@@ -43,6 +43,7 @@ export const engineResourceKeys = {
   musicFolders: ["otome-forge", "engine", "music-folders"] as const,
   characters: ["otome-forge", "engine", "characters"] as const,
   personas: ["otome-forge", "engine", "personas"] as const,
+  backgrounds: ["otome-forge", "engine", "backgrounds"] as const,
 };
 
 function isRecord(value: unknown): value is Row {
@@ -108,6 +109,50 @@ export function useMusicFolders() {
     staleTime: STALE_TIME,
   });
   return { folders: query.data ?? [], ...loadState(query) };
+}
+
+// ── Backgrounds (#2147) ──
+
+export interface BackgroundOption {
+  url: string;
+  /** The file's name without its extension. */
+  name: string;
+  tags: string[];
+}
+
+/** The library's raster backgrounds (the player's and Game Assets'), favourites first; S/art/image-client.ts's rule. */
+function toBackgrounds(rows: Row[]): BackgroundOption[] {
+  const listed = rows.flatMap((row) => {
+    const url = text(row.url);
+    if (!/^\/api\/(?:backgrounds|game-assets)\/file\/[^?#\\]+\.(?:png|jpe?g|webp|gif|avif)$/iu.test(url)) return [];
+    const name = (text(row.filename) || safeDecode(url.split("/").pop() ?? "")).replace(/\.[^.]+$/u, "");
+    const tags = Array.isArray(row.tags) ? row.tags.map(text).filter(Boolean) : [];
+    return [{ url, name, tags, favorite: row.favorite === true || row.favorite === "true" }];
+  });
+  return listed
+    .sort((a, b) => Number(b.favorite) - Number(a.favorite))
+    .map(({ favorite: _favorite, ...background }) => background);
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+const NO_BACKGROUNDS: BackgroundOption[] = [];
+
+/** The Engine's background library, for choosing a place's picture without painting it. */
+export function useEngineBackgrounds() {
+  const query = useQuery({
+    queryKey: engineResourceKeys.backgrounds,
+    queryFn: async () => rowsOf(await api.get<unknown>("/backgrounds")),
+    staleTime: STALE_TIME,
+    select: toBackgrounds,
+  });
+  return { backgrounds: query.data ?? NO_BACKGROUNDS, ...loadState(query) };
 }
 
 // ── Connections ──

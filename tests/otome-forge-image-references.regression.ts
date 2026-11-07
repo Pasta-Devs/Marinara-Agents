@@ -425,3 +425,20 @@ test("someone with no picture at all is painted from the description, as before 
     "the paint says so",
   );
 });
+
+test("an adopted Engine sprite portrait, which the kit never reads, stops no key image while his card has a likeness (#2147)", async () => {
+  const kai = { cardId: "card-dottore", portrait: "/api/sprites/card-dottore/file/full_neutral.png" };
+  // His card's full body, else (no sprites to read) his card's avatar.
+  for (const [i, options, expected] of [
+    [0, {}, data("/api/sprites/card-dottore/file/full_neutral.png")],
+    [1, { missing: ["/api/sprites/card-dottore"] }, data("/api/avatars/file/card.png")],
+  ] as const) {
+    const host = engine({ missing: [...(options.missing ?? [])] });
+    const t = await keyImage(`r-engineref${i}-aaaaaa`, host, ["Kai", "Ines"], kai, {
+      portrait: "/api/avatars/file/persona.png",
+    });
+    assert.equal((await t.paint())?.state, "ready");
+    assert.equal(host.generations.length, 1);
+    assert.deepEqual(host.generations[0]!.referenceImages, [expected, data("/api/avatars/file/persona.png")]);
+  }
+});

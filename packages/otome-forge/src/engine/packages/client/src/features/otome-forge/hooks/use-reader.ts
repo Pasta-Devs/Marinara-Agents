@@ -46,6 +46,7 @@ import type {
   Grant,
   LiId,
   Paint,
+  PlaceArt,
   ReadResult,
   RunView,
   SceneArt,
@@ -728,6 +729,31 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     [chapterKey, node, paint],
   );
   const paintPlace = useCallback((place: string) => paint({ kind: "place", place }), [paint]);
+  /** #2147: a background from the Engine's library as the place's picture (nothing painted); rejects on failure. */
+  const chooseBackground = useCallback(
+    async (place: string, url: string) => {
+      const chosen = await otome.post<{ place: PlaceArt; world: WorldView }>(
+        `${runPath(runKey)}/art/place/background`,
+        { place, url },
+      );
+      patchRun(queryClient, runKey, (shown) => ({ ...shown, world: { ...shown.world, ...chosen.world } }));
+      // The scene's own copy of the place too, so a painted picture it replaced never stands in meanwhile.
+      setScene(
+        (shown) =>
+          shown && {
+            ...shown,
+            art: {
+              ...shown.art,
+              places: shown.art.places.map((entry) =>
+                placeKey(entry.name) === placeKey(place) ? chosen.place : entry,
+              ),
+            },
+          },
+      );
+      setSceneTick((tick) => tick + 1);
+    },
+    [otome, queryClient, runKey],
+  );
   const sendReview = useCallback(
     (edited: ImagePrompt) => {
       if (!review || review.busy) return;
@@ -1131,6 +1157,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     markCgSeen,
     paintCg,
     paintPlace,
+    chooseBackground,
     painting,
     review,
     sendReview,

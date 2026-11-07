@@ -67,6 +67,7 @@ import {
   levelOf,
   prestigeOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { isGiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
@@ -477,7 +478,9 @@ export const STATE_LIMITS = {
 /**
  * His painted faces for `look` (the kit's forgeStoryExpressionCast: a ready set only, and only while expressions are
  * on); by default the look he wears now, his worn outfit (M4) else his portrait, the base art/expressions.ts paints
- * them on. Sets are kept per look, so a look he wore before keeps its faces.
+ * them on. Sets are kept per look, so a look he wore before keeps its faces. #2147: otherwise the set's faces that are
+ * his Engine sprites (S/art/engine-art.ts), whatever its state or the switch, since they cost nothing; a painted face
+ * of a set that is not ready stays hidden.
  */
 export function readyFaces(
   world: Pick<World, "images">,
@@ -485,7 +488,13 @@ export function readyFaces(
   look = wornLookUrl(unit),
 ): Partial<Record<Face, string>> | undefined {
   const { expressions } = forgeStoryExpressionCast(world.images, unit, look, FACES);
-  return expressions as Partial<Record<Face, string>> | undefined;
+  if (expressions) return expressions as Partial<Record<Face, string>>;
+  const set = (look ? unit.expressions[look] : undefined) as { images?: Record<string, { url?: unknown }> } | undefined;
+  const engine = FACES.flatMap((face) => {
+    const url = set?.images?.[face]?.url;
+    return isEngineArt(url) ? [[face, url] as const] : [];
+  });
+  return engine.length ? (Object.fromEntries(engine) as Partial<Record<Face, string>>) : undefined;
 }
 
 /** The cut-out of `url`, keeping an older derivative visible while a free replacement is pending. */

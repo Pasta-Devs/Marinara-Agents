@@ -14,6 +14,7 @@ import { expect, test, type Locator, type Page } from "./fixtures/package-browse
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
+import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -3003,4 +3004,241 @@ test("Otome Hearth memory with no connection to write summaries asks for one, wi
   await expect(root.getByRole("heading", { name: "Your stories", level: 1 })).toBeVisible();
   await expect(banner).toHaveCount(0);
   expect(posts(stub, "/memory/retry")).toHaveLength(0);
+});
+
+// #2147: Background beside a place opens the Engine's backgrounds, with or without an image connection. Its chip is at
+// least 24px tall with a tap reaching about 44px; it never advances the line, traps focus, closes on Escape back to its
+// chip, and the one chosen stands behind the scene; on a phone the picker fits without scrolling sideways, with 44px
+// tiles and a 16px search field, and it keeps its width when a search matches nothing.
+test("Otome Hearth Background beside a place chooses one of the Engine's backgrounds, painting nothing (#2147)", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const stub = createStoryStub({ done: true });
+  const places: Json = { "the-observation-room": { name: "The Observation Room", tags: "glass dome, night" } };
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path === `/api/otome-forge/runs/${RUN}/art/place/background`) {
+      stub.calls.push(call);
+      const place = {
+        ...places["the-observation-room"],
+        art: { state: "ready", at: new Date().toISOString(), url: call.body!.url },
+      };
+      places["the-observation-room"] = place;
+      const view = (answer({ method: "GET", path: `/api/otome-forge/runs/${RUN}`, body: undefined }).json as Json).view;
+      return { status: 200, json: { place, world: { ...view.world, places } } };
+    }
+    const response = answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}`) (response.json as Json).view.world.places = places;
+    return response;
+  };
+  const backgrounds = ["harbour-night", "glass-dome", "rain-street", "library", "garden", "ballroom"].map(
+    (name, index) => ({
+      id: `user:${name}.png`,
+      filename: `${name}.png`,
+      url: `/api/backgrounds/file/${name}.png`,
+      tags: index === 1 ? ["observatory", "night"] : ["city"],
+      source: "user",
+      favorite: index === 1,
+    }),
+  );
+  await page.route("**/api/backgrounds", (route) => route.fulfill({ json: backgrounds }));
+  await page.route("**/api/backgrounds/file/**", (route) =>
+    route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }),
+  );
+  const paid: string[] = [];
+  page.on("request", (request) => {
+    if (/\/api\/(?:characters\/avatar-generation|otome-forge\/runs\/[^/]+\/art\/place$)/u.test(request.url()))
+      paid.push(request.url());
+  });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  const chip = root.getByRole("button", { name: "Choose a background for The Observation Room" });
+  expect((await chip.boundingBox())!.height).toBeGreaterThanOrEqual(24);
+  const reach = await chip.evaluate((button) => {
+    // In view first: on a phone the row scrolls sideways and the chip may start past its end.
+    button.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const box = button.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const row = button.closest("ul")!;
+    return [
+      ...[box.top - 9, box.bottom + 9].map((y) => document.elementFromPoint(x, y)?.closest("button") === button),
+      row.scrollHeight <= row.clientHeight,
+    ];
+  });
+  expect(reach, "a tap 9px past its edge lands on it, and the row never scrolls up and down").toEqual([
+    true,
+    true,
+    true,
+  ]);
+  await chip.click();
+  const dialog = page.getByRole("dialog", { name: "A background for The Observation Room" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Nothing is painted.");
+  const tiles = dialog.getByRole("list").getByRole("button");
+  await expect(tiles).toHaveCount(backgrounds.length);
+  await expect(tiles.first()).toHaveAccessibleName("glass-dome, observatory, night", { timeout: 1_000 });
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+
+  // Focus stays in the picker, Escape closes it and focus returns to the chip.
+  const search = dialog.getByRole("searchbox", { name: "Search by name or tag" });
+  await search.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(chip).toBeFocused();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+
+  await chip.click();
+  await expect(tiles).toHaveCount(backgrounds.length);
+  const fits = await dialog.evaluate((panel) => ({
+    page: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    panel: panel.scrollWidth <= panel.clientWidth,
+  }));
+  expect(fits).toEqual({ page: true, panel: true });
+  const tile = (await tiles.first().boundingBox())!;
+  expect(Math.min(tile.width, tile.height)).toBeGreaterThanOrEqual(44);
+  expect(await search.evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+  await page.screenshot({ path: testInfo.outputPath("background-picker.png") });
+  const width = (await dialog.boundingBox())!.width;
+  await search.fill("no such place");
+  await expect(dialog.getByText("No background matches your search.")).toBeVisible();
+  expect((await dialog.boundingBox())!.width, "the picker keeps its width with no match").toBe(width);
+  await search.fill("rain");
+  await expect(tiles).toHaveCount(1);
+  await tiles.first().click();
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/art/place/background").map((call) => call.body)).toMatchObject([
+    { place: "The Observation Room", url: "/api/backgrounds/file/rain-street.png" },
+  ]);
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveAttribute("style", /rain-street\.png/u);
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(paid).toEqual([]);
+});
+
+// #2147 on a real Engine: a story made without images stands a card's love interest in its Full Body sprite at once,
+// with no paint step and no paid image, so its portrait shows instead of initials.
+test("Otome Hearth real Engine card's sprite is a new story's portrait without an image connection (#2147)", async ({
+  page,
+  request,
+  baseURL,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const headers = { "x-marinara-csrf": "1", origin: new URL(baseURL!).origin };
+  const tag = `${testInfo.project.name} ${Date.now()}`;
+  const created = await request.post("/api/characters", {
+    data: { data: { name: `Engine Art Keeper ${tag}`, creator: "Otome package E2E" } },
+  });
+  await expect(created).toBeOK();
+  const card = await created.json();
+  const id = encodeURIComponent(card.id);
+  const personaCreated = await request.post("/api/characters/personas", {
+    headers,
+    data: { name: `Engine Art Me ${tag}` },
+  });
+  await expect(personaCreated).toBeOK();
+  const persona = await personaCreated.json();
+  const title = `Engine art ${tag}`;
+  let runKey = "";
+  const paid: string[] = [];
+  page.on("request", (call) => {
+    if (/\/api\/(?:characters\/avatar-generation|generate\/raw)/u.test(call.url())) paid.push(call.url());
+  });
+  try {
+    await expect(
+      await request.post(`/api/sprites/${id}`, {
+        data: { expression: "full_neutral", image: `data:image/png;base64,${SPEAKER_PNG}` },
+      }),
+    ).toBeOK();
+    const story = await request.post("/api/otome-forge/runs", {
+      headers,
+      data: {
+        setup: {
+          title,
+          premise: "A lighthouse keeper's last winter.",
+          language: "English",
+          protagonist: {
+            personaId: persona.id,
+            pronouns: { subject: "she", object: "her", possessive: "her" },
+            traits: [],
+            goal: "",
+          },
+          lis: [
+            { source: "card", cardId: card.id, pronouns: { subject: "he", object: "him", possessive: "his" } },
+            {
+              source: "archetype",
+              archetype: "loyal-blade",
+              name: "Rook",
+              pronouns: { subject: "he", object: "him", possessive: "his" },
+            },
+          ],
+          content: defaultContent(),
+          images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
+          connections: { narration: "no-such-connection" },
+        },
+      },
+    });
+    expect(story.ok(), await story.text()).toBe(true);
+    const made = await story.json();
+    runKey = made.run;
+    const sprite = `/api/sprites/${id}/file/full_neutral.png`;
+    const keeper = made.view.lis.find((li: Json) => li.cardId === card.id);
+    expect(keeper.portrait).toBe(sprite);
+    expect(made.view.lis.find((li: Json) => li.source === "archetype").portrait).toBeUndefined();
+    expect(made.view.forge.steps.filter((step: Json) => step.id.startsWith("paint:"))).toEqual([]);
+
+    // The forge cannot write without a connection: the story is shown as ready, so its cast is on screen.
+    await page.route(
+      (url) => url.pathname === `/api/otome-forge/runs/${runKey}`,
+      async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        body.view.forge.phase = "ready";
+        body.view.world.forge.phase = "ready";
+        await route.fulfill({ response, json: body });
+      },
+    );
+    await page.route("**/api/app-settings/ui", (route) =>
+      route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
+    );
+    await page.addInitScript((version) => {
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
+          version: 65,
+        }),
+      );
+    }, appVersion);
+    await page.goto("/");
+    await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
+    const root = page.locator("marinara-capability-otome-forge .of-root");
+    await expect(root).toBeVisible({ timeout: 60_000 });
+    // Home stands him there; Messages lists him with his avatar circle.
+    await expect(root.getByRole("img", { name: `Engine Art Keeper ${tag}`, exact: true })).toBeVisible();
+    await root.getByRole("button", { name: "Messages", exact: true }).click();
+    // His own sprite (or its free cut-out) in his avatar circle, never his initials.
+    const avatar = root
+      .getByRole("button", { name: new RegExp(`^Engine Art Keeper ${tag}`, "u") })
+      .locator(".of-avatar img");
+    await expect(avatar).toHaveAttribute(
+      "src",
+      new RegExp(`^(?:${sprite.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}|/api/global-gallery/file/)`, "u"),
+    );
+    await page.screenshot({ path: testInfo.outputPath("engine-art-portrait.png") });
+    expect(paid).toEqual([]);
+  } finally {
+    if (runKey)
+      await request.post(`/api/otome-forge/runs/${runKey}/delete`, { headers, data: { confirmTitle: title } });
+    await request.delete(`/api/sprites/${id}/full_neutral`);
+    await request.delete(`/api/characters/${id}`);
+    await request.delete(`/api/characters/personas/${encodeURIComponent(persona.id)}`, { headers });
+  }
 });

@@ -28,6 +28,7 @@
 import { forgeSubjectReference, type ImageIdentitySubject } from "@forge-kit/image-avatar-references.mjs";
 import { z, type ZodType } from "zod";
 import type { Paint, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import {
   PHOTO_CUSTOM,
   PHOTO_EXPRESSIONS,
@@ -186,6 +187,8 @@ interface PhotoLook {
   likeness: ImageIdentitySubject;
   /** The likeness is his card's or her persona's avatar (a base look with no portrait): who they are, not this look. */
   face?: true;
+  /** An Engine sprite read as it is (the kit reads only avatars and the gallery): a card unlinked after it gave him one. */
+  engineUrl?: string;
 }
 
 /**
@@ -210,9 +213,11 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.hisLook === BASE_LOOK
       ? {
           outfitLine: unit.outfitLine || unit.bible.look.outfitLine,
-          ...(unit.portrait
+          ...(unit.portrait && !isEngineArt(unit.portrait)
             ? { likeness: { portrait: unit.portrait } }
-            : { likeness: unit.cardId ? { cardId: unit.cardId } : {}, face: true as const }),
+            : unit.portrait && !unit.cardId
+              ? { likeness: {}, engineUrl: unit.portrait }
+              : { likeness: unit.cardId ? { cardId: unit.cardId } : {}, face: true as const }),
         }
       : await wearableLook(deps, runId, setup.hisLook, `li:${unit.id}`).then(({ outfit }) => ({
           outfitLine: outfit.outfitLine,
@@ -222,7 +227,7 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.herLook === BASE_LOOK
       ? {
           outfitLine: run.player.look.outfitLine,
-          ...(run.player.portrait
+          ...(run.player.portrait && !isEngineArt(run.player.portrait)
             ? { likeness: { portrait: run.player.portrait } }
             : { likeness: { personaId: run.player.personaId }, face: true as const }),
         }
@@ -255,18 +260,24 @@ async function buildPhoto(
   const { run, unit, place, his, her, hisLook, herLook } = await resolveSetup(deps, runId, setup);
   const player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
-  const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject, string?]> = [
-    [hisLook.face ? "li-face" : "li", hisLook.likeness, unit.name],
-    [herLook.face ? "her-face" : "her", herLook.likeness, player.name || "Protagonist"],
-    ["place", { portrait: place.url }],
+  const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject, string?, string?]> = [
+    [hisLook.face ? "li-face" : "li", hisLook.likeness, unit.name, hisLook.engineUrl],
+    [herLook.face ? "her-face" : "her", herLook.likeness, player.name || "Protagonist", herLook.engineUrl],
+    ["place", { portrait: place.url }, undefined, isEngineArt(place.url) ? place.url : undefined],
   ];
   const resolved: Array<{ who: PhotoInput["references"][number]; image: string }> = [];
   // The first of them whose picture exists but did not load: paint() stops before paying for a stranger.
   let missing: string | undefined;
-  for (const [who, likeness, name] of sources) {
-    const image = await forgeSubjectReference(images, likeness).catch(() => null);
+  for (const [who, likeness, name, engineUrl] of sources) {
+    // #2147: Engine art (a background chosen for the place, a sprite an unlinked card left him) is read as it is: the
+    // kit reads only avatars and the gallery.
+    const image = await (
+      engineUrl
+        ? images.cardAvatarImage(engineUrl).then((found) => found && `data:${found.mime};base64,${found.base64}`)
+        : forgeSubjectReference(images, likeness)
+    ).catch(() => null);
     if (image) resolved.push({ who, image });
-    else if (name && !missing && (await hasLikenessSource(images, likeness))) missing = name;
+    else if (name && !missing && (engineUrl || (await hasLikenessSource(images, likeness)))) missing = name;
   }
   const li: CgPerson = {
     name: unit.name,

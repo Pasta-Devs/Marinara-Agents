@@ -23,6 +23,7 @@
 // image rating, or picking Dark romance, needs it (403 `age-gate`), lowering never does, and every stored content goes
 // through enforceContent, so a limit that cannot apply is always a Line.
 import { z } from "zod";
+import type { Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { LIS_MAX, LIS_MIN } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/shared/archetypes.js";
 import { OWN_BANNED_PHRASES_MAX } from "../../../../../client/src/features/otome-forge/shared/banned-phrases.js";
@@ -88,10 +89,11 @@ import {
   toWorldView,
 } from "../schemas/world.js";
 import { checkBible } from "../setup/bible.js";
-import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
+import { initialForge, settleForge, startForge, withEngineSteps, withPaintSteps } from "../setup/forge.js";
 import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
+import { ensureEngineLooks, forgetEngineLook } from "../art/engine-art.js";
 import { PLAYER_STICKER_OWNER } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { ensureStickerSets, stickerArtUrls, stickerBook, stickersComing } from "../art/stickers.js";
 import { fillIntimacy } from "../intimacy.js";
@@ -200,6 +202,20 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
     return player ? { ...run, player } : run;
   };
 
+  /**
+   * #2147: a story in progress whose owners have no look yet takes their Engine art, and each paint step of an owner in
+   * Engine art is done (a connection added in Settings since, too). The forge is saved only when a step changed.
+   */
+  const withEngineLooks = async (read: RunDocuments, runId: string): Promise<RunDocuments> => {
+    const run = await ensureEngineLooks(deps, runId, read, read.world.images.ask);
+    if (withEngineSteps(run.world.forge, run) === run.world.forge) return run;
+    const saved = await updateIfChanged(store, runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
+      const forge = withEngineSteps(current.forge, run);
+      return forge === current.forge ? undefined : { ...current, forge };
+    });
+    return saved ? { ...run, world: saved.value } : run;
+  };
+
   router.post(
     "/runs",
     handle(async (request) => {
@@ -228,9 +244,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const liIds: string[] = [];
       for (const name of names) liIds.push(newLiId(name, liIds));
       // The world goes last: GET /runs/:run finds the run only once every other document exists.
+      const units: Unit[] = [];
       for (const [index, li] of setup.lis.entries()) {
         const id = liIds[index]!;
-        await store.mutateDoc(runDocTarget("unit", unitId(runId, id)), normalizeUnit, (unit) => ({
+        const created = await store.mutateDoc(runDocTarget("unit", unitId(runId, id)), normalizeUnit, (unit) => ({
           ...unit,
           id,
           name: names[index]!,
@@ -241,9 +258,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
             : { archetype: li.archetype, ...(li.notes?.trim() ? { notes: li.notes.trim() } : {}) }),
           createdAt: at,
         }));
+        units.push(created);
       }
       const { protagonist } = setup;
-      await store.mutateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (player) => ({
+      const player = await store.mutateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (player) => ({
         ...player,
         personaId: protagonist.personaId,
         name: persona.name,
@@ -252,6 +270,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         traits: protagonist.traits.map((trait) => trait.trim()).filter(Boolean),
         goal: protagonist.goal.trim(),
       }));
+      // #2147: before the world, so its forge never offers to paint a look the Engine already has.
+      const looks = await ensureEngineLooks(deps, runId, { player, units }, setup.images.ask);
       await store.mutateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => ({
         ...state,
         lis: Object.fromEntries(liIds.map((id) => [id, defaultLiState()])),
@@ -267,7 +287,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         content: enforceContent(setup.content, ageGate),
         images: { ...current.images, ...setup.images },
         connections: normalizeConnections(setup.connections),
-        forge: initialForge(liIds, setup.images.connectionId !== null),
+        forge: withEngineSteps(initialForge(liIds, setup.images.connectionId !== null), looks),
       }));
       await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
         ...index,
@@ -329,7 +349,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       await settleForge(deps, runId);
       const read = await readRun(store, runId);
       if (!read) throw runNotFound();
-      const run = await withPersonaAbout(read, runId);
+      const run = await withPersonaAbout(await withEngineLooks(read, runId), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.
       const units = await Promise.all(
@@ -441,6 +461,11 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const ageGate = (await readIndex(store)).ageGate !== null;
       const at = new Date().toISOString();
+      // #2147: whose look is Engine art, so the paint steps a connection adds are done for them (S/setup/forge.ts).
+      const cast = {
+        player: (await store.readDoc(playerId(runId), normalizePlayer)) ?? {},
+        units: await readCastUnits(store, runId),
+      };
       const world = await store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
         const content = body.content ?? current.content;
         const images = { ...current.images, ...body.images };
@@ -458,7 +483,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },
           // A world made without images that gains a connection gets its paint steps, waiting for the tap.
-          forge: images.connectionId ? withPaintSteps(current.forge) : current.forge,
+          forge: images.connectionId ? withEngineSteps(withPaintSteps(current.forge), cast) : current.forge,
         };
       });
       if (!world) throw runNotFound();
@@ -496,6 +521,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           return next;
         });
         if (!unit) throw liNotFound();
+        // #2147: a love interest with no look yet takes the newly linked card's Engine art on the next read.
+        forgetEngineLook(runId, `li:${li}`);
         return { cardId: unit.cardId ?? null };
       });
     }),

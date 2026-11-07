@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the reader's title, scene count, place and content tags. Desktop shows its tools inline; mobile keeps
 // mute, fullscreen and the disclosure visible, with the secondary tools stacked below. Rewrite names its call cost.
-// A place waiting for "Ask before painting" (or failed) offers its paint beside its name, with its cost.
+// A place waiting for "Ask before painting" (or failed) offers its paint beside its name, with its cost, and every place
+// offers a background from the Engine's library (#2147), which paints nothing.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +11,7 @@ import {
   EyeOff,
   FastForward,
   Feather,
+  Image as ImageIcon,
   MapPin,
   MoreHorizontal,
   Paintbrush,
@@ -119,6 +121,8 @@ interface ReaderControlsProps {
   imageDescription?: string;
   /** The place's picture waits for a tap (consent, or a retry after a failure). */
   placePaint?: { retry: boolean; busy: boolean; onPaint: () => void };
+  /** #2147: opens the Engine's backgrounds for the place, with or without an image connection. */
+  onPlaceBackground?: () => void;
   tags: string[];
   /** The scene is showing (not loading, not the tags card or the end card). */
   reading: boolean;
@@ -332,6 +336,22 @@ export function ReaderControls(props: ReaderControlsProps) {
               >
                 <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
                 {t(props.placePaint.retry ? "ui.otomeForge.reader.placeRetry" : "ui.otomeForge.reader.placePaint")}
+              </button>
+            </li>
+          ) : null}
+          {place && props.onPlaceBackground ? (
+            <li className="of-reader-chip-slot">
+              <button
+                type="button"
+                className="of-reader-chip of-reader-chip--background"
+                aria-label={t("ui.otomeForge.reader.placeBackgroundLabel", { place })}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.onPlaceBackground?.();
+                }}
+              >
+                <ImageIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+                {t("ui.otomeForge.reader.placeBackground")}
               </button>
             </li>
           ) : null}

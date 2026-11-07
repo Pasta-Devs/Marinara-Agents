@@ -24,7 +24,6 @@
 // Home (S/routes/home.ts) shows what is worn: wornLookUrl(unit) on him, cut out there as M3 cuts out every worn look,
 // and wornLookUrl(player) on Me with `player.noticed` (P19, written here) under it; `noticingLooks` tells it the line
 // is on its way.
-import { forgeStoryExpressionCast } from "@forge-kit/story-expressions-server.mjs";
 import { z } from "zod";
 import type {
   LiId,
@@ -35,7 +34,7 @@ import type {
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { AFFECTION_EARNINGS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
-import { FACES, isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { figurineSceneKey, giftsFor } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import {
   BASE_LOOK,
@@ -73,7 +72,7 @@ import { couplesOf, ownedItems, readItem, readItems, readOwnedItem } from "../it
 import { noticedMessages, showMessages } from "../prompts.js";
 import { LINE_TOKENS, LineReplySchema, ShowReplySchema, checkLine } from "../items/replies.js";
 import { normalizePlayer } from "../schemas/player.js";
-import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { normalizeState, readRun, readyFaces, type RunDocuments } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { grant } from "../state/rewards.js";
 
@@ -148,13 +147,6 @@ function itemLook(runId: string, item: Item, owner: "me" | LiId, worn: string | 
   };
 }
 
-/** His ready faces on `url`, while expressions are on (the kit's forgeStoryExpressionCast). */
-function facesOn(world: World, unit: Unit, url: string | undefined): Partial<Record<Face, string>> | undefined {
-  if (!url) return undefined;
-  return forgeStoryExpressionCast(world.images, unit, url, FACES).expressions as
-    Partial<Record<Face, string>> | undefined;
-}
-
 /** Love interests noticing her look right now, by `${runId}|${look}` (P19 runs in the background). */
 const noticing = new Set<string>();
 
@@ -182,7 +174,7 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
         .map((item) => itemLook(runId, item, unit.id, unit.wornOutfit, run.world)),
     ];
     him[unit.id] = views.map((view) => {
-      const faces = facesOn(run.world, unit, view.url);
+      const faces = view.url ? readyFaces(run.world, unit, view.url) : undefined;
       return faces ? { ...view, faces } : view;
     });
   }

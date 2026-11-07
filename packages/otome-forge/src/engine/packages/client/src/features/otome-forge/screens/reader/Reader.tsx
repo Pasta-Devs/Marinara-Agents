@@ -41,6 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
+import { BackgroundPicker } from "../../components/BackgroundPicker";
 import { CgTakeover } from "../../components/CgTakeover";
 import { usePaintsByItself } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
@@ -137,7 +138,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   );
   // The last beat's music, kept while the next beat opens; none until the first beat is ready.
   const lastMood = useRef<MusicMood | undefined>(undefined);
-  const [dialog, setDialog] = useState<"log" | "ease" | "own" | null>(null);
+  const [dialog, setDialog] = useState<"log" | "ease" | "own" | "background" | null>(null);
   // #2146: the player's own words for a closing decision, kept until sent (`at`: the choice they answer).
   const [ownDraft, setOwnDraft] = useState<OwnAnswer & { at: string }>({ at: "", kind: "dialogue", text: "" });
   // Each love interest's level (and extra stories unlocked, #2025) when the chapter opened, so the end card can say
@@ -216,7 +217,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     advance();
   };
 
-  const openDialog = (next: "log" | "ease" | "own") => {
+  const openDialog = (next: "log" | "ease" | "own" | "background") => {
     reader.setAuto(false);
     setDialog(next);
   };
@@ -410,6 +411,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
               : undefined
           }
           placePaint={placePaint}
+          onPlaceBackground={() => openDialog("background")}
           tags={reader.tags}
           reading={reading}
           auto={reader.auto}
@@ -535,6 +537,13 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
                 }
               : undefined
           }
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === "background" && place ? (
+        <BackgroundPicker
+          place={place}
+          onChoose={(url) => reader.chooseBackground(place, url)}
           onClose={() => setDialog(null)}
         />
       ) : null}
