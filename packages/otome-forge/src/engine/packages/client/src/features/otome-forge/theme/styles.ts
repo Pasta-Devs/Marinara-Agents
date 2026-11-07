@@ -2390,8 +2390,11 @@ ${R} .of-home-rail > * { max-width: 100%; }
 ${R} .of-home-rail-row { display: flex; gap: 8px; pointer-events: none; }
 ${R} .of-home-rail-row > * { pointer-events: auto; }
 /* Your thoughts… (#2127): Wish's new-tab dot at its top end corner while thoughts wait for the next chapter. */
-${R} .of-home-thoughts { position: relative; }
-${R} .of-home-thoughts .of-tab-dot { position: absolute; top: 3px; inset-inline-end: 3px; }
+${R} :is(.of-home-thoughts, .of-home-remind) { position: relative; }
+${R} :is(.of-home-thoughts, .of-home-remind) .of-tab-dot { position: absolute; top: 3px; inset-inline-end: 3px; }
+/* #2153: Remind Me's dot is its only visible sign of a birthday: on Pearl's pale glass it takes the deeper accent ink,
+   for 3:1 or more (tests/package-otome-forge-birthday.e2e.ts). */
+${R}[data-look="pearl"] .of-home-remind .of-tab-dot { background: var(--of-accent-text); }
 /* A short stage (a 360 × 600 phone under the Engine's own bars leaves about 500 px): the rail tightens by 30 px, every
    button still at least 30 px tall, so the note keeps a line of its words above M6's row. */
 @container of-frame (max-height: 540px) {
@@ -3039,6 +3042,17 @@ ${R} :is(.of-day-events, .of-upcoming) li {
 }
 ${R} .of-day-events li > span, ${R} .of-upcoming-what { overflow-wrap: anywhere; font-weight: 600; }
 ${R} .of-upcoming-when { font-size: 0.78rem; font-weight: 800; white-space: nowrap; color: var(--of-champagne-text); }
+/* #2153: Celebrate, a birthday to a row: his cake, the words, and its button beside them, or under them full width
+   (44 px, a touch target) on a phone. */
+${R} .of-celebrate { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+${R} .of-celebrate li {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 0.92rem;
+}
+${R} .of-celebrate-text { overflow-wrap: anywhere; font-weight: 600; }
+@container of-stage (max-width: 420px) {
+  ${R} .of-celebrate li { grid-template-columns: 18px minmax(0, 1fr); }
+  ${R} .of-celebrate li > .of-button { grid-column: 1 / -1; width: 100%; min-height: 44px; }
+}
 ${R} .of-cycle-card .of-section-title { display: flex; align-items: center; gap: 8px; }
 ${R} .of-cycle-card .of-section-title svg, ${R} .of-cycle-today svg { flex: none; color: var(--of-accent-text); }
 ${R} .of-cycle-card > .of-button { align-self: flex-start; }
