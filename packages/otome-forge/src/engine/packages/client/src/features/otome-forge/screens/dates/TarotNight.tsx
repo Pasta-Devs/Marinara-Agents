@@ -71,6 +71,7 @@ import { PALETTE } from "../../theme/tokens";
 import { FacePlate } from "../reader/FacePlate";
 import { PaintReviewDialog } from "../wish/TenPullGrid";
 import { playQueryKey, type ActivityScreenProps } from "./DatesHub";
+import { WaitQuiz } from "../story/PersonalityQuiz";
 
 /** While a shown card paints, the deck is read again this often (as the Shop and the Wardrobe do). */
 const POLL_MS = 3_000;
@@ -386,12 +387,15 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
       ) : phase.kind === "pick" ? (
         <Pick accent={accent} picks={picks} headingRef={pickRef} onPicks={setPicks} onTurn={() => void start()} />
       ) : phase.kind === "loading" ? (
-        <div className="of-center" role="status">
-          <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">
-            {phase.what === "start" ? t("ui.otomeForge.tarot.loading", { name }) : t("ui.otomeForge.tarot.finishing")}
-          </p>
-        </div>
+        <>
+          <div className="of-center" role="status">
+            <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+            <p className="of-body">
+              {phase.what === "start" ? t("ui.otomeForge.tarot.loading", { name }) : t("ui.otomeForge.tarot.finishing")}
+            </p>
+          </div>
+          <WaitQuiz runKey={runKey} lis={view.lis} />
+        </>
       ) : phase.kind === "failed" && phase.retry === "start" ? (
         // Writing the reading failed (a refusal, no connection, a bad reply): said honestly; Retry keeps the picks.
         <div ref={failedRef} className="of-rh-failed">

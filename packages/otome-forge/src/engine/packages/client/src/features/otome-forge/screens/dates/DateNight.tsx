@@ -60,6 +60,7 @@ import { LookPicker, wornDateLook } from "./LookPicker";
 import { useWardrobe } from "../wardrobe/Wardrobe";
 import { shopQueryKey, wardrobeQueryKey } from "../../hooks/use-items";
 import { PLACE_ICONS, PLACE_NAME_KEYS, PlacePicker, paintedPlaces, type PlacePick } from "./PlacePicker";
+import { WaitQuiz } from "../story/PersonalityQuiz";
 
 export const datesQueryKey = (runKey: string) => ["otome-forge", "dates", runKey] as const;
 
@@ -413,21 +414,24 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
               </div>
             </>
           ) : (
-            <section className="of-reader-panel of-writing of-glass of-glass--strong" role="status">
-              <span className="of-quill" aria-hidden="true">
-                <Feather size={22} strokeWidth={1.7} />
-              </span>
-              <p className="of-section-title">{t("ui.otomeForge.dateNight.planning", { name: partner.name })}</p>
-              <p className="of-hint">{t("ui.otomeForge.dateNight.planningHint")}</p>
-              <button
-                type="button"
-                className="of-button of-button--quiet of-glass of-button--small"
-                onClick={cancelPlan}
-              >
-                <X size={15} strokeWidth={2} aria-hidden="true" />
-                {t("ui.otomeForge.reader.cancel")}
-              </button>
-            </section>
+            <>
+              <section className="of-reader-panel of-writing of-glass of-glass--strong" role="status">
+                <span className="of-quill" aria-hidden="true">
+                  <Feather size={22} strokeWidth={1.7} />
+                </span>
+                <p className="of-section-title">{t("ui.otomeForge.dateNight.planning", { name: partner.name })}</p>
+                <p className="of-hint">{t("ui.otomeForge.dateNight.planningHint")}</p>
+                <button
+                  type="button"
+                  className="of-button of-button--quiet of-glass of-button--small"
+                  onClick={cancelPlan}
+                >
+                  <X size={15} strokeWidth={2} aria-hidden="true" />
+                  {t("ui.otomeForge.reader.cancel")}
+                </button>
+              </section>
+              <WaitQuiz runKey={runKey} lis={view.lis} />
+            </>
           )}
         </>
       ) : null}

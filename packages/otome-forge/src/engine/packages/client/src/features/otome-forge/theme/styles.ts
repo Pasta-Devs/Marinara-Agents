@@ -1619,6 +1619,11 @@ ${R} .of-quiz {
   text-align: center;
 }
 ${R} .of-quiz-play { align-self: center; }
+/* Under a date's wait (WaitQuiz): its own column below the status, scrolling on its own like Who said what? does. */
+${R} .of-wait-quiz {
+  flex: none; display: flex; flex-direction: column; align-self: center; width: min(100%, 560px); min-height: 0;
+  max-height: 58cqh; padding: 0 16px 18px;
+}
 ${R} .of-quiz-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; }
 ${R} .of-quiz-statement { margin: 0; font-size: 1.05rem; font-weight: 700; overflow-wrap: anywhere; }
 ${R} .of-quiz-scale { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
@@ -2789,6 +2794,10 @@ ${R} .of-quote-label {
 }
 ${R} .of-quote-chip q { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--of-font-hand); font-size: 1.15rem; }
 ${R} .of-quote-chip .of-icon-button { width: 32px; height: 32px; }
+/* A sticker attached to the message box, shown small above it until Send (or Remove). */
+${R} .of-attached-sticker .of-sticker { width: 48px; height: 48px; flex: none; border-radius: 12px; }
+${R} .of-attached-sticker .of-sticker--quiet { font-size: 0.6rem; gap: 2px; }
+${R} .of-attached-sticker .of-sticker--quiet svg { width: 18px; height: 18px; }
 ${R} .of-stickers { position: relative; flex: none; }
 /* 44px touch targets: the Stickers button, and Send and the box beside it so the row stays even. */
 ${R} .of-stickers > .of-icon-button, ${R} .of-composer-row > .of-send { width: 44px; height: 44px; }

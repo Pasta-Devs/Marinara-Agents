@@ -30,6 +30,7 @@ import type { ReadHimAnswer, ReadHimFinishResult, ReadHimSetView } from "../../s
 import { PALETTE } from "../../theme/tokens";
 import { FACE_LABEL_KEYS, FacePlate } from "../reader/FacePlate";
 import { playQueryKey, type ActivityScreenProps } from "./DatesHub";
+import { WaitQuiz } from "../story/PersonalityQuiz";
 
 type Phase =
   | { kind: "intro" }
@@ -224,14 +225,17 @@ export function ReadHim({ runKey, view, li: picked, onExit }: ActivityScreenProp
       {phase.kind === "intro" ? (
         <Intro li={li} onBegin={() => void start()} />
       ) : phase.kind === "loading" ? (
-        <div className="of-center" role="status">
-          <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">
-            {phase.what === "start"
-              ? t("ui.otomeForge.readHim.loading", { name })
-              : t("ui.otomeForge.readHim.finishing")}
-          </p>
-        </div>
+        <>
+          <div className="of-center" role="status">
+            <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+            <p className="of-body">
+              {phase.what === "start"
+                ? t("ui.otomeForge.readHim.loading", { name })
+                : t("ui.otomeForge.readHim.finishing")}
+            </p>
+          </div>
+          <WaitQuiz runKey={runKey} lis={view.lis} />
+        </>
       ) : phase.kind === "failed" && phase.retry === "start" ? (
         // Writing the set failed (a refusal, no connection, a bad reply): said honestly, with Retry and Switch connection.
         <div ref={failedRef} className="of-rh-failed">
