@@ -84,6 +84,7 @@ import {
   hisSideKey,
   stageRow,
   type ClimaxMove,
+  HIS_SIDE_MIN_STAGE,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { heldAgainst, type DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { SIDE_WITH_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/economy.js";
@@ -1402,7 +1403,8 @@ async function finishBeat(
       }
       const moment = spent ? null : hisSideMomentOf(chapter, beat, { stageUp: gate.stageUp, repaired: heal.repaired });
       const his = moment?.li === candidate ? next.lis[moment.li] : undefined;
-      if (moment && his) {
+      // #2155: a moment counts once he is at Wound or beyond after it (reaching Wound counts itself).
+      if (moment && his && his.stage >= HIS_SIDE_MIN_STAGE) {
         const ref = `${chapter.key}/${beat.i}`;
         next = noteHisSide(next, moment.li, { arc, ref, moment: moment.moment, at });
         hisSide = moment.li;

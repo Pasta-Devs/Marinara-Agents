@@ -18,7 +18,7 @@
 //                              its summary as a small memory of his (#2066, S/memory/memory.ts), never in the
 //                              timeline; a Character Story joins the timeline (0.7.3)
 //   an extra story (#2025)   → none: it is imagined together for fun, never canon
-//   his side (#2155)         → kind "chapter", his own (audience [li], no cameos): the chapter it follows told again
+//   his side (#2155)         → kind "chapter", his own (audience [li], no cameos): a scene beside the chapter it follows that the protagonist never saw
 //                              from his point of view, summarized into the timeline when it is read, titled as that
 //                              chapter's other side, whose thoughts are his alone
 // Every chapter but a main one has audience [its love interest's id]: as recent canon, as a recall and in full it
@@ -344,9 +344,9 @@ export async function completedChapters(
 function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }): string {
   const title = chapter.title || chapter.key;
   if (owner === undefined) return title;
-  // #2155: the chapter it follows, told again; what the protagonist did there they know, his thoughts are his.
+  // #2155: a scene beside the chapter it follows that the protagonist never saw: they know none of it.
   if (chapter.hisSide) {
-    return `${owner}'s side of "${title}" (the same events, told again from ${owner}'s point of view; private: ${owner}'s thoughts in it are ${owner}'s alone, and nobody else, the protagonist included, knows them)`;
+    return `${owner}'s side of "${title}" (a scene the protagonist never saw, just before it or right after they left; private: the protagonist knows none of it, those in it know only what they saw there, and ${owner}'s thoughts are ${owner}'s alone)`;
   }
   const also = guests?.length ? `; ${guests.join(" and ")} also appear${guests.length === 1 ? "s" : ""} in it` : "";
   return `${owner}'s own ${chapter.kind} chapter "${title}" (private: only the people in its scenes know what happened in it${also})`;
