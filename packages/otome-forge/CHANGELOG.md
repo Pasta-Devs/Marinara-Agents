@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.18.0 — 2026-11-08
+
+- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as "The Lovers · Ren". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.
+
 ## 0.17.1 — 2026-11-08
 
 - **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.

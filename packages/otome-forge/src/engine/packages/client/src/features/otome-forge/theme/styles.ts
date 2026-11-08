@@ -1380,6 +1380,19 @@ ${R} .of-album-sticker--quiet {
 ${R} .of-album-sticker--quiet svg { color: var(--of-accent-text); }
 ${R} .of-album-sticker--quiet .of-button { min-height: 44px; }
 ${R} .of-album-sticker--quiet .of-cost { justify-content: center; }
+/* #2151: Tarot night's cards, each its whole card face (TAROT_RULES), labelled under it; three across on a phone. */
+${R} .of-album-cgs--card { grid-template-columns: repeat(auto-fill, minmax(min(112px, 30%), 1fr)); gap: 14px 10px; }
+${R} .of-album-card { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; text-align: center; }
+${R} .of-album-card-view {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; padding: 0; border: 0;
+  border-radius: 8px; color: inherit; background: transparent; cursor: zoom-in; transition: transform 300ms var(--of-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  ${R} .of-album-card-view:hover { transform: translateY(-3px); }
+}
+${R} .of-album-card .of-album-cg-title { font-size: 0.86rem; overflow-wrap: anywhere; }
+${R} .of-album-card .of-button { min-height: 44px; }
+${R} .of-album-card .of-cost { justify-content: center; }
 ${R} .of-viewer { display: flex; flex-direction: column; gap: 10px; }
 ${R} .of-viewer-figure { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 ${R} .of-viewer-img {

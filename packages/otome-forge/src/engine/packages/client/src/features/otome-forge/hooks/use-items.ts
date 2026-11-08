@@ -15,6 +15,7 @@ import type { ImagePrompt } from "../components/PromptReviewDialog";
 import { useOtomeProps } from "../props";
 import { homeQueryKey } from "../screens/home/HomeScreen";
 import type { Paint, RunView } from "../shared/api-types";
+import { deckKey, type Arcana } from "../shared/tarot";
 import type { ItemOpenResult } from "../shared/wardrobe";
 import { isLookKind, type BannerView, type ItemKind, type ItemView } from "../shared/wish";
 import { runPath } from "./use-reader";
@@ -129,6 +130,18 @@ export const figurinePaintTarget = (runKey: string, li: string, subject: string)
   const path = `${runPath(runKey)}/shop/figurines/${encodeURIComponent(li)}/art`;
   return { id: `figurine:${li}`, subject, paintPath: path, promptPath: `${path}/prompt` };
 };
+
+/**
+ * S/routes/tarot.ts (#2151): POST .../art/tarot {li, card} and .../art/tarot/prompt, from Tarot night and the Album; a
+ * card of the story's one set is the same card whichever love interest's `li` asks. `subject` names it in the review.
+ */
+export const tarotPaintTarget = (runKey: string, li: string, card: Arcana, subject: string): PaintTarget => ({
+  id: `tarot:${deckKey(card, li)}`,
+  subject,
+  paintPath: `${runPath(runKey)}/art/tarot`,
+  promptPath: `${runPath(runKey)}/art/tarot/prompt`,
+  body: { li, card },
+});
 
 /** S/routes/wish.ts: POST .../wish/art {banner} and .../wish/art/prompt {banner}. */
 export const bannerPaintTarget = (runKey: string, banner: BannerView): PaintTarget => ({

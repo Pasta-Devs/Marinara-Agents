@@ -18,7 +18,8 @@
 // - The picture (S/prompts.ts tarotCardPrompt) is the illustration only, at a story CG's size: its people as a picture
 //   kept outside the story (at most Suggestive), with each person's likeness as a keepsake sends it (cgSubjects by id
 //   and role, so a likeness whose pictures fail to load stops before the paid call), or a card of nobody as a place.
-// Opening Tarot night or reading the deck never paints.
+// - Tarot night shows a love interest the shared set and their own cards (deckView), the Album every card (albumCards).
+// Opening Tarot night or the Album, or reading the deck, never paints.
 import type { LiId, Paint, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
   ARCANA,
@@ -28,6 +29,7 @@ import {
   type ArcanaFigure,
   type TarotDeckCard,
 } from "../../../../../client/src/features/otome-forge/shared/tarot.js";
+import type { AlbumCard } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { type ImagePrompt, SCENE_SIZE, tarotCardPrompt } from "../prompts.js";
@@ -99,6 +101,25 @@ export function deckView(runId: string, deck: TarotDeck, li: LiId): Record<strin
         { card: entry.card, art: paintView(runId, tarotOwner(key), entry.art) ?? entry.art },
       ]),
   );
+}
+
+/**
+ * The Album's cards (GET /runs/:run/album): every deck entry, each paint as the client sees it, in Arcana order, then
+ * by love interest in `cast` order (one no longer in the cast goes last).
+ */
+export function albumCards(runId: string, deck: TarotDeck, cast: readonly LiId[]): AlbumCard[] {
+  const rank = (li: LiId | undefined) => {
+    const index = li ? cast.indexOf(li) : -1;
+    return index < 0 ? cast.length : index;
+  };
+  return Object.entries(deck.cards)
+    .map(([key, entry]): AlbumCard => ({
+      key,
+      card: entry.card,
+      ...(entry.li ? { li: entry.li } : {}),
+      art: paintView(runId, tarotOwner(key), entry.art) ?? entry.art,
+    }))
+    .sort((a, b) => ARCANA.indexOf(a.card) - ARCANA.indexOf(b.card) || rank(a.li) - rank(b.li));
 }
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");

@@ -5,12 +5,14 @@
 // reduced motion the keyboard alone opens the letter; a wish without enough Starlight sends nothing. The Wardrobe's
 // toggle moves between a love interest's looks and mine, wears a look at home (his line about it replaces the
 // "noticing" hint in one live region) and shows one of mine; the Album opens a CG large and saves it through the
-// Engine. With the Engine's prompt review on, an open on the 5★ reveal hands focus to Continue, and the review a wish's
-// results open is the dialog on top, and it paints. The Shop tab (#2128) sells a gift once per tap, and a figurine
-// whose scene it then offers; one it cannot afford says how much Starlight is missing. A figurine's Buy says it paints
-// 1 image (#2138), after a tap of Paint it under prompt review; once bought it shows Painting… while the Shop reads
-// itself again, and a failed paint offers Try again, held in place while its tap runs, so a double tap paints it once
-// and hands focus back to Play the scene; the painted figurine shows only cut out of its chroma matte.
+// Engine, and its Cards tab (#2151) lists Tarot night's drawn cards on their faces, opens a painted one large to save
+// and paints a waiting one, or says how to get cards. With the Engine's prompt review on, an open on the 5★ reveal
+// hands focus to Continue, and the review a wish's results open is the dialog on top, and it paints. The Shop tab
+// (#2128) sells a gift once per tap, and a figurine whose scene it then offers; one it cannot afford says how much
+// Starlight is missing. A figurine's Buy says it paints 1 image (#2138), after a tap of Paint it under prompt review;
+// once bought it shows Painting… while the Shop reads itself again, and a failed paint offers Try again, held in place
+// while its tap runs, so a double tap paints it once and hands focus back to Play the scene; the painted figurine
+// shows only cut out of its chroma matte.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-wish.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -1407,7 +1409,125 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
   expect(overflow, `no sideways scroll at ${width} px`).toBeLessThanOrEqual(0);
 });
 
-// With a mouse the Album's seven tabs wrap inside the strip, whose scrollbar is hidden; a phone keeps one native swipe
+test("Otome Hearth Album: the Cards tab lists the drawn cards on their faces, opens a painted one to save, and paints a waiting one", async ({
+  page,
+}, testInfo) => {
+  // #2151: the deck as the server lists it, in Arcana order and then cast order. The Fool and Cassian's Lovers are
+  // painted, Ilvar's Lovers waits for the tap (Ask before painting), Death failed and the Tower is painting.
+  const calls: Call[] = [];
+  const view = runView(2000);
+  const FOOL = "/api/gallery/file/otome-forge-tarot-fool.png";
+  const LOVERS = "/api/gallery/file/otome-forge-tarot-lovers-cassian.png";
+  const PAINTED = "/api/gallery/file/otome-forge-tarot-lovers-ilvar.png";
+  for (const url of [FOOL, LOVERS, PAINTED]) {
+    await page.route(`**${url}`, (route) => route.fulfill({ body: PNG, contentType: "image/png" }));
+  }
+  const at = "2026-11-08T10:00:00.000Z";
+  let painted = false;
+  const album = () => ({
+    ...albumView(),
+    cards: [
+      { key: "fool", card: "fool", art: { state: "ready", at, url: FOOL } },
+      {
+        key: `lovers@${ILVAR}`,
+        card: "lovers",
+        li: ILVAR,
+        art: painted ? { state: "ready", at, url: PAINTED } : { state: "waiting-consent", at },
+      },
+      { key: `lovers@${CASSIAN}`, card: "lovers", li: CASSIAN, art: { state: "ready", at, url: LOVERS } },
+      { key: "death", card: "death", art: { state: "failed", at, error: "The provider refused the image." } },
+      { key: "tower", card: "tower", art: { state: "pending", at } },
+    ],
+  });
+  await stubRoutes(
+    page,
+    (call) => {
+      const path = call.path.replace("/api/otome-forge", "");
+      if (path === "/index" || path === "/index/opened") return { status: 200, json: { index: index() } };
+      if (path === `/runs/${RUN}`) return { status: 200, json: { view } };
+      if (path === `/runs/${RUN}/album`) return { status: 200, json: album() };
+      if (path === `/runs/${RUN}/art/tarot` && call.body?.card === "lovers") {
+        painted = true;
+        return { status: 200, json: { art: { state: "ready", at, url: PAINTED } }, delay: 300 };
+      }
+      if (path === `/runs/${RUN}/art/tarot`) {
+        return { status: 200, json: { art: { state: "failed", at, error: "Refused again." } } };
+      }
+      return undefined;
+    },
+    calls,
+  );
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  const tabs = root.getByRole("tablist", { name: "Album" });
+  await tabs.getByRole("tab", { name: "Cards", exact: true }).click();
+  const panel = root.getByRole("tabpanel");
+  // Each on its own card face, labelled with whose it is when it was cast for a love interest.
+  await expect(panel.locator(".of-album-card .of-album-cg-title")).toHaveText([
+    "The Fool",
+    "The Lovers · Ilvar Thorne",
+    "The Lovers · Cassian",
+    "Death",
+    "The Tower",
+  ]);
+  await expect(panel.locator('.of-album-card svg[data-card="fool"] image')).toHaveAttribute("href", FOOL);
+  await expect(panel.locator('.of-album-card svg[data-card="death"] image')).toHaveCount(0);
+  await expect(panel.locator(".of-album-card").filter({ hasText: "The Tower" })).toContainText("Painting…");
+  await page.screenshot({ path: testInfo.outputPath("album-cards.png") });
+
+  // A painted card opens large, steps through the painted ones and saves as a CG does.
+  await panel.getByRole("button", { name: "View: The Fool" }).click();
+  await expect(page.getByRole("dialog", { name: "The Fool" })).toContainText("A Tarot card");
+  await page.keyboard.press("ArrowRight");
+  const viewer = page.getByRole("dialog", { name: "The Lovers · Cassian" });
+  await expect(viewer.getByText("2 of 2")).toBeVisible();
+  const download = page.waitForEvent("download");
+  await viewer.getByRole("button", { name: "Save image" }).click();
+  expect((await download).suggestedFilename()).toBe("otome-forge-tarot-lovers-cassian.png");
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+
+  // A failed card of nobody tries again through the first love interest (the story's one set is everyone's).
+  const retry = panel.getByRole("button", { name: "Try painting it again" });
+  await expect(retry).toHaveAccessibleDescription("Death");
+  await retry.click();
+  await expect.poll(() => posts(calls, "/art/tarot").length).toBe(1);
+  await expect(retry).toHaveAttribute("aria-disabled", "false");
+  // Ilvar's Lovers waits for the tap: Paint it paints that one card, then it opens large.
+  const paint = panel.getByRole("button", { name: "Paint it" });
+  await expect(paint).toHaveAccessibleDescription("The Lovers · Ilvar Thorne");
+  await expect(panel.locator(".of-album-card").filter({ hasText: "The Lovers · Ilvar Thorne" })).toContainText(
+    "Paints 1 image",
+  );
+  expect((await paint.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await paint.click();
+  await expect(panel.getByRole("button", { name: "View: The Lovers · Ilvar Thorne" })).toBeVisible();
+  expect(posts(calls, "/art/tarot").map((call) => [call.body?.li, call.body?.card])).toEqual([
+    [ILVAR, "death"],
+    [ILVAR, "lovers"],
+  ]);
+  const width = page.viewportSize()!.width;
+  const overflow = await root.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(overflow, `no sideways scroll at ${width} px`).toBeLessThanOrEqual(0);
+});
+
+test("Otome Hearth Album: an empty Cards tab says how to get cards", async ({ page }) => {
+  const calls: Call[] = [];
+  const { answer } = wishStub();
+  await stubRoutes(
+    page,
+    (call) => (call.path.endsWith("/album") ? { status: 200, json: { ...albumView(), cards: [] } } : answer(call)),
+    calls,
+  );
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  await root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Cards", exact: true }).click();
+  await expect(root.getByRole("tabpanel")).toHaveText(
+    "No cards yet. Each card you draw at Tarot night in Dates is painted once and kept here.",
+  );
+});
+
+// With a mouse the Album's nine tabs wrap inside the strip, whose scrollbar is hidden; a phone keeps one native swipe
 // strip. Measured before any click: Playwright would otherwise scroll an off-screen tab into view for the test.
 test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps one swipeable strip", async ({
   page,
@@ -1423,7 +1543,17 @@ test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps 
   const root = await openOtome(page);
   await openDock(root, "Album");
   const tabs = root.getByRole("tablist", { name: "Album" });
-  const names = ["CGs", "Stickers", "Photos", "Memories", "Love Timeline", "Favourite lines", "Soundtrack", "Tells"];
+  const names = [
+    "CGs",
+    "Stickers",
+    "Photos",
+    "Cards",
+    "Memories",
+    "Love Timeline",
+    "Favourite lines",
+    "Soundtrack",
+    "Tells",
+  ];
   for (const [colorScheme, look] of [
     ["dark", "midnight"],
     ["light", "pearl"],

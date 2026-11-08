@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.18.0",
+          "date": "2026-11-08",
+          "notes": "- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as \"The Lovers · Ren\". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.",
+          "highlight": true
+        },
+        {
           "version": "0.17.1",
           "date": "2026-11-08",
           "notes": "- **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.",
@@ -788,12 +794,6 @@
           "date": "2026-11-06",
           "notes": "- **Chapters remember your last Character Story.** A main, route or repair chapter led by another love interest now always knows the Character Story you played last, even before its summary is written, so it no longer contradicts what happened there. That story stays private between you and its love interest: the others still don't know what happened in it.",
           "highlight": false
-        },
-        {
-          "version": "0.8.10",
-          "date": "2026-11-06",
-          "notes": "- **Scenes are written as they were before 0.8.9**: each one when you reach it, and the next one ahead while you read. 0.8.9 wrote the rest of the chapter ahead, so later scenes missed the small choices you made along the way. The fixes for pictures that hung and for the Story connection stay.",
-          "highlight": true
         }
       ]
     },
