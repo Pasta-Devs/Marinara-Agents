@@ -618,6 +618,7 @@ export async function recallText(
     );
     // All or none (Dottore on #2198): one detail for the fitter, so a scene that does not fit leaves out all of the
     // chapter's memories, as it would its recalls, and never sends fewer of them than another.
+    // `details` come newest first, the order the fitter gives a recall pool's way in; told oldest first, in story order.
     const memories = [...result.details]
       .reverse()
       .map((item) => `# Recalled memory: ${item.title}\n${item.content.trim()}`)
