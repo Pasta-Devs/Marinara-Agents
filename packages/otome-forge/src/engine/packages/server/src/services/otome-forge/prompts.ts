@@ -64,7 +64,9 @@
 //   notebookMemories: older Read Me entries as recall records (S/memory/memory.ts)
 // (f) Phone
 //   renderThread: the thread as prompt text (P17, S/phone/memory.ts)
-//   chatReplyMessages: P17 chat reply, with stickers (#2044) and daily messages (S/phone/chat.ts, S/phone/daily.ts)
+//   chatReplyMessages: P17 chat reply, with stickers (#2044) and daily messages (S/phone/chat.ts, S/phone/daily.ts);
+//     0.20.2: its instructions and his card, the story and the conversations that are over are cached (five minutes),
+//     the thread now and the task after them
 //   chatMemoryMessages: P18 what he remembers of a closed conversation (S/phone/memory.ts), and the group chat's
 //   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts)
 // (g) Home and care
@@ -3102,7 +3104,11 @@ export function chatReplyMessages({
           "They already happened. Bring one up only where it fits; never replay it or start from it again.",
         ].join("\n")
       : "",
-    "",
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  // 0.20.2: everything above stays the same through a conversation, so it is cached; the thread and the task follow.
+  const now = [
     "THE THREAD NOW (oldest first)",
     tail.length ? renderThread(tail, { li: name, player: them }, "his", stickers?.name) : "(no messages yet)",
     "",
@@ -3119,8 +3125,9 @@ export function chatReplyMessages({
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");
   return [
-    { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "system", content: system, cacheBreakpoint: true },
+    { role: "user", content: user, cacheBreakpoint: true },
+    { role: "user", content: now },
   ];
 }
 

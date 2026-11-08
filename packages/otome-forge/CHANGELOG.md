@@ -4,6 +4,10 @@
 
 - **Route and repair chapters cost less to start.** Their plan now opens with the same story the chapter's scenes are written from, and on an Anthropic connection caches it, so the first scene reads it at the cached price instead of writing it all again. The plan sees the same things as before, in a different order. This works when your Planning and Narration connections are the same, as for main chapters.
 
+## 0.20.2 — 2026-11-08
+
+- **Messages cost less.** When you text a love interest on an Anthropic connection, everything that stays the same through the conversation (their card, what they know of the story, your earlier conversations) is cached for five minutes, so each reply after the first sends it at the cached price instead of in full. A daily message they send first is cached the same way for your answer.
+
 ## 0.20.0 — 2026-11-08
 
 - **Side characters who keep coming back get a sprite.** Turn on **Side character sprites** in **Settings → Images**. Once a side character has spoken in two different chapters, their one full-body sprite stands where a love interest's figure does while they speak. It's one neutral picture, with no expressions. Stories you already started count the scenes you've read.
