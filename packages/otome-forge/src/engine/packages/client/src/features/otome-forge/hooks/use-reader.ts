@@ -6,7 +6,8 @@
 // interest instead of "They'll remember that.". A Confrontation node (M2b) is played as a beat whose choices are the
 // four stances (lib/reader-state.ts confrontationBeat): each stance is sent once, and the server reveals the next round
 // or, after the third, the ending, which closes on its own card. A key image is marked seen once it has been shown,
-// after the server has heard the read reached it; a paint that waits for consent is painted on a tap.
+// after the server has heard the read reached it; a paint that waits for consent is painted on a tap, as is a recurring
+// side character's sprite (0.20.0, SceneArt.sides).
 // ──────────────────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -183,7 +184,10 @@ const PAINT_POLL_TRIES = 144;
 const AFTER_VOICE_MS = 900;
 
 /** What a tap paints: a key image is held by its chapter and node, as the reader may move on before it is sent. */
-type PaintTarget = { kind: "cg"; key: string; i: number } | { kind: "place"; place: string };
+type PaintTarget =
+  | { kind: "cg"; key: string; i: number }
+  | { kind: "place"; place: string }
+  | { kind: "side"; key: string; name: string };
 
 /** A paint whose prompt is shown for editing before it is sent. */
 export interface PaintReview {
@@ -587,7 +591,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       waitingForFaces(art) ||
       // A first-wear look is waited for with expressions off too, while it paints and then its cut-out: only this read
       // brings it, as the run's own reads stand him in his worn look.
-      art.lookComing === true;
+      art.lookComing === true ||
+      // A side character's sprite while it paints or is cut out (0.20.0).
+      Object.values(art.sides ?? {}).some((side) => side.coming === true);
     const look = async () => {
       tries += 1;
       try {
@@ -687,6 +693,32 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
                 ? { ...shown, art: { ...shown.art, cg: { ...shown.art.cg, art } } }
                 : shown,
             );
+        } else if (target.kind === "side") {
+          const result = await otome.post<{ art?: Paint | null }>(`${runPath(runKey)}/art/side`, {
+            key: target.key,
+            ...edited,
+          });
+          const art = result?.art;
+          // Onto every name the scene shows them under, only on the scene it was tapped on (shown.id against this
+          // render's sceneId, as the key image); the scene's next read brings the cut-out, and a scene shown since its
+          // own poll.
+          if (art)
+            setScene((shown) =>
+              shown && shown.id === sceneId
+                ? {
+                    ...shown,
+                    art: {
+                      ...shown.art,
+                      sides: Object.fromEntries(
+                        Object.entries(shown.art.sides ?? {}).map(([name, side]) => [
+                          name,
+                          side.key === target.key ? { ...side, art } : side,
+                        ]),
+                      ),
+                    },
+                  }
+                : shown,
+            );
         } else {
           const result = await otome.post<{ world?: WorldView }>(`${runPath(runKey)}/art/place`, {
             place: target.place,
@@ -722,7 +754,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         const initial =
           target.kind === "cg"
             ? await otome.post<ImagePrompt>(`${runPath(runKey)}/art/cg/prompt`, { key: target.key, i: target.i })
-            : await otome.post<ImagePrompt>(`${runPath(runKey)}/art/place/prompt`, { place: target.place });
+            : target.kind === "side"
+              ? await otome.post<ImagePrompt>(`${runPath(runKey)}/art/side/prompt`, { key: target.key })
+              : await otome.post<ImagePrompt>(`${runPath(runKey)}/art/place/prompt`, { place: target.place });
         setReview({ target, initial, busy: false, error: null });
       } catch (error) {
         setNotice(otome.errorMessage(error));
@@ -739,6 +773,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     [chapterKey, node, paint],
   );
   const paintPlace = useCallback((place: string) => paint({ kind: "place", place }), [paint]);
+  /** 0.20.0: a recurring side character's sprite, on the tap (its consent, or Retry). */
+  const paintSide = useCallback((key: string, name: string) => paint({ kind: "side", key, name }), [paint]);
   /** #2147: a background from the Engine's library as the place's picture (nothing painted); rejects on failure. */
   const chooseBackground = useCallback(
     async (place: string, url: string) => {
@@ -1167,6 +1203,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     markCgSeen,
     paintCg,
     paintPlace,
+    paintSide,
     chooseBackground,
     painting,
     review,

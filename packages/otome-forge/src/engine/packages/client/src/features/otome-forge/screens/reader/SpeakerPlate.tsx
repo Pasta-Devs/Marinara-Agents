@@ -26,8 +26,21 @@ export function useSpeakerSprite(name: string | null, lineKey: string) {
   };
 }
 
-/** A fresh named line begins empty; no state or crossfade layer belongs to the previous speaker. */
-export function SpeakerPlate({ name, url, onError }: { name: string; url: string | null; onError: () => void }) {
+/**
+ * A fresh named line begins empty; no state or crossfade layer belongs to the previous speaker. `cut` false shows an
+ * image with its backdrop (a side character's sprite whose cleanup failed, 0.20.0) cropped and faded, as an uncut look.
+ */
+export function SpeakerPlate({
+  name,
+  url,
+  cut = true,
+  onError,
+}: {
+  name: string;
+  url: string | null;
+  cut?: boolean;
+  onError: () => void;
+}) {
   if (!url) return null;
   return (
     <figure
@@ -39,7 +52,7 @@ export function SpeakerPlate({ name, url, onError }: { name: string; url: string
       aria-label={name}
       onErrorCapture={onError}
     >
-      <FaceLayers url={url} cut={[url]} />
+      <FaceLayers url={url} cut={cut ? [url] : []} />
     </figure>
   );
 }

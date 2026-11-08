@@ -6,15 +6,18 @@
 // POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge
 // GET  /runs/:run                          → {view: RunView}; with the stickers the player has (#2044), whose owed
 //                                             sets and paints it queues in the background, as it queues the love
-//                                             interests' missing personality quiz answers (#2174) and long-term recall's
-//                                             indexing of chapter summaries not indexed yet (0.19.0)
+//                                             interests' missing personality quiz answers (#2174), long-term recall's
+//                                             indexing of chapter summaries not indexed yet (0.19.0), records the side
+//                                             characters of scenes read before 0.20.0 (once) and, with Side
+//                                             character sprites on, tends their looks and sprites (S/story/side-cast.ts)
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
 // POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?}
 //      → {world: WorldView}; with an image connection, each paint step the world lacks is added, waiting for the tap.
 //      dailyMessages and groupSquabbles are 0–24 (Settings → Connections, S/phone/daily.ts, S/phone/group.ts). A new
 //      `connections.embeddings` (Memory recall embeddings) must name a connection with an embedding model (400
-//      `no-embeddings`), and rebuilds long-term recall's index with it (S/memory/recall-index.ts)
+//      `no-embeddings`), and rebuilds long-term recall's index with it (S/memory/recall-index.ts). Turning
+//      images.sideSprites on starts the qualifying side characters' looks and sprites in the background.
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
 // POST /runs/:run/lis/:li/intimacy          → {intimacy: true}; writes his missing intimacy block only (1 call;
@@ -104,6 +107,7 @@ import { PLAYER_STICKER_OWNER } from "../../../../../client/src/features/otome-f
 import { ensureStickerSets, stickerArtUrls, stickerBook, stickersComing } from "../art/stickers.js";
 import { fillIntimacy } from "../intimacy.js";
 import { cancellable } from "../story/beats.js";
+import { backfillSideCast, tendSideCast } from "../story/side-cast.js";
 
 const NoFields = z.object({});
 const ID_MAX = 200;
@@ -160,6 +164,7 @@ const SettingsBody = z.object({
       expressions: z.boolean().optional(),
       styleProfileId: z.string().max(200).optional(),
       style: ImageStyleSchema.optional(),
+      sideSprites: z.boolean().optional(),
     })
     .optional(),
   connections: ConnectionsSchema.optional(),
@@ -373,6 +378,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
             error instanceof Error ? error.message : String(error),
           ),
         );
+      // 0.20.0: the side characters of scenes read before they were recorded, once; then, with Side character
+      // sprites on, what the recurring ones are owed. Neither is waited for.
+      const sideMode = { debugMode: debugModeOf(request), review: reviewModeOf(request) };
+      void backfillSideCast(deps, runId).then(() => tendSideCast(deps, runId, sideMode));
       const run = await withPersonaAbout(await withEngineLooks(read, runId), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.
@@ -502,6 +511,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         player: (await store.readDoc(playerId(runId), normalizePlayer)) ?? {},
         units: await readCastUnits(store, runId),
       };
+      let sideSpritesOn = false;
       // The embedding choice this write replaced, read inside the write itself (it may run again on a newer revision),
       // so a concurrent save between the check above and this write still rebuilds the index when it should.
       let replaced: string | null = null;
@@ -511,6 +521,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         const images = { ...current.images, ...body.images };
         // Turning faces on again allows one more attempt at a set that failed or stopped before (the kit's rule).
         if (images.expressions && !current.images.expressions) images.expressionsSince = at;
+        sideSpritesOn = !!images.sideSprites && !current.images.sideSprites;
         const from = { ...current.content, imageRating: current.images.rating };
         if (!ageGate && raisesGatedSetting(from, { ...content, imageRating: images.rating })) throw ageGateNeeded();
         return {
@@ -528,6 +539,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!world) throw runNotFound();
+      // Side character sprites turned on: the recurring ones' looks and sprites start in the background.
+      if (sideSpritesOn) {
+        void tendSideCast(deps, runId, { debugMode: debugModeOf(request), review: reviewModeOf(request) });
+      }
       // Another embedding model, as this write saved it: the recall index is built again with it, in the background.
       if (embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
         void deps.recall

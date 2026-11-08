@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.20.0 — 2026-11-08
+
+- **Side characters who keep coming back get a sprite.** Turn on **Side character sprites** in **Settings → Images**. Once a side character has spoken in two different chapters, their one full-body sprite stands where a love interest's figure does while they speak. It's one neutral picture, with no expressions. Stories you already started count the scenes you've read.
+- **Your own characters look like themselves.** Someone whose name matches one of your Engine character cards gets their sprite as soon as they speak, painted with that card's avatar and full-body sprite as references. Two cards with the same name are never guessed between.
+- **What it costs.** Each one takes 1 call on your Planning connection to write their look (none for a character card), then 1 image. With **Ask before painting** on, tap **Paint** beside the place while they speak.
+
 ## 0.19.1 — 2026-11-08
 
 - **Not every chapter ends in a Confrontation or a Closer.** A main chapter has one only when it builds to it, and otherwise ends on an ordinary scene or a moment. A story arc's last chapter still has one for its big event. Confrontations and Closers still alternate, counting only chapters that have one.

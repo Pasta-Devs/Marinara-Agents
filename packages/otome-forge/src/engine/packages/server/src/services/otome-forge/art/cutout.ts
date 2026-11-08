@@ -10,6 +10,8 @@
 //   ready     `url` is the cut-out, `ref` its gallery reference (a deleted run takes it along)
 //   failed    never tried again by the same cleanup revision: Home pans over the uncut look instead
 // A newer Engine cleanup revision rebuilds an obsolete derivative from the retained original, without paid painting.
+// 0.20.0: a recurring side character's sprite is cut out the same way, its record kept on that person in `${R}:sides`
+// (owner `side:<record key>`, S/art/side-sprites.ts).
 // Cut-outs cost no model or image call. They run one at a time in this process, outside the background lane (which
 // takes a model connection's admission slot).
 // ponytail: a cut-out of a look that was repainted stays until the run is deleted; the upgrade path is pruning it with
@@ -17,8 +19,9 @@
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { Cutout, LiId, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { isEngineAvatar } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
-import { playerId, runDocTarget, unitId } from "../ids.js";
+import { playerId, runDocTarget, sideCastId, unitId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
+import { normalizeSideCast } from "../schemas/side-cast.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
 import { galleryRef, loopbackBaseUrl, type PaintedImage } from "./image-client.js";
@@ -151,8 +154,11 @@ export interface CutoutDeps {
   cutouts?: CutoutClient;
 }
 
-/** Love interests and the protagonist share cleanup; each keeps derivatives in its own existing document. */
-type CutoutOwner = LiId | "player";
+/**
+ * Love interests, the protagonist and side characters (`side:<record key>`) share cleanup; each keeps derivatives in
+ * its own existing document.
+ */
+type CutoutOwner = LiId | "player" | `side:${string}`;
 
 // ── One at a time, each once ──
 
@@ -200,10 +206,20 @@ async function save(
     saved = only(current.cutouts?.[url]);
     return saved ? { ...current, cutouts: { ...current.cutouts, [url]: record } } : current;
   };
+  const side = li.startsWith("side:") ? li.slice("side:".length) : null;
   const unit =
     li === "player"
       ? await deps.store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, update)
-      : await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, update);
+      : side !== null
+        ? await deps.store.updateDoc(runDocTarget("sides", sideCastId(runId)), normalizeSideCast, (current) => {
+            const person = current.people[side];
+            if (!person) {
+              saved = false;
+              return current;
+            }
+            return { ...current, people: { ...current.people, [side]: update(person) } };
+          })
+        : await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, update);
   return !!unit && saved;
 }
 

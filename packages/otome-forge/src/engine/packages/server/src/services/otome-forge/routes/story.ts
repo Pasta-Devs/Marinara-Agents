@@ -252,7 +252,10 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const { segment } = parseBody(SegmentBody, request.body);
       const { runId } = runParam(request);
       const { key, i } = beatParams(request);
-      return readTo(deps, runId, key, i, segment, { debugMode: debugModeOf(request) });
+      return readTo(deps, runId, key, i, segment, {
+        debugMode: debugModeOf(request),
+        review: reviewModeOf(request),
+      });
     }),
   );
 
@@ -262,7 +265,10 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const { segment } = parseBody(SegmentBody, request.body);
       const { runId } = runParam(request);
       const { key, i } = beatParams(request);
-      const { beat, ...rest } = await easeOff(deps, runId, key, i, segment, { debugMode: debugModeOf(request) });
+      const { beat, ...rest } = await easeOff(deps, runId, key, i, segment, {
+        debugMode: debugModeOf(request),
+        review: reviewModeOf(request),
+      });
       return { beat: beatView(runId, beat), ...rest };
     }),
   );

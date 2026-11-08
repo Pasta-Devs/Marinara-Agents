@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.20.0",
+          "date": "2026-11-08",
+          "notes": "- **Side characters who keep coming back get a sprite.** Turn on **Side character sprites** in **Settings → Images**. Once a side character has spoken in two different chapters, their one full-body sprite stands where a love interest's figure does while they speak. It's one neutral picture, with no expressions. Stories you already started count the scenes you've read.\n- **Your own characters look like themselves.** Someone whose name matches one of your Engine character cards gets their sprite as soon as they speak, painted with that card's avatar and full-body sprite as references. Two cards with the same name are never guessed between.\n- **What it costs.** Each one takes 1 call on your Planning connection to write their look (none for a character card), then 1 image. With **Ask before painting** on, tap **Paint** beside the place while they speak.",
+          "highlight": true
+        },
+        {
           "version": "0.19.1",
           "date": "2026-11-08",
           "notes": "- **Not every chapter ends in a Confrontation or a Closer.** A main chapter has one only when it builds to it, and otherwise ends on an ordinary scene or a moment. A story arc's last chapter still has one for its big event. Confrontations and Closers still alternate, counting only chapters that have one.",
@@ -787,12 +793,6 @@
           "version": "0.9.4",
           "date": "2026-11-06",
           "notes": "- **Otome Hearth uses a little less battery.** It does less drawing on every screen, and stops work you can't see. The soft glows drifting behind each screen are blurred once instead of on every frame. Once Home has appeared, the scene hidden behind your room is no longer drawn at all, and in Midnight the window's light takes less work to draw. The glows hidden behind the reader hold still, and so do Home's stars at dawn and by day, when the sky hides them. Nothing looks, moves or sounds different.",
-          "highlight": false
-        },
-        {
-          "version": "0.9.3",
-          "date": "2026-11-06",
-          "notes": "- **Figurines are painted.** A love interest's figurine is now a painted picture of them as a small collectible figure in the look they wear, standing on a display base, instead of a drawing. It is painted once, right after you buy it (1 image, with your image connection), then cut out so it stands on the Shop's shelf, in your Wardrobe and on Home. **Ask before painting** and prompt review wait for your tap, and a paint that fails shows **Try painting it again**. Opening the Shop no longer draws every figurine with your Planning model. A figurine you bought before 0.9.3 shows **Paint it** in the Shop and the Wardrobe.",
           "highlight": false
         }
       ]

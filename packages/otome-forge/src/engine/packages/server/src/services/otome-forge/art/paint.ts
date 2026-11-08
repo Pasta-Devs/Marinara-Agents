@@ -69,7 +69,8 @@ const notFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not
  * S/art/outfits.ts) an item's art (`item:<item id>`) or a couple set's pair portrait (`item:<her look's id>/pair`),
  * (#2044, S/art/stickers.ts) a chat sticker (`sticker:<sticker id>`), (#2087, S/minigames/photo-shoot.ts) a Photo
  * Shoot photo (`photo:<photo id>`), (#2138, S/art/figurine.ts) a love interest's Shop figurine (`figurine:<li id>`),
- * or (#2151, S/art/tarot-deck.ts) a card of the Tarot deck (`tarot:<deckKey>`).
+ * (#2151, S/art/tarot-deck.ts) a card of the Tarot deck (`tarot:<deckKey>`), or (0.20.0, S/art/side-sprites.ts) a
+ * recurring side character's sprite (`side:<record key>`).
  */
 export type PaintOwner =
   | LookOwner
@@ -79,7 +80,8 @@ export type PaintOwner =
   | `sticker:${string}`
   | `photo:${string}`
   | `figurine:${string}`
-  | `tarot:${string}`;
+  | `tarot:${string}`
+  | `side:${string}`;
 
 const live = new Map<string, { settled: Promise<void>; settle: () => void }>();
 const liveKey = (runId: string, owner: PaintOwner) => `${runId}|${owner}`;

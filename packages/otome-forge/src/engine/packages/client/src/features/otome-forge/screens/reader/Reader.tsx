@@ -12,7 +12,9 @@
 // panel (#2041, WhoSaidWhat.tsx). A side-with choice (#2046) is marked as one, each option names whom it backs, and its
 // pick shows the affection it moved with each love interest. A chapter's closing decision (its big choice, #2146) may be
 // answered in the player's own words (OwnAnswerDialog.tsx); the draft outlives the dialog until it is sent. A big
-// moment's side (#2155) is announced at the chapter's end, waiting in Routes.
+// moment's side (#2155) is announced at the chapter's end, waiting in Routes. A recurring side character (0.20.0, Side
+// character sprites) stands in their one neutral sprite while they speak, in the speaker's figure slot; one whose
+// sprite waits for a tap (Ask before painting, a failure) offers Paint beside the place, with its cost.
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -279,13 +281,30 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       }
     : null;
   const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
-  const speaker = useSpeakerSprite(cg ? null : otherSpeaker, reader.lineKey);
+  // 0.20.0: a recurring side character's own sprite (SceneArt.sides) comes first; else an Engine card's, as before.
+  const side = otherSpeaker ? reader.sceneArt?.sides?.[otherSpeaker] : undefined;
+  const sideUrl = side?.url && !failedArt.has(side.url) ? side.url : null;
+  const speaker = useSpeakerSprite(cg || sideUrl ? null : otherSpeaker, reader.lineKey);
+  const sideState = side?.art?.state;
+  const sidePaint =
+    canPaint &&
+    side &&
+    otherSpeaker &&
+    (sideState === "waiting-consent" || sideState === "failed" || sideState === "stopped")
+      ? {
+          name: otherSpeaker,
+          retry: sideState !== "waiting-consent",
+          busy: reader.painting,
+          onPaint: () => void reader.paintSide(side.key, otherSpeaker),
+        }
+      : undefined;
   const stageArt = forgeStoryExpressionArt(
     { art: onStageLi?.worn?.url ?? onStageLi?.portrait ?? "", expressions: onStageLi?.expressions ?? {} },
     { expression: reader.onStage.face },
     FACES,
   ).art;
-  const usesCharacterSprite = !cg && (otherSpeaker ? !!speaker.url : !!stageArt && !failedArt.has(stageArt));
+  const usesCharacterSprite =
+    !cg && (otherSpeaker ? !!(sideUrl ?? speaker.url) : !!stageArt && !failedArt.has(stageArt));
   const placeOnScreen = !!placeUrl && !failedArt.has(placeUrl);
   const cgOnScreen = !!cgUrl && !failedArt.has(cgUrl);
 
@@ -412,6 +431,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
               : undefined
           }
           placePaint={placePaint}
+          sidePaint={reading ? sidePaint : undefined}
           onPlaceBackground={() => openDialog("background")}
           tags={reader.tags}
           reading={reading}
@@ -441,6 +461,14 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             state={cg.art?.state}
             busy={reader.painting}
             onPaint={canPaint ? () => void reader.paintCg() : undefined}
+          />
+        ) : otherSpeaker && sideUrl ? (
+          <SpeakerPlate
+            key={reader.lineKey}
+            name={otherSpeaker}
+            url={sideUrl}
+            cut={side?.cut === true}
+            onError={() => artStatus(sideUrl, false)}
           />
         ) : otherSpeaker ? (
           <SpeakerPlate key={reader.lineKey} name={otherSpeaker} url={speaker.url} onError={speaker.onError} />
@@ -570,7 +598,11 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       {reader.review ? (
         <PromptReviewDialog
           subject={
-            reader.review.target.kind === "place" ? reader.review.target.place : t("ui.otomeForge.reader.cgQuiet")
+            reader.review.target.kind === "place"
+              ? reader.review.target.place
+              : reader.review.target.kind === "side"
+                ? reader.review.target.name
+                : t("ui.otomeForge.reader.cgQuiet")
           }
           initial={reader.review.initial}
           busy={reader.review.busy}
