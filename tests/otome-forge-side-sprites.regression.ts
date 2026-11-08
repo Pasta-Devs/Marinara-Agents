@@ -136,8 +136,11 @@ async function sideWorld(runKey: string, { images, before, characters = [], repl
     );
     return { status, body: (result === reply ? payload : result) as Record<string, any> };
   };
-  /** A one-node main chapter `n` whose only scene is `segments` (with `extra` on the beat). */
-  const scene = async (n: number, segments: Segment[], extra: Parameters<typeof beat>[1] = {}) => {
+  /**
+   * A one-node main chapter `n` whose only scene is `segments` (with `extra` on the beat); with `ahead`, a second node
+   * whose scene is written ahead and not read yet.
+   */
+  const scene = async (n: number, segments: Segment[], extra: Parameters<typeof beat>[1] = {}, ahead?: Segment[]) => {
     const key = `main-${n}`;
     const chapter: Chapter = {
       key,
@@ -148,7 +151,10 @@ async function sideWorld(runKey: string, { images, before, characters = [], repl
       title: `Chapter ${n}`,
       tags: [],
       summary: "The lanterns fail.",
-      nodes: [{ i: 0, kind: "beat", guide: "Node 0.", cast: [KAI] }],
+      nodes: [
+        { i: 0, kind: "beat", guide: "Node 0.", cast: [KAI] },
+        ...(ahead ? [{ i: 1, kind: "beat" as const, guide: "Node 1.", cast: [KAI] }] : []),
+      ],
       ledger: { relationship: [], conflict: [], offscreen: [] },
       plannedAt: at,
       connectionId: "conn-text",
@@ -156,6 +162,10 @@ async function sideWorld(runKey: string, { images, before, characters = [], repl
     await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, key)), normalizeChapter, () => chapter);
     const written = { ...beat(0, { segments, ...extra }), key, written: { ...beat(0).written, at: `${at}#${n}` } };
     await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, key, 0)), normalizeBeat, () => written);
+    if (ahead) {
+      const next = { ...beat(1, { segments: ahead }), key, written: { ...beat(1).written, at: `${at}#${n}b` } };
+      await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, key, 1)), normalizeBeat, () => next);
+    }
     return key;
   };
   /** Reads chapter `key`'s scene to its end through the route, as the reader does. */
@@ -255,8 +265,30 @@ test("someone qualifies in a second chapter: one look call, logged, with the con
   assert.equal(t.lookCalls().length, 0);
   assert.equal(t.paid.length, 0);
 
+  // Her look reads the scene as it was read: the picked option's branch, never the other one or a scene written ahead.
+  const picked = (id: string, text: string) => ({
+    id,
+    text: id,
+    selection: { kind: "action" as const, text: id },
+    segments: [ARLE_SAYS(text, "Arlecchino")],
+  });
   await t.read(
-    await t.scene(2, [line("", "The House of the Hearth."), ARLE_SAYS("SECOND-CHAPTER: Sit.", "Arlecchino")]),
+    await t.scene(
+      2,
+      [line("", "The House of the Hearth."), ARLE_SAYS("SECOND-CHAPTER: Sit.", "Arlecchino")],
+      {
+        choices: [
+          {
+            id: "choice-1",
+            kind: "small",
+            at: 1,
+            options: [picked("option-1", "PICKED-BRANCH: Good."), picked("option-2", "UNPICKED-BRANCH: Never.")],
+          },
+        ],
+        choiceCanon: { "choice-1": "option-1" },
+      },
+      [ARLE_SAYS("WRITTEN-AHEAD: Not yet.", "Arlecchino")],
+    ),
   );
   await until(async () => (await t.sides()).arlecchino?.art?.state === "ready", "her sprite painted");
   await t.settle();
@@ -276,6 +308,9 @@ test("someone qualifies in a second chapter: one look call, logged, with the con
   assert.match(user!, /Lady Arlecchino: FIRST-CHAPTER/u, "her lines in both chapters");
   assert.match(user!, /Arlecchino: SECOND-CHAPTER/u);
   assert.match(user!, /Snow on the quay\./u, "with the narration around them");
+  assert.match(user!, /PICKED-BRANCH/u, "the picked option's branch");
+  assert.doesNotMatch(user!, /UNPICKED-BRANCH/u, "never the option not picked");
+  assert.doesNotMatch(user!, /WRITTEN-AHEAD/u, "never a scene not read yet");
   const logged = t.logs.filter((entry) => entry.level === "debugOverride" && entry.args[0] === "side-look");
   assert.ok(logged.length >= 1, "the prompt is logged in debug mode");
 

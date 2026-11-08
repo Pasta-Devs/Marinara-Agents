@@ -104,20 +104,37 @@ export interface SideSpeaker {
   voice?: "male" | "female";
 }
 
-/** The beat's named side speakers as it was read: its lines up to an Ease off's cut, then each picked option's branch. */
-export function sideSpeakers(
-  beat: Pick<Beat, "segments" | "choices" | "choiceCanon" | "easedOff">,
-  cast: Cast,
-): SideSpeaker[] {
+type ReadBeat = Pick<Beat, "segments" | "choices" | "choiceCanon" | "easedOff">;
+
+/** The beat's lines as it was read: its lines up to an Ease off's cut, then each picked option's branch. */
+function readLines(beat: ReadBeat): Beat["segments"] {
   const end = beat.easedOff ? beat.easedOff.at : Infinity;
-  const lines = [
+  return [
     ...beat.segments.slice(0, end + 1),
     ...beat.choices
       .filter((choice) => choice.at <= end)
       .flatMap((choice) => choice.options.find((option) => option.id === beat.choiceCanon[choice.id])?.segments ?? []),
   ];
+}
+
+/** The story and its beats already read (all of a completed chapter's, else those below its beatsRead), or null. */
+async function readBeats(deps: Pick<SideCastDeps, "store">, runId: string) {
+  const run = await readRun(deps.store, runId);
+  if (!run) return null;
+  const read = (beat: Beat) => {
+    const progress = run.state.chapters[beat.key];
+    return !!progress && (!!progress.completed || beat.i < progress.beatsRead);
+  };
+  const beats = (await deps.store.listRun("beat", runId))
+    .flatMap((document) => normalizeBeat(document.data) ?? [])
+    .filter(read);
+  return { run, beats };
+}
+
+/** The beat's named side speakers as it was read (readLines). */
+export function sideSpeakers(beat: ReadBeat, cast: Cast): SideSpeaker[] {
   const found = new Map<string, SideSpeaker>();
-  for (const line of lines) {
+  for (const line of readLines(beat)) {
     const key = line.thought ? null : sideKeyOf(line.speaker, cast);
     if (!key) continue;
     const voice = line.gender === "male" || line.gender === "female" ? line.gender : found.get(key)?.voice;
@@ -210,16 +227,10 @@ export function backfillSideCast(deps: SideCastDeps, runId: string): Promise<voi
       backfilled.add(runId);
       return;
     }
-    const run = await readRun(deps.store, runId);
-    if (!run) return;
-    const read = (beat: Beat) => {
-      const progress = run.state.chapters[beat.key];
-      return !!progress && (!!progress.completed || beat.i < progress.beatsRead);
-    };
-    const beats = (await deps.store.listRun("beat", runId))
-      .flatMap((document) => normalizeBeat(document.data) ?? [])
-      .filter(read)
-      .sort((a, b) => a.written.at.localeCompare(b.written.at) || a.i - b.i);
+    const found = await readBeats(deps, runId);
+    if (!found) return;
+    const { run } = found;
+    const beats = found.beats.sort((a, b) => a.written.at.localeCompare(b.written.at) || a.i - b.i);
     const at = new Date().toISOString();
     await changeSides(deps, runId, (current) => {
       if (current.backfilled) return undefined;
@@ -271,15 +282,18 @@ function normalizeLook(reply: LookReply): LookReply | string {
   return { identityLine, outfitLine: clipLine(reply.outfitLine), presentation };
 }
 
-/** The text of the scenes they spoke in, in the order first heard, each around their lines, at most SIDE_SCENES_MAX. */
+/**
+ * The text of the read scenes they spoke in (readBeats, readLines: never a scene written ahead or cut by Ease off), in
+ * the order first heard, each around their lines, at most SIDE_SCENES_MAX.
+ */
 async function sideScenes(deps: Pick<SideCastDeps, "store">, runId: string, person: SidePerson): Promise<string> {
-  const beats = (await deps.store.listRun("beat", runId))
-    .flatMap((document) => normalizeBeat(document.data) ?? [])
+  const beats = ((await readBeats(deps, runId))?.beats ?? [])
     .filter((beat) => person.chapters.includes(beat.key))
     .sort((a, b) => person.chapters.indexOf(a.key) - person.chapters.indexOf(b.key) || a.i - b.i);
   const parts: string[] = [];
   let left = SIDE_SCENES_MAX;
-  for (const { segments } of beats) {
+  for (const beat of beats) {
+    const segments = readLines(beat);
     const theirs = segments.flatMap((line, index) =>
       !line.thought && nameKey(line.speaker) === person.key ? [index] : [],
     );
