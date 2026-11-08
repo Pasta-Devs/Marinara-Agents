@@ -402,7 +402,7 @@ test("Routes offers a side once its chapter is finished, and while it is read te
       nodes: [{ i: 0, kind: "beat", guide: "g", cast: [KAI] }],
       ...extra,
     })!;
-  const sideNote = note({ arc: 1, ref: "main-3/0", moment: "shut", stage: 2 });
+  const sideNote = note({ arc: 1, ref: "main-3/0", moment: "shut", stage: 4 });
   const state = (chapters: Record<string, string | null>, hisSide = [sideNote]) =>
     normalizeState({
       lis: { [KAI]: { stage: 4, hisSide }, [MIR]: {} },
@@ -413,13 +413,13 @@ test("Routes offers a side once its chapter is finished, and while it is read te
   const main3 = chapter("main-3", "The Bell");
   const done = "2026-11-07T10:00:00.000Z";
   assert.deepEqual(hisSideOffers([main3], state({ "main-3": null }), [KAI, MIR]), [], "not before it is finished");
-  // #2155: nothing is offered below Wound, even a side noted earlier.
+  // #2155: a moment noted below Wound (a save from before 0.18.2) is never offered, even once he has reached Wound.
   const below = normalizeState({
-    lis: { [KAI]: { stage: 3, hisSide: [sideNote] }, [MIR]: {} },
+    lis: { [KAI]: { stage: 4, hisSide: [note({ arc: 1, ref: "main-3/0", moment: "shut", stage: 2 })] }, [MIR]: {} },
     chapters: { "main-3": { beatsRead: 1, completed: "2026-11-07T10:00:00.000Z", applied: [] } },
   });
-  assert.deepEqual(hisSideOffers([main3], below, [KAI, MIR]), [], "not below Wound");
-  const offer = { li: KAI, arc: 1, key: `side-${KAI}-1`, moment: "shut", stage: 2, title: "The Bell", reading: false };
+  assert.deepEqual(hisSideOffers([main3], below, [KAI, MIR]), [], "not a moment noted below Wound");
+  const offer = { li: KAI, arc: 1, key: `side-${KAI}-1`, moment: "shut", stage: 4, title: "The Bell", reading: false };
   assert.deepEqual(hisSideOffers([main3], state({ "main-3": done }), [KAI, MIR]), [offer]);
   // Written, then a later moment of the same arc: the side being read still tells the one it was written for.
   const side = chapter(`side-${KAI}-1`, "The Bell", { kind: "story", li: KAI, hisSide: sideNote });

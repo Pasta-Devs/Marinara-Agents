@@ -130,25 +130,23 @@ export function stateAtMoment(state: RunState, li: LiId, note: HisSideNote): Run
 
 /**
  * Each love interest's side on offer in Routes (GET /runs/:run/story `hisSides`), in cast order, once he has reached
- * Wound (HIS_SIDE_MIN_STAGE): a moment whose chapter is finished, waiting, or its side being read (with the moment it was
+ * Wound (HIS_SIDE_MIN_STAGE): a moment noted at Wound or beyond whose chapter is finished, waiting, or its side being read (with the moment it was
  * written for). A finished side is left out; it
  * stays in the chapter list to replay.
  */
 export function hisSideOffers(chapters: readonly Chapter[], state: RunState, cast: readonly LiId[]): HisSideEntry[] {
   return cast.flatMap((li) =>
-    ((state.lis[li]?.stage ?? 0) < HIS_SIDE_MIN_STAGE ? [] : (state.lis[li]?.hisSide ?? [])).flatMap(
-      (note): HisSideEntry[] => {
-        const key = hisSideKey(li, note.arc);
-        const side = chapters.find((chapter) => chapter.key === key);
-        if (state.chapters[key]?.completed) return [];
-        const told = side?.hisSide ?? note;
-        const source = chapters.find((chapter) => chapter.key === momentChapterKey(told.ref));
-        if (!source || !state.chapters[source.key]?.completed) return [];
-        return [
-          { li, arc: note.arc, key, moment: told.moment, stage: told.stage, title: source.title, reading: !!side },
-        ];
-      },
-    ),
+    (state.lis[li]?.hisSide ?? []).flatMap((note): HisSideEntry[] => {
+      const key = hisSideKey(li, note.arc);
+      const side = chapters.find((chapter) => chapter.key === key);
+      if (state.chapters[key]?.completed) return [];
+      const told = side?.hisSide ?? note;
+      // A moment noted below Wound (a save from before 0.18.2) never counts, whatever his stage now.
+      if (told.stage < HIS_SIDE_MIN_STAGE) return [];
+      const source = chapters.find((chapter) => chapter.key === momentChapterKey(told.ref));
+      if (!source || !state.chapters[source.key]?.completed) return [];
+      return [{ li, arc: note.arc, key, moment: told.moment, stage: told.stage, title: source.title, reading: !!side }];
+    }),
   );
 }
 
@@ -190,8 +188,8 @@ export async function ensureHisSide(
   const his = run.state.lis[li];
   if (!unit || !his) throw notFound("love interest");
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
-  if (his.stage < HIS_SIDE_MIN_STAGE) throw new OtomeForgeError(409, NOT_YET, "locked");
   const note = his.hisSide.find((entry) => entry.arc === arc);
+  if (note && note.stage < HIS_SIDE_MIN_STAGE) throw new OtomeForgeError(409, NOT_YET, "locked");
   const source = note ? await readChapter(deps.store, runId, momentChapterKey(note.ref)) : null;
   const scene =
     note && source && run.state.chapters[source.key]?.completed
