@@ -2,11 +2,14 @@
 // Otome Forge: a portrait circle. The portrait when there is one, else initials on the person's accent colour, so
 // every screen works without an image connection.
 // ──────────────────────────────────────────────
-// The image always fills the circle (theme/styles.ts `.of-avatar img`), framed near the top so a full-body look
-// shows its face. A card avatar can bring the crop chosen for it in the Engine (`AvatarCrop`'s source rectangle,
-// normalized 0–1), which then frames it as the Engine's own avatars do.
-import type { CSSProperties } from "react";
+// The image always fills the circle (theme/styles.ts `.of-avatar img`), anchored at the top. A full-body look (an
+// image much taller than wide, its head at the very top) is also zoomed to the head and shoulders once it loads, so the
+// circle frames a face; a square or bust avatar (a card's, a persona's) is never zoomed. A card avatar can bring the
+// crop chosen for it in the Engine (`AvatarCrop`'s source rectangle, normalized 0–1), which then frames it as the
+// Engine's own avatars do.
+import { useState, type CSSProperties, type SyntheticEvent } from "react";
 import { initialsOf } from "../lib/accent";
+import { isFullBody } from "../lib/avatar-frame";
 
 /** The Engine's avatar crop (its current source-rectangle shape), as the character list carries it. */
 export interface AvatarCrop {
@@ -65,6 +68,12 @@ interface AvatarProps {
 
 export function Avatar({ name, url, accent, size = 44, className, crop }: AvatarProps) {
   const style = { width: size, height: size, fontSize: size * 0.4, ...(accent ? { "--of-li-accent": accent } : {}) };
+  // The image this circle knows is a full-body look; keyed by its url, so a new image starts unzoomed.
+  const [fullBody, setFullBody] = useState<string | null>(null);
+  const onLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight, currentSrc } = event.currentTarget;
+    if (isFullBody(naturalWidth, naturalHeight)) setFullBody(url ?? currentSrc);
+  };
   return (
     <span
       className={className ? `of-avatar ${className}` : "of-avatar"}
@@ -76,8 +85,9 @@ export function Avatar({ name, url, accent, size = 44, className, crop }: Avatar
           src={url}
           alt=""
           loading="lazy"
-          className={crop ? undefined : "of-avatar-face"}
+          className={!crop && fullBody === url ? "of-avatar-face" : undefined}
           style={crop ? cropStyle(crop) : undefined}
+          onLoad={crop ? undefined : onLoad}
         />
       ) : (
         initialsOf(name)
