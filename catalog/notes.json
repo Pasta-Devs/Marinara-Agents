@@ -678,7 +678,7 @@
         {
           "version": "0.20.2",
           "date": "2026-11-08",
-          "notes": "- **Messages cost less.** When you text a love interest, everything that stays the same through the conversation (their card, what they know of the story, your earlier conversations) is cached for five minutes, so each reply after the first sends it at the cached price instead of in full. A daily message they send first is cached the same way for your answer.",
+          "notes": "- **Messages cost less.** When you text a love interest on an Anthropic connection, everything that stays the same through the conversation (their card, what they know of the story, your earlier conversations) is cached for five minutes, so each reply after the first sends it at the cached price instead of in full. A daily message they send first is cached the same way for your answer.",
           "highlight": false
         },
         {
