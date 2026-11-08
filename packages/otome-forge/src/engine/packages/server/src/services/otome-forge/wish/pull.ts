@@ -5,7 +5,8 @@
 // `${R}:state`: the Starlight check (409 `insufficient`, and nothing is rolled), the charge, the rolls with GF's
 // interpolated pity on that banner kind's counter (SH/wish.ts rollRarity), the featured 5★ and the uniform 4★ and 3★,
 // a refund for each duplicate (also one won earlier in the same ten), the new items appended to `owned` with when each
-// was won (the Album and Home date a Memory's CG by it), each new Snapshot on the Love Timeline (and a couple set the
+// was won (the Album and Home date a Memory's CG by it) and as unseen (0.21.0: the Wardrobe's and the Album's dots),
+// each new Snapshot on the Love Timeline (and a couple set the
 // pull completes), and the pull kept by its request id. Another writer that got there first (a read paying
 // Starlight, a second pull) makes the store re-read and apply it again on top, rolling again from the new counter, so
 // the charge, the roll and the counter always land together and a pull is never paid twice or lost. A request id seen
@@ -116,6 +117,8 @@ export function applyPull(
         ...state.owned,
         items: [...state.owned.items, ...won],
         at: { ...state.owned.at, ...Object.fromEntries(won.map((id) => [id, at])) },
+        // 0.21.0: each one waits with a dot in the Wardrobe or the Album until it is looked at.
+        unseen: [...state.owned.unseen, ...won],
       },
       timeline: keepTimeline([...state.timeline, ...timeline]),
       pulls: requestId

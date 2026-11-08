@@ -156,7 +156,12 @@ export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): 
     cgs,
     memories: owned
       .filter((item) => MEMORY_KINDS.has(item.kind))
-      .map((item) => ({ ...itemView(runId, item, true), read: readState(run.state, item) })),
+      .map((item) => ({
+        ...itemView(runId, item, true),
+        read: readState(run.state, item),
+        // 0.21.0: won from Wish and not looked at yet.
+        ...(run.state.owned.unseen.includes(item.id) ? { new: true as const } : {}),
+      })),
     timeline: albumTimeline(run, owned),
     favorites: run.state.favorites,
     soundtrack: [

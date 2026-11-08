@@ -6,11 +6,17 @@
 // POST /runs/:run/items/:item/art {prompt?, negativePrompt?}    → {art}; the tap: Ask's consent, a reviewed prompt,
 //                                                                 or Retry. Waits for the paint; never pays twice
 // POST /runs/:run/items/:item/art/prompt                        → {prompt, negativePrompt}; for the prompt review
+// POST /runs/:run/items/:item/seen                              → {unseen}; 0.21.0: the item was looked at, so its
+//                                                                 dot in the Wardrobe or the Album goes (idempotent;
+//                                                                 an item that is not unseen changes nothing)
 // Only an owned item opens or paints (409 `locked` before it is won; 404 for no such item). The story's call may fail
 // with 503 `no-connection`, 422 `declined` or 502 `bad-format`; a tap with no image connection is a 503. The story is
 // read through the M2a chapter routes (S/routes/story.ts) under its key `story-<itemId>`.
 import { z } from "zod";
-import { isItemId } from "../../../../../client/src/features/otome-forge/shared/wish.js";
+import { isItemId, unseenCounts } from "../../../../../client/src/features/otome-forge/shared/wish.js";
+import { updateIfChanged } from "../art/paint.js";
+import { runDocTarget, stateId } from "../ids.js";
+import { normalizeState } from "../schemas/state.js";
 import { itemArtPrompt, paintItemNow } from "../art/outfits.js";
 import {
   OtomeForgeError,
@@ -77,6 +83,22 @@ export const registerItemRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const { item } = await readOwnedItem(deps, runId, itemParam(request));
       return itemArtPrompt(deps, runId, item, {}, debugModeOf(request));
+    }),
+  );
+
+  router.post(
+    "/runs/:run/items/:item/seen",
+    handle(async (request) => {
+      parseBody(NoFields, request.body);
+      const { runId } = runParam(request);
+      const id = itemParam(request);
+      const saved = await updateIfChanged(deps.store, runDocTarget("state", stateId(runId)), normalizeState, (state) =>
+        state.owned.unseen.includes(id)
+          ? { ...state, owned: { ...state.owned, unseen: state.owned.unseen.filter((entry) => entry !== id) } }
+          : undefined,
+      );
+      if (!saved) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+      return { unseen: unseenCounts(saved.value.owned.unseen) };
     }),
   );
 };

@@ -20,6 +20,8 @@ interface TabListProps<T extends string> {
   iconOf: (tab: T) => LucideIcon;
   /** Tabs with something new, marked with a dot (and said to screen readers). */
   fresh?: ReadonlySet<T>;
+  /** What the dot says to screen readers (Wish's "New this fortnight" by default). */
+  freshLabel?: string;
   className?: string;
 }
 
@@ -32,6 +34,7 @@ export function TabList<T extends string>({
   labelOf,
   iconOf,
   fresh,
+  freshLabel,
   className,
 }: TabListProps<T>) {
   const { t } = useTranslation();
@@ -85,7 +88,7 @@ export function TabList<T extends string>({
             <span>{labelOf(name)}</span>
             {fresh?.has(name) ? (
               <span className="of-tab-dot">
-                <span className="of-visually-hidden">{t("ui.otomeForge.wish.tabNew")}</span>
+                <span className="of-visually-hidden">{freshLabel ?? t("ui.otomeForge.wish.tabNew")}</span>
               </span>
             ) : null}
           </button>

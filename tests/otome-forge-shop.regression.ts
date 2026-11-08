@@ -161,7 +161,14 @@ test("the state reads gifts, figurines and purchases from older, partial and dam
   assert.deepEqual(old.owned.gifts, {});
   assert.deepEqual(old.owned.figurines, {});
   assert.deepEqual(old.purchases, []);
-  assert.deepEqual(normalizeState(undefined).owned, { items: [], at: {}, plush: {}, gifts: {}, figurines: {} });
+  assert.deepEqual(normalizeState(undefined).owned, {
+    items: [],
+    at: {},
+    unseen: [],
+    plush: {},
+    gifts: {},
+    figurines: {},
+  });
 
   const purchases = Array.from({ length: 25 }, (_, n) => ({
     id: `s-req-${String(n).padStart(4, "0")}`,

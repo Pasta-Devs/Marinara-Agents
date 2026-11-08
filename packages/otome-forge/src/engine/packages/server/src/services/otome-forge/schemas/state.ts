@@ -15,6 +15,8 @@
 // written in the same write as the read that made it.
 // 0.8.12 (#2127): Your thoughts… waiting for the next main chapter (`thoughts`, S/routes/home.ts writes them and
 // S/story/chapters.ts lets them go); a damaged or too long one reads as none.
+// 0.21.0: the items won from Wish not looked at yet (`owned.unseen`, S/wish/pull.ts adds them in the pull's write,
+// S/routes/items.ts `seen` lets one go); the RunView counts them by where they are kept, for the dock's dots.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -84,6 +86,7 @@ import {
   FOUR_STAR_EVERY,
   HARD_PITY,
   isItemId,
+  unseenCounts,
   type BannerKind,
   type PityCounter,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
@@ -368,7 +371,11 @@ function normalizeOwned(raw: unknown): RunState["owned"] {
       if (isLiId(li) && typeof bought === "string" && bought.length <= 40) figurines[li] = bought;
     }
   }
-  return { items, at, plush, gifts, figurines };
+  // Only owned items, each once: a state from before 0.21.0 has none unseen.
+  const rawUnseen = field(raw, "unseen");
+  const ownedIds = new Set(items);
+  const unseen = [...new Set((Array.isArray(rawUnseen) ? rawUnseen : []).filter((id) => ownedIds.has(id)))];
+  return { items, at, unseen, plush, gifts, figurines };
 }
 
 /** Who Home shows (M3): a love interest of the run, else the first in cast order; him unless the player picked Me. */
@@ -666,6 +673,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       }),
     forge: world.forge,
     starlight: state.wallet.starlight,
+    unseen: unseenCounts(state.owned.unseen),
   };
 }
 
