@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.18.0 — 2026-11-08
+
+- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as "The Lovers · Ren". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.
+
 ## 0.17.2 — 2026-11-08
 
 - **Send a sticker with your words.** In Messages, picking a sticker now attaches it to your message instead of sending it at once. It shows above the box with a remove button; write something if you like, then tap **Send** to send the sticker and your words together. Picking another sticker swaps it.

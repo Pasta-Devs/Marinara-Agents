@@ -9,6 +9,7 @@
 import type { Favorite, LiId, Noticed, Outfit, Paint, SoundtrackTrack, TimelineEntry } from "./api-types";
 import type { Face, MusicMood } from "./faces";
 import type { GiftId, OwnedFigurineView } from "./shop";
+import type { Arcana } from "./tarot";
 import type { ItemKind, ItemView, Rarity } from "./wish";
 
 /** The look everyone starts in. A wardrobe look id is this, or the id of the look's item. */
@@ -121,8 +122,8 @@ export interface ShowResult {
 }
 
 /**
- * An image the Album keeps: a story CG once seen, a Memory's CG once painted, a couple set's pair portrait, a sticker or
- * (#2087) a Photo Shoot photo.
+ * An image the Album keeps: a story CG once seen, a Memory's CG once painted, a couple set's pair portrait, a sticker,
+ * (#2087) a Photo Shoot photo or (#2151) a Tarot card's painted picture.
  */
 export interface AlbumImage {
   key: string;
@@ -130,7 +131,7 @@ export interface AlbumImage {
   ref?: string;
   at: string;
   li?: LiId;
-  source: "story" | "memory" | "pair" | "sticker" | "photo";
+  source: "story" | "memory" | "pair" | "sticker" | "photo" | "card";
   /** A Memory's title, the couple set's look names, or a photo's place. */
   title?: string;
   /** A sticker's prompt name (mari_laugh), which its saved file is named after. */
@@ -151,6 +152,18 @@ export interface AlbumSticker {
   level?: number;
   url?: string;
   art?: Paint;
+}
+
+/**
+ * A card of the Tarot deck in the Album (#2151): one drawn and claimed for painting, by its deckKey (SH/tarot.ts). `li`
+ * is the love interest a card of them, or of the two of them, was cast for (none for the story's one set); `art` is its
+ * paint as the client should see it.
+ */
+export interface AlbumCard {
+  key: string;
+  card: Arcana;
+  li?: LiId;
+  art: Paint;
 }
 
 /** An owned Memory, Moment or Snapshot, with how far its story has been read (null: it has none, or not yet). */
@@ -178,6 +191,8 @@ export interface AlbumView {
   stickers: AlbumSticker[];
   /** #2087: the Photo Shoot's photos once painted, newest first. Kept out of `cgs`, which Home's back layer reads. */
   photos: AlbumImage[];
+  /** #2151: the Tarot deck's drawn cards in Arcana order, then by love interest in cast order. */
+  cards: AlbumCard[];
 }
 
 /** POST /runs/:run/items/:item/open */
