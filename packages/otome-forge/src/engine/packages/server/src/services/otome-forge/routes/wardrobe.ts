@@ -165,13 +165,16 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
   const allItems = await readItems(deps.store, runId);
   const looks = ownedItems(run, allItems).filter((item) => isLookKind(item.kind));
   const owned = new Set(run.state.owned.items);
+  // 0.21.0: a look won from Wish and not looked at yet carries its dot.
+  const unseen = new Set(run.state.owned.unseen);
+  const marked = (look: LookView): LookView => (unseen.has(look.id) ? { ...look, new: true } : look);
   const him: WardrobeView["him"] = {};
   for (const unit of castOf(run)) {
     const views = [
       baseLook(runId, unit.id, unit, !unit.wornOutfit),
       ...looks
         .filter((item) => lookWearer(item) === `li:${unit.id}`)
-        .map((item) => itemLook(runId, item, unit.id, unit.wornOutfit, run.world)),
+        .map((item) => marked(itemLook(runId, item, unit.id, unit.wornOutfit, run.world))),
     ];
     him[unit.id] = views.map((view) => {
       const faces = view.url ? readyFaces(run.world, unit, view.url) : undefined;
@@ -186,7 +189,9 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
     baseLook(runId, "me", run.player, !run.player.wornOutfit),
     ...looks
       .filter((item) => lookWearer(item) === "player")
-      .map((item) => ({ ...itemLook(runId, item, "me", run.player.wornOutfit, run.world), shownTo: shownTo(item.id) })),
+      .map((item) =>
+        marked({ ...itemLook(runId, item, "me", run.player.wornOutfit, run.world), shownTo: shownTo(item.id) }),
+      ),
   ];
   const couples: CoupleSet[] = couplesOf(allItems)
     .filter(({ his, hers }) => owned.has(his.id) || owned.has(hers.id))

@@ -8,6 +8,8 @@
 // or the Engine's prompt review. A tap paints through the target's own route (`paintPath`, with an edited prompt when
 // reviewed) and the prompt to review comes from `promptPath`; it is also the Retry of a failed or stopped paint. One
 // open per item, and one paint per target, is in flight from this page however many screens or taps ask.
+// 0.21.0: POST /runs/:run/items/:item/seen lets an item won from Wish go from unseen (useMarkSeen): its dot in the
+// Wardrobe or the Album, and the count on the dock, go at once; the server's answer and a read again settle them.
 import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useOtomeApi, type RequestBody } from "../api";
@@ -16,8 +18,8 @@ import { useOtomeProps } from "../props";
 import { homeQueryKey } from "../screens/home/HomeScreen";
 import type { Paint, RunView } from "../shared/api-types";
 import { deckKey, type Arcana } from "../shared/tarot";
-import type { ItemOpenResult } from "../shared/wardrobe";
-import { isLookKind, type BannerView, type ItemKind, type ItemView } from "../shared/wish";
+import type { AlbumView, ItemOpenResult, WardrobeView } from "../shared/wardrobe";
+import { collectionOf, isLookKind, type BannerView, type ItemKind, type ItemView } from "../shared/wish";
 import { runPath } from "./use-reader";
 import { runQueryKey } from "./use-run";
 
@@ -45,6 +47,66 @@ export async function invalidateCollection(queryClient: QueryClient, runKey: str
     tarotQueryKey(runKey),
   ];
   await Promise.all([...keys, runQueryKey(runKey)].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+}
+
+/**
+ * 0.21.0: marks an item won from Wish as looked at. Its dot goes from the cached Wardrobe or Album and the dock's count
+ * drops at once; then the run view and its screen are read again (a failed request brings the dot back). One request
+ * per item at a time.
+ */
+export function useMarkSeen(runKey: string) {
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const sent = useRef(new Set<string>());
+  return (id: string) => {
+    if (sent.current.has(id)) return;
+    sent.current.add(id);
+    const screen = collectionOf(id);
+    const collectionKey = screen === "wardrobe" ? wardrobeQueryKey : albumQueryKey;
+    queryClient.setQueryData<RunView>(runQueryKey(runKey), (view) =>
+      view?.unseen ? { ...view, unseen: { ...view.unseen, [screen]: Math.max(0, view.unseen[screen] - 1) } } : view,
+    );
+    if (screen === "wardrobe") {
+      const seen = <T extends { id: string; new?: true }>(look: T): T => {
+        if (look.id !== id || !look.new) return look;
+        const { new: _new, ...rest } = look;
+        return rest as T;
+      };
+      queryClient.setQueryData<WardrobeView>(wardrobeQueryKey(runKey), (data) =>
+        data
+          ? {
+              ...data,
+              me: data.me.map(seen),
+              him: Object.fromEntries(Object.entries(data.him).map(([li, looks]) => [li, looks.map(seen)])),
+            }
+          : data,
+      );
+    } else {
+      queryClient.setQueryData<AlbumView>(albumQueryKey(runKey), (data) =>
+        data
+          ? {
+              ...data,
+              memories: data.memories.map((item) => {
+                if (item.id !== id || !item.new) return item;
+                const { new: _new, ...rest } = item;
+                return rest;
+              }),
+            }
+          : data,
+      );
+    }
+    void otome
+      .post(`${runPath(runKey)}/items/${encodeURIComponent(id)}/seen`, {})
+      .catch((error: unknown) => console.warn("Otome Forge could not mark an item seen", error))
+      .finally(() => {
+        // The run view and the screen are read again, never written from this answer: two seen in quick succession
+        // may answer out of order (Dottore on #2204), and a read sent before the write must not leave its dot. A failed
+        // request brings the dot back. A later click may send again (the route is idempotent) should one still show.
+        sent.current.delete(id);
+        void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+        void queryClient.invalidateQueries({ queryKey: collectionKey(runKey) });
+      });
+  };
 }
 
 /** A pull's or a purchase's id: kept until it is answered, so a retry is the same request and is never paid twice. */

@@ -71,6 +71,8 @@ export interface LookView {
   story?: { key: string } | null;
   /** Her looks: the love interests already shown it, whose first Show paid its affection. */
   shownTo?: LiId[];
+  /** 0.21.0: won from Wish and not looked at yet (a dot by it until it is clicked). */
+  new?: true;
 }
 
 /** A couple set: a her-look5 and the his-look5 it names. Shown once she owns either half. */
@@ -169,6 +171,8 @@ export interface AlbumCard {
 /** An owned Memory, Moment or Snapshot, with how far its story has been read (null: it has none, or not yet). */
 export interface AlbumMemory extends ItemView {
   read: "unread" | "in-progress" | "done" | null;
+  /** 0.21.0: won from Wish and not looked at yet (a dot by it until it is opened). */
+  new?: true;
 }
 
 /**

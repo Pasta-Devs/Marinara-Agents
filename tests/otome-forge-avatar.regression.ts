@@ -44,10 +44,14 @@ test("every hand-drawn portrait circle frames its image through FaceImage, never
     dirname(fileURLToPath(import.meta.url)),
     "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge",
   );
-  for (const file of ["components/TopBar.tsx", "screens/wardrobe/Wardrobe.tsx"]) {
+  // 0.21.0: the top bar's Home chip draws a house, no portrait (checked below).
+  for (const file of ["screens/wardrobe/Wardrobe.tsx"]) {
     const source = readFileSync(join(client, file), "utf8");
     const circles = [...source.matchAll(/<span className="of-avatar[^"]*"[^>]*>\s*\{[^}]*\?\s*(<[A-Za-z]+)/gu)];
     assert.ok(circles.length > 0, `${file} draws a circle`);
     for (const [, tag] of circles) assert.equal(tag, "<FaceImage", `${file}: a circle's image is framed at the face`);
   }
+  const topBar = readFileSync(join(client, "components/TopBar.tsx"), "utf8");
+  assert.match(topBar, /<House size=/u, "the Home chip is a house");
+  assert.doesNotMatch(topBar, /FaceImage|<img/u, "never a portrait");
 });

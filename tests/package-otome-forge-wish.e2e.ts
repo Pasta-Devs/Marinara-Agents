@@ -1253,6 +1253,126 @@ test("Otome Hearth Album: rarity filters keep unplayed stories first in stable a
   expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
 });
 
+test("Otome Hearth 0.21.0: a house leads Home, and an item won from Wish has a dot until it is clicked", async ({
+  page,
+}, testInfo) => {
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  const LOOK = "his-wardrobe-0-a1";
+  const MEMORY = "memories-0-f";
+  const unseen = new Set([LOOK, MEMORY]);
+  const counts = () => ({
+    wardrobe: unseen.has(LOOK) ? 1 : 0,
+    album: unseen.has(MEMORY) ? 1 : 0,
+  });
+  const fresh = (entry: Json) => (unseen.has(entry.id) ? { ...entry, new: true } : entry);
+  let memorySeen!: () => void;
+  const afterMemory = new Promise<void>((done) => (memorySeen = done));
+  await stubRoutes(
+    page,
+    (call) => {
+      const path = call.path.replace("/api/otome-forge", "");
+      if (path === `/runs/${RUN}`) return { status: 200, json: { view: { ...stub.view, unseen: counts() } } };
+      if (path === `/runs/${RUN}/wardrobe`) {
+        const view = wardrobeView();
+        return {
+          status: 200,
+          json: {
+            ...view,
+            me: view.me.map(fresh),
+            him: Object.fromEntries(Object.entries(view.him).map(([li, looks]) => [li, (looks as Json[]).map(fresh)])),
+          },
+        };
+      }
+      if (path === `/runs/${RUN}/album`) {
+        const view = albumView();
+        return { status: 200, json: { ...view, memories: view.memories.map(fresh) } };
+      }
+      const seen = /^\/runs\/[^/]+\/items\/([^/]+)\/seen$/u.exec(path);
+      if (seen) {
+        const id = decodeURIComponent(seen[1]!);
+        unseen.delete(id);
+        // The look's answer, counted now, lands only after the Memory's (Dottore on #2204): it must not bring a dot back.
+        if (id === LOOK) return { status: 200, json: { unseen: counts() }, wait: afterMemory, delay: 200 };
+        memorySeen();
+        return { status: 200, json: { unseen: counts() } };
+      }
+      return answer(call);
+    },
+    calls,
+  );
+  const root = await openOtome(page);
+
+  // The Home chip is a house in the colour of whoever is on Home, beside their name; never their portrait.
+  const chip = root.locator(".of-topbar").getByRole("button", { name: "Home with Ilvar Thorne", exact: true });
+  await expect(chip.locator(".of-avatar svg")).toBeVisible();
+  await expect(chip.locator("img")).toHaveCount(0);
+  const accent = /--of-li-accent:\s*([^;]+)/u.exec((await chip.locator(".of-avatar").getAttribute("style")) ?? "")?.[1];
+  expect(accent, "the house is drawn in an accent").toBeTruthy();
+
+  // The dock: a dot on the Wardrobe and on the Album, said to screen readers.
+  const dock = root.getByRole("navigation", { name: "Game menu" });
+  await expect(dock.getByRole("button", { name: /^Wardrobe.*1 new item/u })).toBeVisible();
+  await expect(dock.getByRole("button", { name: /^Album.*1 new item/u })).toBeVisible();
+  await expect(dock.locator(".of-dock-dot")).toHaveCount(2);
+  await page.screenshot({ path: testInfo.outputPath("01-house-and-dock.png") });
+  // On Pearl's pale glass the dock's dot, like every new dot, takes the deeper accent ink (Dottore on #2204).
+  const pearl = await root.evaluate((element) => {
+    const before = element.getAttribute("data-look");
+    element.setAttribute("data-look", "pearl");
+    const probe = element.ownerDocument.createElement("span");
+    probe.style.color = "var(--of-accent-text)";
+    element.append(probe);
+    const ink = getComputedStyle(probe).color;
+    const dot = getComputedStyle(element.querySelector(".of-dock-dot")!).backgroundColor;
+    probe.remove();
+    if (before === null) element.removeAttribute("data-look");
+    else element.setAttribute("data-look", before);
+    return { ink, dot };
+  });
+  expect(pearl.dot).toBe(pearl.ink);
+
+  // The Wardrobe: on the tab of whose it is and by the look; a click on its picture lets it go.
+  // Its dock button says how many are new, so it is found by its name's start.
+  await dock.getByRole("button", { name: /^Wardrobe/u }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Wardrobe", exact: true })).toBeVisible();
+  const owners = root.getByRole("group", { name: "Whose wardrobe" });
+  const ilvar = owners.locator(".of-ward-owner", { hasText: "Ilvar Thorne" });
+  await expect(ilvar).toHaveAttribute("style", new RegExp(`--of-li-accent:\\s*${accent}`, "u"));
+  await expect(ilvar.locator(".of-new-dot")).toBeVisible();
+  await expect(owners.locator(".of-ward-owner", { hasText: "Cassian" }).locator(".of-new-dot")).toHaveCount(0);
+  const card = root.locator(".of-ward-look", { hasText: "Midnight Coat" });
+  await expect(card.locator(".of-item-dot")).toBeVisible();
+  await expect(root.locator(".of-item-dot")).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("02-wardrobe.png") });
+  const lookAnswered = page.waitForResponse((response) => response.url().endsWith(`/items/${LOOK}/seen`));
+  await card.locator(".of-ward-frame").click();
+  await expect(card.locator(".of-item-dot")).toHaveCount(0);
+  await expect(owners.locator(".of-new-dot")).toHaveCount(0);
+  await expect(dock.locator(".of-dock-dot")).toHaveCount(1);
+  expect(posts(calls, "/seen").map((call) => call.path)).toEqual([`/api/otome-forge/runs/${RUN}/items/${LOOK}/seen`]);
+
+  // The Album: on the Memories tab and by the Memory; opening it lets it go.
+  await dock.getByRole("button", { name: /^Album/u }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Album", exact: true })).toBeVisible();
+  const memoriesTab = root.getByRole("tab", { name: /^Memories/u });
+  await expect(memoriesTab.locator(".of-tab-dot")).toBeVisible();
+  await memoriesTab.click();
+  const keepsake = root.locator(".of-keepsake", { hasText: "Ink and Rain" });
+  await expect(keepsake.locator(".of-item-dot")).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("03-album.png") });
+  await keepsake.click();
+  await expect(root.getByRole("dialog")).toBeVisible();
+  await root.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).first().click();
+  await expect(keepsake.locator(".of-item-dot")).toHaveCount(0);
+  await expect(memoriesTab.locator(".of-tab-dot")).toHaveCount(0);
+  await expect(dock.locator(".of-dock-dot")).toHaveCount(0);
+  await lookAnswered;
+  await page.waitForTimeout(300);
+  await expect(dock.locator(".of-dock-dot"), "the late answer brings no dot back").toHaveCount(0);
+  expect(posts(calls, "/seen")).toHaveLength(2);
+});
+
 test("Otome Forge Album: a CG opens large and saves through the Engine; the Timeline and the Tells read without images", async ({
   page,
 }) => {

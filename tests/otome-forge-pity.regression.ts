@@ -218,7 +218,7 @@ test("duplicates refund by rarity, Snapshots join the timeline once, and a retri
   // Owning everything: every further pull is a duplicate and refunds.
   const banner = (await readBanner(t.store, t.runId, "memories-0"))!;
   const all = [...banner.items.five, ...banner.items.four, ...banner.items.three];
-  const full = { ...state, owned: { items: all } };
+  const full = { ...state, owned: { ...state.owned, items: all } };
   const { state: next, results } = applyPull(full, { banner, items: new Map(), count: 10, random: always(0.5) });
   assert.ok(results.every((result) => !result.isNew));
   assert.equal(next.wallet.starlight, full.wallet.starlight - 1000 + 9 * 10 + 60);

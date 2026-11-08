@@ -11,6 +11,8 @@
 // #2128: My Wardrobe also lists the gifts bought in Wish's Shop, with how many of each (Date Night gives them), and the
 // figurines bought, each with Play the scene and (#2138) its paint: Painting…, or Paint / Try again as in the Shop
 // (ShopPanel.tsx FigurinePaint); the view's `gifts` and `figurines`, absent from an older server.
+// 0.21.0: a look won from Wish and not looked at yet has a dot by its name, and so does the tab of whose it is; a click
+// anywhere on its card (its picture, or any of its buttons) lets it go (useMarkSeen).
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +30,7 @@ import {
   paintWaits,
   readyArt,
   useItemActions,
+  useMarkSeen,
   useRefocus,
   wardrobeQueryKey,
   type ItemActions,
@@ -127,6 +130,7 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
   const wardrobe = useWardrobe(runKey);
   const actions = useItemActions(runKey);
   const wearing = useWearLook(runKey);
+  const markSeen = useMarkSeen(runKey);
   const owners: WardrobeOwner[] = [...view.lis.map((li) => li.id), "me"];
   const [owner, setOwner] = useState<WardrobeOwner>(
     initialOwner && owners.includes(initialOwner) ? initialOwner : (owners[0] ?? "me"),
@@ -203,6 +207,11 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
                 {person ? initialsOf(person.name) : <Sparkles size={12} strokeWidth={2} />}
               </span>
               <span className="of-ward-owner-name">{ownerName(t, value, view.lis)}</span>
+              {(value === "me" ? data.me : (data.him[value] ?? [])).some((look) => look.new) ? (
+                <span className="of-tab-dot of-new-dot">
+                  <span className="of-visually-hidden">{t("ui.otomeForge.common.hasNew")}</span>
+                </span>
+              ) : null}
             </label>
           );
         })}
@@ -239,6 +248,7 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
                   onWear={() => void wearing.wear(owner, look.id)}
                   onShow={() => setShowing(look)}
                   onOpenStory={onOpenStory}
+                  onSeen={() => markSeen(look.id)}
                 />
               </li>
             ))}
@@ -395,9 +405,22 @@ interface LookCardProps {
   onWear: () => void;
   onShow: () => void;
   onOpenStory: (key: string) => void;
+  /** 0.21.0: the card was clicked, so a new look is new no more. */
+  onSeen: () => void;
 }
 
-function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onShow, onOpenStory }: LookCardProps) {
+function LookCard({
+  view,
+  look,
+  person,
+  actions,
+  wearing,
+  wearBusy,
+  onWear,
+  onShow,
+  onOpenStory,
+  onSeen,
+}: LookCardProps) {
   const { t } = useTranslation();
   const nameRef = useRef<HTMLHeadingElement>(null);
   const wornRef = useRef<HTMLParagraphElement>(null);
@@ -430,6 +453,8 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
     <article
       className="of-ward-look"
       onFocus={onFocus}
+      // A click on its picture or on any of its buttons (Enter and Space on one click too) is looking at it.
+      onClick={look.new ? onSeen : undefined}
       data-worn={look.worn}
       style={person ? ({ "--of-li-accent": accentOf(person) } as CSSProperties) : undefined}
     >
@@ -450,6 +475,11 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
       <div className="of-ward-look-body">
         <h3 ref={nameRef} className="of-ward-look-name" tabIndex={-1}>
           {name}
+          {look.new ? (
+            <span className="of-tab-dot of-new-dot of-item-dot">
+              <span className="of-visually-hidden">{t("ui.otomeForge.common.newItem")}</span>
+            </span>
+          ) : null}
         </h3>
         {look.item ? <RarityStars rarity={look.item.rarity} /> : null}
         <ImageDescription text={look.description} />

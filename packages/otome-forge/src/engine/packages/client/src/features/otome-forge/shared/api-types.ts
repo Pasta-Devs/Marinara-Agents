@@ -15,7 +15,7 @@ import type { TarotPaid } from "./tarot";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
 import type { FigurinePicture, GiftId } from "./shop";
 import type { PlayerSticker } from "./stickers";
-import type { BannerKind, PityCounter, Rarity } from "./wish";
+import type { BannerKind, PityCounter, Rarity, UnseenCounts } from "./wish";
 
 export type {
   ClimaxEnding,
@@ -917,6 +917,8 @@ export interface RunState {
   owned: {
     items: string[];
     at: Record<string, string>;
+    /** 0.21.0: the items won from Wish not looked at yet, in the order won (S/routes/items.ts `seen` lets one go). */
+    unseen: string[];
     plush: Record<string, number>;
     gifts: Partial<Record<GiftId, number>>;
     figurines: Record<LiId, string>;
@@ -1593,6 +1595,8 @@ export interface RunView {
   /** A sticker set is being designed or a sticker painted in the background: poll the run until it lands. */
   stickersPending?: true;
   starlight: number;
+  /** 0.21.0: the items won from Wish not looked at yet, by where they are kept (absent from an older server). */
+  unseen?: UnseenCounts;
   /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
   prologue?: boolean;
 }

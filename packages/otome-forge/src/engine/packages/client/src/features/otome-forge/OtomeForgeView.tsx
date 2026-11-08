@@ -400,7 +400,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
           run={
             RUN_SCREENS.has(screen)
               ? {
-                  li: homeLi ? { name: homeLi.name, accent: accentOf(homeLi), portraitUrl: homeLi.portrait } : null,
+                  li: homeLi ? { name: homeLi.name, accent: accentOf(homeLi) } : null,
                   starlight: view?.starlight ?? null,
                 }
               : null
@@ -440,7 +440,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       </div>
       {/* "You unlocked a new sticker" (#2044), over whichever screen is open. */}
       {view && activeRun ? <StickerNotice view={view} /> : null}
-      {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} /> : null}
+      {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} unseen={view?.unseen} /> : null}
     </OtomeAudioProvider>
   );
 }

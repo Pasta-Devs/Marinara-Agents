@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.21.0 — 2026-11-08
+
+- **The top left button is a house.** It takes you Home, as before, and its circle is in the colour of whoever is with you there, beside their name.
+- **New items have a dot.** Anything you win from Wish shows a small dot in the Wardrobe or the Album: on the dock, on the tab that holds it, and by the item itself. The dot goes once you click the item (or one of its buttons).
+
 ## 0.20.4 — 2026-11-08
 
 - **Every scene of a chapter remembers the same small moments.** A chapter now picks its small memories (message exchanges, Snapshots, Read Him, Claw Machine and Tarot rounds, Read Me notes and dates) once, for everyone in it, and each of its scenes is written with the same ones, marked with who knows them. On an Anthropic connection, after the first scene they're sent at the cached price instead of in full every time. Something that happens during a chapter is remembered from the next one.

@@ -219,6 +219,21 @@ export function isItemId(value: unknown): value is string {
 /** The banner key an item id belongs to. */
 export const bannerKeyOfItem = (itemId: string) => itemId.replace(/-(?:f|a[1-3]|s[1-6])$/, "");
 
+/** Where an owned item is kept (0.21.0): a wardrobe banner's looks (its 5★ and 4★s) in the Wardrobe, all else in the Album. */
+export type CollectionScreen = "wardrobe" | "album";
+
+export const collectionOf = (itemId: string): CollectionScreen =>
+  /^(?:his|my)-wardrobe-\d+-(?:f|a[1-3])$/.test(itemId) ? "wardrobe" : "album";
+
+/** 0.21.0: how many items won from Wish wait unseen in each (the dock's dots). */
+export type UnseenCounts = Record<CollectionScreen, number>;
+
+export function unseenCounts(unseen: readonly string[]): UnseenCounts {
+  const counts: UnseenCounts = { wardrobe: 0, album: 0 };
+  for (const id of unseen) counts[collectionOf(id)] += 1;
+  return counts;
+}
+
 /** A look's name (the world's language) and its English, visual-only outfit line. */
 export interface ItemLook {
   name: string;
