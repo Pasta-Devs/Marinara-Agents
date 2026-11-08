@@ -496,18 +496,26 @@ test("with the toggle off nothing is called, matched or painted; turning it on s
   assert.equal((await t.sides()).arlecchino!.cardId, "card-arle");
 });
 
-test("past the cap the oldest speakers without a sprite go; nobody with a sprite is ever dropped", () => {
-  const person = (n: number, painted: boolean) => ({
+test("past the cap the oldest speakers without an image go; nobody whose record holds one is ever dropped", () => {
+  const person = (n: number, painted: boolean, art?: object) => ({
     name: `Clerk ${n}`,
     chapters: ["main-1"],
     at: `2026-11-08T00:${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}.000Z`,
     ...(painted
       ? { art: { state: "ready", url: `/api/global-gallery/file/s${n}.png`, ref: `global-gallery:s${n}`, at: "x" } }
-      : {}),
+      : art
+        ? { art }
+        : {}),
   });
-  // The ten oldest have sprites; 205 people in all.
+  // The ten oldest have sprites; the next three a sprite that holds no image yet (waiting for consent, failed,
+  // painting); 205 people in all.
+  const unpainted = [
+    { state: "waiting-consent", at: "x" },
+    { state: "failed", at: "x", error: "no" },
+    { state: "pending", at: "x" },
+  ];
   const raw = Object.fromEntries(
-    Array.from({ length: SIDE_PEOPLE_MAX + 5 }, (_, n) => [`clerk ${n}`, person(n, n < 10)]),
+    Array.from({ length: SIDE_PEOPLE_MAX + 5 }, (_, n) => [`clerk ${n}`, person(n, n < 10, unpainted[n - 10])]),
   );
   const kept = normalizeSideCast({ version: 1, people: raw }).people;
   assert.equal(Object.keys(kept).length, SIDE_PEOPLE_MAX);
