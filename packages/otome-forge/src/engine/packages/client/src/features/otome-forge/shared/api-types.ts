@@ -43,7 +43,8 @@ export type OtomeErrorCode =
   | "declined"
   | "bad-format"
   | "no-connection"
-  | "capacity";
+  | "capacity"
+  | "no-embeddings";
 
 export interface OtomeRunEntry {
   runKey: string;
@@ -100,6 +101,11 @@ export interface Connections {
   structured?: string;
   chat?: string;
   compress?: string;
+  /**
+   * Memory recall embeddings (0.19.0, S/memory/recall-index.ts): the Engine connection whose own embedding model indexes
+   * the chapter summaries; absent, the Engine's built-in local model. Never a text job's connection.
+   */
+  embeddings?: string;
 }
 
 export interface ImageSettings {
@@ -1056,6 +1062,11 @@ export interface Chapter {
    * the client).
    */
   hisSide?: HisSideNote;
+  /**
+   * 0.19.0: a main chapter's earlier chapters recalled in detail, by chapter key, in the order they go, chosen once when
+   * it was planned so every scene's story context is the same (S/story/canon.ts recallText; hidden from the client).
+   */
+  recalled?: string[];
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1260,7 +1271,7 @@ export type BeatState = "unwritten" | "ready" | "read";
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
 export type ChapterView = Omit<
   Chapter,
-  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "gift" | "hisSide"
+  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "gift" | "hisSide" | "recalled"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
@@ -1494,6 +1505,20 @@ export interface MemoryStatus {
   noConnection?: boolean;
   /** How many finished chapters (dates and Character Stories too) have no summary yet. */
   unsummarized?: number;
+}
+
+/**
+ * GET /runs/:run/memory/recall and POST .../memory/recall/retry → {status}: the long-term recall index (0.19.0,
+ * S/memory/recall-index.ts). `failed` waits for Retry indexing, with the error (English, raw).
+ */
+export interface RecallIndexStatus {
+  phase: "indexing" | "ready" | "failed";
+  /** How many of the chapter summaries (`total`) are indexed for the story's embedding model. */
+  indexed: number;
+  total: number;
+  message?: string;
+  /** This Engine lets the story use a connection's embedding model (capability API 1.818); otherwise only Built-in. */
+  choosable: boolean;
 }
 
 // ── Wire shapes ──

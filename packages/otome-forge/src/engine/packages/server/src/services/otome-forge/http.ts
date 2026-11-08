@@ -12,6 +12,7 @@ import type { OtomeArt } from "./art/expressions.js";
 import type { ImageClient } from "./art/image-client.js";
 import type { BackgroundQueue } from "./background-queue.js";
 import type { OtomeMemory } from "./memory/memory.js";
+import type { RecallIndex } from "./memory/recall-index.js";
 import { isLiId, isRunKey, runIdOf } from "./ids.js";
 import type { OtomeStore } from "./store.js";
 import type { CutoutClient } from "./art/cutout.js";
@@ -103,6 +104,8 @@ export interface RouteDeps {
   cutouts?: CutoutClient;
   /** Private story memory (S/memory/memory.ts); without it prompts carry no recall. */
   memory?: OtomeMemory;
+  /** Long-term recall's index (S/memory/recall-index.ts); without it nothing is indexed or recalled in detail. */
+  recall?: RecallIndex;
   /** The run-scoped Cancel for story writes (forge-kit story-cancel-server). */
   cancellation?: ForgeStoryCancellation;
   /** The package's background lane (line packs, M3); without it nothing is written in the background. */

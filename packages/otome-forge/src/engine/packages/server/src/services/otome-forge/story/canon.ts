@@ -18,7 +18,7 @@
 //                              its summary as a small memory of his (#2066, S/memory/memory.ts), never in the
 //                              timeline; a Character Story joins the timeline (0.7.3)
 //   an extra story (#2025)   → none: it is imagined together for fun, never canon
-//   his side (#2155)         → kind "chapter", his own (audience [li], no cameos): the chapter it follows told again
+//   his side (#2155)         → kind "chapter", his own (audience [li], no cameos): a scene beside the chapter it follows that the protagonist never saw
 //                              from his point of view, summarized into the timeline when it is read, titled as that
 //                              chapter's other side, whose thoughts are his alone
 // Every chapter but a main one has audience [its love interest's id]: as recent canon, as a recall and in full it
@@ -43,6 +43,14 @@
 // - the story's timeline as saved (#2066, S/memory/timeline.ts savedStory: the summaries of the chapters folded so far,
 //   a condensed head and the newest after it, in story order), without the previous chapter's own entry, which goes in
 //   full;
+// - long-term recall (0.19.0, S/memory/recall-index.ts): between the timeline's condensed head and its newest entries
+//   ("# Canon to date, continued"), up to three earlier chapters by their original summaries ("# Earlier, in detail"),
+//   in story order: only chapters the head condensed, so none the prompt has otherwise (an entry, the previous chapter
+//   or his side of it, the last Character Story), and with `cached` only those every call of its chapter may know,
+//   otherwise those this one may (mayKnow). A main chapter's plan chooses them by meaning (`chooseBy`: its arc's purpose,
+//   lead and cast, the player's thoughts, and here how the previous chapter ended) and saves them on the chapter, and
+//   each of its scenes sends exactly those, in that order (`recalled`), so the cached story context stays the same. No
+//   index, no embedding model or none similar enough: none, and the context is as it was without them;
 // - around the previous chapter, in story order, every other chapter the prompt may know that the timeline does not
 //   cover: by its saved summary when it has one ("# Recent canon summary"), and in full only while it has none, being
 //   summarized, its summary failed or never written ("# Canon in full"). A chapter that has a summary never goes in
@@ -104,6 +112,7 @@ import type {
 import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { beatId, chapterId, isItemStoryKey, memoryId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
+import { lastWords, type RecallIndex } from "../memory/recall-index.js";
 import { parseTimeline, renderTimeline, savedStory } from "../memory/timeline.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeState } from "../schemas/state.js";
@@ -335,9 +344,9 @@ export async function completedChapters(
 function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }): string {
   const title = chapter.title || chapter.key;
   if (owner === undefined) return title;
-  // #2155: the chapter it follows, told again; what the protagonist did there they know, his thoughts are his.
+  // #2155: a scene beside the chapter it follows that the protagonist never saw: they know none of it.
   if (chapter.hisSide) {
-    return `${owner}'s side of "${title}" (the same events, told again from ${owner}'s point of view; private: ${owner}'s thoughts in it are ${owner}'s alone, and nobody else, the protagonist included, knows them)`;
+    return `${owner}'s side of "${title}" (a scene the protagonist never saw, just before it or right after they left; private: the protagonist knows none of it, those in it know only what they saw there, and ${owner}'s thoughts are ${owner}'s alone)`;
   }
   const also = guests?.length ? `; ${guests.join(" and ")} also appear${guests.length === 1 ? "s" : ""} in it` : "";
   return `${owner}'s own ${chapter.kind} chapter "${title}" (private: only the people in its scenes know what happened in it${also})`;
@@ -437,10 +446,23 @@ export type RecallTextOptions = Omit<ForgeRecallOptions, "runId"> & {
    * title that says it is private between the protagonist and its love interest.
    */
   lastStory?: boolean;
+  /** Long-term recall (see the header): the earlier chapters a chapter's plan chose, by key, as its scenes send them. */
+  recalled?: readonly string[];
+  /**
+   * Long-term recall, for a chapter's plan (see the header): what the chapter is about, to choose its earlier chapters
+   * by; how the previous chapter ended is added here. The chosen come back as the context's `recalled`.
+   */
+  chooseBy?: readonly string[];
 };
 
-/** The story before a prompt: its memory context, and when `cached` the recalls' own (pass both to generateJson). */
-export type StoryContext = ForgeMemoryContext & { recalls?: ForgeMemoryContext };
+/**
+ * The story before a prompt: its memory context, when `cached` the recalls' own (pass both to generateJson), and the
+ * earlier chapters it recalls in detail, by key (see the header).
+ */
+export type StoryContext = ForgeMemoryContext & { recalls?: ForgeMemoryContext; recalled?: string[] };
+
+/** How many of the previous chapter's last words tell a chapter's plan how it ended, to choose its earlier chapters by. */
+const ENDING_WORDS = 120;
 
 /** A block of the memory context's prefix, in story order. */
 interface Block {
@@ -514,11 +536,13 @@ export async function recallText(
     store: Pick<OtomeStore, "readDoc">;
     memory?: StoryMemory;
     runtime?: Pick<CapabilityRuntimeHost, "logger">;
+    /** Long-term recall's index (see the header); without it a plan chooses no earlier chapters. */
+    recall?: Pick<RecallIndex, "choose">;
   },
   runId: string,
   options: RecallTextOptions,
 ): Promise<StoryContext> {
-  const { debugMode, continues, cached, lastStory: withLastStory, ...recall } = options;
+  const { debugMode, continues, cached, lastStory: withLastStory, recalled, chooseBy, ...recall } = options;
   const warn = (what: string, error: unknown) =>
     deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
   const [story, saved] = await Promise.all([
@@ -672,19 +696,70 @@ export async function recallText(
   }
   // The timeline without the previous chapter's own entry (that chapter goes in full) nor the last Character Story's
   // (#2126: it goes in as its own block). A head that condensed it keeps it, so it goes in beside that.
-  const overview = renderTimeline(
-    parseTimeline(saved?.timeline),
+  const timeline = parseTimeline(saved?.timeline);
+  const without = [
     previousKey ? JSON.stringify(["chapter", previousKey]) : undefined,
     lastStoryKey,
     ...sideKeys.map((key) => JSON.stringify(["chapter", key])),
-  );
+  ];
+  // Long-term recall (see the header): what the condensed head holds and nothing else in the prompt does.
+  const sourceKey = ({ chapter }: Completed) => JSON.stringify([kindOf(chapter), chapter.key]);
+  const entries = new Set(timeline.entries.map((entry) => entry.key));
+  const recallable = (completed: Completed) =>
+    (kindOf(completed.chapter) === "chapter" || isItemStoryKey(completed.chapter.key)) &&
+    !!saved?.covered.has(sourceKey(completed)) &&
+    !entries.has(sourceKey(completed)) &&
+    !!saved.summaries.get(sourceKey(completed)) &&
+    completed.chapter.key !== previousKey &&
+    !sideKeys.includes(completed.chapter.key) &&
+    completed !== lastStory &&
+    (cached ? !own(completed.chapter) : mayKnow(recall, completed.audience));
+  const candidates = chapters.filter(recallable);
+  let earlier: Completed[] = [];
+  if (recalled) {
+    earlier = recalled.flatMap((key) => candidates.filter(({ chapter }) => chapter.key === key));
+  } else if (chooseBy && deps.recall && candidates.length) {
+    // How the previous chapter ended, its last scene's last words, with what the chapter is about.
+    const ending = lastWords(scenes.at(-1) ?? "", ENDING_WORDS);
+    const chosen = await deps.recall.choose(runId, {
+      query: [...chooseBy, ending]
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join("\n"),
+      candidates: candidates.map((completed) => ({
+        completed,
+        key: sourceKey(completed),
+        title: titleOf(completed),
+        summary: saved!.summaries.get(sourceKey(completed))!,
+      })),
+      ...(recall.signal ? { signal: recall.signal } : {}),
+      debugMode: debugMode === true,
+      label: "recall",
+    });
+    earlier = candidates.filter((completed) => chosen.some((entry) => entry.completed === completed));
+  }
+  const head = renderTimeline({ head: timeline.head, entries: [] });
+  const rest = renderTimeline({ head: "", entries: timeline.entries }, ...without);
+  const overview = earlier.length
+    ? [
+        head,
+        ...earlier.map((completed) =>
+          block("Earlier, in detail", titleOf(completed), saved!.summaries.get(sourceKey(completed))!),
+        ),
+        rest ? `# Canon to date, continued\n${rest}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+    : renderTimeline(timeline, ...without);
   const recalls = (result?.recalls ?? [])
     .map(({ id, title, content }) => ({ id, kind: "recall", title, content }))
     .reverse();
-  return storyContext(
+  const context = storyContext(
     { overview, details: recalls, maxContext: result?.maxContext ?? null },
     [...previous, ...sideBlocks, ...others],
     [...full, ...earliestScenes],
     summaries,
   );
+  if (earlier.length) context.recalled = earlier.map(({ chapter }) => chapter.key);
+  return context;
 }

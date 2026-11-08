@@ -155,6 +155,12 @@ export const isItemStoryKey = (key: string) => key.startsWith("story-");
 export const quizId = (runId: string) => `${runId}:quiz`;
 
 /**
+ * `${R}:recall` (0.19.0): the long-term recall index, each timeline chapter's summary as vectors (S/memory/recall-index.ts).
+ * Never read by a prompt.
+ */
+export const recallId = (runId: string) => `${runId}:recall`;
+
+/**
  * `${R}:sides` (0.20.0): the side characters who spoke in the scenes read so far, each one's chapters, Engine card, look
  * and sprite (S/schemas/side-cast.ts, S/story/side-cast.ts). Never read by a prompt.
  */
@@ -180,6 +186,7 @@ export const RUN_DOC_KINDS = [
   "tarot",
   "deck",
   "quiz",
+  "recall",
   "sides",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];

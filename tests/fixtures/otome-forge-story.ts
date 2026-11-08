@@ -113,8 +113,8 @@ export async function storyWorld({
   arcReply?: (prompt: string) => string;
   /** #2174: the personality quiz lines the fake writes, when a test needs other ones than fakeQuizReply's. */
   quizReply?: FakeRuntimeOptions["quizReply"];
-  /** The fake connection's context window, output cap and background admission (#2039). */
-  model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens" | "admissionRun">;
+  /** The fake connection's context window, output cap and background admission (#2039), and the embedders (0.19.0). */
+  model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens" | "admissionRun" | "embeddings" | "embeddingsFor">;
 }) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
