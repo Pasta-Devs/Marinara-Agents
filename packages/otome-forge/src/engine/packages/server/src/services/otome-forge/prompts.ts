@@ -1104,7 +1104,8 @@ export function musicBriefMessages(world: Pick<World, "premise" | "setting">, cu
 // #2046 (Side with): while a side-with scene may come (S/story/chapters.ts sideWithOpen), P5 may mark one beat node
 // where two to four love interests disagree; P6 on that node offers ONE choice with an option per love interest present,
 // each naming whom it backs, and the game, never the reply, sets what siding changes. Other prompts are unchanged.
-// #2155 (his side): P6 tells one scene again from a love interest's point of view (hisSideFraming): its instructions let
+// #2155 (his side): P6 writes a scene the protagonist was not there for, beside a big moment, from a love interest's
+// point of view (hisSideFraming): its instructions let
 // only him think and carry no choice rules, its card is as things stood at the moment (the caller's state), and the
 // scene as the protagonist lived it goes in the last turn, after the cached part. Its story context and every other chapter's messages are unchanged.
 
@@ -2317,7 +2318,8 @@ function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Uni
   }
   if (chapter.kind === "repair") return `a repair chapter with ${owner}`;
   if (chapter.kind === "story") {
-    if (chapter.hisSide) return `${owner}'s side of it: the same events, told again from ${owner}'s point of view`;
+    if (chapter.hisSide)
+      return `${owner}'s side of it: a scene the protagonist was not there for, just before that moment or right after they left`;
     return chapter.prestige ? `${owner}'s extra story, imagined together (not canon)` : `${owner}'s Character Story`;
   }
   return `${chapter.kind} chapter`;
@@ -2356,13 +2358,13 @@ function prestigeFraming(name: string, prestige: NonNullable<Chapter["prestige"]
 }
 
 /**
- * #2155: what P6 adds to his side (`side-<li>-<arc>`, S/story/his-side.ts) in place of the Character Story's framing: the
- * scene above, told again from his point of view, as things stood at the moment (the caller's state).
+ * #2155: what P6 adds to his side (`side-<li>-<arc>`, S/story/his-side.ts) in place of the Character Story's framing: a
+ * scene beside the one above that the protagonist never saw, from his point of view, as things stood then.
  */
 function hisSideFraming(name: string): string[] {
   return [
-    `This is ${name.toUpperCase()}'S SIDE: the scene above, told again from ${name}'s point of view. The same events in the same order, condensed to this node's length: the lines that matter are said again word for word, every choice and action of the protagonist's stays exactly as it was, nothing new happens, nothing is undone, and it ends where that scene ended. Never repeat the bracketed game markers.`,
-    `The narration stays with ${name}: what ${name} sees, notices and feels in their body. The protagonist is still "you", seen through ${name}'s eyes; where the writing rules speak of what the protagonist feels, write what ${name} feels, and let the protagonist's feelings show only as ${name} reads them. Keep everything How it's written asks but the point of view.`,
+    `This is ${name.toUpperCase()}'S SIDE: a scene the protagonist was not there for, beside the scene above: what led ${name} to it, or what ${name} did right after the protagonist left, whichever tells more. Never retell the scene above; it stays exactly as it happened. Never repeat the bracketed game markers.`,
+    `The narration stays with ${name}: what ${name} sees, notices and feels in their body. The protagonist is not in it, or only leaving at its start; where the writing rules speak of what the protagonist feels, write what ${name} feels. Keep everything How it's written asks but the point of view.`,
     `${name}'s thoughts show what ${name} wanted, feared and kept back then, in ${name}'s own voice, and only what ${name} knew at that moment, nothing that happened later. How far ${name} admits their feelings, even to themselves, keeps to the romance line on ${name}'s card.`,
     `A Hidden line on the card is never stated, even in thought; it presses on ${name} only as the tells do. The protagonist never learns any of this.`,
   ];

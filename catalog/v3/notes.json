@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.18.2",
+          "date": "2026-11-08",
+          "notes": "- **Their side shows what you never saw.** A love interest's side of a big moment is now a scene you weren't there for, just before it or right after you left, instead of the same scene told again. It opens once they reach **Wound**; earlier moments don't count.",
+          "highlight": false
+        },
+        {
           "version": "0.18.1",
           "date": "2026-11-08",
           "notes": "- **Stories meet the world's important people.** Chapters now bring in major side characters with real parts, not only passing locals, so they can grow into love interests or antagonists later. In a story set in an existing world, that means its own canon characters tied to your love interests.\n- **Premise suggestions may use existing worlds.** Surprise me no longer avoids names, places and characters from existing books, films and games.",
@@ -788,12 +794,6 @@
           "date": "2026-11-06",
           "notes": "- **Less affection from activities each day.** Date Night, Read Them, Read Me, the Claw Machine, Close and remember and Show him now earn at most 150 affection per love interest a day, down from 300. Story chapters still earn without a limit, and so does a gift you give on a date.",
           "highlight": false
-        },
-        {
-          "version": "0.9.0",
-          "date": "2026-11-06",
-          "notes": "- **A Shop in Wish.** Spend Starlight on gifts: flowers, chocolates, wine, and under NSFW Heat an aphrodisiac. They wait in your Wardrobe until a date.\n- **Bring a gift to Date Night.** Pick one with your looks and give it in the first scene: they react in their own voice, and the evening can change because of it. The gift earns extra affection, even past the daily cap.\n- **Figurines of your love interests.** Each one is drawn just for them and costs 5,000 Starlight. Buying one unlocks a short, funny scene with them, and the figurine joins you on Home.",
-          "highlight": true
         }
       ]
     },

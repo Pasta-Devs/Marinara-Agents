@@ -15,6 +15,9 @@ export const FIRST_STAGE = 1;
 export const LAST_STAGE = 6;
 
 export const STAGE_NAMES = ["mask", "crack", "pull", "wound", "reckoning", "bond"] as const;
+
+/** #2155: his side opens once he reaches Wound (stage 4): a moment counts, and Routes offers its side, from then on. */
+export const HIS_SIDE_MIN_STAGE = 4;
 export type StageName = (typeof STAGE_NAMES)[number];
 
 /** What a route chapter's gate must hold before it may move him to that stage. */

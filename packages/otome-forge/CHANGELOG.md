@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.18.2 — 2026-11-08
+
+- **Their side shows what you never saw.** A love interest's side of a big moment is now a scene you weren't there for, just before it or right after you left, instead of the same scene told again. It opens once they reach **Wound**; earlier moments don't count.
+
 ## 0.18.1 — 2026-11-08
 
 - **Stories meet the world's important people.** Chapters now bring in major side characters with real parts, not only passing locals, so they can grow into love interests or antagonists later. In a story set in an existing world, that means its own canon characters tied to your love interests.
