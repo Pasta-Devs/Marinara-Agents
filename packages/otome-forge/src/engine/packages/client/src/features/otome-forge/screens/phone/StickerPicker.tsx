@@ -179,7 +179,7 @@ export function StickerPicker({ stickers, name, disabled, onPick }: StickerPicke
             type="button"
             className="of-sticker-choice"
             data-kind={choice.url ? "chibi" : "builtin"}
-            aria-label={t("ui.otomeForge.phone.stickerSend", { face: choice.label })}
+            aria-label={t("ui.otomeForge.phone.stickerAttach", { face: choice.label })}
             title={choice.label}
             onClick={() => {
               close(false);

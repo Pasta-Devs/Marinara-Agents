@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Hearth: the personality quiz (#2174), under "Planning chapter …" while a chapter that opens no arc is planned
+// Otome Hearth: the personality quiz (#2174), under "Planning chapter …" while a chapter that opens no arc is planned,
+// and under a date's wait (WaitQuiz: Date Night's plan, Read Him, Read Me and Tarot night, writing or finishing)
 // ──────────────────────────────────────────────
 // Optional, as Who said what? is (C/screens/reader/WhoSaidWhat.tsx): one Play button, then a statement and a 1–5 scale
 // from strongly disagree to strongly agree. The answer is saved (POST /runs/:run/quiz/answer; the first is final) and
@@ -243,5 +244,17 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
         </button>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The quiz under a date's wait (Date Night's plan, Read Him, Read Me, Tarot night): a column of its own after the
+ * wait's status, outside its live region, so the quiz is never announced as the status, and gone when the wait ends.
+ */
+export function WaitQuiz({ runKey, lis }: { runKey: string; lis: readonly RunLiView[] }) {
+  return (
+    <div className="of-wait-quiz">
+      <PersonalityQuiz runKey={runKey} lis={lis} />
+    </div>
   );
 }
