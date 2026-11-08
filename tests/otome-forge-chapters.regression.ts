@@ -1,5 +1,5 @@
 // Otome Forge's main chapters (M2a): the two Lead candidates (least recent, ripest conflict above 0), the chapter
-// plan's checks (6–9 nodes, 1–2 moments, one confrontation as the climax, at most two CGs, the Foil on stage, every
+// plan's checks (6–9 nodes, 1–2 moments, at most one climax, at most two CGs, the Foil on stage, every
 // love interest in chapter 1, an off-screen line for each absent one, no tag for a Line, and conflict seeds that never
 // repeat that love interest's last two kinds of angst, counting the same plan's), and the plan route: the prompt
 // carries the knowledge boundary, the content contract, the kit's PLAYER AGENCY and every Foil candidate's full bible; a
@@ -151,7 +151,10 @@ test("a chapter plan keeps the shape: 6–9 nodes, 1–2 moments, one confrontat
     /1 or 2 moment/,
   );
   fails({ nodes: [nodes[5], ...without(5)] }, /second-to-last or last/);
-  fails({ nodes: nodes.map((node, at) => (at === 4 ? { ...node, kind: "confrontation" } : node)) }, /exactly one/);
+  fails(
+    { nodes: nodes.map((node, at) => (at === 4 ? { ...node, kind: "confrontation" } : node)) },
+    /at most one climax/,
+  );
   fails({ nodes: nodes.map((node) => ({ ...node, cg: true })) }, /at most 2 nodes may have cg/);
   fails({ foil: KAI }, /other than the Lead/);
   // A beat may be the protagonist's alone (#1955); a moment or the climax is played with a love interest.
