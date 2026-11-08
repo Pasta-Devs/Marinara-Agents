@@ -8,6 +8,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
+import { fitForgeMemoryPrompt, forgeComposeMemoryPrompt } from "@forge-kit/story-memory-fit.mjs";
 import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import {
   chatTarget,
@@ -195,4 +197,48 @@ test("a chapter's small memories are saved only from a pool that was read, in st
   assert.equal(failed.memories, undefined, "a pool that failed is chosen again next time");
   const none = await recallText({ store: t.store, memory: stub({ recalls: [] }) }, t.runId, options);
   assert.deepEqual(none.memories, [], "an empty pool is a choice too");
+});
+
+test("a scene too long for its context never sends fewer of the chapter's small memories (Dottore on #2198)", async () => {
+  const t = await storyWorld({ runKey: "r-pool-cccccc" });
+  const memories = ["one", "two", "three"].map((id, order) => ({
+    id,
+    title: `${id} (private)`,
+    content: `${id.toUpperCase()}-MEMORY ${"words ".repeat(200)}`,
+    order,
+  }));
+  const memory = {
+    recall: async () => ({ text: "", details: [], maxContext: null, recalls: memories }) as never,
+    maintain: async () => true,
+  };
+  const context = await recallText({ store: t.store, memory }, t.runId, {
+    job: "narration",
+    cast: [KAI],
+    cached: {},
+    continues: "main",
+    pool: { cast: [KAI], ids: ["one", "two", "three"] },
+  });
+  const pool = context.pool!;
+  assert.deepEqual([pool.details.length, pool.optional.length], [0, 0], "nothing in it the fitter may leave out");
+  const sent = `RECALLED MEMORIES (each title says who knows it)\n${pool.text}`;
+  const messages = forgeComposeMemoryPrompt(
+    () => [
+      { role: "system", content: "STORY CONTEXT" },
+      { role: "system", content: sent },
+      { role: "user", content: `Narrate node 9 of 9. ${"scene ".repeat(400)}` },
+    ],
+    [pool, context],
+  );
+  const estimate = (list: Array<{ content: string }>) =>
+    list.reduce((sum, message) => sum + estimateTextTokens(message.content), 0);
+  // Room for everything but a few hundred tokens: a recall pool would give way one memory at a time here.
+  const fitted = fitForgeMemoryPrompt(messages, {
+    maxContext: estimate(messages) + 1024 - 300,
+    maxTokens: 1024,
+    estimateMessages: estimate,
+    safetyTokens: 0,
+    minOutputTokens: 256,
+  });
+  assert.equal(fitted.droppedDetails, 0);
+  assert.equal(fitted.messages[1]!.content, sent, "all of them, or the scene does not go");
 });
