@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.20.1 — 2026-11-08
+
+- **Every scene of a chapter remembers the same small moments.** A chapter now picks its small memories (message exchanges, Snapshots, Read Him, Claw Machine and Tarot rounds, Read Me notes and dates) once, for everyone in it, and each of its scenes is written with the same ones, marked with who knows them. After the first scene they're sent at the cached price instead of in full every time. Something that happens during a chapter is remembered from the next one.
+
 ## 0.20.0 — 2026-11-08
 
 - **Side characters who keep coming back get a sprite.** Turn on **Side character sprites** in **Settings → Images**. Once a side character has spoken in two different chapters, their one full-body sprite stands where a love interest's figure does while they speak. It's one neutral picture, with no expressions. Stories you already started count the scenes you've read.

@@ -28,6 +28,10 @@
 //   beat counts as read, and the lookahead written from the uncut scene is removed (again on a retry, and by the
 //   lookahead itself when it was saved just after the cut). A Confrontation eased off after its ending keeps its canon
 //   whole, so its lookahead stays.
+// - A chapter's small memories (0.20.1, the maintainer's: cached, and never switching between scenes): its first
+//   scene recalls the pool for everyone in its nodes and saves the ones it sent on the chapter (`memories`, a
+//   revision-checked write that keeps what an earlier call saved); every later scene, Confrontation and Closer of the
+//   chapter sends exactly those (S/story/canon.ts `pool`). A memory made meanwhile waits for the next chapter.
 // - A date's beat (M5, chapter kind "date") has exactly one small choice whose options each carry a hidden `score`
 //   (−1/0/1, how the date's love interest takes it; at least one scores 1), read by index like the effects and saved
 //   as `beat.scores`. A date never ends on a big choice, and an option opens a grievance only on a date planned to go
@@ -101,9 +105,9 @@ import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
 import { beatMessages, closerMessages, confrontationMessages, explicitCgAllowed, prologueEnding } from "../prompts.js";
 import { OtomeForgeError } from "../http.js";
-import { PROLOGUE_KEY, beatId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
-import { normalizeBeat } from "../schemas/story.js";
+import { normalizeBeat, normalizeChapter } from "../schemas/story.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
@@ -672,26 +676,42 @@ async function generateBeat(
   // as its plan is; a date's or a story's scenes are not.
   // A side chapter tells a scene of a chapter before it again, so the story's memory, which is the story as it is now,
   // would hand it chapters that came after the moment it retells: it gets the scene itself (hisSideSource) and none.
-  const memory: StoryContext = told
+  // The chapter's small memories are everyone's in it, chosen by its first scene (see the header).
+  const everyone = [...new Set(chapter.nodes.flatMap((entry) => entry.cast))];
+  const recall = (memories: readonly string[] | undefined): Promise<StoryContext> =>
+    recallText(deps, runId, {
+      job: "narration",
+      cast: node.cast,
+      ...(pov ? { reader: pov } : {}),
+      cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
+      ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
+      ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
+      lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
+      // Long-term recall: exactly the earlier chapters its plan chose, in their order (S/story/canon.ts).
+      ...(chapter.recalled ? { recalled: chapter.recalled } : {}),
+      pool: { cast: everyone, ...(memories ? { ids: memories } : {}) },
+      query: {
+        cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
+        plan: node.guide,
+        speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
+      },
+      signal,
+      debugMode,
+    });
+  let memory: StoryContext = told
     ? { text: "", overview: "", details: [], maxContext: null, prefix: "", fate: "", optional: [] }
-    : await recallText(deps, runId, {
-        job: "narration",
-        cast: node.cast,
-        ...(pov ? { reader: pov } : {}),
-        cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
-        ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
-        ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
-        lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
-        // Long-term recall: exactly the earlier chapters its plan chose, in their order (S/story/canon.ts).
-        ...(chapter.recalled ? { recalled: chapter.recalled } : {}),
-        query: {
-          cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
-          plan: node.guide,
-          speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
-        },
-        signal,
-        debugMode,
-      });
+    : await recall(chapter.memories);
+  if (!told && !chapter.memories && memory.memories) {
+    const chosen = memory.memories;
+    const saved = await deps.store.updateDoc(
+      runDocTarget("chapter", chapterId(runId, key)),
+      normalizeChapter,
+      (current) => (!current || current.memories ? current : { ...current, memories: chosen }),
+    );
+    // Another scene of the chapter chose first: send what it saved, so every scene's stays the same.
+    const kept = saved?.memories;
+    if (kept && kept.join("\n") !== chosen.join("\n")) memory = await recall(kept);
+  }
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
@@ -728,6 +748,7 @@ async function generateBeat(
     storySoFar,
     memory: memory.text,
     recalls: memory.recalls?.text ?? "",
+    pool: memory.pool?.text ?? "",
     // The arc's line for a main chapter goes in the story context, as P5 sends it (#2066).
     arc:
       chapter.kind === "main" && chapter.number

@@ -58,6 +58,9 @@
 //   in as recent canon, by its summary or in full while it has none (S/story/canon.ts). The pool is the same in every
 //   phase. No embeddings are made, so none are paid for. Long-term recall (0.19.0) embeds the saved summaries apart from
 //   this: each upkeep job hands its run to `afterUpkeep`, which indexes what is new (S/memory/recall-index.ts).
+//   0.20.1, a chapter's small memories (`pool`): a story chapter's scenes recall the pool for everyone in the chapter
+//   (`cast`), chosen once and then sent as those exact memories (`ids`), so it never changes from scene to scene
+//   (S/story/beats.ts saves them on the chapter). Each is titled with who knows it.
 // - A Character Story, Moment or first-wear beat (also the kit's `character-story`, a `story-<itemId>` chapter) joins
 //   the timeline in story order, as a route chapter does, titled and summarized as private to its love interest (the
 //   maintainer's, 2026-11-03: love interests must know what happened in them; as recalls they were often left out).
@@ -215,9 +218,20 @@ export interface OtomeMemoryDeps {
   afterUpkeep?: (runId: string) => void;
 }
 
+/** A chapter's small memories (see the header): the pool for `cast`, or exactly `ids` of it, in their order. */
+export interface RecallPoolOptions {
+  cast: readonly string[];
+  ids?: readonly string[];
+}
+
+export type OtomeRecallOptions = ForgeRecallOptions & { pool?: RecallPoolOptions };
+
 export interface OtomeMemory {
-  /** The kit's recall. Without `reader` or `cast`, recall as a scene with no love interest present. */
-  recall(options: ForgeRecallOptions): Promise<OtomeRecallResult>;
+  /**
+   * The kit's recall. Without `reader` or `cast`, recall as a scene with no love interest present. With `pool`, the
+   * recall pool is that chapter's (see the header).
+   */
+  recall(options: OtomeRecallOptions): Promise<OtomeRecallResult>;
   /**
    * Queues maintenance (summaries, overview, recall vectors) on the background lane. False when the run has no world
    * or no connection to summarize with; true once queued, or folded into the job already waiting or running. `retry`:
@@ -284,7 +298,11 @@ export interface RecallItem {
  * The kit's recall without its recent canon (a story prompt reads the saved story itself, see the header), and the
  * small memories that go beside the timeline.
  */
-export type OtomeRecallResult = Omit<ForgeRecallResult, "recent"> & { recalls?: RecallItem[] };
+export type OtomeRecallResult = Omit<ForgeRecallResult, "recent"> & {
+  recalls?: RecallItem[];
+  /** The recall pool could not be read: it is empty this once (a chapter's is chosen again next time). */
+  poolFailed?: true;
+};
 
 /** Where a moment sits in story order: after the main chapters completed before it, then by time (S/phone/memory.ts). */
 function storyOrderAt(chapters: Record<string, { completed?: string | null }>, at: string): number {
@@ -515,10 +533,11 @@ export function createOtomeMemory({
    * sets of the love interests this recall is for (S/prompts.ts notebookMemories; live, never stored, so a deleted
    * entry never comes back). What the caller lists in full (`listed`) is left out. Each is counted as the prompt shows
    * it (S/story/canon.ts renderMemory); one that alone could never fit is passed over, and the first other that does
-   * not fit ends the pool, so only the oldest are left out.
+   * not fit ends the pool, so only the oldest are left out. With `ids` (a chapter's, see the header), exactly those
+   * that still exist, in that order.
    */
   async function recallPool(
-    options: ForgeRecallOptions,
+    options: OtomeRecallOptions,
     sources: readonly ForgeMemorySource[],
     knowing: Pick<ForgeRecallOptions, "reader" | "cast">,
     told: readonly RecallItem[],
@@ -528,7 +547,7 @@ export function createOtomeMemory({
       .filter((source) => source.kind === "chat" && mayKnow(knowing, source.audience) && source.content.trim())
       .map(({ id, title, content, order }) => ({ id, title, content: content.trim(), order: order ?? 0 }));
     items.push(...told);
-    const lis = options.reader ? [options.reader] : (options.cast ?? []);
+    const lis = knowing.reader ? [knowing.reader] : (knowing.cast ?? []);
     const state = lis.length ? await store.readDoc(stateId(options.runId), normalizeState) : null;
     for (const li of new Set(lis)) {
       const liState = state?.lis[li];
@@ -539,6 +558,8 @@ export function createOtomeMemory({
         items.push({ id, title, content, order });
       }
     }
+    const ids = options.pool?.ids;
+    if (ids) return ids.flatMap((id) => items.filter((item) => item.id === id).slice(0, 1));
     const kept: RecallItem[] = [];
     const limit = RECALL_TOKENS + HEADROOM_TOKENS;
     let used = 0;
@@ -561,13 +582,16 @@ export function createOtomeMemory({
       // goes on without the recall pool instead of a recall with the private-canon filters off.
       const sources = await readSources(options.runId);
       const knowing = options.reader || options.cast ? options : { cast: [] };
+      // A chapter's small memories are everyone's in it (see the header); the rest of the recall stays the call's own.
+      const { pool, ...kit } = options;
+      const pooled = pool ? { cast: [...pool.cast] } : knowing;
       // The caller sends the story's chapters itself (S/story/canon.ts), so the newest of all (the kit's `latest`) is
       // never ranked as a detail.
       const latest = sources.filter((source) => source.kind === "chapter").at(-1);
       // #2066: the kit's ranked details are not sent any more, so every source is listed and none is ranked, which
       // also leaves the kit no query to embed.
       const result = await memory.recall({
-        ...options,
+        ...kit,
         ...(options.reader || options.cast ? {} : { cast: [] }),
         listed: [...(options.listed ?? []), ...sources.map((source) => source.id)],
         excludeChapterIds: [...(options.excludeChapterIds ?? []), ...(latest ? [latest.id] : [])],
@@ -579,7 +603,7 @@ export function createOtomeMemory({
         (source) =>
           source.kind === "character-story" &&
           (options.ownStories || !isItemStoryKey(source.id)) &&
-          mayKnow(knowing, source.audience),
+          mayKnow(pooled, source.audience),
       );
       const saved = sideStories.length
         ? savedStory((await documents.getById(OTOME_FORGE_PACKAGE_ID, memoryId(options.runId)))?.data)
@@ -590,12 +614,12 @@ export function createOtomeMemory({
         return summary ? [{ id: source.id, title: source.title, content: summary, order: source.order ?? 0 }] : [];
       });
       // A recall pool that fails only loses its memories; the prompt still goes out with everything else.
-      const recalls = await recallPool(options, sources, knowing, told).catch((error): RecallItem[] => {
+      const recalls = await recallPool(options, sources, pooled, told).catch((error): null => {
         runtime.logger.warn("[otome-forge] Recall pool: %s", error instanceof Error ? error.message : String(error));
-        return [];
+        return null;
       });
       const { recent: _recent, ...rest } = result;
-      return { ...rest, details: [], text: "", recalls };
+      return { ...rest, details: [], text: "", recalls: recalls ?? [], ...(recalls ? {} : { poolFailed: true }) };
     },
 
     async maintain({ runId, debugMode = false, retry = false }) {

@@ -1067,6 +1067,11 @@ export interface Chapter {
    * it was planned so every scene's story context is the same (S/story/canon.ts recallText; hidden from the client).
    */
   recalled?: string[];
+  /**
+   * 0.20.1: the chapter's small memories, by id, in the order they go, chosen by its first scene for everyone in it so
+   * every scene sends the same ones; [] when it has none (S/story/beats.ts; hidden from the client).
+   */
+  memories?: string[];
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1271,7 +1276,17 @@ export type BeatState = "unwritten" | "ready" | "read";
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
 export type ChapterView = Omit<
   Chapter,
-  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "gift" | "hisSide" | "recalled"
+  | "nodes"
+  | "ledger"
+  | "connectionId"
+  | "date"
+  | "music"
+  | "prestige"
+  | "thoughts"
+  | "gift"
+  | "hisSide"
+  | "recalled"
+  | "memories"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;

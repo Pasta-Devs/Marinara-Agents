@@ -98,6 +98,10 @@
 // ponytail: the canon only some may know is told after the cached part, so it no longer sits in story order among the
 // rest; its titles say whose it is, and its blocks keep their own order. The upgrade path is naming each block's place
 // in the story (after which chapter it happened).
+// 0.20.1, a chapter's small memories (`pool`, the maintainer's: cached, and never switching between scenes): with
+// `cached`, the recall pool is everyone's in the chapter, chosen once (`memories`, which S/story/beats.ts saves on the
+// chapter) and a context of its own (`pool`), which the prompt sends as its own cached part after the story context.
+// Each memory's title says who knows it, as the last Character Story's does.
 import { forgeCanonicalSegments } from "@forge-kit/player-choices-server.mjs";
 import { forgeMemoryContext, type ForgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
 import type { ForgeMemorySource, ForgeRecallOptions, ForgeRecallResult } from "@forge-kit/story-memory.mjs";
@@ -111,7 +115,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { beatId, chapterId, isItemStoryKey, memoryId, playerId, stateId, unitId } from "../ids.js";
-import type { OtomeMemory } from "../memory/memory.js";
+import type { OtomeMemory, RecallPoolOptions } from "../memory/memory.js";
 import { lastWords, type RecallIndex } from "../memory/recall-index.js";
 import { parseTimeline, renderTimeline, savedStory } from "../memory/timeline.js";
 import { normalizePlayer } from "../schemas/player.js";
@@ -453,13 +457,24 @@ export type RecallTextOptions = Omit<ForgeRecallOptions, "runId"> & {
    * by; how the previous chapter ended is added here. The chosen come back as the context's `recalled`.
    */
   chooseBy?: readonly string[];
+  /**
+   * A chapter's small memories (see the header): the recall pool for everyone in the chapter, or exactly its saved
+   * `ids`. With `cached` they are the context's `pool`, and the ones sent come back as its `memories`.
+   */
+  pool?: RecallPoolOptions;
 };
 
 /**
  * The story before a prompt: its memory context, when `cached` the recalls' own (pass both to generateJson), and the
  * earlier chapters it recalls in detail, by key (see the header).
  */
-export type StoryContext = ForgeMemoryContext & { recalls?: ForgeMemoryContext; recalled?: string[] };
+export type StoryContext = ForgeMemoryContext & {
+  recalls?: ForgeMemoryContext;
+  recalled?: string[];
+  /** A chapter's small memories, a cached part of their own, and their ids as sent (see the header). */
+  pool?: ForgeMemoryContext;
+  memories?: string[];
+};
 
 /** How many of the previous chapter's last words tell a chapter's plan how it ended, to choose its earlier chapters by. */
 const ENDING_WORDS = 120;
@@ -543,6 +558,7 @@ export async function recallText(
   options: RecallTextOptions,
 ): Promise<StoryContext> {
   const { debugMode, continues, cached, lastStory: withLastStory, recalled, chooseBy, ...recall } = options;
+  const chapterPool = !!cached && !!recall.pool;
   const warn = (what: string, error: unknown) =>
     deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
   const [story, saved] = await Promise.all([
@@ -590,12 +606,20 @@ export async function recallText(
       blocks.filter((entry) => !mine(entry)),
       [...older(summaries.filter((entry) => !mine(entry))), ...optional.filter((entry) => !mine(entry))],
     );
+    // A chapter's small memories go apart from what follows the call's cast (see the header).
     const recalls = contextOf(
-      { overview: "", details: result.details, maxContext: result.maxContext },
+      { overview: "", details: chapterPool ? [] : result.details, maxContext: result.maxContext },
       blocks.filter(mine),
       [...older(summaries.filter(mine)), ...optional.filter(mine)],
     );
-    return recalls.text ? { ...context, recalls } : context;
+    const pool = chapterPool
+      ? contextOf({ overview: "", details: result.details, maxContext: result.maxContext }, [], [])
+      : null;
+    return {
+      ...context,
+      ...(recalls.text ? { recalls } : {}),
+      ...(pool?.text ? { pool } : {}),
+    };
   };
   const last = previousOf(known, continues);
   const lastScenes =
@@ -761,5 +785,7 @@ export async function recallText(
     summaries,
   );
   if (earlier.length) context.recalled = earlier.map(({ chapter }) => chapter.key);
+  // Only a pool that was read: one that failed sends none, and is chosen again on the next call.
+  if (chapterPool && result && !result.poolFailed) context.memories = recalls.map(({ id }) => id).reverse();
   return context;
 }
