@@ -682,6 +682,12 @@
           "highlight": false
         },
         {
+          "version": "0.18.1",
+          "date": "2026-11-08",
+          "notes": "- **Stories meet the world's important people.** Chapters now bring in major side characters with real parts, not only passing locals, so they can grow into love interests or antagonists later. In a story set in an existing world, that means its own canon characters tied to your love interests.\n- **Premise suggestions may use existing worlds.** Surprise me no longer avoids names, places and characters from existing books, films and games.",
+          "highlight": false
+        },
+        {
           "version": "0.18.0",
           "date": "2026-11-08",
           "notes": "- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as \"The Lovers · Ren\". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.",
@@ -788,12 +794,6 @@
           "date": "2026-11-06",
           "notes": "- **Less affection from activities each day.** Date Night, Read Them, Read Me, the Claw Machine, Close and remember and Show him now earn at most 150 affection per love interest a day, down from 300. Story chapters still earn without a limit, and so does a gift you give on a date.",
           "highlight": false
-        },
-        {
-          "version": "0.9.0",
-          "date": "2026-11-06",
-          "notes": "- **A Shop in Wish.** Spend Starlight on gifts: flowers, chocolates, wine, and under NSFW Heat an aphrodisiac. They wait in your Wardrobe until a date.\n- **Bring a gift to Date Night.** Pick one with your looks and give it in the first scene: they react in their own voice, and the evening can change because of it. The gift earns extra affection, even past the daily cap.\n- **Figurines of your love interests.** Each one is drawn just for them and costs 5,000 Starlight. Buying one unlocks a short, funny scene with them, and the figurine joins you on Home.",
-          "highlight": true
         }
       ]
     },
