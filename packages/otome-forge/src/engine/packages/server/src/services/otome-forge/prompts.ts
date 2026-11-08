@@ -1111,6 +1111,8 @@ export function musicBriefMessages(world: Pick<World, "premise" | "setting">, cu
 // point of view (hisSideFraming): its instructions let
 // only him think and carry no choice rules, its card is as things stood at the moment (the caller's state), and the
 // scene as the protagonist lived it goes in the last turn, after the cached part. Its story context and every other chapter's messages are unchanged.
+// 0.19.1: P5's climax is optional, planned only when the chapter builds to one; a story arc's last chapter keeps one
+// for its big event.
 
 // ── The blocks and rules the story prompts share ──
 // Most other prompts carry these blocks too (betweenYou, knowsAboutYou, protagonistBlock, appearanceLine, bibleBlock,
@@ -1760,7 +1762,7 @@ export interface ChapterPlanInput {
   memory: string;
   /** The recalls' text (recallText with `cached`): the recalls and the canon only some may know, or "". */
   recalls?: string;
-  /** The climax this chapter must use (S/story/chapters.ts requiredClimax), or null when the planner picks. */
+  /** The climax this chapter must use if it has one (S/story/chapters.ts requiredClimax), or null when the planner picks. */
   climax?: ClimaxKind | null;
   /** The story arc this chapter belongs to (#1980); its scheduled reveal for this chapter is the only mystery text a planner sees. */
   arc?: StoryArc | null;
@@ -1827,16 +1829,17 @@ export function chapterPlanMessages({
       ANGST_TYPES.join(", ") +
       "), or escalate, complicate or resolve an open one by its id. ledger.offscreen: one line for every love interest NOT in this chapter: what they were doing meanwhile.",
     "RULES",
-    `- ${NODES_MIN} to ${NODES_MAX} nodes; 1 or 2 moment nodes; exactly one climax node, a confrontation or a closer, as the second-to-last or last node; at most 2 nodes with cg.`,
+    `- ${NODES_MIN} to ${NODES_MAX} nodes; 1 or 2 moment nodes; at most one climax node, a confrontation or a closer, as the second-to-last or last node; at most 2 nodes with cg.`,
+    "- A climax only when the chapter builds to one; a chapter may go without, and end on an ordinary scene or a moment.",
     climax
-      ? `- This chapter's climax is a ${climax}: the last two main chapters both ended with a ${climax === "closer" ? "confrontation" : "closer"}.`
-      : `- Choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
-    "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
+      ? `- If this chapter has a climax, it is a ${climax}: the last two climaxes were both ${climax === "closer" ? "confrontation" : "closer"}s.`
+      : `- If it has one, choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
+    "- The Lead is in most nodes and in the climax, if any; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
     // #2047: a climax-last plan has no big choice at its end, so it could never close on the judgment.
     ...(judgment
       ? [
-          "- This chapter's end may close on a judgment the protagonist can get wrong (the narrator decides; it is optional): put the climax second-to-last, so the last node can hold a big choice.",
+          "- This chapter's end may close on a judgment the protagonist can get wrong (the narrator decides; it is optional): put any climax second-to-last, so the last node can hold a big choice.",
         ]
       : []),
     "- The world has other people, important ones too: give named characters (friends, family, rivals, superiors, officials, locals) real parts where the story calls for them; they speak and can matter. Introduce major characters with depth, so they can become love interests or antagonists later; in an existing world, its canon characters tied to the love interests. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
@@ -1870,7 +1873,9 @@ export function chapterPlanMessages({
               .map((entry) => `${entry.n} — ${entry.purpose}`)
               .join("; "),
           lastChapter
-            ? `THIS IS THE ARC'S LAST CHAPTER. Its big event is this chapter's climax: ${arc.endsWith?.what ?? arc.goal} Set "eventNode" to the climax node's index.`
+            ? arc.endsWith
+              ? `THIS IS THE ARC'S LAST CHAPTER. It has a climax, which carries its big event: ${arc.endsWith.what} Set "eventNode" to the climax node's index.`
+              : `THIS IS THE ARC'S LAST CHAPTER: ${arc.goal} If it has a climax, set "eventNode" to the climax node's index.`
             : arc.endsWith
               ? `Chapter ${arc.endsAt} ends the arc: ${arc.endsWith.what}`
               : "",
