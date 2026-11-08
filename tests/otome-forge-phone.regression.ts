@@ -382,7 +382,11 @@ test("P17 is a message from him alone: boundary, chat contract, comfort rule, st
   ]) {
     assert.ok(head.includes(part), `system has: ${part.slice(0, 50)}`);
   }
-  const user = prompt.at(-1)!.content;
+  // 0.20.2: the cached part (his card, the story, the conversations that are over), then the thread now.
+  const user = prompt
+    .filter((message) => message.role === "user")
+    .map((message) => message.content)
+    .join("\n");
   assert.ok(user.includes(`Ines: (replying to your note: "${quote}") I read your note.`));
   assert.ok(user.includes("He mended the north lens alone."));
   assert.ok(user.includes("Open grievance g-1"));
@@ -748,7 +752,7 @@ test("P17 keeps the overview and recalled details whole beside the previous chap
   const phone = phoneRoutes({ ...t.deps, memory: memory as unknown as OtomeMemory }, "r-phonea-aaaaaa");
   const sent = await phone("POST", send, { li: KAI, body: { text: "Do you remember my sister's name?" } });
   assert.equal(sent.status, 200, JSON.stringify(sent.body));
-  const user = t.calls.find((call) => isReplyPrompt(call.messages))!.messages.at(-1)!.content;
+  const user = t.calls.find((call) => isReplyPrompt(call.messages))!.messages[1]!.content;
   for (const mark of ["OVERVIEW-MARK", "OLD-SESSION-MARK", "# Previous chapter in full: Harbour", "LATEST-END-MARK"]) {
     assert.ok(user.includes(mark), `P17 holds ${mark}`);
   }
@@ -1132,9 +1136,36 @@ test("P17 written first changes only its task line: the same role, rules, bounda
   const reply = chatReplyMessages(input);
   const first = chatReplyMessages({ ...input, first: true });
   assert.equal(first[0]!.content, reply[0]!.content, "the system message is the same");
-  const lines = (messages: typeof reply) => messages[1]!.content.split("\n");
+  assert.equal(first[1]!.content, reply[1]!.content, "the cached part is the same: a reply reads what it wrote");
+  const lines = (messages: typeof reply) => messages[2]!.content.split("\n");
   const changed = lines(first).filter((line) => !lines(reply).includes(line));
   assert.equal(changed.length, 1);
   assert.ok(changed[0]!.includes(FIRST_LINE));
   assert.ok(lines(first).includes("(no messages yet)"));
+});
+
+test("P17 caches all but the thread now and its task, for five minutes, so the next reply reads it (0.20.2)", async () => {
+  const t = await phoneWorld("r-phonec-aaaaaa", { replies: phoneModel() });
+  for (const text of ["Are you awake?", "The lamp is out again."]) {
+    const sent = await t.phone("POST", send, { li: KAI, body: { text } });
+    assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  }
+  const [one, two] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.ok(one && two, "two replies");
+  for (const call of [one, two]) {
+    assert.deepEqual(
+      call.messages.map((message) => [message.role, message.cacheBreakpoint === true]),
+      [
+        ["system", true],
+        ["user", true],
+        ["user", false],
+      ],
+    );
+    assert.equal((call.options as { cacheTtl?: string }).cacheTtl, "5m");
+    assert.ok(call.messages[2]!.content.startsWith("THE THREAD NOW"), "the thread and the task follow the cached part");
+    assert.ok(!call.messages[1]!.content.includes("Are you awake?"), "no message of the thread in the cached part");
+  }
+  assert.equal(two.messages[0]!.content, one.messages[0]!.content, "the same instructions");
+  assert.equal(two.messages[1]!.content, one.messages[1]!.content, "the same card, story and conversations over");
+  assert.ok(two.messages[2]!.content.includes("The lamp is out again."));
 });

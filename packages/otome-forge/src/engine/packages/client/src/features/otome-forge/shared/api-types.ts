@@ -1068,7 +1068,7 @@ export interface Chapter {
    */
   recalled?: string[];
   /**
-   * 0.20.1: the chapter's small memories, by id, in the order they go, chosen by its first scene for everyone in it so
+   * 0.20.4: the chapter's small memories, by id, in the order they go, chosen by its first scene for everyone in it so
    * every scene sends the same ones; [] when it has none (S/story/beats.ts; hidden from the client).
    */
   memories?: string[];

@@ -12,7 +12,7 @@
 //    chapter's earliest scenes. The timeline, the previous chapter's last scene and the newest summary always stay,
 //    and nothing outside the memory is ever cut. A cached prompt's own canon
 //    (S/story/canon.ts `cached`) is a context of its own, beside the recalls, and its summaries give way before the
-//    cached part's, each part keeping its newest (#2091); a chapter's small memories (0.20.1, the context's `pool`) are
+//    cached part's, each part keeping its newest (#2091); a chapter's small memories (0.20.4, the context's `pool`) are
 //    one more, after the recalls, whose memories give way all together or not at all. A message's `cacheBreakpoint`
 //    (#2066) is sent as it is. A
 //    prompt that still leaves the reply less than the floor (or the connection's own smaller cap) is a 413 `capacity`
@@ -25,7 +25,8 @@
 //    other sampling or reasoning setting, so what the connection saves (its temperature, its reasoning effort) is what
 //    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A prompt with cache marks also asks
 //    for the hour-long cache (cacheTtl "1h", capability API 1.815; an older Engine ignores it and keeps the
-//    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote. A
+//    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote;
+//    a request may ask for the five-minute one instead (0.20.2: a message thread's replies, which come closer). A
 //    background call holds its job's connection admission slot throughout; it names that connection and never takes a
 //    second slot here.
 // 6. Parse: parseJsonish (or the request's own `parse` for a plain-text shape), then the schema, then `normalize`. On
@@ -81,6 +82,8 @@ export interface GenerateJsonRequest<T extends object> {
    * the header). Without it nothing in the prompt gives way.
    */
   memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext; pool?: ForgeMemoryContext };
+  /** How long a prompt with cache marks stays cached (see the header): an hour unless it asks for five minutes. */
+  cacheTtl?: "5m" | "1h";
   schema: ZodType<T>;
   /**
    * A reply in a plain-text shape of its own: turns the text into the value the schema checks, or undefined when none
@@ -326,7 +329,7 @@ export async function generateJson<T extends object>(
       maxTokens: fitted.maxTokens,
       debugMode: request.debugMode,
       signal: request.signal,
-      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: "1h" as const } : {}),
+      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: request.cacheTtl ?? ("1h" as const) } : {}),
     };
     const reply = await model.chatComplete(sent, options);
     logCacheUse(runtime, label, request.debugMode, reply.usage);

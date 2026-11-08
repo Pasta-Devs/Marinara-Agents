@@ -98,7 +98,7 @@
 // ponytail: the canon only some may know is told after the cached part, so it no longer sits in story order among the
 // rest; its titles say whose it is, and its blocks keep their own order. The upgrade path is naming each block's place
 // in the story (after which chapter it happened).
-// 0.20.1, a chapter's small memories (`pool`, the maintainer's: cached, and never switching between scenes): with
+// 0.20.4, a chapter's small memories (`pool`, the maintainer's: cached, and never switching between scenes): with
 // `cached`, the recall pool is everyone's in the chapter, chosen once (`memories`, which S/story/beats.ts saves on the
 // chapter) and a context of its own (`pool`), which the prompt sends as its own cached part after the story context.
 // Each memory's title says who knows it, as the last Character Story's does. They give way all together or not at

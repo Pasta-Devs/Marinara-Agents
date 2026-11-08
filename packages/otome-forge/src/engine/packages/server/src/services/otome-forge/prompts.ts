@@ -64,7 +64,9 @@
 //   notebookMemories: older Read Me entries as recall records (S/memory/memory.ts)
 // (f) Phone
 //   renderThread: the thread as prompt text (P17, S/phone/memory.ts)
-//   chatReplyMessages: P17 chat reply, with stickers (#2044) and daily messages (S/phone/chat.ts, S/phone/daily.ts)
+//   chatReplyMessages: P17 chat reply, with stickers (#2044) and daily messages (S/phone/chat.ts, S/phone/daily.ts);
+//     0.20.2: its instructions and his card, the story and the conversations that are over are cached (five minutes),
+//     the thread now and the task after them
 //   chatMemoryMessages: P18 what he remembers of a closed conversation (S/phone/memory.ts), and the group chat's
 //   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts)
 // (g) Home and care
@@ -1474,7 +1476,7 @@ export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly 
 // `cached`), the task. Each of the first three parts ends where the provider may cache the prompt (cacheBreakpoint,
 // capability API 1.814; P5, P12 and P12c mark the story context alone, as no later call shares the rest, and P5 on a
 // connection of its own marks nothing), so after a chapter's first call its story context is sent at the cached price.
-// Nothing in the story context may follow the node, its cast or the prompt's kind. 0.20.1: P6, P12 and P12c send the
+// Nothing in the story context may follow the node, its cast or the prompt's kind. 0.20.4: P6, P12 and P12c send the
 // chapter's small memories (S/story/canon.ts `pool`) as a cached part of their own right after it, the same for every
 // scene of the chapter; P5's own recalls still follow its cached part.
 
@@ -1557,7 +1559,7 @@ function storyMessages(
     marks === "none" ? { role: "system", content } : { role: "system", content, cacheBreakpoint: true };
   return [
     cachedPart(context),
-    // The chapter's small memories under their heading (S/story/canon.ts), the same for each of its scenes (0.20.1);
+    // The chapter's small memories under their heading (S/story/canon.ts), the same for each of its scenes (0.20.4);
     // left empty when they give way, which the Engine drops. At most four marks in all.
     ...(pool.trim() ? [cachedPart(pool.trim())] : []),
     marked({ role: "system", content: instructions }),
@@ -3138,7 +3140,11 @@ export function chatReplyMessages({
           "They already happened. Bring one up only where it fits; never replay it or start from it again.",
         ].join("\n")
       : "",
-    "",
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  // 0.20.2: everything above stays the same through a conversation, so it is cached; the thread and the task follow.
+  const now = [
     "THE THREAD NOW (oldest first)",
     tail.length ? renderThread(tail, { li: name, player: them }, "his", stickers?.name) : "(no messages yet)",
     "",
@@ -3155,8 +3161,9 @@ export function chatReplyMessages({
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");
   return [
-    { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "system", content: system, cacheBreakpoint: true },
+    { role: "user", content: user, cacheBreakpoint: true },
+    { role: "user", content: now },
   ];
 }
 

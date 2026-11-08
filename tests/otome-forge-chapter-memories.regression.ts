@@ -1,4 +1,4 @@
-// Otome Hearth 0.20.1, a chapter's small memories (the maintainer's: cached, and never switching between scenes):
+// Otome Hearth 0.20.4, a chapter's small memories (the maintainer's: cached, and never switching between scenes):
 // - a chapter's first scene recalls the small memories for everyone in its nodes, and saves the ones it sent on the
 //   chapter, which the client never sees;
 // - every scene of the chapter, and its Confrontation, sends exactly those, as a cached system message of its own

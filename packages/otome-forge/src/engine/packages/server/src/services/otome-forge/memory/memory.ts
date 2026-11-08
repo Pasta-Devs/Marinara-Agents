@@ -58,7 +58,7 @@
 //   in as recent canon, by its summary or in full while it has none (S/story/canon.ts). The pool is the same in every
 //   phase. No embeddings are made, so none are paid for. Long-term recall (0.19.0) embeds the saved summaries apart from
 //   this: each upkeep job hands its run to `afterUpkeep`, which indexes what is new (S/memory/recall-index.ts).
-//   0.20.1, a chapter's small memories (`pool`): a story chapter's scenes recall the pool for everyone in the chapter
+//   0.20.4, a chapter's small memories (`pool`): a story chapter's scenes recall the pool for everyone in the chapter
 //   (`cast`), chosen once and then sent as those exact memories (`ids`), so it never changes from scene to scene
 //   (S/story/beats.ts saves them on the chapter). Each is titled with who knows it.
 // - A Character Story, Moment or first-wear beat (also the kit's `character-story`, a `story-<itemId>` chapter) joins

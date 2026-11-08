@@ -112,7 +112,12 @@ const system = (messages: Messages) =>
     .filter((message) => message.role === "system")
     .map((message) => message.content)
     .join("\n\n");
-const user = (messages: Messages) => messages.at(-1)!.content;
+// 0.20.2: P17's user part is two messages, the cached one and the thread now with the task.
+const user = (messages: Messages) =>
+  messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content)
+    .join("\n");
 const DAY = "2026-10-28";
 const UPSET = /The protagonist is upset with Kai and has said so to Kai\./;
 const INVITE_OFFER = 'add "invite": true to the JSON object';

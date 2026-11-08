@@ -28,7 +28,7 @@
 //   beat counts as read, and the lookahead written from the uncut scene is removed (again on a retry, and by the
 //   lookahead itself when it was saved just after the cut). A Confrontation eased off after its ending keeps its canon
 //   whole, so its lookahead stays.
-// - A chapter's small memories (0.20.1, the maintainer's: cached, and never switching between scenes): its first
+// - A chapter's small memories (0.20.4, the maintainer's: cached, and never switching between scenes): its first
 //   scene recalls the pool for everyone in its nodes and saves the ones it sent on the chapter (`memories`, a
 //   revision-checked write that keeps what an earlier call saved); every later scene, Confrontation and Closer of the
 //   chapter sends exactly those (S/story/canon.ts `pool`). A memory made meanwhile waits for the next chapter.
