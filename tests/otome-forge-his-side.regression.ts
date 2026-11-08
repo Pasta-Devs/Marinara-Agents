@@ -725,7 +725,8 @@ test("his side's reply: only his thoughts, at any stage, and no choice; other ch
 
 test("every other chapter's P6 is byte for byte the builder's from before his side", () => {
   // The sha256 of beatMessages' output for a main chapter's last node (thinkers, choices, the closing decision) and a
-  // Character Story's first node, taken from the builder before #2155 (origin/staging at 0.12.0). A change to what
+  // Character Story's first node, taken from the builder before #2155 (origin/staging at 0.12.0; 0.18.1's canon writing
+  // rule, which names an existing world's characters, moved both). A change to what
   // these prompts share with his side's must show here; a deliberate change to P6 updates both, with the reason.
   const units = CAST.map((li) => normalizeUnit({ id: li.id, name: li.name, source: "archetype", bible: bible() })!);
   const node = (i: number) => ({ i, kind: "beat" as const, guide: `Node ${i + 1} at the lamp.`, cast: [KAI, MIR] });
@@ -749,10 +750,10 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
     storySoFar: ["Node 1.", "Node 2."],
   });
   assert.ok(/PLAYER CHOICES/u.test(mainMessages[1]!.content), "the fixture reaches the choice rules");
-  assert.equal(sha(mainMessages), "11819f577b229f79905af6d6e98ebad1c48fbd2fffc77c61e5a2fb2559700b49", "a main chapter");
+  assert.equal(sha(mainMessages), "001d3b1180971167040077b3d46b7b5cfe134ae9f284751c2b5cddf8f84b8c0a", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "b2176ea039453496a3a9a6c42ab4f389526841a2d3336c2289aa3d07dfd38327",
+    "03d87c8b341e4c5c2a26820c9659d980427dd0a851c816bbc7e6a811fee1162d",
     "a Character Story, even with a scene handed to it",
   );
 });

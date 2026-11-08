@@ -1248,11 +1248,12 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 
 // What a date's prompts sent before #2128 (staging 0.8.10, sha256 of the messages as JSON), for datePrompts() below
 // with no gift: a date without one is planned and written exactly as before.
+// 0.18.1: the canon writing rule now names an existing world's characters, so every date prompt's bytes moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "a72654b7fb0df424",
-  scene1: "80b6acde53173d73",
-  scene2: "244998fe523c2f0f",
-  scene3: "6bdf3e44d529a617",
+  plan: "a4a65909c35adc32",
+  scene1: "aa9304e841379218",
+  scene2: "a23eaf8f9fb0a872",
+  scene3: "a41397c5d878481f",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */
