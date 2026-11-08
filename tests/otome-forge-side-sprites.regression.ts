@@ -496,30 +496,32 @@ test("with the toggle off nothing is called, matched or painted; turning it on s
   assert.equal((await t.sides()).arlecchino!.cardId, "card-arle");
 });
 
-test("past the cap the oldest speakers without an image go; nobody whose record holds one is ever dropped", () => {
-  const person = (n: number, painted: boolean, art?: object) => ({
+test("past the cap the oldest speakers neither holding nor painting an image go; the rest are never dropped", () => {
+  const person = (n: number, art?: object) => ({
     name: `Clerk ${n}`,
     chapters: ["main-1"],
     at: `2026-11-08T00:${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}.000Z`,
-    ...(painted
-      ? { art: { state: "ready", url: `/api/global-gallery/file/s${n}.png`, ref: `global-gallery:s${n}`, at: "x" } }
-      : art
-        ? { art }
-        : {}),
+    ...(art ? { art } : {}),
   });
-  // The ten oldest have sprites; the next three a sprite that holds no image yet (waiting for consent, failed,
-  // painting); 205 people in all.
-  const unpainted = [
+  const ready = (n: number) => ({ state: "ready", url: `/x/s${n}.png`, ref: `global-gallery:s${n}`, at: "x" });
+  // The ten oldest have sprites; the next three's wait for consent, failed, and are painting (paid already); 205 in all.
+  const states = [
     { state: "waiting-consent", at: "x" },
     { state: "failed", at: "x", error: "no" },
     { state: "pending", at: "x" },
   ];
   const raw = Object.fromEntries(
-    Array.from({ length: SIDE_PEOPLE_MAX + 5 }, (_, n) => [`clerk ${n}`, person(n, n < 10, unpainted[n - 10])]),
+    Array.from({ length: SIDE_PEOPLE_MAX + 5 }, (_, n) => [
+      `clerk ${n}`,
+      person(n, n < 10 ? ready(n) : states[n - 10]),
+    ]),
   );
+  // Every read and write of `${R}:sides` goes through normalizeSideCast, so this is the cap a paint's save meets too.
   const kept = normalizeSideCast({ version: 1, people: raw }).people;
   assert.equal(Object.keys(kept).length, SIDE_PEOPLE_MAX);
-  for (let n = 0; n < 10; n += 1) assert.ok(kept[`clerk ${n}`]?.art, `clerk ${n}'s sprite is kept`);
-  for (let n = 10; n < 15; n += 1) assert.equal(kept[`clerk ${n}`], undefined, `clerk ${n} is the oldest without one`);
+  for (let n = 0; n < 10; n += 1) assert.ok(kept[`clerk ${n}`]?.art?.ref, `clerk ${n}'s sprite is kept`);
+  assert.equal(kept["clerk 12"]?.art?.state, "pending", "a sprite being painted is kept, so its save finds them");
+  for (const n of [10, 11, 13, 14, 15])
+    assert.equal(kept[`clerk ${n}`], undefined, `clerk ${n} is among the oldest without one`);
   assert.ok(kept[`clerk ${SIDE_PEOPLE_MAX + 4}`], "the newest speaker is kept");
 });

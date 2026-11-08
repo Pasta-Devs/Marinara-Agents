@@ -6,15 +6,15 @@
 // the distinct chapters they spoke in, the Engine card their name matches, their look once written (English image tags)
 // and their sprite's paint and cut-out (S/art/side-sprites.ts). A damaged record or field is dropped on read; everyone
 // whose record holds an image (a painted sprite or a cut-out: its gallery images go only with the story, and someone
-// back is never painted twice), then the newest speakers up to SIDE_PEOPLE_MAX, and each one's newest
-// SIDE_CHAPTERS_MAX chapters are kept. A sprite waiting for consent, failed or painting holds none (a paint whose
-// record is gone deletes its image: S/art/paint.ts paintRecord).
+// back is never painted twice) or is painting one (a paid paint is never thrown away: S/art/paint.ts paintRecord
+// deletes an image whose record is gone), then the newest speakers up to SIDE_PEOPLE_MAX, and each one's newest
+// SIDE_CHAPTERS_MAX chapters are kept. A sprite waiting for consent or failed has neither.
 import { z, type ZodType } from "zod";
 import type { Cutout, Paint, Presentation } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, normalizeCutouts } from "./common.js";
 
-/** The most side characters whose record holds no image a story keeps beside those that do (the newest speakers). */
+/** The most side characters neither holding nor painting an image a story keeps beside those who are (the newest). */
 export const SIDE_PEOPLE_MAX = 200;
 /** The most chapters kept per side character (the newest); two different ones are all that qualifying needs. */
 export const SIDE_CHAPTERS_MAX = 24;
@@ -97,10 +97,13 @@ export function normalizeSideCast(data: unknown): SideCast {
   const all = Object.entries(isRecord(raw.people) ? raw.people : {})
     .flatMap(([key, person]) => normalizePerson(key, person) ?? [])
     .sort((a, b) => b.at.localeCompare(a.at));
-  // ponytail: someone whose record holds an image is never dropped, so it is never orphaned; they grow only with images
-  // the player paid for. Upgrade path: an explicit prune that deletes their images (as deletePhoto does).
+  // ponytail: someone whose record holds or is painting an image is never dropped, so no paid image is orphaned or
+  // thrown away; they grow only with images the player paid for. Upgrade path: an explicit prune that deletes their
+  // images (as deletePhoto does).
   const owns = (person: SidePerson) =>
-    !!person.art?.ref || Object.values(person.cutouts ?? {}).some((cutout) => !!cutout.ref);
+    !!person.art?.ref ||
+    person.art?.state === "pending" ||
+    Object.values(person.cutouts ?? {}).some((cutout) => !!cutout.ref);
   const painted = all.filter(owns);
   const people = [
     ...painted,
