@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.19.1 — 2026-11-08
+
+- **Not every chapter ends in a Confrontation or a Closer.** A main chapter has one only when it builds to it, and otherwise ends on an ordinary scene or a moment. A story arc's last chapter still has one for its big event. Confrontations and Closers still alternate, counting only chapters that have one.
+
 ## 0.19.0 — 2026-11-08
 
 - **Long stories remember their beginnings in detail.** As a story grows, its early chapters are condensed again and again. Now each main chapter brings back up to three earlier chapters that matter to it, by their original summaries, in its plan and every scene. Only chapters everyone in it may know come back, and nothing changes when none is close enough.

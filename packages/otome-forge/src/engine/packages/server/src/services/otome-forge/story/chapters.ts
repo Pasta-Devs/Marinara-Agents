@@ -8,9 +8,10 @@
 // one; the planner picks the Foil. #2156: a love interest whose grievance with her stands is never offered or accepted
 // as the Lead (he may still be in the chapter); in a story where every one of them holds one (only from before #2156)
 // the usual pair is offered.
-// A plan is checked before it is saved (normalizeChapterPlan): 6–9 nodes, 1–2 moments, exactly one climax node (a
-// Confrontation, or a Closer with the Lead in it: #1938) as the second-to-last or last node, the other kind after two
-// main chapters in a row ended with the same one (requiredClimax), at most two CG nodes, the Lead and the Foil each in at least one node, every love interest in chapter 1,
+// A plan is checked before it is saved (normalizeChapterPlan): 6–9 nodes, 1–2 moments, at most one climax node (a
+// Confrontation, or a Closer with the Lead in it: #1938; 0.19.1: none when the chapter does not build to one, except a
+// story arc's last, which carries its big event) as the second-to-last or last node, the other kind after the last two
+// climaxes were alike (requiredClimax), at most two CG nodes, the Lead and the Foil each in at least one node, every love interest in chapter 1,
 // an off-screen line for each absent one, no tag for a Line, and conflict seeds that never repeat that love interest's
 // last two kinds of angst, counting the seeds planted earlier in the same plan (at most one open misunderstanding
 // each, resolved within two chapters). A failed check is the generation core's one repair turn. A side-with mark
@@ -146,7 +147,7 @@ export interface PlanContext {
   world: Pick<World, "content">;
   number: number;
   lead: LiId;
-  /** The climax this chapter must use, after CLIMAX_STREAK main chapters alike; absent, the planner picks. */
+  /** The climax this chapter must use if it has one, after CLIMAX_STREAK climaxes alike; absent, the planner picks. */
   climax?: ClimaxKind;
   /** The story arc this chapter belongs to (#1980), when the run has one. */
   arc?: StoryArc | null;
@@ -156,7 +157,7 @@ export interface PlanContext {
   judgment?: ArcJudgment;
 }
 
-/** How many main chapters in a row may end with the same climax (the maintainer's 2, so the two alternate often). */
+/** How many climaxes in a row may be the same kind (the maintainer's 2, so the two alternate often). */
 export const CLIMAX_STREAK = 2;
 
 /** A chapter's climax: the kind of its confrontation or closer node, or null when it has none. */
@@ -165,12 +166,17 @@ export function climaxOfChapter(chapter: Pick<Chapter, "nodes"> | undefined): Cl
   return node?.kind === "confrontation" || node?.kind === "closer" ? node.kind : null;
 }
 
-/** The climax the next main chapter must use: the other kind once the last CLIMAX_STREAK all ended alike, else null. */
+/**
+ * The climax the next main chapter must use if it has one: the other kind once the last CLIMAX_STREAK climaxes played
+ * were alike, else null. Chapters without one are skipped.
+ */
 export function requiredClimax(mains: ReadonlyArray<Pick<Chapter, "nodes">>): ClimaxKind | null {
-  if (mains.length < CLIMAX_STREAK) return null;
-  const last = mains.slice(-CLIMAX_STREAK).map(climaxOfChapter);
+  const last = mains
+    .map(climaxOfChapter)
+    .filter((kind) => kind !== null)
+    .slice(-CLIMAX_STREAK);
   const first = last[0];
-  if (!first || last.some((kind) => kind !== first)) return null;
+  if (last.length < CLIMAX_STREAK || !first || last.some((kind) => kind !== first)) return null;
   return first === "closer" ? "confrontation" : "closer";
 }
 
@@ -338,17 +344,18 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   const nodes = planNodes(reply, context);
   const moments = nodes.filter((node) => node.kind === "moment").length;
   if (moments < 1 || moments > 2) return `the chapter needs 1 or 2 moment nodes, not ${moments}`;
+  // 0.19.1: a chapter that does not build to a climax has none.
   const climaxes = nodes.filter((node) => node.kind === "confrontation" || node.kind === "closer");
-  if (climaxes.length !== 1) {
-    return `the chapter needs exactly one climax node (a confrontation or a closer), not ${climaxes.length}`;
+  if (climaxes.length > 1) {
+    return `the chapter has at most one climax node (a confrontation or a closer), not ${climaxes.length}`;
   }
-  const climax = climaxes[0]!;
-  if (climax.i < nodes.length - 2) return `the ${climax.kind} must be the second-to-last or last node`;
-  if (context.climax && climax.kind !== context.climax) {
-    return `this chapter's climax must be a ${context.climax} node, not a ${climax.kind}: the last two main chapters both ended with a ${climax.kind}`;
+  const climax = climaxes[0];
+  if (climax && climax.i < nodes.length - 2) return `the ${climax.kind} must be the second-to-last or last node`;
+  if (climax && context.climax && climax.kind !== context.climax) {
+    return `this chapter's climax must be a ${context.climax} node, not a ${climax.kind}: the last two climaxes were both ${climax.kind}s`;
   }
   // Its trust, first and grievance are the Lead's: a Closer is played with them.
-  if (climax.kind === "closer" && !climax.cast.includes(lead)) return "the Lead must be in the closer node";
+  if (climax?.kind === "closer" && !climax.cast.includes(lead)) return "the Lead must be in the closer node";
   // A node may be the protagonist's alone (#1955), but a moment and the climax are played with a love interest.
   const empty = nodes.find((node) => node.kind !== "beat" && !node.cast.length);
   if (empty) return `the ${empty.kind} node ${empty.i + 1} needs a love interest in its cast`;
@@ -371,7 +378,7 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   }
   // #1980: the arc's schedule is what makes a reveal real. A scheduled chapter must place it on a node (with its holder
   // when it is a piece); a node in an unscheduled chapter is dropped, so a hallucinated early reveal cannot land; the
-  // arc's last chapter carries its big event in the climax.
+  // arc's last chapter carries its big event in the climax (a breathing arc's has none, so its climax is optional).
   const scheduled = arc ? revealAt(arc, number) : undefined;
   if (scheduled) {
     const index = typeof reply.revealNode === "number" ? reply.revealNode : -1;
@@ -383,7 +390,8 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
     }
     node.reveal = scheduled.kind === "truth" ? { kind: "truth" } : { kind: "piece", li: scheduled.li! };
   }
-  if (arc && number === arc.endsAt) {
+  if (arc && number === arc.endsAt && (climax || arc.endsWith)) {
+    if (!climax) return "this is the arc's last chapter: it ends on a climax node that carries its big event";
     if (reply.eventNode !== climax.i) return "this is the arc's last chapter: set eventNode to the climax node's index";
     climax.arcEvent = true;
   }

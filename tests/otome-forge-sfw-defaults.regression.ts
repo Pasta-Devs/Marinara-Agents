@@ -259,20 +259,21 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "8f0df9f5dbc87129",
   beat: "f35715e5ac283f03",
   beatWithCg: "d00809932b0cdc15",
-  chapterPlan: "65cd5ce6d2ae4961",
+  chapterPlan: "336ab43ab84afa96",
   closer: "5602bc908ac0e908",
   confrontation: "33df0da4d7b5a953",
   repairPlan: "0f59816edeaa4c0a",
   routePlan: "2487a810b4292ac2",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
+// 0.19.1: the chapter plan's climax is optional, so both chapterPlan digests moved.
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "2bac0220f89da60b",
   bannerMemories: "e3ee118ca16986f8",
   bannerMine: "f7692079bd94c918",
   beat: "f2595d3092dc753a",
   beatWithCg: "9dc90845ed8abbda",
-  chapterPlan: "d6dafaeddad91eee",
+  chapterPlan: "8cd5f764a8edf97f",
   closer: "72624d0c7a7619d7",
   confrontation: "ca4d891c3cee9103",
   repairPlan: "6bc1fe4375a382aa",

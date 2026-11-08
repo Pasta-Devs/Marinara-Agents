@@ -436,6 +436,18 @@ test("a chapter that reveals nothing never carries a reveal, and the last chapte
   if (typeof last === "string") return;
   assert.equal(last.nodes[5]!.arcEvent, true);
   assert.deepEqual(last.nodes[5]!.reveal, { kind: "truth" }, "the truth reveal is stamped from the schedule");
+  // 0.19.1: a chapter may go without a climax, but a story arc's last one keeps it for the big event; a breathing
+  // arc's last chapter has none to carry.
+  const calm = reply({
+    eventNode: 5,
+    revealNode: 5,
+    nodes: planReply().nodes.map((node) => (node.kind === "confrontation" ? { ...node, kind: "beat" } : node)),
+  });
+  assert.equal(typeof normalizeChapterPlan(calm, planContext(planned, 9)), "object", "an ordinary chapter needs none");
+  assert.match(String(normalizeChapterPlan(calm, planContext(planned, 10))), /ends on a climax node/u);
+  const breathing = arc({ kind: "breathing", chapters: purposes(4), endsWith: null, reveals: [], antagonist: null });
+  const rest = normalizeChapterPlan(calm, planContext(breathing, breathing.endsAt));
+  assert.equal(typeof rest, "object", String(rest));
 });
 
 test("neither stamped field reaches the client", () => {
@@ -902,7 +914,7 @@ test("the chapter planner of a listed chapter is told to leave its last node fre
   const listed = shown(prompt(null, 4, true));
   assert.match(
     listed,
-    /- This chapter's end may close on a judgment the protagonist can get wrong \(the narrator decides; it is optional\): put the climax second-to-last, so the last node can hold a big choice\./u,
+    /- This chapter's end may close on a judgment the protagonist can get wrong \(the narrator decides; it is optional\): put any climax second-to-last, so the last node can hold a big choice\./u,
   );
   assert.doesNotMatch(shown(prompt(null, 4)), /close on a judgment/u, "an unlisted chapter plans as before");
 });
@@ -1059,7 +1071,7 @@ test("POST /chapters/next stamps the arc's judgment on a listed chapter's last n
   const stored = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
   assert.deepEqual(stored.nodes.at(-1)!.judgment, asked, "chapter 1 is listed: its last node may close on it");
   assert.equal(stored.nodes.filter((node) => node.judgment).length, 1);
-  assert.match(planPrompt, /This chapter's end may close on a judgment .* put the climax second-to-last/u);
+  assert.match(planPrompt, /This chapter's end may close on a judgment .* put any climax second-to-last/u);
   assert.doesNotMatch(planPrompt, /Who rang the bell/u, "the chapter planner learns only that it is listed");
   assert.doesNotMatch(JSON.stringify(planned.body), /Who rang the bell|judgment/u, "nothing of it reaches the client");
 });

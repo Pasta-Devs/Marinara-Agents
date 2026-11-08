@@ -934,7 +934,7 @@ test("a chapter whose summary failed goes in full in every story prompt, with it
     const number = Number(/main chapter (\d+)/.exec(whole(messages))?.[1] ?? 1);
     if (isPlanner(messages)) {
       // Main chapter 3 follows two Confrontations: the planner is told to end it with a Closer (#1938).
-      const plan = /This chapter's climax is a closer/.test(system(messages)) ? closerPlanReply : planReply;
+      const plan = /If this chapter has a climax, it is a closer/.test(system(messages)) ? closerPlanReply : planReply;
       return json(plan({ title: `Night ${number}`, ledger: { relationship: [], conflict: [], offscreen: [] } }));
     }
     const i = Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
