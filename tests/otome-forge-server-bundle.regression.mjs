@@ -102,6 +102,8 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "POST /api/otome-forge/runs/:run/art/place/background",
     "POST /api/otome-forge/runs/:run/art/place/prompt",
     "POST /api/otome-forge/runs/:run/art/prompt",
+    "POST /api/otome-forge/runs/:run/art/side",
+    "POST /api/otome-forge/runs/:run/art/side/prompt",
     "POST /api/otome-forge/runs/:run/art/sticker",
     "POST /api/otome-forge/runs/:run/art/sticker/prompt",
     "POST /api/otome-forge/runs/:run/art/tarot",

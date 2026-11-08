@@ -99,6 +99,9 @@
 //   stickerPrompt: a chat sticker (S/art/stickers.ts)
 //   figurinePrompt: a love interest's Shop figurine, painted once it is bought, #2138 (S/art/figurine.ts)
 //   photoPrompt: a Photo Shoot photo (S/minigames/photo-shoot.ts)
+// (m) Side characters
+//   sideLookMessages: a recurring side character's look, for their sprite, 0.20.0 (S/story/side-cast.ts); the sprite
+//     itself is lookPrompt's (S/art/side-sprites.ts)
 //
 // ELSEWHERE, and why
 // - The forge kit, shared with Gacha Forge (sources/forge-kit; editing it changes Gacha Forge too):
@@ -127,7 +130,7 @@
 //   (arcs), S/story/chapters.ts (P5), S/story/routes-plan.ts (P10, P11), S/story/beats.ts and S/story/prologue.ts
 //   prologueProblem (P6), S/story/confrontation.ts (P12, P12c), S/phone/replies.ts (P17, P18), S/home/lines.ts,
 //   S/home/note.ts, S/care/care-note.ts, S/minigames/read-me.ts, read-him.ts, date-night.ts, quiz.ts and plush.ts (with
-//   S/art/plush-svg.ts), S/art/stickers.ts, S/wish/replies.ts, S/items/replies.ts checkLine, S/audio/music.ts.
+//   S/art/plush-svg.ts), S/art/stickers.ts, S/story/side-cast.ts, S/wish/replies.ts, S/items/replies.ts checkLine, S/audio/music.ts.
 // - Text built inside non-prompt code, which moving would mean rewriting that code: S/story/canon.ts (EASE_OFF_MARKER,
 //   whose start C/lib/reader-state.ts matches; a climax pick's canon marker; titleOf, a private chapter's title;
 //   DECISIONS_HEADING and the decision lines; the recall block headings), the private titles and texts of memory
@@ -5980,4 +5983,54 @@ export function photoPrompt(input: PhotoInput, edited: Partial<ImagePrompt> = {}
   return edited.negativePrompt?.trim()
     ? built
     : { ...built, negativePrompt: mergeTags(built.negativePrompt, PHOTO_NEGATIVE) };
+}
+
+// ──────────────────────────────────────────────
+// (m) Side characters
+// ──────────────────────────────────────────────
+// 0.20.0: a side character who keeps coming back (S/story/side-cast.ts) gets one full-body sprite, painted with
+// lookPrompt from a look written here in one background call on the Planning connection: their name, the setting, and
+// the scenes they spoke in, as the story wrote them (bounded by the caller). The reply is English, visual-only tags, as
+// a love interest's bible look is. A canon character of an existing world may take what the scenes leave open from
+// canon. A character card's own Appearance stands in for this call, so it is never made for one.
+
+/** The look call's prompt. `scenes` is the text of the scenes they spoke in, in story order, already bounded. */
+export function sideLookMessages({
+  world,
+  name,
+  scenes,
+}: {
+  world: Pick<World, "content" | "images" | "setting" | "premise">;
+  name: string;
+  scenes: string;
+}): OtomeMessage[] {
+  const system = [
+    `You write how one side character of an otome visual novel looks, for a full-body portrait of them: ${name}.`,
+    'Reply with ONLY a JSON object: {"identityLine": "...", "outfitLine": "...", "presentation": "man|woman|person"}',
+    "FIELDS",
+    "- identityLine: English only, visual-only comma-separated tags: face, hair, eyes, build, skin, marks, with adult features.",
+    "- outfitLine: English only, visual-only comma-separated tags: the clothing they wear in these scenes, else their everyday clothing in this world.",
+    "- presentation: how to draw them, man, woman or person.",
+    "RULES",
+    "- Everything the scenes show or say of their looks and clothing comes first, as English tags.",
+    "- When they are a known character of an existing book, film, game or series this world comes from, take what the scenes leave open from their canonical look.",
+    "- Otherwise fill what the scenes leave open with a look that fits who they are in the scenes, their role and the setting.",
+    "- Visual only: no names, personality, story, pose, expression or background.",
+    "",
+    otomeContentContract({ world, lis: [], kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "THE SETTING",
+    world.setting.trim() || world.premise.trim(),
+    "",
+    `THE SCENES ${name.toUpperCase()} SPEAKS IN, IN STORY ORDER`,
+    scenes,
+    "",
+    `Write ${name}'s look now.`,
+    otomeContractReminder("planner"),
+  ].join("\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
 }

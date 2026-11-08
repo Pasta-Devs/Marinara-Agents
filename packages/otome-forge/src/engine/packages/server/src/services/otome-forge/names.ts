@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge: how a written name is matched to a person (S/art/cg.ts resolveCast, S/phone/replies.ts namedIn)
+// Otome Forge: how a written name is matched to a person (S/art/cg.ts resolveCast, S/phone/replies.ts namedIn,
+// S/story/side-cast.ts: side characters and their Engine cards)
 // ──────────────────────────────────────────────
 // Kept apart from cg.ts so the phone's reply checks can use it without importing the art pipeline (and its prompts).
 
@@ -35,3 +36,5 @@ export const coreOf = (words: readonly string[]) => {
 };
 /** A name's core words, folded: "Il Dottore" is ["dottore"], "Mr. Darcy" ["darcy"]. */
 export const nameCore = (name: string) => coreOf(nameWords(name));
+/** One key per person: a name's core words, joined ("Lady Arlecchino" and "Arlecchino" are "arlecchino"). */
+export const nameKey = (name: string) => nameCore(name).join(" ");

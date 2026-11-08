@@ -154,6 +154,12 @@ export const isItemStoryKey = (key: string) => key.startsWith("story-");
  */
 export const quizId = (runId: string) => `${runId}:quiz`;
 
+/**
+ * `${R}:sides` (0.20.0): the side characters who spoke in the scenes read so far, each one's chapters, Engine card, look
+ * and sprite (S/schemas/side-cast.ts, S/story/side-cast.ts). Never read by a prompt.
+ */
+export const sideCastId = (runId: string) => `${runId}:sides`;
+
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
 export const RUN_DOC_KINDS = [
   "world",
@@ -174,6 +180,7 @@ export const RUN_DOC_KINDS = [
   "tarot",
   "deck",
   "quiz",
+  "sides",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */

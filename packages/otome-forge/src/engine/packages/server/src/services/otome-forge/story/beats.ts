@@ -59,6 +59,8 @@
 //   beat written queues its places and CG (which wait for a tap under Ask before painting, or while the player
 //   reviews image prompts); a beat replaced by a rewrite, or removed after it, releases its CG. All of it in the
 //   background: the art never holds up or breaks the story.
+// - 0.20.0: a beat counted as read records its side speakers (S/story/side-cast.ts noteSideSpeakers, one cheap write,
+//   no model call), and with Side character sprites on tends their looks and sprites in the background.
 import { forgeChoiceLabel } from "@forge-kit/player-choice-text.mjs";
 import { forgeNormalizeChoiceBeat, forgePendingChoice } from "@forge-kit/player-choices-server.mjs";
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
@@ -109,6 +111,7 @@ import { payClearing, readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
+import { noteSideSpeakers, type SideCastDeps } from "./side-cast.js";
 import {
   OWN_ANSWER_LABEL,
   type StoryContext,
@@ -149,7 +152,7 @@ import {
   type BeatReply,
 } from "./replies.js";
 
-export interface BeatDeps extends ChapterDeps {
+export interface BeatDeps extends ChapterDeps, Pick<SideCastDeps, "background" | "images" | "cutouts"> {
   /** The run-scoped Cancel (forge-kit story-cancel-server); without one, writes simply run. */
   cancellation?: ForgeStoryCancellation;
   /** The story's art (S/art, M2b); without it nothing is painted. */
@@ -1344,7 +1347,7 @@ async function finishBeat(
   runId: string,
   chapter: Chapter,
   beat: Beat,
-  debugMode: boolean,
+  { debugMode, review }: PaintMode,
 ): Promise<ReadResult> {
   let outcome: Omit<ReturnType<typeof readBeatToEnd>, "state"> = { grants: [], chapterDone: false };
   let stageUp: ReadResult["stageUp"];
@@ -1416,6 +1419,7 @@ async function finishBeat(
     return next;
   });
   if (!state) throw runNotFound();
+  await noteSideSpeakers(deps, runId, chapter.key, beat, { debugMode, review });
   if (completedNow && deps.memory) {
     void Promise.resolve(deps.memory.maintain({ runId, debugMode })).catch((error: unknown) =>
       deps.runtime.logger.warn(
@@ -1449,7 +1453,7 @@ export async function readTo(
   key: string,
   i: number,
   segment: number,
-  { debugMode }: { debugMode: boolean },
+  mode: PaintMode,
 ): Promise<ReadResult> {
   const { run, chapter } = await load(deps, runId, key);
   const beat = await readBeat(deps.store, runId, key, i);
@@ -1468,7 +1472,7 @@ export async function readTo(
   if (reached < end || (!beat.easedOff && unsettled)) {
     return { grants: [], starlight: run.state.wallet.starlight, chapterDone: false };
   }
-  return finishBeat(deps, runId, chapter, beat, debugMode);
+  return finishBeat(deps, runId, chapter, beat, mode);
 }
 
 /** A node eased off before anything was written (its scene was declined): no lines, cut at the start. */
@@ -1503,7 +1507,7 @@ export async function easeOff(
   key: string,
   i: number,
   segment: number,
-  { debugMode }: { debugMode: boolean },
+  mode: PaintMode,
 ): Promise<{ beat: Beat; veilSuggestions: LimitId[] } & ReadResult> {
   const { run, chapter } = await load(deps, runId, key);
   const node = chapter.nodes[i];
@@ -1543,6 +1547,6 @@ export async function easeOff(
     (tag): tag is LimitId =>
       (LIMIT_IDS as readonly string[]).includes(tag) && world?.content.limits[tag as LimitId] === "allow",
   );
-  const read = await finishBeat(deps, runId, chapter, beat, debugMode);
+  const read = await finishBeat(deps, runId, chapter, beat, mode);
   return { beat, veilSuggestions, ...read };
 }

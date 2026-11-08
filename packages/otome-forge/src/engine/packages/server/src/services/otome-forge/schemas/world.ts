@@ -106,6 +106,7 @@ export function normalizeImages(data: unknown): ImageSettings {
       expressionsSince: z.string().optional(),
       styleProfileId: z.string().optional(),
       style: z.string().max(IMAGE_STYLE_MAX).optional(),
+      sideSprites: z.boolean().optional(),
     },
     () => ({ connectionId: null, rating: DEFAULT_IMAGE_RATING, ask: false, expressions: true }),
     data,

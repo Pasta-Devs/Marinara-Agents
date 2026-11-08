@@ -9,7 +9,8 @@
 // while an arc is planned, the personality quiz while a chapter inside an arc is, and Who said what? while a scene is
 // written, on a phone and a desktop; and a side-with choice
 // (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest; and
-// Write your own… (#2146) at a chapter's closing decision only, its draft kept until sent, on a phone and a desktop.
+// Write your own… (#2146) at a chapter's closing decision only, its draft kept until sent, on a phone and a desktop;
+// and a recurring side character (0.20.0) standing in their own sprite while they speak, painted on a tap under Ask.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -2607,6 +2608,168 @@ test("Otome Hearth waits for a first-wear scene's look while it paints, with exp
   const settled = sceneReads();
   await page.clock.runFor(10_000);
   expect(sceneReads(), "the look in place, the scene's art is not read again").toBe(settled);
+});
+
+/** 0.20.0: a scene where a recurring side character speaks between Ilvar's lines, and the scene art that carries them. */
+function sideCharacterStub(side: () => Json, { sideSprites = true } = {}) {
+  const stub = createStoryStub({
+    done: true,
+    storyBeats: [
+      {
+        ...BEATS[0],
+        segments: [
+          seg("Ilvar Thorne", "You came to see it.", { expression: "cold" }),
+          seg("Arin Vale", "I keep turning up, don't I?"),
+          seg("", "The clocks tick on."),
+          seg("Arin Vale", "Still here."),
+        ],
+        choices: [],
+      },
+      ...BEATS.slice(1),
+    ],
+  });
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    const response = answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}`) {
+      const view = (response.json as Json).view;
+      view.world.images.connectionId = "conn-image";
+      view.world.images.sideSprites = sideSprites;
+      view.lis[0].portrait = LI_SPEAKER_PORTRAIT;
+      view.lis[0].cut = [LI_SPEAKER_PORTRAIT];
+    }
+    if (call.path.endsWith("/art/scene")) {
+      // S/routes/art.ts with S/story/side-cast.ts sceneSides: the speaker as the beat names them, and their sprite.
+      return {
+        status: 200,
+        json: { places: [], cg: null, faces: {}, facesComing: [], sides: { "Arin Vale": side() } },
+      };
+    }
+    return response;
+  };
+  return stub;
+}
+
+const SIDE_SPRITE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="320"><circle cx="80" cy="40" r="26" fill="#c9a96e"/><path d="M52 72H108L120 190H100V310H85V190H75V310H60V190H40Z" fill="#c9a96e"/></svg>',
+)}`;
+const SIDE_PAINTED = { state: "ready", at: "2026-11-08T10:00:00.000Z", url: "/api/global-gallery/file/arin.png" };
+
+test("Otome Hearth a recurring side character stands in their own sprite while they speak (0.20.0)", async ({
+  page,
+}) => {
+  const catalog: string[] = [];
+  page.on("request", (request) => {
+    // The reader's own card lookup by name (C/lib/speaker-sprites.ts), not the Engine's character list.
+    const url = new URL(request.url());
+    if (url.pathname === "/api/characters/catalog" && url.searchParams.get("limit") === "200") catalog.push(url.href);
+  });
+  const stub = sideCharacterStub(() => ({ key: "arin vale", art: SIDE_PAINTED, url: SIDE_SPRITE, cut: true }));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await root.getByRole("button", { name: "Begin" }).click();
+  await (await scene).finished();
+  const front = root.locator('.of-reader-stage .of-face-img[data-front="true"]');
+  await expect(front).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  await next(root);
+  await expect(line(root)).toContainText("I keep turning up, don't I?");
+  // The speaker's figure slot, as a love interest's: one neutral sprite, cut out, with no face chip.
+  await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+  await expect(front).toHaveAttribute("src", SIDE_SPRITE);
+  await expect(front).toHaveAttribute("data-cut", "true");
+  await expect(root.locator(".of-face-chip")).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("The clocks tick on.");
+  await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("Still here.");
+  await expect(front).toHaveAttribute("src", SIDE_SPRITE);
+  expect(catalog, "their own sprite: no Engine card is looked up for them").toEqual([]);
+  expect(posts(stub, "/art/side")).toEqual([]);
+});
+
+test("Otome Hearth a side character's sprite held by Ask before painting is painted from the reader on a tap (0.20.0)", async ({
+  page,
+}) => {
+  let painted = false;
+  const stub = sideCharacterStub(() =>
+    painted
+      ? { key: "arin vale", art: SIDE_PAINTED, url: SIDE_SPRITE, cut: true }
+      : { key: "arin vale", art: { state: "waiting-consent", at: "2026-11-08T10:00:00.000Z" } },
+  );
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path.endsWith("/art/side")) {
+      stub.calls.push(call);
+      painted = true;
+      return { status: 200, json: { art: SIDE_PAINTED } };
+    }
+    return answer(call);
+  };
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await root.getByRole("button", { name: "Begin" }).click();
+  await (await scene).finished();
+  const paint = root.getByRole("button", { name: "Paint a sprite of Arin Vale (1 image)" });
+  await expect(paint).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("I keep turning up, don't I?");
+  await expect(paint).toContainText("Paint Arin Vale · 1 image");
+  const again = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await paint.click();
+  await (await again).finished();
+  expect(posts(stub, "/art/side").map((call) => call.body?.key)).toEqual(["arin vale"]);
+  await expect(root.locator('.of-reader-stage .of-face-img[data-front="true"]')).toHaveAttribute("src", SIDE_SPRITE);
+  await expect(paint).toHaveCount(0);
+});
+
+test("Otome Hearth Settings → Images offers Side character sprites, off, with its cost, and saves it (0.20.0)", async ({
+  page,
+}) => {
+  const stub = sideCharacterStub(() => ({ key: "arin vale", art: null }), { sideSprites: false });
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path.endsWith("/settings")) {
+      stub.calls.push(call);
+      const world = (answer({ method: "GET", path: `/api/otome-forge/runs/${RUN}`, body: undefined }).json as Json).view
+        .world;
+      return { status: 200, json: { world: { ...world, images: { ...world.images, ...call.body!.images } } } };
+    }
+    return answer(call);
+  };
+  await stubRoutes(page, stub);
+  await page.route("**/api/connections", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: [
+            { id: "conn-text", name: "Story fixture", provider: "custom", model: "fixture", isDefault: "true" },
+            { id: "conn-image", name: "Image fixture", provider: "image_generation", model: "fixture-image" },
+          ],
+        })
+      : route.continue(),
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("tab", { name: "Images" }).click();
+  const toggle = root.getByRole("switch", { name: "Side character sprites" });
+  await expect(toggle).not.toBeChecked();
+  const row = root
+    .locator(".of-switch-row")
+    .filter({ has: page.getByRole("switch", { name: "Side character sprites" }) });
+  await expect(row).toContainText("speaks in two different chapters");
+  await expect(row).toContainText(
+    "Paints 1 image · per recurring side character, plus 1 call on your Planning connection to write their look (none for a character card)",
+  );
+  await toggle.check();
+  await root.getByRole("button", { name: "Save changes" }).click();
+  await expect(root.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+  expect(posts(stub, "/settings").map((call) => call.body?.images?.sideSprites)).toEqual([true]);
 });
 
 /** #2046: the first beat as a side-with scene: Ilvar and Cassian disagree, and one small choice backs each. */

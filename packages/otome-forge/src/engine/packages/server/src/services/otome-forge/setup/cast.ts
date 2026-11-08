@@ -53,7 +53,11 @@ export async function readCard(
   cardId: string,
 ): Promise<CardFields | null> {
   const [record] = await runtime.resources.listCharacters([cardId]);
-  const raw = parsed(record?.data);
+  return cardFields(record?.data);
+}
+
+function cardFields(stored: unknown): CardFields | null {
+  const raw = parsed(stored);
   const data = isRecord(raw) && isRecord(raw.data) ? raw.data : raw;
   if (!isRecord(data)) return null;
   const extensions = isRecord(data.extensions) ? data.extensions : {};
@@ -64,6 +68,16 @@ export async function readCard(
     backstory: str(extensions.backstory) || str(data.backstory),
     appearance: str(extensions.appearance) || str(data.appearance),
   };
+}
+
+/** Every character card the player has, with its name (0.20.0: S/story/side-cast.ts matches side characters to them). */
+export async function listCardNames(
+  runtime: Pick<CapabilityRuntimeHost, "resources">,
+): Promise<Array<{ id: string; name: string }>> {
+  return (await runtime.resources.listCharacters()).flatMap((record) => {
+    const name = cardFields(record.data)?.name;
+    return record.id && name ? [{ id: record.id, name }] : [];
+  });
 }
 
 export interface PersonaFields {

@@ -130,6 +130,8 @@ interface ReaderControlsProps {
   imageDescription?: string;
   /** The place's picture waits for a tap (consent, or a retry after a failure). */
   placePaint?: { retry: boolean; busy: boolean; onPaint: () => void };
+  /** 0.20.0: the speaking side character's sprite waits for a tap (Ask before painting) or a Retry. */
+  sidePaint?: { name: string; retry: boolean; busy: boolean; onPaint: () => void };
   /** #2147: opens the Engine's backgrounds for the place, with or without an image connection. */
   onPlaceBackground?: () => void;
   tags: string[];
@@ -345,6 +347,28 @@ export function ReaderControls(props: ReaderControlsProps) {
               >
                 <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
                 {t(props.placePaint.retry ? "ui.otomeForge.reader.placeRetry" : "ui.otomeForge.reader.placePaint")}
+              </button>
+            </li>
+          ) : null}
+          {props.sidePaint ? (
+            <li className="of-reader-chip-slot">
+              <button
+                type="button"
+                className="of-reader-chip of-reader-chip--paint"
+                aria-disabled={props.sidePaint.busy}
+                aria-label={t(
+                  props.sidePaint.retry ? "ui.otomeForge.reader.sideRetryLabel" : "ui.otomeForge.reader.sidePaintLabel",
+                  { name: props.sidePaint.name },
+                )}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!props.sidePaint?.busy) props.sidePaint?.onPaint();
+                }}
+              >
+                <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
+                {t(props.sidePaint.retry ? "ui.otomeForge.reader.sideRetry" : "ui.otomeForge.reader.sidePaint", {
+                  name: props.sidePaint.name,
+                })}
               </button>
             </li>
           ) : null}

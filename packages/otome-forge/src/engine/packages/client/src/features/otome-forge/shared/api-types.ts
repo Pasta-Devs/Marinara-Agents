@@ -114,6 +114,11 @@ export interface ImageSettings {
   styleProfileId?: string;
   /** The player's own words for how every picture looks (art style, medium); they lead each image prompt. */
   style?: string;
+  /**
+   * 0.20.0: a full-body sprite for each recurring side character (S/story/side-cast.ts), shown while they speak; absent
+   * or false: none, and nothing is called or painted for them.
+   */
+  sideSprites?: boolean;
 }
 
 export type ForgeStepState = "pending" | "running" | "done" | "failed" | "waiting-consent";
@@ -1288,6 +1293,25 @@ export interface SceneArt {
    * it. Absent otherwise, also for a look waiting for Paint, failed or stopped.
    */
   lookComing?: true;
+  /**
+   * 0.20.0: the recurring side characters who speak in this beat, by the speaker name as the beat writes it, while Side
+   * character sprites is on (S/art/side-sprites.ts). Absent with none.
+   */
+  sides?: Record<string, SideSpriteView>;
+}
+
+/** A recurring side character's sprite as the reader sees it (0.20.0): one neutral full-body picture, never a face. */
+export interface SideSpriteView {
+  /** Their record's key (POST /runs/:run/art/side {key}). */
+  key: string;
+  /** The sprite's paint record, or null before it is asked for (their look is still being written). */
+  art: Paint | null;
+  /** The sprite: its cut-out once ready, or the painted image when cleanup failed. */
+  url?: string;
+  /** `url` is a cut-out (no backdrop). */
+  cut?: true;
+  /** It is being painted or cut out: the reader polls. */
+  coming?: true;
 }
 
 export interface StoryChapterEntry {
@@ -1554,7 +1578,9 @@ export interface SetupInput {
 /** POST /runs/:run/settings. Raising a gated setting needs the 18+ gate; lowering one never does. */
 export interface SettingsInput {
   content?: ContentSettings;
-  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style">>;
+  images?: Partial<
+    Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style" | "sideSprites">
+  >;
   connections?: Connections;
   language?: string;
   writingStyle?: string;
