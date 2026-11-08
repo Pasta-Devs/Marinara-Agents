@@ -255,6 +255,17 @@ function createTarotStub({ images = false, open = false }: StubOptions = {}) {
 
 type Stub = ReturnType<typeof createTarotStub>;
 
+/** Holds requests to `url` until the returned release is called, then lets them through to the stub. */
+async function hold(page: Page, url: string) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route(url, async (route) => {
+    await gate;
+    await route.fallback();
+  });
+  return release;
+}
+
 async function stubRoutes(page: Page, stub: Stub) {
   await page.route("**/api/otome-forge/**", async (route) => {
     const request = route.request();
@@ -428,7 +439,15 @@ test("Otome Hearth Tarot night: Kai Ardent reads my cards, picked by tap or clic
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("03-pick.png") });
   await recordSpeech(page);
+  // While he lays out the cards, the personality quiz waits under the status, and takes no focus.
+  const release = await hold(page, "**/runs/*/tarot");
   await press(turnCards);
+  await expect(root.getByRole("status").filter({ hasText: "Kai Ardent lays out the cards" })).toBeVisible();
+  const play = root.getByRole("button", { name: "Play the personality quiz" });
+  await expect(play).toBeVisible();
+  await expect(play).not.toBeFocused();
+  release();
+  await page.unroute("**/runs/*/tarot");
 
   // Play: the context opens it, his opening line is voiced and focused, and every card lies face down.
   await expect(root.getByRole("heading", { name: "The reading begins" })).toBeFocused();
