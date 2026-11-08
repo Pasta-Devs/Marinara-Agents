@@ -1,9 +1,10 @@
-// Fakes for the Otome Forge regressions: the Engine's document store, a runtime typed as the host's, and an image
-// client that counts paid calls. Shapes follow the Engine (capability-persistence.service.ts createDocumentStore,
+// Fakes for the Otome Forge regressions: the Engine's document store, a runtime typed as the host's, an image client
+// that counts paid calls, and a deterministic embedder (long-term recall, 0.19.0). Shapes follow the Engine (capability-persistence.service.ts createDocumentStore,
 // capability-runtime.ts CapabilityRuntimeHost); anything a test has not asked for throws when it is touched.
 import type {
   CapabilityDocumentRecord,
   CapabilityDocumentStore,
+  CapabilityEmbeddingHost,
   CapabilityLanguageModelCompletion,
   CapabilityLanguageModelCompletionOptions,
   CapabilityLanguageModelMessage,
@@ -169,6 +170,10 @@ export interface FakeRuntimeOptions {
   maxOutputTokens?: number | null;
   /** The connection's context window (the resolved model's maxContext); 32768 by default, null for unknown. */
   maxContext?: number | null;
+  /** The Engine's runtime.embeddings (an older Engine's only embedder); absent, touching it throws. */
+  embeddings?: CapabilityEmbeddingHost;
+  /** Capability API 1.818's runtime.embeddingsFor; absent, the runtime has none (an older Engine). */
+  embeddingsFor?: (connectionId: string | null) => Promise<CapabilityEmbeddingHost | null>;
 }
 
 /** True for a personality quiz call (#2174): the love interests' answers, or new statements with theirs. */
@@ -279,6 +284,9 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
     };
 
   const runtime: CapabilityRuntimeHost = notInFake<CapabilityRuntimeHost>("runtime", {
+    ...(options.embeddings ? { embeddings: options.embeddings } : {}),
+    // Not in the staging Engine's type yet (capability API 1.818), so it goes in as the host would add it.
+    ...((options.embeddingsFor ? { embeddingsFor: options.embeddingsFor } : {}) as object),
     isDebugAgentsEnabled: () => options.debugAgents === true,
     json: {
       parseJsonish(raw: string) {
@@ -347,4 +355,52 @@ export function createFakeImageClient() {
     },
   });
   return { client, paid };
+}
+
+/** One word's slot in a fake vector (FNV-1a), so texts that share words point the same way. */
+function wordSlot(word: string, dimensions: number): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < word.length; index += 1) hash = Math.imul(hash ^ word.charCodeAt(index), 0x01000193);
+  return (hash >>> 0) % dimensions;
+}
+
+/** A text as the fake embedder sees it: each word (letters and digits, lower case) adds 1 to its slot. */
+export function wordVector(text: string, dimensions = 1024): number[] {
+  const vector = new Array<number>(dimensions).fill(0);
+  for (const word of text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) vector[wordSlot(word, dimensions)]! += 1;
+  return vector;
+}
+
+/**
+ * A deterministic embedder with the Engine's caps (128 texts, 200k characters: more gives null, as the host does):
+ * `vectorOf` (wordVector by default) for each text. Every call is recorded; `fail` makes the next calls throw or give
+ * no vectors until it is called with false.
+ */
+export function createFakeEmbedder({
+  spaceId = "fake:words:v1",
+  label = "Fake words",
+  vectorOf = (text: string) => wordVector(text),
+}: { spaceId?: string; label?: string; vectorOf?: (text: string) => number[] } = {}) {
+  const calls: Array<{ texts: string[]; inputType?: string }> = [];
+  let failing: false | "throw" | "null" = false;
+  const host: CapabilityEmbeddingHost = {
+    spaceId,
+    label,
+    async embed(texts, _signal, inputType) {
+      calls.push({ texts: [...texts], inputType });
+      if (!texts.length || texts.length > 128 || texts.reduce((total, text) => total + text.length, 0) > 200_000) {
+        return null;
+      }
+      if (failing === "throw") throw new Error("FAKE-EMBEDDINGS-DOWN");
+      if (failing === "null") return null;
+      return texts.map(vectorOf);
+    },
+  };
+  return {
+    host,
+    calls,
+    fail(mode: false | "throw" | "null") {
+      failing = mode;
+    },
+  };
 }

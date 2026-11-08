@@ -13,6 +13,10 @@
 // POST /runs/:run/memory/retry  → {status}  queues maintenance again on the background lane: a failed summary waits
 //                                           for this tap and is never retried by itself; 503 `no-connection` when the
 //                                           world names no connection to summarize with
+// GET  /runs/:run/memory/recall → {status}  long-term recall's index (0.19.0, S/memory/recall-index.ts): indexing,
+//                                           ready or failed (with its error), how many chapter summaries are indexed,
+//                                           and whether this Engine lets the story choose its embedding model
+// POST /runs/:run/memory/recall/retry → {status}  Retry indexing: indexes again at once, under foreground admission
 import { z } from "zod";
 import {
   OtomeForgeError,
@@ -25,6 +29,7 @@ import {
 } from "../http.js";
 import { memoryId, worldId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
+import type { RecallIndex } from "../memory/recall-index.js";
 import { parseTimeline, timelineParagraphs } from "../memory/timeline.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
@@ -67,9 +72,11 @@ export interface MemoryRouteDeps {
   store: Pick<OtomeStore, "readDoc">;
   handle: Handle;
   memory: Pick<OtomeMemory, "maintain" | "status">;
+  /** Long-term recall's index; without it its routes are not registered. */
+  recall?: Pick<RecallIndex, "ensure" | "status">;
 }
 
-export function registerMemoryRoutes(router: OtomeRouter, { store, handle, memory }: MemoryRouteDeps): void {
+export function registerMemoryRoutes(router: OtomeRouter, { store, handle, memory, recall }: MemoryRouteDeps): void {
   /** The run id of `:run`, or a 404 when the run has no world. */
   const runOf = async (request: OtomeRequest) => {
     const { runId } = runParam(request);
@@ -100,6 +107,23 @@ export function registerMemoryRoutes(router: OtomeRouter, { store, handle, memor
         throw new OtomeForgeError(503, "No connection is set to summarize the story with.", "no-connection");
       }
       return { status: await memory.status(runId) };
+    }),
+  );
+
+  if (!recall) return;
+
+  router.get(
+    "/runs/:run/memory/recall",
+    handle(async (request) => ({ status: await recall.status(await runOf(request)) })),
+  );
+
+  router.post(
+    "/runs/:run/memory/recall/retry",
+    handle(async (request) => {
+      parseBody(NoFields, request.body);
+      const runId = await runOf(request);
+      await recall.ensure(runId, { retry: true });
+      return { status: await recall.status(runId) };
     }),
   );
 }

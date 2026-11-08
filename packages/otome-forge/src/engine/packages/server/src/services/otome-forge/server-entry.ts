@@ -10,6 +10,7 @@ import { createBackgroundQueue } from "./background-queue.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
 import { createOtomeMemory } from "./memory/memory.js";
+import { createRecallIndex } from "./memory/recall-index.js";
 import { registerAlbumRoutes } from "./routes/album.js";
 import { registerArcRoutes } from "./routes/arcs.js";
 import { registerArtRoutes } from "./routes/art.js";
@@ -51,13 +52,21 @@ export async function activate({ api }: ActivationContext) {
   const { runtime } = api;
   const store = createOtomeStore(runtime.persistence.documents);
   const handle = createHandle(runtime.logger);
-  // One background lane (memory summaries and line packs), one story memory, one Cancel and one art service (faces,
-  // places, CGs; M2b) per activation.
+  // One background lane (memory summaries and line packs), one story memory with its long-term recall index, one Cancel
+  // and one art service (faces, places, CGs; M2b) per activation.
   const background = createBackgroundQueue(runtime);
-  const memory = createOtomeMemory({ runtime, store, background });
+  const recall = createRecallIndex({ runtime, store, background });
+  // What each memory upkeep job summarized is indexed for long-term recall after it, in the background.
+  const afterUpkeep = (runId: string) =>
+    void recall
+      .ensure(runId)
+      .catch((error: unknown) =>
+        runtime.logger.warn("[otome-forge] Recall index: %s", error instanceof Error ? error.message : String(error)),
+      );
+  const memory = createOtomeMemory({ runtime, store, background, afterUpkeep });
   const cancellation = createForgeStoryCancellation();
   const art = createOtomeArt({ runtime, store });
-  const deps: RouteDeps = { runtime, store, handle, memory, cancellation, art, background };
+  const deps: RouteDeps = { runtime, store, handle, memory, recall, cancellation, art, background };
   // Wish's banner art paints in the background (M4); after teardown nothing more is paid for.
   let disposed = false;
   const active = () => !disposed;
@@ -73,7 +82,7 @@ export async function activate({ api }: ActivationContext) {
       registerArcRoutes(router, deps);
       registerArtRoutes(router, deps);
       registerAudioRoutes(router, deps);
-      registerMemoryRoutes(router, { store, handle, memory });
+      registerMemoryRoutes(router, { store, handle, memory, recall });
       registerHomeRoutes(router, deps);
       registerPhoneRoutes(router, deps);
       registerWishRoutes(router, deps, { active });
@@ -99,6 +108,7 @@ export async function activate({ api }: ActivationContext) {
     art.dispose();
     cancellation.dispose();
     memory.dispose();
+    recall.dispose();
     background.dispose();
     await releaseRoutes();
   };

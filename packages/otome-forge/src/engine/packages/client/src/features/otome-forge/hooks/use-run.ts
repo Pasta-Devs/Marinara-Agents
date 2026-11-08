@@ -12,7 +12,7 @@ import { useOtomeApi } from "../api";
 import { ACCENT_SAMPLER_VERSION, accentIsPlaceholder, castAccentFor, sampleAccent } from "../lib/accent";
 import type { RunView, SettingsInput, WorldView } from "../shared/api-types";
 import { forgeIsWorking } from "../shared/forge";
-import { memoryQueryKey } from "./use-memory";
+import { memoryQueryKey, recallQueryKey } from "./use-memory";
 
 const POLL_MS = 2_000;
 
@@ -111,8 +111,10 @@ export function useSaveSettings(runKey: string | null) {
       });
       // The forge too: an image connection added here brings the cast's paint steps.
       patchRun(queryClient, runKey, (view) => ({ ...view, world: { ...view.world, ...world }, forge: world.forge }));
-      // And the story memory's status: a connection given here ends its "no connection" banner at once.
+      // And the story memory's status: a connection given here ends its "no connection" banner at once. Another
+      // embedding model rebuilds the recall index, so its status is read again too.
       void queryClient.invalidateQueries({ queryKey: memoryQueryKey(runKey) });
+      void queryClient.invalidateQueries({ queryKey: recallQueryKey(runKey) });
       setStatus({ error: false, text: savedText });
       return true;
     } catch (failure) {

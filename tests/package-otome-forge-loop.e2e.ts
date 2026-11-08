@@ -270,6 +270,8 @@ function createLoopStub({ seeded = false } = {}) {
   let wish = false;
   let herWorn = "base";
   let dateDone = false;
+  // Long-term recall's index (0.19.0): failed on an Engine before capability API 1.818, until Retry indexing.
+  let recall: Json = { phase: "failed", indexed: 2, total: 5, message: "FAKE-EMBEDDINGS-DOWN", choosable: false };
   const picks: Array<number | undefined> = [];
   const plush: Record<string, number> = {};
   const earned = { starlight: 0, affection: {} as Record<string, number> };
@@ -606,6 +608,12 @@ function createLoopStub({ seeded = false } = {}) {
     if (path === `${base}/memory/retry`) {
       return { status: 200, json: { status: { phase: "pending", retryable: false, recordCount: 3 } } };
     }
+    if (path === `${base}/memory/recall`) return { status: 200, json: { status: recall } };
+    // Retry indexing, as on an Engine that now lets the story choose its embedding model.
+    if (path === `${base}/memory/recall/retry`) {
+      recall = { phase: "indexing", indexed: 2, total: 5, choosable: true };
+      return { status: 200, json: { status: recall } };
+    }
     // Settings → Connections (#2044): the connections and the daily messages, saved as the server does.
     if (path === `${base}/settings`) {
       const { connections, dailyMessages } = call.body!;
@@ -911,11 +919,20 @@ async function stubEngine(page: Page, stub: Stub) {
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
-  // Text only: one story connection, the Engine's default.
+  // Text only: one story connection, the Engine's default, with an embedding model of its own.
   await page.route("**/api/connections", (route) =>
     route.request().method() === "GET"
       ? route.fulfill({
-          json: [{ id: "conn-text", name: "Story fixture", provider: "custom", model: "fixture", isDefault: "true" }],
+          json: [
+            {
+              id: "conn-text",
+              name: "Story fixture",
+              provider: "custom",
+              model: "fixture",
+              isDefault: "true",
+              embeddingModel: "fixture-embed",
+            },
+          ],
         })
       : route.continue(),
   );
@@ -1708,8 +1725,23 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect(memory).toContainText("A summary failed. Retry when you’re ready.");
         await memory.getByRole("button", { name: "Retry memory upkeep" }).click();
         await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
-        // Love interests who message you each day (#2044): 0, off, until the player sets it; by keyboard, 0 to 24 only.
         const panel = root.getByRole("tabpanel");
+        // Long-term recall (0.19.0): Memory recall embeddings, Built-in only on an Engine before capability API 1.818,
+        // and the index's failure beside the story memory's, with Retry indexing.
+        const embeddings = panel.getByRole("combobox", { name: "Memory recall embeddings" });
+        await expect(embeddings).toHaveValue("");
+        await expect(embeddings.locator("option")).toHaveText(["Built-in (local)"]);
+        await expect(embeddings).toHaveAccessibleDescription(/A newer Marinara Engine lets you choose your own/u);
+        await expect(memory).toContainText("Long-term recall: indexing failed. Retry when you’re ready.");
+        await expect(memory).toContainText("FAKE-EMBEDDINGS-DOWN");
+        await memory.getByRole("button", { name: "Retry indexing" }).click();
+        await expect.poll(() => posts(stub, "/memory/recall/retry").length).toBe(1);
+        await expect(memory).toContainText("Long-term recall: indexing chapter summaries (2 of 5 so far)…");
+        await expect(memory.getByRole("button", { name: "Retry indexing" })).toHaveCount(0);
+        // This Engine offers the connections with an embedding model of their own.
+        await expect(embeddings.locator("option")).toHaveText(["Built-in (local)", "Story fixture · fixture"]);
+        await expect(embeddings).toHaveAccessibleDescription(/Built-in runs on this computer/u);
+        // Love interests who message you each day (#2044): 0, off, until the player sets it; by keyboard, 0 to 24 only.
         const daily = panel.getByRole("spinbutton", { name: "Love interests who message you each day" });
         const save = panel.getByRole("button", { name: "Save changes" });
         await expect(daily).toHaveValue("0");
@@ -1743,6 +1775,14 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect(save).toBeFocused();
         await expect(save).toHaveAttribute("aria-disabled", "true");
         await auditScreen(page, root, "settings: Connections, saved", tab);
+        // A connection's own embedding model, saved with its own note; the server checks it and indexes again.
+        await panel.getByRole("combobox", { name: "Memory recall embeddings" }).selectOption("conn-text");
+        await save.click();
+        await expect
+          .poll(() => posts(stub, "/settings").at(-1)?.body)
+          .toMatchObject({ connections: { narration: "conn-text", embeddings: "conn-text" } });
+        await expect(panel.getByText("Saved. Your chapter summaries are indexed again with it.")).toBeVisible();
+        await expect(panel.getByRole("combobox", { name: "Memory recall embeddings" })).toHaveValue("conn-text");
       }
     }
     await page.screenshot({ path: testInfo.outputPath("settings-debug.png") });

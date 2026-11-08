@@ -56,7 +56,8 @@
 //   already lists in full (`listed`, P17's newest conversations). A date (the kit's `character-story`) never joins the
 //   timeline's text: it is its love interest's own, and until its summary is folded (the timeline covers it) it goes
 //   in as recent canon, by its summary or in full while it has none (S/story/canon.ts). The pool is the same in every
-//   phase. No embeddings are made, so none are paid for.
+//   phase. No embeddings are made, so none are paid for. Long-term recall (0.19.0) embeds the saved summaries apart from
+//   this: each upkeep job hands its run to `afterUpkeep`, which indexes what is new (S/memory/recall-index.ts).
 // - A Character Story, Moment or first-wear beat (also the kit's `character-story`, a `story-<itemId>` chapter) joins
 //   the timeline in story order, as a route chapter does, titled and summarized as private to its love interest (the
 //   maintainer's, 2026-11-03: love interests must know what happened in them; as recalls they were often left out).
@@ -210,6 +211,8 @@ export interface OtomeMemoryDeps {
   background?: BackgroundQueue;
   /** Every canonical source of a run; S/memory/sources.ts by default, kept until the store writes (tests pass their own). */
   readSources?: (runId: string) => Promise<ForgeMemorySource[]>;
+  /** Called once each upkeep job ends, so new summaries are indexed for long-term recall (S/memory/recall-index.ts). */
+  afterUpkeep?: (runId: string) => void;
 }
 
 export interface OtomeMemory {
@@ -320,6 +323,7 @@ export function createOtomeMemory({
   store,
   background,
   readSources = keptSources(store),
+  afterUpkeep,
 }: OtomeMemoryDeps): OtomeMemory {
   const documents = runtime.persistence.documents;
   const queue = background ?? createBackgroundQueue(runtime);
@@ -621,6 +625,8 @@ export function createOtomeMemory({
             }
           } finally {
             running.delete(runId);
+            // Whatever the job wrote before it ended, failed or not.
+            if (!disposed) afterUpkeep?.(runId);
           }
         },
       });

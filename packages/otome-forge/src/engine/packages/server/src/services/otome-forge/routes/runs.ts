@@ -6,12 +6,15 @@
 // POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge
 // GET  /runs/:run                          → {view: RunView}; with the stickers the player has (#2044), whose owed
 //                                             sets and paints it queues in the background, as it queues the love
-//                                             interests' missing personality quiz answers (#2174)
+//                                             interests' missing personality quiz answers (#2174) and long-term recall's
+//                                             indexing of chapter summaries not indexed yet (0.19.0)
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
 // POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?}
 //      → {world: WorldView}; with an image connection, each paint step the world lacks is added, waiting for the tap.
-//      dailyMessages and groupSquabbles are 0–24 (Settings → Connections, S/phone/daily.ts, S/phone/group.ts)
+//      dailyMessages and groupSquabbles are 0–24 (Settings → Connections, S/phone/daily.ts, S/phone/group.ts). A new
+//      `connections.embeddings` (Memory recall embeddings) must name a connection with an embedding model (400
+//      `no-embeddings`), and rebuilds long-term recall's index with it (S/memory/recall-index.ts)
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
 // POST /runs/:run/lis/:li/intimacy          → {intimacy: true}; writes his missing intimacy block only (1 call;
@@ -44,6 +47,7 @@ import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { runForeground } from "../generation.js";
 import { ensureQuizScores } from "../minigames/quiz.js";
+import { embeddingHost } from "../memory/recall-index.js";
 import {
   OtomeForgeError,
   debugModeOf,
@@ -360,6 +364,15 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           error instanceof Error ? error.message : String(error),
         ),
       );
+      // Long-term recall: chapter summaries not indexed yet (a story from before it, too), in the background.
+      void deps.recall
+        ?.ensure(runId, { open: true })
+        .catch((error: unknown) =>
+          deps.runtime.logger.warn(
+            "[otome-forge] The recall index was not queued: %s",
+            error instanceof Error ? error.message : String(error),
+          ),
+        );
       const run = await withPersonaAbout(await withEngineLooks(read, runId), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.
@@ -430,6 +443,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
       deps.cancellation?.cancel(runId);
       deps.memory?.invalidate(runId);
+      deps.recall?.invalidate(runId);
       // A document's images go as soon as it does (taken from the revision that went), so a sweep that stops part-way
       // (a storage error, a conflict, a restart) has already let go of the images of what it removed, and what stays
       // keeps its own for the next delete. The Engine refuses an image a document still refers to, so one shared with
@@ -470,6 +484,17 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const body = parseBody(SettingsBody, request.body);
       const { runId } = runParam(request);
+      // Memory recall embeddings: a connection chosen now must have an embedding model this Engine can use.
+      const embeddings = body.connections ? (normalizeConnections(body.connections).embeddings ?? null) : undefined;
+      const before = embeddings === undefined ? null : await store.readDoc(worldId(runId), normalizeWorld);
+      const newEmbeddings = !!before && embeddings !== (before.connections.embeddings ?? null);
+      if (newEmbeddings && embeddings && !(await embeddingHost(runtime, embeddings).catch(() => null))) {
+        throw new OtomeForgeError(
+          400,
+          "That connection has no embedding model Otome can use: choose one with an embedding model, or Built-in.",
+          "no-embeddings",
+        );
+      }
       const ageGate = (await readIndex(store)).ageGate !== null;
       const at = new Date().toISOString();
       // #2147: whose look is Engine art, so the paint steps a connection adds are done for them (S/setup/forge.ts).
@@ -477,7 +502,11 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         player: (await store.readDoc(playerId(runId), normalizePlayer)) ?? {},
         units: await readCastUnits(store, runId),
       };
+      // The embedding choice this write replaced, read inside the write itself (it may run again on a newer revision),
+      // so a concurrent save between the check above and this write still rebuilds the index when it should.
+      let replaced: string | null = null;
       const world = await store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
+        replaced = current.connections.embeddings ?? null;
         const content = body.content ?? current.content;
         const images = { ...current.images, ...body.images };
         // Turning faces on again allows one more attempt at a set that failed or stopped before (the kit's rule).
@@ -499,6 +528,17 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!world) throw runNotFound();
+      // Another embedding model, as this write saved it: the recall index is built again with it, in the background.
+      if (embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
+        void deps.recall
+          ?.ensure(runId)
+          .catch((error: unknown) =>
+            runtime.logger.warn(
+              "[otome-forge] The recall index was not queued: %s",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
+      }
       return { world: toWorldView(withPlaceViews(runId, world)) };
     }),
   );

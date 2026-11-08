@@ -4,18 +4,24 @@
 // a day they may squabble in the group chat on their own (#2154, S/phone/group.ts; 0, the default, is off), and the story
 // memory's status with its Retry (Debug's MemorySection), next to the connection that writes the summaries. Opened by
 // the memory banner for a failed summary, it shows that connection (Memory, under More connections), focused.
+// Memory recall embeddings (0.19.0, S/memory/recall-index.ts): the model that indexes the chapter summaries for
+// long-term recall, Built-in (local) by default, or a connection with an embedding model of its own, which only an
+// Engine with capability API 1.818 offers (the index's status says); the server checks it on save. The index's status
+// and Retry indexing are in the memory section.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
+import { useRecallIndex } from "../../hooks/use-memory";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { Connections, RunView } from "../../shared/api-types";
 import { DAILY_MESSAGES_MAX } from "../../shared/home";
 import { ConnectionControls } from "../setup/ConnectionsStep";
 import type { DraftConnections } from "../setup/draft";
-import { TextField } from "../setup/parts";
+import { ConnectionSelect, TextField } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
+import { embeddingOptions } from "../../lib/recall-choice";
 import { MemorySection } from "./Debug";
 
 const toForm = (connections: Connections): DraftConnections => ({
@@ -25,13 +31,15 @@ const toForm = (connections: Connections): DraftConnections => ({
   compress: connections.compress ?? "",
 });
 
-function toConnections(form: DraftConnections): Connections {
+/** The connections as saved; `embeddings` "" is the built-in embedding model. */
+function toConnections(form: DraftConnections, embeddings: string): Connections {
   const own = (id: string) => (id && id !== form.narration ? id : undefined);
   return {
     narration: form.narration,
     ...(own(form.structured) ? { structured: form.structured } : {}),
     ...(own(form.chat) ? { chat: form.chat } : {}),
     ...(own(form.compress) ? { compress: form.compress } : {}),
+    ...(embeddings ? { embeddings } : {}),
   };
 }
 
@@ -56,6 +64,12 @@ function StoryConnections({
   const { t } = useTranslation();
   const connections = useConnections();
   const [form, setForm] = useState(() => toForm(run.world.connections));
+  const storedEmbeddings = run.world.connections.embeddings ?? "";
+  const [embeddings, setEmbeddings] = useState(storedEmbeddings);
+  // An Engine before capability API 1.818 has only its built-in model to offer; until the recall status says which
+  // this Engine is (loading, or failed to load), only the saved choice is listed (lib/recall-choice.ts).
+  const recallStatus = useRecallIndex(run.runKey).status;
+  const olderEngine = recallStatus?.choosable === false;
   const stored = run.world.dailyMessages ?? 0;
   const [dailyText, setDailyText] = useState(() => String(stored));
   const daily = dailyOf(dailyText);
@@ -63,8 +77,10 @@ function StoryConnections({
   const [squabblesText, setSquabblesText] = useState(() => String(storedSquabbles));
   const squabbles = dailyOf(squabblesText);
   const connectionsChanged =
-    JSON.stringify(toConnections(form)) !== JSON.stringify(toConnections(toForm(run.world.connections)));
-  const changed = connectionsChanged || daily !== stored || squabbles !== storedSquabbles;
+    JSON.stringify(toConnections(form, storedEmbeddings)) !==
+    JSON.stringify(toConnections(toForm(run.world.connections), storedEmbeddings));
+  const embeddingsChanged = embeddings !== storedEmbeddings;
+  const changed = connectionsChanged || embeddingsChanged || daily !== stored || squabbles !== storedSquabbles;
   if (connections.isLoading) {
     return (
       <p className="of-hint" role="status">
@@ -91,6 +107,14 @@ function StoryConnections({
         onCheckAgain={connections.refetch}
         revealMemory={revealMemory}
         onMemoryRevealed={onMemoryRevealed}
+      />
+      <ConnectionSelect
+        label={t("ui.otomeForge.settings.embeddingsLabel")}
+        hint={t(olderEngine ? "ui.otomeForge.settings.embeddingsOlderEngine" : "ui.otomeForge.settings.embeddingsHint")}
+        value={embeddings}
+        connections={embeddingOptions(recallStatus, connections.embeddings, storedEmbeddings)}
+        emptyLabel={t("ui.otomeForge.settings.embeddingsBuiltIn")}
+        onChange={setEmbeddings}
       />
       <TextField
         label={t("ui.otomeForge.settings.dailyMessages")}
@@ -128,15 +152,17 @@ function StoryConnections({
         status={settings.status}
         onSave={() => {
           if (daily === null || squabbles === null) return;
-          // The connections' note is about scenes; the daily number and the squabbles get their own.
+          // The connections' note is about scenes; the embedding model, the daily number and the squabbles get their own.
           void settings.save(
-            { connections: toConnections(form), dailyMessages: daily, groupSquabbles: squabbles },
+            { connections: toConnections(form, embeddings), dailyMessages: daily, groupSquabbles: squabbles },
             t(
               connectionsChanged
                 ? "ui.otomeForge.settings.saved"
-                : daily !== stored
-                  ? "ui.otomeForge.settings.dailyMessagesSaved"
-                  : "ui.otomeForge.settings.groupSquabblesSaved",
+                : embeddingsChanged
+                  ? "ui.otomeForge.settings.embeddingsSaved"
+                  : daily !== stored
+                    ? "ui.otomeForge.settings.dailyMessagesSaved"
+                    : "ui.otomeForge.settings.groupSquabblesSaved",
             ),
           );
         }}
