@@ -643,6 +643,11 @@ test("a repair plan keeps its shape; a rupture that moves on is offered its own 
     await t.call("POST", beatPath, {}, { key, i: String(i) });
     await t.call("POST", `${beatPath}/read`, { segment: 99 }, { key, i: String(i) });
   }
+  // 0.20.2: the repair plan opens with the story context its scenes cache, marked, so the first scene reads it.
+  const scene = t.calls.find((call) => /Narrate node 1 of/u.test(call.messages.at(-1)!.content))!;
+  const plan = calls(t, "repair planner").at(-1)!;
+  assert.equal(plan.messages[0]!.content, scene.messages[0]!.content, "the plan's story context is the scenes'");
+  assert.equal(plan.messages[0]!.cacheBreakpoint, true);
   const state = await t.state();
   assert.deepEqual(state.lis[KAI]!.rupture?.grievanceId, "g-b", "another rupture still owed keeps the gates shut");
   assert.equal(state.lis[KAI]!.stage, 3);

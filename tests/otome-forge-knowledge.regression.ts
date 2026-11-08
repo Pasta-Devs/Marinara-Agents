@@ -470,11 +470,13 @@ test("only the arc and chapter planners read the premise, for its world alone; t
     assert.equal(prompt.split(PREMISE).length - 1, 1, `${kind}: in that line alone`);
     assert.ok(prompt.includes(SETTING), `${kind} keeps the setting`);
     const bare = text(without.planners[kind as keyof typeof withPremise.planners]);
-    // P5 opens its own part with the line and a blank; the others put it on the line after the setting.
+    // P5 opens its own part with the line and a blank, P10 and P11 (0.20.2, the same cached layout) with the line;
+    // the others put it on the line after the setting.
+    const own = kind === "chapterPlan" || kind === "routePlan" || kind === "repairPlan";
     const added = kind === "chapterPlan" ? `${line}\n\n` : `${line}\n`;
     assert.equal(prompt.replace(added, ""), bare, `${kind}: only the line is new`);
-    if (kind !== "chapterPlan")
-      assert.ok(prompt.includes(`WORLD\n${SETTING}\n${line}\n`), `${kind}: after the setting`);
+    if (own) assert.ok(messages.at(-1)!.content.startsWith(added), `${kind}: its own part opens with it`);
+    else assert.ok(prompt.includes(`WORLD\n${SETTING}\n${line}\n`), `${kind}: after the setting`);
   }
   // The extra story still offers its au, and P21 and the extra story plan a call as P5, P10 and P11 do.
   assert.ok(text(withPremise.planners.extraStoryPlan).includes("- au: a mini alternate universe they imagine"));
