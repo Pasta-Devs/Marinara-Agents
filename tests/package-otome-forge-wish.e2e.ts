@@ -1266,6 +1266,8 @@ test("Otome Hearth 0.21.0: a house leads Home, and an item won from Wish has a d
     album: unseen.has(MEMORY) ? 1 : 0,
   });
   const fresh = (entry: Json) => (unseen.has(entry.id) ? { ...entry, new: true } : entry);
+  let memorySeen!: () => void;
+  const afterMemory = new Promise<void>((done) => (memorySeen = done));
   await stubRoutes(
     page,
     (call) => {
@@ -1288,7 +1290,11 @@ test("Otome Hearth 0.21.0: a house leads Home, and an item won from Wish has a d
       }
       const seen = /^\/runs\/[^/]+\/items\/([^/]+)\/seen$/u.exec(path);
       if (seen) {
-        unseen.delete(decodeURIComponent(seen[1]!));
+        const id = decodeURIComponent(seen[1]!);
+        unseen.delete(id);
+        // The look's answer, counted now, lands only after the Memory's (Dottore on #2204): it must not bring a dot back.
+        if (id === LOOK) return { status: 200, json: { unseen: counts() }, wait: afterMemory, delay: 200 };
+        memorySeen();
         return { status: 200, json: { unseen: counts() } };
       }
       return answer(call);
@@ -1310,6 +1316,21 @@ test("Otome Hearth 0.21.0: a house leads Home, and an item won from Wish has a d
   await expect(dock.getByRole("button", { name: /^Album.*1 new item/u })).toBeVisible();
   await expect(dock.locator(".of-dock-dot")).toHaveCount(2);
   await page.screenshot({ path: testInfo.outputPath("01-house-and-dock.png") });
+  // On Pearl's pale glass the dock's dot, like every new dot, takes the deeper accent ink (Dottore on #2204).
+  const pearl = await root.evaluate((element) => {
+    const before = element.getAttribute("data-look");
+    element.setAttribute("data-look", "pearl");
+    const probe = element.ownerDocument.createElement("span");
+    probe.style.color = "var(--of-accent-text)";
+    element.append(probe);
+    const ink = getComputedStyle(probe).color;
+    const dot = getComputedStyle(element.querySelector(".of-dock-dot")!).backgroundColor;
+    probe.remove();
+    if (before === null) element.removeAttribute("data-look");
+    else element.setAttribute("data-look", before);
+    return { ink, dot };
+  });
+  expect(pearl.dot).toBe(pearl.ink);
 
   // The Wardrobe: on the tab of whose it is and by the look; a click on its picture lets it go.
   // Its dock button says how many are new, so it is found by its name's start.
@@ -1324,6 +1345,7 @@ test("Otome Hearth 0.21.0: a house leads Home, and an item won from Wish has a d
   await expect(card.locator(".of-item-dot")).toBeVisible();
   await expect(root.locator(".of-item-dot")).toHaveCount(1);
   await page.screenshot({ path: testInfo.outputPath("02-wardrobe.png") });
+  const lookAnswered = page.waitForResponse((response) => response.url().endsWith(`/items/${LOOK}/seen`));
   await card.locator(".of-ward-frame").click();
   await expect(card.locator(".of-item-dot")).toHaveCount(0);
   await expect(owners.locator(".of-new-dot")).toHaveCount(0);
@@ -1345,6 +1367,9 @@ test("Otome Hearth 0.21.0: a house leads Home, and an item won from Wish has a d
   await expect(keepsake.locator(".of-item-dot")).toHaveCount(0);
   await expect(memoriesTab.locator(".of-tab-dot")).toHaveCount(0);
   await expect(dock.locator(".of-dock-dot")).toHaveCount(0);
+  await lookAnswered;
+  await page.waitForTimeout(300);
+  await expect(dock.locator(".of-dock-dot"), "the late answer brings no dot back").toHaveCount(0);
   expect(posts(calls, "/seen")).toHaveLength(2);
 });
 

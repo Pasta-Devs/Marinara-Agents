@@ -871,7 +871,7 @@ ${R} .of-tab-dot {
    it and on the dock. It is the only sign, so on Pearl's pale glass it takes the deeper accent ink, as Remind Me's does. */
 ${R} .of-new-dot { display: inline-block; flex: none; vertical-align: middle; margin-inline-start: 6px; }
 ${R} .of-dock-dot { position: absolute; top: 5px; inset-inline-end: calc(50% - 17px); margin: 0; }
-${R}[data-look="pearl"] :is(.of-new-dot, .of-album-tabs .of-tab-dot) { background: var(--of-accent-text); }
+${R}[data-look="pearl"] :is(.of-new-dot, .of-dock-dot, .of-album-tabs .of-tab-dot) { background: var(--of-accent-text); }
 /* An item's picture, or a quiet card in their colour with their initials. */
 ${R} .of-item-art {
   position: relative; display: grid; place-items: center; flex: none; width: 100%; aspect-ratio: 3 / 4;

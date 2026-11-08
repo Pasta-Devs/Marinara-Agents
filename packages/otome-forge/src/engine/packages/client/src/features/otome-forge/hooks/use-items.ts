@@ -19,14 +19,7 @@ import { homeQueryKey } from "../screens/home/HomeScreen";
 import type { Paint, RunView } from "../shared/api-types";
 import { deckKey, type Arcana } from "../shared/tarot";
 import type { AlbumView, ItemOpenResult, WardrobeView } from "../shared/wardrobe";
-import {
-  collectionOf,
-  isLookKind,
-  type BannerView,
-  type ItemKind,
-  type ItemView,
-  type UnseenCounts,
-} from "../shared/wish";
+import { collectionOf, isLookKind, type BannerView, type ItemKind, type ItemView } from "../shared/wish";
 import { runPath } from "./use-reader";
 import { runQueryKey } from "./use-run";
 
@@ -58,7 +51,8 @@ export async function invalidateCollection(queryClient: QueryClient, runKey: str
 
 /**
  * 0.21.0: marks an item won from Wish as looked at. Its dot goes from the cached Wardrobe or Album and the dock's count
- * drops at once; the server's counts replace them, and a failed request reads both again, so the dot comes back.
+ * drops at once; then the run view and its screen are read again (a failed request brings the dot back). One request
+ * per item at a time.
  */
 export function useMarkSeen(runKey: string) {
   const otome = useOtomeApi();
@@ -68,6 +62,7 @@ export function useMarkSeen(runKey: string) {
     if (sent.current.has(id)) return;
     sent.current.add(id);
     const screen = collectionOf(id);
+    const collectionKey = screen === "wardrobe" ? wardrobeQueryKey : albumQueryKey;
     queryClient.setQueryData<RunView>(runQueryKey(runKey), (view) =>
       view?.unseen ? { ...view, unseen: { ...view.unseen, [screen]: Math.max(0, view.unseen[screen] - 1) } } : view,
     );
@@ -101,21 +96,15 @@ export function useMarkSeen(runKey: string) {
       );
     }
     void otome
-      .post<{ unseen?: UnseenCounts }>(`${runPath(runKey)}/items/${encodeURIComponent(id)}/seen`, {})
-      .then((result) => {
-        if (result?.unseen) {
-          queryClient.setQueryData<RunView>(runQueryKey(runKey), (view) =>
-            view ? { ...view, unseen: result.unseen } : view,
-          );
-        }
-      })
-      .catch((error: unknown) => {
+      .post(`${runPath(runKey)}/items/${encodeURIComponent(id)}/seen`, {})
+      .catch((error: unknown) => console.warn("Otome Forge could not mark an item seen", error))
+      .finally(() => {
+        // The run view and the screen are read again, never written from this answer: two seen in quick succession
+        // may answer out of order (Dottore on #2204), and a read sent before the write must not leave its dot. A failed
+        // request brings the dot back. A later click may send again (the route is idempotent) should one still show.
         sent.current.delete(id);
-        console.warn("Otome Forge could not mark an item seen", error);
         void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
-        void queryClient.invalidateQueries({
-          queryKey: screen === "wardrobe" ? wardrobeQueryKey(runKey) : albumQueryKey(runKey),
-        });
+        void queryClient.invalidateQueries({ queryKey: collectionKey(runKey) });
       });
   };
 }
