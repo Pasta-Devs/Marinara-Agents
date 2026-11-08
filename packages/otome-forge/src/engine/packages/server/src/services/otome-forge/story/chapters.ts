@@ -20,6 +20,9 @@
 // cached part, and copied onto the chapter for its scenes (S/story/beats.ts); the write that registers the chapter lets
 // them go, unless newer ones were sent meanwhile. A plan that fails, is cancelled or refused saves nothing and keeps
 // them.
+// Long-term recall (0.19.0, S/story/canon.ts recallText): the plan chooses the earlier chapters its story context
+// recalls in detail, by its arc's purpose for it, its Lead and cast, those thoughts and how the previous chapter ended,
+// after its arc is known, and saves them on the chapter (`recalled`), so each of its scenes sends exactly those.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   ArcJudgment,
@@ -70,6 +73,7 @@ import { withPersonaStoryAbout } from "../setup/cast.js";
 import { cancellable } from "./beats.js";
 import { hisSideOffers } from "./his-side.js";
 import { removeLoveInterest } from "./introduce.js";
+import type { RecallIndex } from "../memory/recall-index.js";
 import { readBeat, recallText, type StoryMemory } from "./canon.js";
 import { chapterPlanMessages, knownRows } from "../prompts.js";
 import {
@@ -86,6 +90,8 @@ export interface ChapterDeps extends GenerationDeps {
   runtime: GenerationDeps["runtime"] & Pick<CapabilityRuntimeHost, "resources">;
   store: OtomeStore;
   memory?: StoryMemory;
+  /** Long-term recall's index (S/memory/recall-index.ts); without it a plan recalls no earlier chapter in detail. */
+  recall?: Pick<RecallIndex, "choose">;
 }
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");
@@ -474,24 +480,6 @@ export async function planNextChapter(
   return readOrGenerate(runId, read, async () => {
     signal?.throwIfAborted();
     const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
-    // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
-    // The Lead's own route and repair chapters reach the plan; the Foil's and everyone else's never do, in recall
-    // (S/story/canon.ts mayKnow) or in the ledgers (S/prompts.ts knownTo), but for the last Character Story, whoever's
-    // it is, titled private between the protagonist and its love interest (#2126, `lastStory`). Upgrade path: a
-    // second recall for the Foil after the plan names them, or keep [lead] so another love interest's private canon
-    // never reaches the node guides.
-    const memory = await recallText(deps, runId, {
-      job: "structured",
-      cast: [lead],
-      continues: "main",
-      // The recalls follow the Lead, so they go after the story context the chapter's scenes share (#2066, #2091).
-      cached: {},
-      // As every scene of the chapter is, so the story context stays theirs (S/story/beats.ts generateBeat).
-      lastStory: true,
-      query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
-      signal,
-      debugMode,
-    });
     const climax = requiredClimax(mains);
     const sideWith = sideWithOpen(mains, number);
     // #1980: the arc this chapter belongs to, planned right here when the run has none covering it (the first arc, or
@@ -536,6 +524,32 @@ export async function planNextChapter(
     const judgment = await judgmentFor(deps.store, runId, arc, mains, number);
     // #2127: the thoughts waiting now, after the arc's plan: `run.state` was read before this task was queued.
     const thoughts = (await deps.store.readDoc(stateId(runId), normalizeState))?.thoughts ?? null;
+    // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
+    // The Lead's own route and repair chapters reach the plan; the Foil's and everyone else's never do, in recall
+    // (S/story/canon.ts mayKnow) or in the ledgers (S/prompts.ts knownTo), but for the last Character Story, whoever's
+    // it is, titled private between the protagonist and its love interest (#2126, `lastStory`). Upgrade path: a
+    // second recall for the Foil after the plan names them, or keep [lead] so another love interest's private canon
+    // never reaches the node guides.
+    const leadName = units.find((unit) => unit.id === lead)?.name ?? "";
+    const others = units.filter((unit) => unit.id !== lead).map((unit) => unit.name);
+    const memory = await recallText(deps, runId, {
+      job: "structured",
+      cast: [lead],
+      continues: "main",
+      // The recalls follow the Lead, so they go after the story context the chapter's scenes share (#2066, #2091).
+      cached: {},
+      // As every scene of the chapter is, so the story context stays theirs (S/story/beats.ts generateBeat).
+      lastStory: true,
+      query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
+      // Long-term recall (see the header): the earlier chapters this one is about, saved below for its scenes.
+      chooseBy: [
+        arc.plan.find((entry) => entry.n === number)?.purpose ?? "",
+        others.length ? `${leadName} leads, with ${others.join(", ")}.` : `${leadName} leads.`,
+        thoughts?.text ?? "",
+      ],
+      signal,
+      debugMode,
+    });
     const context: PlanContext = {
       units,
       state: run.state,
@@ -592,6 +606,7 @@ export async function planNextChapter(
       plannedAt: new Date().toISOString(),
       connectionId,
       ...(thoughts ? { thoughts: thoughts.text } : {}),
+      ...(memory.recalled ? { recalled: memory.recalled } : {}),
     };
     const saved = await deps.store.mutateDoc(
       runDocTarget("chapter", chapterId(runId, key)),

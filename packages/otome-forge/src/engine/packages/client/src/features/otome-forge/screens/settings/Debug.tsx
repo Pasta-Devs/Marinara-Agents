@@ -4,16 +4,17 @@
 // its Retry (a failed summary is never retried by itself) and the provider's whole message (Otome's own, on a line of
 // its own and not as the connection's, when the memory model is too small). The status and Retry are
 // hooks/use-memory.ts's, shared with the banner every screen of the story shows (components/MemoryBanner.tsx). The
-// memory section is also under Settings → Connections, beside the connection that writes the summaries.
+// memory section is also under Settings → Connections, beside the connection that writes the summaries. Below it,
+// long-term recall's index (0.19.0): indexing, how many chapter summaries it holds, or its failure with Retry indexing.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClipboardCopy, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "../../api";
-import { useMemoryStatus } from "../../hooks/use-memory";
+import { useMemoryStatus, useRecallIndex } from "../../hooks/use-memory";
 import { ownMessage } from "../../lib/memory-notice";
 import { useOtomeProps } from "../../props";
-import type { MemoryStatus, RunView } from "../../shared/api-types";
+import type { MemoryStatus, RecallIndexStatus, RunView } from "../../shared/api-types";
 import { Section } from "../setup/parts";
 
 const MEMORY_PHASE_KEYS: Record<MemoryStatus["phase"], string> = {
@@ -22,6 +23,66 @@ const MEMORY_PHASE_KEYS: Record<MemoryStatus["phase"], string> = {
   stale: "ui.otomeForge.settings.debugMemoryStale",
   error: "ui.otomeForge.settings.debugMemoryError",
 };
+
+const RECALL_PHASE_KEYS: Record<RecallIndexStatus["phase"], string> = {
+  indexing: "ui.otomeForge.settings.recallIndexing",
+  ready: "ui.otomeForge.settings.recallReady",
+  failed: "ui.otomeForge.settings.recallFailed",
+};
+
+/** Long-term recall's index (see the header): its phase and counts, its error, and Retry indexing once it failed. */
+function RecallIndexLine({ runKey }: { runKey: string }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const { status, query, retry, error } = useRecallIndex(runKey);
+  return (
+    <>
+      <p className="of-body" role="status">
+        {status
+          ? t(
+              status.phase === "ready" && !status.total
+                ? "ui.otomeForge.settings.recallEmpty"
+                : RECALL_PHASE_KEYS[status.phase],
+              {
+                indexed: status.indexed,
+                total: status.total,
+              },
+            )
+          : query.isError
+            ? otome.errorMessage(query.error)
+            : t("ui.otomeForge.settings.recallLoading")}
+      </p>
+      {status?.phase === "failed" && status.message ? (
+        <dl className="of-review-list">
+          <dt>{t("ui.otomeForge.settings.recallMessage")}</dt>
+          <dd>
+            <code>{status.message}</code>
+          </dd>
+        </dl>
+      ) : null}
+      {status?.phase === "failed" ? (
+        <div className="of-actions of-actions--start">
+          <button
+            type="button"
+            className="of-button of-button--quiet of-glass of-button--small"
+            aria-disabled={retry.isPending}
+            onClick={() => {
+              if (!retry.isPending) retry.mutate();
+            }}
+          >
+            <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
+            {t("ui.otomeForge.settings.recallRetry")}
+          </button>
+        </div>
+      ) : null}
+      {error ? (
+        <p className="of-hint" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </>
+  );
+}
 
 export function MemorySection({ runKey }: { runKey: string }) {
   const { t } = useTranslation();
@@ -86,6 +147,7 @@ export function MemorySection({ runKey }: { runKey: string }) {
           {error}
         </p>
       ) : null}
+      <RecallIndexLine runKey={runKey} />
     </Section>
   );
 }

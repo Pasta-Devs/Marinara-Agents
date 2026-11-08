@@ -154,6 +154,12 @@ export const isItemStoryKey = (key: string) => key.startsWith("story-");
  */
 export const quizId = (runId: string) => `${runId}:quiz`;
 
+/**
+ * `${R}:recall` (0.19.0): the long-term recall index, each timeline chapter's summary as vectors (S/memory/recall-index.ts).
+ * Never read by a prompt.
+ */
+export const recallId = (runId: string) => `${runId}:recall`;
+
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
 export const RUN_DOC_KINDS = [
   "world",
@@ -174,6 +180,7 @@ export const RUN_DOC_KINDS = [
   "tarot",
   "deck",
   "quiz",
+  "recall",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */

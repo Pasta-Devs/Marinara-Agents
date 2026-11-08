@@ -3,8 +3,9 @@
 // ──────────────────────────────────────────────
 // Both are written once by the story (S/story/*) and only ever read here, so a damaged list item is dropped and a
 // damaged field takes its default; a document with no key or no index reads as missing (null), and is written again.
-// The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts…, a
-// birthday scene's gift, the moment his side retells, a beat's effects, a date's plan and its scores) are stripped by
+// The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts… and the
+// earlier chapters it recalls, a birthday scene's gift, the moment his side retells, a beat's effects, a date's plan and
+// its scores) are stripped by
 // toChapterView and toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
 import type {
@@ -48,6 +49,7 @@ import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-for
 import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { isChapterKey } from "../ids.js";
+import { RECALL_MAX } from "../memory/recall-index.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
 import { ARCS_MAX, JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
 import { TrackSchema } from "./world.js";
@@ -269,6 +271,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
       gift: z.enum(GIFT_IDS).optional(),
       hisSide: HisSideNoteSchema.optional(),
+      recalled: z.array(z.string().refine(isChapterKey)).min(1).max(RECALL_MAX).optional(),
     },
     () => ({
       key: data.key as string,
@@ -353,7 +356,8 @@ export function normalizeBeat(data: unknown): Beat | null {
 /**
  * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, a date's plan
  * (GET .../dates shows a date), an extra story's premise (#2025), the Your thoughts… its plan read (#2127; Home shows
- * the player only the ones still waiting), a birthday scene's gift (#2153) or the moment his side retells (#2155).
+ * the player only the ones still waiting), a birthday scene's gift (#2153), the moment his side retells (#2155) or the
+ * earlier chapters it recalls (0.19.0).
  */
 export function toChapterView(chapter: Chapter): ChapterView {
   const {
@@ -366,6 +370,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     thoughts: _thoughts,
     gift: _gift,
     hisSide: _hisSide,
+    recalled: _recalled,
     music,
     ...rest
   } = chapter;

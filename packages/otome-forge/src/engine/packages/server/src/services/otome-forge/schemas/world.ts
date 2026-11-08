@@ -59,12 +59,16 @@ export const ContentSchema: ZodType<ContentSettings> = z.object({
   mcRole: z.enum(MC_ROLES).optional(),
 });
 
-/** The world's connections: narration is required; an empty job falls back to narration (normalizeConnections). */
+/**
+ * The world's connections: narration is required; an empty job falls back to narration (normalizeConnections). An
+ * empty `embeddings` is the built-in embedding model (S/memory/recall-index.ts).
+ */
 export const ConnectionsSchema: ZodType<Connections> = z.object({
   narration: z.string().min(1).max(CONNECTION_ID_MAX),
   structured: z.string().max(CONNECTION_ID_MAX).optional(),
   chat: z.string().max(CONNECTION_ID_MAX).optional(),
   compress: z.string().max(CONNECTION_ID_MAX).optional(),
+  embeddings: z.string().max(CONNECTION_ID_MAX).optional(),
 });
 
 export const WebRowSchema: ZodType<WebRow> = z.object({
@@ -114,7 +118,7 @@ export function normalizeImages(data: unknown): ImageSettings {
 
 export function normalizeConnections(data: unknown): Connections {
   const connections: Connections = { narration: "" };
-  for (const job of ["narration", "structured", "chat", "compress"] as const) {
+  for (const job of ["narration", "structured", "chat", "compress", "embeddings"] as const) {
     const value = field(data, job);
     if (typeof value === "string" && value) connections[job] = value;
   }

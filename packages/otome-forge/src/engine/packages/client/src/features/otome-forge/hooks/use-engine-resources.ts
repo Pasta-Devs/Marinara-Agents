@@ -162,12 +162,21 @@ export interface ConnectionLists {
   image: ConnectionOption[];
   /** Audio connections that make music (`provider === "audio_generation"`, music on). */
   music: ConnectionOption[];
+  /**
+   * Text connections with an embedding model of their own (Memory recall embeddings): an Embedding model set, or an
+   * Embedding Connection that has one (or the Local Model sidecar). The server checks the choice when it is saved.
+   */
+  embeddings: ConnectionOption[];
 }
 
-const NO_CONNECTIONS: ConnectionLists = { text: [], image: [], music: [] };
+const NO_CONNECTIONS: ConnectionLists = { text: [], image: [], music: [], embeddings: [] };
+/** The Engine's Local Model sidecar as an Embedding Connection (shared LOCAL_SIDECAR_CONNECTION_ID). */
+const LOCAL_SIDECAR_ID = "__local_sidecar__";
 
 function toConnectionLists(rows: Row[]): ConnectionLists {
-  const lists: ConnectionLists = { text: [], image: [], music: [] };
+  const lists: ConnectionLists = { text: [], image: [], music: [], embeddings: [] };
+  const withModel = new Set(rows.filter((row) => text(row.embeddingModel).trim()).map((row) => text(row.id)));
+  withModel.add(LOCAL_SIDECAR_ID);
   for (const row of rows) {
     const id = text(row.id);
     const provider = text(row.provider);
@@ -183,9 +192,13 @@ function toConnectionLists(rows: Row[]): ConnectionLists {
     if (provider === IMAGE_PROVIDER) lists.image.push(option);
     else if (provider === AUDIO_PROVIDER) {
       if (row.audioMusic === "true" || row.audioMusic === true) lists.music.push(option);
-    } else if (!NON_TEXT_PROVIDERS.has(provider)) lists.text.push(option);
+    } else if (!NON_TEXT_PROVIDERS.has(provider)) {
+      lists.text.push(option);
+      if (withModel.has(id) || withModel.has(text(row.embeddingConnectionId))) lists.embeddings.push(option);
+    }
   }
   lists.text.sort(byName);
+  lists.embeddings.sort(byName);
   lists.image.sort(byName);
   lists.music.sort(byName);
   return lists;

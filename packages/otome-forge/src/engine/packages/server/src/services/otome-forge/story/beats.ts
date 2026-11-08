@@ -678,6 +678,8 @@ async function generateBeat(
         ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
         ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
         lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
+        // Long-term recall: exactly the earlier chapters its plan chose, in their order (S/story/canon.ts).
+        ...(chapter.recalled ? { recalled: chapter.recalled } : {}),
         query: {
           cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
           plan: node.guide,
