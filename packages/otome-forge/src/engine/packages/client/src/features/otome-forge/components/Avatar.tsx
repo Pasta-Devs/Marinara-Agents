@@ -7,9 +7,9 @@
 // circle frames a face; a square or bust avatar (a card's, a persona's) is never zoomed. A card avatar can bring the
 // crop chosen for it in the Engine (`AvatarCrop`'s source rectangle, normalized 0–1), which then frames it as the
 // Engine's own avatars do.
-import { useState, type CSSProperties, type SyntheticEvent } from "react";
+import type { CSSProperties } from "react";
 import { initialsOf } from "../lib/accent";
-import { isFullBody } from "../lib/avatar-frame";
+import { useFaceFrame } from "../lib/use-face-frame";
 
 /** The Engine's avatar crop (its current source-rectangle shape), as the character list carries it. */
 export interface AvatarCrop {
@@ -68,12 +68,7 @@ interface AvatarProps {
 
 export function Avatar({ name, url, accent, size = 44, className, crop }: AvatarProps) {
   const style = { width: size, height: size, fontSize: size * 0.4, ...(accent ? { "--of-li-accent": accent } : {}) };
-  // The image this circle knows is a full-body look; keyed by its url, so a new image starts unzoomed.
-  const [fullBody, setFullBody] = useState<string | null>(null);
-  const onLoad = (event: SyntheticEvent<HTMLImageElement>) => {
-    const { naturalWidth, naturalHeight, currentSrc } = event.currentTarget;
-    if (isFullBody(naturalWidth, naturalHeight)) setFullBody(url ?? currentSrc);
-  };
+  const frame = useFaceFrame(url, !!crop);
   return (
     <span
       className={className ? `of-avatar ${className}` : "of-avatar"}
@@ -85,15 +80,22 @@ export function Avatar({ name, url, accent, size = 44, className, crop }: Avatar
           src={url}
           alt=""
           loading="lazy"
-          className={!crop && fullBody === url ? "of-avatar-face" : undefined}
+          className={frame.className}
           style={crop ? cropStyle(crop) : undefined}
-          onLoad={crop ? undefined : onLoad}
+          onLoad={frame.onLoad}
         />
       ) : (
         initialsOf(name)
       )}
     </span>
   );
+}
+
+/** A love interest's image inside an `.of-avatar` circle drawn by hand (the top bar's chip, the Wardrobe's), framed at
+ * the face as Avatar frames it (lib/use-face-frame.ts). */
+export function FaceImage({ src }: { src: string }) {
+  const frame = useFaceFrame(src);
+  return <img src={src} alt="" className={frame.className} onLoad={frame.onLoad} />;
 }
 
 /**

@@ -38,3 +38,16 @@ test("the face zoom is anchored at the top and never clamped by the host's img r
   assert.match(rule, /max-width: none; max-height: none;/u, "the zoom is not clamped to half the circle");
   assert.match(css, /\.of-avatar img \{[^}]*object-position: 50% 0;/u, "every circle is anchored at the top");
 });
+
+test("every hand-drawn portrait circle frames its image through FaceImage, never a bare img", () => {
+  const client = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge",
+  );
+  for (const file of ["components/TopBar.tsx", "screens/wardrobe/Wardrobe.tsx"]) {
+    const source = readFileSync(join(client, file), "utf8");
+    const circles = [...source.matchAll(/<span className="of-avatar[^"]*"[^>]*>\s*\{[^}]*\?\s*(<[A-Za-z]+)/gu)];
+    assert.ok(circles.length > 0, `${file} draws a circle`);
+    for (const [, tag] of circles) assert.equal(tag, "<FaceImage", `${file}: a circle's image is framed at the face`);
+  }
+});

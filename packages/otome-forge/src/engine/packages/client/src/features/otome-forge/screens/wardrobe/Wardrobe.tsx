@@ -35,6 +35,7 @@ import {
 } from "../../hooks/use-items";
 import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { runPath } from "../../hooks/use-reader";
+import { FaceImage } from "../../components/Avatar";
 import { accentOf, initialsOf } from "../../lib/accent";
 import type { LiId, RunLiView, RunView } from "../../shared/api-types";
 import { FACES } from "../../shared/faces";
@@ -777,7 +778,7 @@ function ShowDialog({
                 onClick={() => void show(item.id)}
               >
                 <span className="of-avatar" aria-hidden="true">
-                  {item.portrait ? <img src={item.portrait} alt="" /> : initialsOf(item.name)}
+                  {item.portrait ? <FaceImage src={item.portrait} /> : initialsOf(item.name)}
                 </span>
                 <span className="of-candidate-name">{t("ui.otomeForge.wardrobe.show", { name: item.name })}</span>
                 {look.shownTo?.includes(item.id) ? (
@@ -797,7 +798,7 @@ function ShowDialog({
       {result && person ? (
         <figure className="of-show-line" style={{ "--of-li-accent": accentOf(person) } as CSSProperties}>
           <span className="of-avatar of-avatar--hero" aria-hidden="true">
-            {face ? <img src={face} alt="" /> : initialsOf(person.name)}
+            {face ? <FaceImage src={face} /> : initialsOf(person.name)}
           </span>
           <figcaption className="of-show-who">{person.name}</figcaption>
           <p ref={lineRef} className="of-show-text" tabIndex={-1}>
