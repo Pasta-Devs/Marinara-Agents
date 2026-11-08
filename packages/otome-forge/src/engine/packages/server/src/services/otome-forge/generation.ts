@@ -23,7 +23,8 @@
 //    other sampling or reasoning setting, so what the connection saves (its temperature, its reasoning effort) is what
 //    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A prompt with cache marks also asks
 //    for the hour-long cache (cacheTtl "1h", capability API 1.815; an older Engine ignores it and keeps the
-//    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote. A
+//    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote;
+//    a request may ask for the five-minute one instead (0.20.2: a message thread's replies, which come closer). A
 //    background call holds its job's connection admission slot throughout; it names that connection and never takes a
 //    second slot here.
 // 6. Parse: parseJsonish (or the request's own `parse` for a plain-text shape), then the schema, then `normalize`. On
@@ -79,6 +80,8 @@ export interface GenerateJsonRequest<T extends object> {
    * the prompt gives way.
    */
   memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext };
+  /** How long a prompt with cache marks stays cached (see the header): an hour unless it asks for five minutes. */
+  cacheTtl?: "5m" | "1h";
   schema: ZodType<T>;
   /**
    * A reply in a plain-text shape of its own: turns the text into the value the schema checks, or undefined when none
@@ -320,7 +323,7 @@ export async function generateJson<T extends object>(
       maxTokens: fitted.maxTokens,
       debugMode: request.debugMode,
       signal: request.signal,
-      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: "1h" as const } : {}),
+      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: request.cacheTtl ?? ("1h" as const) } : {}),
     };
     const reply = await model.chatComplete(sent, options);
     logCacheUse(runtime, label, request.debugMode, reply.usage);

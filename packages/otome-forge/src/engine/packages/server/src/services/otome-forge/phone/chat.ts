@@ -401,6 +401,8 @@ async function writeReply(
       reason,
     }),
     memory: story,
+    // A conversation's replies come minutes apart, so the five-minute cache, at a cheaper write, carries it (0.20.2).
+    cacheTtl: "5m",
     schema: ChatReplySchema,
     normalize: (raw) => normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite),
     maxTokens: 1200,
