@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.17.1",
+          "date": "2026-11-08",
+          "notes": "- **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.",
+          "highlight": false
+        },
+        {
           "version": "0.17.0",
           "date": "2026-11-07",
           "notes": "- **Take the personality quiz while a chapter is planned.** While a chapter is being planned, tap **Play the personality quiz** and answer statements from strongly disagree to strongly agree. After each answer you see how every love interest answered the same statement, and how alike the two of you are so far. Statements about sex and kinks appear only when Heat is NSFW. Once you've answered them all, 50 new statements are written for you in the background.\n- **Your love interests answer it once.** A new story writes their answers in the background after their bibles, in one call on your Planning connection. A story you started before this update gets theirs in the background the next time you open it, and someone new who joins later gets theirs the same way.\n- **What happened so far… now shows while an arc is planned.** Planning any other chapter offers the quiz instead, and **Who said what?** still plays while a scene is written.",
@@ -787,12 +793,6 @@
           "version": "0.8.10",
           "date": "2026-11-06",
           "notes": "- **Scenes are written as they were before 0.8.9**: each one when you reach it, and the next one ahead while you read. 0.8.9 wrote the rest of the chapter ahead, so later scenes missed the small choices you made along the way. The fixes for pictures that hung and for the Story connection stay.",
-          "highlight": true
-        },
-        {
-          "version": "0.8.9",
-          "date": "2026-11-05",
-          "notes": "- **A chapter's art is painted ahead.** Opening a chapter, a date or a story now writes its scenes ahead in the background and paints each one's places and key image as soon as it is written, so the art is waiting when you get there. Writing ahead stops at a big choice or a Confrontation, because what comes next depends on what you pick, and goes on once you have picked. Ease off and Rewrite still let go of the scenes they replace.\n- **No more endless \"Painting this moment…\".** A picture the image service never finishes now stops after 10 minutes and shows Retry, and the pictures waiting behind it carry on.\n- **Dates, banners and Character Stories are written with your Story connection**, like the chapters: Date Night, Read Them, Read Me, the banners' scenes and Memories, Character Stories and the extra stories that unlock past level 10.",
           "highlight": true
         }
       ]

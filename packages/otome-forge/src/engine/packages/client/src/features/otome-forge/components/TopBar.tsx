@@ -7,6 +7,7 @@ import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, Heart, Settings, Sparkle } from "lucide-react";
 import { initialsOf } from "../lib/accent";
+import { FaceImage } from "./Avatar";
 import { useOtomeProps } from "../props";
 import { FullscreenButton } from "./Stage";
 
@@ -41,7 +42,7 @@ function LoveInterestChip({ li, onHome }: { li: TopBarLoveInterest | null; onHom
     <button type="button" className="of-chip of-glass" aria-label={label} title={label} onClick={onHome}>
       {li ? (
         <span className="of-avatar" style={avatarStyle} aria-hidden="true">
-          {li.portraitUrl ? <img src={li.portraitUrl} alt="" /> : initialsOf(li.name)}
+          {li.portraitUrl ? <FaceImage src={li.portraitUrl} /> : initialsOf(li.name)}
         </span>
       ) : (
         <span className="of-avatar of-avatar--empty" aria-hidden="true">

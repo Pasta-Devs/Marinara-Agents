@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.17.1 — 2026-11-08
+
+- **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.
+
 ## 0.17.0 — 2026-11-07
 
 - **Take the personality quiz while a chapter is planned.** While a chapter is being planned, tap **Play the personality quiz** and answer statements from strongly disagree to strongly agree. After each answer you see how every love interest answered the same statement, and how alike the two of you are so far. Statements about sex and kinks appear only when Heat is NSFW. Once you've answered them all, 50 new statements are written for you in the background.

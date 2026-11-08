@@ -967,7 +967,9 @@ test("Otome Forge arcs: a rupture's banner plans the repair, routes open, wait o
   const sora = routes.getByRole("listitem").filter({ hasText: "Sora" });
   await expect(sora).toContainText("Affection 3 · her next chapter");
   await expect(sora).toContainText("Opens at affection 3 · now 1");
-  await expect(sora.getByRole("button")).toHaveCount(0);
+  // A route that waits offers no chapter to open; its only button is "I'm upset with her" (#2156), beside every route.
+  await expect(sora.getByRole("button")).toHaveCount(1);
+  await expect(sora.getByRole("button", { name: "I’m upset with her" })).toBeVisible();
   const cassian = routes.getByRole("listitem").filter({ hasText: "Cassian" });
   await expect(cassian).toContainText("Stage 2 · Crack");
   await expect(cassian).toContainText("Next: Pull");
