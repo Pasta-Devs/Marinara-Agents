@@ -6,6 +6,10 @@
 - **Stories you already have too.** Chapter summaries are indexed in the background when you open a story and after each new summary, with no model call. The built-in model runs on this computer and its index is stored with the story.
 - **Memory recall embeddings.** In **Settings → Connections**, choose **Built-in (local)** or an Engine connection with its own embedding model, for example one better at your story's language. An older Engine offers only Built-in. Beside it you see how many summaries are indexed, or why indexing failed, with **Retry indexing**.
 
+## 0.18.0 — 2026-11-08
+
+- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as "The Lovers · Ren". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.
+
 ## 0.17.2 — 2026-11-08
 
 - **Send a sticker with your words.** In Messages, picking a sticker now attaches it to your message instead of sending it at once. It shows above the box with a remove button; write something if you like, then tap **Send** to send the sticker and your words together. Picking another sticker swaps it.

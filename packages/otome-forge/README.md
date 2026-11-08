@@ -203,6 +203,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
   - **Memories** offers All, 3★, 4★ and 5★ filters. Unplayed Memories and Moments appear first; partially read and completed stories keep their saved progress. Snapshots are vignettes without a playable chapter.
   - the CGs you have seen and your Memories;
   - **Photos**: the photos you take in the Photo Shoot, to view, save or delete;
+  - **Cards**: every card you have drawn at Tarot night with an image connection, in deck order, each labelled with whose it is (a card that shows your love interest is theirs). Tap a painted card to see it large and save it. A card still painting says so, and one waiting for your tap or one that failed offers **Paint it** or **Try painting it again** here too;
   - the Love Timeline: each stage and first with a love interest, each Snapshot, Moment and Memory you won with them on the day you won it, and each couple set. A Snapshot, Moment or Memory opens from there;
   - the tells you have learned;
   - your favourite lines and the soundtrack.

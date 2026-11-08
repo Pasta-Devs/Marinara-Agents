@@ -133,6 +133,7 @@ export async function prepareGeneratedNoodleMedia(input: {
         const generatedImage = await generateNoodlePostImage({
           account,
           referenceAccounts: activeCharacterReferenceAccounts,
+          personaAccount: input.personaAccount,
           postContent: generatedPost.content,
           draftPrompt: imagePrompt,
           settings: input.settings,

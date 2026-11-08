@@ -2929,7 +2929,7 @@
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.5.12",
+        "version": "1.5.13",
         "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -3012,8 +3012,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "71795a663c2b92df08ce28026f031aafe729c5d7b39f375848403b1b40684810",
-            "bytes": 545726
+            "sha256": "10cb572a67318bab0c909d95af57ddf090a143edbfc72502f2f930a30ebd64c3",
+            "bytes": 546858
           },
           {
             "path": "client.js",
@@ -3039,9 +3039,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.12.zip",
-        "sha256": "6ce0d8812d52d7e63f9a131605ada38a35421c62bc572405953b0deae112f7d6",
-        "bytes": 1311787
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.13.zip",
+        "sha256": "e7de7502261f80acfea5b4cd7e33bce295b63a1799b3d9b9b4622a2865fa120f",
+        "bytes": 1312919
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -3092,13 +3092,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "77a2a62600a46515d36654626af70f708ab73abbdcd34b8eb1f534420c73aab1",
-            "bytes": 654979
+            "sha256": "0d8ed790ea856968af6fd17078e884df3d569ba08763e8a4964a0ee105245c4f",
+            "bytes": 655293
           },
           {
             "path": "client.js",
-            "sha256": "f664582e5c49bc3d864ec679f84c4ab1df0b62b3299147666c18fdbe5560410e",
-            "bytes": 1362238
+            "sha256": "f95d934efda7a2828e369cf791faad5b5b7bfa87657c01d726f48b868cb57da8",
+            "bytes": 1366021
           },
           {
             "path": "otome-hearth-icon.png",
@@ -3127,8 +3127,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.19.0.zip",
-        "sha256": "405e8b16bfb2a1a2505eeaf9132cd450ca9b9597c20221fe5a55dbee2e60e9e9",
-        "bytes": 2168869
+        "sha256": "53445e6288d71b37330818e259d7584f43622e25b96f9c4cd0514978e5cfc639",
+        "bytes": 2172966
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },

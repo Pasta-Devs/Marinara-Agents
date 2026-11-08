@@ -39,7 +39,7 @@ import { CostHint } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { Dialog } from "../../components/Dialog";
 import { ARCANA_NAME_KEYS, TarotBack, TarotCard, TarotFace } from "../../components/TarotCard";
-import { imagesOn, tarotQueryKey, useItemActions, type ItemActions, type PaintTarget } from "../../hooks/use-items";
+import { imagesOn, tarotPaintTarget, tarotQueryKey, useItemActions, type ItemActions } from "../../hooks/use-items";
 import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { runPath } from "../../hooks/use-reader";
 import { patchRun, runQueryKey } from "../../hooks/use-run";
@@ -108,15 +108,6 @@ function typing(target: EventTarget): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
-
-/** S/routes/tarot.ts: POST .../art/tarot {li, card} and .../art/tarot/prompt; `subject` names it in the review. */
-const tarotPaintTarget = (runKey: string, li: string, card: Arcana, subject: string): PaintTarget => ({
-  id: `tarot:${deckKey(card, li)}`,
-  subject,
-  paintPath: `${runPath(runKey)}/art/tarot`,
-  promptPath: `${runPath(runKey)}/art/tarot/prompt`,
-  body: { li, card },
-});
 
 /** GET /runs/:run/lis/:li/tarot, read again while one of the deck's cards paints. */
 function useTarot(runKey: string, li: string) {

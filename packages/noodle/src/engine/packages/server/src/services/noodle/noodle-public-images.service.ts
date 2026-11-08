@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { PROFESSOR_MARI_ID, type NoodleAccount, type NoodleBootstrap } from "@marinara-engine/shared";
+import {
+  noodleTextMentionsHandle,
+  PROFESSOR_MARI_ID,
+  stripMacroComments,
+  type NoodleAccount,
+  type NoodleBootstrap,
+} from "@marinara-engine/shared";
 import type { PackageNoodleSettings } from "../storage/noodle.storage.js";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
@@ -88,9 +94,50 @@ function readProfessorMariReferenceImages(): string[] {
   });
 }
 
+/**
+ * A card's Image Generation Appearance Override (Pasta-Devs/Marinara-Engine#7053) when it is on and has text, else
+ * null. Characters keep it in `data.extensions` with a boolean flag; persona rows keep it in their own columns, with
+ * the flag stored as text.
+ * ponytail: Noodle bundles sources/engine, whose shared helpers and illustrator-references predate #7053 and never
+ * read the override, so Noodle reads it here and hands it to them as the card's appearance. Once sources/engine
+ * carries the Engine's readImageAppearanceOverride and override-aware resolver, use those instead.
+ */
+export function imageAppearanceOverride(fields: Record<string, unknown>) {
+  if (fields.imageAppearanceEnabled !== true && fields.imageAppearanceEnabled !== "true") return null;
+  return normalizeIllustratorAppearance(fields.imageAppearance);
+}
+
+function characterImageAppearanceOverride(row: { data: unknown }) {
+  return imageAppearanceOverride(parseRecord(parseRecord(row.data).extensions));
+}
+
+/** The appearance image prompts use for a character: its Image Generation Appearance Override first. */
 export function characterAppearanceFromRow(row: { data: unknown }) {
   const data = parseRecord(row.data);
-  return readIllustratorAppearance(data) ?? normalizeIllustratorAppearance(data.description) ?? "";
+  return (
+    characterImageAppearanceOverride(row) ??
+    readIllustratorAppearance(data) ??
+    normalizeIllustratorAppearance(data.description) ??
+    ""
+  );
+}
+
+/** The user's persona as the illustrator references take it, with its Image Generation Appearance Override first. */
+async function personaImageReference(
+  characters: ReturnType<typeof createCharactersStorage>,
+  account: NoodleAccount | null | undefined,
+) {
+  const row = account ? await characters.getPersona(account.entityId) : null;
+  if (!account || !row) return null;
+  // The rows carry the override columns, which are newer than the vendored persona schema.
+  const appearanceOverride = imageAppearanceOverride(row as Record<string, unknown>);
+  return {
+    id: row.id,
+    name: account.displayName || row.name,
+    avatarPath: row.avatarPath ?? null,
+    appearance: appearanceOverride ?? row.appearance,
+    appearanceOverride,
+  };
 }
 
 export function characterNoodleImageContextFromRow(row: { data: unknown }) {
@@ -123,6 +170,8 @@ async function characterImageConnection(input: {
 export async function generateNoodlePostImage(baseInput: {
   account: NoodleAccount;
   referenceAccounts: NoodleAccount[];
+  /** The user's persona account; a character's post that names it, or @mentions it, depicts the persona too. */
+  personaAccount?: NoodleAccount | null;
   postContent: string;
   draftPrompt: string;
   settings: PackageNoodleSettings;
@@ -152,6 +201,7 @@ export async function generateNoodlePostImage(baseInput: {
     input.imageConnection.id,
   );
   let characterDescription = "";
+  let appearanceOverrides = "";
   let characterImageInstructions = "";
   let characterPersonality = "";
   let referenceImages: string[] | undefined;
@@ -164,6 +214,11 @@ export async function generateNoodlePostImage(baseInput: {
       characterImageInstructions = imageContext.imageInstructions;
 
       if (input.settings.imageGenerationIncludeDescriptions || input.settings.imageGenerationUseAvatarReferences) {
+        // The line the appearance block writes for each card with an override, so those lines can be found in it.
+        const overrideLines = new Set<string>();
+        const noteOverride = (name: string, override: string | null | undefined) => {
+          if (override) overrideLines.add(`${name}'s Appearance: ${override}`);
+        };
         const referenceAccountByEntityId = new Map(
           [input.account, ...input.referenceAccounts]
             .filter((account) => account.kind === "character")
@@ -178,23 +233,49 @@ export async function generateNoodlePostImage(baseInput: {
           .filter((row): row is NonNullable<typeof row> => !!row)
           .map((row) => {
             const account = referenceAccountByEntityId.get(row.id);
+            const name = account?.displayName || characterNameFromRow(row);
+            noteOverride(name, characterImageAppearanceOverride(row));
             return {
               id: row.id,
-              name: account?.displayName || characterNameFromRow(row),
+              name,
               avatarPath: row.avatarPath ?? null,
               appearance: characterAppearanceFromRow(row),
             };
           });
+        const personaAccount = input.personaAccount ?? null;
+        const persona = await personaImageReference(input.characters, personaAccount);
+        if (persona) noteOverride(persona.name, persona.appearanceOverride);
+        // The resolver finds the persona's name in the post; an @mention of its handle asks for it by name too.
+        const personaMentioned =
+          !!personaAccount &&
+          noodleTextMentionsHandle(`${input.postContent}\n${input.draftPrompt}`, personaAccount.handle);
+        // The resolver also matches cards outside this refresh, from these rows. It reads a card's appearance
+        // from extensions.appearance and names it by its own name, so the override goes there under that name.
+        // Listed once, before the resolver runs, so every override line is noted where it is read.
+        const allRows = (await input.characters.list()).map((row) => {
+          const override = characterImageAppearanceOverride(row);
+          if (!override) return row;
+          const data = parseRecord(row.data);
+          noteOverride(stripMacroComments(typeof data.name === "string" ? data.name : "").trim(), override);
+          return {
+            ...row,
+            data: { ...data, extensions: { ...parseRecord(data.extensions), appearance: override } },
+          };
+        });
         const referenceResolution = await resolveIllustratorCharacterReferences({
-          charactersStore: input.characters,
+          charactersStore: { list: async () => allRows },
           chatCharacters,
-          persona: null,
-          requestedNames: [input.account.displayName],
+          persona,
+          requestedNames: [input.account.displayName, ...(persona && personaMentioned ? [persona.name] : [])],
           promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
           maxReferences: 6,
         });
         if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
           characterDescription = referenceResolution.appearanceBlock;
+          appearanceOverrides = characterDescription
+            .split("\n")
+            .filter((line) => overrideLines.has(line))
+            .join("\n");
         }
         if (input.settings.imageGenerationUseAvatarReferences) {
           const builtInMariReferences =
@@ -219,9 +300,10 @@ export async function generateNoodlePostImage(baseInput: {
   const enableImageInterpretation =
     (input.settings as PackageNoodleSettings & { enableImageInterpretation?: boolean }).enableImageInterpretation !==
     false;
-  // Include descriptions: the rewrite model gets the appearance notes as character context, so the
-  // prompt it edits leaves them out; without a rewrite they are added as written
-  // (Pasta-Devs/Marinara-Agents#1282).
+  // Include descriptions: the rewrite model gets the appearance notes, the user's persona's included, as character
+  // context, so the prompt it edits leaves them out; without a rewrite they are added as written
+  // (Pasta-Devs/Marinara-Agents#1282). Each card's Image Generation Appearance Override among them is also added
+  // word for word after a rewrite, below (Pasta-Devs/Marinara-Agents#2182).
   const rewritePostPrompt =
     characterDescription && enableImageInterpretation && !input.promptOverride
       ? await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, { ...postPromptContext, characterDescription: "" })
@@ -266,7 +348,11 @@ export async function generateNoodlePostImage(baseInput: {
   // The connection's Image Prompting Instructions, the poster's appearance notes, personality and image
   // habits, and the profile's Style text guide the rewrite model only. Without a rewrite the image model
   // gets the base prompt with the appearance notes; pasted instructions reached it as stray words
-  // (Pasta-Devs/Marinara-Agents#1278, Pasta-Devs/Marinara-Agents#1282).
+  // (Pasta-Devs/Marinara-Agents#1278, Pasta-Devs/Marinara-Agents#1282). The one exception is an Image Generation
+  // Appearance Override: it is written for image prompts, so after a rewrite each depicted card's override line goes
+  // out as written, as the Engine's Illustrator sends it (Pasta-Devs/Marinara-Engine#7053,
+  // Pasta-Devs/Marinara-Agents#2182). Without a rewrite the appearance notes already carry it, and a prompt the
+  // user reviewed is sent as they left it.
   if (rewriteRequested && !rewrittenPrompt) {
     logger.warn(
       "[noodle] Image prompt rewrite gave no prompt for %s; sending the base prompt without the image instructions",
@@ -279,7 +365,17 @@ export async function generateNoodlePostImage(baseInput: {
       input.account.displayName,
     );
   }
-  const finalPrompt = rewrittenPrompt ?? (input.promptOverride?.prompt.trim() || compiledPrompt.prompt);
+  const finalPrompt = rewrittenPrompt
+    ? [rewrittenPrompt, appearanceOverrides].filter(Boolean).join("\n\n")
+    : input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
+  if (rewrittenPrompt && appearanceOverrides) {
+    logDebugOverride(
+      input.debugMode,
+      "[debug/noodle/image] Image Generation Appearance Override added as written for %s:\n%s",
+      input.account.displayName,
+      appearanceOverrides,
+    );
+  }
   const finalNegativePrompt = input.promptOverride
     ? input.promptOverride.negativePrompt?.trim() || undefined
     : compiledPrompt.negativePrompt || undefined;

@@ -552,6 +552,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.13",
+          "date": "2026-11-08",
+          "notes": "- With Include descriptions on, a character's Image Generation Appearance Override now reaches Noodle's images word for word. Interpret image prompts no longer rewords or drops it, and with Interpret image prompts off it now replaces the character's Appearance instead of being left out. (#2182)\n- A character's post image that names your persona or @mentions it now includes your persona: its appearance, Image Generation Appearance Override first, with Include descriptions on, and its avatar with Use avatar references on. (#2182)",
+          "highlight": false
+        },
+        {
           "version": "1.5.12",
           "date": "2026-10-30",
           "notes": "- The \"Long-Term Memory isn't sharing memories\" line now clears as soon as sharing is turned back on.\n- Turning on \"Use memories from Long-Term Memory\" now offers to turn on Long-Term Memory's sharing when it is off.",
@@ -664,12 +670,6 @@
           "date": "2026-09-13",
           "notes": "- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.\n- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.\n- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.\n- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.",
           "highlight": false
-        },
-        {
-          "version": "1.2.22",
-          "date": "2026-09-13",
-          "notes": "- Maintenance: simplify the inline composer's visibility checks and remove unused code.",
-          "highlight": false
         }
       ]
     },
@@ -679,6 +679,12 @@
           "version": "0.19.0",
           "date": "2026-11-08",
           "notes": "- **Long stories remember their beginnings in detail.** As a story grows, its early chapters are condensed again and again. Now each main chapter brings back up to three earlier chapters that matter to it, by their original summaries, in its plan and every scene. Only chapters everyone in it may know come back, and nothing changes when none is close enough.\n- **Stories you already have too.** Chapter summaries are indexed in the background when you open a story and after each new summary, with no model call. The built-in model runs on this computer and its index is stored with the story.\n- **Memory recall embeddings.** In **Settings → Connections**, choose **Built-in (local)** or an Engine connection with its own embedding model, for example one better at your story's language. An older Engine offers only Built-in. Beside it you see how many summaries are indexed, or why indexing failed, with **Retry indexing**.",
+          "highlight": true
+        },
+        {
+          "version": "0.18.0",
+          "date": "2026-11-08",
+          "notes": "- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as \"The Lovers · Ren\". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.",
           "highlight": true
         },
         {
@@ -788,12 +794,6 @@
           "date": "2026-11-06",
           "notes": "- **A Shop in Wish.** Spend Starlight on gifts: flowers, chocolates, wine, and under NSFW Heat an aphrodisiac. They wait in your Wardrobe until a date.\n- **Bring a gift to Date Night.** Pick one with your looks and give it in the first scene: they react in their own voice, and the evening can change because of it. The gift earns extra affection, even past the daily cap.\n- **Figurines of your love interests.** Each one is drawn just for them and costs 5,000 Starlight. Buying one unlocks a short, funny scene with them, and the figurine joins you on Home.",
           "highlight": true
-        },
-        {
-          "version": "0.8.12",
-          "date": "2026-11-06",
-          "notes": "- **Tell the story what's on your mind.** A new thought-bubble button on Home, beside Remind Me, opens Your thoughts…: write what your protagonist is thinking about what happened lately, something to look into, something a love interest did that you can't let go of, or that you'd like a hug today. The next main story chapter takes it into account in its plan and its scenes, then lets it go. Until then a dot on the button shows it's waiting, and you can change or clear it. Sending it costs nothing extra.",
-          "highlight": false
         }
       ]
     },
