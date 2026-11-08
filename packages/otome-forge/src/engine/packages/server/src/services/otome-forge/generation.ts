@@ -13,8 +13,8 @@
 //    and nothing outside the memory is ever cut. A cached prompt's own canon
 //    (S/story/canon.ts `cached`) is a context of its own, beside the recalls, and its summaries give way before the
 //    cached part's, each part keeping its newest (#2091); a chapter's small memories (0.20.1, the context's `pool`) are
-//    one more, after the recalls, whose memories never give way (each scene of the chapter sends them all). A message's
-//    `cacheBreakpoint` (#2066) is sent as it is. A
+//    one more, after the recalls, whose memories give way all together or not at all. A message's `cacheBreakpoint`
+//    (#2066) is sent as it is. A
 //    prompt that still leaves the reply less than the floor (or the connection's own smaller cap) is a 413 `capacity`
 //    before anything is sent, never a request the Engine would cut: its fitter would shrink the reply to 128 tokens,
 //    then cut the rules. The margin kept is the Engine's (fitSafety) with some to spare, and model.fitContext checks the

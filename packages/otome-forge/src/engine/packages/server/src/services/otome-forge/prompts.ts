@@ -1557,8 +1557,9 @@ function storyMessages(
     marks === "none" ? { role: "system", content } : { role: "system", content, cacheBreakpoint: true };
   return [
     cachedPart(context),
-    // The chapter's small memories, the same for each of its scenes (0.20.1): at most four marks in all.
-    ...(pool.trim() ? [cachedPart(`RECALLED MEMORIES (each title says who knows it)\n${pool.trim()}`)] : []),
+    // The chapter's small memories under their heading (S/story/canon.ts), the same for each of its scenes (0.20.1);
+    // left empty when they give way, which the Engine drops. At most four marks in all.
+    ...(pool.trim() ? [cachedPart(pool.trim())] : []),
     marked({ role: "system", content: instructions }),
     ...settled.map((content, index): OtomeMessage =>
       index === settled.length - 1 ? marked({ role: "user", content }) : { role: "user", content },

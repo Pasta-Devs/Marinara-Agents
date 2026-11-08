@@ -23,7 +23,10 @@ import {
   normalizeChapter,
   toChapterView,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
-import { recallText } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
+import {
+  POOL_HEADING,
+  recallText,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
 import {
   KAI,
   MIR,
@@ -199,7 +202,7 @@ test("a chapter's small memories are saved only from a pool that was read, in st
   assert.deepEqual(none.memories, [], "an empty pool is a choice too");
 });
 
-test("a scene too long for its context never sends fewer of the chapter's small memories (Dottore on #2198)", async () => {
+test("a scene too long for its context sends all of the chapter's small memories or none (Dottore on #2198)", async () => {
   const t = await storyWorld({ runKey: "r-pool-cccccc" });
   const memories = ["one", "two", "three"].map((id, order) => ({
     id,
@@ -219,8 +222,11 @@ test("a scene too long for its context never sends fewer of the chapter's small 
     pool: { cast: [KAI], ids: ["one", "two", "three"] },
   });
   const pool = context.pool!;
-  assert.deepEqual([pool.details.length, pool.optional.length], [0, 0], "nothing in it the fitter may leave out");
-  const sent = `RECALLED MEMORIES (each title says who knows it)\n${pool.text}`;
+  assert.equal(pool.details.length, 1, "one item for the fitter: all of them or none");
+  assert.equal(pool.optional.length, 0);
+  const sent = pool.text;
+  assert.ok(sent.startsWith(`${POOL_HEADING}\n# Recalled memory: one (private)`), sent.slice(0, 120));
+  assert.ok(sent.includes("THREE-MEMORY"));
   const messages = forgeComposeMemoryPrompt(
     () => [
       { role: "system", content: "STORY CONTEXT" },
@@ -231,14 +237,17 @@ test("a scene too long for its context never sends fewer of the chapter's small 
   );
   const estimate = (list: Array<{ content: string }>) =>
     list.reduce((sum, message) => sum + estimateTextTokens(message.content), 0);
-  // Room for everything but a few hundred tokens: a recall pool would give way one memory at a time here.
-  const fitted = fitForgeMemoryPrompt(messages, {
-    maxContext: estimate(messages) + 1024 - 300,
-    maxTokens: 1024,
-    estimateMessages: estimate,
-    safetyTokens: 0,
-    minOutputTokens: 256,
-  });
-  assert.equal(fitted.droppedDetails, 0);
-  assert.equal(fitted.messages[1]!.content, sent, "all of them, or the scene does not go");
+  const fit = (room: number) =>
+    fitForgeMemoryPrompt(messages, {
+      maxContext: estimate(messages) + 1024 + room,
+      maxTokens: 1024,
+      estimateMessages: estimate,
+      safetyTokens: 0,
+      minOutputTokens: 256,
+    });
+  assert.equal(fit(0).messages[1]!.content, sent, "with room, all of them");
+  // A few hundred tokens short: a recall pool would give way one memory at a time here.
+  const squeezed = fit(-300);
+  assert.equal(squeezed.droppedDetails, 1);
+  assert.equal(squeezed.messages[1]!.content, "", "all of them give way together, never one by one");
 });

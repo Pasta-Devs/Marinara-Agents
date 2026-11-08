@@ -101,8 +101,8 @@
 // 0.20.1, a chapter's small memories (`pool`, the maintainer's: cached, and never switching between scenes): with
 // `cached`, the recall pool is everyone's in the chapter, chosen once (`memories`, which S/story/beats.ts saves on the
 // chapter) and a context of its own (`pool`), which the prompt sends as its own cached part after the story context.
-// Each memory's title says who knows it, as the last Character Story's does. Its memories never give way one by one,
-// so no scene sends fewer of them than another.
+// Each memory's title says who knows it, as the last Character Story's does. They give way all together or not at
+// all, so no scene sends fewer of them than another.
 import { forgeCanonicalSegments } from "@forge-kit/player-choices-server.mjs";
 import { forgeMemoryContext, type ForgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
 import type { ForgeMemorySource, ForgeRecallOptions, ForgeRecallResult } from "@forge-kit/story-memory.mjs";
@@ -477,6 +477,9 @@ export type StoryContext = ForgeMemoryContext & {
   memories?: string[];
 };
 
+/** The heading of a chapter's small memories (see the header), which the prompt sends as they are. */
+export const POOL_HEADING = "RECALLED MEMORIES (each title says who knows it)";
+
 /** How many of the previous chapter's last words tell a chapter's plan how it ended, to choose its earlier chapters by. */
 const ENDING_WORDS = 120;
 
@@ -613,17 +616,21 @@ export async function recallText(
       blocks.filter(mine),
       [...older(summaries.filter(mine)), ...optional.filter(mine)],
     );
-    // Never trimmed (Dottore on #2198): blocks of its own, not details the fitter drops one by one, so every scene sends
-    // all of the chapter's memories; a scene that does not fit gives way elsewhere, or is a `capacity` 413.
-    const pool = chapterPool
-      ? contextOf(
-          { overview: "", details: [], maxContext: result.maxContext },
-          [...result.details]
-            .reverse()
-            .map((item, order) => ({ order, text: `# Recalled memory: ${item.title}\n${item.content.trim()}` })),
-          [],
-        )
-      : null;
+    // All or none (Dottore on #2198): one detail for the fitter, so a scene that does not fit leaves out all of the
+    // chapter's memories, as it would its recalls, and never sends fewer of them than another.
+    const memories = [...result.details]
+      .reverse()
+      .map((item) => `# Recalled memory: ${item.title}\n${item.content.trim()}`)
+      .join("\n\n");
+    const pool =
+      chapterPool && memories
+        ? forgeMemoryContext(
+            { details: [{ kind: "recall", title: POOL_HEADING, content: memories }], maxContext: result.maxContext },
+            {
+              renderMemory: ({ details }) => details.map((item) => `${item.title}\n${item.content}`).join("\n\n"),
+            },
+          )
+        : null;
     return {
       ...context,
       ...(recalls.text ? { recalls } : {}),
