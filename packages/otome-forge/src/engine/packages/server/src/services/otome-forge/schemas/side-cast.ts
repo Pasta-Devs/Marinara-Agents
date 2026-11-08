@@ -4,14 +4,15 @@
 // One record per side character who spoke in a scene read to its end (S/story/side-cast.ts decides who), keyed by
 // nameKey(name), the name's core words (S/names.ts), so "Lady Arlecchino" and "Arlecchino" are one person. A record keeps
 // the distinct chapters they spoke in, the Engine card their name matches, their look once written (English image tags)
-// and their sprite's paint and cut-out (S/art/side-sprites.ts). A damaged record or field is dropped on read; the newest
-// SIDE_PEOPLE_MAX speakers and each one's newest SIDE_CHAPTERS_MAX chapters are kept.
+// and their sprite's paint and cut-out (S/art/side-sprites.ts). A damaged record or field is dropped on read; everyone
+// with a sprite (painted or owed: its gallery images go only with the story, and someone back is never painted twice),
+// then the newest speakers up to SIDE_PEOPLE_MAX, and each one's newest SIDE_CHAPTERS_MAX chapters are kept.
 import { z, type ZodType } from "zod";
 import type { Cutout, Paint, Presentation } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, normalizeCutouts } from "./common.js";
 
-/** The most side characters a story keeps (the newest speakers). */
+/** The most side characters without a sprite a story keeps beside those with one (the newest speakers). */
 export const SIDE_PEOPLE_MAX = 200;
 /** The most chapters kept per side character (the newest); two different ones are all that qualifying needs. */
 export const SIDE_CHAPTERS_MAX = 24;
@@ -91,10 +92,17 @@ function normalizePerson(key: string, raw: unknown): SidePerson | null {
 /** The document as stored; anything damaged is dropped, record by record. */
 export function normalizeSideCast(data: unknown): SideCast {
   const raw = isRecord(data) ? data : {};
-  const people = Object.entries(isRecord(raw.people) ? raw.people : {})
+  const all = Object.entries(isRecord(raw.people) ? raw.people : {})
     .flatMap(([key, person]) => normalizePerson(key, person) ?? [])
-    .sort((a, b) => b.at.localeCompare(a.at))
-    .slice(0, SIDE_PEOPLE_MAX);
+    .sort((a, b) => b.at.localeCompare(a.at));
+  // ponytail: someone with a sprite is never dropped, so its gallery images are never orphaned; they grow only with
+  // images the player paid for. Upgrade path: an explicit prune that deletes their images (as deletePhoto does).
+  const owns = (person: SidePerson) => !!person.art || !!person.cutouts;
+  const painted = all.filter(owns);
+  const people = [
+    ...painted,
+    ...all.filter((person) => !owns(person)).slice(0, Math.max(0, SIDE_PEOPLE_MAX - painted.length)),
+  ];
   return {
     version: 1,
     ...(typeof raw.backfilled === "string" ? { backfilled: raw.backfilled } : {}),

@@ -44,6 +44,7 @@ import { registerArtRoutes } from "../packages/otome-forge/src/engine/packages/s
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { registerStoryRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
 import {
+  SIDE_PEOPLE_MAX,
   normalizeSideCast,
   qualifies,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/side-cast.ts";
@@ -493,4 +494,24 @@ test("with the toggle off nothing is called, matched or painted; turning it on s
   await t.settle();
   assert.equal(t.lookCalls().length, 1, "Pantalone's look; Arlecchino is a card");
   assert.equal((await t.sides()).arlecchino!.cardId, "card-arle");
+});
+
+test("past the cap the oldest speakers without a sprite go; nobody with a sprite is ever dropped", () => {
+  const person = (n: number, painted: boolean) => ({
+    name: `Clerk ${n}`,
+    chapters: ["main-1"],
+    at: `2026-11-08T00:${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}.000Z`,
+    ...(painted
+      ? { art: { state: "ready", url: `/api/global-gallery/file/s${n}.png`, ref: `global-gallery:s${n}`, at: "x" } }
+      : {}),
+  });
+  // The ten oldest have sprites; 205 people in all.
+  const raw = Object.fromEntries(
+    Array.from({ length: SIDE_PEOPLE_MAX + 5 }, (_, n) => [`clerk ${n}`, person(n, n < 10)]),
+  );
+  const kept = normalizeSideCast({ version: 1, people: raw }).people;
+  assert.equal(Object.keys(kept).length, SIDE_PEOPLE_MAX);
+  for (let n = 0; n < 10; n += 1) assert.ok(kept[`clerk ${n}`]?.art, `clerk ${n}'s sprite is kept`);
+  for (let n = 10; n < 15; n += 1) assert.equal(kept[`clerk ${n}`], undefined, `clerk ${n} is the oldest without one`);
+  assert.ok(kept[`clerk ${SIDE_PEOPLE_MAX + 4}`], "the newest speaker is kept");
 });

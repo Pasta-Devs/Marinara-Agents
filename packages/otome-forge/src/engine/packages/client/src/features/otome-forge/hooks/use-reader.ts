@@ -699,22 +699,25 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
             ...edited,
           });
           const art = result?.art;
-          // Onto every name the scene shows them under; the scene's next read brings the cut-out.
+          // Onto every name the scene shows them under, only on the scene it was tapped on (shown.id against this
+          // render's sceneId, as the key image); the scene's next read brings the cut-out, and a scene shown since its
+          // own poll.
           if (art)
-            setScene(
-              (shown) =>
-                shown && {
-                  ...shown,
-                  art: {
-                    ...shown.art,
-                    sides: Object.fromEntries(
-                      Object.entries(shown.art.sides ?? {}).map(([name, side]) => [
-                        name,
-                        side.key === target.key ? { ...side, art } : side,
-                      ]),
-                    ),
-                  },
-                },
+            setScene((shown) =>
+              shown && shown.id === sceneId
+                ? {
+                    ...shown,
+                    art: {
+                      ...shown.art,
+                      sides: Object.fromEntries(
+                        Object.entries(shown.art.sides ?? {}).map(([name, side]) => [
+                          name,
+                          side.key === target.key ? { ...side, art } : side,
+                        ]),
+                      ),
+                    },
+                  }
+                : shown,
             );
         } else {
           const result = await otome.post<{ world?: WorldView }>(`${runPath(runKey)}/art/place`, {
