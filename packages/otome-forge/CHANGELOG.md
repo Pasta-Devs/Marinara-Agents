@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.18.2 — 2026-11-08
+
+- **Their side shows what you never saw.** A love interest's side of a big moment is now a scene you weren't there for, just before it or right after you left, instead of the same scene told again. It opens once they reach **Wound**; earlier moments don't count.
+
 ## 0.18.0 — 2026-11-08
 
 - **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as "The Lovers · Ren". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.

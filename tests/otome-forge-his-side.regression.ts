@@ -142,6 +142,37 @@ const routePlan = (title = "The North Light") => ({
   ledger: { relationship: [], conflict: [], offscreen: [] },
 });
 
+/** A valid P10 reply for Kai's Reckoning (stage 5): its one confrontation node comes before the gate. */
+const reckoningPlan = () => ({
+  ...routePlan("The Reckoning"),
+  nodes: [
+    { kind: "beat", guide: "Kai waits by the lamp.", cast: [KAI] },
+    { kind: "beat", guide: "The bell rings once, and he does not look up.", cast: [KAI] },
+    { kind: "confrontation", guide: "Kai and the protagonist have it out.", cast: [KAI] },
+    { kind: "beat", guide: RECKONING_GATE, cast: [KAI] },
+  ],
+});
+/** The Reckoning's gate ends on one big choice (its node's guide names it in the prompt). */
+const RECKONING_GATE = "The gate: what is left between them.";
+const bigChoiceBeat = () =>
+  beatReply({
+    choices: [
+      {
+        kind: "big",
+        at: 2,
+        options: [
+          { text: "Stay with him", selection: { kind: "dialogue", text: "I'm staying." }, segments: [] },
+          { text: "Leave the light", selection: { kind: "action", text: "You go down the stairs." }, segments: [] },
+        ],
+      },
+    ],
+  });
+/** The first route plan is the Wound's; every later one the Reckoning's. */
+const throughReckoning = () => {
+  let plans = 0;
+  return () => (plans++ === 0 ? routePlan() : reckoningPlan());
+};
+
 /**
  * Answers each planner and narrator; his side's narrator with sideReply. Chapter 1 is Kai's with a Closer, any later
  * one Mireille's with a Confrontation.
@@ -158,6 +189,7 @@ function router(route = () => routePlan()) {
     }
     if (isCloserPrompt(messages)) return json(closerReply());
     if (isConfrontationPrompt(messages)) return json(confrontationReply());
+    if (messages.some((message) => message.content.includes(RECKONING_GATE))) return json(bigChoiceBeat());
     return json(beatReply());
   });
 }
@@ -176,7 +208,15 @@ async function playRoute(t: World) {
   const reads = [];
   for (let i = 0; i < planned.body.chapter.nodes.length; i += 1) {
     const params = { key, i: String(i) };
-    assert.equal((await t.call("POST", beatPath, {}, params)).status, 200);
+    const written = await t.call("POST", beatPath, {}, params);
+    assert.equal(written.status, 200, `node ${i}: ${JSON.stringify(written.body)}`);
+    // A confrontation node plays its rounds; a gate that must end on a big choice has it picked (the Reckoning's).
+    for (let round = 1; written.body.confrontation && round <= 3; round += 1) {
+      assert.equal((await t.call("POST", `${beatPath}/stance`, { round, stance: "press" }, params)).status, 200);
+    }
+    for (const choice of written.body.beat?.choices ?? []) {
+      await t.call("POST", `${beatPath}/choose`, { choice: choice.id, option: "option-1" }, params);
+    }
     reads.push(await t.call("POST", `${beatPath}/read`, { segment: 99 }, params));
   }
   await t.settle();
@@ -365,7 +405,7 @@ test("Routes offers a side once its chapter is finished, and while it is read te
   const sideNote = note({ arc: 1, ref: "main-3/0", moment: "shut", stage: 2 });
   const state = (chapters: Record<string, string | null>, hisSide = [sideNote]) =>
     normalizeState({
-      lis: { [KAI]: { hisSide }, [MIR]: {} },
+      lis: { [KAI]: { stage: 4, hisSide }, [MIR]: {} },
       chapters: Object.fromEntries(
         Object.entries(chapters).map(([key, completed]) => [key, { beatsRead: 1, completed, applied: [] }]),
       ),
@@ -373,6 +413,12 @@ test("Routes offers a side once its chapter is finished, and while it is read te
   const main3 = chapter("main-3", "The Bell");
   const done = "2026-11-07T10:00:00.000Z";
   assert.deepEqual(hisSideOffers([main3], state({ "main-3": null }), [KAI, MIR]), [], "not before it is finished");
+  // #2155: nothing is offered below Wound, even a side noted earlier.
+  const below = normalizeState({
+    lis: { [KAI]: { stage: 3, hisSide: [sideNote] }, [MIR]: {} },
+    chapters: { "main-3": { beatsRead: 1, completed: "2026-11-07T10:00:00.000Z", applied: [] } },
+  });
+  assert.deepEqual(hisSideOffers([main3], below, [KAI, MIR]), [], "not below Wound");
   const offer = { li: KAI, arc: 1, key: `side-${KAI}-1`, moment: "shut", stage: 2, title: "The Bell", reading: false };
   assert.deepEqual(hisSideOffers([main3], state({ "main-3": done }), [KAI, MIR]), [offer]);
   // Written, then a later moment of the same arc: the side being read still tells the one it was written for.
@@ -391,27 +437,45 @@ test("Routes offers a side once its chapter is finished, and while it is read te
 
 // ── A route gate's side, end to end ──
 
-test("a gate notes his side in the read's write, once; Read writes it with no call; it plays as his own scene", async () => {
+test("his side opens at Wound: a gate below it notes nothing, and nothing is offered or read", async () => {
   const t = await storyWorld({
-    runKey: "r-hisside-aaaaaa",
+    runKey: "r-hisside-dddddd",
     replies: router(),
     lis: { [KAI]: { points: levelFloor(3) } },
   });
+  const { reads } = await playRoute(t);
+  assert.deepEqual(reads.at(-1)!.body.stageUp, { li: KAI, stage: 2 }, "the gate to Crack still moves his stage");
+  assert.ok(
+    reads.every((read) => !("hisSide" in read.body)),
+    "no moment below Wound",
+  );
+  assert.deepEqual((await t.state()).lis[KAI]!.hisSide, []);
+  assert.deepEqual(await sides(t), []);
+  assert.equal((await claim(t, 0)).body.code, "locked");
+});
+
+test("a gate notes his side in the read's write, once; Read writes it with no call; it plays as his own scene", async () => {
+  const t = await storyWorld({
+    runKey: "r-hisside-aaaaaa",
+    replies: router(throughReckoning()),
+    // #2155: his side opens at Wound, so the gate that reaches it is the moment.
+    lis: { [KAI]: { stage: 3, points: levelFloor(7) } },
+  });
   const { key, reads } = await playRoute(t);
   const gate = reads.at(-1)!.body;
-  assert.deepEqual(gate.stageUp, { li: KAI, stage: 2 });
+  assert.deepEqual(gate.stageUp, { li: KAI, stage: 4 });
   assert.equal(gate.hisSide, KAI, "the read says his side waits");
   assert.ok(
     reads.slice(0, -1).every((read) => !("hisSide" in read.body)),
     "no other node of it is a moment",
   );
   assert.deepEqual(brief((await t.state()).lis[KAI]!.hisSide), [
-    { arc: 0, ref: `${key}/3`, moment: "stage", stage: 2 },
+    { arc: 0, ref: `${key}/3`, moment: "stage", stage: 4 },
   ]);
   const again = await t.call("POST", `${beatPath}/read`, { segment: 99 }, { key, i: "3" });
   assert.equal("hisSide" in again.body, false, "a second read notes nothing");
 
-  const offer = { li: KAI, arc: 0, key: SIDE_KAI_0, moment: "stage", stage: 2, title: "The North Light" };
+  const offer = { li: KAI, arc: 0, key: SIDE_KAI_0, moment: "stage", stage: 4, title: "The North Light" };
   assert.deepEqual(await sides(t), [{ ...offer, reading: false }]);
 
   // Read: two taps write one chapter, with no model call.
@@ -432,7 +496,7 @@ test("a gate notes his side in the read's write, once; Read writes it with no ca
     {
       i: 0,
       kind: "beat",
-      guide: `Kai's side of "The North Light": the same events, told from Kai's point of view.`,
+      guide: `Kai's side of "The North Light": just before it, or right after the protagonist left, what the protagonist never saw.`,
       cast: [KAI, MIR],
       place: "The Lamp Room",
     },
@@ -477,7 +541,12 @@ test("a gate notes his side in the read's write, once; Read writes it with no ca
     turn.includes(`THE SCENE AS THE PROTAGONIST LIVED IT ("The North Light"):\n[The Lamp Room]\nThe lamp hisses.`),
   );
   assert.ok(turn.indexOf("THE SCENE AS THE PROTAGONIST LIVED IT") < turn.indexOf("KAI'S SIDE"));
-  assert.ok(turn.includes("Kai's side of it: the same events, told again from Kai's point of view"));
+  assert.ok(
+    turn.includes(
+      "Kai's side of it: a scene the protagonist was not there for, just before that moment or right after they left",
+    ),
+  );
+  assert.ok(turn.includes("Never retell the scene above"), "a scene the protagonist never saw, not a retelling");
   assert.ok(turn.includes("Slow burn: Kai never says what they feel"), "his card is at the moment's stage");
   assert.ok(!(system(prompt) + turn).includes("Kai has chosen the protagonist"), "never his stage now");
   assert.ok(!turn.includes("TOLD-LATER") && !turn.includes("A rupture stands between them"), "nothing later");
@@ -519,27 +588,28 @@ test("a gate notes his side in the read's write, once; Read writes it with no ca
   assert.deepEqual(source.audience, [KAI]);
   assert.match(
     source.title,
-    /^Kai's side of "The North Light" \(the same events, told again from Kai's point of view; private: Kai's thoughts/u,
+    /^Kai's side of "The North Light" \(a scene the protagonist never saw, just before it or right after they left; private: the protagonist knows none of it/u,
   );
   assert.ok(source.content.includes(SIDE_LINE));
   const game = await whoSaidWhat(t.deps, t.runId);
   assert.ok(!game.lines.some((line) => line.text.includes("SIDE-LINE")), "his side's lines are never asked");
 
   // His side of this arc is written: the next gate in it notes nothing.
-  await kaiState(t, { stage: 2, points: levelFloor(5), rupture: null, disclosures: [] });
+  // The Reckoning's gate, in the same arc: a moment of an arc whose side is written notes nothing.
+  await kaiState(t, { stage: 4, points: levelFloor(8), rupture: null, disclosures: [] });
   const next = await playRoute(t);
-  assert.deepEqual(next.reads.at(-1)!.body.stageUp, { li: KAI, stage: 3 });
+  assert.deepEqual(next.reads.at(-1)!.body.stageUp, { li: KAI, stage: 5 });
   assert.equal("hisSide" in next.reads.at(-1)!.body, false, "one side per arc");
   assert.deepEqual(brief((await t.state()).lis[KAI]!.hisSide), [
-    { arc: 0, ref: `${key}/3`, moment: "stage", stage: 2 },
+    { arc: 0, ref: `${key}/3`, moment: "stage", stage: 4 },
   ]);
 });
 
 test("his side is part of the chapter it follows: the next chapter's prompts get both in full, its timeline entry left out", async () => {
   const t = await storyWorld({
     runKey: "r-hisside-bbbbbb",
-    replies: router(),
-    lis: { [KAI]: { points: levelFloor(3) } },
+    replies: router(throughReckoning()),
+    lis: { [KAI]: { stage: 3, points: levelFloor(7) } },
   });
   const { key } = await playRoute(t);
   const recall = (options: Parameters<typeof recallText>[2]) => recallText(t.deps, t.runId, options);
@@ -593,7 +663,7 @@ test("his side is part of the chapter it follows: the next chapter's prompts get
   assert.ok(!(cached.recalls?.text ?? "").includes(SIDE_LINE));
 
   // Once a newer chapter of his storyline is the previous one, his side goes by the timeline as his own chapter.
-  await kaiState(t, { points: levelFloor(5) });
+  await kaiState(t, { points: levelFloor(8) });
   await playRoute(t);
   const later = (await recall({ ...narration, continues: KAI })).text;
   assert.ok(!later.includes("other side, in full") && !later.includes(SIDE_LINE));
@@ -601,7 +671,7 @@ test("his side is part of the chapter it follows: the next chapter's prompts get
 });
 
 test("a Closer's Opened up notes his side at its climax; Routes offers it once the chapter ends; the next plan gets it", async () => {
-  const t = await storyWorld({ runKey: "r-hisside-cccccc", replies: router() });
+  const t = await storyWorld({ runKey: "r-hisside-cccccc", replies: router(), lis: { [KAI]: { stage: 4 } } });
   assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
   const node = (i: number) => ({ key: "main-1", i: String(i) });
   for (let i = 0; i < 5; i += 1) {
@@ -617,7 +687,7 @@ test("a Closer's Opened up notes his side at its climax; Routes offers it once t
   assert.equal(climaxRead.body.hisSide, KAI);
   const arc = (await readChapter(t.store, t.runId, "main-1"))!.arc!;
   assert.equal(arc, 1);
-  assert.deepEqual(brief((await t.state()).lis[KAI]!.hisSide), [{ arc, ref: "main-1/5", moment: "opened", stage: 1 }]);
+  assert.deepEqual(brief((await t.state()).lis[KAI]!.hisSide), [{ arc, ref: "main-1/5", moment: "opened", stage: 4 }]);
   assert.deepEqual(await sides(t), [], "not before the chapter's last scene is read");
   assert.equal((await claim(t, arc)).body.code, "locked");
   assert.equal((await t.call("POST", beatPath, {}, node(6))).status, 200);
@@ -628,7 +698,7 @@ test("a Closer's Opened up notes his side at its climax; Routes offers it once t
   assert.equal(last.hisSide, KAI);
   const key = `side-${KAI}-${arc}`;
   assert.deepEqual(await sides(t), [
-    { li: KAI, arc, key, moment: "opened", stage: 1, title: "The Dark Quay", reading: false },
+    { li: KAI, arc, key, moment: "opened", stage: 4, title: "The Dark Quay", reading: false },
   ]);
 
   assert.equal((await claim(t, arc)).status, 200);

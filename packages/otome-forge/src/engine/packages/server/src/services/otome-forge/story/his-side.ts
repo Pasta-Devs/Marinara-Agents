@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
-// Otome Hearth: his side (#2155). One big moment, told again from the love interest's point of view, in Routes, at
-// most once per story arc for each love interest
+// Otome Hearth: his side (#2155). A scene beside one big moment that the protagonist never saw (just before it, or
+// right after they left), from the love interest's point of view, in Routes, at most once per story arc for each love
+// interest, once he has reached Wound (HIS_SIDE_MIN_STAGE)
 // ──────────────────────────────────────────────
 // - The moments (the maintainer's "big moments only"): a route gate that moves his stage, a climax that ends in the
 //   truth, a walkout, Opened up or Shut out, and a rift a repair chapter mends. Each is noted at its first play, in the
@@ -33,6 +34,7 @@ import {
   hisSideKey,
   type HisSideEntry,
   type HisSideMoment,
+  HIS_SIDE_MIN_STAGE,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget } from "../ids.js";
@@ -127,21 +129,26 @@ export function stateAtMoment(state: RunState, li: LiId, note: HisSideNote): Run
 }
 
 /**
- * Each love interest's side on offer in Routes (GET /runs/:run/story `hisSides`), in cast order: a moment whose chapter
- * is finished, waiting, or its side being read (with the moment it was written for). A finished side is left out; it
+ * Each love interest's side on offer in Routes (GET /runs/:run/story `hisSides`), in cast order, once he has reached
+ * Wound (HIS_SIDE_MIN_STAGE): a moment whose chapter is finished, waiting, or its side being read (with the moment it was
+ * written for). A finished side is left out; it
  * stays in the chapter list to replay.
  */
 export function hisSideOffers(chapters: readonly Chapter[], state: RunState, cast: readonly LiId[]): HisSideEntry[] {
   return cast.flatMap((li) =>
-    (state.lis[li]?.hisSide ?? []).flatMap((note): HisSideEntry[] => {
-      const key = hisSideKey(li, note.arc);
-      const side = chapters.find((chapter) => chapter.key === key);
-      if (state.chapters[key]?.completed) return [];
-      const told = side?.hisSide ?? note;
-      const source = chapters.find((chapter) => chapter.key === momentChapterKey(told.ref));
-      if (!source || !state.chapters[source.key]?.completed) return [];
-      return [{ li, arc: note.arc, key, moment: told.moment, stage: told.stage, title: source.title, reading: !!side }];
-    }),
+    ((state.lis[li]?.stage ?? 0) < HIS_SIDE_MIN_STAGE ? [] : (state.lis[li]?.hisSide ?? [])).flatMap(
+      (note): HisSideEntry[] => {
+        const key = hisSideKey(li, note.arc);
+        const side = chapters.find((chapter) => chapter.key === key);
+        if (state.chapters[key]?.completed) return [];
+        const told = side?.hisSide ?? note;
+        const source = chapters.find((chapter) => chapter.key === momentChapterKey(told.ref));
+        if (!source || !state.chapters[source.key]?.completed) return [];
+        return [
+          { li, arc: note.arc, key, moment: told.moment, stage: told.stage, title: source.title, reading: !!side },
+        ];
+      },
+    ),
   );
 }
 
@@ -183,6 +190,7 @@ export async function ensureHisSide(
   const his = run.state.lis[li];
   if (!unit || !his) throw notFound("love interest");
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
+  if (his.stage < HIS_SIDE_MIN_STAGE) throw new OtomeForgeError(409, NOT_YET, "locked");
   const note = his.hisSide.find((entry) => entry.arc === arc);
   const source = note ? await readChapter(deps.store, runId, momentChapterKey(note.ref)) : null;
   const scene =
@@ -205,7 +213,7 @@ export async function ensureHisSide(
       {
         i: 0,
         kind: "beat",
-        guide: `${name}'s side of "${source.title}": the same events, told from ${name}'s point of view.`,
+        guide: `${name}'s side of "${source.title}": just before it, or right after the protagonist left, what the protagonist never saw.`,
         cast: [li, ...others],
         ...(scene.place ? { place: scene.place } : {}),
       },
