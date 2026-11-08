@@ -2454,8 +2454,12 @@ export interface ArcPlanInput {
   state: RunState;
   /** Whose chapter it is. */
   li: LiId;
-  /** Recalled memory (the kit's text), or "". */
+  /** The story memory's text (S/story/canon.ts recallText with `cached`, as his chapter's scenes get it), or "". */
   memory: string;
+  /** The recalls' text (recallText with `cached`), or "". */
+  recalls?: string;
+  /** 0.20.2: the chapter's scenes run on this connection too, so its story context is marked for them to read. */
+  sharesCache?: boolean;
 }
 
 const PLAN_SHAPE =
@@ -2479,18 +2483,16 @@ function othersBlock(units: readonly Unit[], state: RunState, li: LiId): string 
     .join("\n\n");
 }
 
+/**
+ * P10's and P11's own part (0.20.2): what follows the story context they share with their chapter's scenes, which
+ * holds the world, the protagonist and the story memory. The premise and the mystery's truth are the planner's alone.
+ */
 function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): string {
-  const { world, player, units, state, li, memory } = input;
+  const { world, units, state, li, recalls = "" } = input;
   const unit = units.find((item) => item.id === li);
   return [
-    "WORLD",
-    world.setting.trim() || world.premise.trim(),
     ...plannerPremise(world),
-    world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
     world.mystery.truth ? `The hidden truth (never stated outright): ${world.mystery.truth}` : "",
-    "",
-    "PROTAGONIST",
-    protagonistBlock(player),
     "",
     unit
       ? [
@@ -2511,13 +2513,31 @@ function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): stri
     // As recall's cast [li] (S/story/routes-plan.ts): no other love interest's own chapter reaches the plan.
     ledgerBlock(state, units, [li]) || "(none yet)",
     "",
-    memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
+    recalls.trim(),
     "",
     ...task,
     otomeContractReminder("planner"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");
+}
+
+/**
+ * P10 and P11 in the cached layout, as P5 is (0.20.2): the story context their chapter's scenes open with (its writing
+ * rules and content contract, the world, the protagonist, the story memory as his chapter's scenes get it), marked
+ * when the scenes run on the same connection, so the first scene reads what the plan wrote; then the plan's own
+ * instructions; then its own part.
+ */
+function planInStoryLayout(input: ArcPlanInput, system: string, user: string): OtomeMessage[] {
+  const { world, player, units, memory, sharesCache = false } = input;
+  const [instructions] = forgeChoicePlanMessages([{ role: "system" as const, content: system }], true);
+  return storyMessages(
+    storyContext({ world, player, units, number: null, arc: null, memory }),
+    instructions!.content,
+    [],
+    [user],
+    { marks: sharesCache ? "context" : "none" },
+  );
 }
 
 export interface RoutePlanInput extends ArcPlanInput {
@@ -2559,11 +2579,6 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     "- Never reveal a secret before its stage.",
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
-    "",
-    STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
-    "",
-    otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ]
     .filter(Boolean)
     .join("\n");
@@ -2576,13 +2591,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     ),
     `Plan ${name}'s route chapter toward stage ${stage} now (id ${li}).`,
   ]);
-  return forgeChoicePlanMessages(
-    [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    true,
-  );
+  return planInStoryLayout(input, system, user);
 }
 
 export interface RepairPlanInput extends ArcPlanInput {
@@ -2610,23 +2619,12 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     TIME_RULE,
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
-    "",
-    STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
-    "",
-    otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ].join("\n");
   const user = arcPlanUser(input, `${name.toUpperCase()} (whose repair this is)`, [
     `The rupture (grievance ${grievance.id}, held by ${holder}): ${grievance.text}`,
     `Plan the repair between ${name} and the protagonist now (id ${li}).`,
   ]);
-  return forgeChoicePlanMessages(
-    [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    true,
-  );
+  return planInStoryLayout(input, system, user);
 }
 
 // ── P12: the Confrontation (narration, 0.9, scene contract, one call) ──

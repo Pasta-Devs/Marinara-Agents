@@ -29,7 +29,7 @@ import {
   routeStatus,
   stageRow,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
-import { generateJson, readOrGenerate } from "../generation.js";
+import { generateJson, readOrGenerate, resolveConnectionId } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
@@ -154,7 +154,11 @@ export function normalizeRepairPlan(
 
 // ── Planning ──
 
-/** The run's love interests that have a bible, in cast order. */
+/** The chapter's scenes read the story context its plan caches only on the same connection (#2091, 0.20.2). */
+const sharesScenesCache = (world: RunDocuments["world"]) =>
+  resolveConnectionId(world, "structured") === resolveConnectionId(world, "narration");
+
+/** The run's love interests that have a bible, in cast order (the scenes' cast order too). */
 function castOf(run: RunDocuments): Unit[] {
   return Object.keys(run.state.lis).flatMap((li) => run.units.filter((unit) => unit.id === li && unit.bible));
 }
@@ -218,6 +222,8 @@ export async function planRouteChapter(
       job: "structured",
       cast: [li],
       continues: li,
+      // 0.20.2: the story context the route chapter's scenes cache, so the first reads what this plan wrote.
+      cached: { li },
       // The last Character Story, whoever's it is, as the route chapter's scenes are given it (#2126).
       lastStory: true,
       query: {
@@ -248,6 +254,8 @@ export async function planRouteChapter(
         li,
         stage: next.stage,
         memory: memory.text,
+        recalls: memory.recalls?.text ?? "",
+        sharesCache: sharesScenesCache(run.world),
       }),
       memory,
       schema: ChapterPlanSchema,
@@ -315,6 +323,8 @@ export async function planRepairChapter(
       job: "structured",
       cast: [li],
       continues: li,
+      // 0.20.2: the story context the repair chapter's scenes cache, so the first reads what this plan wrote.
+      cached: { li },
       // The last Character Story, whoever's it is, as the repair chapter's scenes are given it (#2126).
       lastStory: true,
       query: { plan: grievance.text, speakers: [unit.name] },
@@ -342,6 +352,8 @@ export async function planRepairChapter(
         li,
         grievance,
         memory: memory.text,
+        recalls: memory.recalls?.text ?? "",
+        sharesCache: sharesScenesCache(run.world),
       }),
       memory,
       schema: ChapterPlanSchema,
