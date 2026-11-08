@@ -132,6 +132,25 @@ test("a chapter's small memories are chosen once for everyone in it, and every s
     }
     assert.ok(isConfrontationPrompt(byNode.get(5)!), "node 6 is the Confrontation");
 
+    // A chosen memory deleted meanwhile is left out of the scenes after; the others stay as chosen.
+    await t.store.mutateDoc(chatTarget(t.runId, MIR), normalizeThread, (thread) => ({ ...thread, sessions: [] }));
+    // The scenes are read and the Confrontation is played first: the scene after it follows its stances.
+    for (let i = 0; i <= 5; i += 1) {
+      if (i === 5) assert.equal((await t.call("POST", beatPath, {}, node(5))).status, 200);
+      if (i < 5) assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(i))).status, 200);
+    }
+    for (let round = 1; round <= 3; round += 1) {
+      const played = await t.call("POST", `${beatPath}/stance`, { round, stance: "hold" }, node(5));
+      assert.equal(played.status, 200, JSON.stringify(played.body));
+    }
+    assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(5))).status, 200);
+    assert.equal((await t.call("POST", beatPath, {}, node(6))).status, 200);
+    await t.settle();
+    const last = t.calls.filter((call) => /Narrate node 7 of/.test(call.messages.at(-1)!.content)).at(-1)!.messages;
+    const after = memoriesOf(last)!.content;
+    assert.match(after, /KAI-DM/u);
+    assert.doesNotMatch(after, /MIR-DM|KAI-LATER/u);
+
     // The next chapter's first scene would choose afresh, the later memory among them.
     const fresh = await recallText({ store: t.store, memory, runtime: t.runtime }, t.runId, {
       job: "narration",
@@ -141,8 +160,39 @@ test("a chapter's small memories are chosen once for everyone in it, and every s
       pool: { cast: [KAI, MIR] },
     });
     assert.match(fresh.pool?.text ?? "", /KAI-LATER/u);
-    assert.equal(fresh.memories?.length, 3);
+    assert.equal(fresh.memories?.length, 2, "Kai's two; Mireille's was deleted");
   } finally {
     memory.dispose();
   }
+});
+
+test("a chapter's small memories are saved only from a pool that was read, in story order", async () => {
+  const t = await storyWorld({ runKey: "r-pool-bbbbbb" });
+  const item = (id: string, order: number) => ({ id, title: `${id} (private)`, content: `${id} text`, order });
+  const stub = (recall: Record<string, unknown>) => ({
+    recall: async () => ({ text: "", details: [], maxContext: null, ...recall }) as never,
+    maintain: async () => true,
+  });
+  const options = {
+    job: "narration" as const,
+    cast: [KAI],
+    cached: {},
+    continues: "main" as const,
+    pool: { cast: [KAI] },
+  };
+  const read = await recallText(
+    { store: t.store, memory: stub({ recalls: [item("a", 1), item("b", 2)] }) },
+    t.runId,
+    options,
+  );
+  assert.deepEqual(read.memories, ["a", "b"], "in story order, as they go");
+  assert.match(read.pool?.text ?? "", /# Recalled memory: a \(private\)[\s\S]*# Recalled memory: b \(private\)/u);
+  const failed = await recallText(
+    { store: t.store, memory: stub({ recalls: [], poolFailed: true }) },
+    t.runId,
+    options,
+  );
+  assert.equal(failed.memories, undefined, "a pool that failed is chosen again next time");
+  const none = await recallText({ store: t.store, memory: stub({ recalls: [] }) }, t.runId, options);
+  assert.deepEqual(none.memories, [], "an empty pool is a choice too");
 });
