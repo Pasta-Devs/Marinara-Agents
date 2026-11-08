@@ -502,7 +502,11 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         player: (await store.readDoc(playerId(runId), normalizePlayer)) ?? {},
         units: await readCastUnits(store, runId),
       };
+      // The embedding choice this write replaced, read inside the write itself (it may run again on a newer revision),
+      // so a concurrent save between the check above and this write still rebuilds the index when it should.
+      let replaced: string | null = null;
       const world = await store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
+        replaced = current.connections.embeddings ?? null;
         const content = body.content ?? current.content;
         const images = { ...current.images, ...body.images };
         // Turning faces on again allows one more attempt at a set that failed or stopped before (the kit's rule).
@@ -524,8 +528,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!world) throw runNotFound();
-      // Another embedding model: the recall index is built again with it, in the background.
-      if (newEmbeddings) {
+      // Another embedding model, as this write saved it: the recall index is built again with it, in the background.
+      if (embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
         void deps.recall
           ?.ensure(runId)
           .catch((error: unknown) =>

@@ -676,6 +676,37 @@ test("Memory recall embeddings: a connection is checked on save, and a new one r
     ["NIGHT-ONE: the lighthouse."],
   );
   assert.equal(admitted.at(-1), "conn-embed", "in that connection's admission slot");
+  // A concurrent save between the route's first read and its write: the route read a stale "conn-embed" while the
+  // stored choice is Built-in by the time it writes "conn-embed" again. The write replaced Built-in, so it rebuilds.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (current) => ({
+    ...current,
+    connections: { ...current.connections, embeddings: null },
+  }));
+  const ensured: string[] = [];
+  const ensure = recall.ensure.bind(recall);
+  recall.ensure = (runId, options) => {
+    ensured.push(runId);
+    return ensure(runId, options);
+  };
+  const realRead = t.store.readDoc.bind(t.store);
+  let stale = true;
+  t.store.readDoc = (async (id: string, normalize: (value: unknown) => unknown) => {
+    const value = await realRead(id, normalize as never);
+    if (stale && id === worldId(t.runId) && value) {
+      stale = false;
+      const world = value as ReturnType<typeof normalizeWorld>;
+      return { ...world, connections: { ...world.connections, embeddings: "conn-embed" } };
+    }
+    return value;
+  }) as typeof t.store.readDoc;
+  const raced = await runs("POST", "/runs/:run/settings", {
+    connections: { narration: "conn-text", embeddings: "conn-embed" },
+  });
+  t.store.readDoc = realRead;
+  assert.equal(raced.status, 200, JSON.stringify(raced.body));
+  assert.deepEqual(ensured, [t.runId], "the persisted change rebuilds, whatever the stale read said");
+  recall.ensure = ensure;
+  await settled(recall, t.runId);
   // Saved again unchanged (another field): not checked again, nothing rebuilt.
   asked.length = 0;
   const again = await runs("POST", "/runs/:run/settings", {
