@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.18.0",
+          "date": "2026-11-08",
+          "notes": "- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as \"The Lovers · Ren\". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.",
+          "highlight": true
+        },
+        {
           "version": "0.17.2",
           "date": "2026-11-08",
           "notes": "- **Send a sticker with your words.** In Messages, picking a sticker now attaches it to your message instead of sending it at once. It shows above the box with a remove button; write something if you like, then tap **Send** to send the sticker and your words together. Picking another sticker swaps it.\n- **The personality quiz on date waits too.** While Date Night plans your evening, and while Read Him, Read Me or Tarot night is being set or read, tap **Play the personality quiz** to answer statements as you wait.",
@@ -787,12 +793,6 @@
           "version": "0.8.12",
           "date": "2026-11-06",
           "notes": "- **Tell the story what's on your mind.** A new thought-bubble button on Home, beside Remind Me, opens Your thoughts…: write what your protagonist is thinking about what happened lately, something to look into, something a love interest did that you can't let go of, or that you'd like a hug today. The next main story chapter takes it into account in its plan and its scenes, then lets it go. Until then a dot on the button shows it's waiting, and you can change or clear it. Sending it costs nothing extra.",
-          "highlight": false
-        },
-        {
-          "version": "0.8.11",
-          "date": "2026-11-06",
-          "notes": "- **Chapters remember your last Character Story.** A main, route or repair chapter led by another love interest now always knows the Character Story you played last, even before its summary is written, so it no longer contradicts what happened there. That story stays private between you and its love interest: the others still don't know what happened in it.",
           "highlight": false
         }
       ]
