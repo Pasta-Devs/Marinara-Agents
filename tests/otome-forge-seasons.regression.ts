@@ -155,11 +155,11 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
     .digest("hex")
     .slice(0, 16);
 
-/** Taken from the 0.6.3 builder, before seasons. */
+/** Taken from the 0.6.3 builder, before seasons; 0.18.1's canon writing rule ("characters") moved them. */
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "e75bc92590d80aa3",
-  "his-wardrobe": "7fdd86907403669a",
-  "my-wardrobe": "cdd24db38cc846a9",
+  memories: "bd53007c161c4418",
+  "his-wardrobe": "755de1c849d1cb0e",
+  "my-wardrobe": "c2e01c0d683a496b",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

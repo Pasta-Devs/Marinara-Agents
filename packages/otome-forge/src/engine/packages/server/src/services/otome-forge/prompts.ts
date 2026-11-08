@@ -383,7 +383,7 @@ export const WRITING_RULES = [
   "Falling for the protagonist does not make a monster good or secretly kind at once; as affection grows and they come to know the protagonist, they may become a better partner to them, in their own way.",
   "The protagonist knows only what the story has shown them and what their own persona would know.",
   "A card or bible is for writing a character, never what the protagonist knows: a love interest's past, body, habits, powers, and words for their world reach the protagonist only on the page, when they are told, see it, or find it out. Until then the protagonist does not understand them, and nobody talks to the protagonist as if they do.",
-  "When the story is set in an existing world from a game, book, film or show, keep to its canon: its places, peoples, powers, history and terms. Never rename, replace, or reinvent them.",
+  "When the story is set in an existing world from a game, book, film or show, keep to its canon: its places, peoples, characters, powers, history and terms. Never rename, replace, or reinvent them.",
 ] as const;
 
 export const STORY_PACING_INSTRUCTION =
@@ -820,7 +820,7 @@ export function premiseMessages(language: string): OtomeMessage[] {
         "RULES",
         `- 3 to 5 sentences, written in ${language}.`,
         "- An original setting and situation with a romance-mystery hook: something is wrong, someone is hiding it, and the protagonist is about to be drawn in.",
-        "- No real people, and no names, places or characters from existing books, films, games or other media.",
+        "- No real people.",
         "- Everyone in it is an adult. No school settings and no students.",
         "- Leave the love interests unnamed: the player brings the cast.",
         '- Never assume the protagonist\'s gender: address them as "you".',
@@ -1620,7 +1620,7 @@ export function arcPlanMessages(
     nothingLeft
       ? "- reveals: leave it empty. Every piece of the mystery and its truth are already revealed."
       : "- reveals: 1 to 4, in the order they land. kind piece reveals one love interest's part of the mystery (name them by id); kind truth reveals the whole answer, only in the last chapter and only once. Never schedule a piece marked ALREADY REVEALED, or the truth once it is told.",
-    "- antagonist: a person or force standing against the protagonist this arc; null when the arc's trouble is not a person.",
+    "- antagonist: a person or force standing against the protagonist this arc, in an existing world often one of its canon characters; null when the arc's trouble is not a person.",
     // #2047: only this writer knows which answer is true, so only it can promise the true one is among the options;
     // the narrator sees the question and the answers alone.
     '- judgment: OPTIONAL. Only when this arc holds a mystery, suspects, a traitor or a disputed account the protagonist could judge (who did it, who betrayed them, whom to believe). question: that question, short ("Who betrayed the guild?"). answers: 2 to 4 plausible answers, worded the same way; the true one (what the hidden truth, your reveals and your ending make true) is always among them, and you never mark which. Name the true answer in endsWith.what or in the reveal that answers it, since later writers see only those; when neither your hidden truth nor your ending answers the question, omit judgment. chapters: the 1-based positions of the chapters whose end may close on it, once the clues allow a real guess and before a reveal or the ending answers it. The scene writer sees only the question and the answers, the player may guess wrong, and whatever they pick is canon: write the later purposes so they hold either way. Never in a breathing arc, and never invented to fill the field: when the arc has no such question, omit judgment.',
@@ -1818,7 +1818,7 @@ export function chapterPlanMessages({
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
     "- nodes: kind beat is an ordinary scene. Kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a call from afar, only voices), date (time together that may go as hoped, or stumble on something real when the story gives it a reason). Kind confrontation is a climax: an argument in which something true comes out. Kind closer is a warm climax: a quiet moment in which the Lead offers something of themselves and lets the protagonist close, or almost does; it can end well, or go wrong.",
-    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image (a confession, a revelation, a rescue${firstNightCg(world) ? ", or under this Heat a first night together" : ""}). resolves: ids of open grievances this node may resolve.`,
+    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present; name anyone else present in the guide. place: where it opens (optional). cg: true only for a node holding a story-defining image (a confession, a revelation, a rescue${firstNightCg(world) ? ", or under this Heat a first night together" : ""}). resolves: ids of open grievances this node may resolve.`,
     "- ledger.relationship: one line per love interest present on what moved between them and the protagonist. ledger.conflict: conflict seeds: plant a new one (type from: " +
       ANGST_TYPES.join(", ") +
       "), or escalate, complicate or resolve an open one by its id. ledger.offscreen: one line for every love interest NOT in this chapter: what they were doing meanwhile.",
@@ -1835,7 +1835,7 @@ export function chapterPlanMessages({
           "- This chapter's end may close on a judgment the protagonist can get wrong (the narrator decides; it is optional): put the climax second-to-last, so the last node can hold a big choice.",
         ]
       : []),
-    "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
+    "- The world has other people, important ones too: give named characters (friends, family, rivals, superiors, officials, locals) real parts where the story calls for them; they speak and can matter. Introduce major characters with depth, so they can become love interests or antagonists later; in an existing world, its canon characters tied to the love interests. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
     "- No cap on the cast: when the beat needs everyone (a rescue, a party, a confrontation), a node may hold the whole cast, each with their own stake.",
     ...(sideWith ? [SIDE_WITH_PLAN_RULE] : []),
     TIME_RULE,
@@ -2457,7 +2457,7 @@ function arcPlanFields(world: Pick<World, "content">): string[] {
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
     "- nodes: kind beat is an ordinary scene. Kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (time together that may go as hoped, or stumble on something real when the story gives it a reason). Kind confrontation is an argument that comes to a head, played as three rounds of stances.",
-    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image${firstNightCg(world) ? " (under this Heat, a first night together counts)" : ""}. resolves: ids of open grievances this node may resolve.`,
+    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present; name anyone else present in the guide. place: where it opens (optional). cg: true only for a node holding a story-defining image${firstNightCg(world) ? " (under this Heat, a first night together counts)" : ""}. resolves: ids of open grievances this node may resolve.`,
     `- ledger.relationship: one line on what moved between them and the protagonist. ledger.conflict: plant a new conflict seed (type from: ${ANGST_TYPES.join(", ")}), or escalate, complicate or resolve an open one by its id. ledger.offscreen: optional lines for love interests not in this chapter.`,
   ];
 }

@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.18.1 — 2026-11-08
+
+- **Stories meet the world's important people.** Chapters now bring in major side characters with real parts, not only passing locals, so they can grow into love interests or antagonists later. In a story set in an existing world, that means its own canon characters tied to your love interests.
+- **Premise suggestions may use existing worlds.** Surprise me no longer avoids names, places and characters from existing books, films and games.
+
 ## 0.18.0 — 2026-11-08
 
 - **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as "The Lovers · Ren". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.

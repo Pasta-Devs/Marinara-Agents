@@ -54,7 +54,11 @@ const KNOWS = "The protagonist knows only what the story has shown them and what
 const CARD = "A card or bible is for writing a character, never what the protagonist knows:";
 const UNTIL = "Until then the protagonist does not understand them, and nobody talks to the protagonist as if they do.";
 const CANON = "When the story is set in an existing world from a game, book, film or show, keep to its canon:";
-const OTHERS = "- The world has other people: give named minor characters";
+const OTHERS =
+  "- The world has other people, important ones too: give named characters (friends, family, rivals, superiors, officials, locals) real parts";
+/** The planners introduce major characters, canon ones in an existing world, as future love interests or antagonists. */
+const MAJOR =
+  "Introduce major characters with depth, so they can become love interests or antagonists later; in an existing world, its canon characters tied to the love interests.";
 const ALONE = "a node may be theirs alone or with others (cast [])";
 const TIME =
   "- Time passes as in a life: the protagonist is human, resting, sleeping, washing and seeing to the small needs of a day or night in passing.";
@@ -191,13 +195,14 @@ test("the world plan names an existing world as it is; the Surprise me premise s
     plan,
     /- In an existing world, the mystery, the pieces and the web fit its canon: [^\n]*never contradict it\./,
   );
-  // The premise writer invents one, so it keeps away from existing media.
+  // The premise writer keeps real people out, and no longer bans existing media (the maintainer's, 2026-11-08).
   const premise = text(premiseMessages("English"));
-  assert.match(premise, /No real people, and no names, places or characters from existing books, films, games/);
+  assert.match(premise, /- No real people\./);
+  assert.ok(!/existing books, films, games/.test(premise), "existing media is no longer banned");
   assert.ok(!premise.includes(CANON));
 });
 
-test("P5 gives minor characters parts and nodes without a love interest; P5, P10 and P11 let the protagonist rest", () => {
+test("P5 gives other characters, major ones too, real parts and nodes without a love interest; P5, P10 and P11 let the protagonist rest", () => {
   const input = inputs();
   const arc = { ...input, li: KAI, memory: "" };
   const chapter = text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" }));
@@ -206,6 +211,7 @@ test("P5 gives minor characters parts and nodes without a love interest; P5, P10
     repairPlanMessages({ ...arc, grievance: { id: "g1", text: "The lamp was left dark.", by: "li" } }),
   );
   assert.ok(chapter.includes(OTHERS) && chapter.includes(ALONE), "a main chapter");
+  assert.ok(chapter.includes(MAJOR), "a main chapter introduces major characters");
   for (const [kind, prompt] of Object.entries({ chapter, route, repair })) {
     assert.ok(prompt.includes(TIME), `${kind} lets time pass`);
     assert.match(prompt, /give a node, or part of one, to rest: settling down, sleep, waking up\./, kind);
@@ -352,19 +358,20 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // What every prompt but the planners and the world plan sent on staging (e01922d19), for build() below with the premise:
 // sha256 of the messages as JSON. A change to one of them is a change to a prompt the world limits keep as it was; a
 // release that changes one on purpose (0.8.7 moves the date plan's WHAT THEY WEAR into protagonistBlock) retakes it.
+// 0.18.1: the canon writing rule now names an existing world's characters, so these prompts' bytes moved.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "a9f81dc2b4e41db4",
-  callScene: "082f4a96e3320b99",
-  confrontation: "646929977ecd71b2",
-  closer: "07ddfbafd6578c00",
-  bible: "0e8da543f0ac13bf",
+  scene: "c61963d675e6e605",
+  callScene: "e4e2cd0c6688e1c7",
+  confrontation: "32fe59a8da9f973c",
+  closer: "c89ea91cf17157fe",
+  bible: "325d01ffa45a220d",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
-  chat: "61022c566041871d",
-  daily: "ecbf4de70469ea5e",
-  note: "77c2dd85e08f8023",
+  chat: "e1bf241f413d6926",
+  daily: "f0b68e47fca887a4",
+  note: "305d0abcc1d105a0",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "26811b6da118503b",
+  datePlan: "f946f626483eafd1",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {
