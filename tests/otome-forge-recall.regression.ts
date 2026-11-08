@@ -6,7 +6,10 @@
 // of its scenes sends exactly those, between the head and the newest entries, so its cached story context stays the
 // same. No embeddings: the prompt is as before. A failed index waits for Retry indexing; no prompt ever carries the
 // index; a deleted story keeps none.
-import { embeddingsChoosable } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/recall-choice.ts";
+import {
+  embeddingOptions,
+  embeddingsChoosable,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/recall-choice.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityEmbeddingHost, CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -815,4 +818,14 @@ test("Settings offers an embedding connection only once the recall status confir
   assert.equal(embeddingsChoosable({}), false, "no answer");
   assert.equal(embeddingsChoosable({ choosable: false }), false, "an older Engine");
   assert.equal(embeddingsChoosable({ choosable: true }), true, "capability API 1.818");
+  // The options: all once confirmed, none on an older Engine, and while unknown only the saved one (by its name).
+  const all = [{ id: "conn-a" }, { id: "conn-b" }];
+  assert.deepEqual(embeddingOptions({ choosable: true }, all, "conn-a"), all);
+  assert.deepEqual(embeddingOptions({ choosable: false }, all, "conn-a"), []);
+  assert.deepEqual(
+    embeddingOptions(undefined, all, "conn-a"),
+    [{ id: "conn-a" }],
+    "loading: the saved one, never Missing",
+  );
+  assert.deepEqual(embeddingOptions(null, all, ""), [], "failed, with Built-in saved: nothing new offered");
 });
