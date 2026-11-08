@@ -1,5 +1,10 @@
 # Noodle release notes
 
+## 1.5.13 — 2026-11-08
+
+- With Include descriptions on, a character's Image Generation Appearance Override now reaches Noodle's images word for word. Interpret image prompts no longer rewords or drops it, and with Interpret image prompts off it now replaces the character's Appearance instead of being left out. (#2182)
+- A character's post image that names your persona or @mentions it now includes your persona: its appearance, Image Generation Appearance Override first, with Include descriptions on, and its avatar with Use avatar references on. (#2182)
+
 ## 1.5.12 — 2026-10-30
 
 - The "Long-Term Memory isn't sharing memories" line now clears as soon as sharing is turned back on.

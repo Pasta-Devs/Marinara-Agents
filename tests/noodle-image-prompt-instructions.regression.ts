@@ -5,7 +5,9 @@ import { runInNewContext } from "node:vm";
 import {
   compileImagePrompt,
   createDefaultImageStyleProfileSettings,
+  noodleTextMentionsHandle,
   resolveImageStyleGuidanceText,
+  stripMacroComments,
 } from "@marinara-engine/shared";
 import { NOODLE_IMAGE_POST } from "../packages/noodle/src/engine/packages/server/src/services/prompt-overrides/registry/noodle.js";
 import {
@@ -17,6 +19,9 @@ import {
 // model that writes image prompts must not reach the image model word for word. That covers the
 // poster's Personality and image habits, the image connection's Image Prompting Instructions, a
 // style profile's Style text once the rewrite model gets it, and the built-in Auto instruction.
+// The exception is an Image Generation Appearance Override, which is written for image prompts: with Include
+// descriptions on it reaches the image model as written, the user's persona's too when a post depicts it
+// (Pasta-Devs/Marinara-Agents#2182, reported in Pasta-Devs/Marinara-Engine#8975).
 
 const autoInstruction = /Infer a consistent visual style/u;
 const danbooruStyle = /Danbooru-tagged anime generation/u;
@@ -90,10 +95,55 @@ const servicePath = new URL(
   import.meta.url,
 );
 const service = readFileSync(servicePath, "utf8");
-const start = service.indexOf("export function characterAppearanceFromRow");
+const start = service.indexOf("export function imageAppearanceOverride");
 const end = service.indexOf("export function createPublicNoodleImagesService");
 assert.ok(start > 0 && end > start, "generateNoodlePostImage moved; update this regression");
 const functions = stripTypeScriptTypes(service.slice(start, end).replace(/^export /gmu, ""));
+
+// The illustrator references Noodle bundles: the vendored copy in sources/engine, with picture files stubbed.
+const referencesSource = readFileSync(
+  new URL("../sources/engine/packages/server/src/services/image/illustrator-references.ts", import.meta.url),
+  "utf8",
+);
+const references: Record<string, unknown> = {
+  stripMacroComments,
+  readAvatarBase64: (avatarPath: string | null | undefined) => (avatarPath ? `avatar:${avatarPath}` : undefined),
+  readPreferredFullBodySpriteBase64: () => undefined,
+};
+runInNewContext(
+  stripTypeScriptTypes(referencesSource.replace(/^import .*$/gmu, "").replace(/^export /gmu, "")),
+  references,
+);
+assert.equal(typeof references.resolveIllustratorCharacterReferences, "function", "update this regression");
+
+// Image Generation Appearance Overrides: Dottore's, a card outside the refresh, and the user's persona's.
+const dottoreOverride = "tall, white plague mask, lab coat, crimson eyes";
+const dottoreOverrideLine = `Dottore's Appearance: ${dottoreOverride}`;
+const columbinaOverrideLine = "Columbina's Appearance: 1girl, white dress, eye mask";
+const personaOverrideLine = "Kasia's Appearance: 1girl, red hair, green eyes, freckles";
+const columbina = {
+  id: "columbina",
+  avatarPath: "columbina.png",
+  data: {
+    name: "Columbina",
+    extensions: {
+      appearance: "a pale woman in a white dress",
+      imageAppearanceEnabled: true,
+      imageAppearance: "1girl, white dress, eye mask",
+    },
+  },
+};
+const personaRow = {
+  id: "kasia",
+  name: "Kasia",
+  appearance: "long red hair and freckles",
+  avatarPath: "kasia.png",
+  // Persona rows store the switch as text.
+  imageAppearanceEnabled: "true",
+  imageAppearance: "1girl, red hair, green eyes, freckles",
+};
+// Its handle does not contain its name, so only an @mention finds it by handle.
+const personaAccount = { kind: "persona", entityId: "kasia", displayName: "Kasia", handle: "moonlit" };
 
 type RewriteInput = {
   prompt: string;
@@ -110,17 +160,29 @@ async function postImagePrompt(options: {
   rewrite?: string | null;
   promptOverride?: { prompt: string };
   characterConnectionId?: string;
+  /** Dottore's Image Generation Appearance Override is on. */
+  override?: boolean;
+  postContent?: string;
+  /** The refresh has the user's persona. */
+  persona?: boolean;
+  includeDescriptions?: boolean;
+  avatarReferences?: boolean;
+  /** Generate the image instead of previewing its prompt; the prompt is then the one sent. */
+  send?: boolean;
 }) {
   const rewrites: RewriteInput[] = [];
   const warnings: string[] = [];
   const debugLines: string[] = [];
+  const sent: Array<{ prompt: string; referenceImages?: string[] }> = [];
   const character = {
     id: "dottore",
-    avatarPath: null,
+    avatarPath: "dottore.png",
     data: {
       name: "Dottore",
       personality,
       extensions: {
+        appearance: "blue hair and a white mask",
+        ...(options.override ? { imageAppearanceEnabled: true, imageAppearance: dottoreOverride } : {}),
         applyConversationImageInstructionsToNoodle: true,
         conversationImageInstructions: imageHabits,
         noodleImageConnectionId: options.characterConnectionId,
@@ -129,33 +191,41 @@ async function postImagePrompt(options: {
   };
   const context = {
     input: {
-      account: { kind: "character", entityId: "dottore", displayName: "Dottore" },
+      account: { kind: "character", entityId: "dottore", displayName: "Dottore", handle: "dottore" },
       referenceAccounts: [],
-      postContent: "I left one meeting unattended for six minutes.",
+      personaAccount: options.persona ? personaAccount : null,
+      postContent: options.postContent ?? "I left one meeting unattended for six minutes.",
       draftPrompt: draft,
       settings: {
         imageGenerationPrompt: "",
-        imageGenerationIncludeDescriptions: true,
-        imageGenerationUseAvatarReferences: false,
+        imageGenerationIncludeDescriptions: options.includeDescriptions ?? true,
+        imageGenerationUseAvatarReferences: options.avatarReferences ?? false,
         enableImageInterpretation: options.interpret,
         generationConnectionId: "noodle-writer",
         imageWidth: 1024,
         imageHeight: 1024,
       },
-      characters: { getById: async (id: string) => (id === "dottore" ? character : null) },
+      characters: {
+        getById: async (id: string) => (id === "dottore" ? character : null),
+        list: async () => [character, columbina],
+        getPersona: async (id: string) => (id === personaRow.id ? personaRow : null),
+      },
       characterGallery: {},
       promptOverrides: {},
       imageConnection: { id: "comfy", model: "", imagePromptInstructions: connectionInstructions },
       db: {},
       debugMode: true,
-      previewOnly: true,
+      previewOnly: !options.send,
       promptOverride: options.promptOverride,
     },
     styleProfiles: styleProfiles(options.profileId),
     NOODLE_IMAGE_POST,
+    PROFESSOR_MARI_ID: "professor-mari",
     compileImagePrompt,
     compileNoodleImagePrompts,
     resolveImageStyleGuidanceText,
+    noodleTextMentionsHandle,
+    stripMacroComments,
     loadImageGenerationUserSettings: async () => ({ styleProfiles: context.styleProfiles }),
     resolveConnectionImageDefaults: () => undefined,
     resolveImageConnectionFallback: async () => null,
@@ -172,15 +242,23 @@ async function postImagePrompt(options: {
       ctx: Parameters<typeof def.defaultBuilder>[0],
     ) => def.defaultBuilder(ctx),
     parseRecord: (value: unknown) => (value && typeof value === "object" ? value : {}),
-    readIllustratorAppearance: () => null,
-    normalizeIllustratorAppearance: () => null,
-    characterNameFromRow: () => "Dottore",
-    resolveIllustratorCharacterReferences: async () => ({ appearanceBlock: appearance, referenceImages: [] }),
+    readIllustratorAppearance: references.readIllustratorAppearance,
+    normalizeIllustratorAppearance: references.normalizeIllustratorAppearance,
+    resolveIllustratorCharacterReferences: references.resolveIllustratorCharacterReferences,
+    characterNameFromRow: (row: { data: { name: string } }) => row.data.name,
     rewriteNoodleImagePrompt: async (rewriteInput: RewriteInput) => {
       rewrites.push(rewriteInput);
       return options.rewrite ?? null;
     },
     resolveImagePromptReviewSize: () => ({ width: 1024, height: 1024 }),
+    generateNoodleImageWithRetry: (run: () => Promise<unknown>) => run(),
+    generateImage: async (...args: unknown[]) => {
+      sent.push(args[4] as (typeof sent)[number]);
+      return { base64: "AAAA", ext: "png" };
+    },
+    stageImageToDisk: () => ({ filePath: "dottore/post.png" }),
+    noodleImageExtension: () => "png",
+    characterGalleryImageUrl: () => "/gallery/dottore/post.png",
     logger: {
       warn: (message: string) => warnings.push(message),
       info: () => undefined,
@@ -191,8 +269,15 @@ async function postImagePrompt(options: {
     result: undefined as unknown,
   };
   runInNewContext(`${functions}\nresult = generateNoodlePostImage(input);`, context);
-  const generated = (await context.result) as { preview: { prompt: string } };
-  return { prompt: generated.preview.prompt, rewrites, warnings, debugLines };
+  const generated = (await context.result) as { preview: { prompt: string } | null };
+  return {
+    prompt: options.send ? sent[0]!.prompt : generated.preview!.prompt,
+    // Copied out of the vm context, whose arrays never deep-equal this one's.
+    referenceImages: [...(sent[0]?.referenceImages ?? [])],
+    rewrites,
+    warnings,
+    debugLines,
+  };
 }
 
 const leaks = [/User image instructions/u, /Danbooru tags only/u, /precise, arrogant/u, /stark lab photography/u];
@@ -376,8 +461,144 @@ async function main() {
   assert.equal(reviewed.prompt, "1boy, my own tags");
   assert.equal(reviewed.rewrites.length, 0);
 
+  for (const [name, check] of appearanceOverrideChecks) {
+    try {
+      await check();
+    } catch (error) {
+      throw new Error(`Image Generation Appearance Override check failed: ${name}`, { cause: error });
+    }
+  }
   await rewriteChecks();
   console.log("noodle-image-prompt-instructions regression passed");
 }
+
+const occurrences = (text: string, part: string) => text.split(part).length - 1;
+const plainAppearance = /blue hair and a white mask|long red hair and freckles|a pale woman/u;
+
+// Pasta-Devs/Marinara-Agents#2182: with Include descriptions on, a depicted card's Image Generation Appearance
+// Override reaches the image model as written, the user's persona's too.
+const appearanceOverrideChecks: Array<[string, () => Promise<void>]> = [
+  [
+    "a rewrite keeps the override word for word, and only the override",
+    async () => {
+      const options = { profileId: "danbooru", interpret: true, rewrite: "1boy, rewritten tags", override: true };
+      const preview = await postImagePrompt(options);
+      const sent = await postImagePrompt({ ...options, send: true });
+      assert.equal(sent.prompt, `1boy, rewritten tags\n\n${dottoreOverrideLine}`);
+      assert.equal(preview.prompt, sent.prompt, "the review shows the prompt that is sent");
+      assert.doesNotMatch(sent.prompt, plainAppearance, "plain Appearance stays rewrite-model context (#1282)");
+      assert.match(sent.rewrites[0]!.characterContext ?? "", new RegExp(`Appearance:\\n${dottoreOverrideLine}`, "u"));
+      assert.doesNotMatch(sent.rewrites[0]!.prompt, /Appearance/u, "the prompt it edits still leaves it out");
+      assert.ok(sent.debugLines.some((line) => /Appearance Override added as written/u.test(line)));
+    },
+  ],
+  [
+    "without an override a rewrite adds nothing (#1282)",
+    async () => {
+      const sent = await postImagePrompt({ profileId: "danbooru", interpret: true, rewrite: "1boy", send: true });
+      assert.equal(sent.prompt, "1boy");
+    },
+  ],
+  [
+    "without a rewrite the appearance notes carry the override once",
+    async () => {
+      for (const options of [
+        { profileId: "danbooru", interpret: false, override: true },
+        { profileId: "danbooru", interpret: true, rewrite: null, override: true },
+      ]) {
+        const { prompt } = await postImagePrompt({ ...options, send: true });
+        assert.equal(occurrences(prompt, dottoreOverrideLine), 1, prompt);
+        assert.doesNotMatch(prompt, plainAppearance, prompt);
+      }
+    },
+  ],
+  [
+    "a reviewed prompt is sent as the player left it",
+    async () => {
+      const reviewed = await postImagePrompt({
+        profileId: "danbooru",
+        interpret: true,
+        rewrite: "unused",
+        override: true,
+        persona: true,
+        postContent: "Dinner with Kasia tonight.",
+        promptOverride: { prompt: "1boy, my own tags" },
+        send: true,
+      });
+      assert.equal(reviewed.prompt, "1boy, my own tags");
+    },
+  ],
+  [
+    "a card outside the refresh that the post names gets its override too",
+    async () => {
+      const postContent = "Columbina borrowed my lab coat.";
+      const rewritten = await postImagePrompt({
+        profileId: "danbooru",
+        interpret: true,
+        rewrite: "2people",
+        postContent,
+      });
+      assert.equal(rewritten.prompt, `2people\n\n${columbinaOverrideLine}`);
+      const off = await postImagePrompt({ profileId: "danbooru", interpret: false, postContent });
+      assert.equal(occurrences(off.prompt, columbinaOverrideLine), 1, off.prompt);
+    },
+  ],
+  [
+    "a post that names the persona depicts it",
+    async () => {
+      for (const postContent of ["Dinner with Kasia tonight.", "@moonlit you missed the demo."]) {
+        const options = { profileId: "danbooru", persona: true, avatarReferences: true, postContent, send: true };
+        const rewritten = await postImagePrompt({ ...options, interpret: true, rewrite: "1boy, 1girl" });
+        assert.equal(rewritten.prompt, `1boy, 1girl\n\n${personaOverrideLine}`, postContent);
+        assert.match(rewritten.rewrites[0]!.characterContext ?? "", new RegExp(personaOverrideLine, "u"));
+        assert.deepEqual(rewritten.referenceImages, ["avatar:dottore.png", "avatar:kasia.png"]);
+        const off = await postImagePrompt({ ...options, interpret: false });
+        assert.equal(occurrences(off.prompt, personaOverrideLine), 1, off.prompt);
+        assert.doesNotMatch(
+          off.prompt,
+          /long red hair and freckles/u,
+          "the override wins over the persona's Appearance",
+        );
+      }
+    },
+  ],
+  [
+    "a post that does not name the persona leaves it out",
+    async () => {
+      const sent = await postImagePrompt({
+        profileId: "danbooru",
+        interpret: true,
+        rewrite: "1boy",
+        persona: true,
+        avatarReferences: true,
+        send: true,
+      });
+      assert.equal(sent.prompt, "1boy");
+      assert.doesNotMatch(sent.rewrites[0]!.characterContext ?? "", /Kasia/u);
+      assert.deepEqual(sent.referenceImages, ["avatar:dottore.png"]);
+    },
+  ],
+  [
+    "Include descriptions off adds no appearance; Use avatar references still sends the persona's picture",
+    async () => {
+      for (const interpret of [true, false]) {
+        const sent = await postImagePrompt({
+          profileId: "danbooru",
+          interpret,
+          rewrite: "1boy, 1girl",
+          override: true,
+          persona: true,
+          includeDescriptions: false,
+          avatarReferences: true,
+          postContent: "Dinner with Kasia tonight.",
+          send: true,
+        });
+        assert.doesNotMatch(sent.prompt, /Appearance/u, sent.prompt);
+        for (const rewrite of sent.rewrites) assert.doesNotMatch(rewrite.characterContext ?? "", /Appearance/u);
+        assert.deepEqual(sent.referenceImages, ["avatar:dottore.png", "avatar:kasia.png"]);
+      }
+    },
+  ],
+];
 
 void main();
