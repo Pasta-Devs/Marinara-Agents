@@ -6,6 +6,7 @@
 // of its scenes sends exactly those, between the head and the newest entries, so its cached story context stays the
 // same. No embeddings: the prompt is as before. A failed index waits for Retry indexing; no prompt ever carries the
 // index; a deleted story keeps none.
+import { embeddingsChoosable } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/recall-choice.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityEmbeddingHost, CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -805,4 +806,13 @@ test("after memory upkeep writes a chapter's summary, it is indexed too", async 
   } finally {
     memory.dispose();
   }
+});
+
+test("Settings offers an embedding connection only once the recall status confirms the Engine lets it choose", () => {
+  // Dottore: while the status loads or fails, the picker behaves as on an older Engine (Built-in alone).
+  assert.equal(embeddingsChoosable(undefined), false, "loading");
+  assert.equal(embeddingsChoosable(null), false, "failed");
+  assert.equal(embeddingsChoosable({}), false, "no answer");
+  assert.equal(embeddingsChoosable({ choosable: false }), false, "an older Engine");
+  assert.equal(embeddingsChoosable({ choosable: true }), true, "capability API 1.818");
 });

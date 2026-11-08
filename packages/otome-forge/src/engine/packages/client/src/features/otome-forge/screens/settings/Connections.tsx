@@ -21,6 +21,7 @@ import { ConnectionControls } from "../setup/ConnectionsStep";
 import type { DraftConnections } from "../setup/draft";
 import { ConnectionSelect, TextField } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
+import { embeddingsChoosable } from "../../lib/recall-choice";
 import { MemorySection } from "./Debug";
 
 const toForm = (connections: Connections): DraftConnections => ({
@@ -65,8 +66,11 @@ function StoryConnections({
   const [form, setForm] = useState(() => toForm(run.world.connections));
   const storedEmbeddings = run.world.connections.embeddings ?? "";
   const [embeddings, setEmbeddings] = useState(storedEmbeddings);
-  // An Engine before capability API 1.818 has only its built-in model to offer.
-  const olderEngine = useRecallIndex(run.runKey).status?.choosable === false;
+  // An Engine before capability API 1.818 has only its built-in model to offer; until the recall status says which
+  // this Engine is (loading, or failed to load), only Built-in is offered (lib/recall-choice.ts).
+  const recallStatus = useRecallIndex(run.runKey).status;
+  const olderEngine = recallStatus?.choosable === false;
+  const choosable = embeddingsChoosable(recallStatus);
   const stored = run.world.dailyMessages ?? 0;
   const [dailyText, setDailyText] = useState(() => String(stored));
   const daily = dailyOf(dailyText);
@@ -109,7 +113,7 @@ function StoryConnections({
         label={t("ui.otomeForge.settings.embeddingsLabel")}
         hint={t(olderEngine ? "ui.otomeForge.settings.embeddingsOlderEngine" : "ui.otomeForge.settings.embeddingsHint")}
         value={embeddings}
-        connections={olderEngine ? [] : connections.embeddings}
+        connections={choosable ? connections.embeddings : []}
         emptyLabel={t("ui.otomeForge.settings.embeddingsBuiltIn")}
         onChange={setEmbeddings}
       />
