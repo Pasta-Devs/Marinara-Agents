@@ -42,6 +42,7 @@ import { PALETTE } from "../../theme/tokens";
 import { FACE_LABEL_KEYS, FacePlate } from "../reader/FacePlate";
 import { playQueryKey, type ActivityScreenProps } from "./DatesHub";
 import { CATEGORY_KEYS, Notebook, notebookQueryKey, VERDICT_ICONS, VERDICT_KEYS, wordsErrorMessage } from "./Notebook";
+import { WaitQuiz } from "../story/PersonalityQuiz";
 
 type Phase =
   | { kind: "intro" }
@@ -258,12 +259,17 @@ export function ReadMe({ runKey, view, li: picked, onExit }: ActivityScreenProps
       {phase.kind === "intro" ? (
         <Intro runKey={runKey} li={li} onBegin={() => void start()} />
       ) : phase.kind === "loading" ? (
-        <div className="of-center" role="status">
-          <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">
-            {phase.what === "start" ? t("ui.otomeForge.readMe.loading", { name }) : t("ui.otomeForge.readMe.finishing")}
-          </p>
-        </div>
+        <>
+          <div className="of-center" role="status">
+            <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+            <p className="of-body">
+              {phase.what === "start"
+                ? t("ui.otomeForge.readMe.loading", { name })
+                : t("ui.otomeForge.readMe.finishing")}
+            </p>
+          </div>
+          <WaitQuiz runKey={runKey} lis={view.lis} />
+        </>
       ) : phase.kind === "failed" && phase.retry === "start" ? (
         // Writing the set failed (a refusal, no connection, a bad reply): said honestly, with Retry and Switch connection.
         <div ref={failedRef} className="of-rh-failed">

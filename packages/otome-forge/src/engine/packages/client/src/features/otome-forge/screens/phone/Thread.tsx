@@ -12,6 +12,8 @@
 // the protagonist's five stickers, no quote, and Close and remember for everyone in it (no affection).
 // #2156: his invitation to clear the air (PhoneMessage.invite) shows under his message with Accept and Decline while it
 // waits (POST .../invite), then what became of it; Accept opens Date Night with him (onDate).
+// A picked sticker is attached to the message box (shown above it, with Remove), not sent: Send sends it with the words
+// in the box, or alone, as one message; picking another replaces it. A failed send that was never saved gives it back.
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -129,6 +131,8 @@ export function Thread({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [quote, setQuote] = useState<string | null>(initialQuote?.trim() || null);
+  /** The sticker attached to the message box, sent with its words on Send. */
+  const [attached, setAttached] = useState<string | null>(null);
   // The phone keeps the quote while it waits, so the thread opened again (after Settings) never brings back one spent.
   useEffect(() => {
     onQuoteChange(quote);
@@ -180,9 +184,9 @@ export function Thread({
   const remoteBusy = !outgoing && latest.data?.busy === true;
   const typing = waiting || revealing || remoteBusy;
   const busy = !!outgoing || remoteBusy;
-  const canSend = !busy && draft.trim().length > 0;
+  const canSend = !busy && (draft.trim().length > 0 || !!attached);
 
-  /** `fromDraft`: the box's own words are sent (a sticker leaves them where they are). */
+  /** `fromDraft`: the box's own words (and the sticker attached to it) are sent. */
   const send = async (body: SendBody, fromDraft = false) => {
     if (busy || sending.has(threadKey)) return;
     sending.add(threadKey);
@@ -205,7 +209,10 @@ export function Thread({
     setClosedGrant(0);
     setAnnounce(li ? t("ui.otomeForge.phone.typing", { name: li.name }) : t("ui.otomeForge.phone.groupTyping"));
     if (local) {
-      if (fromDraft) setDraft("");
+      if (fromDraft) {
+        setDraft("");
+        setAttached(null);
+      }
       setQuote(null);
     }
     try {
@@ -227,8 +234,9 @@ export function Thread({
         // Unknown: keep her words.
       }
       if (local && !saved) {
-        // A sticker has no words, and a newer draft is never overwritten.
+        // A newer draft, or a sticker attached since, is never overwritten.
         setDraft((current) => current || local.text);
+        if (local.sticker) setAttached((current) => current ?? local.sticker ?? null);
         if (local.quote) setQuote((current) => current ?? local.quote ?? null);
       }
       setOutgoing(null);
@@ -362,7 +370,15 @@ export function Thread({
 
   const submit = () => {
     if (!canSend) return;
-    void send({ text: draft.trim(), id: messageId(), ...(quote ? { quote } : {}) }, true);
+    void send(
+      {
+        text: draft.trim(),
+        id: messageId(),
+        ...(attached ? { sticker: attached } : {}),
+        ...(quote ? { quote } : {}),
+      },
+      true,
+    );
   };
 
   const closed = (result: PhoneCloseResult) => {
@@ -588,13 +604,40 @@ export function Thread({
             </button>
           </div>
         ) : null}
+        {attached ? (
+          <div className="of-quote-chip of-attached-sticker">
+            {isFace(attached) && li ? (
+              <Sticker li={li} face={attached} />
+            ) : (
+              <StickerArt stickers={stickers} id={attached} />
+            )}
+            <span className="of-quote-text">
+              <span className="of-quote-label">
+                {t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, attached) })}
+              </span>
+            </span>
+            <button
+              type="button"
+              className="of-icon-button"
+              aria-label={t("ui.otomeForge.phone.removeSticker")}
+              title={t("ui.otomeForge.phone.removeSticker")}
+              onClick={() => {
+                setAttached(null);
+                input.current?.focus({ preventScroll: true });
+              }}
+            >
+              <X size={15} strokeWidth={2.2} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
         <div className="of-composer-row">
           <StickerPicker
             stickers={stickers}
             name={title}
             disabled={busy}
             onPick={(sticker) => {
-              void send({ text: "", sticker, id: messageId(), ...(quote ? { quote } : {}) });
+              setAttached(sticker);
+              setAnnounce(t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, sticker) }));
               input.current?.focus({ preventScroll: true });
             }}
           />

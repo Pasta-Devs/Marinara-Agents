@@ -1045,14 +1045,17 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   const yours = root.getByRole("group", { name: "Your stickers" });
   const his = root.getByRole("group", { name: "Ilvar Thorne’s stickers" });
   await expect(yours.getByRole("button")).toHaveCount(5);
-  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" }).locator("img")).toHaveAttribute(
+  await expect(yours.getByRole("button", { name: "Attach the Laughing sticker" }).locator("img")).toHaveAttribute(
     "src",
     HER_LAUGH,
   );
-  await expect(yours.getByRole("button", { name: "Send the Pouting sticker" })).toHaveAttribute("data-kind", "builtin");
+  await expect(yours.getByRole("button", { name: "Attach the Pouting sticker" })).toHaveAttribute(
+    "data-kind",
+    "builtin",
+  );
   await expect(his.getByRole("button")).toHaveCount(2);
-  await expect(his.getByRole("button", { name: "Send the Pensive sticker" })).toBeVisible();
-  await expect(root.getByRole("button", { name: "Send the Flustered sticker" })).toHaveCount(0);
+  await expect(his.getByRole("button", { name: "Attach the Pensive sticker" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Attach the Flustered sticker" })).toHaveCount(0);
   // 44 px targets (the Stickers button and Send too), and the panel stays on the stage.
   for (const target of [
     yours.getByRole("button").first(),
@@ -1086,7 +1089,7 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
     document.addEventListener("mousedown", press);
     Object.assign(window, { iosPress: press });
   });
-  await yours.getByRole("button", { name: "Send the Laughing sticker" }).click();
+  await yours.getByRole("button", { name: "Attach the Laughing sticker" }).click();
   await page.evaluate(() => {
     document.removeEventListener(
       "mousedown",
@@ -1094,25 +1097,43 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
     );
     document.querySelector<HTMLElement>("main")!.removeAttribute("tabindex");
   });
-  // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page.
+  // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page. It is attached to
+  // the message, not sent: nothing goes until Send, and then the words and the sticker go together as one message.
   await expect(box).toBeFocused();
-  await expect.poll(() => posts(stub, "/send").length).toBe(3);
-  expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "", sticker: "you:laugh" });
-  await expect(log.getByRole("img", { name: "Sticker: Laughing" }).first()).toHaveAttribute("src", HER_LAUGH);
   await expect(box).toHaveValue("Half a thought");
+  const attached = root.locator(".of-attached-sticker");
+  await expect(attached).toContainText("Sticker attached: Laughing");
+  await expect(attached.getByRole("img", { name: "Sticker: Laughing" })).toHaveAttribute("src", HER_LAUGH);
+  expect(posts(stub, "/send")).toHaveLength(2);
+  // Remove takes it off; picking again puts it back.
+  await attached.getByRole("button", { name: "Remove the sticker" }).click();
+  await expect(attached).toHaveCount(0);
+  await expect(box).toBeFocused();
+  await root.getByRole("button", { name: "Stickers" }).click();
+  await yours.getByRole("button", { name: "Attach the Laughing sticker" }).click();
+  await expect(attached).toContainText("Sticker attached: Laughing");
+  await root.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => posts(stub, "/send").length).toBe(3);
+  expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "Half a thought", sticker: "you:laugh" });
+  await expect(attached).toHaveCount(0);
+  await expect(box).toHaveValue("");
+  // One bubble holds both.
+  const both = log.getByRole("listitem").filter({ hasText: "Half a thought" }).last();
+  await expect(both.getByRole("img", { name: "Sticker: Laughing" })).toHaveAttribute("src", HER_LAUGH);
+  await box.fill("Half a thought");
   // By keyboard, once his reply has landed (the picker waits while he writes): it opens on its first sticker, and
   // Escape closes it and gives focus back.
   await expect(root.locator(".of-typing")).toHaveCount(0);
   await expect(root.getByRole("button", { name: "Stickers" })).toHaveAttribute("aria-disabled", "false");
   await root.getByRole("button", { name: "Stickers" }).focus();
   await page.keyboard.press("Enter");
-  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" })).toBeFocused();
+  await expect(yours.getByRole("button", { name: "Attach the Laughing sticker" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
   await expect(yours).toHaveCount(0);
   // Closing it from its button gives focus back to the button too, never to the page.
   await root.getByRole("button", { name: "Stickers" }).click();
-  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" })).toBeFocused();
+  await expect(yours.getByRole("button", { name: "Attach the Laughing sticker" })).toBeFocused();
   await root.getByRole("button", { name: "Stickers" }).click();
   await expect(yours).toHaveCount(0);
   await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
@@ -1764,8 +1785,8 @@ for (const cleanup of ["pending", "failed"] as const) {
     await expect(log.getByRole("img", { name: "Sticker: Tender" })).toBeVisible();
     // #2044: the picker offers her stickers and his, never his faces.
     await root.getByRole("button", { name: "Stickers" }).click();
-    await expect(root.getByRole("button", { name: "Send the Laughing sticker" })).toBeVisible();
-    await expect(root.getByRole("button", { name: "Send the Tender sticker" })).toHaveCount(0);
+    await expect(root.getByRole("button", { name: "Attach the Laughing sticker" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Attach the Tender sticker" })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`phone-original-sticker-${cleanup}.png`) });
     expect(posts(stub, "/send")).toHaveLength(0);
     expect(stub.calls.filter((call) => call.method === "POST" && call.path.includes("/art/"))).toHaveLength(0);

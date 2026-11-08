@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.17.2 — 2026-11-08
+
+- **Send a sticker with your words.** In Messages, picking a sticker now attaches it to your message instead of sending it at once. It shows above the box with a remove button; write something if you like, then tap **Send** to send the sticker and your words together. Picking another sticker swaps it.
+- **The personality quiz on date waits too.** While Date Night plans your evening, and while Read Him, Read Me or Tarot night is being set or read, tap **Play the personality quiz** to answer statements as you wait.
+
 ## 0.17.1 — 2026-11-08
 
 - **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.
