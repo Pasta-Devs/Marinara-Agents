@@ -1476,7 +1476,9 @@ export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly 
 // `cached`), the task. Each of the first three parts ends where the provider may cache the prompt (cacheBreakpoint,
 // capability API 1.814; P5, P12 and P12c mark the story context alone, as no later call shares the rest, and P5 on a
 // connection of its own marks nothing), so after a chapter's first call its story context is sent at the cached price.
-// Nothing in the story context may follow the node, its cast or the prompt's kind.
+// Nothing in the story context may follow the node, its cast or the prompt's kind. 0.20.4: P6, P12 and P12c send the
+// chapter's small memories (S/story/canon.ts `pool`) as a cached part of their own right after it, the same for every
+// scene of the chapter; P5's own recalls still follow its cached part.
 
 export interface StoryContextInput {
   world: World;
@@ -1548,15 +1550,18 @@ function storyMessages(
   instructions: string,
   texts: readonly string[],
   rest: readonly string[],
-  { marks = "all" }: { marks?: "all" | "context" | "none" } = {},
+  { marks = "all", pool = "" }: { marks?: "all" | "context" | "none"; pool?: string } = {},
 ): OtomeMessage[] {
   const settled = texts.slice(0, -1);
   const marked = (message: OtomeMessage): OtomeMessage =>
     marks === "all" ? { ...message, cacheBreakpoint: true } : message;
+  const cachedPart = (content: string): OtomeMessage =>
+    marks === "none" ? { role: "system", content } : { role: "system", content, cacheBreakpoint: true };
   return [
-    marks === "none"
-      ? { role: "system", content: context }
-      : { role: "system", content: context, cacheBreakpoint: true },
+    cachedPart(context),
+    // The chapter's small memories under their heading (S/story/canon.ts), the same for each of its scenes (0.20.4);
+    // left empty when they give way, which the Engine drops. At most four marks in all.
+    ...(pool.trim() ? [cachedPart(pool.trim())] : []),
     marked({ role: "system", content: instructions }),
     ...settled.map((content, index): OtomeMessage =>
       index === settled.length - 1 ? marked({ role: "user", content }) : { role: "user", content },
@@ -2047,6 +2052,8 @@ export interface BeatMessagesInput {
   memory: string;
   /** The recalls' text (recallText with `cached`): the recalls and the canon only some may know, or "". */
   recalls?: string;
+  /** The chapter's small memories (recallText's `pool`), the same for each of its scenes, or "". */
+  pool?: string;
   /** A main chapter's arc (#1980), for the story context, or null. */
   arc?: StoryArc | null;
   /** #2155: his side's scene as the protagonist lived it (S/story/his-side.ts hisSideSource), or none. */
@@ -2063,6 +2070,7 @@ export function beatMessages({
   storySoFar,
   memory,
   recalls = "",
+  pool = "",
   arc = null,
   prologue = "",
   hisSide = "",
@@ -2188,7 +2196,7 @@ export function beatMessages({
     chapterTexts(chapter, units, storySoFar, opening),
     rest,
     // Only a Rewrite of his side shares its instructions, so they are no cache write of their own (#2091).
-    pov ? { marks: "context" } : undefined,
+    { ...(pov ? { marks: "context" as const } : {}), pool },
   );
 }
 
@@ -2641,7 +2649,20 @@ const SEGMENT_SHAPE = '{"speaker": "", "text": "...", "thought": false, "express
 
 /** P12: the opening, three rounds of four stances each, and the three endings, in one reply. */
 export function confrontationMessages(input: ConfrontationMessagesInput): OtomeMessage[] {
-  const { world, player, units, state, chapter, node, storySoFar, memory, recalls = "", arc = null, li } = input;
+  const {
+    world,
+    player,
+    units,
+    state,
+    chapter,
+    node,
+    storySoFar,
+    memory,
+    recalls = "",
+    pool = "",
+    arc = null,
+    li,
+  } = input;
   const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id) || unit.id === li);
   const him = units.find((unit) => unit.id === li);
@@ -2713,7 +2734,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
-    { marks: "context" },
+    { marks: "context", pool },
   );
 }
 
@@ -2725,7 +2746,20 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
  * their tastes (#1936), and Opened up may turn intimate; the content contract decides how far.
  */
 export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[] {
-  const { world, player, units, state, chapter, node, storySoFar, memory, recalls = "", arc = null, li } = input;
+  const {
+    world,
+    player,
+    units,
+    state,
+    chapter,
+    node,
+    storySoFar,
+    memory,
+    recalls = "",
+    pool = "",
+    arc = null,
+    li,
+  } = input;
   const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id) || unit.id === li);
   const partner = units.find((unit) => unit.id === li);
@@ -2798,7 +2832,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
-    { marks: "context" },
+    { marks: "context", pool },
   );
 }
 

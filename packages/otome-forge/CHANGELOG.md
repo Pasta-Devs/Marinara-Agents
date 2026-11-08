@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.20.4 — 2026-11-08
+
+- **Every scene of a chapter remembers the same small moments.** A chapter now picks its small memories (message exchanges, Snapshots, Read Him, Claw Machine and Tarot rounds, Read Me notes and dates) once, for everyone in it, and each of its scenes is written with the same ones, marked with who knows them. On an Anthropic connection, after the first scene they're sent at the cached price instead of in full every time. Something that happens during a chapter is remembered from the next one.
+
 ## 0.20.3 — 2026-11-08
 
 - **Route and repair chapters cost less to start.** Their plan now opens with the same story the chapter's scenes are written from, and on an Anthropic connection caches it, so the first scene reads it at the cached price instead of writing it all again. The plan sees the same things as before, in a different order. This works when your Planning and Narration connections are the same, as for main chapters.

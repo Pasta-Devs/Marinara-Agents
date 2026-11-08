@@ -12,7 +12,9 @@
 //    chapter's earliest scenes. The timeline, the previous chapter's last scene and the newest summary always stay,
 //    and nothing outside the memory is ever cut. A cached prompt's own canon
 //    (S/story/canon.ts `cached`) is a context of its own, beside the recalls, and its summaries give way before the
-//    cached part's, each part keeping its newest (#2091). A message's `cacheBreakpoint` (#2066) is sent as it is. A
+//    cached part's, each part keeping its newest (#2091); a chapter's small memories (0.20.4, the context's `pool`) are
+//    one more, after the recalls, whose memories give way all together or not at all. A message's `cacheBreakpoint`
+//    (#2066) is sent as it is. A
 //    prompt that still leaves the reply less than the floor (or the connection's own smaller cap) is a 413 `capacity`
 //    before anything is sent, never a request the Engine would cut: its fitter would shrink the reply to 128 tokens,
 //    then cut the rules. The margin kept is the Engine's (fitSafety) with some to spare, and model.fitContext checks the
@@ -76,10 +78,10 @@ export interface GenerateJsonRequest<T extends object> {
   messages: OtomeMessage[];
   /**
    * The story memory the messages carry (recallText's context, its `text` inserted as it is, and when `cached` its
-   * recalls' text too): what the fit may leave out when the prompt does not fit (see the header). Without it nothing in
-   * the prompt gives way.
+   * recalls' and its chapter's small memories' text too): what the fit may leave out when the prompt does not fit (see
+   * the header). Without it nothing in the prompt gives way.
    */
-  memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext };
+  memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext; pool?: ForgeMemoryContext };
   /** How long a prompt with cache marks stays cached (see the header): an hour unless it asks for five minutes. */
   cacheTtl?: "5m" | "1h";
   schema: ZodType<T>;
@@ -302,9 +304,13 @@ export async function generateJson<T extends object>(
   const budget = outputBudget(request.maxTokens, model.maxOutputTokens);
   // The memory context rides on the first message, so the repair turn (the same messages and two more) carries it too.
   // The recalls' context goes first: the fitter leaves out the first context's optional blocks first, so what follows
-  // the cached part (a cached prompt's own canon, S/story/canon.ts) gives way before the cached part does (#2091).
+  // the cached part (a cached prompt's own canon, S/story/canon.ts) gives way before the cached part does (#2091), and
+  // a chapter's small memories before the story context.
   const messages = request.memory
-    ? forgeComposeMemoryPrompt(() => request.messages, [request.memory.recalls, request.memory].filter(Boolean))
+    ? forgeComposeMemoryPrompt(
+        () => request.messages,
+        [request.memory.recalls, request.memory.pool, request.memory].filter(Boolean),
+      )
     : request.messages;
   const mayCall = () => {
     request.signal?.throwIfAborted();

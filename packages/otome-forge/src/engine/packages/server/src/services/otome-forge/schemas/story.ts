@@ -272,6 +272,8 @@ export function normalizeChapter(data: unknown): Chapter | null {
       gift: z.enum(GIFT_IDS).optional(),
       hisSide: HisSideNoteSchema.optional(),
       recalled: z.array(z.string().refine(isChapterKey)).min(1).max(RECALL_MAX).optional(),
+      // 0.20.4: its small memories' ids, [] when it has none (S/story/beats.ts).
+      memories: z.array(z.string().min(1).max(300)).max(200).optional(),
     },
     () => ({
       key: data.key as string,
@@ -356,8 +358,8 @@ export function normalizeBeat(data: unknown): Beat | null {
 /**
  * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, a date's plan
  * (GET .../dates shows a date), an extra story's premise (#2025), the Your thoughts… its plan read (#2127; Home shows
- * the player only the ones still waiting), a birthday scene's gift (#2153), the moment his side retells (#2155) or the
- * earlier chapters it recalls (0.19.0).
+ * the player only the ones still waiting), a birthday scene's gift (#2153), the moment his side retells (#2155), the
+ * earlier chapters it recalls (0.19.0) or its small memories (0.20.4).
  */
 export function toChapterView(chapter: Chapter): ChapterView {
   const {
@@ -371,6 +373,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     gift: _gift,
     hisSide: _hisSide,
     recalled: _recalled,
+    memories: _memories,
     music,
     ...rest
   } = chapter;
