@@ -71,7 +71,17 @@ export function Avatar({ name, url, accent, size = 44, className, crop }: Avatar
       style={style as CSSProperties}
       aria-hidden="true"
     >
-      {url ? <img src={url} alt="" loading="lazy" style={crop ? cropStyle(crop) : undefined} /> : initialsOf(name)}
+      {url ? (
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          className={crop ? undefined : "of-avatar-face"}
+          style={crop ? cropStyle(crop) : undefined}
+        />
+      ) : (
+        initialsOf(name)
+      )}
     </span>
   );
 }

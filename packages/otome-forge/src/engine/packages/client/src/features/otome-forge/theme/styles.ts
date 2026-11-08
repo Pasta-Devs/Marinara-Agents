@@ -205,7 +205,16 @@ ${R} .of-avatar {
 }
 /* Out of flow, so a tall look cannot keep its own height and push past the circle: cover then always crops it. */
 ${R} .of-avatar img {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%;
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0;
+}
+/* A look is painted full body with the head at the very top, so the circle frames it as a portrait: anchored at the
+   top and zoomed to the head and shoulders, never past the crown. A card avatar's own crop (inline, Avatar.tsx) keeps
+   its rectangle. */
+${R} .of-avatar img.of-avatar-face {
+  right: auto; bottom: auto; left: -50%; top: 0; width: 200%; height: 200%;
+  /* The Engine's global img reset clamps max-width to 100%, which would clip the zoom to half the circle (as the
+     crop's inline style already guards against). */
+  max-width: none; max-height: none;
 }
 ${R} .of-avatar--empty {
   background: transparent; color: var(--of-accent-text); box-shadow: none;
@@ -1624,7 +1633,9 @@ ${R} .of-quiz-point[aria-disabled="true"] { cursor: default; }
 ${R} .of-quiz-point[aria-disabled="true"]:not([aria-pressed="true"]) { opacity: 0.6; }
 ${R} .of-quiz-ends { display: flex; justify-content: space-between; gap: 8px; margin-top: -4px; font-size: 0.75rem; color: var(--of-text-soft); }
 ${R} .of-quiz-you { margin: 0; font-weight: 700; }
-${R} .of-quiz-answers { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; text-align: start; }
+${R} .of-quiz-answers {
+  display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; padding-inline: 3px; list-style: none; text-align: start;
+}
 ${R} .of-quiz-answer { display: flex; align-items: center; gap: 10px; }
 ${R} .of-quiz-answer-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 ${R} .of-quiz-alike { flex: none; font-size: 0.78rem; font-weight: 700; color: var(--of-text-soft); }`;
