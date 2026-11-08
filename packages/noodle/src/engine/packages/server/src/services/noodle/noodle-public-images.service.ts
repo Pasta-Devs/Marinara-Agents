@@ -249,22 +249,21 @@ export async function generateNoodlePostImage(baseInput: {
         const personaMentioned =
           !!personaAccount &&
           noodleTextMentionsHandle(`${input.postContent}\n${input.draftPrompt}`, personaAccount.handle);
+        // The resolver also matches cards outside this refresh, from these rows. It reads a card's appearance
+        // from extensions.appearance and names it by its own name, so the override goes there under that name.
+        // Listed once, before the resolver runs, so every override line is noted where it is read.
+        const allRows = (await input.characters.list()).map((row) => {
+          const override = characterImageAppearanceOverride(row);
+          if (!override) return row;
+          const data = parseRecord(row.data);
+          noteOverride(stripMacroComments(typeof data.name === "string" ? data.name : "").trim(), override);
+          return {
+            ...row,
+            data: { ...data, extensions: { ...parseRecord(data.extensions), appearance: override } },
+          };
+        });
         const referenceResolution = await resolveIllustratorCharacterReferences({
-          // The resolver also matches cards outside this refresh, from these rows. It reads a card's appearance
-          // from extensions.appearance and names it by its own name, so the override goes there under that name.
-          charactersStore: {
-            list: async () =>
-              (await input.characters.list()).map((row) => {
-                const override = characterImageAppearanceOverride(row);
-                if (!override) return row;
-                const data = parseRecord(row.data);
-                noteOverride(stripMacroComments(typeof data.name === "string" ? data.name : "").trim(), override);
-                return {
-                  ...row,
-                  data: { ...data, extensions: { ...parseRecord(data.extensions), appearance: override } },
-                };
-              }),
-          },
+          charactersStore: { list: async () => allRows },
           chatCharacters,
           persona,
           requestedNames: [input.account.displayName, ...(persona && personaMentioned ? [persona.name] : [])],
