@@ -6,7 +6,8 @@
 // chapter (its content tags), at a Confrontation's ending (its card) and at the chapter's end (what it earned). Ease
 // off stays at the top for every node not yet finished, written or not. A rupture that opens elsewhere holds a route
 // chapter (its next scene, or its gate's end): the reader says with whom, and leads back to the story to make it right.
-// M2b: a painted story CG takes over the stage when its line comes (components/CgTakeover.tsx); the beat's music cue
+// M2b: a painted story CG takes over the stage when its line comes (components/CgTakeover.tsx), until the scene moves to
+// another place (0.21.1, lib/reader-state.ts cgOnLine); the beat's music cue
 // plays and each spoken line is voiced (hooks/use-otome-audio.ts), and Auto waits for the voice. Everything works the
 // same with no image, music or voice connection. While a scene is written, Who said what? may be played under the
 // panel (#2041, WhoSaidWhat.tsx). A side-with choice (#2046) is marked as one, each option names whom it backs, and its
@@ -58,7 +59,7 @@ import {
 } from "../../hooks/use-otome-audio";
 import { useReader, useReducedMotion, type ReaderState } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
-import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
+import { canonOption, cgOnLine, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, LiId, RunLiView, RunView } from "../../shared/api-types";
 import { OWN_OPTION } from "../../shared/arcs";
@@ -250,7 +251,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           onPaint: () => void reader.paintPlace(place),
         }
       : undefined;
-  const cg = reader.cg && current && current.main >= reader.cg.at ? reader.cg : null;
+  // From its line until the scene moves to another place (0.21.1: it stayed to the end of the scene).
+  const cg = reader.cg && current && cgOnLine(reader.timeline, reader.cg, reader.lineIndex) ? reader.cg : null;
   const cgUrl = readyUrl(cg?.art);
   const cgId = `${chapterKey}/${reader.node ?? 0}r${beat?.rewrites ?? 0}`;
   // The pan plays once per version of a beat in this visit, the first time its line comes.
