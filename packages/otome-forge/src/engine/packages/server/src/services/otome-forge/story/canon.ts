@@ -73,6 +73,10 @@
 //   timeline, and could contradict it. By its summary (the kit's one record of it, pieces joined), or in full while it
 //   has none, as above; it goes in even when the timeline covers it, its entry left out of the timeline, or beside the
 //   condensed head that holds it;
+// - the hand-off (`handOff`, the maintainer's, 2026-11-09): when that last Character Story is the newest thing that
+//   happened (no chapter but his side completed after it) and its block went in, the main story's prompts get its
+//   title, so a main chapter's plan and first scene pick up from how it ended, as chapter 1 picks up from the prologue
+//   (S/prompts.ts storyHandOff);
 // - the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k tokens, each date the
 //   timeline covers by its summary among them), after the timeline or, when `cached`, as a context of its own that the
 //   prompt sends after its cached part. A recall that fails is the same story context without it.
@@ -475,6 +479,11 @@ export type StoryContext = ForgeMemoryContext & {
   /** A chapter's small memories, a cached part of their own, and their ids as sent (see the header). */
   pool?: ForgeMemoryContext;
   memories?: string[];
+  /**
+   * The last Character Story's title when the main story's prompts pick up from it (see the header): it is the newest
+   * thing that happened, and its block went in.
+   */
+  handOff?: string;
 };
 
 /** The heading of a chapter's small memories (see the header), which the prompt sends as they are. */
@@ -804,5 +813,10 @@ export async function recallText(
   if (earlier.length) context.recalled = earlier.map(({ chapter }) => chapter.key);
   // Only a pool that was read: one that failed sends none, and is chosen again on the next call.
   if (chapterPool && result && !result.poolFailed) context.memories = recalls.map(({ id }) => id).reverse();
+  // The hand-off (see the header): only when nothing but his side came after the last Character Story.
+  const newest = chapters.filter(({ chapter }) => !chapter.hisSide).at(-1);
+  if (continues === "main" && lastStory && lastStory === newest && lastStoryKey) {
+    context.handOff = lastStory.chapter.title || lastStory.chapter.key;
+  }
   return context;
 }
