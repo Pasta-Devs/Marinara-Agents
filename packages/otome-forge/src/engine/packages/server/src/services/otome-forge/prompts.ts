@@ -2278,16 +2278,19 @@ function dateGiftText(gift: GiftId, name: string, i: number): string {
  * main chapter's plan and its first scene pick up from how it ended, as chapter 1's first scene picks up from the
  * prologue (the maintainer's, 2026-11-09). Its text is in STORY MEMORY, under its own heading; this line names it with
  * the task. Chapter 1 opens on the opening situation instead.
- * ponytail: when the fitter leaves the Character Story in full out (the reply would get less than its floor), the line
- * still names it, by its title alone. The upgrade path is the fitter reporting which optional blocks it kept.
+ * ponytail: the fitter may leave the Character Story in full out (only when the reply would otherwise get less than its
+ * floor; its summary always stays), and this line is written before the prompt is fitted, so it says what to do then:
+ * continue from the previous chapter (Dottore on #2209). The upgrade path is the fitter reporting which optional blocks
+ * it kept, and the line going only with a kept block.
  */
 export function storyHandOff(title: string, task: "plan" | "scene"): string {
-  const what = `The Character Story "${title}" (in STORY MEMORY, under "Last Character Story") is the last chapter played, after the previous chapter.`;
+  const what = `The Character Story "${title}" is the last chapter played, after the previous chapter.`;
+  const source = 'as STORY MEMORY gives it under "Last Character Story"';
   const pick =
     task === "plan"
-      ? "This chapter picks up from how that story ended, and from any choice the protagonist made at its end: the chapter's first node opens on what follows from them."
-      : "Pick up from how that story ended, and from any choice the protagonist made at its end; never tell it again.";
-  return `${what} ${pick} Only the people who were in it know what happened there.`;
+      ? `This chapter picks up from how that story ended, ${source}, and from any choice the protagonist made at its end: the chapter's first node opens on what follows from them.`
+      : `Pick up from how that story ended, ${source}, and from any choice the protagonist made at its end; never tell it again.`;
+  return `${what} ${pick} If STORY MEMORY does not give it, continue from the previous chapter. Only the people who were in it know what happened there.`;
 }
 
 // ── The prologue (P6's framing for it, and its hand-off to chapter 1) ──

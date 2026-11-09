@@ -657,6 +657,13 @@ test("the hand-off from the last Character Story: with the task only, from chapt
       ...(handOff === undefined ? {} : { handOff }),
     });
   const line = storyHandOff("The Ledger Room", "plan");
+  // Written before the prompt is fitted, it says what to do when the story in full gave way (Dottore on #2209).
+  for (const task of ["plan", "scene"] as const) {
+    assert.match(
+      storyHandOff("The Ledger Room", task),
+      /If STORY MEMORY does not give it, continue from the previous chapter\./u,
+    );
+  }
   assert.deepEqual(plan(2, ""), plan(2), "no hand-off: the prompt it got before");
   const after = plan(2, "The Ledger Room");
   assert.deepEqual(after.slice(0, -1), plan(2).slice(0, -1), "the cached part is the same");
