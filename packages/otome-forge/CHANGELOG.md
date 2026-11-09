@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.21.2 — 2026-11-09
+
+- **The next main chapter carries on from a Character Story.** When a Character Story is the last thing you played, the next main chapter picks up from how it ended, including any choice you made at its end. Love interests who weren't in it still don't know what happened there.
+
 ## 0.21.1 — 2026-11-09
 
 - **A scene's key image gives way when the scene moves on.** Once the story goes to another place, that place's background takes over instead of the image staying until the end of the scene. Naming the same room again keeps it.

@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.21.2",
+          "date": "2026-11-09",
+          "notes": "- **The next main chapter carries on from a Character Story.** When a Character Story is the last thing you played, the next main chapter picks up from how it ended, including any choice you made at its end. Love interests who weren't in it still don't know what happened there.",
+          "highlight": false
+        },
+        {
           "version": "0.21.1",
           "date": "2026-11-09",
           "notes": "- **A scene's key image gives way when the scene moves on.** Once the story goes to another place, that place's background takes over instead of the image staying until the end of the scene. Naming the same room again keeps it.",
@@ -787,12 +793,6 @@
           "version": "0.13.0",
           "date": "2026-11-07",
           "notes": "- **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.\n- **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.",
-          "highlight": true
-        },
-        {
-          "version": "0.12.0",
-          "date": "2026-11-07",
-          "notes": "- **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.",
           "highlight": true
         }
       ]

@@ -10,7 +10,8 @@
 // Your thoughts… (#2127): the next main chapter's plan reads the thoughts waiting on Home with its task (never in its
 // cached part), keeps a copy on the chapter that the client never sees, and lets them go in the write that registers
 // it; a plan that fails or is refused keeps them, thoughts sent while it is written wait for the chapter after, and a
-// plan without thoughts gets the prompt it got before.
+// plan without thoughts gets the prompt it got before. The last Character Story's hand-off goes with the task of a
+// main chapter's plan and first scene from chapter 2, never in the cached part, and changes nothing without one.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -44,6 +45,7 @@ import {
 import {
   beatMessages,
   chapterPlanMessages,
+  storyHandOff,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   ChapterPlanSchema,
@@ -638,4 +640,60 @@ test("Your thoughts… (#2127): a plan without thoughts gets the prompt it got b
   // Named "the protagonist" while the player document has no name, and never softened or filtered.
   assert.match(after.at(-1)!.content, /After what happened lately, the protagonist is thinking/u);
   assert.match(after.at(-1)!.content, /"I wish someone would hug me today\."/u);
+});
+
+test("the hand-off from the last Character Story: with the task only, from chapter 2, and nothing without one", () => {
+  const units = CAST.map((li) => ({ ...normalizeUnit({}), id: li.id, name: li.name, pronouns: HE, bible: bible() }));
+  const world = normalizeWorld({ connections: { narration: "conn-text" }, openingSituation: "The quay at dusk." });
+  const plan = (number: number, handOff?: string) =>
+    chapterPlanMessages({
+      world,
+      player: normalizePlayer({}),
+      units,
+      state: stateWith({}),
+      number,
+      lead: KAI,
+      memory: "",
+      ...(handOff === undefined ? {} : { handOff }),
+    });
+  const line = storyHandOff("The Ledger Room", "plan");
+  // Written before the prompt is fitted, it says what to do when the story in full gave way (Dottore on #2209).
+  for (const task of ["plan", "scene"] as const) {
+    assert.match(
+      storyHandOff("The Ledger Room", task),
+      /If STORY MEMORY does not give it, continue from the previous chapter\./u,
+    );
+  }
+  assert.deepEqual(plan(2, ""), plan(2), "no hand-off: the prompt it got before");
+  const after = plan(2, "The Ledger Room");
+  assert.deepEqual(after.slice(0, -1), plan(2).slice(0, -1), "the cached part is the same");
+  assert.ok(after.at(-1)!.content.includes(`${line}\n`), after.at(-1)!.content);
+  assert.equal(
+    after.at(-1)!.content.replace(`${line}\n`, ""),
+    plan(2).at(-1)!.content,
+    "one line is all that is added",
+  );
+  // Chapter 1 opens on the opening situation, never on a Character Story.
+  assert.deepEqual(plan(1, "The Ledger Room"), plan(1));
+
+  const scene = (number: number, i: number, handOff?: string) => {
+    const nodes = [0, 1].map((n) => ({ i: n, kind: "beat", guide: "Rain.", cast: [KAI] }) as ChapterNode);
+    const chapter = { kind: "main" as const, number, title: "Rain", lead: KAI, foil: MIR, nodes };
+    return beatMessages({
+      world,
+      player: normalizePlayer({}),
+      units,
+      state: stateWith({}),
+      chapter,
+      node: nodes[i]!,
+      storySoFar: i ? ["The rain starts."] : [],
+      memory: "",
+      ...(handOff === undefined ? {} : { handOff }),
+    });
+  };
+  const first = scene(2, 0, "The Ledger Room");
+  assert.deepEqual(first.slice(0, -1), scene(2, 0).slice(0, -1), "the cached part is the same");
+  assert.ok(first.at(-1)!.content.includes(storyHandOff("The Ledger Room", "scene")), first.at(-1)!.content);
+  assert.deepEqual(scene(2, 1, "The Ledger Room"), scene(2, 1), "a later scene takes none");
+  assert.deepEqual(scene(1, 0, "The Ledger Room"), scene(1, 0), "nor chapter 1's first");
 });

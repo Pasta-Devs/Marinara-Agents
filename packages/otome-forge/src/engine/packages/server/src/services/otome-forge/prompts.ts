@@ -55,6 +55,7 @@
 //     (#2155) and the prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word
 //     (Elsewhere)
 //   GUIDE, prologueFraming, prologueEnding: the prologue's node, framing and hand-off (S/story/prologue.ts, beats.ts)
+//   storyHandOff: the last Character Story's hand-off to the next main chapter's plan (P5) and first scene (P6)
 //   stageGoal, arcFraming: what a route stage is for, and P6's route, repair, story, extra-story and his side's framing
 //   routePlanMessages, repairPlanMessages: P10 route plan, P11 repair plan (S/story/routes-plan.ts)
 //   confrontationMessages: P12 Confrontation (S/story/beats.ts)
@@ -1786,6 +1787,8 @@ export interface ChapterPlanInput {
    * can read the story context it caches. Otherwise nothing is marked: nothing would read it (#2091).
    */
   sharesCache?: boolean;
+  /** The last Character Story's title when this chapter picks up from it (recallText `handOff`, storyHandOff), or "". */
+  handOff?: string;
 }
 
 /** P5's rule, while a side-with scene may come; the story's content settings decide how heated the argument gets. */
@@ -1807,6 +1810,7 @@ export function chapterPlanMessages({
   judgment = false,
   thoughts = "",
   sharesCache = true,
+  handOff = "",
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
@@ -1924,6 +1928,7 @@ export function chapterPlanMessages({
     recalls.trim(),
     ...thoughtsLines(player, thoughts, "plan"),
     "",
+    ...(number > 1 && handOff ? [storyHandOff(handOff, "plan")] : []),
     `Plan main chapter ${number} now, led by ${leadUnit?.name ?? lead} (id ${lead}).`,
     otomeContractReminder("planner"),
   ];
@@ -2058,6 +2063,8 @@ export interface BeatMessagesInput {
   arc?: StoryArc | null;
   /** #2155: his side's scene as the protagonist lived it (S/story/his-side.ts hisSideSource), or none. */
   hisSide?: string;
+  /** The last Character Story's title when this chapter picks up from it (recallText `handOff`, storyHandOff), or "". */
+  handOff?: string;
 }
 
 export function beatMessages({
@@ -2074,6 +2081,7 @@ export function beatMessages({
   arc = null,
   prologue = "",
   hisSide = "",
+  handOff = "",
 }: BeatMessagesInput): OtomeMessage[] {
   const backgrounds = savedBackgrounds(world);
   // #2155: his side tells one scene again from his point of view: only he thinks, and it offers no choice. Only his
@@ -2133,6 +2141,9 @@ export function beatMessages({
       ? [
           `The prologue, the protagonist alone before they meet anyone in this story, ended like this. Pick up from it; never tell it again:\n${prologue.trim()}`,
         ]
+      : []),
+    ...(handOff && chapter.kind === "main" && (chapter.number ?? 0) > 1 && node.i === 0
+      ? [storyHandOff(handOff, "scene")]
       : []),
     "",
     ...(backgrounds ? [backgrounds, PLACE_REUSE_RULE, ""] : []),
@@ -2258,6 +2269,28 @@ function dateGiftText(gift: GiftId, name: string, i: number): string {
   }
   if (i < GIFT_BEAT) return "";
   return `Earlier tonight the protagonist gave ${name} ${what}; it may still colour the evening.${gift === "aphrodisiac" ? " It was an aphrodisiac, and its effect is still building: desire between them rises, as far as the content contract allows." : ""}`;
+}
+
+// ── The last Character Story's hand-off (P5, P6) ──
+
+/**
+ * When the last Character Story is the newest thing that happened (S/story/canon.ts recallText `handOff`), the next
+ * main chapter's plan and its first scene pick up from how it ended, as chapter 1's first scene picks up from the
+ * prologue (the maintainer's, 2026-11-09). Its text is in STORY MEMORY, under its own heading; this line names it with
+ * the task. Chapter 1 opens on the opening situation instead.
+ * ponytail: the fitter may leave the Character Story in full out (only when the reply would otherwise get less than its
+ * floor; its summary always stays), and this line is written before the prompt is fitted, so it says what to do then:
+ * continue from the previous chapter (Dottore on #2209). The upgrade path is the fitter reporting which optional blocks
+ * it kept, and the line going only with a kept block.
+ */
+export function storyHandOff(title: string, task: "plan" | "scene"): string {
+  const what = `The Character Story "${title}" is the last chapter played, after the previous chapter.`;
+  const source = 'as STORY MEMORY gives it under "Last Character Story"';
+  const pick =
+    task === "plan"
+      ? `This chapter picks up from how that story ended, ${source}, and from any choice the protagonist made at its end: the chapter's first node opens on what follows from them.`
+      : `Pick up from how that story ended, ${source}, and from any choice the protagonist made at its end; never tell it again.`;
+  return `${what} ${pick} If STORY MEMORY does not give it, continue from the previous chapter. Only the people who were in it know what happened there.`;
 }
 
 // ── The prologue (P6's framing for it, and its hand-off to chapter 1) ──

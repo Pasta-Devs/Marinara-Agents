@@ -588,6 +588,8 @@ export async function planNextChapter(
         sideWith,
         judgment: !!judgment,
         thoughts: thoughts?.text ?? "",
+        // It picks up from the last Character Story when that is the newest thing that happened (S/story/canon.ts).
+        handOff: memory.handOff ?? "",
         // The scenes read the story context it caches only on the same connection (#2091).
         sharesCache: resolveConnectionId(run.world, "structured") === resolveConnectionId(run.world, "narration"),
       }),

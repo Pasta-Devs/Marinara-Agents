@@ -755,6 +755,8 @@ async function generateBeat(
         ? (arcCovering(await listArcs(deps.store, runId), chapter.number) ?? null)
         : null,
     prologue,
+    // A main chapter's first scene picks up from the last Character Story, as its plan does (S/story/canon.ts).
+    handOff: memory.handOff ?? "",
     ...(told ? { hisSide: told.text } : {}),
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;

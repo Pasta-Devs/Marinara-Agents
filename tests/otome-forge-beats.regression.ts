@@ -24,7 +24,9 @@
 // #2126: a storyline chapter's plan and scenes are given the last Character Story (never an extra story or a date),
 // whoever leads it and whoever is in the scene, in the story context they share, titled private between the
 // protagonist and its love interest (and anyone who speaks in it): by its summary, in full while it has none, once
-// even when the timeline holds it, and beside a head that condensed it; without the option, nothing changes.
+// even when the timeline holds it, and beside a head that condensed it; without the option, nothing changes. The
+// hand-off: while it is the newest thing that happened, the next main chapter's plan and first scene (never chapter 1,
+// a later scene or a route chapter) pick up from it, with the task, so the story context they share stays the same.
 // #2146: a chapter's closing decision takes the player's own words: saved as one more option of that big choice, with no
 // effects, carried into the next chapter's cached story context; every other choice, a blank, too long or mismatched
 // body, and a beat not being read are refused and save nothing.
@@ -54,6 +56,7 @@ import {
   closerMessages,
   confrontationMessages,
   sideWithInstruction,
+  storyHandOff,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
@@ -3536,4 +3539,82 @@ test("a chapter another love interest leads plans and writes its scenes with the
   for (const messages of [plan, scene]) {
     assert.equal(whole(messages).split("MIR-STORY").length, 2, "once, in the story context");
   }
+});
+
+test("the next main chapter's plan and first scene pick up from the last Character Story (the hand-off)", async () => {
+  // The maintainer's (2026-11-09): after a Character Story, the main story did not carry on its last choice. Its plan
+  // and first scene now pick up from it, as chapter 1's first scene picks up from the prologue, with the task only.
+  const t = await storyWorld({ runKey: "r-handoff-aaaaaa", replies: router() });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: the quay goes dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "story-item-ledger-0001", kind: "story", li: MIR, lead: MIR, title: "The Ledger Room" },
+    "MIR-STORY: she shows her the forged page.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: SOL })).status, 200);
+  const main2 = (i: number) => ({ key: "main-2", i: String(i) });
+  assert.equal((await t.call("POST", beatPath, {}, main2(0))).status, 200);
+  await t.settle();
+  const plan = t.calls.find((call) => isPlanner(call.messages))!.messages;
+  const scene = (n: number) =>
+    t.calls.find((call) => new RegExp(`Narrate node ${n} of`, "u").test(call.messages.at(-1)!.content))!.messages;
+  assert.ok(plan.at(-1)!.content.includes(storyHandOff("The Ledger Room", "plan")), plan.at(-1)!.content);
+  assert.ok(scene(1).at(-1)!.content.includes(storyHandOff("The Ledger Room", "scene")), scene(1).at(-1)!.content);
+  const named = 'The Character Story "The Ledger Room"';
+  assert.ok(!whole(scene(2)).includes(named), "the first scene only");
+  // With the task only: the story context every scene shares stays the same.
+  assert.equal(scene(1)[0]!.content, plan[0]!.content);
+  for (const messages of [plan, scene(1)]) assert.equal(whole(messages).split(named).length, 2, "once");
+
+  // Only while it is the newest thing that happened: a date after it, or another kind of storyline, takes none.
+  const handOff = (options: Partial<Parameters<typeof recallText>[2]> = {}) =>
+    recallText({ store: t.store }, t.runId, {
+      job: "narration",
+      cast: [SOL],
+      continues: "main",
+      cached: {},
+      lastStory: true,
+      ...options,
+    }).then((context) => context.handOff);
+  assert.equal(await handOff(), "The Ledger Room");
+  assert.equal(await handOff({ continues: MIR }), undefined, "a route chapter's prompts take none");
+  assert.equal(await handOff({ lastStory: false }), undefined);
+  // His side (#2155) is part of the chapter it follows, so read after the Character Story it takes nothing away.
+  await completeChapter(
+    t,
+    {
+      key: `side-${KAI}-1`,
+      kind: "story",
+      li: KAI,
+      lead: KAI,
+      title: "Night 1",
+      hisSide: {
+        arc: 1,
+        ref: "main-1/0",
+        moment: "stage",
+        stage: 3,
+        trust: 0,
+        tension: 0,
+        open: [],
+        rupture: null,
+        at: "2026-10-28T10:30:00.000Z",
+      },
+    },
+    "KAI-SIDE: he watches the quay go dark.",
+    "2026-10-28T10:30:00.000Z",
+  );
+  assert.equal(await handOff(), "The Ledger Room", "his side after it keeps the hand-off");
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    "KAI-DATE: Kai counts jellyfish.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  assert.equal(await handOff(), undefined, "the date came after it");
 });
