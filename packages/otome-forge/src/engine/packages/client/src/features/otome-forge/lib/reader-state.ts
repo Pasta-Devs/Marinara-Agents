@@ -175,6 +175,29 @@ export function readerBeat(response: BeatResponse): { beat: BeatView; confrontat
   throw new Error("The beat route answered without a beat");
 }
 
+/**
+ * Whether the beat's key image is on screen at line `index`: from its own line (`at`) until the first later line that
+ * moves the scene to another place, where that place's background takes over (0.21.1). Going back to its lines shows it
+ * again. False with no key image or no line.
+ */
+export function cgOnLine(timeline: Timeline | null, cg: { at: number } | null | undefined, index: number): boolean {
+  const lines = timeline?.lines;
+  if (!cg || !lines || index < 0 || index >= lines.length || lines[index]!.main < cg.at) return false;
+  const opens = lines.findIndex((line) => line.main >= cg.at);
+  // The place the scene is in when the key image comes: the newest named up to its line.
+  const placeAt = (at: number) =>
+    lines
+      .slice(0, at + 1)
+      .reverse()
+      .find((line) => line.segment.place)?.segment.place;
+  const from = placeAt(opens);
+  for (let at = opens + 1; at <= index; at += 1) {
+    const place = lines[at]!.segment.place;
+    if (place && (!from || placeKey(place) !== placeKey(from))) return false;
+  }
+  return true;
+}
+
 /** The record for a beat's place among `places`, matched by name (the server keys them by its own slug). */
 export function placeEntry(places: Iterable<PlaceArt> | null | undefined, name: string | undefined): PlaceArt | null {
   if (!name || !places) return null;

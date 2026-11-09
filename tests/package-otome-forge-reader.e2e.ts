@@ -1466,6 +1466,89 @@ test("Otome Hearth a line under a story CG types only after the art has loaded a
   await expect(line(root)).toContainText("sentence 12.");
 });
 
+test("Otome Hearth a story CG gives way to the next place's background, not the end of the scene (0.21.1)", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const cgUrl = "/__otome-test/cg-ends.png";
+  const roomUrl = "/__otome-test/room.png";
+  const corridorUrl = "/__otome-test/corridor.png";
+  const ready = (url: string) => ({ state: "ready", at: written.at, url });
+  const segments = [
+    seg("", "Rain on the dome.", { place: "The Observation Room" }),
+    seg("Ilvar Thorne", "Stay.", { expression: "tender" }),
+    seg("", "The lens hums.", { place: "The Observation Room" }),
+    seg("Ilvar", "Just a moment longer."),
+    seg("", "The corridor below is cold.", { place: "The Lower Corridor" }),
+    seg("Ilvar", "Wait for me."),
+  ];
+  const fixture = createStoryStub({
+    done: true,
+    storyBeats: [
+      {
+        ...BEATS[0],
+        places: [
+          { name: "The Observation Room", tags: "glass dome, night" },
+          { name: "The Lower Corridor", tags: "stone corridor, lamps" },
+        ],
+        segments,
+        choices: [],
+        cg: { at: 1, brief: "Two figures under the glass dome.", cast: ["Ilvar Thorne"], art: ready(cgUrl) },
+      },
+      ...BEATS.slice(1),
+    ],
+  });
+  await stubRoutes(page, {
+    ...fixture,
+    answer(call: Call) {
+      const reply = fixture.answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        (reply.json as Json).view.world.places = {
+          "the-observation-room": { name: "The Observation Room", tags: "glass dome, night", art: ready(roomUrl) },
+          "the-lower-corridor": { name: "The Lower Corridor", tags: "stone corridor, lamps", art: ready(corridorUrl) },
+        };
+      }
+      return reply;
+    },
+  });
+  await page.route(`**/api/otome-forge/runs/${RUN}/art/cg/seen`, (route) => route.fulfill({ json: { ok: true } }));
+  for (const url of [cgUrl, roomUrl, corridorUrl]) {
+    await page.route(`**${url}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }),
+    );
+  }
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const reader = root.locator(".of-reader");
+  const place = root.locator('.of-place[data-on="true"]');
+  await expect(line(root)).toContainText("Rain on the dome.");
+  await expect(reader).not.toHaveAttribute("data-cg");
+  await expect(place).toHaveAttribute("style", /room\.png/u);
+
+  // Its line brings the key image; the same room named again keeps it.
+  await next(root);
+  await expect(line(root)).toContainText("Stay.");
+  await expect(reader).toHaveAttribute("data-cg", /intro|shown/u);
+  if ((await reader.getAttribute("data-cg")) === "intro") await root.locator(".of-reader-stage").click();
+  await expect(reader).toHaveAttribute("data-cg", "shown");
+  for (const text of ["The lens hums.", "Just a moment longer."]) {
+    await next(root);
+    await expect(line(root)).toContainText(text);
+    await expect(reader).toHaveAttribute("data-cg", "shown");
+  }
+  // Another place: its background takes over, for the rest of the scene.
+  await next(root);
+  await expect(line(root)).toContainText("The corridor below is cold.");
+  await expect(reader).not.toHaveAttribute("data-cg");
+  await expect(root.locator(".of-cg")).toHaveCount(0);
+  await expect(place).toHaveAttribute("style", /corridor\.png/u);
+  await page.screenshot({ path: testInfo.outputPath("cg-gives-way.png") });
+  await next(root);
+  await expect(line(root)).toContainText("Wait for me.");
+  await expect(reader).not.toHaveAttribute("data-cg");
+});
+
 test("Otome Hearth a story CG whose picture fails ends its pan at once and the line types (#2051)", async ({
   page,
 }) => {

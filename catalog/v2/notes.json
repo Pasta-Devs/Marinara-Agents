@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.21.1",
+          "date": "2026-11-09",
+          "notes": "- **A scene's key image gives way when the scene moves on.** Once the story goes to another place, that place's background takes over instead of the image staying until the end of the scene. Naming the same room again keeps it.",
+          "highlight": false
+        },
+        {
           "version": "0.21.0",
           "date": "2026-11-08",
           "notes": "- **The top left button is a house.** It takes you Home, as before, and its circle is in the colour of whoever is with you there, beside their name.\n- **New items have a dot.** Anything you win from Wish shows a small dot in the Wardrobe or the Album: on the dock, on the tab that holds it, and by the item itself. The dot goes once you click the item (or one of its buttons).",
@@ -787,12 +793,6 @@
           "version": "0.12.0",
           "date": "2026-11-07",
           "notes": "- **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.",
-          "highlight": true
-        },
-        {
-          "version": "0.11.0",
-          "date": "2026-11-07",
-          "notes": "- **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.\n- **A Tarot deck painted for your story.** With an image connection, each card is painted the first time it is drawn and kept: your cards show you, theirs show them, and the Lovers, the Sun, Temperance and Judgement show you both. At most 3 images a reading, only for cards not painted yet; Ask before painting and prompt review wait for your tap. Without one, the cards are Otome Hearth's own gold line art.",
           "highlight": true
         }
       ]

@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.21.1 — 2026-11-09
+
+- **A scene's key image gives way when the scene moves on.** Once the story goes to another place, that place's background takes over instead of the image staying until the end of the scene. Naming the same room again keeps it.
+
 ## 0.21.0 — 2026-11-08
 
 - **The top left button is a house.** It takes you Home, as before, and its circle is in the colour of whoever is with you there, beside their name.
