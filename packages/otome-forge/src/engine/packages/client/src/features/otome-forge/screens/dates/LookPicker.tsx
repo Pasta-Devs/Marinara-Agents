@@ -2,7 +2,8 @@
 // Otome Forge: Date Night's looks. What each of them wears tonight, side by side: every look they own and can wear (the
 // Wardrobe's own list, GET /runs/:run/wardrobe), their everyday look first, or initials on their colour when a look has
 // no image. Starting the date wears the picks, as Wear at home does (S/routes/dates.ts), so they stay on afterwards.
-// The Photo Shoot (#2087) reuses it with its own note: a photo wears nothing. Looks show matte-cleaned (LookImage).
+// The Photo Shoot (#2087) reuses it with its own note: a photo wears nothing. Looks show matte-cleaned (LookImage): the
+// Wardrobe's saved cut-outs as they are, the rest cleaned in the browser.
 // ──────────────────────────────────────────────
 import { useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
@@ -54,7 +55,9 @@ interface LookCardProps {
 /** One person's looks as a radio group (one card per look they can wear). */
 function LookCard({ group, who, name, url, looks, accent, value, onPick }: LookCardProps) {
   const { t } = useTranslation();
-  const shown = looks.length ? looks : [{ id: BASE_LOOK, name: "", url } as Pick<LookView, "id" | "name" | "url">];
+  const shown = looks.length
+    ? looks
+    : [{ id: BASE_LOOK, name: "", url } as Pick<LookView, "id" | "name" | "url" | "cut">];
   return (
     <fieldset className="of-looks-person" style={{ "--of-li-accent": accent } as CSSProperties}>
       <legend className="of-looks-who">{who}</legend>
@@ -74,8 +77,10 @@ function LookCard({ group, who, name, url, looks, accent, value, onPick }: LookC
             <span className="of-look-frame" aria-hidden="true">
               <LookImage
                 src={image}
+                cut={!!image && !!look.cut?.includes(image)}
                 alt=""
                 loading="lazy"
+                decoding="async"
                 fallback={<span className="of-look-initials">{initialsOf(name)}</span>}
               />
             </span>

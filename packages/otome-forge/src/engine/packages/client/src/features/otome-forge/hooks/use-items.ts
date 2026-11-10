@@ -143,6 +143,13 @@ export const paintWaits = (art: Paint | null | undefined) =>
 export const readyArt = (art: Paint | null | undefined): string | null =>
   art?.state === "ready" && art.url ? art.url : null;
 
+/** Ready art and whether it is a saved cut-out (an ItemView's or BannerView's `cut`: shown as it is, never cleaned). */
+export const readyPicture = (source: { art: Paint | null; cut?: true } | null | undefined) => {
+  const url = readyArt(source?.art);
+  return url ? { url, cut: !!source?.cut } : null;
+};
+export type ReadyPicture = NonNullable<ReturnType<typeof readyPicture>>;
+
 export const imagesOn = (view: Pick<RunView, "world">) => !!view.world.images.connectionId;
 
 /** True when nothing holds focus: the control that had it has left the page. */

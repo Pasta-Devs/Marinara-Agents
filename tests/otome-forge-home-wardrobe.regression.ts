@@ -1,5 +1,6 @@
-// Otome Forge M4 on M3's Home: Wear at home puts the look on Home (his cut out once on the next read, his faces read on
-// the look he wears, the uncut look when the cut-out fails, initials with no art; hers on Me, uncut); the line a love
+// Otome Forge M4 on M3's Home: Wear at home puts the look on Home (his cut out once, queued by the Wardrobe that wears it
+// or by Home's next read, his faces read on the look he wears, the uncut look when the cut-out fails, initials with no
+// art; hers on Me, cut out the same way); the line a love
 // interest says on noticing her new look (P19) is Home's love interest's by default, shows on Me while she wears that
 // look, and Home is told while it is being written (also when it lands during a read: Home and the Wardrobe never
 // answer "none, and not noticing" then); Home's back layer takes his newest Album CG, an owned Memory's included, dated
@@ -18,7 +19,9 @@ import type {
   Banner,
   Item,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
+import type { LookView } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wardrobe.ts";
 import {
+  cutoutsPending,
   cutoutsSettled,
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
@@ -29,6 +32,7 @@ import { ensureLinePacks } from "../packages/otome-forge/src/engine/packages/ser
 import { serveNote } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts";
 import type { RouteDeps } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/http.ts";
 import {
+  bannerId,
   beatId,
   chapterId,
   itemId,
@@ -64,8 +68,12 @@ import {
   normalizeChapter,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
-import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
+import {
+  normalizeBanner,
+  normalizeItem,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { wishView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/banners.ts";
 import { applyPull } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/pull.ts";
 import { artWorld, routesOf, until } from "./fixtures/otome-forge-art.ts";
 import { KAI, MIR, SOL, at, json, storyWorld } from "./fixtures/otome-forge-story.ts";
@@ -162,22 +170,22 @@ async function wardrobeHome(
   return { ...t, deps, call, home, wear, faces, setPortrait };
 }
 
-function cutoutClient() {
+/** A free cleanup that saves `${url}.cut.png`, and fails for the `failing` looks. */
+function cutoutClient(failing: readonly string[] = []) {
   const cuts: string[] = [];
-  const state = { fail: false };
   const client: CutoutClient = {
     async cutOut(url) {
       cuts.push(url);
-      if (state.fail) throw new Error("no background remover");
+      if (failing.includes(url)) throw new Error("no background remover");
       return { id: `cut${cuts.length}`, url: `${url}.cut.png` };
     },
     deleteGalleryImage: async () => true,
   };
-  return { cuts, state, client };
+  return { cuts, client };
 }
 
-test("Wear at home puts his look on Home: cut out once on the next read, his faces on it, uncut or initials without", async () => {
-  const cut = cutoutClient();
+test("Wear at home puts his look on Home: cut out once, his faces on it, uncut or initials without", async () => {
+  const cut = cutoutClient([SOLS.art!.url!]);
   const t = await wardrobeHome("r-m4hhim-aaaaaa", { cutouts: cut.client });
   const portrait = gallery("kai-base");
   await t.setPortrait(KAI, portrait);
@@ -187,9 +195,12 @@ test("Wear at home puts his look on Home: cut out once on the next read, his fac
   await t.wear(KAI, HIS.id);
   assert.deepEqual(t.faces, ["Kai"], "his faces for the new look are queued (M2b)");
   const worn = HIS.art!.url!;
-  assert.deepEqual((await t.home()).look, { url: worn, source: "look", cutoutState: "pending" }, "the look he wears");
   await cutoutsSettled();
-  assert.deepEqual(cut.cuts, [portrait, worn], "the worn look is cut out lazily, once, on the next read");
+  assert.deepEqual(
+    cut.cuts,
+    [portrait, worn, SOLS.art!.url, HERS.art!.url],
+    "the Wardrobe that wears it queues every look's cut-out, each once",
+  );
   assert.deepEqual((await t.home()).look, {
     url: worn,
     source: "look",
@@ -216,7 +227,7 @@ test("Wear at home puts his look on Home: cut out once on the next read, his fac
     cold: { url: "/harbour-cold.png", cutoutState: "pending" },
   });
   await cutoutsSettled();
-  assert.deepEqual(cut.cuts.slice(2), ["/harbour-tender.png", "/harbour-cold.png"]);
+  assert.deepEqual(cut.cuts.slice(4), ["/harbour-tender.png", "/harbour-cold.png"]);
 
   // Back in his base look, Home shows the portrait's cut-out made before, and its own faces.
   await t.wear(KAI, "base");
@@ -224,12 +235,10 @@ test("Wear at home puts his look on Home: cut out once on the next read, his fac
   assert.deepEqual(base.look, { url: portrait, source: "look", cutoutState: "ready", cutout: `${portrait}.cut.png` });
   assert.equal(base.faces.tender.url, "/base-tender.png");
 
-  // Sol has no portrait: initials. His look, when its cut-out fails, pans uncut and is never tried again.
+  // Sol has no portrait: initials. His look, whose cut-out failed, pans uncut and is never tried again.
   await t.call("POST", "/runs/:run/home/set", { li: SOL });
   assert.equal((await t.home()).look, null, "no art: initials on a gradient");
-  cut.state.fail = true;
   await t.wear(SOL, SOLS.id);
-  assert.equal((await t.home()).look.cutoutState, "pending");
   await cutoutsSettled();
   const uncut = (await t.home()).look;
   assert.deepEqual(uncut, { url: SOLS.art!.url, source: "look", cutoutState: "uncut" }, "the slow pan, uncut");
@@ -239,7 +248,7 @@ test("Wear at home puts his look on Home: cut out once on the next read, his fac
 
 test("Me shows the look she wears, with what Home's love interest noticed, told while it is written", async () => {
   const line = "Amber suits you. Do not let it go to your head.";
-  const t = await wardrobeHome("r-m4hme-aaaaaa", { replies: [json({ text: line })] });
+  const t = await wardrobeHome("r-m4hme-aaaaaa", { replies: [json({ text: line })], cutouts: cutoutClient().client });
   await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
     ...player,
     portrait: gallery("ines-base"),
@@ -255,10 +264,11 @@ test("Me shows the look she wears, with what Home's love interest noticed, told 
   let release!: () => void;
   const gate = runForeground(t.runId, () => new Promise<void>((resolve) => (release = resolve)));
   await t.wear("me", HERS.id);
+  await cutoutsSettled();
   const writing = await t.home();
   assert.deepEqual(
     writing.look,
-    { url: HERS.art!.url, source: "look", cutoutState: "pending" },
+    { url: HERS.art!.url, source: "look", cutoutState: "ready", cutout: `${HERS.art!.url}.cut.png` },
     "her look uses the same cleanup as his",
   );
   assert.equal(writing.noticing, true, "Home asks again while the line is written");
@@ -281,6 +291,179 @@ test("Me shows the look she wears, with what Home's love interest noticed, told 
   assert.equal(after.look.url, gallery("ines-base"));
   assert.equal(after.noticed, null);
   assert.equal(t.calls.length, 1, "wearing her base look asks nothing");
+});
+
+test("the Wardrobe and Wish show each look, face and banner as its saved cut-out once ready, and queue the missing ones", async () => {
+  const cut = cutoutClient();
+  const SNAP = item("his-wardrobe-0-s1", { title: "Late Tea", text: "They share a late tea.", art: ready("late-tea") });
+  const HER4 = item("my-wardrobe-0-a1", { kind: "her-look4", li: null, title: "Rain Coat" });
+  const t = await wardrobeHome("r-m4hcuts-aaaaaa", {
+    items: [HIS, SOLS, HERS, SNAP, HER4],
+    owned: [HIS.id, SOLS.id, HERS.id],
+    cutouts: cut.client,
+  });
+  const portrait = gallery("kai-base");
+  const face = "/harbour-tender.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait,
+    expressions: { [HIS.art!.url!]: { state: "ready", at, images: { tender: { url: face } } } },
+  }));
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    images: { ...world.images, expressions: true },
+  }));
+  // His Wardrobe's banner art is its own picture of his 5★ look; My Wardrobe's shares her 5★'s.
+  const bannerArt = ready("harbour-night-banner");
+  const banner = (kind: "his-wardrobe" | "my-wardrobe", items: Banner["items"], art: Banner["art"]): Banner => ({
+    key: `${kind}-0`,
+    kind,
+    rotation: 0,
+    startsDay: "2026-10-28",
+    endsDay: "2026-11-10",
+    featuredLi: KAI,
+    items,
+    art,
+    createdAt: at,
+    connectionId: "conn-image",
+    model: "image-model",
+  });
+  for (const value of [
+    banner("his-wardrobe", { five: [HIS.id], four: [SOLS.id], three: [SNAP.id] }, bannerArt),
+    banner("my-wardrobe", { five: [HERS.id], four: [HER4.id], three: [SNAP.id] }, HERS.art),
+  ]) {
+    await t.store.mutateDoc(runDocTarget("banner", bannerId(t.runId, value.key)), normalizeBanner, () => value);
+  }
+  const wardrobe = async () => {
+    const answer = await t.call("GET", "/runs/:run/wardrobe");
+    assert.equal(answer.status, 200, JSON.stringify(answer.body));
+    return answer.body;
+  };
+  const wish = async () => {
+    const view = await wishView(t.deps, t.runId);
+    const [his, hers] = ["his-wardrobe", "my-wardrobe"].map((kind) =>
+      [...view.banners, ...view.echoes].find((entry) => entry.kind === kind),
+    );
+    return { his: his!, hers: hers! };
+  };
+  const cutOut = (url: string | undefined) => `${url}.cut.png`;
+
+  // Nothing is cut out yet: the painted images, and nothing named cut (the client cleans those in the browser).
+  const before = await wardrobe();
+  assert.deepEqual(
+    before.him[KAI].map((look: LookView) => [look.url, look.faces, look.cut]),
+    [
+      [portrait, undefined, undefined],
+      [HIS.art!.url, { tender: face }, undefined],
+    ],
+  );
+  assert.equal(before.couples[0].his.cut, undefined);
+  const raw = await wish();
+  assert.deepEqual(
+    [raw.his.art?.url, raw.his.cut, raw.his.five.art?.url, raw.his.five.cut],
+    [bannerArt.url, undefined, HIS.art!.url, undefined],
+  );
+  await cutoutsSettled();
+  assert.deepEqual(
+    [...cut.cuts].sort(),
+    [portrait, HIS.art!.url, face, SOLS.art!.url, HERS.art!.url, bannerArt.url].sort(),
+    "the reads queue every look, face and banner art once, and never a Snapshot",
+  );
+
+  // Once ready, each is its cut-out, and `cut` names it.
+  const after = await wardrobe();
+  assert.deepEqual(
+    after.him[KAI].map((look: LookView) => [look.url, look.faces, look.cut]),
+    [
+      [cutOut(portrait), undefined, [cutOut(portrait)]],
+      [cutOut(HIS.art!.url), { tender: cutOut(face) }, [cutOut(face), cutOut(HIS.art!.url)]],
+    ],
+  );
+  assert.deepEqual(
+    after.him[SOL].map((look: LookView) => [look.url, look.cut]),
+    [
+      [undefined, undefined],
+      [cutOut(SOLS.art!.url), [cutOut(SOLS.art!.url)]],
+    ],
+  );
+  assert.deepEqual(
+    after.me.map((look: LookView) => [look.url, look.cut]),
+    [
+      [undefined, undefined],
+      [cutOut(HERS.art!.url), [cutOut(HERS.art!.url)]],
+    ],
+  );
+  assert.deepEqual(
+    [after.couples[0].his.url, after.couples[0].his.cut, after.couples[0].hers.url, after.couples[0].hers.cut],
+    [cutOut(HIS.art!.url), true, cutOut(HERS.art!.url), true],
+  );
+  const shown = await wish();
+  assert.deepEqual(
+    [shown.his, shown.his.five, shown.his.four[0], shown.hers, shown.hers.five].map((view) => [
+      view!.art?.url,
+      view!.cut,
+    ]),
+    [
+      [cutOut(bannerArt.url), true],
+      [cutOut(HIS.art!.url), true],
+      [cutOut(SOLS.art!.url), true],
+      [cutOut(HERS.art!.url), true],
+      [cutOut(HERS.art!.url), true],
+    ],
+  );
+  assert.deepEqual(
+    [shown.his.three[0]!.art?.url, shown.his.three[0]!.cut],
+    [SNAP.art!.url, undefined],
+    "a Snapshot is no look",
+  );
+  assert.equal(shown.hers.four[0]!.art, null, "an unpainted look stays unpainted");
+  await cutoutsSettled();
+  assert.equal(cut.cuts.length, 6, "a ready cut-out is never cut again");
+  assert.equal(
+    (await t.store.readDoc(itemId(t.runId, HIS.id), normalizeItem))!.art!.url,
+    HIS.art!.url,
+    "the paint is kept",
+  );
+  assert.deepEqual(t.paid, [], "cut-outs are free");
+});
+
+test("the Wardrobe's cut-outs wait behind Home's, and the run view does not poll for them", async () => {
+  // Each cleanup is held until released, so the queue's order shows.
+  const cuts: string[] = [];
+  const held: Array<() => void> = [];
+  const client: CutoutClient = {
+    async cutOut(url) {
+      cuts.push(url);
+      await new Promise<void>((resolve) => held.push(resolve));
+      return { id: `cut${cuts.length}`, url: `${url}.cut.png` };
+    },
+    deleteGalleryImage: async () => true,
+  };
+  const t = await wardrobeHome("r-m4hlane-aaaaaa", { replies: [json({ text: "Amber suits you." })], cutouts: client });
+  const stored = async (owner: string) =>
+    owner === "player"
+      ? { id: "player", cutouts: (await t.store.readDoc(playerId(t.runId), normalizePlayer))!.cutouts ?? {} }
+      : (await t.store.readDoc(unitId(t.runId, owner), normalizeUnit))!;
+
+  // The Wardrobe queues his, Sol's and her looks, in that order; his is being cut out.
+  assert.equal((await t.call("GET", "/runs/:run/wardrobe")).status, 200);
+  await until(() => cuts.length === 1, "the first cut-out");
+  assert.deepEqual(cuts, [HIS.art!.url]);
+  assert.equal(cutoutsPending(t.runId, [await stored(KAI)]), false, "the run view does not poll for a view's cut-out");
+
+  // Home shows her look, the Wardrobe's last: it goes ahead of Sol's, and is pending for Home and the run view.
+  await t.wear("me", HERS.id);
+  await t.call("POST", "/runs/:run/home/set", { show: "me" });
+  assert.equal((await t.home()).look.cutoutState, "pending");
+  held.shift()!();
+  await until(() => cuts.length === 2, "the second cut-out");
+  assert.deepEqual(cuts, [HIS.art!.url, HERS.art!.url], "Home's look is cut out before the Wardrobe's others");
+  assert.equal(cutoutsPending(t.runId, [await stored("player")]), true, "Home's look is polled for");
+  held.shift()!();
+  await until(() => cuts.length === 3, "the third cut-out");
+  held.shift()!();
+  await cutoutsSettled();
+  assert.deepEqual(cuts, [HIS.art!.url, HERS.art!.url, SOLS.art!.url], "each once");
 });
 
 test("Home's back layer is his newest Album CG, an owned Memory's included, never one not won or another's", async () => {

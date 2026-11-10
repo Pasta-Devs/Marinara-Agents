@@ -24,6 +24,8 @@
 // Home (S/routes/home.ts) shows what is worn: wornLookUrl(unit) on him, cut out there as M3 cuts out every worn look,
 // and wornLookUrl(player) on Me with `player.noticed` (P19, written here) under it; `noticingLooks` tells it the line
 // is on its way.
+// The view shows each look, face and couple half as its saved cut-out once ready (`cut` names those) and queues the
+// missing ones, free, as Home does (S/art/cutout.ts viewCutouts); the client cleans the rest in the browser meanwhile.
 import { z } from "zod";
 import type {
   LiId,
@@ -62,6 +64,7 @@ import {
   pairView,
   paintPairNow,
 } from "../art/outfits.js";
+import { viewCutouts } from "../art/cutout.js";
 import { figurinePicture, queueFigurineCutouts, type FigurineDeps } from "../art/figurine.js";
 import { paintView, updateIfChanged } from "../art/paint.js";
 import { generateJson, runForeground } from "../generation.js";
@@ -168,6 +171,33 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
   // 0.21.0: a look won from Wish and not looked at yet carries its dot.
   const unseen = new Set(run.state.owned.unseen);
   const marked = (look: LookView): LookView => (unseen.has(look.id) ? { ...look, new: true } : look);
+  const cutouts = viewCutouts(deps, runId);
+  const player = { id: "player", cutouts: run.player.cutouts ?? {} };
+  /** `url` as shown: its wearer's cut-out once ready (pushed onto `cut`), else as painted. */
+  const shown = (wearer: Pick<Unit, "id" | "cutouts">, url: string, cut: string[]) => {
+    const cutout = cutouts.ready(wearer, url);
+    if (cutout) cut.push(cutout);
+    return cutout ?? url;
+  };
+  const cutLook = (wearer: Pick<Unit, "id" | "cutouts">, view: LookView): LookView => {
+    const cut: string[] = [];
+    const faces = view.faces
+      ? (Object.fromEntries(
+          Object.entries(view.faces).map(([face, url]) => [face, url && shown(wearer, url, cut)]),
+        ) as LookView["faces"])
+      : undefined;
+    return {
+      ...view,
+      ...(view.url ? { url: shown(wearer, view.url, cut) } : {}),
+      ...(faces ? { faces } : {}),
+      ...(cut.length ? { cut } : {}),
+    };
+  };
+  const cutHalf = <T extends { url?: string }>(wearer: Pick<Unit, "id" | "cutouts"> | undefined, half: T) => {
+    const cut: string[] = [];
+    const url = half.url && wearer ? shown(wearer, half.url, cut) : half.url;
+    return { ...half, ...(url ? { url } : {}), ...(cut.length ? { cut: true as const } : {}) };
+  };
   const him: WardrobeView["him"] = {};
   for (const unit of castOf(run)) {
     const views = [
@@ -177,8 +207,9 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
         .map((item) => marked(itemLook(runId, item, unit.id, unit.wornOutfit, run.world))),
     ];
     him[unit.id] = views.map((view) => {
+      // His faces are read on the painted look, before it is shown as its cut-out.
       const faces = view.url ? readyFaces(run.world, unit, view.url) : undefined;
-      return faces ? { ...view, faces } : view;
+      return cutLook(unit, faces ? { ...view, faces } : view);
     });
   }
   const shownTo = (look: string) =>
@@ -192,7 +223,7 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
       .map((item) =>
         marked({ ...itemLook(runId, item, "me", run.player.wornOutfit, run.world), shownTo: shownTo(item.id) }),
       ),
-  ];
+  ].map((view) => cutLook(player, view));
   const couples: CoupleSet[] = couplesOf(allItems)
     .filter(({ his, hers }) => owned.has(his.id) || owned.has(hers.id))
     .map(({ his, hers }) => {
@@ -200,24 +231,28 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
       const herOutfit = outfitOf(hers);
       const complete = owned.has(his.id) && owned.has(hers.id);
       return {
-        his: {
-          id: his.id,
-          li: his.li,
-          name: his.look?.name ?? his.title,
-          owned: owned.has(his.id),
-          ...(hisOutfit ? { url: hisOutfit.url } : {}),
-        },
-        hers: {
+        his: cutHalf(
+          run.units.find((unit) => unit.id === his.li),
+          {
+            id: his.id,
+            li: his.li,
+            name: his.look?.name ?? his.title,
+            owned: owned.has(his.id),
+            ...(hisOutfit ? { url: hisOutfit.url } : {}),
+          },
+        ),
+        hers: cutHalf(player, {
           id: hers.id,
           name: hers.look?.name ?? hers.title,
           owned: owned.has(hers.id),
           ...(herOutfit ? { url: herOutfit.url } : {}),
-        },
+        }),
         complete,
         pair: pairView(runId, run.state.album.cgs, hers.id),
         canPaintPair: complete && !!hisOutfit && !!herOutfit && !!run.world.images.connectionId,
       };
     });
+  await cutouts.queue();
   return {
     him,
     me,

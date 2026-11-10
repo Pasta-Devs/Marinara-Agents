@@ -92,6 +92,8 @@ function lookPng(clean: boolean): Buffer {
 const RAW_LOOK = "/api/global-gallery/file/wish-look-green.png";
 const OTHER_LOOK = "/api/global-gallery/file/wardrobe-other-green.png";
 const CLEAN_LOOK = `data:image/png;base64,${lookPng(true).toString("base64")}`;
+/** A look the server has already cut out of its matte (a `cut` URL): shown as it is. */
+const CUT_LOOK = "/api/global-gallery/file/wish-look.cut.png";
 
 async function stubLookCleanup(
   page: Page,
@@ -715,6 +717,78 @@ test("Otome Hearth look art: Wardrobe cleans LI and persona looks, faces and cou
   expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
   expect(stub.view.player.outfits).toEqual([]);
   expect(wardrobe.me[0].url).toBe(RAW_LOOK);
+});
+
+test("Otome Hearth look art: the server's cut-outs show as they are in the Wardrobe and Wish, never cleaned again", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  const wardrobe = wardrobeView();
+  for (const entry of [...wardrobe.him[ILVAR], ...wardrobe.me]) {
+    entry.url = CUT_LOOK;
+    entry.art = ready(RAW_LOOK);
+    entry.cut = [CUT_LOOK];
+  }
+  for (const entry of wardrobe.him[ILVAR]) entry.faces = { cold: CUT_LOOK };
+  wardrobe.couples[0].his = { ...wardrobe.couples[0].his, owned: true, url: CUT_LOOK, cut: true };
+  wardrobe.couples[0].hers = { ...wardrobe.couples[0].hers, url: CUT_LOOK, cut: true };
+  // His Wardrobe's banner art is cut out; its 5★ is not painted yet, so the reveal and the results show the banner's.
+  const banner = stub.wish.banners[1];
+  banner.art = ready(CUT_LOOK);
+  banner.cut = true;
+  const cleanup = await stubLookCleanup(page);
+  const served: string[] = [];
+  await page.route("**/api/global-gallery/file/*.cut.png", (route) => {
+    served.push(route.request().url());
+    return route.fulfill({ contentType: "image/png", body: lookPng(true) });
+  });
+  await stubRoutes(
+    page,
+    (call) => (call.path.endsWith("/wardrobe") ? { status: 200, json: wardrobe } : answer(call)),
+    calls,
+  );
+  const root = await openOtome(page);
+  await openDock(root, "Wardrobe");
+  await expect(root.locator(".of-ward-look .of-ward-frame img")).toHaveCount(2);
+  await expect(root.locator(".of-ward-faces img")).toHaveCount(2);
+  for (const img of await root.locator(".of-ward-frame img, .of-ward-faces img").all()) {
+    await expect(img).toHaveAttribute("src", CUT_LOOK);
+    await expect(img).toHaveAttribute("decoding", "async");
+  }
+  const owners = root.getByRole("group", { name: "Whose wardrobe" });
+  await owners.getByText("Me", { exact: true }).click();
+  await expect(root.getByRole("heading", { name: "My looks" })).toBeVisible();
+  await expect(root.locator(".of-ward-look .of-ward-frame img, .of-couple-half img")).toHaveCount(4);
+  for (const img of await root.locator(".of-ward-frame img").all()) await expect(img).toHaveAttribute("src", CUT_LOOK);
+
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  await expect(root.locator(".of-banner-img")).toHaveAttribute("src", CUT_LOOK);
+  stub.pullResponse = {
+    results: [{ item: { ...banner.five, owned: true }, rarity: 5, isNew: true, refund: 0 }],
+    spent: 100,
+    starlight: 1900,
+    pity: PITY,
+  };
+  await root.getByRole("button", { name: "Wish ×1, 100 Starlight", exact: true }).click();
+  const takeover = page.getByRole("dialog", { name: "Your wish" });
+  await takeover.getByRole("button", { name: "Break the seal" }).click();
+  await expect(takeover.locator(".of-reveal-art img")).toHaveAttribute("src", CUT_LOOK);
+  await takeover.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(takeover.locator(".of-item-art img")).toHaveAttribute("src", CUT_LOOK);
+  expect(served.length).toBeGreaterThan(0);
+  // No browser cleanup ever started for it: not even the download and scan before an upload.
+  expect(
+    await page.evaluate(
+      (url) =>
+        (globalThis as any).__MARINARA_HOST__.queryClient.getQueryState(["otome-forge", "speaker-display", url]) ??
+        null,
+      CUT_LOOK,
+    ),
+  ).toBeNull();
+  expect(cleanup).toHaveLength(0);
 });
 
 test("Otome Hearth look art: pending, late, missing and failed cleanup never exposes matte or the prior outfit", async ({
