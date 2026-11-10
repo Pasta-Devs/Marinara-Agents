@@ -1296,7 +1296,52 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   }
   const told = liState.disclosures.slice(-3).map((item) => item.text);
   if (told.length) lines.push(`The protagonist has told ${unit.name}: ${told.join(" ")}`);
+  // Their romantic firsts, once a chapter's summary recorded them (S/memory/memory.ts): sent with them from then on.
+  // The short label ("first time"), not the ask's clarifying phrase: the sentence itself says what happened.
+  for (const [field, , , label] of ROMANTIC_FIRSTS) {
+    const sentence = liState[field];
+    if (sentence)
+      lines.push(`${unit.name} and the protagonist's ${label.toLowerCase()} has already happened: ${sentence}`);
+  }
   return lines.join("\n");
+}
+
+/**
+ * The romantic firsts a chapter's summary reports once each (LiState.firstKiss and the rest): the field, how the summary
+ * names it, and its Love Timeline kind and label, which the calendar shows every year ("First kiss with Kai").
+ */
+export const ROMANTIC_FIRSTS = [
+  ["firstKiss", "first kiss", "first-kiss", "First kiss"],
+  ["firstTime", "first time (the first time they had sex)", "first-time", "First time"],
+  [
+    "firstConfession",
+    "first confession (the first time either said outright that they love the other)",
+    "first-confession",
+    "First confession",
+  ],
+] as const satisfies ReadonlyArray<readonly [keyof LiState, string, `first-${string}`, string]>;
+
+/**
+ * What a chapter summary also reports (the maintainer, 2026-11-10): for each love interest, only the firsts not
+ * recorded yet, each null unless it happens in this part of the story for the first time, else one sentence on how and
+ * in which chapter. "" once every first of every love interest is recorded, so nothing is asked again.
+ */
+export function romanticFirstsAsk(units: ReadonlyArray<Pick<Unit, "id" | "name">>, state: RunState): string {
+  const open = units
+    .map((unit) => {
+      const liState = liStateOf(state, unit.id);
+      return { name: unit.name, fields: ROMANTIC_FIRSTS.filter(([field]) => !liState[field]).map(([field]) => field) };
+    })
+    .filter((entry) => entry.fields.length);
+  if (!open.length) return "";
+  const shape = Object.fromEntries(
+    open.map(({ name, fields }) => [name, Object.fromEntries(fields.map((field) => [field, null]))]),
+  );
+  return [
+    `Also return "firsts", shaped exactly like ${JSON.stringify(shape)}.`,
+    `Set a field to ONE sentence saying how it happened and in which chapter (by the source's title) only when it happens in the supplied source between that love interest and the protagonist for the first time; leave it null otherwise.`,
+    ROMANTIC_FIRSTS.map(([field, what]) => `${field}: their ${what}.`).join(" "),
+  ].join(" ");
 }
 
 /**
@@ -2933,9 +2978,13 @@ export function timelineFoldMessages(timeline: string): OtomeMessage[] {
   ];
 }
 
-/** The request's messages, its system message ending with the job's rules (and a chapter summary's own wording). */
-export const withRules = (request: SummaryRequest, { rules }: SummaryJob): OtomeMessage[] => {
-  const ending = request.kind === "detail" ? `${rules}\n${CHAPTER_SUMMARY_WORDING}` : rules;
+/**
+ * The request's messages, its system message ending with the job's rules (and a chapter summary's own wording, then
+ * `firsts`, its romanticFirstsAsk).
+ */
+export const withRules = (request: SummaryRequest, { rules }: SummaryJob, firsts = ""): OtomeMessage[] => {
+  const ending =
+    request.kind === "detail" ? [rules, CHAPTER_SUMMARY_WORDING, firsts].filter(Boolean).join("\n") : rules;
   return request.messages.map((message, index) =>
     index === 0 && message.role === "system" ? { ...message, content: `${message.content}\n\n${ending}` } : message,
   );

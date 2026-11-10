@@ -55,9 +55,11 @@ import {
   SUMMARY_WORDING,
   TIMELINE_FOLD_WORDING,
   beatMessages,
+  betweenYou,
   chapterPlanMessages,
   closerMessages,
   confrontationMessages,
+  romanticFirstsAsk,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   HEADROOM_TOKENS,
@@ -82,7 +84,9 @@ import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/ser
 import {
   defaultLiState,
   normalizeState,
+  readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { calendarView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/care.ts";
 import {
   normalizeBible,
   normalizeUnit,
@@ -189,6 +193,107 @@ async function settle(memory: OtomeMemory) {
   }
   throw new Error("The memory maintenance never finished");
 }
+
+test("a chapter summary records each romantic first once, never asks again for one, and never overwrites it", async () => {
+  // The maintainer's (2026-11-10): first kiss, first time, first confession, null until a chapter's summary reports them,
+  // then one sentence sent with that love interest from then on.
+  const asked: string[] = [];
+  const KISS = 'Kai kissed Ava under the broken telescope in "The Observatory".';
+  const summaryWithFirsts = (messages: Array<{ content: string }>) => {
+    const input = JSON.parse(messages.at(-1)!.content);
+    if (!input.source) return JSON.stringify({ summary: "CONDENSED" });
+    asked.push(messages[0]!.content);
+    if (input.source.id === "main-1") {
+      return JSON.stringify({
+        summary: "S1",
+        firsts: { Kai: { firstKiss: KISS, firstTime: null, firstConfession: null }, Nobody: { firstKiss: "Who?" } },
+      });
+    }
+    // A later chapter reports Kai's kiss again: the first one stays.
+    return JSON.stringify({
+      summary: "S2",
+      firsts: {
+        Kai: { firstKiss: "OVERWRITTEN", firstConfession: 'Kai told Ava he loves her in "The Ledger".' },
+        mireille: { firstTime: 'Mireille and Ava spent the night together in "The Ledger".' },
+      },
+    });
+  };
+  const { store, memory } = await setup(undefined, {
+    replies: Array.from({ length: 12 }, () => summaryWithFirsts),
+    sources: [
+      SOURCES[0]!,
+      { id: "main-2", kind: "chapter", title: "The Ledger", content: "Later that night.", order: 10001 },
+    ],
+  });
+  const FINISHED = "2026-02-14T19:00:00.000Z";
+  await store.updateDoc(runDocTarget("state", stateId(RUN)), normalizeState, (state) => ({
+    ...state,
+    chapters: { ...state.chapters, "main-1": { completed: FINISHED, applied: [] } as never },
+  }));
+  assert.equal(await memory.maintain({ runId: RUN, debugMode: false }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  const both = (fields: string) =>
+    `"Kai":${fields},"Mireille":{"firstKiss":null,"firstTime":null,"firstConfession":null}`;
+  assert.ok(asked[0]!.includes(both('{"firstKiss":null,"firstTime":null,"firstConfession":null}')), asked[0]);
+  assert.ok(
+    asked[1]!.includes(both('{"firstTime":null,"firstConfession":null}')),
+    "a recorded first is not asked again",
+  );
+  const state = (await store.readDoc(stateId(RUN), normalizeState))!;
+  assert.deepEqual(
+    [KAI, MIR].map((li) => [state.lis[li]!.firstKiss, state.lis[li]!.firstTime, state.lis[li]!.firstConfession]),
+    [
+      [KISS, null, 'Kai told Ava he loves her in "The Ledger".'],
+      [null, 'Mireille and Ava spent the night together in "The Ledger".', null],
+    ],
+    "set once by name (any case), never overwritten, and someone outside the cast is ignored",
+  );
+  // Each one is dated on the Love Timeline, once, so the calendar marks it every year as "First kiss with Kai".
+  assert.deepEqual(
+    state.timeline
+      .filter((entry) => entry.kind.startsWith("first-"))
+      .map((entry) => [entry.li, entry.kind, entry.text]),
+    [
+      [KAI, "first-kiss", "First kiss with Kai"],
+      [KAI, "first-confession", "First confession with Kai"],
+      [MIR, "first-time", "First time with Mireille"],
+    ],
+    "never a second entry for the kiss a later summary reported again",
+  );
+  assert.ok(state.lis[KAI]!.firsts.kiss && state.lis[KAI]!.firsts.confession && state.lis[MIR]!.firsts.time);
+  // Dated by the day its chapter was finished, not by when its summary ran.
+  assert.equal(state.timeline.find((entry) => entry.kind === "first-kiss")!.at, FINISHED);
+  const calendar = calendarView((await readRun(store, RUN))!, [], "2026-11-10");
+  assert.deepEqual(
+    calendar.anniversaries.filter((row) => row.label.startsWith("First")).map((row) => [row.label, row.li]),
+    [
+      ["First kiss with Kai", KAI],
+      ["First confession with Kai", KAI],
+      ["First time with Mireille", MIR],
+    ],
+  );
+  // From then on it goes with them wherever their card does; nothing is sent while a first is null.
+  const kai = betweenYou({ name: "Kai" }, state.lis[KAI]!);
+  assert.ok(kai.includes(`Kai and the protagonist's first kiss has already happened: ${KISS}`), kai);
+  assert.ok(kai.includes(`Kai and the protagonist's first confession has already happened: Kai told Ava`), kai);
+  const mireille = betweenYou({ name: "Mireille" }, state.lis[MIR]!);
+  assert.ok(mireille.includes("Mireille and the protagonist's first time has already happened: Mireille and Ava"));
+  assert.doesNotMatch(
+    kai + mireille,
+    /\(the first time/u,
+    "the card reads the short label, never the ask's clarification",
+  );
+  assert.doesNotMatch(betweenYou({ name: "Kai" }, defaultLiState()), /already happened/u);
+  // Once every first is recorded, the summary asks for nothing more.
+  const done = { ...state.lis[KAI]!, firstTime: "x", firstKiss: "y", firstConfession: "z" };
+  assert.equal(romanticFirstsAsk([{ id: KAI, name: "Kai" }], { ...state, lis: { [KAI]: done } }), "");
+  // A story saved before the firsts reads them as null.
+  const old = normalizeState({ lis: { [KAI]: { points: 300, stage: 2 } } });
+  assert.deepEqual(
+    [old.lis[KAI]!.firstKiss, old.lis[KAI]!.firstTime, old.lis[KAI]!.firstConfession],
+    [null, null, null],
+  );
+});
 
 test("a Character Story joins the timeline in story order, private to its love interest; a date never does", async () => {
   // The maintainer's (2026-11-03): love interests must know what happened in their Character Stories, and as recalls

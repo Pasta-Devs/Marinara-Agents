@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.22.4 — 2026-11-10
+
+- **Firsts are remembered for good.** A love interest's first kiss, first time and first confession with you are now kept permanently. When a chapter's summary is written, it notes any of the three that happened there for the first time, in one sentence saying how and in which chapter, and that sentence goes with them into every later scene, so the story never treats it as a first again. Each one also joins the Love Timeline, and the calendar marks it every year, as "First kiss with Kai". Stories you've already started begin with none noted.
+
 ## 0.22.3 — 2026-11-10
 
 - **Love interests can show they want you.** The slow burn now holds back love, not attraction. Through their first four stages, a love interest may flirt, tease and say outright that they find you attractive, as far as their mask lets them, but still won't confess or become your partner. A kiss given out of feeling waits for their fifth stage, where a confession can come too.
