@@ -26,7 +26,7 @@ import {
   type MessageReaction,
 } from "@marinara-engine/shared";
 import { createChatsStorage } from "../services/storage/chats.storage.js";
-import { createCharactersStorage } from "../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createConversationCallsStorage } from "../services/storage/conversation-calls.storage.js";
 import { createAppSettingsStorage } from "../services/storage/app-settings.storage.js";

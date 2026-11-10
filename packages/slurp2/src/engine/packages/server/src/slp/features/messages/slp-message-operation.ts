@@ -10,7 +10,7 @@ import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../../data/slp-storage.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";

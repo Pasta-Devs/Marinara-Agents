@@ -1,5 +1,5 @@
 import type { DB } from "../../../db/connection.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { slurpActivePlatformEvents } from "../../../../../shared/src/slp/slp-platform-events.js";
 import { listSlurpContinuityForEditor } from "../../data/continuity/slp-continuity-storage.js";
 import { listSlurpOpportunities } from "../../data/feed/slp-opportunity-storage.js";

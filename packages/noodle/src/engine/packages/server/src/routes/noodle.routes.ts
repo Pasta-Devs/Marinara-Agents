@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createNoodleStorage } from "../services/storage/noodle.storage.js";
-import { createCharactersStorage } from "../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createPublicNoodleGenerationService } from "../services/noodle/noodle-public-generation.service.js";
 import { createPublicNoodleImagesService } from "../services/noodle/noodle-public-images.service.js";
