@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.22.0",
+          "date": "2026-11-10",
+          "notes": "- **Portraits and expressions paint by themselves.** With an image connection, a new story paints every love interest's portrait and yours once their bibles are written. With **Expressions** on, their faces follow in the background. Card characters are painted too, instead of using their Engine sprites or avatar. **Ask before painting** and prompt review still hold the portraits for **Paint the cast**. Without an image connection, your Engine sprites and avatars are used as before.\n- **Someone new gets a portrait in Your cast.** A love interest who arrives at the end of an arc now appears in **Your cast** with their portrait: it paints by itself with an image connection, or waits for **Paint the cast** with **Ask before painting** or prompt review on. Someone who arrived before this update gets theirs the next time you open the story.\n- Stories you've already started keep their **Paint the cast** button: portraits waiting there don't start painting by themselves.",
+          "highlight": true
+        },
+        {
           "version": "0.21.6",
           "date": "2026-11-10",
           "notes": "- **Figurine and birthday scenes no longer count as your last Character Story.** One you read after a Character Story no longer takes its place: the next main chapter picks up from that Character Story, and main, route and repair chapters keep it as the last one you played. Their love interest still remembers the scene.",
@@ -787,12 +793,6 @@
           "version": "0.17.0",
           "date": "2026-11-07",
           "notes": "- **Take the personality quiz while a chapter is planned.** While a chapter is being planned, tap **Play the personality quiz** and answer statements from strongly disagree to strongly agree. After each answer you see how every love interest answered the same statement, and how alike the two of you are so far. Statements about sex and kinks appear only when Heat is NSFW. Once you've answered them all, 50 new statements are written for you in the background.\n- **Your love interests answer it once.** A new story writes their answers in the background after their bibles, in one call on your Planning connection. A story you started before this update gets theirs in the background the next time you open it, and someone new who joins later gets theirs the same way.\n- **What happened so far… now shows while an arc is planned.** Planning any other chapter offers the quiz instead, and **Who said what?** still plays while a scene is written.",
-          "highlight": true
-        },
-        {
-          "version": "0.16.0",
-          "date": "2026-11-07",
-          "notes": "- **Grievances.** Only a serious break now leaves a love interest with a grievance against you, at most once a story arc. Until you make it right they can't lead a chapter, their affection doesn't grow and your dates with them wait, with nothing lost. After two story chapters of space, **Make it right** in Routes plans the one chapter that clears it, for 300 affection. A grievance from before needs no space.\n- **I'm upset with them.** Tell a love interest from Routes that you're upset with them (1 call: they answer in Messages), and take it back any time. They know it in their messages and in the story, and may ask you out once to clear the air: accept, and it's your next Date Night with them, somewhere they choose.",
           "highlight": true
         }
       ]

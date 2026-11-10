@@ -1,7 +1,9 @@
 // Otome Forge's setup (M1): the forge job writes the world plan and one bible per love interest from the cards and
 // archetypes; a bible must be an adult's with no school role (one repair turn, then the step fails and waits for
-// Retry); paint steps wait for consent, paint once, and are never repainted after a failure; a step left running by a
-// restart is stored as failed; and every document the setup writes keeps the `otome-forge:` prefix.
+// Retry); paint steps wait for consent, paint once, and are never repainted after a failure; with neither Ask before
+// painting nor prompt review a new world paints each look by itself and queues his faces (0.22.0), and someone new
+// mid-story gets his paint step on the next read; a step left running by a restart is stored as failed; and every
+// document the setup writes keeps the `otome-forge:` prefix.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -27,6 +29,10 @@ import {
   toSetupInput,
   type DraftLi,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/setup/draft.ts";
+import type {
+  ExpressionBeat,
+  OtomeArt,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import type {
   ImageClient,
   PortraitRequest,
@@ -72,6 +78,7 @@ import {
   settleForge,
   startForge,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/forge.ts";
+import { removeLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
 import { createOtomeStore } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
 import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
 import { normalizeQuiz } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/quiz.ts";
@@ -189,6 +196,8 @@ async function setup({
   cast = CAST,
   replies = [],
   imageConnection = null,
+  auto = false,
+  faces,
   failures = 0,
   persona = { name: "Ines", description: "A cartographer.", appearance: "" },
 }: {
@@ -196,6 +205,10 @@ async function setup({
   cast?: Seeded[];
   replies?: FakeReply[];
   imageConnection?: string | null;
+  /** The paint steps start pending, as a new world's do with nothing holding them (POST /runs). */
+  auto?: boolean;
+  /** Each love interest whose faces are queued, by name (the art service's queueExpressions). */
+  faces?: string[];
   failures?: number;
   persona?: { name: string; description: string; appearance: string };
 }) {
@@ -227,6 +240,7 @@ async function setup({
     forge: initialForge(
       cast.map((li) => li.id),
       imageConnection !== null,
+      auto,
     ),
   }));
   await store.mutateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (player) => ({
@@ -249,10 +263,14 @@ async function setup({
     lis: Object.fromEntries(cast.map((li) => [li.id, { points: 0, stage: 1 }])),
   }));
 
-  const deps = { runtime, store, handle: createHandle(runtime.logger), images };
+  const art = {
+    queueExpressions: (_runId: string, beat: ExpressionBeat) =>
+      void faces?.push(...beat.segments.map((segment) => (segment as { speaker: string }).speaker)),
+  } as Pick<OtomeArt, "queueExpressions"> as OtomeArt;
+  const deps = { runtime, store, handle: createHandle(runtime.logger), images, art };
   const call = routeHarness(deps);
   const post = (path: string, body: unknown) => call("POST", path, body, runKey);
-  const get = (path: string) => call("GET", path, {}, runKey);
+  const get = (path: string, query: object = {}) => call("GET", path, query, runKey);
   const world = async () => (await store.readDoc(worldId(runId), normalizeWorld))!;
   const unit = async (li: string) => (await store.readDoc(unitId(runId, li), normalizeUnit))!;
   const player = async () => (await store.readDoc(playerId(runId), normalizePlayer))!;
@@ -619,6 +637,120 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
   assert.equal((repaint.body.paint as Paint).ref, "global-gallery:img5");
   assert.deepEqual(t.deleted, ["img3"]);
   assert.equal((await t.post("/runs/:run/art/paint", { target: { kind: "look", owner: "li:bad id" } })).status, 400);
+});
+
+test("with neither Ask before painting nor prompt review, each look paints by itself once written, then his faces queue", async () => {
+  const faces: string[] = [];
+  const t = await setup({
+    runKey: "r-autopaint-aaaaaa",
+    cast: CAST.slice(0, 2),
+    imageConnection: "conn-image",
+    auto: true,
+    faces,
+    failures: 1,
+    replies: [
+      JSON.stringify(plan),
+      JSON.stringify(bible()),
+      JSON.stringify(
+        bible({ pronouns: SHE, look: { identityLine: "red hair", outfitLine: "gown", presentation: "woman" } }),
+      ),
+    ],
+  });
+  startForge(t.deps, t.runId, { debugMode: false });
+  await forgeSettled(t.runId);
+  const world = await t.world();
+  assert.equal(world.forge.phase, "ready");
+  assert.deepEqual(
+    world.forge.steps.filter((step) => step.id.startsWith("paint:")).map((step) => [step.id, step.state]),
+    [
+      [`paint:${KAI}`, "failed"],
+      [`paint:${MIR}`, "done"],
+      ["paint:player", "done"],
+    ],
+  );
+  assert.equal(t.paid.length, 3, "each look once; his failed one waits for Retry");
+  assert.deepEqual(faces, ["Mireille"], "faces for a love interest's painted look only, never the protagonist's");
+  await settleForge(t.deps, t.runId);
+  assert.equal(t.paid.length, 3);
+});
+
+test("someone new mid-story gets his steps on the next read: painting by itself, held for the tap, or none", async () => {
+  const newcomer = {
+    ...CAST[2]!,
+    bible: normalizeBible(
+      bible({ look: { identityLine: "sun-dark skin", outfitLine: "patched coat", presentation: "man" } }),
+    ),
+  };
+  for (const [why, runKey, images, review, expected] of [
+    ["by itself", "r-newauto-aaaaaa", { connectionId: "conn-image", ask: false }, false, ["done", 1, ["Sol"]]],
+    [
+      "Ask before painting",
+      "r-newask-aaaaaa",
+      { connectionId: "conn-image", ask: true },
+      false,
+      ["waiting-consent", 0, []],
+    ],
+    [
+      "prompt review",
+      "r-newreview-aaaaaa",
+      { connectionId: "conn-image", ask: false },
+      true,
+      ["waiting-consent", 0, []],
+    ],
+    ["no image connection", "r-newnoimg-aaaaaa", { connectionId: null, ask: false }, false, [undefined, 0, []]],
+  ] as const) {
+    const faces: string[] = [];
+    const t = await setup({
+      runKey,
+      cast: CAST.slice(0, 2),
+      imageConnection: images.connectionId,
+      faces,
+    });
+    // The cast was forged long ago; its looks still wait for the tap.
+    const cast = [
+      { id: "world-plan", state: "done" as const },
+      ...[KAI, MIR].map((li) => ({ id: `bible:${li}`, state: "done" as const })),
+      ...(images.connectionId
+        ? [`paint:${KAI}`, `paint:${MIR}`, "paint:player"].map((id) => ({
+            id,
+            state: "waiting-consent" as const,
+            paid: true,
+          }))
+        : []),
+    ];
+    await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      images: { ...world.images, ...images },
+      forge: { phase: "ready", steps: cast },
+    }));
+    await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, SOL)), normalizeUnit, (unit) => ({
+      ...unit,
+      ...newcomer,
+      createdAt: at,
+    }));
+    await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+      ...state,
+      lis: { ...state.lis, [SOL]: { points: 0, stage: 1 } },
+    }));
+    const read = await t.get("/runs/:run", review ? { reviewImagePrompts: true } : {});
+    assert.equal(read.status, 200, `${why}: ${JSON.stringify(read.body)}`);
+    await forgeSettled(t.runId);
+    await t.get("/runs/:run");
+    const [paint, paid, queued] = expected;
+    const steps = (await t.world()).forge.steps;
+    assert.deepEqual(steps.slice(0, cast.length), cast, `${why}: the cast's own steps are left as they were`);
+    assert.deepEqual(
+      steps.slice(cast.length).map((step) => [step.id, step.state]),
+      [[`bible:${SOL}`, "done"], ...(paint ? [[`paint:${SOL}`, paint]] : [])],
+      `${why}: his steps, once`,
+    );
+    assert.equal((await t.world()).forge.phase, "ready", why);
+    assert.equal(t.paid.length, paid, why);
+    assert.deepEqual(faces, queued, why);
+    // An arc plan that fails takes him back out of the cast, and Your cast with him.
+    await removeLoveInterest(t.deps, t.runId, SOL);
+    assert.deepEqual((await t.world()).forge.steps, cast, why);
+  }
 });
 
 test("without an image connection there are no paint steps, and consent is refused", async () => {

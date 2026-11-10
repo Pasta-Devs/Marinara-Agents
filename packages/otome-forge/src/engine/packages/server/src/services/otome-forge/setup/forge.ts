@@ -2,7 +2,10 @@
 // Otome Forge: the forge job that turns a new world's setup into a playable world (plan M1 "Forge job")
 // ──────────────────────────────────────────────
 // Steps: `world-plan`, then `bible:<li>` for each love interest, then (with an image connection) `paint:<li>` and
-// `paint:player`, which wait for the player's consent.
+// `paint:player`. A new world paints them by itself once the text steps are through, unless Ask before painting or
+// prompt review holds them for the player's consent; a world that gains its connection later always waits for it.
+// After a love interest's look is painted here, his faces are queued (art/expressions.ts; only while Expressions is on).
+// A love interest who arrives mid-story (S/story/introduce.ts) gets his steps on the next read (forgeCast).
 // - Text steps run on the foreground lane, in the run's serial queue (runForeground), while the player watches the
 //   progress screen. Each re-reads its step inside the queue and runs only while it is still `pending`.
 // - The phase is `ready` once the world plan and every bible are done; painting can still be running.
@@ -27,6 +30,7 @@ import type {
 import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { forgePrerequisite } from "../../../../../client/src/features/otome-forge/shared/forge.js";
 import { claimPaint, paintClaimed, paintIsLive, type ArtDeps, type LookOwner } from "../art/paint.js";
+import type { OtomeArt } from "../art/expressions.js";
 import type { BackgroundQueue } from "../background-queue.js";
 import { ensureQuiz } from "../minigames/quiz.js";
 import { type ImagePrompt, bibleMessages, worldPlanMessages } from "../prompts.js";
@@ -42,8 +46,11 @@ import { checkBible } from "./bible.js";
 import { castOf, normalizeWorldPlan, withPersonaStoryAbout, WorldPlanSchema, type WorldPlan } from "./cast.js";
 import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
-/** The background lane, when there is one, takes the personality quiz's answers once every bible is written. */
-export type ForgeDeps = ArtDeps & { background?: BackgroundQueue };
+/**
+ * The background lane, when there is one, takes the personality quiz's answers once every bible is written; the art
+ * service, when there is one, a painted love interest's faces.
+ */
+export type ForgeDeps = ArtDeps & { background?: BackgroundQueue; art?: Pick<OtomeArt, "queueExpressions"> };
 
 export const WORLD_PLAN_STEP = "world-plan";
 export const PLAYER_PAINT_STEP = "paint:player";
@@ -59,23 +66,26 @@ function paintOwner(stepId: string): LookOwner | null {
   return stepId.startsWith("paint:") ? (`li:${stepId.slice("paint:".length)}` as LookOwner) : null;
 }
 
-/** One paint step per love interest and the protagonist's, each waiting for the player's tap. */
-function paintSteps(liIds: readonly LiId[]): ForgeStep[] {
+/** One paint step per love interest and the protagonist's: pending when `auto`, else waiting for the player's tap. */
+function paintSteps(liIds: readonly LiId[], auto = false): ForgeStep[] {
   return [...liIds.map((li) => `li:${li}` as LookOwner), "player" as const].map((owner): ForgeStep => ({
     id: paintStepId(owner),
-    state: "waiting-consent",
+    state: auto ? "pending" : "waiting-consent",
     paid: true,
   }));
 }
 
-/** The steps a new world starts with; the paint steps only when it has an image connection. */
-export function initialForge(liIds: readonly LiId[], withImages: boolean): ForgeStatus {
+/**
+ * The steps a new world starts with; the paint steps only when it has an image connection, pending when `auto` (neither
+ * Ask before painting nor prompt review holds them), so the text job queues them once it is through.
+ */
+export function initialForge(liIds: readonly LiId[], withImages: boolean, auto = false): ForgeStatus {
   return {
     phase: "forging",
     steps: [
       { id: WORLD_PLAN_STEP, state: "pending" },
       ...liIds.map((li): ForgeStep => ({ id: bibleStepId(li), state: "pending" })),
-      ...(withImages ? paintSteps(liIds) : []),
+      ...(withImages ? paintSteps(liIds, auto) : []),
     ],
   };
 }
@@ -439,11 +449,8 @@ async function runPaintSteps(deps: ForgeDeps, runId: string, debugMode: boolean)
     if (!next || !owner) return;
     tried.add(next.id);
     // #2147: an owner who took Engine art since the tap (S/art/engine-art.ts) is not painted by itself.
-    const art = (
-      owner === "player"
-        ? await deps.store.readDoc(playerId(runId), normalizePlayer)
-        : await deps.store.readDoc(unitId(runId, owner.slice(3)), normalizeUnit)
-    )?.art;
+    const unit = owner === "player" ? null : await deps.store.readDoc(unitId(runId, owner.slice(3)), normalizeUnit);
+    const art = owner === "player" ? (await deps.store.readDoc(playerId(runId), normalizePlayer))?.art : unit?.art;
     if (isEngineArt(art?.url)) {
       await updateWorld(deps, runId, (current) =>
         stepOf(current, next.id)?.state === "pending" ? withStep(current, next.id, { state: "done" }) : current,
@@ -451,7 +458,15 @@ async function runPaintSteps(deps: ForgeDeps, runId: string, debugMode: boolean)
       continue;
     }
     try {
-      await paintWithStep(deps, runId, owner, { debugMode });
+      const paint = await paintWithStep(deps, runId, owner, { debugMode });
+      // His faces for the look just painted, in the background, as a change of look queues them (routes/wardrobe.ts).
+      if (paint.state === "ready" && unit) {
+        deps.art?.queueExpressions(
+          runId,
+          { segments: [{ speaker: unit.name, text: "…" }], choices: [] },
+          { debugMode },
+        );
+      }
     } catch (error) {
       // `busy`: a tap on the art route is painting this look already, and that paint owns the step.
       if (!(error instanceof OtomeForgeError && error.code === "busy")) {
@@ -524,6 +539,53 @@ export async function consentForge(
     }));
     schedulePaints(deps, runId, debugMode);
     return next.forge;
+  } finally {
+    release();
+  }
+}
+
+/**
+ * A love interest who joined mid-story (S/story/introduce.ts) gets the steps the cast was forged with, so Your cast can
+ * paint him: a done `bible:<li>` and, with an image connection, `paint:<li>`. That one is done when he already has a look,
+ * paints by itself unless Ask before painting or prompt review (`review`) holds it, and otherwise waits for the tap.
+ * GET /runs/:run calls this, so someone who arrived before it gets theirs the next time the story opens. A world never
+ * forged (no bible step) is left alone. Returns the world as saved.
+ */
+export async function forgeCast(
+  deps: ForgeDeps,
+  runId: string,
+  run: { world: World; units: ReadonlyArray<Pick<Unit, "id" | "art">> },
+  { debugMode, review }: { debugMode: boolean; review: boolean },
+): Promise<World> {
+  const newcomers = (world: World) =>
+    world.forge.steps.some((step) => step.id.startsWith("bible:"))
+      ? run.units.filter((unit) => !stepOf(world, bibleStepId(unit.id)))
+      : [];
+  if (!newcomers(run.world).length) return run.world;
+  const release = holdJob(paintJobs, runId);
+  try {
+    let queued = false;
+    const world = await updateWorld(deps, runId, (current) => {
+      const { connectionId, ask } = current.images;
+      const added = newcomers(current).flatMap((unit): ForgeStep[] => [
+        { id: bibleStepId(unit.id), state: "done" },
+        ...(connectionId
+          ? [
+              {
+                id: paintStepId(`li:${unit.id}`),
+                state: unit.art?.state === "ready" ? "done" : ask || review ? "waiting-consent" : "pending",
+                paid: true,
+              } satisfies ForgeStep,
+            ]
+          : []),
+      ]);
+      queued = added.some((step) => step.state === "pending");
+      return added.length
+        ? { ...current, forge: { ...current.forge, steps: [...current.forge.steps, ...added] } }
+        : current;
+    });
+    if (queued) schedulePaints(deps, runId, debugMode);
+    return world;
   } finally {
     release();
   }

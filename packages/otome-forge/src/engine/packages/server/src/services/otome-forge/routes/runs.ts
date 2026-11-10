@@ -3,13 +3,16 @@
 // ──────────────────────────────────────────────
 // POST /age-gate {confirm:true}            → {ageGate}
 // POST /age-gate/revoke                    → {ageGate:null}; every world drops to SFW Heat, Angst at most, SFW images
-// POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge
+// POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge (with
+//                                             an image connection, the cast's looks paint by themselves unless Ask
+//                                             before painting or prompt review holds them)
 // GET  /runs/:run                          → {view: RunView}; with the stickers the player has (#2044), whose owed
 //                                             sets and paints it queues in the background, as it queues the love
 //                                             interests' missing personality quiz answers (#2174), long-term recall's
 //                                             indexing of chapter summaries not indexed yet (0.19.0), records the side
 //                                             characters of scenes read before 0.20.0 (once) and, with Side
-//                                             character sprites on, tends their looks and sprites (S/story/side-cast.ts)
+//                                             character sprites on, tends their looks and sprites (S/story/side-cast.ts);
+//                                             someone new mid-story gets his forge steps (setup/forge.ts forgeCast)
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
 // POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?}
@@ -98,7 +101,7 @@ import {
   toWorldView,
 } from "../schemas/world.js";
 import { checkBible } from "../setup/bible.js";
-import { initialForge, settleForge, startForge, withEngineSteps, withPaintSteps } from "../setup/forge.js";
+import { forgeCast, initialForge, settleForge, startForge, withEngineSteps, withPaintSteps } from "../setup/forge.js";
 import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
@@ -215,11 +218,18 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   };
 
   /**
-   * #2147: a story in progress whose owners have no look yet takes their Engine art, and each paint step of an owner in
-   * Engine art is done (a connection added in Settings since, too). The forge is saved only when a step changed.
+   * #2147: in a story with no image connection, owners with no look yet take their Engine art; someone new mid-story gets
+   * his forge steps (forgeCast); and each paint step of an owner in Engine art is done (a connection added in Settings
+   * since, too). The forge is saved only when a step changed.
    */
-  const withEngineLooks = async (read: RunDocuments, runId: string): Promise<RunDocuments> => {
-    const run = await ensureEngineLooks(deps, runId, read, read.world.images.ask);
+  const withEngineLooks = async (
+    read: RunDocuments,
+    runId: string,
+    mode: { debugMode: boolean; review: boolean },
+  ): Promise<RunDocuments> => {
+    const looks = await ensureEngineLooks(deps, runId, read, read.world.images.ask, !!read.world.images.connectionId);
+    const world = await forgeCast(deps, runId, looks, mode);
+    const run = world === looks.world ? looks : { ...looks, world };
     if (withEngineSteps(run.world.forge, run) === run.world.forge) return run;
     const saved = await updateIfChanged(store, runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
       const forge = withEngineSteps(current.forge, run);
@@ -282,8 +292,9 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         traits: protagonist.traits.map((trait) => trait.trim()).filter(Boolean),
         goal: protagonist.goal.trim(),
       }));
-      // #2147: before the world, so its forge never offers to paint a look the Engine already has.
-      const looks = await ensureEngineLooks(deps, runId, { player, units }, setup.images.ask);
+      // #2147: a story with no image connection shows the Engine's art; with one, everyone is painted.
+      const paints = setup.images.connectionId !== null;
+      await ensureEngineLooks(deps, runId, { player, units }, setup.images.ask, paints);
       await store.mutateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => ({
         ...state,
         lis: Object.fromEntries(liIds.map((id) => [id, defaultLiState()])),
@@ -299,7 +310,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         content: enforceContent(setup.content, ageGate),
         images: { ...current.images, ...setup.images },
         connections: normalizeConnections(setup.connections),
-        forge: withEngineSteps(initialForge(liIds, setup.images.connectionId !== null), looks),
+        forge: initialForge(liIds, paints, paints && !setup.images.ask && !reviewModeOf(request)),
       }));
       await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
         ...index,
@@ -382,7 +393,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // sprites on, what the recurring ones are owed. Neither is waited for.
       const sideMode = { debugMode: debugModeOf(request), review: reviewModeOf(request) };
       void backfillSideCast(deps, runId).then(() => tendSideCast(deps, runId, sideMode));
-      const run = await withPersonaAbout(await withEngineLooks(read, runId), runId);
+      const run = await withPersonaAbout(await withEngineLooks(read, runId, sideMode), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.
       const units = await Promise.all(

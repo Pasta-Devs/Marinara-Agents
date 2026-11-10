@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.22.0 — 2026-11-10
+
+- **Portraits and expressions paint by themselves.** With an image connection, a new story paints every love interest's portrait and yours once their bibles are written. With **Expressions** on, their faces follow in the background. Card characters are painted too, instead of using their Engine sprites or avatar. **Ask before painting** and prompt review still hold the portraits for **Paint the cast**. Without an image connection, your Engine sprites and avatars are used as before.
+- **Someone new gets a portrait in Your cast.** A love interest who arrives at the end of an arc now appears in **Your cast** with their portrait: it paints by itself with an image connection, or waits for **Paint the cast** with **Ask before painting** or prompt review on. Someone who arrived before this update gets theirs the next time you open the story.
+- Stories you've already started keep their **Paint the cast** button: portraits waiting there don't start painting by themselves.
+
 ## 0.21.6 — 2026-11-10
 
 - **Figurine and birthday scenes no longer count as your last Character Story.** One you read after a Character Story no longer takes its place: the next main chapter picks up from that Character Story, and main, route and repair chapters keep it as the last one you played. Their love interest still remembers the scene.

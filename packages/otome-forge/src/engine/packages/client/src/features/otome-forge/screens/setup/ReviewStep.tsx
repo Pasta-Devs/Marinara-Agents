@@ -6,7 +6,7 @@ import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { PencilLine } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
-import { CostHint } from "../../components/CostHint";
+import { CostHint, usePaintsByItself } from "../../components/CostHint";
 import { useConnections } from "../../hooks/use-engine-resources";
 import { nameAccent } from "../../lib/accent";
 import type { Darkness, Heat, ImageRating } from "../../shared/content";
@@ -77,6 +77,8 @@ export function ReviewStep({ draft, onEdit }: ReviewStepProps) {
   const nameOf = (id: string) => connections.text.find((connection) => connection.id === id)?.name ?? id;
   const imageConnection = connections.image.find((connection) => connection.id === draft.images.connectionId);
   const count = draft.lis.length;
+  // With an image connection the looks paint by themselves, unless Ask before painting or prompt review holds them.
+  const byItself = usePaintsByItself(draft.images);
   const lines = Object.values(draft.content.limits).filter((level) => level === "line").length;
   const veils = Object.values(draft.content.limits).filter((level) => level === "veil").length;
   const customs = draft.content.custom.filter((limit) => limit.text.trim()).length;
@@ -155,9 +157,18 @@ export function ReviewStep({ draft, onEdit }: ReviewStepProps) {
         <p className="of-body">{t("ui.otomeForge.setup.costText", { count: count ? count + 2 : 1 })}</p>
         {imageConnection ? (
           <>
-            <CostHint images={count + 1} note={t("ui.otomeForge.setup.costLooksNote")} />
+            <CostHint
+              images={count + 1}
+              note={t(byItself ? "ui.otomeForge.setup.costLooksAutoNote" : "ui.otomeForge.setup.costLooksNote")}
+            />
             {draft.images.expressions ? (
-              <CostHint images={FACES_PER_LOOK * count} about note={t("ui.otomeForge.setup.costExpressionsNote")} />
+              <CostHint
+                images={FACES_PER_LOOK * count}
+                about
+                note={t(
+                  byItself ? "ui.otomeForge.setup.costExpressionsAutoNote" : "ui.otomeForge.setup.costExpressionsNote",
+                )}
+              />
             ) : null}
           </>
         ) : (

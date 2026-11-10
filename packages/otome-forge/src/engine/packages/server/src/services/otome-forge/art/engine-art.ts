@@ -1,12 +1,14 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the Engine's own art first (#2147)
+// Otome Forge: the Engine's own art in a story that paints nothing (#2147)
 // ──────────────────────────────────────────────
-// A love interest from a character card stands in the card's Engine sprites, else its avatar, and the protagonist in her
-// persona's avatar, before anything is painted. Only an owner with no look yet adopts it (POST /runs, and GET /runs/:run
-// for stories in progress and a card linked later): `portrait` is the Engine file, with no `portraitRef`, and `art` is
-// ready with its url, so the forge's paint step for that owner is done (setup/forge.ts withEngineSteps). A painted look
-// is never replaced, and a Repaint (the art route) still paints over Engine art by the player's choice; only
-// `global-gallery:` refs are ever deleted, so no Engine file is.
+// In a world with no image connection, a love interest from a character card stands in the card's Engine sprites, else
+// its avatar, and the protagonist in her persona's avatar. Only an owner with no look yet adopts it (POST /runs, and GET
+// /runs/:run for stories in progress and a card linked later): `portrait` is the Engine file, with no `portraitRef`, and
+// `art` is ready with its url, so the forge's paint step for that owner is done (setup/forge.ts withEngineSteps). With an
+// image connection, an owner with no look is painted instead (setup/forge.ts), and one already in Engine art keeps it,
+// which is how stories made before 0.22.0 or before their connection stay. A painted look is never replaced, and a
+// Repaint (the art route) still paints over Engine art by the player's choice; only `global-gallery:` refs are ever
+// deleted, so no Engine file is.
 // A sprite base brings the faces its sprites already have (ENGINE_FACE_LABELS) as the kit's face set for that base: ready
 // when all five are found, or whenever Ask before painting is on, so no face is ever paid for without a tap; otherwise
 // `stopped` with the found ones (no record with none), so with a connection and Expressions on the kit pays only for the
@@ -191,19 +193,21 @@ async function adopt<T extends { portrait?: string; portraitRef?: string; art?: 
 
 /**
  * The run's card love interests and protagonist with no look yet, each in their Engine look when they have one; the
- * documents as saved. Archetype love interests and owners with a look are returned as they are. `ask` is the world's
- * Ask before painting.
+ * documents as saved. Archetype love interests and owners with a look are returned as they are, and so is anyone with no
+ * look when `paints` (the world has an image connection: they are painted). `ask` is the world's Ask before painting.
  */
 export async function ensureEngineLooks<T extends { player: Player; units: Unit[] }>(
   deps: ArtDeps,
   runId: string,
   run: T,
   ask: boolean,
+  paints = false,
 ): Promise<T> {
   const images = imagesOf(deps);
+  const painted = (doc: { portrait?: string }) => paints && !doc.portrait;
   const units = await Promise.all(
     run.units.map((unit) =>
-      unit.cardId
+      unit.cardId && !painted(unit)
         ? adopt(
             deps,
             runId,
@@ -219,16 +223,18 @@ export async function ensureEngineLooks<T extends { player: Player; units: Unit[
         : unit,
     ),
   );
-  const player = await adopt(
-    deps,
-    runId,
-    "player",
-    run.player,
-    async () => {
-      const url = await personaAvatarPath(deps.runtime, run.player.personaId);
-      return url ? { url, faces: {}, avatar: true } : null;
-    },
-    [runDocTarget("player", playerId(runId)), normalizePlayer],
-  );
+  const player = painted(run.player)
+    ? run.player
+    : await adopt(
+        deps,
+        runId,
+        "player",
+        run.player,
+        async () => {
+          const url = await personaAvatarPath(deps.runtime, run.player.personaId);
+          return url ? { url, faces: {}, avatar: true } : null;
+        },
+        [runDocTarget("player", playerId(runId)), normalizePlayer],
+      );
   return { ...run, units, player };
 }
