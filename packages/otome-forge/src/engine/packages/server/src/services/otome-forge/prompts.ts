@@ -211,7 +211,7 @@ import {
   STORY_PLACE,
   stillToMend,
 } from "../../../../client/src/features/otome-forge/shared/dates.js";
-import type { PrestigeKind } from "../../../../client/src/features/otome-forge/shared/economy.js";
+import { levelOf, type PrestigeKind } from "../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   FACES,
   FACE_LOOKS,
@@ -1240,16 +1240,18 @@ export const SLOW_BURN_LAST_STAGE = 4;
 
 /**
  * Where the romance stands, by stage (#1960; moved later by the maintainer on 2026-11-03): a slow burn through stage 4,
- * where neither names what they feel; in stage 5 a confession may come when a scene has earned it, and by the finale
- * at the latest; in stage 6, if it has not come yet, it must. Desire is not feeling: the content contract alone
- * decides what bodies may do, at any stage.
+ * where neither confesses what they feel; in stage 5 a confession may come when a scene has earned it, and by the
+ * finale at the latest; in stage 6, if it has not come yet, it must. The slow burn holds back love, not attraction (the
+ * maintainer, 2026-11-10): flirting and saying outright that they want the protagonist are open at any stage, and a kiss
+ * given out of feeling waits for stage 5. Desire is not feeling: the content contract alone decides what bodies may do,
+ * at any stage.
  */
 function romanceLine(name: string, stage: number): string {
   if (stage <= SLOW_BURN_LAST_STAGE) {
-    return `Slow burn: ${name} never says what they feel for the protagonist, and neither does the protagonist. It shows in tension, glances, deflections and near misses, with no confession and no becoming a couple yet. Desire is not feeling: they may still act on desire, out of lust or to get what they want, as far as the content contract allows, and feelings may grow from it later.`;
+    return `Slow burn: ${name} does not confess what they feel for the protagonist, and neither does the protagonist, and they do not become a couple yet. The slow burn holds back love, not attraction: ${name} may flirt, tease, and say outright that they find the protagonist attractive or want them, in their own way and as far as their mask lets them at this stage. A kiss given out of feeling waits for stage 5. Desire is not feeling: they may still act on desire, out of lust or to get what they want, as far as the content contract allows, and feelings may grow from it later.`;
   }
   if (stage < LAST_STAGE) {
-    return `The slow burn may break: when a scene has earned it, ${name} may confess what they feel, if they have not yet; by the finale of their route at the latest, they say it.`;
+    return `The slow burn may break: ${name} may kiss the protagonist, and when a scene has earned it, ${name} may confess what they feel, if they have not yet; by the finale of their route at the latest, they say it.`;
   }
   // The finale asks for the words, but Ease off can end it first, so the story so far says whether they were spoken.
   return `${name} has chosen the protagonist. If the story has not yet shown ${name} saying what they feel, ${name} says it in words at the first moment a scene allows; once said, it is no longer hidden between them.`;
@@ -1278,6 +1280,8 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   const lines = [
     `Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`,
     romanceLine(unit.name, liState.stage),
+    // The affection level the player sees: how drawn they are, shown within what the stage allows (2026-11-10).
+    `Affection level ${levelOf(liState.points)} of 10: how drawn ${unit.name} is to the protagonist. The higher it is, the more it shows in what ${unit.name} does and says, within what their stage allows.`,
   ];
   for (const grievance of shown) {
     const holder = grievance.by === "li" ? unit.name : "the protagonist";

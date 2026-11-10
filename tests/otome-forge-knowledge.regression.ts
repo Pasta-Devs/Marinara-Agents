@@ -47,6 +47,7 @@ import {
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { CAST, HE, KAI, MIR, SHE, at, bible } from "./fixtures/otome-forge-story.ts";
+import { levelFloor } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 
 const text = (messages: Array<{ content: string }>) => messages.map((message) => message.content).join("\n");
 
@@ -251,17 +252,32 @@ test("every scene writer asks the protagonist to sit with what matters to them, 
 test("a slow burn through stage 4, a confession when earned in stage 5, and in stage 6 if not yet (#1960, 0.7.5)", () => {
   const kai = { name: "Kai" };
   const at = (stage: number) => betweenYou(kai, { ...defaultLiState(), stage });
-  const SLOW = /Slow burn: Kai never says what they feel for the protagonist, and neither does the protagonist\./;
+  const SLOW = /Slow burn: Kai does not confess what they feel for the protagonist, and neither does the protagonist/;
   // Desire is not feeling: the burn holds back the words, never what the content contract allows.
   const DESIRE = /Desire is not feeling: they may still act on desire, out of lust or to get what they want/;
-  const MAY = /The slow burn may break: when a scene has earned it, Kai may confess what they feel/;
+  // It holds back love, not attraction (2026-11-10): flirting and wanting them out loud are open, a kiss waits for stage 5.
+  const ATTRACTION =
+    /holds back love, not attraction: Kai may flirt, tease, and say outright that they find the protagonist attractive/;
+  const KISS_LATER = /A kiss given out of feeling waits for stage 5\./;
+  const MAY =
+    /The slow burn may break: Kai may kiss the protagonist, and when a scene has earned it, Kai may confess what they feel/;
   for (const stage of [1, 2, 3, 4]) {
     assert.match(at(stage), SLOW, `stage ${stage}`);
+    assert.match(at(stage), ATTRACTION, `stage ${stage}`);
+    assert.match(at(stage), KISS_LATER, `stage ${stage}`);
     assert.match(at(stage), DESIRE, `stage ${stage}`);
     assert.doesNotMatch(at(stage), MAY);
   }
   assert.match(at(5), MAY);
   assert.doesNotMatch(at(5), SLOW);
+  assert.doesNotMatch(at(5), KISS_LATER);
+  // The affection level the player sees reaches the prompt, read from the points as the client shows it.
+  assert.match(at(1), /Affection level 1 of 10: how drawn Kai is to the protagonist\./);
+  assert.match(
+    betweenYou(kai, { ...defaultLiState(), points: levelFloor(9) }),
+    /Affection level 9 of 10: how drawn Kai is to the protagonist\. The higher it is, the more it shows/,
+  );
+  assert.match(betweenYou(kai, { ...defaultLiState(), points: 1_000_000 }), /Affection level 10 of 10/);
   // Stage 6: if not said yet, it must be; Ease off can end the finale before the words, so it never claims they were.
   assert.match(
     at(6),
@@ -359,20 +375,22 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // sha256 of the messages as JSON. A change to one of them is a change to a prompt the world limits keep as it was; a
 // release that changes one on purpose (0.8.7 moves the date plan's WHAT THEY WEAR into protagonistBlock) retakes it.
 // 0.18.1: the canon writing rule now names an existing world's characters, so these prompts' bytes moved.
+// 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so every prompt
+// with a love interest's card moved (the bible, which has none, did not).
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "8583f906691eb1b7",
-  callScene: "ed4799ff3f64f438",
-  confrontation: "ca6d7738bdce9f03",
-  closer: "cec529a66b16236c",
+  scene: "6e5c66a808dce9a8",
+  callScene: "d114f4fe8ec04a9a",
+  confrontation: "abb1ce9a36a31e21",
+  closer: "858e88fdfc2f6942",
   bible: "a500b0070a43282e",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
-  chat: "3f47cf5405af9d8b",
-  daily: "e5e05d626c6590a5",
-  note: "f0ac5f17447ce8d8",
+  chat: "fa12ef57c1ce4b4e",
+  daily: "f0c321c7e08d62ca",
+  note: "f0fa08c18c2e6608",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "4eefe6cc24812915",
+  datePlan: "3ff9bb3236f5795d",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {

@@ -156,10 +156,11 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
     .slice(0, 16);
 
 /** Taken from the 0.6.3 builder, before seasons; 0.18.1's canon writing rule ("characters") moved them. */
+// 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "24f52a507c2e18e8",
-  "his-wardrobe": "44173ffca5287223",
-  "my-wardrobe": "700bf4692c07aa11",
+  memories: "0b3591fa583164d9",
+  "his-wardrobe": "0233b58087053e13",
+  "my-wardrobe": "6d175fe1d2589e04",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

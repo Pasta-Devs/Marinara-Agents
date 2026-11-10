@@ -688,6 +688,12 @@
           "highlight": false
         },
         {
+          "version": "0.22.3",
+          "date": "2026-11-10",
+          "notes": "- **Love interests can show they want you.** The slow burn now holds back love, not attraction. Through their first four stages, a love interest may flirt, tease and say outright that they find you attractive, as far as their mask lets them, but still won't confess or become your partner. A kiss given out of feeling waits for their fifth stage, where a confession can come too.\n- **Your affection level shows in the story.** Each love interest's affection level now reaches the scenes, so the higher it is, the more drawn to you they act, within what their stage allows.\n- The README now gives the right affection level costs: level 2 takes 200 points, and each level after it 50 more.",
+          "highlight": false
+        },
+        {
           "version": "0.22.2",
           "date": "2026-11-10",
           "notes": "- **Wardrobe and Wish art shows faster.** Looks, faces and wardrobe banner art now use the cut-outs Otome Hearth already saves on the server. Before, your browser downloaded each full painting, sent it to Marinara Engine to remove its backdrop and waited for the result, for every look and face on screen. Art that isn't cut out yet still shows the old way, and is cut out in the background for your next visit.",
@@ -794,12 +800,6 @@
           "date": "2026-11-08",
           "notes": "- **Stories meet the world's important people.** Chapters now bring in major side characters with real parts, not only passing locals, so they can grow into love interests or antagonists later. In a story set in an existing world, that means its own canon characters tied to your love interests.\n- **Premise suggestions may use existing worlds.** Surprise me no longer avoids names, places and characters from existing books, films and games.",
           "highlight": false
-        },
-        {
-          "version": "0.18.0",
-          "date": "2026-11-08",
-          "notes": "- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as \"The Lovers · Ren\". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.",
-          "highlight": true
         }
       ]
     },
