@@ -275,6 +275,14 @@ test("a chapter summary records each romantic first once, never asks again for o
   // From then on it goes with them wherever their card does; nothing is sent while a first is null.
   const kai = betweenYou({ name: "Kai" }, state.lis[KAI]!);
   assert.ok(kai.includes(`Kai and the protagonist's first kiss has already happened: ${KISS}`), kai);
+  assert.ok(kai.includes(`Kai and the protagonist's first confession has already happened: Kai told Ava`), kai);
+  const mireille = betweenYou({ name: "Mireille" }, state.lis[MIR]!);
+  assert.ok(mireille.includes("Mireille and the protagonist's first time has already happened: Mireille and Ava"));
+  assert.doesNotMatch(
+    kai + mireille,
+    /\(the first time/u,
+    "the card reads the short label, never the ask's clarification",
+  );
   assert.doesNotMatch(betweenYou({ name: "Kai" }, defaultLiState()), /already happened/u);
   // Once every first is recorded, the summary asks for nothing more.
   const done = { ...state.lis[KAI]!, firstTime: "x", firstKiss: "y", firstConfession: "z" };

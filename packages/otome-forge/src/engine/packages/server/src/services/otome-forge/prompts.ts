@@ -1297,9 +1297,11 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   const told = liState.disclosures.slice(-3).map((item) => item.text);
   if (told.length) lines.push(`The protagonist has told ${unit.name}: ${told.join(" ")}`);
   // Their romantic firsts, once a chapter's summary recorded them (S/memory/memory.ts): sent with them from then on.
-  for (const [field, what] of ROMANTIC_FIRSTS) {
+  // The short label ("first time"), not the ask's clarifying phrase: the sentence itself says what happened.
+  for (const [field, , , label] of ROMANTIC_FIRSTS) {
     const sentence = liState[field];
-    if (sentence) lines.push(`${unit.name} and the protagonist's ${what} has already happened: ${sentence}`);
+    if (sentence)
+      lines.push(`${unit.name} and the protagonist's ${label.toLowerCase()} has already happened: ${sentence}`);
   }
   return lines.join("\n");
 }
