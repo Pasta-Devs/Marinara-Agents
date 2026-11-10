@@ -2,7 +2,7 @@
 
 ## 0.21.5 — 2026-11-10
 
-- **Figurine and birthday scenes stay out of the story.** A figurine's scene or a birthday scene you read after a Character Story no longer takes that story's place. The next main chapter still picks up from the Character Story, and every chapter still gets it as the last one played.
+- **Figurine and birthday scenes no longer count as your last Character Story.** One you read after a Character Story no longer takes its place: the next main chapter picks up from that Character Story, and main, route and repair chapters keep it as the last one you played. Their love interest still remembers the scene.
 
 ## 0.21.4 — 2026-11-10
 
