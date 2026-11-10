@@ -26,7 +26,8 @@
 // protagonist and its love interest (and anyone who speaks in it): by its summary, in full while it has none, once
 // even when the timeline holds it, and beside a head that condensed it; without the option, nothing changes. The
 // hand-off: while it is the newest thing that happened, the next main chapter's plan and first scene (never chapter 1,
-// a later scene or a route chapter) pick up from it, with the task, so the story context they share stays the same.
+// a later scene or a route chapter) pick up from it, with the task, so the story context they share stays the same. A
+// figurine or birthday scene is never the last Character Story, and the hand-off looks past one.
 // #2146: a chapter's closing decision takes the player's own words: saved as one more option of that big choice, with no
 // effects, carried into the next chapter's cached story context; every other choice, a blank, too long or mismatched
 // body, and a beat not being read are refused and save nothing.
@@ -46,6 +47,8 @@ import {
   OWN_ANSWER_MAX,
   OWN_OPTION,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
+import { birthdaySceneKey } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/birthdays.ts";
+import { figurineSceneKey } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/shop.ts";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z } from "zod";
 import { generateJson } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
@@ -3610,6 +3613,25 @@ test("the next main chapter's plan and first scene pick up from the last Charact
     "2026-10-28T10:30:00.000Z",
   );
   assert.equal(await handOff(), "The Ledger Room", "his side after it keeps the hand-off");
+  // A figurine (#2128) or birthday (#2153) scene never counts toward the story (the maintainer's, 2026-11-10): read
+  // after the Character Story, neither takes its place as the last one, nor the hand-off.
+  for (const [key, title, line, at] of [
+    [figurineSceneKey(KAI), "Kai in Miniature", "KAI-FIGURINE: he sets it on the shelf.", "2026-10-28T10:40:00.000Z"],
+    [birthdaySceneKey(SOL, 2026), "Sol's Birthday", "SOL-BIRTHDAY: a cake on the quay.", "2026-10-28T10:50:00.000Z"],
+  ] as const) {
+    const li = key.includes(KAI) ? KAI : SOL;
+    await completeChapter(t, { key, kind: "story", li, lead: li, title }, line, at);
+    assert.equal(await handOff(), "The Ledger Room", `${title} after it keeps the hand-off`);
+    const context = await recallText({ store: t.store }, t.runId, {
+      job: "narration",
+      cast: [li],
+      continues: "main",
+      cached: {},
+      lastStory: true,
+    });
+    assert.ok(context.text.includes('# Last Character Story in full: "The Ledger Room"'), context.text);
+    assert.ok(!context.text.includes(`"${title}" (private between`), `${title} is never the last Character Story`);
+  }
   await completeChapter(
     t,
     { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },

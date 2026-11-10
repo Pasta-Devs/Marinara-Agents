@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.21.6 — 2026-11-10
+
+- **Figurine and birthday scenes no longer count as your last Character Story.** One you read after a Character Story no longer takes its place: the next main chapter picks up from that Character Story, and main, route and repair chapters keep it as the last one you played. Their love interest still remembers the scene.
+
 ## 0.21.5 — 2026-11-10
 
 - **Choosing a card for someone new works again.** When you bring someone new into the story from your cards at the end of an arc, your cards show as a grid of tiles, and the one you tap gets a check, as in setup.

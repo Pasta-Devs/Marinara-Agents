@@ -74,9 +74,10 @@
 //   has none, as above; it goes in even when the timeline covers it, its entry left out of the timeline, or beside the
 //   condensed head that holds it;
 // - the hand-off (`handOff`, the maintainer's, 2026-11-09): when that last Character Story is the newest thing that
-//   happened (no chapter but his side completed after it) and its block went in, the main story's prompts get its
-//   title, so a main chapter's plan and first scene pick up from how it ended, as chapter 1 picks up from the prologue
-//   (S/prompts.ts storyHandOff);
+//   happened (no chapter but his side, a figurine scene or a birthday scene completed after it) and its block went
+//   in, the main story's prompts get its title, so a main chapter's plan and first scene pick up from how it ended, as
+//   chapter 1 picks up from the prologue (S/prompts.ts storyHandOff). A figurine or birthday scene is never the last
+//   Character Story (isFigurineOrBirthday);
 // - the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k tokens, each date the
 //   timeline covers by its summary among them), after the timeline or, when `cached`, as a context of its own that the
 //   prompt sends after its cached part. A recall that fails is the same story context without it.
@@ -119,6 +120,8 @@ import type {
   Segment,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { birthdayOfKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
+import { figurineLiOf } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { beatId, chapterId, isItemStoryKey, memoryId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory, RecallPoolOptions } from "../memory/memory.js";
 import { lastWords, type RecallIndex } from "../memory/recall-index.js";
@@ -362,13 +365,25 @@ function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }):
 }
 
 /**
+ * A Shop figurine's scene (#2128) or a birthday scene (#2153): a `story-` chapter with no story item behind it. Neither
+ * counts toward the story (the maintainer's, 2026-11-10): it is never the last Character Story, and the hand-off looks
+ * past it. It stays its love interest's own chapter, as before.
+ */
+const isFigurineOrBirthday = (key: string) => figurineLiOf(key) !== null || birthdayOfKey(key) !== null;
+
+/**
  * The last Character Story (#2126, see the header): the newest completed `story-<itemId>` chapter (a Memory's
  * Character Story, a Moment or a first-wear scene), chosen from every completed chapter and never from what a cast may
  * know, so a cached story context stays the same whatever the call's cast. completedChapters is in story order, where
- * a story sorts by when it completed; an extra story is not among them, and a date is no story.
+ * a story sorts by when it completed; an extra story is not among them, a date is no story, and neither is a figurine
+ * or birthday scene (isFigurineOrBirthday).
  */
 const lastStoryOf = (chapters: readonly Completed[]) =>
-  chapters.filter(({ chapter }) => chapter.kind === "story" && isItemStoryKey(chapter.key)).at(-1);
+  chapters
+    .filter(
+      ({ chapter }) => chapter.kind === "story" && isItemStoryKey(chapter.key) && !isFigurineOrBirthday(chapter.key),
+    )
+    .at(-1);
 
 /**
  * The last Character Story's title in the storyline chapters' prompts (#2126): private between the protagonist and its
@@ -813,8 +828,9 @@ export async function recallText(
   if (earlier.length) context.recalled = earlier.map(({ chapter }) => chapter.key);
   // Only a pool that was read: one that failed sends none, and is chosen again on the next call.
   if (chapterPool && result && !result.poolFailed) context.memories = recalls.map(({ id }) => id).reverse();
-  // The hand-off (see the header): only when nothing but his side came after the last Character Story.
-  const newest = chapters.filter(({ chapter }) => !chapter.hisSide).at(-1);
+  // The hand-off (see the header): only when nothing but his side, a figurine or a birthday scene came after the last
+  // Character Story.
+  const newest = chapters.filter(({ chapter }) => !chapter.hisSide && !isFigurineOrBirthday(chapter.key)).at(-1);
   if (continues === "main" && lastStory && lastStory === newest && lastStoryKey) {
     context.handOff = lastStory.chapter.title || lastStory.chapter.key;
   }
