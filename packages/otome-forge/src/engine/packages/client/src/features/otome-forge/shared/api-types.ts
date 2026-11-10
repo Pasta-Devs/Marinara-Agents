@@ -774,7 +774,7 @@ export interface ChapterShift {
 
 /** One love interest's progress and the state of things between him and the protagonist. */
 export interface LiState {
-  /** Affection points may fall within the reached level. Level = min(10, 1 + floor(points / 300)). */
+  /** Affection points may fall within the reached level. Level: shared/economy.ts levelOf (200 points to level 2, 50 more for each after). */
   points: number;
   stage: number;
   /** −3..+3, starting at 0; moved only by first-play choices, capped per beat and per chapter. */
