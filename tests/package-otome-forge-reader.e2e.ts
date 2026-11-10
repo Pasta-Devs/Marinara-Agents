@@ -1078,8 +1078,31 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
   newcomer = true;
   await page.goto("about:blank");
   const third = await openStory(page);
+  // Someone from your cards (the maintainer, 2026-11-10): the cards lay out as setup's tiles, and a tap shows a check
+  // and readies Bring them in. The classes this used had no styles, so the list fell apart and a tap showed nothing.
+  const cardNames = ["Albedo", "Alhaitham", "Arlecchino", "Bob", "Capitano", "Columbina"];
+  await page.route("**/api/characters/catalog?**", (route) =>
+    route.fulfill({
+      json: {
+        items: cardNames.map((name) => ({ id: `card-${name.toLowerCase()}`, name })),
+        hasMore: false,
+      },
+    }),
+  );
   await third.getByRole("button", { name: /Meet someone new/ }).click();
   const arrives = page.getByRole("dialog", { name: "Who arrives?" });
+  const tiles = arrives.getByRole("list", { name: "Someone from your cards" }).getByRole("button");
+  await expect(tiles).toHaveCount(cardNames.length);
+  const [first, second] = await Promise.all([tiles.nth(0).boundingBox(), tiles.nth(1).boundingBox()]);
+  expect(Math.abs(first!.y - second!.y), "two cards share a row").toBeLessThan(2);
+  const arlecchino = tiles.filter({ hasText: "Arlecchino" });
+  await expect(arlecchino).toHaveAttribute("aria-pressed", "false");
+  await arlecchino.click();
+  await expect(arlecchino).toHaveAttribute("aria-pressed", "true");
+  await expect(arlecchino.locator(".of-tile-check")).toBeVisible();
+  await expect(arrives.getByText("he/him", { exact: true })).toBeVisible();
+  await arrives.getByText("he/him", { exact: true }).click();
+  await expect(arrives.getByRole("button", { name: "Bring them in" })).toBeEnabled();
   await arrives.getByLabel("Someone new, invented for this story").check();
   await arrives.getByLabel("Their name").fill("Noor");
   await arrives.getByText("he/him", { exact: true }).click();
