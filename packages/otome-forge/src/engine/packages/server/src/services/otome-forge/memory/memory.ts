@@ -87,15 +87,17 @@ import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { z } from "zod";
 import { createBackgroundQueue, type BackgroundQueue } from "../background-queue.js";
 import {
+  ROMANTIC_FIRSTS,
   SUMMARY_WORDING,
   notebookMemories,
   otomeContentContract,
+  romanticFirstsAsk,
   timelineFoldMessages,
   withRules,
 } from "../prompts.js";
 import { OUTPUT_FLOOR, generateJson, promptRoom, resolveConnectionId, type OtomeMessage } from "../generation.js";
 import { OTOME_FORGE_PACKAGE_ID, isItemStoryKey, memoryId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
-import { normalizeState, readCastUnits } from "../schemas/state.js";
+import { FIRST_SENTENCE_MAX, normalizeState, readCastUnits } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
@@ -141,7 +143,8 @@ export const RECALL_TOKENS = 5000;
  */
 const MEMORY_CONTEXT = 400_000;
 
-const SummarySchema = z.object({ summary: z.string().min(1) });
+// `firsts` comes only with a chapter summary that asked for it (romanticFirstsAsk); anything else in it is ignored.
+const SummarySchema = z.object({ summary: z.string().min(1), firsts: z.unknown().optional() });
 
 /** The longest failed summary's message kept on the status: a proxy's error page can be long. */
 const FAILURE_CHARACTERS = 2000;
@@ -209,7 +212,7 @@ export type MemoryRuntime = Pick<
 
 export interface OtomeMemoryDeps {
   runtime: MemoryRuntime;
-  store: Pick<OtomeStore, "readDoc" | "listRun" | "version">;
+  store: Pick<OtomeStore, "readDoc" | "listRun" | "version" | "updateDoc">;
   /** The package's background lane; without one the memory makes its own (and disposes it). */
   background?: BackgroundQueue;
   /** Every canonical source of a run; S/memory/sources.ts by default, kept until the store writes (tests pass their own). */
@@ -370,6 +373,45 @@ export function createOtomeMemory({
     };
   }
 
+  /** The cast and what a chapter summary asks about their romantic firsts now ("" once every one is recorded). */
+  async function firstsOf(runId: string) {
+    const state = await store.readDoc(stateId(runId), normalizeState);
+    const units = state ? await readCastUnits(store, runId, state) : [];
+    return { units, ask: state ? romanticFirstsAsk(units, state) : "" };
+  }
+
+  /**
+   * Saves each first a summary reported, by the love interest's name, only where it is still null: set once, never
+   * overwritten, so a later summary (or another piece of a long chapter) never replaces it.
+   */
+  async function recordFirsts(runId: string, units: ReadonlyArray<{ id: string; name: string }>, raw: unknown) {
+    if (!raw || typeof raw !== "object") return;
+    const found = new Map<string, Partial<Record<(typeof ROMANTIC_FIRSTS)[number][0], string>>>();
+    for (const [name, fields] of Object.entries(raw as Record<string, unknown>)) {
+      const unit = units.find((candidate) => candidate.name.trim().toLowerCase() === name.trim().toLowerCase());
+      if (!unit || !fields || typeof fields !== "object") continue;
+      for (const [field] of ROMANTIC_FIRSTS) {
+        const value = (fields as Record<string, unknown>)[field];
+        const sentence = typeof value === "string" ? value.trim().slice(0, FIRST_SENTENCE_MAX) : "";
+        if (sentence) found.set(unit.id, { ...found.get(unit.id), [field]: sentence });
+      }
+    }
+    if (!found.size) return;
+    await store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => {
+      const lis = { ...state.lis };
+      for (const [li, fields] of found) {
+        const current = lis[li];
+        if (!current) continue;
+        const next = { ...current };
+        for (const [field, sentence] of Object.entries(fields) as Array<[keyof typeof fields, string]>) {
+          if (!next[field]) next[field] = sentence;
+        }
+        lis[li] = next;
+      }
+      return { ...state, lis };
+    });
+  }
+
   /** The memory as the kit writes it, with a failed summary's message (and tooSmall's reason) on its error status. */
   const withFailure = (runId: string, data: unknown) => {
     const status = (data as { status?: { phase?: unknown } } | null)?.status;
@@ -441,7 +483,9 @@ export function createOtomeMemory({
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
       if (!job) return false;
       if (!job.maxContext) return true;
-      if (promptRoom(job.maxContext, withRules(request, job)) >= summaryReserve(job.maxOutputTokens)) return true;
+      const firsts = request.kind === "detail" ? (await firstsOf(request.runId)).ask : "";
+      if (promptRoom(job.maxContext, withRules(request, job, firsts)) >= summaryReserve(job.maxOutputTokens))
+        return true;
       if (pieceLength(request) <= 1) failures.set(request.runId, tooSmall(job.maxContext, "write a summary"));
       return false;
     },
@@ -449,7 +493,7 @@ export function createOtomeMemory({
       const request = value as SummaryRequest;
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
       if (!job) throw new Error("memory-unavailable");
-      const ask = async (kind: string, messages: OtomeMessage[], maxTokens = SUMMARY_OUTPUT_TOKENS) => {
+      const call = async (kind: string, messages: OtomeMessage[], maxTokens = SUMMARY_OUTPUT_TOKENS) => {
         const { value: reply } = await generateJson(
           { runtime, store },
           {
@@ -471,8 +515,17 @@ export function createOtomeMemory({
           });
           throw error;
         });
-        return reply.summary.trim();
+        return reply;
       };
+      const ask = async (kind: string, messages: OtomeMessage[], maxTokens?: number) =>
+        (await call(kind, messages, maxTokens)).summary.trim();
+      if (request.kind === "detail") {
+        // A chapter's summary also reports the romantic firsts not recorded yet; each is saved once, never overwritten.
+        const firsts = await firstsOf(request.runId);
+        const reply = await call(request.kind, withRules(request, job, firsts.ask));
+        if (firsts.ask) await recordFirsts(request.runId, firsts.units, reply.firsts);
+        return reply.summary.trim();
+      }
       if (request.kind !== "overview") return ask(request.kind, withRules(request, job));
       // The kit folds one record into the overview: here that is appending its summary to the timeline, then, once
       // the timeline crossed its ceiling, condensing everything before the newest main chapter's entry (#2066, #2091;

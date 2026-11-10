@@ -267,10 +267,16 @@ export const defaultLiState = (): LiState => ({
   lastLead: null,
   angst: [],
   firsts: {},
+  firstKiss: null,
+  firstTime: null,
+  firstConfession: null,
   tellsLearned: [],
   known: [],
   hisSide: [],
 });
+
+/** The longest romantic-first sentence kept (LiState.firstKiss and the rest). */
+export const FIRST_SENTENCE_MAX = 400;
 
 function normalizeLiState(raw: unknown): LiState {
   return readFields<LiState>(
@@ -293,6 +299,9 @@ function normalizeLiState(raw: unknown): LiState {
       lastLead: z.number().int().min(0).nullable(),
       angst: (value) => validItems(short(80), value, LIST_MAX),
       firsts: z.record(z.string(), z.string()),
+      firstKiss: z.string().max(FIRST_SENTENCE_MAX).nullable(),
+      firstTime: z.string().max(FIRST_SENTENCE_MAX).nullable(),
+      firstConfession: z.string().max(FIRST_SENTENCE_MAX).nullable(),
       tellsLearned: normalizeTells,
       known: (value) => keepNewest(validItems(NotebookEntrySchema, value), NOTEBOOK_MAX),
       hisSide: (value) => keepNewest(validItems(HisSideNoteSchema, value), ARCS_MAX + 1),

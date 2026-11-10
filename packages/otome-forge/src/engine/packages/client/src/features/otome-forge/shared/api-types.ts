@@ -810,6 +810,13 @@ export interface LiState {
   angst: string[];
   /** Dated firsts for the Love Timeline: first-kind → ISO time. */
   firsts: Record<string, string>;
+  /**
+   * Their romantic firsts with the protagonist (the maintainer, 2026-11-10): null until it happens, then the one sentence
+   * a chapter's summary wrote about how and in which chapter it happened. Set once and never overwritten (S/memory).
+   */
+  firstKiss: string | null;
+  firstTime: string | null;
+  firstConfession: string | null;
   /** Indexes into his bible's `mask.tells` the protagonist has learned to read (Read Him, M5). */
   tellsLearned: number[];
   /**
