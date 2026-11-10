@@ -33,7 +33,7 @@ import {
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
   slpCreatorIdentityInstruction,

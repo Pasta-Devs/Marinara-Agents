@@ -52,7 +52,7 @@ import {
   slurpAudienceCharacterTraits,
   slurpAudienceCharacterVoice,
 } from "../../../../../shared/src/slp/slp-audience-characters.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { newId } from "../../../utils/id-generator.js";
 import {
   claimSlurpModelBudget,

@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.19 — 2026-11-10 [highlight]
+
+- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Slurp versions read every persona there as blank: no name, description, appearance or About Me in feeds, profiles, messages and pictures. Slurp now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)
+
 ## 0.4.18 — 2026-11-05
 
 - Added: Backstage > Live shows has a Tip goals group. "Goal size" makes the room's goals and menu prices smaller or bigger. "Own goals" sets up to three goals for one Creator: an amount and what happens. They replace the made goals in that Creator's next shows, and the Creator acts out the text when the room hits the goal. Viewers cannot tip for an own goal's reward directly.

@@ -22,7 +22,7 @@ import { slurpDeepDetailsImageRunRecorder } from "../../../data/feed/slp-post-de
 import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
 import { slurpHeldCollabDrop } from "../../projects/slp-projects-contract.js";
 import { tryCreatorAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
-import { createCharactersStorage } from "../../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../../lib/host-characters-storage.js";
 import { createPromptOverridesStorage } from "../../../../services/storage/prompt-overrides.storage.js";
 import {
   runSlurpAutoPostPollOperations,

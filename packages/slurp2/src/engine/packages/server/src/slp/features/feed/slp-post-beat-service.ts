@@ -32,7 +32,7 @@ import { selectSlurpReference, slurpReferenceCandidates } from "../../modules/fe
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { SLP_CANON_READING_SCALE } from "../../base/prompting/slp-prompt-safety.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { planSlurpBondBeat, planSlurpTieBeat } from "../projects/slp-projects-contract.js";
 import { planSlurpDramaBeat } from "../world/slp-world-contract.js";

@@ -1,6 +1,6 @@
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { slpLivePictureDue, slpLivePictureScene } from "../../../../../shared/src/slp/slp-live-picture.js";

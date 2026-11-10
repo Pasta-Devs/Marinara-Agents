@@ -5,7 +5,7 @@ import { type SlpAccount, type SlpInteractionType } from "../../../../../shared/
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createChatsStorage } from "../../../services/storage/chats.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";

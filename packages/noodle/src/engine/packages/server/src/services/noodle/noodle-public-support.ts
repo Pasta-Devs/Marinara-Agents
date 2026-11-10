@@ -9,7 +9,7 @@ import {
 } from "@marinara-engine/shared";
 import { basename } from "path";
 import { logger } from "../../lib/logger.js";
-import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createCharactersStorage } from "../../lib/host-characters-storage.js";
 import { createNoodleStorage, parseNoodleAvatarCrop } from "../storage/noodle.storage.js";
 import { isNoodleProfileGenerated } from "./noodle-profile-selection.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";

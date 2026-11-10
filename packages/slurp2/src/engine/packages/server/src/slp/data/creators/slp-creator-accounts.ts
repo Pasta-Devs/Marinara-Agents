@@ -1,6 +1,6 @@
 import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
 import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createSlurpStorage, type SlurpBootstrap } from "../slp-storage.js";
 import { parseSlpAvatarCrop } from "../../modules/records/slp-storage-model.js";
 import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
