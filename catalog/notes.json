@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.21.5",
+          "date": "2026-11-10",
+          "notes": "- **Choosing a card for someone new works again.** When you bring someone new into the story from your cards at the end of an arc, your cards show as a grid of tiles, and the one you tap gets a check, as in setup.",
+          "highlight": false
+        },
+        {
           "version": "0.21.4",
           "date": "2026-11-10",
           "notes": "- **Your Messages model designs the small art.** Side characters' looks, love interests' stickers and their Claw Machine plushies are now written by your Messages connection instead of Planning. There's nothing new to set: left on **Same as Story**, Messages uses your Story connection.",
@@ -787,12 +793,6 @@
           "version": "0.15.0",
           "date": "2026-11-07",
           "notes": "- **Their side.** After a big moment with a love interest (a route chapter that moves your bond on a stage, a Closer that ends with them opening up or shutting you out, a confrontation that ends in the truth or a walkout, or a rift you mend), Routes offers their side of it: the same scene, told from their point of view, with their thoughts. The chapter's end tells you when one waits. There is one per story arc for each love interest; until you read it, it follows the arc's newest big moment. Opening it is free, writing it is 1 model call, it paints only a place that has no picture yet, and reading it pays 30 Starlight. It becomes part of that chapter: the next chapter is written knowing both.",
-          "highlight": true
-        },
-        {
-          "version": "0.14.0",
-          "date": "2026-11-07",
-          "notes": "- **Touch your love interest on Home.** Tap their head, cheek, chest or hand for a line in their own voice, and their face answers where you touched. Their reactions grow bolder as you grow closer, from their mask at first to someone who is yours. Under NSFW Heat (Fade or Explicit) you can touch their crotch too, and a touch to their chest or crotch is an intimate one, as far as your Heat and Lines & Veils allow. A touch never waits for the model, earns nothing, and is voiced when voices are on. Without a picture of them, the places are labelled buttons under their initials.\n- **Stories in progress catch up once.** On your next Home visit, each love interest's lines are written again in the background, 1 call each, to add the new places; until then Cheek plays a few stock lines. Under NSFW Heat, changing Heat, Darkness, Lines & Veils or your role writes them once more.",
           "highlight": true
         }
       ]

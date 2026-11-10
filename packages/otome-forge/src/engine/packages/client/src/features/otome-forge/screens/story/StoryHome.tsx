@@ -19,6 +19,7 @@ import {
   BookHeart,
   BookOpen,
   CalendarHeart,
+  Check,
   Eye,
   Feather,
   Heart,
@@ -42,7 +43,7 @@ import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { Dialog } from "../../components/Dialog";
 import { useCharacterOptions } from "../../hooks/use-engine-resources";
 import { cancelStoryWork, runPath, storyQueryKey, useChapter, useStory } from "../../hooks/use-reader";
-import { accentOf } from "../../lib/accent";
+import { accentOf, nameAccent } from "../../lib/accent";
 import { emptyPronouns, resolvePronouns, type PronounChoice } from "../setup/draft";
 import { PronounPicker } from "../setup/parts";
 import { ARCHETYPES, ARCHETYPE_IDS } from "../../shared/archetypes";
@@ -930,21 +931,37 @@ function NewcomerDialog({
           </fieldset>
           <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
           {mode === "card" ? (
-            <ul className="of-cast-picks">
-              {cards.items.map((card) => (
-                <li key={card.id}>
-                  <button
-                    type="button"
-                    className="of-cast-pick of-glass"
-                    aria-pressed={cardId === card.id}
-                    data-chosen={cardId === card.id}
-                    onClick={() => setCardId(card.id)}
-                  >
-                    <Avatar name={card.name} url={card.avatarUrl} accent="var(--of-champagne)" size={32} />
-                    <span>{card.name}</span>
-                  </button>
-                </li>
-              ))}
+            // Setup's card tiles (CastStep): a grid with a check on the one chosen. The of-cast-pick classes this used
+            // had no styles, so the list fell apart and a tap showed nothing.
+            <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.story.newcomerCard")}>
+              {cards.items.map((card) => {
+                const picked = cardId === card.id;
+                return (
+                  <li key={card.id}>
+                    <button
+                      type="button"
+                      className="of-tile of-glass"
+                      data-checked={picked}
+                      aria-pressed={picked}
+                      title={card.name}
+                      onClick={() => setCardId(card.id)}
+                    >
+                      <Avatar
+                        name={card.name}
+                        url={card.avatarUrl}
+                        crop={card.avatarCrop}
+                        accent={nameAccent(card.name)}
+                      />
+                      <span className="of-tile-name">{card.name}</span>
+                      {picked ? (
+                        <span className="of-tile-check" aria-hidden="true">
+                          <Check size={12} strokeWidth={3} />
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <>

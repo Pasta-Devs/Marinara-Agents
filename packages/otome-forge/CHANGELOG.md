@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.21.5 — 2026-11-10
+
+- **Choosing a card for someone new works again.** When you bring someone new into the story from your cards at the end of an arc, your cards show as a grid of tiles, and the one you tap gets a check, as in setup.
+
 ## 0.21.4 — 2026-11-10
 
 - **Your Messages model designs the small art.** Side characters' looks, love interests' stickers and their Claw Machine plushies are now written by your Messages connection instead of Planning. There's nothing new to set: left on **Same as Story**, Messages uses your Story connection.
