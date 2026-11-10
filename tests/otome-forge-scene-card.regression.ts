@@ -1,6 +1,7 @@
 // Otome Forge's scene card (M1): a secret not yet revealed never reaches a prompt, only its tells do; a revealed one is
 // something the protagonist knows; every list keeps at most 3 items and the card fits its token budget, in any
-// script. The writing rules carry the knowledge boundary only for prompts that write story.
+// script. The writing rules carry the knowledge boundary only for prompts that write story. Tells are a few possible
+// signs among others, and the writing rules forbid reusing one, or a sentence, within a chapter.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -63,7 +64,7 @@ test("an unrevealed secret shows only as its tells; a revealed one is what the p
   assert.doesNotMatch(first, /TRUTH-STAGE/);
   assert.match(
     first,
-    /Hidden \(never state it; it may show only as these tells\): flinches at the north bell; never looks at the Arden's memorial; knows Vey's boat by its sound\./,
+    /Hidden \(never state it; it may show only in hints, such as these tells\): flinches at the north bell; never looks at the Arden's memorial; knows Vey's boat by its sound\./,
   );
   assert.doesNotMatch(first, /The protagonist knows/);
   assert.match(first, /^Sol \(they\/them\) — stage 1 \(Mask\)\. Mask 90 \/ self 10\./);
@@ -180,5 +181,21 @@ test("writing rules: story prompts get the knowledge boundary first, planners ne
     assert.doesNotMatch(rules, /softens toward the protagonist, not toward the world/);
     assert.match(rules, /I'll always protect you/);
     assert.match(rules, /practiced ease/);
+  }
+});
+
+test("tells are a few possible signs among others, and the writing rules ask for variety without repeats", () => {
+  // The maintainer's (2026-11-10): love interests showed only their bible's tells, often in the same words within a
+  // chapter. The card names them as some signs among others, and every story prompt's writing rules forbid reusing one.
+  const card = otomeSceneCard(unit(), { stage: 1 });
+  assert.match(card, /Tells \(a few possible signs among others; let one slip now and then, never explain it\): /);
+  assert.match(card, /Hidden \(never state it; it may show only in hints, such as these tells\): /);
+  assert.doesNotMatch(card, /only as these tells/);
+  assert.doesNotMatch(card, /…/, "the longer labels still fit without shrinking");
+  for (const story of [true, false]) {
+    assert.match(
+      otomeWritingRules({ story }),
+      /- A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter\./,
+    );
   }
 });

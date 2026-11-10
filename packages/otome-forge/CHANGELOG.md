@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.21.3 — 2026-11-10
+
+- **Love interests stop repeating their habits.** The signs written in a love interest's bible (how they act when stressed, their tics, what gives them away) are now only some of the ways they can react. They show one now and then among other, fresh reactions, and never repeat the same gesture or sentence within a chapter.
+
 ## 0.21.2 — 2026-11-09
 
 - **The next main chapter carries on from a Character Story.** When a Character Story is the last thing you played, the next main chapter picks up from how it ended, including any choice you made at its end. Love interests who weren't in it still don't know what happened there.

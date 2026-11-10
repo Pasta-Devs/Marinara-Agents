@@ -383,6 +383,7 @@ export const WRITING_RULES = [
   "Every cruelty has a reason the love interest believes, and the love interest keeps whatever red lines they have.",
   "A love interest may be genuinely evil, a monster or a villain, as dark as this story's Darkness allows: taming them is the point, so never soften them before the story earns it.",
   "A face may contradict the words it speaks.",
+  "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   "Write what the protagonist feels in their body when something happens to them, not only the action.",
   "All characters, player included, can change; for better, or worse.",
   "Character change must be earned and consistent with established identity and canonical character cards; it is not automatic redemption or a replacement personality.",
@@ -686,10 +687,13 @@ function render(unit: SceneCardUnit, stage: number, learnedTells: readonly numbe
     ),
     sentence(
       ["Mask: ", one(bible.mask.presents)],
-      ["Tells (let them slip; never explain them): ", list(bible.mask.tells)],
+      [
+        "Tells (a few possible signs among others; let one slip now and then, never explain it): ",
+        list(bible.mask.tells),
+      ],
     ),
     sentence(["The protagonist has learned to read these tells and may call them out: ", list(learned)]),
-    sentence(["Hidden (never state it; it may show only as these tells): ", list(hidden)]),
+    sentence(["Hidden (never state it; it may show only in hints, such as these tells): ", list(hidden)]),
     sentence(["The protagonist knows: ", list(known)]),
     // Darkness comes last, so a card cut to fit keeps the red lines and moral code it kept before. It shows at every
     // stage, so the bible keeps it to what they are; a secret's events stay in secrets (bibleMessages, Setup).
@@ -2417,7 +2421,7 @@ function hisSideFraming(name: string): string[] {
     `This is ${name.toUpperCase()}'S SIDE: a scene the protagonist was not there for, beside the scene above: what led ${name} to it, or what ${name} did right after the protagonist left, whichever tells more. Never retell the scene above; it stays exactly as it happened. Never repeat the bracketed game markers.`,
     `The narration stays with ${name}: what ${name} sees, notices and feels in their body. The protagonist is not in it, or only leaving at its start; where the writing rules speak of what the protagonist feels, write what ${name} feels. Keep everything How it's written asks but the point of view.`,
     `${name}'s thoughts show what ${name} wanted, feared and kept back then, in ${name}'s own voice, and only what ${name} knew at that moment, nothing that happened later. How far ${name} admits their feelings, even to themselves, keeps to the romance line on ${name}'s card.`,
-    `A Hidden line on the card is never stated, even in thought; it presses on ${name} only as the tells do. The protagonist never learns any of this.`,
+    `A Hidden line on the card is never stated, even in thought; it presses on ${name} only in hints, as the tells do. The protagonist never learns any of this.`,
   ];
 }
 

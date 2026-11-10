@@ -360,19 +360,19 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // release that changes one on purpose (0.8.7 moves the date plan's WHAT THEY WEAR into protagonistBlock) retakes it.
 // 0.18.1: the canon writing rule now names an existing world's characters, so these prompts' bytes moved.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "c61963d675e6e605",
-  callScene: "e4e2cd0c6688e1c7",
-  confrontation: "32fe59a8da9f973c",
-  closer: "c89ea91cf17157fe",
-  bible: "325d01ffa45a220d",
+  scene: "8583f906691eb1b7",
+  callScene: "ed4799ff3f64f438",
+  confrontation: "ca6d7738bdce9f03",
+  closer: "cec529a66b16236c",
+  bible: "a500b0070a43282e",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
-  chat: "8d899a9c896ed8ad",
-  daily: "7bb5d0db3df513f0",
-  note: "305d0abcc1d105a0",
+  chat: "3f47cf5405af9d8b",
+  daily: "e5e05d626c6590a5",
+  note: "f0ac5f17447ce8d8",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "f946f626483eafd1",
+  datePlan: "4eefe6cc24812915",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {

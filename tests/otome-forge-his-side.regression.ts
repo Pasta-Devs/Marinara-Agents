@@ -820,10 +820,10 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
     storySoFar: ["Node 1.", "Node 2."],
   });
   assert.ok(/PLAYER CHOICES/u.test(mainMessages[1]!.content), "the fixture reaches the choice rules");
-  assert.equal(sha(mainMessages), "001d3b1180971167040077b3d46b7b5cfe134ae9f284751c2b5cddf8f84b8c0a", "a main chapter");
+  assert.equal(sha(mainMessages), "479bcf90ce877f640d57da8f94e42af3408cdffad8e54b59a70de639bb977757", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "03d87c8b341e4c5c2a26820c9659d980427dd0a851c816bbc7e6a811fee1162d",
+    "39493f8b19ecaf254e72e7ba19b44bb39f9568f3e56d4040a65873bc9a8aa7eb",
     "a Character Story, even with a scene handed to it",
   );
 });
