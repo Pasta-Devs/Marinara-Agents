@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.22.3 — 2026-11-10
+
+- **Love interests can show they want you.** The slow burn now holds back love, not attraction. Through their first four stages, a love interest may flirt, tease and say outright that they find you attractive, as far as their mask lets them, but still won't confess or become your partner. A kiss given out of feeling waits for their fifth stage, where a confession can come too.
+- **Your affection level shows in the story.** Each love interest's affection level now reaches the scenes, so the higher it is, the more drawn to you they act, within what their stage allows.
+- The README now gives the right affection level costs: level 2 takes 200 points, and each level after it 50 more.
+
 ## 0.22.1 — 2026-11-10
 
 - **A stray thought no longer costs the whole scene.** While a love interest is still behind their mask, the story can't show their thoughts. When the model writes one anyway, Otome Hearth now drops just that line and keeps the rest of the scene, instead of asking the model to write it again. This works the same in Confrontations and Closers.
