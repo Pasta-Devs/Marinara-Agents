@@ -53,7 +53,6 @@ import {
   type WearResult,
 } from "../../shared/wardrobe";
 import type { ItemView } from "../../shared/wish";
-import { FACE_LABEL_KEYS } from "../reader/FacePlate";
 import { FigurinePaint } from "../wish/ShopPanel";
 import { OpenCost, PaintReviewDialog, RarityStars } from "../wish/TenPullGrid";
 
@@ -494,24 +493,11 @@ function LookCard({
             {t("ui.otomeForge.wish.painting")}
           </p>
         ) : null}
-        {faces.length ? (
+        {/* A check once all five faces are painted, not the faces themselves: the Wardrobe never downloads them. */}
+        {faces.length === FACES.length ? (
           <p className="of-ward-faces">
-            <span className="of-visually-hidden">
-              {t("ui.otomeForge.wardrobe.faces", {
-                faces: faces.map((face) => t(FACE_LABEL_KEYS[face])).join(", "),
-              })}
-            </span>
-            {faces.map((face) => (
-              <LookImage
-                key={face}
-                src={look.faces?.[face]}
-                cut={!!look.cut?.includes(look.faces?.[face] ?? "")}
-                alt=""
-                title={t(FACE_LABEL_KEYS[face])}
-                loading="lazy"
-                decoding="async"
-              />
-            ))}
+            {t("ui.otomeForge.wardrobe.expressions")}
+            <Check size={13} strokeWidth={2.6} role="img" aria-label={t("ui.otomeForge.wardrobe.expressionsPainted")} />
           </p>
         ) : null}
         <div ref={actionsRef} className="of-ward-actions">

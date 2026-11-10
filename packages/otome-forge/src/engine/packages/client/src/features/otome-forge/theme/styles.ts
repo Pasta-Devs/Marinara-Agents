@@ -1306,9 +1306,8 @@ ${R} .of-ward-worn {
 ${R} .of-ward-look-body { display: flex; flex-direction: column; gap: 4px; padding-inline: 4px; min-width: 0; flex: 1; }
 ${R} .of-ward-look-name { font-family: var(--of-font-display); font-weight: 600; font-size: 1.1rem; line-height: 1.1; overflow-wrap: anywhere; }
 ${R} .of-ward-look-state { font-size: 0.74rem; font-weight: 800; color: var(--of-champagne-text); }
-${R} .of-ward-faces { display: flex; gap: 4px; }
-${R} .of-ward-faces img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; object-position: 50% 12%;
-  box-shadow: 0 0 0 1.5px var(--of-li-accent, var(--of-rose)); }
+${R} .of-ward-faces { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 0.74rem; font-weight: 700; }
+${R} .of-ward-faces svg { color: var(--of-li-accent, var(--of-rose)); flex: none; }
 ${R} .of-ward-actions { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-top: auto; padding-top: 4px; }
 ${R} .of-ward-actions .of-button { width: 100%; padding: 4px 10px; line-height: 1.15; text-align: center; }
 ${R} .of-ward-actions .of-cost { justify-content: center; font-size: 0.72rem; }

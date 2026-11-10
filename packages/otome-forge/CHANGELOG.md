@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.22.5 — 2026-11-10
+
+- **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to "Expressions" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.
+
 ## 0.22.4 — 2026-11-10
 
 - **Firsts are remembered for good.** A love interest's first kiss, first time and first confession with you are now kept permanently. When a chapter's summary is written, it notes any of the three that happened there for the first time, in one sentence saying how and in which chapter, and that sentence goes with them into every later scene, so the story never treats it as a first again. Each one also joins the Love Timeline, and the calendar marks it every year, as "First kiss with Kai". Stories you've already started begin with none noted.
