@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.21.5 — 2026-11-10
+
+- **Figurine and birthday scenes stay out of the story.** A figurine's scene or a birthday scene you read after a Character Story no longer takes that story's place. The next main chapter still picks up from the Character Story, and every chapter still gets it as the last one played.
+
 ## 0.21.4 — 2026-11-10
 
 - **Your Messages model designs the small art.** Side characters' looks, love interests' stickers and their Claw Machine plushies are now written by your Messages connection instead of Planning. There's nothing new to set: left on **Same as Story**, Messages uses your Story connection.
