@@ -229,14 +229,26 @@ test("P12's reply is normalized list by list with P6's rules", () => {
   assert.match(String(normalize({ ...base, endings: { truth: base.endings.truth } })), /endings\.walkout/);
   assert.match(String(normalize({ ...base, grievance: {} })), /grievance\.text is required/);
   assert.match(String(normalize({ ...base, disclosure: "" })), /disclosure is required/);
+  // A love interest's thought before stage 2 is dropped here too: a list left with nothing gets the repair turn.
   assert.match(
     String(
       normalize(
         withRound(0, (round) => ({ ...round, lines: [{ speaker: "Kai", text: "...don't go.", thought: true }] })),
       ),
     ),
-    /still behind their mask/,
-    "a love interest's thought before stage 2 gets the repair turn here too",
+    /rounds\[0\]\.lines needs 1 to 4 segments/,
+  );
+  const kept = normalize(
+    withRound(0, (round) => ({
+      ...round,
+      lines: [...round.lines, { speaker: "Kai", text: "...don't go.", thought: true }],
+    })),
+  );
+  assert.ok(typeof kept === "object", String(kept));
+  assert.deepEqual(
+    kept.confrontation.rounds[0]!.his.map((segment) => segment.text),
+    base.rounds[0].lines.map((segment: { text: string }) => segment.text),
+    "only his thought line is gone",
   );
 });
 
