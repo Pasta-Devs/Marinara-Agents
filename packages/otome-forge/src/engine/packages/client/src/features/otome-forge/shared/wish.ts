@@ -306,6 +306,11 @@ export interface ItemView {
   coupleWith?: string;
   owned: boolean;
   art: Paint | null;
+  /**
+   * A look's `art.url` is its wearer's saved cut-out (no backdrop; set by the Wish view only): shown as it is, never
+   * cleaned in the browser.
+   */
+  cut?: true;
   story: { key: string } | null;
   voicedLine?: string;
 }
@@ -327,6 +332,8 @@ export interface BannerView {
   four: ItemView[];
   three: ItemView[];
   art: Paint | null;
+  /** A wardrobe banner's `art.url` is its wearer's saved cut-out, as an ItemView's `cut`. */
+  cut?: true;
 }
 
 /** A love interest's Memory Selector: at affection 10, once, claim one of their Memories from an Echo not owned yet. */

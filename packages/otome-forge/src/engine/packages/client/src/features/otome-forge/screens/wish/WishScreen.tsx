@@ -28,7 +28,7 @@ import {
   invalidateCollection,
   newRequestId,
   paintWaits,
-  readyArt,
+  readyPicture,
   useItemActions,
   useRefocus,
   wishQueryKey,
@@ -487,7 +487,8 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
   const li = view.lis.find((item) => item.id === banner.featuredLi) ?? null;
   const bannerTitle = banner.title || banner.five.title;
   const look = banner.kind !== "memories";
-  const art = useSpriteDisplay(readyArt(banner.art) ?? readyArt(banner.five.art), look);
+  const picture = readyPicture(banner) ?? readyPicture(banner.five);
+  const art = useSpriteDisplay(picture?.url ?? null, look && !picture?.cut);
   const [expanded, setExpanded] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const viewerBlocked = actions.busy.size > 0 || !!actions.review;
@@ -770,7 +771,7 @@ function EchoList({ view, wish, onOpen }: { view: RunView; wish: WishView; onOpe
                 style={li ? ({ "--of-li-accent": accentOf(li) } as CSSProperties) : undefined}
                 onClick={() => onOpen(banner.key)}
               >
-                <ItemArt item={banner.five} view={view} fallbackUrl={readyArt(banner.art)} />
+                <ItemArt item={banner.five} view={view} fallbackArt={readyPicture(banner)} />
                 <span className="of-echo-text">
                   <span className="of-echo-kind">{tabLabel(t, banner.kind, li?.name ?? null)}</span>
                   <span className="of-echo-title">{name}</span>
@@ -954,7 +955,7 @@ function PullSequence({
   const audio = useOtomeAudio();
   const { results, phase, banner } = sequence;
   const fives = results.flatMap((result, index) => (result.rarity === 5 ? [index] : []));
-  const bannerArt = readyArt(banner.art) ?? readyArt(resolve(banner.five).art);
+  const bannerArt = readyPicture(banner) ?? readyPicture(resolve(banner.five));
   const toResults = () => onPhase({ at: "results" });
   const afterReveal = (index: number) => {
     const next = fives.indexOf(index) + 1;
@@ -982,7 +983,7 @@ function PullSequence({
         view={view}
         item={resolve(result.item)}
         isNew={result.isNew}
-        fallbackUrl={bannerArt}
+        fallbackArt={bannerArt}
         position={fives.length > 1 ? { index: fives.indexOf(phase.index) + 1, total: fives.length } : null}
         actions={actions}
         reducedMotion={reducedMotion}

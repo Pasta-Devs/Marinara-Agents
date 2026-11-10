@@ -6,6 +6,10 @@
 - **Your affection level shows in the story.** Each love interest's affection level now reaches the scenes, so the higher it is, the more drawn to you they act, within what their stage allows.
 - The README now gives the right affection level costs: level 2 takes 200 points, and each level after it 50 more.
 
+## 0.22.2 — 2026-11-10
+
+- **Wardrobe and Wish art shows faster.** Looks, faces and wardrobe banner art now use the cut-outs Otome Hearth already saves on the server. Before, your browser downloaded each full painting, sent it to Marinara Engine to remove its backdrop and waited for the result, for every look and face on screen. Art that isn't cut out yet still shows the old way, and is cut out in the background for your next visit.
+
 ## 0.22.1 — 2026-11-10
 
 - **A stray thought no longer costs the whole scene.** While a love interest is still behind their mask, the story can't show their thoughts. When the model writes one anyway, Otome Hearth now drops just that line and keeps the rest of the scene, instead of asking the model to write it again. This works the same in Confrontations and Closers.

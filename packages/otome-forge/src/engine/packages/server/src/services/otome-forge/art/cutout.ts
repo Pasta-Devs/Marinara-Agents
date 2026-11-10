@@ -13,7 +13,8 @@
 // 0.20.0: a recurring side character's sprite is cut out the same way, its record kept on that person in `${R}:sides`
 // (owner `side:<record key>`, S/art/side-sprites.ts).
 // Cut-outs cost no model or image call. They run one at a time in this process, outside the background lane (which
-// takes a model connection's admission slot).
+// takes a model connection's admission slot). Those a view queues for its lists (the Wardrobe's, Wish's) wait behind
+// the ones Home and the reader stand on stage, and are not what the run view or a scene polls for.
 // ponytail: a cut-out of a look that was repainted stays until the run is deleted; the upgrade path is pruning it with
 // the expressions kit's stale sets.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
@@ -22,6 +23,7 @@ import { isEngineAvatar } from "../../../../../client/src/features/otome-forge/s
 import { playerId, runDocTarget, sideCastId, unitId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeSideCast } from "../schemas/side-cast.js";
+import { readyCutout } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
 import { galleryRef, loopbackBaseUrl, type PaintedImage } from "./image-client.js";
@@ -167,6 +169,26 @@ const live = new Set<string>();
 const refreshAttempts = new Set<string>();
 let chain: Promise<void> = Promise.resolve();
 const liveKey = (runId: string, li: LiId, url: string) => `${runId}|${li}|${url}`;
+// A view's cut-outs: `quiet` until Home or the reader asks for one too; `waiting` joins `chain` one at a time, so what
+// Home and the reader queue meanwhile goes first.
+const quiet = new Set<string>();
+const waiting = new Map<string, () => Promise<void>>();
+let draining = false;
+function drainWaiting(): void {
+  const [next] = waiting;
+  draining = !!next;
+  if (!next) return;
+  waiting.delete(next[0]);
+  chain = chain.then(next[1]).then(drainWaiting);
+}
+/** Home or the reader wants one a view queued: it counts as pending, and goes ahead of the view's others. */
+function hurry(key: string): void {
+  if (!quiet.delete(key)) return;
+  const job = waiting.get(key);
+  if (!job) return;
+  waiting.delete(key);
+  chain = chain.then(job);
+}
 
 export type CutoutState = "ready" | "pending" | "uncut";
 
@@ -188,9 +210,16 @@ export function cutoutView(
       : { state: "uncut" };
 }
 
-/** Free work still owned by this process, including a replacement whose old pixels remain visible meanwhile. */
+/**
+ * Free work still owned by this process, including a replacement whose old pixels remain visible meanwhile; a view's
+ * own (quiet) ones aside.
+ */
 export const cutoutsPending = (runId: string, units: Array<Pick<Unit, "id" | "cutouts">>) =>
-  units.some((unit) => Object.keys(unit.cutouts).some((url) => cutoutView(runId, unit, url).state === "pending"));
+  units.some((unit) =>
+    Object.keys(unit.cutouts).some(
+      (url) => !quiet.has(liveKey(runId, unit.id, url)) && cutoutView(runId, unit, url).state === "pending",
+    ),
+  );
 
 /** Saves `record` for `url` unless `only` says it may not replace what is there; false when nothing was saved. */
 async function save(
@@ -284,18 +313,21 @@ async function cutOne(deps: CutoutDeps, runId: string, li: CutoutOwner, url: str
 /**
  * Reads the host's cached cleanup revision, then queues missing or obsolete derivatives, one at a time. Returns a
  * view of the unit with queued cut-outs pending so Home and the reader poll until their replacement is saved.
+ * `later` (a view's lists) queues them behind everything else and keeps them out of cutoutsPending.
  */
 export async function queueCutouts<T extends Pick<Unit, "id" | "cutouts">>(
   deps: CutoutDeps,
   runId: string,
   unit: T,
   urls: string[],
+  { later = false }: { later?: boolean } = {},
 ): Promise<T> {
   if (!urls.some(Boolean)) return unit;
   const revision = await clientOf(deps).cleanupRevision?.();
   const cutouts = { ...unit.cutouts };
   for (const url of new Set(urls)) {
     const key = liveKey(runId, unit.id, url);
+    if (!later) hurry(key);
     if (!url || isEngineAvatar(url) || !needsCutout(unit.cutouts[url], revision)) continue;
     const refreshKey = `${key}|${revision}`;
     if (unit.cutouts[url] && refreshAttempts.has(refreshKey) && !live.has(key)) continue;
@@ -304,13 +336,45 @@ export async function queueCutouts<T extends Pick<Unit, "id" | "cutouts">>(
     if (live.has(key)) continue;
     refreshAttempts.add(refreshKey);
     live.add(key);
-    chain = chain
-      .then(() => cutOne(deps, runId, unit.id, url, revision))
-      .catch((error: unknown) => deps.runtime.logger.error(error, "Otome Forge could not save a cut-out"))
-      .finally(() => live.delete(key));
+    const job = () =>
+      cutOne(deps, runId, unit.id, url, revision)
+        .catch((error: unknown) => deps.runtime.logger.error(error, "Otome Forge could not save a cut-out"))
+        .finally(() => {
+          live.delete(key);
+          quiet.delete(key);
+        });
+    if (!later) {
+      chain = chain.then(job);
+      continue;
+    }
+    quiet.add(key);
+    waiting.set(key, job);
+    if (!draining) drainWaiting();
   }
   return { ...unit, cutouts };
 }
 
-/** Resolves once every cut-out queued so far has settled (tests). */
-export const cutoutsSettled = () => chain;
+/**
+ * The saved cut-outs of a view that lists many looks (the Wardrobe and Wish): `ready` is the cut-out of `url` once there
+ * is one (readyCutout), and `queue` queues every image asked about, behind Home's and the reader's, so a missing one is
+ * cut out in the background and a later read shows it. The client cleans the rest in the browser meanwhile.
+ */
+export function viewCutouts(deps: CutoutDeps, runId: string) {
+  const asked = new Map<Pick<Unit, "id" | "cutouts">, string[]>();
+  return {
+    ready(owner: Pick<Unit, "id" | "cutouts">, url: string): string | undefined {
+      asked.set(owner, [...(asked.get(owner) ?? []), url]);
+      return readyCutout(owner, url);
+    },
+    queue: () =>
+      Promise.all([...asked].map(([owner, urls]) => queueCutouts(deps, runId, owner, urls, { later: true }))),
+  };
+}
+
+/** Resolves once every cut-out queued so far, a view's waiting ones included, has settled (tests). */
+export async function cutoutsSettled(): Promise<void> {
+  for (let seen = chain; ; seen = chain) {
+    await seen;
+    if (seen === chain) return;
+  }
+}

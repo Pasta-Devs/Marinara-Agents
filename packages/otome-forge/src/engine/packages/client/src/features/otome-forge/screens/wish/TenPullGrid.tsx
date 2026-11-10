@@ -15,10 +15,11 @@ import {
   needsOpen,
   paintWaits,
   paintsOnOpen,
-  readyArt,
+  readyPicture,
   useRefocus,
   writesOnOpen,
   type ItemActions,
+  type ReadyPicture,
 } from "../../hooks/use-items";
 import { useOtomeAudio, useAudioSnapshot } from "../../hooks/use-otome-audio";
 import { accentOf, initialsOf } from "../../lib/accent";
@@ -68,12 +69,24 @@ export function RarityStars({ rarity }: { rarity: Rarity }) {
   );
 }
 
-/** The item's picture: its ready art, or a quiet card in the person's colour with their initials. */
-export function ItemArt({ item, view, fallbackUrl }: { item: ItemView; view: RunView; fallbackUrl?: string | null }) {
+/**
+ * The item's picture: its ready art (a look cleaned of its backdrop, unless it is a saved cut-out), or a quiet card in
+ * the person's colour with their initials.
+ */
+export function ItemArt({
+  item,
+  view,
+  fallbackArt,
+}: {
+  item: ItemView;
+  view: RunView;
+  fallbackArt?: ReadyPicture | null;
+}) {
   const li = itemPerson(item, view);
   const name = li?.name ?? view.player.name;
   const look = isLookKind(item.kind);
-  const url = useSpriteDisplay(readyArt(item.art) ?? fallbackUrl ?? null, look);
+  const picture = readyPicture(item) ?? fallbackArt ?? null;
+  const url = useSpriteDisplay(picture?.url ?? null, look && !picture?.cut);
   const accent = li ? accentOf(li) : undefined;
   return (
     <span
@@ -98,7 +111,7 @@ interface ItemDetailProps {
   item: ItemView;
   actions: ItemActions;
   /** The banner's art, shown for its featured item until the item's own is ready. */
-  fallbackUrl?: string | null;
+  fallbackArt?: ReadyPicture | null;
   onOpenStory?: (key: string) => void;
   onOpenWardrobe?: () => void;
   /** Where focus starts (the item's title, so a screen reader reads it). */
@@ -110,7 +123,7 @@ export function ItemDetail({
   view,
   item,
   actions,
-  fallbackUrl,
+  fallbackArt,
   onOpenStory,
   onOpenWardrobe,
   autoFocus,
@@ -150,7 +163,7 @@ export function ItemDetail({
 
   return (
     <article className="of-item-detail" data-rarity={RARITY_NAMES[item.rarity]} onFocus={onFocus}>
-      <ItemArt item={item} view={view} fallbackUrl={fallbackUrl} />
+      <ItemArt item={item} view={view} fallbackArt={fallbackArt} />
       <div className="of-item-body">
         <p className="of-item-kind">
           <RarityStars rarity={item.rarity} />
@@ -305,7 +318,7 @@ interface TenPullGridProps {
   spent: number;
   actions: ItemActions;
   /** The banner's art, for its featured item until the item's own is ready. */
-  bannerArt: string | null;
+  bannerArt: ReadyPicture | null;
   reducedMotion: boolean;
   onDone: () => void;
   onOpenStory?: (key: string) => void;
@@ -361,7 +374,7 @@ export function TenPullGrid({
           view={view}
           item={resolve(result.item)}
           actions={actions}
-          fallbackUrl={result.rarity === 5 ? bannerArt : null}
+          fallbackArt={result.rarity === 5 ? bannerArt : null}
           onOpenStory={onOpenStory}
           onOpenWardrobe={onOpenWardrobe}
           autoFocus
@@ -399,7 +412,7 @@ export function TenPullGrid({
                 data-rarity={RARITY_NAMES[result.rarity]}
                 onClick={() => setShown(index)}
               >
-                <ItemArt item={item} view={view} fallbackUrl={result.rarity === 5 ? bannerArt : null} />
+                <ItemArt item={item} view={view} fallbackArt={result.rarity === 5 ? bannerArt : null} />
                 {result.isNew ? (
                   <span className="of-ribbon">{t("ui.otomeForge.wish.new")}</span>
                 ) : (
