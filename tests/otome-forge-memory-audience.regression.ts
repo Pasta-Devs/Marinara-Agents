@@ -225,6 +225,11 @@ test("a chapter summary records each romantic first once, never asks again for o
       { id: "main-2", kind: "chapter", title: "The Ledger", content: "Later that night.", order: 10001 },
     ],
   });
+  const FINISHED = "2026-02-14T19:00:00.000Z";
+  await store.updateDoc(runDocTarget("state", stateId(RUN)), normalizeState, (state) => ({
+    ...state,
+    chapters: { ...state.chapters, "main-1": { completed: FINISHED, applied: [] } as never },
+  }));
   assert.equal(await memory.maintain({ runId: RUN, debugMode: false }), true);
   assert.equal((await settle(memory)).phase, "ready");
   const both = (fields: string) =>
@@ -256,6 +261,8 @@ test("a chapter summary records each romantic first once, never asks again for o
     "never a second entry for the kiss a later summary reported again",
   );
   assert.ok(state.lis[KAI]!.firsts.kiss && state.lis[KAI]!.firsts.confession && state.lis[MIR]!.firsts.time);
+  // Dated by the day its chapter was finished, not by when its summary ran.
+  assert.equal(state.timeline.find((entry) => entry.kind === "first-kiss")!.at, FINISHED);
   const calendar = calendarView((await readRun(store, RUN))!, [], "2026-11-10");
   assert.deepEqual(
     calendar.anniversaries.filter((row) => row.label.startsWith("First")).map((row) => [row.label, row.li]),

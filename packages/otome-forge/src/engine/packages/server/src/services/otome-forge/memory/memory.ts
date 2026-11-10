@@ -166,6 +166,12 @@ const tooSmall = (maxContext: number, task: "write a summary" | "condense the st
 });
 
 /** How many characters of its source a detail request carries (the kit's `range`); a piece of one is the smallest. */
+/** The id of the source a chapter summary request summarizes (its chapter key), when the kit's message carries one. */
+const sourceIdOf = (request: SummaryRequest): string | undefined => {
+  const { source } = JSON.parse(request.messages.at(-1)?.content ?? "{}") as { source?: { id?: unknown } };
+  return typeof source?.id === "string" ? source.id : undefined;
+};
+
 const pieceLength = (request: SummaryRequest) => {
   const { source } = JSON.parse(request.messages.at(-1)?.content ?? "{}") as {
     source?: { range?: { from: number; to: number } };
@@ -390,9 +396,15 @@ export function createOtomeMemory({
   /**
    * Saves each first a summary reported, by the love interest's name, only where it is still null: set once, never
    * overwritten, so a later summary (or another piece of a long chapter) never replaces it. Each one saved also dates
-   * its Love Timeline entry ("First kiss with Kai"), which the calendar shows every year, as a first date does.
+   * its Love Timeline entry ("First kiss with Kai"), which the calendar shows every year, as a first date does: on the
+   * day its chapter was finished (the summary can run later, after a Retry), else now.
    */
-  async function recordFirsts(runId: string, units: ReadonlyArray<{ id: string; name: string }>, raw: unknown) {
+  async function recordFirsts(
+    runId: string,
+    units: ReadonlyArray<{ id: string; name: string }>,
+    raw: unknown,
+    sourceId?: string,
+  ) {
     if (!raw || typeof raw !== "object") return;
     const found = new Map<string, Partial<Record<(typeof ROMANTIC_FIRSTS)[number][0], string>>>();
     for (const [name, fields] of Object.entries(raw as Record<string, unknown>)) {
@@ -405,8 +417,8 @@ export function createOtomeMemory({
       }
     }
     if (!found.size) return;
-    const at = new Date().toISOString();
     await store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => {
+      const at = (sourceId && state.chapters[sourceId]?.completed) || new Date().toISOString();
       const lis = { ...state.lis };
       const timeline = [...state.timeline];
       for (const [li, fields] of found) {
@@ -538,7 +550,7 @@ export function createOtomeMemory({
         // A chapter's summary also reports the romantic firsts not recorded yet; each is saved once, never overwritten.
         const firsts = await firstsOf(request.runId);
         const reply = await call(request.kind, withRules(request, job, firsts.ask));
-        if (firsts.ask) await recordFirsts(request.runId, firsts.units, reply.firsts);
+        if (firsts.ask) await recordFirsts(request.runId, firsts.units, reply.firsts, sourceIdOf(request));
         return reply.summary.trim();
       }
       if (request.kind !== "overview") return ask(request.kind, withRules(request, job));
