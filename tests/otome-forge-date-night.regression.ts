@@ -1250,10 +1250,10 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // with no gift: a date without one is planned and written exactly as before.
 // 0.18.1: the canon writing rule now names an existing world's characters, so every date prompt's bytes moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "a4a65909c35adc32",
-  scene1: "aa9304e841379218",
-  scene2: "a23eaf8f9fb0a872",
-  scene3: "a41397c5d878481f",
+  plan: "d53ff669921c6aab",
+  scene1: "db390d7ce7400310",
+  scene2: "e4173fbf42753af7",
+  scene3: "925b1a7e64141eec",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

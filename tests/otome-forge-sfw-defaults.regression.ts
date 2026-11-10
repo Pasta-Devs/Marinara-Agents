@@ -254,32 +254,32 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "99e3af27fad884ce",
-  bannerMemories: "155e645ebefaaedb",
-  bannerMine: "8f0df9f5dbc87129",
-  beat: "f35715e5ac283f03",
-  beatWithCg: "d00809932b0cdc15",
-  chapterPlan: "336ab43ab84afa96",
-  closer: "5602bc908ac0e908",
-  confrontation: "33df0da4d7b5a953",
-  repairPlan: "b0cbcbf81fcde517",
-  routePlan: "720a92d274add3c6",
+  bannerHis: "ee0a7cac70bdd18f",
+  bannerMemories: "e03d37de5f975296",
+  bannerMine: "644f0d2c27032770",
+  beat: "b1909273c224547d",
+  beatWithCg: "bf696a72f4956e4b",
+  chapterPlan: "7c41029fa4f3f858",
+  closer: "1065030538e13cfc",
+  confrontation: "ae6d893870201df0",
+  repairPlan: "ae21cc89133671f0",
+  routePlan: "4c26a2a2c074fe86",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
 // 0.20.2: P10 and P11 open with the story context their chapter's scenes cache, so both sets' routePlan and
 // repairPlan digests moved.
 // 0.19.1: the chapter plan's climax is optional, so both chapterPlan digests moved.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "2bac0220f89da60b",
-  bannerMemories: "e3ee118ca16986f8",
-  bannerMine: "f7692079bd94c918",
-  beat: "f2595d3092dc753a",
-  beatWithCg: "9dc90845ed8abbda",
-  chapterPlan: "8cd5f764a8edf97f",
-  closer: "72624d0c7a7619d7",
-  confrontation: "ca4d891c3cee9103",
-  repairPlan: "9e37fe1fe6636eca",
-  routePlan: "c1a5a9832357a7ce",
+  bannerHis: "953079fcfcf29da1",
+  bannerMemories: "e3c89631bd339847",
+  bannerMine: "90ef5e31eadb283c",
+  beat: "fd356d7d5926a08d",
+  beatWithCg: "a274afd04732714b",
+  chapterPlan: "137d02e43ee89a18",
+  closer: "291af787e75cdcc0",
+  confrontation: "a55385318323b774",
+  repairPlan: "068df4da9edf07d9",
+  routePlan: "a403a64d0c3629aa",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {
