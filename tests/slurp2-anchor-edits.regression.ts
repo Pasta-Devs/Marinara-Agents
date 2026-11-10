@@ -48,6 +48,12 @@ async function main() {
           force: true,
         });
     }
+    // Slurp builds on the host-runtime overlay, whose lib/host-characters-storage.ts reads personas through the
+    // Engine (Marinara-Agents#2230). Here the live Engine source is the host, so its own storage stands in.
+    await writeFile(
+      join(overlayRoot, "packages/server/src/lib/host-characters-storage.ts"),
+      'export { createCharactersStorage } from "../services/storage/characters.storage.js";\n',
+    );
     const schemaRoot = join(overlayRoot, "packages/server/src/db/schema");
     await cp(join(engineRoot, "packages/server/src/db/schema/slurp.ts"), join(schemaRoot, "host-slurp.ts"));
     const hostSchema = await readFile(join(schemaRoot, "index.ts"), "utf8");

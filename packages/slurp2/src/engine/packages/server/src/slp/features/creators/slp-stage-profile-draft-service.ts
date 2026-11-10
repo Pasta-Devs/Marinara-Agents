@@ -19,7 +19,7 @@ import { withConnectionFallbackProvider } from "../../../services/llm/connection
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {

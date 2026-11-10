@@ -61,7 +61,7 @@ import {
   SLURP_PAID_WELL_COINS,
   SlurpCreatorState,
 } from "../../modules/creators/slp-creator-state.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { SLURP_SETTINGS_KEY, SLURP_CREATOR_STATE_KEY, slurpViewerSettingsKey } from "./slp-storage-constants.js";
 import {
   parseRecord,

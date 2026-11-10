@@ -19,7 +19,7 @@ import { newId, now } from "../../../utils/id-generator.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 import { activeSlurpStrikes, type SlurpStanceLatitude } from "../../modules/world/slp-stance.js";
 import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { isCreatorNightQuietTime } from "../feed/slp-feed-contract.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";

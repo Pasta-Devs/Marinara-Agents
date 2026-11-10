@@ -8,7 +8,7 @@ import type { DB } from "../../../db/connection.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { readAvatarBase64 } from "../../../services/game/game-asset-generation.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-resolve.js";

@@ -1,5 +1,9 @@
 # Calls release notes
 
+## 1.1.9 — 2026-11-10 [highlight]
+
+- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Calls versions read every persona there as blank: no name, description, appearance or About Me in calls, call prompts and persona videos. Calls now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)
+
 ## 1.1.8 — 2026-11-06
 
 - A call video that has just finished generating no longer shows as missing. Before, a call's video tile could show the clip as missing right after it finished, and keep showing that until the clips were checked again. (#2132)

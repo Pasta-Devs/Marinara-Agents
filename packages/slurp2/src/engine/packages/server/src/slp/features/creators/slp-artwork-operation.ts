@@ -3,7 +3,7 @@ import { createAppSettingsStorage } from "../../../services/storage/app-settings
 import { slpImageRetryable } from "../../base/media/slp-image-retry.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { logger } from "../../../lib/logger.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";

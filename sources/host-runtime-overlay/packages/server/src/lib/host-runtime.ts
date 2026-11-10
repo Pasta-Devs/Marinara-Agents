@@ -188,6 +188,10 @@ export interface HostRuntime {
   logger: HostRuntimeLogger;
   integrations?: HostIntegrations;
   persistence: HostPersistence;
+  /** Capability API 1.6: personas as the Engine's live storage reads them, in the flat persona row shape. */
+  resources?: {
+    listPersonas(personaIds?: string[]): Promise<Array<{ id: string; data: unknown }>>;
+  };
   /** Capability API 1.341: another package's service registered with api.registerService. */
   services?: { get<T = unknown>(key: string): T | null };
   /** Capability API 1.341: the commands every package registered, parsed with the host grammar. */

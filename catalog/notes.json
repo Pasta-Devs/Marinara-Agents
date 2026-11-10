@@ -92,6 +92,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.1.9",
+          "date": "2026-11-10",
+          "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Calls versions read every persona there as blank: no name, description, appearance or About Me in calls, call prompts and persona videos. Calls now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
+          "highlight": true
+        },
+        {
           "version": "1.1.8",
           "date": "2026-11-06",
           "notes": "- A call video that has just finished generating no longer shows as missing. Before, a call's video tile could show the clip as missing right after it finished, and keep showing that until the clips were checked again. (#2132)",
@@ -552,6 +558,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.14",
+          "date": "2026-11-10",
+          "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Noodle versions read every persona there as blank: no name, description, appearance or About Me in posts, profiles and pictures. Noodle now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
+          "highlight": true
+        },
+        {
           "version": "1.5.13",
           "date": "2026-11-08",
           "notes": "- With Include descriptions on, a character's Image Generation Appearance Override now reaches Noodle's images word for word. Interpret image prompts no longer rewords or drops it, and with Interpret image prompts off it now replaces the character's Appearance instead of being left out. (#2182)\n- A character's post image that names your persona or @mentions it now includes your persona: its appearance, Image Generation Appearance Override first, with Include descriptions on, and its avatar with Use avatar references on. (#2182)",
@@ -664,12 +676,6 @@
           "date": "2026-09-15",
           "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
           "highlight": false
-        },
-        {
-          "version": "1.2.23",
-          "date": "2026-09-13",
-          "notes": "- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.\n- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.\n- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.\n- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.",
-          "highlight": false
         }
       ]
     },
@@ -679,6 +685,12 @@
           "version": "0.22.2",
           "date": "2026-11-10",
           "notes": "- **Wardrobe and Wish art shows faster.** Looks, faces and wardrobe banner art now use the cut-outs Otome Hearth already saves on the server. Before, your browser downloaded each full painting, sent it to Marinara Engine to remove its backdrop and waited for the result, for every look and face on screen. Art that isn't cut out yet still shows the old way, and is cut out in the background for your next visit.",
+          "highlight": false
+        },
+        {
+          "version": "0.22.1",
+          "date": "2026-11-10",
+          "notes": "- **A stray thought no longer costs the whole scene.** While a love interest is still behind their mask, the story can't show their thoughts. When the model writes one anyway, Otome Hearth now drops just that line and keeps the rest of the scene, instead of asking the model to write it again. This works the same in Confrontations and Closers.",
           "highlight": false
         },
         {
@@ -787,12 +799,6 @@
           "version": "0.17.2",
           "date": "2026-11-08",
           "notes": "- **Send a sticker with your words.** In Messages, picking a sticker now attaches it to your message instead of sending it at once. It shows above the box with a remove button; write something if you like, then tap **Send** to send the sticker and your words together. Picking another sticker swaps it.\n- **The personality quiz on date waits too.** While Date Night plans your evening, and while Read Him, Read Me or Tarot night is being set or read, tap **Play the personality quiz** to answer statements as you wait.",
-          "highlight": false
-        },
-        {
-          "version": "0.17.1",
-          "date": "2026-11-08",
-          "notes": "- **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.",
           "highlight": false
         }
       ]
@@ -1070,6 +1076,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.19",
+          "date": "2026-11-10",
+          "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Slurp versions read every persona there as blank: no name, description, appearance or About Me in feeds, profiles, messages and pictures. Slurp now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
+          "highlight": true
+        },
+        {
           "version": "0.4.18",
           "date": "2026-11-05",
           "notes": "- Added: Backstage > Live shows has a Tip goals group. \"Goal size\" makes the room's goals and menu prices smaller or bigger. \"Own goals\" sets up to three goals for one Creator: an amount and what happens. They replace the made goals in that Creator's next shows, and the Creator acts out the text when the room hits the goal. Viewers cannot tip for an own goal's reward directly.",
@@ -1182,12 +1194,6 @@
           "date": "2026-10-23",
           "notes": "One release for everything built since 0.3.53 (unreleased 0.3.54 to 0.3.65 folded in):\n\n- Storylines: arcs, dramas and situations run on one storyline engine; Story Packs import v2 files, one JSON `fit`, one Packs list with a gate and Remove, topic switches `<pack>:<topic>`.\n- Packs (off by default): Family pack and five kink packs (Lingerie, Cosplay, Feet, Dom/sub, Exhibition).\n- Intimacy ladder: rapport tiers open doors in DMs (`slurpRapportDoors`), the highest tier is kept.\n- Paid sexting sessions (`SlpSextingBar`); Stir as a slide-up sheet (`SlpStirDeck`); Stories in Slurp's own layer.\n- Fixes: DM prompts know the player's latest public posts, @tagged Creators join the picture cast, tag-list looks go over whole, picture prompt rewrite floor 8192, wardrobe tag commas, neutral wording; Images > Advanced \"Keep original picture files\".",
           "highlight": true
-        },
-        {
-          "version": "0.3.53",
-          "date": "2026-10-21",
-          "notes": "- Image failures marked nonretryable by the Engine no longer start automatic replacement requests. Slurp also stops later background retries for posts and Creator artwork, and keeps post prompts for a deliberate retry.",
-          "highlight": false
         }
       ]
     },

@@ -5,7 +5,7 @@ import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { readFileSync } from "node:fs";

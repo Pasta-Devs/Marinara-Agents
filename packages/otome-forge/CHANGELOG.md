@@ -4,6 +4,10 @@
 
 - **Wardrobe and Wish art shows faster.** Looks, faces and wardrobe banner art now use the cut-outs Otome Hearth already saves on the server. Before, your browser downloaded each full painting, sent it to Marinara Engine to remove its backdrop and waited for the result, for every look and face on screen. Art that isn't cut out yet still shows the old way, and is cut out in the background for your next visit.
 
+## 0.22.1 — 2026-11-10
+
+- **A stray thought no longer costs the whole scene.** While a love interest is still behind their mask, the story can't show their thoughts. When the model writes one anyway, Otome Hearth now drops just that line and keeps the rest of the scene, instead of asking the model to write it again. This works the same in Confrontations and Closers.
+
 ## 0.22.0 — 2026-11-10
 
 - **Portraits and expressions paint by themselves.** With an image connection, a new story paints every love interest's portrait and yours once their bibles are written. With **Expressions** on, their faces follow in the background. Card characters are painted too, instead of using their Engine sprites or avatar. **Ask before painting** and prompt review still hold the portraits for **Paint the cast**. Without an image connection, your Engine sprites and avatars are used as before.

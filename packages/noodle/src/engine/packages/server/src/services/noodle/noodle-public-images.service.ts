@@ -23,7 +23,7 @@ import {
   resolveIllustratorCharacterReferences,
 } from "../image/illustrator-references.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
-import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createCharactersStorage } from "../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";

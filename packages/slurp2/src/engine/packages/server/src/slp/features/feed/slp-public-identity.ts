@@ -1,6 +1,6 @@
 import { type SlpAccount, type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";

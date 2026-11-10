@@ -19,7 +19,7 @@ import type { SlpDeepDetailsImageRun } from "../../../../../shared/src/slp/slp-d
 import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
 import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { resolveIllustratorCharacterReferences } from "../../../services/image/illustrator-references.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import {

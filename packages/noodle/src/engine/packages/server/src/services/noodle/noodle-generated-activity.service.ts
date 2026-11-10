@@ -9,7 +9,7 @@ import {
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
-import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createCharactersStorage } from "../../lib/host-characters-storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";

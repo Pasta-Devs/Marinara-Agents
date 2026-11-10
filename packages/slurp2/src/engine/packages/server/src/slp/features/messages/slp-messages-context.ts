@@ -2,7 +2,7 @@ import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-s
 import type { SlurpMessagesStorage } from "../../data/messages/slp-messages-storage.js";
 import type { SlurpMessage } from "../../data/messages/slp-messages-storage-types.js";
 import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import type { FastifyInstance } from "fastify";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
 

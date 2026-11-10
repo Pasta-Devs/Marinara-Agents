@@ -277,10 +277,43 @@ function exitsOf(context: BeatContext, raw: unknown): LiId[] {
   return [...ids];
 }
 
+/** A thought line of a love interest still behind their mask (stage 1). His side (pov) keeps its own rule. */
+function maskedThought(context: BeatContext, raw: unknown): boolean {
+  if (context.pov || !raw || typeof raw !== "object") return false;
+  const segment = raw as Record<string, unknown>;
+  if (segment.thought !== true && segment.thought !== "true") return false;
+  const li = speakerLi(context, str(segment.speaker, NAME_MAX));
+  return !!li && (context.state.lis[li.id]?.stage ?? 1) < 2;
+}
+
 /**
- * Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene; in his side,
- * anyone's thought but his), or "". `counts` holds each love interest's thoughts read on the way to these segments, and
- * gets theirs added.
+ * The list without the thought lines of love interests still behind their mask: the model sometimes writes one anyway,
+ * and only that line goes, instead of the whole reply. `at` maps an index into the list as written to the list kept: it
+ * moves back past each dropped line, and an index on a dropped line moves to the line before it (0 at the least).
+ */
+export function withoutMaskedThoughts(
+  context: BeatContext,
+  raw: unknown,
+): { segments: unknown; at(index: unknown): unknown } {
+  const dropped = Array.isArray(raw)
+    ? raw.flatMap((segment, index) => (maskedThought(context, segment) ? [index] : []))
+    : [];
+  if (!dropped.length) return { segments: raw, at: (index) => index };
+  return {
+    segments: (raw as unknown[]).filter((_, index) => !dropped.includes(index)),
+    at: (index) => {
+      const n = typeof index === "string" && index.trim() ? Number(index) : index;
+      if (typeof n !== "number" || !Number.isInteger(n)) return index;
+      const before = dropped.filter((at) => at < n).length + (dropped.includes(n) ? 1 : 0);
+      return Math.max(0, n - before);
+    },
+  };
+}
+
+/**
+ * Why the reply's thoughts break the rules (two of a love interest's in one scene; in his side, anyone's thought but his),
+ * or "". A masked love interest's thought is dropped before this (withoutMaskedThoughts). `counts` holds each love
+ * interest's thoughts read on the way to these segments, and gets theirs added.
  */
 function thoughtProblem(context: BeatContext, segments: unknown[], counts = new Map<string, number>()): string {
   for (const raw of segments) {
@@ -296,8 +329,6 @@ function thoughtProblem(context: BeatContext, segments: unknown[], counts = new 
       return `only ${name} thinks in this scene: every thought line has "speaker" set to ${name}, and nobody else, the protagonist included, has one`;
     }
     if (!li) continue;
-    if ((context.state.lis[li.id]?.stage ?? 1) < 2)
-      return `${li.name} is still behind their mask: no thought lines yet`;
     counts.set(li.id, (counts.get(li.id) ?? 0) + 1);
     if (counts.get(li.id)! > 1) return `${li.name} may have at most one thought line in this scene`;
   }
@@ -376,8 +407,40 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
 
 type NormalizedBeat = BeatBody & { choices: ForgeChoice[]; sideWith?: Beat["sideWith"] };
 
+/**
+ * The reply with every masked love interest's thought line dropped (withoutMaskedThoughts), from its segments and each
+ * choice's branches, and the choices' and the CG's `at` moved to match.
+ */
+function unmasked(reply: BeatReply, context: BeatContext): BeatReply {
+  const main = withoutMaskedThoughts(context, reply.segments);
+  const record = (value: unknown) => (value && typeof value === "object" ? (value as Record<string, unknown>) : null);
+  const choices = Array.isArray(reply.choices)
+    ? reply.choices.map((raw) => {
+        const choice = record(raw);
+        if (!choice) return raw;
+        const options = Array.isArray(choice.options)
+          ? choice.options.map((option) => {
+              const fields = record(option);
+              return fields
+                ? { ...fields, segments: withoutMaskedThoughts(context, fields.segments).segments }
+                : option;
+            })
+          : choice.options;
+        return { ...choice, at: main.at(choice.at), options };
+      })
+    : reply.choices;
+  const cg = record(reply.cg);
+  return {
+    ...reply,
+    segments: main.segments as unknown[],
+    choices,
+    ...(cg ? { cg: { ...cg, at: main.at(cg.at) } } : {}),
+  };
+}
+
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
-export function normalizeBeatReply(reply: BeatReply, context: BeatContext): NormalizedBeat | string {
+export function normalizeBeatReply(written: BeatReply, context: BeatContext): NormalizedBeat | string {
+  const reply = unmasked(written, context);
   const places = declaredPlaces(reply.places, context.places);
   if (typeof places === "string") return places;
   // One thought per love interest on the path with the most of them: the mainline, then in each choice (every one
@@ -428,6 +491,7 @@ export function segmentLists(context: BeatContext): SegmentLists {
     },
     list: (raw, start) => normalizeBeatBody(raw, { start, context }),
     thoughts: (raw, counts) => thoughtProblem(context, raw, counts),
+    unmask: (raw) => withoutMaskedThoughts(context, raw),
   };
 }
 

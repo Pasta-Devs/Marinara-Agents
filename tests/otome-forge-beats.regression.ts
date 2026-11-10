@@ -81,6 +81,7 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import {
   normalizeBeatReply,
   segmentLists,
+  withoutMaskedThoughts,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
 import { normalizeConfrontationReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/confrontation.ts";
 import {
@@ -422,14 +423,22 @@ test("Ease off cuts the canon with its marker, makes no model call, and drops th
   assert.equal(veiled.body.world.content.limits["non-consent"], "line", "a Line is never raised to a Veil");
 });
 
-test("a refusal is a 422 that writes nothing; a LI's thought before stage 2 gets the repair turn", async () => {
+test("a refusal is a 422 that writes nothing; a LI's thought before stage 2 is dropped, with no repair turn", async () => {
   const t = await storyWorld({
     runKey: "r-decl-aaaaaa",
     replies: [
       json(planReply()),
       "I can't help with writing this scene.",
       "I'm unable to continue this story.",
-      json(beatReply({ segments: [...beatReply().segments, { speaker: "Kai", text: "Don't leave.", thought: true }] })),
+      json(
+        beatReply({
+          segments: [
+            ...beatReply().segments,
+            { speaker: "Kai", text: "Don't leave.", thought: true },
+            { speaker: "", text: "The lamp steadies." },
+          ],
+        }),
+      ),
       json(beatReply()),
     ],
   });
@@ -438,15 +447,78 @@ test("a refusal is a 422 that writes nothing; a LI's thought before stage 2 gets
   assert.equal(declined.status, 422);
   assert.equal(declined.body.code, "declined");
   assert.equal(await t.store.readDoc(beatId(t.runId, "main-1", 0), normalizeBeat), null);
-  const repaired = await t.call("POST", beatPath, {}, node(0));
-  assert.equal(repaired.status, 200);
-  assert.match(
-    t.calls
-      .filter((entry) => !isArcPlan(entry.messages))
-      .at(-1)!
-      .messages.at(-1)!.content,
-    /Kai is still behind their mask/,
+  const written = await t.call("POST", beatPath, {}, node(0));
+  assert.equal(written.status, 200);
+  const saved = (await t.store.readDoc(beatId(t.runId, "main-1", 0), normalizeBeat))!;
+  assert.deepEqual(
+    saved.segments.map((segment) => segment.text),
+    [...beatReply().segments.map((segment: { text: string }) => segment.text), "The lamp steadies."],
+    "that reply is kept, with only his thought line gone",
   );
+});
+
+test("a masked love interest's thought line is dropped, and each choice's and the CG's `at` moves with it", () => {
+  const units = [{ id: KAI, name: "Kai Arden" }];
+  const at = { i: 0, kind: "beat", guide: "Rain.", cast: [KAI] } as ChapterNode;
+  const masked = normalizeState({ lis: { [KAI]: {} } });
+  const context = { node: at, units, state: masked, last: false };
+  const option = (text: string, segments: object[]) => ({
+    text,
+    selection: { kind: "dialogue", text },
+    segments,
+  });
+  const reply = {
+    segments: [
+      { speaker: "", text: "Rain on the glass." },
+      { speaker: "Kai", text: "Stay.", thought: true },
+      { speaker: "Kai", text: "You're late." },
+      { speaker: "Kai", text: "Don't go.", thought: true },
+    ],
+    choices: [
+      {
+        kind: "small",
+        at: 2,
+        options: [
+          option("Apologise", [
+            { speaker: "Kai", text: "Hm." },
+            { speaker: "Kai", text: "Fine.", thought: true },
+          ]),
+          option("Shrug", [{ speaker: "", text: "Silence." }]),
+        ],
+      },
+      {
+        kind: "small",
+        at: 1,
+        options: [option("Wave", [{ speaker: "Kai", text: "Hm." }]), option("Wait", [{ speaker: "", text: "Rain." }])],
+      },
+    ],
+  };
+  const beat = normalizeBeatReply(reply, context);
+  assert.ok(typeof beat === "object", String(beat));
+  assert.deepEqual(
+    beat.segments.map((segment) => segment.text),
+    ["Rain on the glass.", "You're late."],
+  );
+  // The choice after "You're late." follows it still; the one anchored on the dropped thought moves to the line before.
+  assert.deepEqual(
+    beat.choices.map((choice) => choice.at),
+    [0, 1],
+  );
+  assert.deepEqual(
+    beat.choices[1]!.options[0]!.segments.map((segment) => segment.text),
+    ["Hm."],
+    "a branch loses its masked thought too",
+  );
+  const moved = withoutMaskedThoughts(context, reply.segments);
+  assert.deepEqual(
+    [0, 1, 2, 3, "2", "x"].map((index) => moved.at(index)),
+    [0, 0, 1, 1, 1, "x"],
+    "the CG's `at` moves the same way",
+  );
+  // His side keeps its own rule: there, his thoughts are the point.
+  const pov = normalizeBeatReply({ segments: reply.segments.slice(0, 3) }, { ...context, pov: KAI });
+  assert.ok(typeof pov === "object", String(pov));
+  assert.equal(pov.segments.length, 3);
 });
 
 test("a love interest's thought under his first name alone keeps the stage and one-per-beat rules", () => {
@@ -455,9 +527,12 @@ test("a love interest's thought under his first name alone keeps the stage and o
   const thought = (speaker: string) => ({ speaker, text: "Stay.", thought: true });
   const reply = (...lines: object[]) => ({ segments: [{ speaker: "", text: "Rain on the glass." }, ...lines] });
   const masked = normalizeState({ lis: { [KAI]: {} } });
-  assert.match(
-    String(normalizeBeatReply(reply(thought("Kai")), { node: at, units, state: masked, last: false })),
-    /Kai Arden is still behind their mask/,
+  const kept = normalizeBeatReply(reply(thought("Kai")), { node: at, units, state: masked, last: false });
+  assert.ok(typeof kept === "object", String(kept));
+  assert.deepEqual(
+    kept.segments.map((segment) => segment.text),
+    ["Rain on the glass."],
+    "a masked love interest's thought is dropped, by his first name too",
   );
   const open = normalizeState({ lis: { [KAI]: { stage: 2 } } });
   assert.match(

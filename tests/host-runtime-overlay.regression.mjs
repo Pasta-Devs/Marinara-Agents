@@ -1,12 +1,12 @@
 // Calls, Noodle and Slurp reach the Engine's live services through api.runtime (Pasta-Devs/Marinara-Agents#1487):
 // sources/host-runtime-overlay replaces each vendored copy of a stateful Engine service. This loads the overlay
 // modules as the package build stacks them and checks the binding, the pre-activation log buffer, delegation to
-// the host members, the "needs a newer Marinara Engine" answer (HTTP 501) when a member is missing, and the
-// Calls schedule update.
+// the host members, the "needs a newer Marinara Engine" answer (HTTP 501) when a member is missing, the
+// Calls schedule update, and persona reads through api.runtime.resources (Pasta-Devs/Marinara-Agents#2230).
 // Run: node --experimental-transform-types tests/host-runtime-overlay.regression.mjs
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -288,6 +288,59 @@ try {
     /from "\.\.\/\.\.\/\.\.\/services\/capability-packages\/capability-service-registry\.service\.js"/u,
   );
   assert.match(memorySource, /"long-term-memory:recall"/u);
+
+  // --- Personas -----------------------------------------------------------------------------------------------
+  // Engine storage format 11 keeps a persona's fields in one `data` column, which the bundled flat `personas`
+  // declaration reads as blank, so persona reads go to api.runtime.resources and the bundled ones refuse.
+  const { withHostPersonas } = await load("lib/host-personas.ts");
+  const bundled = {
+    getById: async (id) => ({ id, data: "{}" }),
+    getPersona: async () => ({ name: "" }),
+    listPersonas: async () => [{ name: "" }],
+    listPersonasPage: async () => ({ items: [] }),
+    updatePersona: async () => "written",
+  };
+  const personas = withHostPersonas(bundled);
+  const personaRow = { id: "p1", name: "Mira", description: "Paints at night.", isActive: "true" };
+  const asked = [];
+  const unbindPersonas = host.bindHostRuntime({
+    logger: runtimeLogger,
+    persistence: {},
+    resources: {
+      listPersonas: async (ids) => {
+        asked.push(ids);
+        return !ids || ids.includes("p1") ? [{ id: "p1", data: personaRow }] : [];
+      },
+    },
+  });
+  assert.deepEqual(await personas.getPersona("p1"), personaRow, "a persona reads through the host");
+  assert.equal(await personas.getPersona("gone"), null);
+  assert.deepEqual(await personas.listPersonas(), [personaRow]);
+  assert.deepEqual(asked, [["p1"], ["gone"], undefined]);
+  assert.deepEqual(await personas.getById("c1"), { id: "c1", data: "{}" }, "characters stay on the bundled storage");
+  await assert.rejects(personas.updatePersona("p1", {}), /api\.runtime\.resources/u, "bundled persona writes refuse");
+  await assert.rejects(personas.listPersonasPage({}), /api\.runtime\.resources/u, "other bundled persona reads refuse");
+  unbindPersonas();
+  const unbindWithoutResources = host.bindHostRuntime({ logger: runtimeLogger, persistence: {} });
+  await assert.rejects(personas.getPersona("p1"), {
+    name: "HostFeatureUnavailableError",
+    message: "Reading personas needs a newer Marinara Engine.",
+  });
+  unbindWithoutResources();
+
+  // No package builds the bundled characters storage directly: it would read format-11 personas as blank.
+  for (const id of ["conversation-calls", "noodle", "slurp2"]) {
+    const sourceRoot = join(root, "packages", id, "src");
+    for (const entry of await readdir(sourceRoot, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile() || !/\.tsx?$/u.test(entry.name)) continue;
+      const text = await readFile(join(entry.parentPath, entry.name), "utf8");
+      assert.doesNotMatch(
+        text,
+        /from "[^"]*services\/storage\/characters\.storage\.js"|from "\.\.?\/(?:\.\.\/)*storage\/characters\.storage\.js"/u,
+        `${id}: ${entry.name} imports the bundled characters storage; use lib/host-characters-storage.js`,
+      );
+    }
+  }
 
   console.log("host runtime overlay regression passed");
 } finally {
