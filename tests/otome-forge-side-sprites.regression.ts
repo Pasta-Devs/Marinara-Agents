@@ -4,7 +4,7 @@
 // - Someone qualifies after speaking in two different chapters, or at once when one Engine card matches their name; two
 //   cards that match (namesakes) are never guessed. A card's sprite needs no look call and sends the card as likeness.
 // - Opening a story records the scenes read before, once per story and one pass at a time, with no call.
-// - The look call: once per person, on the Planning connection's background lane, logged in debug mode, with the
+// - The look call: once per person, on the Messages connection's background lane, logged in debug mode, with the
 //   setting, their scenes and the story's content contract; turning the toggle on in Settings starts it.
 // - The sprite: one full-body look on its chroma matte, held for the tap under Ask before painting, a failure kept for
 //   Retry, never paid twice for one tap; cut out for free, and GET .../art/scene carries it for the speaker.
