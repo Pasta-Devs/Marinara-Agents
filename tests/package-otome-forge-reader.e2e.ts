@@ -773,11 +773,20 @@ test("Otome Hearth waits: What happened so far… while a chapter is planned, Wh
   await expect(soFar.locator("p")).toHaveCount(SO_FAR.length);
   await expect(lead.getByRole("heading", { name: "What happened so far…" })).toBeVisible();
   await expect(status, "the summary is never announced as status").not.toContainText("SO-FAR");
+  if (test.info().project.name.includes("chromium")) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 8 });
+  }
   // By keyboard: it is the stop before Cancel, and End scrolls it.
   await page.keyboard.press("Shift+Tab");
   await expect(soFar).toBeFocused();
   await page.keyboard.press("End");
-  await expect.poll(() => soFar.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  // Wait until End has reached the bottom, not merely started: Home pressed while End is still scrolling can leave the
+  // box at the bottom (CI mobile-chromium, #2223's run: scrollTop 2328).
+  await expect
+    .poll(() => soFar.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1);
+  expect(await soFar.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.keyboard.press("Home");
   await expect.poll(() => soFar.evaluate((element) => element.scrollTop)).toBe(0);
   if (!mobile) {
