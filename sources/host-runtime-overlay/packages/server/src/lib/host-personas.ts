@@ -26,6 +26,8 @@ function hostResources() {
 
 /** The same storage, with persona reads answered by the Engine and every other persona method refused. */
 export function withHostPersonas<T extends PersonaReadStorage>(storage: T): T {
+  // Matched by name on purpose: a persona method the bundled copy gains later is refused too, instead of quietly
+  // reading or writing the stale flat table.
   const refused = Object.fromEntries(
     Object.keys(storage)
       .filter((key) => key.includes("Persona") && key !== "getPersona" && key !== "listPersonas")
@@ -41,7 +43,7 @@ export function withHostPersonas<T extends PersonaReadStorage>(storage: T): T {
     ...refused,
     async getPersona(id: string) {
       const [record] = await hostResources().listPersonas([id]);
-      return record ? (record.data as PersonaRow<T>) : null;
+      return (record?.data as PersonaRow<T> | undefined) ?? null;
     },
     async listPersonas() {
       return (await hostResources().listPersonas()).map((record) => record.data as PersonaRow<T>);
