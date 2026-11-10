@@ -55,7 +55,7 @@ export interface LookView {
   description?: string;
   /** The item it was won as; absent for the base look. */
   item?: { kind: ItemKind; rarity: Rarity; title: string };
-  /** The painted full-body image, once there is one. */
+  /** The painted full-body image, once there is one: its saved cut-out once ready (`cut`). */
   url?: string;
   /** Its paint as the client should see it: the base look's setup portrait, or the item's first-open paint. */
   art: Paint | null;
@@ -65,8 +65,10 @@ export interface LookView {
   wearable: boolean;
   /** True while the item's first open has not happened (POST .../items/:item/open paints it). */
   unopened: boolean;
-  /** His ready faces on this look, while expressions are on. */
+  /** His ready faces on this look, while expressions are on; each its saved cut-out once ready (`cut`). */
   faces?: Partial<Record<Face, string>>;
+  /** Which of `url` and `faces` are saved cut-outs (no backdrop): shown as they are, never cleaned in the browser. */
+  cut?: string[];
   /** A 5★ look (his-look5, her-look5): the first-wear beat (a one-node Character Story), once its first open wrote it. */
   story?: { key: string } | null;
   /** Her looks: the love interests already shown it, whose first Show paid its affection. */
@@ -75,10 +77,13 @@ export interface LookView {
   new?: true;
 }
 
-/** A couple set: a her-look5 and the his-look5 it names. Shown once she owns either half. */
+/**
+ * A couple set: a her-look5 and the his-look5 it names. Shown once she owns either half. A half's `url` is its look's
+ * saved cut-out once ready, which its `cut` says (shown as it is, never cleaned in the browser).
+ */
 export interface CoupleSet {
-  his: { id: string; li: LiId | null; name: string; owned: boolean; url?: string };
-  hers: { id: string; name: string; owned: boolean; url?: string };
+  his: { id: string; li: LiId | null; name: string; owned: boolean; url?: string; cut?: true };
+  hers: { id: string; name: string; owned: boolean; url?: string; cut?: true };
   complete: boolean;
   /** The pair portrait: ready once painted, pending while it paints, null until then. */
   pair: Paint | null;

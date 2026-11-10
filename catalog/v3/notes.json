@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.22.2",
+          "date": "2026-11-10",
+          "notes": "- **Wardrobe and Wish art shows faster.** Looks, faces and wardrobe banner art now use the cut-outs Otome Hearth already saves on the server. Before, your browser downloaded each full painting, sent it to Marinara Engine to remove its backdrop and waited for the result, for every look and face on screen. Art that isn't cut out yet still shows the old way, and is cut out in the background for your next visit.",
+          "highlight": false
+        },
+        {
           "version": "0.22.0",
           "date": "2026-11-10",
           "notes": "- **Portraits and expressions paint by themselves.** With an image connection, a new story paints every love interest's portrait and yours once their bibles are written. With **Expressions** on, their faces follow in the background. Card characters are painted too, instead of using their Engine sprites or avatar. **Ask before painting** and prompt review still hold the portraits for **Paint the cast**. Without an image connection, your Engine sprites and avatars are used as before.\n- **Someone new gets a portrait in Your cast.** A love interest who arrives at the end of an arc now appears in **Your cast** with their portrait: it paints by itself with an image connection, or waits for **Paint the cast** with **Ask before painting** or prompt review on. Someone who arrived before this update gets theirs the next time you open the story.\n- Stories you've already started keep their **Paint the cast** button: portraits waiting there don't start painting by themselves.",
@@ -788,12 +794,6 @@
           "date": "2026-11-08",
           "notes": "- **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.",
           "highlight": false
-        },
-        {
-          "version": "0.17.0",
-          "date": "2026-11-07",
-          "notes": "- **Take the personality quiz while a chapter is planned.** While a chapter is being planned, tap **Play the personality quiz** and answer statements from strongly disagree to strongly agree. After each answer you see how every love interest answered the same statement, and how alike the two of you are so far. Statements about sex and kinks appear only when Heat is NSFW. Once you've answered them all, 50 new statements are written for you in the background.\n- **Your love interests answer it once.** A new story writes their answers in the background after their bibles, in one call on your Planning connection. A story you started before this update gets theirs in the background the next time you open it, and someone new who joins later gets theirs the same way.\n- **What happened so far… now shows while an arc is planned.** Planning any other chapter offers the quiz instead, and **Who said what?** still plays while a scene is written.",
-          "highlight": true
         }
       ]
     },

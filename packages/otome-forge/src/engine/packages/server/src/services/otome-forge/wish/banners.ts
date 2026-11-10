@@ -20,6 +20,8 @@
 // ready it is also the featured item's art, so the item's first open (S/items/open.ts) pays for nothing more.
 // Owned Snapshots are private memory: itemMemorySources gives each to the kit as a `chat` with audience [its love
 // interest], so only that love interest recalls it (S/memory/sources.ts).
+// The view shows a look's art, and a wardrobe banner's, as its wearer's saved cut-out once ready (`cut` says so) and
+// queues the missing ones, free, as Home does (S/art/cutout.ts viewCutouts); the client cleans the rest meanwhile.
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
 import type {
@@ -33,6 +35,7 @@ import {
   BANNER_ITEM_KINDS,
   BANNER_KINDS,
   bannerKey,
+  isLookKind,
   itemIdOf,
   parseBannerKey,
   pityView,
@@ -51,8 +54,9 @@ import {
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { cgReferences, cgSubjects, warnUnmatched } from "../art/cg.js";
+import { viewCutouts } from "../art/cutout.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
-import { bannerArtOwner, itemArtOwner } from "../art/outfits.js";
+import { bannerArtOwner, itemArtOwner, lookWearer } from "../art/outfits.js";
 import {
   imagesOf,
   paintRecord,
@@ -77,8 +81,9 @@ import {
 import { generateJson, readOrGenerate } from "../generation.js";
 import { itemView } from "../items/open.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
-import { bannerId, itemId, mainChapterNumber, runDocTarget, stateId, unitId, worldId } from "../ids.js";
-import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { bannerId, itemId, mainChapterNumber, playerId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { normalizePlayer } from "../schemas/player.js";
+import { normalizeState, readCastUnits, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
@@ -88,7 +93,7 @@ import { cancellable } from "../story/beats.js";
 import { recallText } from "../story/canon.js";
 import { BANNER_PLAN_TOKENS, BannerPlanSchema, normalizeBannerPlan, type BannerPlan } from "./replies.js";
 
-export type WishDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "memory" | "cancellation">;
+export type WishDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "memory" | "cancellation" | "cutouts">;
 
 export { bannerArtOwner };
 
@@ -235,20 +240,46 @@ const creating = new Map<string, number>();
  * ponytail: reads every banner's ten items on each view; the ceiling is a few hundred banners (years of two-week
  * rotations), and the upgrade path is the item fields a view needs copied onto the banner document.
  */
-export async function wishView(deps: Pick<WishDeps, "store">, runId: string): Promise<WishView> {
+export async function wishView(
+  deps: Pick<WishDeps, "store" | "runtime" | "cutouts">,
+  runId: string,
+): Promise<WishView> {
   const { store } = deps;
-  const [world, state, banners] = await Promise.all([
+  const [world, state, banners, player] = await Promise.all([
     store.readDoc(worldId(runId), normalizeWorld),
     store.readDoc(stateId(runId), normalizeState),
     readBanners(store, runId),
+    store.readDoc(playerId(runId), normalizePlayer),
   ]);
   if (!world || !state) throw runNotFound();
   const rotation = currentRotation(world);
-  const items = await readItems(store, runId, banners.flatMap(bannerItemIds));
+  const [items, units] = await Promise.all([
+    readItems(store, runId, banners.flatMap(bannerItemIds)),
+    readCastUnits(store, runId, state),
+  ]);
   const owned = new Set(state.owned.items);
+  const cutouts = viewCutouts(deps, runId);
+  const wearers = new Map<string, Pick<Unit, "id" | "cutouts">>([
+    ["player", { id: "player", cutouts: player?.cutouts ?? {} }],
+    ...units.map((unit) => [`li:${unit.id}`, unit] as const),
+  ]);
+  /** A look's art (`look` is its item) as its wearer's cut-out once ready, which `cut` says. */
+  const cutArt = <T extends { art: Paint | null; cut?: true }>(view: T, look: Pick<ItemView, "kind" | "li">): T => {
+    const wearer = isLookKind(look.kind) ? wearers.get(lookWearer(look) ?? "") : undefined;
+    const url = view.art?.state === "ready" ? view.art.url : undefined;
+    const cutout = wearer && url ? cutouts.ready(wearer, url) : undefined;
+    return cutout && view.art ? { ...view, art: { ...view.art, url: cutout }, cut: true } : view;
+  };
   const views = banners
     .map((banner) => toBannerView(runId, banner, items, owned, rotation.number))
-    .filter((view): view is BannerView => !!view);
+    .filter((view): view is BannerView => !!view)
+    // A banner's art is its 5★'s picture, on its wearer.
+    .map((view) => ({
+      ...cutArt(view, view.five),
+      five: cutArt(view.five, view.five),
+      four: view.four.map((item) => cutArt(item, item)),
+    }));
+  await cutouts.queue();
   const current = views.filter((view) => view.rotation === rotation.number);
   return {
     starlight: state.wallet.starlight,

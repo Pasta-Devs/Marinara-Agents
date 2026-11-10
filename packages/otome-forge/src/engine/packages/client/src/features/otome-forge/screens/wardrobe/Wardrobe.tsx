@@ -461,6 +461,7 @@ function LookCard({
       <span className="of-ward-frame" data-painting={look.art?.state === "pending"} aria-hidden="true">
         <LookImage
           src={url}
+          cut={!!url && !!look.cut?.includes(url)}
           alt=""
           loading="lazy"
           decoding="async"
@@ -501,7 +502,15 @@ function LookCard({
               })}
             </span>
             {faces.map((face) => (
-              <LookImage key={face} src={look.faces?.[face]} alt="" title={t(FACE_LABEL_KEYS[face])} loading="lazy" />
+              <LookImage
+                key={face}
+                src={look.faces?.[face]}
+                cut={!!look.cut?.includes(look.faces?.[face] ?? "")}
+                alt=""
+                title={t(FACE_LABEL_KEYS[face])}
+                loading="lazy"
+                decoding="async"
+              />
             ))}
           </p>
         ) : null}
@@ -634,8 +643,10 @@ function CoupleCard({
         <span className="of-ward-frame of-ward-frame--small" aria-hidden="true">
           <LookImage
             src={look.url}
+            cut={!!look.cut}
             alt=""
             loading="lazy"
+            decoding="async"
             fallback={<span className="of-item-initials">{initialsOf(name)}</span>}
           />
         </span>

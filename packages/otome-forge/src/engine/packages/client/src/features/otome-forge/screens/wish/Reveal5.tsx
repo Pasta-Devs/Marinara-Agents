@@ -7,7 +7,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, Sparkle, Sparkles } from "lucide-react";
-import { imagesOn, needsOpen, readyArt, useRefocus, type ItemActions } from "../../hooks/use-items";
+import {
+  imagesOn,
+  needsOpen,
+  readyPicture,
+  useRefocus,
+  type ItemActions,
+  type ReadyPicture,
+} from "../../hooks/use-items";
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { useSpriteDisplay } from "../../hooks/use-sprite-display";
 import { accentOf, initialsOf } from "../../lib/accent";
@@ -24,7 +31,7 @@ interface Reveal5Props {
   item: ItemView;
   isNew: boolean;
   /** The banner's art, shown until the item's own is ready. */
-  fallbackUrl: string | null;
+  fallbackArt: ReadyPicture | null;
   /** "1 of 2" when one wish brought more than one. */
   position: { index: number; total: number } | null;
   actions: ItemActions;
@@ -36,7 +43,7 @@ export function Reveal5({
   view,
   item,
   isNew,
-  fallbackUrl,
+  fallbackArt,
   position,
   actions,
   reducedMotion,
@@ -51,7 +58,8 @@ export function Reveal5({
   const spoken = useRef<string | null>(null);
   const li = itemPerson(item, view);
   const look = isLookKind(item.kind);
-  const url = useSpriteDisplay(readyArt(item.art) ?? fallbackUrl, look);
+  const picture = readyPicture(item) ?? fallbackArt;
+  const url = useSpriteDisplay(picture?.url ?? null, look && !picture?.cut);
   const title = item.look?.name || item.title;
   const busy = actions.busy.has(item.id);
   const opening = needsOpen(item, imagesOn(view));
