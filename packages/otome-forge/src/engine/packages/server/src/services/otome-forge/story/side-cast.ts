@@ -328,7 +328,7 @@ export async function writeSideLook(
   if (!world || !spritesOn(world) || !person || person.look || person.cardId || !qualifies(person)) return;
   const { value } = await generateJson(deps, {
     runId,
-    job: "structured",
+    job: "chat",
     label: "side-look",
     messages: sideLookMessages({ world, name: person.name, scenes: await sideScenes(deps, runId, person) }),
     schema: LookReplySchema,
@@ -413,7 +413,8 @@ export async function tendSideCast(deps: SideCastDeps, runId: string, mode: Side
           )?.value ?? sides;
       }
     }
-    const connectionId = resolveConnectionId(run.world, "structured");
+    // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), not Planning.
+    const connectionId = resolveConnectionId(run.world, "chat");
     for (const person of people()) {
       if (!qualifies(person) || person.art) continue;
       if (person.cardId || person.look) await queueSideSprite(deps, runId, person.key, mode);

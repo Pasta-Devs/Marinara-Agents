@@ -65,7 +65,8 @@ export async function ensurePlushArt(
   const { background } = deps;
   if (!background || !lis.length) return [];
   const run = await readRun(deps.store, runId);
-  const connectionId = resolveConnectionId(run?.world ?? null, "structured");
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), not Planning.
+  const connectionId = resolveConnectionId(run?.world ?? null, "chat");
   if (!run || !connectionId) return [];
   const waiting: LiId[] = [];
   for (const li of lis) {
@@ -112,7 +113,7 @@ export async function writePlushArt(
   const at = new Date().toISOString();
   const { value } = await generateJson(deps, {
     runId,
-    job: "structured",
+    job: "chat",
     label: "plush",
     messages: plushMessages({ unit }),
     schema: PlushReplySchema,

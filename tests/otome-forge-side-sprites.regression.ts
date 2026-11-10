@@ -260,6 +260,11 @@ test("a scene read to its end records its side speakers by their core name, neve
 
 test("someone qualifies in a second chapter: one look call, logged, with the contract; then one sprite, cut out", async () => {
   const t = await sideWorld("r-side02-bbbbbb", { images: {}, replies: [json(ARLE_LOOK)] });
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), never Planning.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "conn-text", structured: "conn-plan", chat: "conn-chat" },
+  }));
   await t.read(await t.scene(1, [line("", "Snow on the quay."), ARLE_SAYS("FIRST-CHAPTER: Children, gather round.")]));
   await t.settle();
   assert.equal(qualifies((await t.sides()).arlecchino!), false, "one chapter is not enough");
@@ -296,7 +301,7 @@ test("someone qualifies in a second chapter: one look call, logged, with the con
   const [look, ...more] = t.lookCalls();
   assert.ok(look, "her look was written");
   assert.equal(more.length, 0, "once");
-  assert.equal(look.connectionId, "conn-text", "on the Planning connection (narration's when none is set)");
+  assert.equal(look.connectionId, "conn-chat", "on the Messages connection, never Planning");
   const [system, user] = look.messages.map((message) => message.content);
   const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
   assert.ok(

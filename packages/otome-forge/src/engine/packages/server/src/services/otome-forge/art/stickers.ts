@@ -336,7 +336,8 @@ export const stickerSetJobKey = (runId: string, li: LiId) => `${unitId(runId, li
  */
 export function ensureStickerSets(deps: StickerDeps, runId: string, run: Run, { debugMode }: { debugMode: boolean }) {
   const { background } = deps;
-  const connectionId = resolveConnectionId(run.world, "structured");
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), not Planning.
+  const connectionId = resolveConnectionId(run.world, "chat");
   if (!background || !connectionId || !run.world.images.connectionId) return false;
   let pending = false;
   for (const unit of run.units) {
@@ -377,7 +378,7 @@ export async function writeStickerSet(
     .map((entry) => ({ name: entry.name, emotions: entry.stickers!.set.map((sticker) => sticker.emotion) }));
   const { value } = await generateJson(deps, {
     runId,
-    job: "structured",
+    job: "chat",
     label: "stickers",
     messages: stickerSetMessages({ unit, language: run.world.language, others }),
     schema: StickerSetReplySchema,

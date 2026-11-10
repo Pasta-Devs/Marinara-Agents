@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.21.4 — 2026-11-10
+
+- **Your Messages model designs the small art.** Side characters' looks, love interests' stickers and their Claw Machine plushies are now written by your Messages connection instead of Planning. There's nothing new to set: left on **Same as Story**, Messages uses your Story connection.
+
 ## 0.21.3 — 2026-11-10
 
 - **Love interests stop repeating their habits.** The signs written in a love interest's bible (how they act when stressed, their tics, what gives them away) are now only some of the ways they can react. They show one now and then among other, fresh reactions, and never repeat the same gesture or sentence within a chapter.

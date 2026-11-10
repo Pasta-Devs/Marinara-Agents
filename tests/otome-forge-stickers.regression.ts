@@ -42,6 +42,7 @@ import {
   runDocTarget,
   stateId,
   unitId,
+  worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
   normalizeThread,
@@ -60,6 +61,7 @@ import {
   readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { artWorld, routesOf, setImages, until } from "./fixtures/otome-forge-art.ts";
@@ -395,6 +397,11 @@ test("images off: nothing is designed or painted, and the book holds her built-i
 
 test("a love interest at level 2 or more gets his nine designed, then one painted sticker per level reached", async () => {
   const t = await stickerWorld("r-stlevels-aaaaaa");
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), never Planning.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "conn-text", structured: "conn-plan", chat: "conn-chat" },
+  }));
   await setLevel(t, KAI, 4);
   await setLevel(t, MIR, 1);
   const first = await t.view();
@@ -406,6 +413,9 @@ test("a love interest at level 2 or more gets his nine designed, then one painte
     EMOTIONS,
   );
   assert.equal((await t.unit(MIR)).stickers, undefined, "level 1 designs nothing");
+  const designs = t.calls.filter((entry) => !isQuizCall(entry.messages));
+  assert.equal(designs.length, 1, "one design call, for his nine");
+  assert.equal(designs[0]!.connectionId, "conn-chat", "on the Messages connection, never Planning");
   // Levels 2, 3 and 4: three paints, one at a time in the low lane, each a chibi of him with his likeness.
   assert.deepEqual(Object.keys(kai.stickers!.art), ["guarded", "smug", "pensive"]);
   assert.equal(t.stickerPaints().length, 3);
