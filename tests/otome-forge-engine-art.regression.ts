@@ -1,9 +1,10 @@
-// Otome Hearth's "Use Engine art first" (#2147, S/art/engine-art.ts): a card love interest stands in his Engine sprites
-// (else his card avatar) and the protagonist in her persona avatar before anything is painted; his sprites bring the
-// faces they have, and the kit pays only for the missing ones, never under Ask before painting; a painted look is never
-// replaced; an adopted avatar follows a new one; their paint steps are done, also for a connection added later;
-// avatars are never cut out; Photo Shoot keeps their likeness; and a place can show a background from the Engine's
-// library, painting nothing and keeping a painting it replaces. A fake image client counts every paid call.
+// Otome Hearth's Engine art (#2147, S/art/engine-art.ts): in a story with no image connection, a card love interest
+// stands in his Engine sprites (else his card avatar) and the protagonist in her persona avatar; with one, nobody without
+// a look takes Engine art (0.22.0: they are painted) and anyone already in it keeps it. His sprites bring the faces they
+// have, and the kit pays only for the missing ones, never under Ask before painting; a painted look is never replaced; an
+// adopted avatar follows a new one; their paint steps are done, also for a connection added later; avatars are never cut
+// out; Photo Shoot keeps their likeness; and a place can show a background from the Engine's library, painting nothing
+// and keeping a painting it replaces. A fake image client counts every paid call.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
@@ -241,7 +242,7 @@ test("the loopback client builds sprite and background paths itself and keeps on
     assert.equal(engineArtPath(path), "", path);
 });
 
-test("POST /runs: card love interests and the protagonist start in their Engine art, their paint steps done, unpaid", async () => {
+test("POST /runs with no image connection: card love interests and the protagonist start in their Engine art, unpaid", async () => {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
   const { runtime } = createFakeRuntime({
@@ -277,7 +278,7 @@ test("POST /runs: card love interests and the protagonist start in their Engine 
         { source: "archetype", archetype: ARCHETYPE_IDS[0], name: "Sol", pronouns: HE },
       ],
       content: defaultContent(),
-      images: { connectionId: "conn-image", rating: "sfw", ask: false, expressions: true },
+      images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
     },
   });
@@ -311,17 +312,70 @@ test("POST /runs: card love interests and the protagonist start in their Engine 
     [`bible:${kai!.id}`]: "pending",
     [`bible:${vale!.id}`]: "pending",
     [`bible:${sol!.id}`]: "pending",
-    [`paint:${kai!.id}`]: "done",
-    [`paint:${vale!.id}`]: "done",
-    [`paint:${sol!.id}`]: "waiting-consent",
-    "paint:player": "done",
   });
   assert.equal(paints.paid.length, 0);
   await forgeSettled(runId);
 });
 
-test("GET /runs/:run: a story in progress adopts Engine art for owners with no look, once, and never over a painting", async () => {
-  const t = await artWorld({ runKey: "r-engineget-aaaaaa", images: { expressions: true } });
+test("POST /runs with an image connection: nobody takes Engine art; looks paint by themselves unless Ask or review holds them", async () => {
+  const fake = createFakeDocuments();
+  const store = createOtomeStore(fake.documents);
+  const { runtime } = createFakeRuntime({
+    documents: fake.documents,
+    characters: [{ id: "card-kai", data: { name: "Kai" } }],
+    personas: [{ id: "persona-ava", data: { name: "Ava" } }],
+  });
+  const paints = fakeImages();
+  const engine = engineArt(
+    { images: paints.images, runtime },
+    { sprites: { "card-kai": spritesOf("card-kai", ...FULL_FIVE) }, persona: AVA },
+  );
+  const deps: RouteDeps = { runtime, store, handle: createHandle(runtime.logger), images: paints.images };
+  const call = routesOf(registerRunRoutes, deps, "");
+  const create = async (images: { ask: boolean }, review = false) => {
+    const created = await call("POST", "/runs", {
+      setup: {
+        title: "",
+        premise: "A masked court where every vow binds.",
+        language: "English",
+        protagonist: { personaId: "persona-ava", pronouns: SHE, traits: [], goal: "" },
+        lis: [
+          { source: "card", cardId: "card-kai", pronouns: HE },
+          { source: "archetype", archetype: ARCHETYPE_IDS[0], name: "Sol", pronouns: HE },
+        ],
+        content: defaultContent(),
+        images: { connectionId: "conn-image", rating: "sfw", expressions: true, ...images },
+        connections: { narration: "conn-text" },
+      },
+      ...(review ? { reviewImagePrompts: true } : {}),
+    });
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    await forgeSettled(runIdOf(created.body.run));
+    const [kai, sol] = created.body.view.lis as Array<{ id: string; portrait?: string }>;
+    const paintSteps = Object.entries(stepsOf(created.body.view.forge)).filter(([id]) => id.startsWith("paint:"));
+    return { kai: kai!, sol: sol!, player: created.body.view.player, paintSteps };
+  };
+  const auto = await create({ ask: false });
+  assert.equal(auto.kai.portrait, undefined, "his sprites are not used: he is painted");
+  assert.equal(auto.player.portrait, undefined, "nor her persona avatar");
+  assert.deepEqual(auto.paintSteps, [
+    [`paint:${auto.kai.id}`, "pending"],
+    [`paint:${auto.sol.id}`, "pending"],
+    ["paint:player", "pending"],
+  ]);
+  for (const held of [await create({ ask: true }), await create({ ask: false }, true)])
+    assert.deepEqual(
+      held.paintSteps.map(([, state]) => state),
+      ["waiting-consent", "waiting-consent", "waiting-consent"],
+      "Ask before painting and prompt review hold every look for the tap",
+    );
+  assert.deepEqual(engine.reads, [], "the Engine's art is never read");
+  // No model reply is scripted: the world plan fails, so no look is ready to paint, and nothing is paid.
+  assert.equal(paints.paid.length, 0);
+});
+
+test("GET /runs/:run: a story with no image connection adopts Engine art for owners with no look, once, never over a painting", async () => {
+  const t = await artWorld({ runKey: "r-engineget-aaaaaa", images: { expressions: true, connectionId: null } });
   const cutouts = fakeCutouts();
   const call = routesOf(registerRunRoutes, { ...t.deps, cutouts: cutouts.client }, "r-engineget-aaaaaa");
   const engine = engineArt(t, {
@@ -392,8 +446,52 @@ test("GET /runs/:run: a story in progress adopts Engine art for owners with no l
   assert.equal(t.paid.length, 0);
 });
 
+test("GET /runs/:run with an image connection: no one without a look takes Engine art, and a story's waiting looks still wait", async () => {
+  const t = await artWorld({ runKey: "r-enginepaints-aaaaaa", images: { expressions: true } });
+  const call = routesOf(registerRunRoutes, { ...t.deps, cutouts: fakeCutouts().client }, "r-enginepaints-aaaaaa");
+  const engine = engineArt(t, {
+    sprites: { "card-kai": spritesOf("card-kai", "full_neutral"), "card-mir": spritesOf("card-mir", "full_neutral") },
+    persona: AVA,
+  });
+  const mirBase = "/api/sprites/card-mir/file/full_neutral.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-kai",
+  }));
+  // Mireille took her sprite before (a story made without images): she keeps it.
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, MIR)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-mir",
+    portrait: mirBase,
+    art: { state: "ready", at, url: mirBase },
+  }));
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    forge: {
+      phase: "ready",
+      steps: [
+        { id: `paint:${KAI}`, state: "waiting-consent", paid: true },
+        { id: `paint:${MIR}`, state: "waiting-consent", paid: true },
+        { id: "paint:player", state: "waiting-consent", paid: true },
+      ],
+    },
+  }));
+  const read = await call("GET", "/runs/:run");
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  assert.equal((await readUnit(t, KAI)).portrait, undefined);
+  assert.equal((await readPlayer(t)).portrait, undefined);
+  assert.equal((await readUnit(t, MIR)).portrait, mirBase);
+  assert.deepEqual(stepsOf(read.body.view.forge), {
+    [`paint:${KAI}`]: "waiting-consent",
+    [`paint:${MIR}`]: "done",
+    "paint:player": "waiting-consent",
+  });
+  assert.deepEqual(engine.reads, []);
+  assert.equal(t.paid.length, 0, "a story in progress keeps its tap: nothing paints on open");
+});
+
 test("a card linked to a love interest with no look is resolved again on the next read", async () => {
-  const t = await artWorld({ runKey: "r-enginelink-aaaaaa" });
+  const t = await artWorld({ runKey: "r-enginelink-aaaaaa", images: { connectionId: null } });
   const deps = { ...t.deps, cutouts: fakeCutouts().client };
   const call = routesOf(registerRunRoutes, deps, "r-enginelink-aaaaaa");
   const link = (cardId: string) =>
@@ -575,7 +673,10 @@ test("Engine faces show without painting; the kit pays only for the missing ones
 });
 
 test("Ask before painting: an adopted sprite base keeps only the faces it has, and nothing is painted untapped", async (context) => {
-  const t = await artWorld({ runKey: "r-engineask-aaaaaa", images: { ask: true, expressions: true } });
+  const t = await artWorld({
+    runKey: "r-engineask-aaaaaa",
+    images: { ask: true, expressions: true, connectionId: null },
+  });
   const art = createOtomeArt({ runtime: t.runtime, store: t.store, images: t.images });
   context.after(() => art.dispose());
   const call = routesOf(registerRunRoutes, { ...t.deps, cutouts: fakeCutouts().client }, "r-engineask-aaaaaa");
@@ -604,7 +705,8 @@ test("Ask before painting: an adopted sprite base keeps only the faces it has, a
     at: (await readUnit(t, MIR)).art!.at,
     images: {},
   });
-  // Both speak: no face is painted for either until Repaint expressions.
+  // An image connection added since. Both speak: no face is painted for either until Repaint expressions.
+  await setImages(t.store, t.runId, { connectionId: "conn-image" });
   art.queueExpressions(
     t.runId,
     beat(0, {
@@ -622,7 +724,7 @@ test("Ask before painting: an adopted sprite base keeps only the faces it has, a
 });
 
 test("an adopted avatar follows a new one once per process; a sprite base, or an avatar with painted faces, never moves", async () => {
-  const t = await artWorld({ runKey: "r-enginenew-aaaaaa" });
+  const t = await artWorld({ runKey: "r-enginenew-aaaaaa", images: { connectionId: null } });
   const cutouts = fakeCutouts();
   const call = routesOf(registerRunRoutes, { ...t.deps, cutouts: cutouts.client }, "r-enginenew-aaaaaa");
   const home = routesOf(
@@ -696,7 +798,7 @@ test("an adopted avatar follows a new one once per process; a sprite base, or an
 });
 
 test("a card or persona that could not be read is tried again on the next read; a card that is gone is not", async () => {
-  const t = await artWorld({ runKey: "r-engineretry-aaaaaa" });
+  const t = await artWorld({ runKey: "r-engineretry-aaaaaa", images: { connectionId: null } });
   const call = routesOf(registerRunRoutes, { ...t.deps, cutouts: fakeCutouts().client }, "r-engineretry-aaaaaa");
   const engine = engineArt(t, { avatars: { "card-kai": "/api/avatars/file/kai.png" }, persona: AVA });
   const cardReads: string[] = [];

@@ -3,8 +3,9 @@
 // ──────────────────────────────────────────────
 // The end-of-arc "meet someone new" choice writes one love interest: their unit, their bible and their ties into the
 // world's web, then adds them to the cast LAST (cast order is Object.keys(state.lis), and a newcomer appended last is
-// safe everywhere). Nothing here touches world.forge.steps: the forge phase turns "forging" the moment a text step is
-// pending, and the whole app would drop the player onto a progress screen mid-arc. A love interest only exists once
+// safe everywhere). Nothing here adds to world.forge.steps: the forge phase turns "forging" the moment a text step is
+// pending, and the whole app would drop the player onto a progress screen mid-arc. The next read gives them a done bible
+// step and their paint step instead (setup/forge.ts forgeCast), so Your cast can paint them. A love interest only exists once
 // their bible does (the cast is state.lis filtered by unit.bible), so a failed arrival degrades to "not yet": the unit
 // sits without a bible, out of the cast, and the next attempt writes the bible. A newcomer whose arc plan fails or is
 // cancelled leaves the cast and the web but keeps their unit and bible (removeLoveInterest), so the same arrival again
@@ -188,6 +189,11 @@ export async function removeLoveInterest(
     .updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (world) => ({
       ...world,
       web: world.web.filter((row) => row.a !== li && row.b !== li),
+      // The forge steps a read may have given them (setup/forge.ts forgeCast), so Your cast lists no one gone.
+      forge: {
+        ...world.forge,
+        steps: world.forge.steps.filter((step) => step.id !== `bible:${li}` && step.id !== `paint:${li}`),
+      },
     }))
     .catch(() => null);
   await deps.store

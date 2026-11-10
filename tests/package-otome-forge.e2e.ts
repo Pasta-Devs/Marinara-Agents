@@ -69,13 +69,15 @@ function createOtomeStub() {
         level: 1,
         stage: 1,
       }));
+      // As the server does: looks paint by themselves unless Ask before painting or prompt review holds them.
+      const paint = setup.images.ask || call.body!.reviewImagePrompts ? "waiting-consent" : "pending";
       const forge = {
         phase: "forging",
         steps: [
           { id: "world-plan", state: "pending" },
           ...lis.map((li: Json) => ({ id: `bible:${li.id}`, state: "pending" })),
-          ...lis.map((li: Json) => ({ id: `paint:${li.id}`, state: "waiting-consent" })),
-          { id: "paint:player", state: "waiting-consent" },
+          ...lis.map((li: Json) => ({ id: `paint:${li.id}`, state: paint })),
+          { id: "paint:player", state: paint },
         ],
       };
       run = {
@@ -258,13 +260,14 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
   expect(stub.index.ageGate?.confirmedAt).toEqual(expect.any(String));
   await root.getByRole("button", { name: "Next" }).click();
 
-  // 5. Connections: the Engine default; images optional.
+  // 5. Connections: the Engine default; images optional. Ask before painting holds the looks for the tap below.
   await expect(root.getByLabel("Story", { exact: true })).toHaveValue("conn-text");
   await root.getByLabel("Image connection").selectOption("conn-image");
+  await root.getByRole("switch", { name: "Ask before painting" }).check();
   await root.getByRole("button", { name: "Next" }).click();
 
   // 6. Review shows the paint cost, then the world is made.
-  await expect(root.getByText("Paints 3 images")).toBeVisible();
+  await expect(root.getByText("Paints 3 images · base looks, only when you tap Paint the cast")).toBeVisible();
   await root.getByRole("button", { name: "Forge our story" }).click();
   await expect(root.getByRole("heading", { name: "Forging your story" })).toBeVisible();
   const created = stub.calls.find((call) => call.path.endsWith("/runs") && call.method === "POST")!.body!;
@@ -277,7 +280,7 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
       { source: "card", cardId: "card-dottore", pronouns: { subject: "he", object: "him", possessive: "his" } },
     ],
     content: { heat: "explicit", darkness: "angst" },
-    images: { connectionId: "conn-image", rating: "sfw" },
+    images: { connectionId: "conn-image", rating: "sfw", ask: true },
     connections: { narration: "conn-text" },
   });
   expect(await page.evaluate(() => localStorage.getItem("otome-forge:setup-draft:v1"))).toBeNull();

@@ -275,8 +275,9 @@ test("POST /runs checks the setup and the 18+ gate, then writes the run and star
     [
       ["world-plan", "pending"],
       ...ids.map((id) => [`bible:${id}`, "pending"]),
-      ...ids.map((id) => [`paint:${id}`, "waiting-consent"]),
-      ["paint:player", "waiting-consent"],
+      // With an image connection, and neither Ask before painting nor prompt review, each look paints by itself.
+      ...ids.map((id) => [`paint:${id}`, "pending"]),
+      ["paint:player", "pending"],
     ],
   );
   const archetype = (await store.readDoc(unitId(runId, ids[2]!), normalizeUnit))!;
@@ -310,6 +311,22 @@ test("POST /runs checks the setup and the 18+ gate, then writes the run and star
   assert.ok(plain.body.view.forge.steps.every((step: { id: string }) => !step.id.startsWith("paint:")));
   assert.equal(plain.body.view.world.content.heat, "explicit");
   await forgeSettled(runIdOf(plain.body.run));
+
+  // Ask before painting, or the Engine's prompt review, holds every look for the tap.
+  for (const body of [
+    { setup: setupInput({ images: { ...base.images, ask: true } }) },
+    { setup: base, reviewImagePrompts: true },
+  ]) {
+    const held = await call("POST", "/runs", { body });
+    assert.equal(held.status, 200);
+    assert.deepEqual(
+      held.body.view.forge.steps
+        .filter((step: { id: string }) => step.id.startsWith("paint:"))
+        .map((step: { state: string }) => step.state),
+      ["waiting-consent", "waiting-consent", "waiting-consent", "waiting-consent"],
+    );
+    await forgeSettled(runIdOf(held.body.run));
+  }
 });
 
 test("GET /runs/:run shows a forge step a restart left running as failed", async () => {
