@@ -4,7 +4,7 @@
 // - Someone qualifies after speaking in two different chapters, or at once when one Engine card matches their name; two
 //   cards that match (namesakes) are never guessed. A card's sprite needs no look call and sends the card as likeness.
 // - Opening a story records the scenes read before, once per story and one pass at a time, with no call.
-// - The look call: once per person, on the Planning connection's background lane, logged in debug mode, with the
+// - The look call: once per person, on the Messages connection's background lane, logged in debug mode, with the
 //   setting, their scenes and the story's content contract; turning the toggle on in Settings starts it.
 // - The sprite: one full-body look on its chroma matte, held for the tap under Ask before painting, a failure kept for
 //   Retry, never paid twice for one tap; cut out for free, and GET .../art/scene carries it for the speaker.
@@ -260,6 +260,11 @@ test("a scene read to its end records its side speakers by their core name, neve
 
 test("someone qualifies in a second chapter: one look call, logged, with the contract; then one sprite, cut out", async () => {
   const t = await sideWorld("r-side02-bbbbbb", { images: {}, replies: [json(ARLE_LOOK)] });
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), never Planning.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "conn-text", structured: "conn-plan", chat: "conn-chat" },
+  }));
   await t.read(await t.scene(1, [line("", "Snow on the quay."), ARLE_SAYS("FIRST-CHAPTER: Children, gather round.")]));
   await t.settle();
   assert.equal(qualifies((await t.sides()).arlecchino!), false, "one chapter is not enough");
@@ -296,7 +301,7 @@ test("someone qualifies in a second chapter: one look call, logged, with the con
   const [look, ...more] = t.lookCalls();
   assert.ok(look, "her look was written");
   assert.equal(more.length, 0, "once");
-  assert.equal(look.connectionId, "conn-text", "on the Planning connection (narration's when none is set)");
+  assert.equal(look.connectionId, "conn-chat", "on the Messages connection, never Planning");
   const [system, user] = look.messages.map((message) => message.content);
   const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
   assert.ok(

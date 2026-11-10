@@ -2847,7 +2847,7 @@ test("Otome Hearth Settings → Images offers Side character sprites, off, with 
     .filter({ has: page.getByRole("switch", { name: "Side character sprites" }) });
   await expect(row).toContainText("speaks in two different chapters");
   await expect(row).toContainText(
-    "Paints 1 image · per recurring side character, plus 1 call on your Planning connection to write their look (none for a character card)",
+    "Paints 1 image · per recurring side character, plus 1 call on your Messages connection to write their look (none for a character card)",
   );
   await toggle.check();
   await root.getByRole("button", { name: "Save changes" }).click();

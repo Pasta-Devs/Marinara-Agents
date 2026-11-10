@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.21.4",
+          "date": "2026-11-10",
+          "notes": "- **Your Messages model designs the small art.** Side characters' looks, love interests' stickers and their Claw Machine plushies are now written by your Messages connection instead of Planning. There's nothing new to set: left on **Same as Story**, Messages uses your Story connection.",
+          "highlight": false
+        },
+        {
           "version": "0.21.3",
           "date": "2026-11-10",
           "notes": "- **Love interests stop repeating their habits.** The signs written in a love interest's bible (how they act when stressed, their tics, what gives them away) are now only some of the ways they can react. They show one now and then among other, fresh reactions, and never repeat the same gesture or sentence within a chapter.",
@@ -788,12 +794,6 @@
           "date": "2026-11-07",
           "notes": "- **Touch your love interest on Home.** Tap their head, cheek, chest or hand for a line in their own voice, and their face answers where you touched. Their reactions grow bolder as you grow closer, from their mask at first to someone who is yours. Under NSFW Heat (Fade or Explicit) you can touch their crotch too, and a touch to their chest or crotch is an intimate one, as far as your Heat and Lines & Veils allow. A touch never waits for the model, earns nothing, and is voiced when voices are on. Without a picture of them, the places are labelled buttons under their initials.\n- **Stories in progress catch up once.** On your next Home visit, each love interest's lines are written again in the background, 1 call each, to add the new places; until then Cheek plays a few stock lines. Under NSFW Heat, changing Heat, Darkness, Lines & Veils or your role writes them once more.",
           "highlight": true
-        },
-        {
-          "version": "0.13.1",
-          "date": "2026-11-07",
-          "notes": "- **Starting a new arc no longer fails on wordy chapter outlines.** When the model described a chapter of the next arc in more than a short sentence, the plan was refused and you saw \"The model's reply wasn't in the expected format.\" Longer chapter descriptions are now accepted, so going on with the story works with models that write more, such as thinking models on high effort.\n- **Later arcs no longer fail on mystery reveals you already know.** In a longer story, planning the next arc could fail with the same error when the model scheduled a piece of the mystery, or its truth, that earlier arcs had already revealed. The planner is now told what you already know, and a repeated reveal is skipped instead of failing the arc.",
-          "highlight": false
         }
       ]
     },
