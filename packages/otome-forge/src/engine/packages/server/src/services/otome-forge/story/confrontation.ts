@@ -147,10 +147,12 @@ export interface SegmentLists {
   /** The list in its saved shape from `start` (the place it opens in); null when nothing usable is left. */
   list(raw: unknown, start: string): { segments: Segment[]; places: Array<{ name: string; tags: string }> } | null;
   /**
-   * Why the list's thoughts break the rules (a love interest's before stage 2, or a second one in the scene), or "".
-   * `counts` holds each love interest's thoughts on the way to this list, and gets the list's added.
+   * Why the list's thoughts break the rules (a second one of a love interest's in the scene), or "". `counts` holds each
+   * love interest's thoughts on the way to this list, and gets the list's added.
    */
   thoughts(raw: unknown[], counts: Map<string, number>): string;
+  /** The list without masked love interests' thought lines, and where an index into it moves (beats.ts withoutMaskedThoughts). */
+  unmask(raw: unknown): { segments: unknown; at(index: unknown): unknown };
 }
 
 /** The stored parts a P12 (P12c) reply becomes: the opening (the beat's segments) and the rest of the game. */
@@ -201,9 +203,12 @@ export function normalizeConfrontationReply(
     for (const seen of alternatives) for (const [li, count] of seen) most.set(li, Math.max(most.get(li) ?? 0, count));
     return most;
   };
-  const tooLong = lengths("opening", reply.opening, CONFRONTATION_OPENING_MAX);
+  // A masked love interest's thought line is dropped from every list, not refused; the CG's `at` moves with the opening.
+  const unmaskedOpening = lists.unmask(reply.opening);
+  const rawOpening = unmaskedOpening.segments;
+  const tooLong = lengths("opening", rawOpening, CONFRONTATION_OPENING_MAX);
   if (tooLong) return tooLong;
-  const openingThought = thought(reply.opening, counts);
+  const openingThought = thought(rawOpening, counts);
   if (openingThought) return openingThought;
   // Every place a list is set in (a round or an ending may move on), in order, so each one is recorded and painted;
   // more than BEAT_PLACES_MAX get the repair turn, as an ordinary beat's do. A place first met with no description takes
@@ -220,13 +225,14 @@ export function normalizeConfrontationReply(
     }
     return "";
   };
-  const opening = lists.list({ segments: reply.opening, places: reply.places }, node.place ?? "");
+  const opening = lists.list({ segments: rawOpening, places: reply.places }, node.place ?? "");
   if (!opening) return "opening needs at least one segment with text";
   forgeSpeakerGenders(reply, opening.segments);
   const crowded = keep(opening.places);
   if (crowded) return crowded;
   let place = lastPlace(opening.segments, node.place ?? "");
-  const list = (name: string, raw: unknown, max: number, seen: Map<string, number>): Segment[] | string => {
+  const list = (name: string, written: unknown, max: number, seen: Map<string, number>): Segment[] | string => {
+    const raw = lists.unmask(written).segments;
     if (!Array.isArray(raw) || !raw.length) return `${name} needs 1 to ${max} segments`;
     if (raw.length > max) return `${name} has more than ${max} segments`;
     const problem = thought(raw, seen);
@@ -311,7 +317,7 @@ export function normalizeConfrontationReply(
   const cg = record(reply.cg);
   const brief = str(cg.brief, 1200);
   if (cgOpen && brief) {
-    const at = Number(cg.at);
+    const at = Number(unmaskedOpening.at(cg.at));
     body.cg = {
       at: Number.isInteger(at) ? Math.max(0, Math.min(opening.segments.length - 1, at)) : 0,
       brief,
