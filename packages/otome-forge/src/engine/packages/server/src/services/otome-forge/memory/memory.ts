@@ -97,7 +97,14 @@ import {
 } from "../prompts.js";
 import { OUTPUT_FLOOR, generateJson, promptRoom, resolveConnectionId, type OtomeMessage } from "../generation.js";
 import { OTOME_FORGE_PACKAGE_ID, isItemStoryKey, memoryId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
-import { FIRST_SENTENCE_MAX, normalizeState, readCastUnits } from "../schemas/state.js";
+import {
+  FIRST_SENTENCE_MAX,
+  STATE_LIMITS,
+  clipText,
+  keepTimeline,
+  normalizeState,
+  readCastUnits,
+} from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
@@ -382,7 +389,8 @@ export function createOtomeMemory({
 
   /**
    * Saves each first a summary reported, by the love interest's name, only where it is still null: set once, never
-   * overwritten, so a later summary (or another piece of a long chapter) never replaces it.
+   * overwritten, so a later summary (or another piece of a long chapter) never replaces it. Each one saved also dates
+   * its Love Timeline entry ("First kiss with Kai"), which the calendar shows every year, as a first date does.
    */
   async function recordFirsts(runId: string, units: ReadonlyArray<{ id: string; name: string }>, raw: unknown) {
     if (!raw || typeof raw !== "object") return;
@@ -397,18 +405,25 @@ export function createOtomeMemory({
       }
     }
     if (!found.size) return;
+    const at = new Date().toISOString();
     await store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => {
       const lis = { ...state.lis };
+      const timeline = [...state.timeline];
       for (const [li, fields] of found) {
         const current = lis[li];
         if (!current) continue;
-        const next = { ...current };
-        for (const [field, sentence] of Object.entries(fields) as Array<[keyof typeof fields, string]>) {
-          if (!next[field]) next[field] = sentence;
+        const next = { ...current, firsts: { ...current.firsts } };
+        const name = units.find((unit) => unit.id === li)?.name ?? "";
+        for (const [field, , kind, label] of ROMANTIC_FIRSTS) {
+          const sentence = fields[field];
+          if (!sentence || next[field]) continue;
+          next[field] = sentence;
+          next.firsts[kind.slice("first-".length)] = at;
+          timeline.push({ at, li, kind, text: clipText(`${label} with ${name}`, STATE_LIMITS.text) });
         }
         lis[li] = next;
       }
-      return { ...state, lis };
+      return { ...state, lis, timeline: keepTimeline(timeline) };
     });
   }
 

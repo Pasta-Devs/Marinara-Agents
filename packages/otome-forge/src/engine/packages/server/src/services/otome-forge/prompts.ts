@@ -1300,12 +1300,20 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   return lines.join("\n");
 }
 
-/** The romantic firsts a chapter's summary reports once each (LiState.firstKiss and the rest), as the summary names them. */
+/**
+ * The romantic firsts a chapter's summary reports once each (LiState.firstKiss and the rest): the field, how the summary
+ * names it, and its Love Timeline kind and label, which the calendar shows every year ("First kiss with Kai").
+ */
 export const ROMANTIC_FIRSTS = [
-  ["firstKiss", "first kiss"],
-  ["firstTime", "first time (the first time they had sex)"],
-  ["firstConfession", "first confession (the first time either said outright that they love the other)"],
-] as const satisfies ReadonlyArray<readonly [keyof LiState, string]>;
+  ["firstKiss", "first kiss", "first-kiss", "First kiss"],
+  ["firstTime", "first time (the first time they had sex)", "first-time", "First time"],
+  [
+    "firstConfession",
+    "first confession (the first time either said outright that they love the other)",
+    "first-confession",
+    "First confession",
+  ],
+] as const satisfies ReadonlyArray<readonly [keyof LiState, string, `first-${string}`, string]>;
 
 /**
  * What a chapter summary also reports (the maintainer, 2026-11-10): for each love interest, only the firsts not

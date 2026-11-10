@@ -84,7 +84,9 @@ import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/ser
 import {
   defaultLiState,
   normalizeState,
+  readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { calendarView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/care.ts";
 import {
   normalizeBible,
   normalizeUnit,
@@ -240,6 +242,28 @@ test("a chapter summary records each romantic first once, never asks again for o
       [null, 'Mireille and Ava spent the night together in "The Ledger".', null],
     ],
     "set once by name (any case), never overwritten, and someone outside the cast is ignored",
+  );
+  // Each one is dated on the Love Timeline, once, so the calendar marks it every year as "First kiss with Kai".
+  assert.deepEqual(
+    state.timeline
+      .filter((entry) => entry.kind.startsWith("first-"))
+      .map((entry) => [entry.li, entry.kind, entry.text]),
+    [
+      [KAI, "first-kiss", "First kiss with Kai"],
+      [KAI, "first-confession", "First confession with Kai"],
+      [MIR, "first-time", "First time with Mireille"],
+    ],
+    "never a second entry for the kiss a later summary reported again",
+  );
+  assert.ok(state.lis[KAI]!.firsts.kiss && state.lis[KAI]!.firsts.confession && state.lis[MIR]!.firsts.time);
+  const calendar = calendarView((await readRun(store, RUN))!, [], "2026-11-10");
+  assert.deepEqual(
+    calendar.anniversaries.filter((row) => row.label.startsWith("First")).map((row) => [row.label, row.li]),
+    [
+      ["First kiss with Kai", KAI],
+      ["First confession with Kai", KAI],
+      ["First time with Mireille", MIR],
+    ],
   );
   // From then on it goes with them wherever their card does; nothing is sent while a first is null.
   const kai = betweenYou({ name: "Kai" }, state.lis[KAI]!);
