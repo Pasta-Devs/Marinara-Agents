@@ -1576,10 +1576,16 @@ export interface RunLiView {
   cut?: string[];
   /** His bible has its intimacy block (#1936): only that it exists, never its text. */
   intimacy?: true;
+  /** 1–20 (0.23.0): affection alone to 10, then the bond ranks after his finale. */
   level: number;
   /** Current-level progress only; optional while a pre-update run view remains cached. */
   affectionProgress?: { current: number; required: number };
-  /** At level 10 only (#2025): prestige points, progress toward the next, and the extra stories unlocked. */
+  /**
+   * 0.23.0: the bond rank he stands at, from 11 on (Named … Always); `played` bond stories of the ten, and the level the
+   * next one opens, null at the last rank. Absent below 11.
+   */
+  bond?: { level: number; name: string; played: number; next: number | null };
+  /** At the last bond rank (20), his finale read (#2025): prestige points and the extra stories unlocked. */
   prestige?: Prestige;
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */

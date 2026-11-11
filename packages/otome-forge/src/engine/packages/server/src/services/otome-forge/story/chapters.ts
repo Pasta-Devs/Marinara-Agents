@@ -40,7 +40,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { LAST_STAGE, type ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
@@ -790,9 +790,11 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     // #2025: an extra story unlocked and not written yet, per love interest (S/items/prestige.ts writes it on the tap).
     prestige: ready
       ? cast.flatMap((li) => {
+          const liState = run.state.lis[li];
           const n = nextPrestige(
-            run.state.lis[li]?.points ?? 0,
+            liState?.points ?? 0,
             chapters.filter((chapter) => chapter.prestige && chapter.li === li).length,
+            (liState?.stage ?? 0) >= LAST_STAGE,
           );
           return n ? [{ li, key: prestigeKey(li, n) }] : [];
         })

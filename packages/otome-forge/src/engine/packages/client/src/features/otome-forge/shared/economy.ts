@@ -42,14 +42,27 @@ export const MAX_LEVEL = 10;
  * maintainer's, 2026-11-04). Level n is reached at the sum of the first n − 1 costs.
  */
 export const LEVEL_COSTS: readonly number[] = Array.from({ length: 9 }, (_, i) => 200 + 50 * i);
-const LEVEL_FLOORS: readonly number[] = LEVEL_COSTS.reduce<number[]>(
+/**
+ * 0.23.0, the bond ranks: levels 11–20 continue the same curve past the finale, 50 more per level (650 … 1,100), so the
+ * ladder is one rule and a choice loss stops where it always did. Rank n is reached at the sum of every cost before it:
+ * level 11 at 3,600 (level 10's floor) and level 20 at 12,350. They open only for a love interest past his finale
+ * (S/schemas/state.ts bondOpen) and one rank at a time, each rank's story played first (bondRankOf).
+ * The maintainer's, 2026-11-11: "let's not make it easy to reach".
+ */
+export const BOND_COSTS: readonly number[] = Array.from({ length: 10 }, (_, i) => 650 + 50 * i);
+const LEVEL_FLOORS: readonly number[] = [...LEVEL_COSTS, ...BOND_COSTS].reduce<number[]>(
   (floors, cost) => [...floors, floors.at(-1)! + cost],
   [0],
 );
 
-/** The affection points at which `level` (1–10) is reached. */
+/** The highest affection level, the last bond rank. */
+export const BOND_MAX_LEVEL = LEVEL_COSTS.length + BOND_COSTS.length + MIN_LEVEL;
+/** The points at which level 20 is reached. */
+export const BOND_MAX_POINTS = LEVEL_FLOORS.at(-1)!;
+
+/** The affection points at which `level` (1–20) is reached; above 20 it stays at the last rank. */
 export function levelFloor(level: number): number {
-  return LEVEL_FLOORS[Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, Math.trunc(level))) - MIN_LEVEL]!;
+  return LEVEL_FLOORS[Math.min(BOND_MAX_LEVEL, Math.max(MIN_LEVEL, Math.trunc(level))) - MIN_LEVEL]!;
 }
 
 /** Affection points per earning. Story earnings are never capped; the rest share OUTSIDE_AFFECTION_DAILY_CAP. */
@@ -100,20 +113,42 @@ export function levelOf(points: number): number {
   return level;
 }
 
-/** Public progress within the current level; the maximum level is complete, with no level 11 implied. */
-export function affectionProgressOf(points: number): { current: number; required: number } {
+/**
+ * The level he stands at, 1–20 (0.23.0). Below the finale's gate (`open`: LiState.stage is the last stage) it is his
+ * affection level, 1–10, exactly as before. Past it, the bond ranks open one at a time: his points buy ranks, but only
+ * one beyond the bond stories he has played (`played`), so a story already under way cannot bank its way to 20.
+ */
+export function bondRankOf(points: number, open: boolean, played: number): number {
+  if (!open) return levelOf(points);
   const safe = Number.isFinite(points) ? Math.max(0, points) : 0;
-  const level = levelOf(safe);
-  if (level === MAX_LEVEL) return { current: LEVEL_COSTS.at(-1)!, required: LEVEL_COSTS.at(-1)! };
-  return { current: safe - levelFloor(level), required: LEVEL_COSTS[level - MIN_LEVEL]! };
+  // From wherever his points stand, never from 10: below level 10 the gate changes nothing at all.
+  let bought = levelOf(safe);
+  while (bought < BOND_MAX_LEVEL && safe >= levelFloor(bought + 1)) bought += 1;
+  const earned = Math.max(0, Math.min(BOND_COSTS.length, Math.trunc(played) || 0)) + 1;
+  return Math.min(bought, MAX_LEVEL + earned);
 }
 
-// ── Prestige (#2025): past level 10, affection keeps counting. Every POINTS_PER_LEVEL is a prestige point, and every
+/**
+ * Public progress within the current level (1–20). Level 10 keeps the old reading (600 of 600) while the gate is shut;
+ * with it open it counts toward rank 11 (0 of 650). The last rank is complete, with no level 21 implied.
+ */
+export function affectionProgressOf(points: number, open = false, played = 0): { current: number; required: number } {
+  const safe = Number.isFinite(points) ? Math.max(0, points) : 0;
+  const level = bondRankOf(safe, open, played);
+  // Level 10 with the gate shut is what level 10 always was: a finished ladder, never a step toward 11.
+  if (level === BOND_MAX_LEVEL || (level === MAX_LEVEL && !open))
+    return { current: LEVEL_COSTS.at(-1)!, required: LEVEL_COSTS.at(-1)! };
+  const cost = [...LEVEL_COSTS, ...BOND_COSTS][level - MIN_LEVEL]!;
+  return { current: Math.max(0, safe - levelFloor(level)), required: cost };
+}
+
+// ── Prestige (#2025): past level 20, affection keeps counting. Every POINTS_PER_LEVEL is a prestige point, and every
 // PRESTIGE_POINTS_PER_STORY of them unlocks one extra story with him (S/items/prestige.ts); the pips then start again.
 // All of it is derived from his points, which are never capped, so no affection is lost and nothing is stored but
-// the stories written (their chapter keys `prestige-<li>-<n>`). ──
+// the stories written (their chapter keys `prestige-<li>-<n>`). 0.23.0: the origin moves from level 10 to level 20
+// (BOND_MAX_POINTS) and needs the finale's gate, so the bond ranks come first and the infinite loop opens last. ──
 
-/** The affection points at which level 10 is reached. */
+/** The affection points at which level 10 is reached: where the bond ranks begin. */
 export const MAX_LEVEL_POINTS = levelFloor(MAX_LEVEL);
 export const PRESTIGE_POINTS_PER_STORY = 3;
 const PRESTIGE_CYCLE = PRESTIGE_POINTS_PER_STORY * POINTS_PER_LEVEL;
@@ -132,10 +167,10 @@ export interface Prestige {
   required: number;
 }
 
-/** His prestige from his affection points: all zero below level 10 and at exactly level 10. */
-export function prestigeOf(points: number): Prestige {
+/** His prestige from his affection points: all zero without the gate, below level 20, and at exactly level 20. */
+export function prestigeOf(points: number, open = false): Prestige {
   const safe = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
-  const over = Math.max(0, safe - MAX_LEVEL_POINTS);
+  const over = open ? Math.max(0, safe - BOND_MAX_POINTS) : 0;
   return {
     unlocked: Math.floor(over / PRESTIGE_CYCLE),
     points: Math.floor(over / POINTS_PER_LEVEL) % PRESTIGE_POINTS_PER_STORY,
@@ -145,18 +180,20 @@ export function prestigeOf(points: number): Prestige {
 }
 
 /** The number of the extra story to write next (from 1), or null while none is unlocked beyond the `written` ones. */
-export function nextPrestige(points: number, written: number): number | null {
-  return prestigeOf(points).unlocked > written ? written + 1 : null;
+export function nextPrestige(points: number, written: number, open = false): number | null {
+  return prestigeOf(points, open).unlocked > written ? written + 1 : null;
 }
 
 /**
- * Where a choice loss stops: the floor of the level reached, and at level 10 the last extra story unlocked, so a loss
- * never takes an unlocked story back (prestige points within the cycle may fall, as points within a level do).
+ * Where a choice loss stops: the floor of the level reached, and at the last rank the last extra story unlocked, so a
+ * loss never takes an unlocked story back (prestige points within the cycle may fall, as points within a level do).
  */
-export function affectionFloorOf(points: number): number {
+export function affectionFloorOf(points: number, open = false, played = 0): number {
   const safe = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
-  const level = levelOf(safe);
-  return level < MAX_LEVEL ? levelFloor(level) : MAX_LEVEL_POINTS + prestigeOf(safe).unlocked * PRESTIGE_CYCLE;
+  const level = bondRankOf(safe, open, played);
+  return level < BOND_MAX_LEVEL
+    ? levelFloor(level)
+    : BOND_MAX_POINTS + prestigeOf(safe, open).unlocked * PRESTIGE_CYCLE;
 }
 
 /**

@@ -211,7 +211,8 @@ import {
   STORY_PLACE,
   stillToMend,
 } from "../../../../client/src/features/otome-forge/shared/dates.js";
-import { levelOf, type PrestigeKind } from "../../../../client/src/features/otome-forge/shared/economy.js";
+import { bondRankAt } from "../../../../client/src/features/otome-forge/shared/bond.js";
+import { bondRankOf, type PrestigeKind } from "../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   FACES,
   FACE_LOOKS,
@@ -1270,6 +1271,20 @@ function romanceLine(name: string, stage: number): string {
 }
 
 /**
+ * The affection the player sees, as the model is told it (0.23.0): level 1–20, and past his finale the bond rank he
+ * stands at, so a settled couple writes like one instead of like a confession from yesterday.
+ */
+function affectionLine(name: string, liState: LiState, played = 0): string {
+  const open = liState.stage >= LAST_STAGE;
+  const level = bondRankOf(liState.points, open, played);
+  const rank = open ? bondRankAt(level) : undefined;
+  const settled = rank
+    ? ` They are together, past their confession, at bond rank ${rank.level} of 20: ${rank.focus}`
+    : "";
+  return `Affection level ${level} of 20: how drawn ${name} is to the protagonist. The higher it is, the more it shows in what ${name} does and says, within what their stage allows.${settled}`;
+}
+
+/**
  * What stands between them and the protagonist: trust and tension in words, open grievances (with their ids, so a
  * node can resolve them), a rupture, and what the protagonist has told them. The grievances shown are the newest
  * three, the rupture's and those `also` names (the ones a node may resolve), or every one with "all" (the planner).
@@ -1293,7 +1308,7 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
     `Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`,
     romanceLine(unit.name, liState.stage),
     // The affection level the player sees: how drawn they are, shown within what the stage allows (2026-11-10).
-    `Affection level ${levelOf(liState.points)} of 10: how drawn ${unit.name} is to the protagonist. The higher it is, the more it shows in what ${unit.name} does and says, within what their stage allows.`,
+    affectionLine(unit.name, liState),
   ];
   for (const grievance of shown) {
     const holder = grievance.by === "li" ? unit.name : "the protagonist";

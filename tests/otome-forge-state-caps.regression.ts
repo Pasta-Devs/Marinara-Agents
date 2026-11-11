@@ -608,16 +608,15 @@ test("Side with (#2046): the one backed gains past the daily cap; one passed ove
     [205, 200],
     [215, 205],
     [economy.MAX_LEVEL_POINTS + 5, economy.MAX_LEVEL_POINTS],
-    // At level 10 with one extra story unlocked (three prestige points, 900 past level 10), a loss never takes it back.
-    [economy.MAX_LEVEL_POINTS + 904, economy.MAX_LEVEL_POINTS + 900],
-    [economy.MAX_LEVEL_POINTS + 1400, economy.MAX_LEVEL_POINTS + 1390],
   ] as const) {
     const before = fresh();
     before.lis[MIR] = { ...before.lis[MIR]!, points };
     const outcome = pick(before, side(KAI, MIR), { i: 0 });
     assert.equal(outcome.state.lis[MIR]!.points, expected, `loss from ${points}`);
     assert.equal(economy.levelOf(outcome.state.lis[MIR]!.points), economy.levelOf(points));
-    assert.equal(economy.prestigeOf(outcome.state.lis[MIR]!.points).unlocked, economy.prestigeOf(points).unlocked);
+    // Below the finale's gate there are no bond ranks and no prestige, so a loss only ever stops at a level's floor.
+    assert.equal(economy.prestigeOf(outcome.state.lis[MIR]!.points).unlocked, 0);
+    assert.equal(economy.prestigeOf(points).unlocked, 0);
     assert.deepEqual(outcome.affection, [
       { li: KAI, amount: 30 },
       ...(expected !== points ? [{ li: MIR, amount: expected - points }] : []),

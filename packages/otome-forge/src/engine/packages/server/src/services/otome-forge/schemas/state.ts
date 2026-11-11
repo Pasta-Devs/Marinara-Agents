@@ -30,6 +30,7 @@ import type {
   Player,
   PlayerThoughts,
   RunState,
+  RunLiView,
   RunView,
   ShopPurchaseRecord,
   TimelineEntry,
@@ -38,6 +39,7 @@ import type {
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FIRST_STAGE, LAST_STAGE } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { bondRankAt, bondStoriesPlayed } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import {
   CLAW_MAX_CATCHES,
   CLAW_ROUNDS_KEPT,
@@ -72,8 +74,10 @@ import {
   TENSION_MIN,
   TRUST_MAX,
   TRUST_MIN,
+  BOND_MAX_LEVEL,
   MAX_LEVEL,
   affectionProgressOf,
+  bondRankOf,
   levelOf,
   prestigeOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
@@ -620,6 +624,32 @@ export function clipText(text: string, max: number): string {
 }
 
 /**
+ * His level and its progress (1–20, 0.23.0): 1–10 from affection alone, and past his finale one bond rank at a time,
+ * each rank's story played before the next opens. `prestige` appears only at the last rank, and only then does the
+ * infinite loop (#2025) open; `bond` names the rank he stands at, for the Story screen.
+ */
+function bondView(
+  id: string,
+  points: number,
+  stage: number,
+  state: RunState,
+): Pick<RunLiView, "level" | "affectionProgress"> & { bond?: RunLiView["bond"]; prestige?: RunLiView["prestige"] } {
+  const open = stage >= LAST_STAGE;
+  const played = bondStoriesPlayed(state.chapters, id);
+  const level = bondRankOf(points, open, played);
+  const rank = bondRankAt(level);
+  return {
+    level,
+    affectionProgress: affectionProgressOf(points, open, played),
+    ...(rank
+      ? { bond: { level: rank.level, name: rank.name, played, next: bondRankAt(rank.level + 1)?.level ?? null } }
+      : {}),
+    // #2025: past level 20, his affection fills prestige points (only the derived numbers, never the points).
+    ...(level === BOND_MAX_LEVEL ? { prestige: prestigeOf(points, open) } : {}),
+  };
+}
+
+/**
  * What GET /runs/:run returns. LIs follow the order of `state.lis` (setup order); a unit missing from it goes last.
  */
 export function toRunView(runKey: string, world: World, player: Player, units: Unit[], state: RunState): RunView {
@@ -670,10 +700,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           ...(portrait ? { portrait } : {}),
           ...(unit.art ? { art: unit.art } : {}),
           ...(unit.bible?.intimacy ? { intimacy: true as const } : {}),
-          level: levelOf(progress.points),
-          affectionProgress: affectionProgressOf(progress.points),
-          // #2025: past level 10, his affection fills prestige points (only the derived numbers, never the points).
-          ...(levelOf(progress.points) === MAX_LEVEL ? { prestige: prestigeOf(progress.points) } : {}),
+          ...bondView(unit.id, progress.points, progress.stage, state),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
           ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
