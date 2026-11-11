@@ -668,12 +668,14 @@ function bondRankFrom(liState: Pick<SceneCardState, "points" | "bondPlayed">): n
 /**
  * 0.23.0: past the finale the bond ranks' reveals are what the protagonist learns as the relationship settles; his stage
  * secrets were all revealed on his route, so the card carries them no longer. Below the finale the card is unchanged.
+ * `bonded` tells the two apart: a bond rank's truth is settled ground, so the card keeps every one she has reached
+ * rather than the three newest items a list there keeps.
  */
 function revealLines(
   unit: SceneCardUnit,
   stage: number,
   liState: Pick<SceneCardState, "points" | "bondPlayed">,
-): { hidden: string[]; known: string[] } {
+): { hidden: string[]; known: string[]; bonded: boolean } {
   const bible = unit.bible!;
   // Only once the bond reveals are written: a finale before they are keeps its stage secrets, rather than losing every
   // reveal it had.
@@ -684,7 +686,7 @@ function revealLines(
       .sort((a, b) => b.level - a.level)
       .map((entry) => entry.truth);
     // Reached no rank yet: the route's secrets are still all she has, so they stay on the card rather than vanishing.
-    if (known.length) return { hidden: [], known };
+    if (known.length) return { hidden: [], known, bonded: true };
   }
   return {
     hidden: bible.secrets.filter((secret) => secret.revealAt.stage > stage).flatMap((secret) => secret.tells),
@@ -692,6 +694,7 @@ function revealLines(
       .filter((secret) => secret.revealAt.stage <= stage)
       .sort((a, b) => b.revealAt.stage - a.revealAt.stage)
       .map((secret) => secret.truth),
+    bonded: false,
   };
 }
 
@@ -713,12 +716,19 @@ function render(
       .filter(Boolean)
       .slice(0, limits.list)
       .join("; ");
+  // A reached bond ladder is not a list of three: every rank's truth stays on the card, each clipped to the item limit
+  // like any other, and the card's token shrink still governs the whole.
+  const ladder = (items: readonly string[]) =>
+    items
+      .map((item) => clip(item, limits.item))
+      .filter(Boolean)
+      .join("; ");
   const sentence = (...parts: Array<[label: string, value: string]>) =>
     parts
       .filter(([, value]) => value)
       .map(([label, value]) => `${label}${value}.`)
       .join(" ");
-  const { hidden, known } = revealLines(unit, stage, bond);
+  const { hidden, known, bonded } = revealLines(unit, stage, bond);
   // An index the bible no longer has (an edited bible) names nothing.
   const learned = learnedTells.map((index) => bible.mask.tells[index] ?? "").filter((tell) => tell.trim());
   const meta = stageRow(stage);
@@ -745,7 +755,9 @@ function render(
     ),
     sentence(["The protagonist has learned to read these tells and may call them out: ", list(learned)]),
     sentence(["Hidden (never state it; it may show only in hints, such as these tells): ", list(hidden)]),
-    sentence(["The protagonist knows: ", list(known)]),
+    // A bond rank's truth is settled ground, not one more item that falls off a list: the card keeps every rank he has
+    // reached, so a truth learned at rank 11 still holds at 15.
+    sentence(["The protagonist knows: ", bonded ? ladder(known) : list(known)]),
     // Darkness comes last, so a card cut to fit keeps the red lines and moral code it kept before. It shows at every
     // stage, so the bible keeps it to what they are; a secret's events stay in secrets (bibleMessages, Setup).
     sentence(
@@ -1404,7 +1416,7 @@ function affectionLine(name: string, liState: LiState, played = 0): string {
   const level = bondRankOf(liState.points, open, played);
   const rank = open ? bondRankAt(level) : undefined;
   const settled = rank
-    ? ` They are together, past their confession, at bond rank ${rank.level} of 20: ${rank.focus}`
+    ? ` They are together, past their confession, at bond rank ${rank.level} of 20 ("${rank.name}"): ${rank.focus}`
     : "";
   return `Affection level ${level} of 20: how drawn ${name} is to the protagonist. The higher it is, the more it shows in what ${name} does and says, within what their stage allows.${settled}`;
 }
@@ -1648,7 +1660,8 @@ export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], 
     ...bible
   } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
   // 0.23.0: so are the bond reveals past the rank he stands at, which the protagonist does not know yet.
-  const rank = bondRankOf(liState.points, liState.stage >= LAST_STAGE, bondStoriesPlayed(state.chapters, unit.id));
+  const played = bondStoriesPlayed(state.chapters, unit.id);
+  const rank = bondRankOf(liState.points, liState.stage >= LAST_STAGE, played);
   const bond = bondReveals?.filter((entry) => entry.level <= rank);
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
@@ -1656,7 +1669,8 @@ export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], 
     ...[appearanceLine(unit), intimacyLine(world, unit)].filter(Boolean),
     // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
     // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
-    betweenYou(unit, liState, "all"),
+    // The affection line names the rank he stands at, as every other prompt's does (0.23.0).
+    betweenYou(unit, { ...liState, bondPlayed: played }, "all"),
   ].join("\n");
 }
 

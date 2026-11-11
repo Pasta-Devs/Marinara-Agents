@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.23.1",
+          "date": "2026-11-11",
+          "notes": "- **Each bond rank's truth stays with you.** Past the finale, the story keeps every bond reveal you have reached, rather than the three newest, so a truth learned at rank 11 still holds at rank 15; the card's own size limit still governs what it sends.\n- **The story speaks of the rank by name.** A settled couple's card and every prompt that writes their words now read the rank's word beside its number (\"bond rank 15 of 20 — tested\"), the same rank the Story screen shows.\n- **An afternoon stays an afternoon.** A scene told from their side counts only the bond ranks reached by the moment it retells, so it never carries what was learned weeks later.",
+          "highlight": false
+        },
+        {
           "version": "0.23.0",
           "date": "2026-11-11",
           "notes": "- **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.\n- **One rank at a time.** A rank's story is played before the next opens, so banked affection skips none; each level from 11 to 20 costs 650, then 50 more.\n- **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.\n- **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.",
@@ -800,12 +806,6 @@
           "date": "2026-11-08",
           "notes": "- **Messages cost less.** When you text a love interest on an Anthropic connection, everything that stays the same through the conversation (their card, what they know of the story, your earlier conversations) is cached for five minutes, so each reply after the first sends it at the cached price instead of in full. A daily message they send first is cached the same way for your answer.",
           "highlight": false
-        },
-        {
-          "version": "0.20.0",
-          "date": "2026-11-08",
-          "notes": "- **Side characters who keep coming back get a sprite.** Turn on **Side character sprites** in **Settings → Images**. Once a side character has spoken in two different chapters, their one full-body sprite stands where a love interest's figure does while they speak. It's one neutral picture, with no expressions. Stories you already started count the scenes you've read.\n- **Your own characters look like themselves.** Someone whose name matches one of your Engine character cards gets their sprite as soon as they speak, painted with that card's avatar and full-body sprite as references. Two cards with the same name are never guessed between.\n- **What it costs.** Each one takes 1 call on your Planning connection to write their look (none for a character card), then 1 image. With **Ask before painting** on, tap **Paint** beside the place while they speak.",
-          "highlight": true
         }
       ]
     },
