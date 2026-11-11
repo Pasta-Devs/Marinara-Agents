@@ -688,9 +688,11 @@ test("Otome Hearth look art: Wardrobe cleans LI and persona looks, faces and cou
     entry.url = RAW_LOOK;
     entry.art = ready(RAW_LOOK);
   }
-  // All five faces of his looks are painted: the Wardrobe says so with a check and never downloads them.
+  // Both his looks have all five faces, but only the first's are painted (the server's facesPainted): the second's are
+  // his Engine sprites. The Wardrobe shows a check for the painted set only, and never downloads a face.
   for (const entry of wardrobe.him[ILVAR])
     entry.faces = { tender: RAW_LOOK, flustered: RAW_LOOK, cold: RAW_LOOK, hurt: RAW_LOOK, angry: RAW_LOOK };
+  wardrobe.him[ILVAR][0].facesPainted = true;
   wardrobe.couples[0].his.url = RAW_LOOK;
   wardrobe.couples[0].his.owned = true;
   wardrobe.couples[0].hers.url = RAW_LOOK;
@@ -705,10 +707,11 @@ test("Otome Hearth look art: Wardrobe cleans LI and persona looks, faces and cou
   const root = await openOtome(page);
   await openDock(root, "Wardrobe");
   await expect(root.locator(".of-ward-look .of-ward-frame img")).toHaveCount(2);
-  await expect(root.locator(".of-ward-faces")).toHaveCount(2);
-  await expect(root.locator(".of-ward-faces").first()).toHaveText("Expressions");
-  await expect(root.locator(".of-ward-faces").first().getByRole("img", { name: "painted" })).toBeVisible();
-  await expect(root.locator(".of-ward-faces img")).toHaveCount(0);
+  const [painted, sprites] = [root.locator(".of-ward-look").nth(0), root.locator(".of-ward-look").nth(1)];
+  await expect(painted.locator(".of-ward-expressions")).toHaveText("Expressions");
+  await expect(painted.locator(".of-ward-expressions").getByRole("img", { name: "painted" })).toBeVisible();
+  await expect(sprites.locator(".of-ward-expressions")).toHaveCount(0);
+  await expect(root.locator(".of-ward-look-body img")).toHaveCount(0);
   for (const img of await root.locator(".of-ward-frame img").all())
     await expect(img).toHaveAttribute("src", CLEAN_LOOK);
   const owners = root.getByRole("group", { name: "Whose wardrobe" });
@@ -758,7 +761,7 @@ test("Otome Hearth look art: the server's cut-outs show as they are in the Wardr
   await openDock(root, "Wardrobe");
   await expect(root.locator(".of-ward-look .of-ward-frame img")).toHaveCount(2);
   // One face of a look is not a set: no check, and no face is downloaded.
-  await expect(root.locator(".of-ward-faces")).toHaveCount(0);
+  await expect(root.locator(".of-ward-expressions")).toHaveCount(0);
   for (const img of await root.locator(".of-ward-frame img").all()) {
     await expect(img).toHaveAttribute("src", CUT_LOOK);
     await expect(img).toHaveAttribute("decoding", "async");

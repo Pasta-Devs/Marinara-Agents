@@ -67,6 +67,8 @@ export interface LookView {
   unopened: boolean;
   /** His ready faces on this look, while expressions are on; each its saved cut-out once ready (`cut`). */
   faces?: Partial<Record<Face, string>>;
+  /** All five of `faces` are painted, none of them his Engine sprites: the Wardrobe shows a check for them. */
+  facesPainted?: true;
   /** Which of `url` and `faces` are saved cut-outs (no backdrop): shown as they are, never cleaned in the browser. */
   cut?: string[];
   /** A 5★ look (his-look5, her-look5): the first-wear beat (a one-node Character Story), once its first open wrote it. */

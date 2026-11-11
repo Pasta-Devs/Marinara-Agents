@@ -493,9 +493,10 @@ function LookCard({
             {t("ui.otomeForge.wish.painting")}
           </p>
         ) : null}
-        {/* A check once all five faces are painted, not the faces themselves: the Wardrobe never downloads them. */}
-        {faces.length === FACES.length ? (
-          <p className="of-ward-faces">
+        {/* A check once all five faces are painted (the server's facesPainted: his Engine sprites are not), not the
+            faces themselves: the Wardrobe never downloads them. */}
+        {look.facesPainted ? (
+          <p className="of-ward-expressions">
             {t("ui.otomeForge.wardrobe.expressions")}
             <Check size={13} strokeWidth={2.6} role="img" aria-label={t("ui.otomeForge.wardrobe.expressionsPainted")} />
           </p>
