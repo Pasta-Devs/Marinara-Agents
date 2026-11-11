@@ -594,7 +594,7 @@ assert.deepEqual(
     // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
     // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).
     // Life panel: +3 useMutation, +4 useQuery, +1 invalidateQueries, +3 onError.
-    invalidateQueries: 162,
+    invalidateQueries: 163,
     setQueryData: 32,
     cancelQueries: 7,
     removeQueries: 1,
