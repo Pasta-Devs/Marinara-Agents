@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.23.1 — 2026-11-11
+
+- **Each bond rank's truth stays with you.** Past the finale, the story keeps every bond reveal you have reached, rather than the three newest, so a truth learned at rank 11 still holds at rank 15; the card's own size limit still governs what it sends.
+- **The story speaks of the rank by name.** A settled couple's card and every prompt that writes their words now read the rank's word beside its number ("bond rank 15 of 20 — tested"), the same rank the Story screen shows.
+- **An afternoon stays an afternoon.** A scene told from their side counts only the bond ranks reached by the moment it retells, so it never carries what was learned weeks later.
+
 ## 0.23.0 — 2026-11-11
 
 - **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.
