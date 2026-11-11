@@ -211,7 +211,13 @@ import {
   STORY_PLACE,
   stillToMend,
 } from "../../../../client/src/features/otome-forge/shared/dates.js";
-import { levelOf, type PrestigeKind } from "../../../../client/src/features/otome-forge/shared/economy.js";
+import {
+  BOND_RANKS,
+  bondRankAt,
+  bondStoriesPlayed,
+  type BondRank,
+} from "../../../../client/src/features/otome-forge/shared/bond.js";
+import { bondRankOf, type PrestigeKind } from "../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   FACES,
   FACE_LOOKS,
@@ -627,8 +633,16 @@ const LIST_MAX = 3;
 const NAME_MAX = 60;
 
 export type SceneCardUnit = Pick<Unit, "name" | "pronouns" | "bible">;
-/** `tellsLearned` is optional so a prompt that only knows the stage (a line pack) still builds a card. */
-export type SceneCardState = Pick<RunState["lis"][string], "stage"> & { tellsLearned?: readonly number[] };
+/**
+ * `tellsLearned` is optional so a prompt that only knows the stage (a line pack) still builds a card. `points` and
+ * `bondPlayed` are what names his bond rank past the finale (0.23.0); a caller without them reads him at rank 11, the
+ * first, which reveals nothing beyond what his route already told her.
+ */
+export type SceneCardState = Pick<RunState["lis"][string], "stage"> & {
+  tellsLearned?: readonly number[];
+  points?: number;
+  bondPlayed?: number;
+};
 
 /** One line of text, at most `max` characters (by code point, cut at a word where there is one), no full stop. */
 function clip(text: string, max: number): string {
@@ -646,7 +660,48 @@ interface Limits {
   item: number;
 }
 
-function render(unit: SceneCardUnit, stage: number, learnedTells: readonly number[], limits: Limits): string {
+/** His bond rank from the state a card is built with (0.23.0): 11 unless the caller says how far he has come. */
+function bondRankFrom(liState: Pick<SceneCardState, "points" | "bondPlayed">): number {
+  return bondRankOf(liState.points ?? 0, true, liState.bondPlayed ?? 0);
+}
+
+/**
+ * 0.23.0: past the finale the bond ranks' reveals are what the protagonist learns as the relationship settles; his stage
+ * secrets were all revealed on his route, so the card carries them no longer. Below the finale the card is unchanged.
+ */
+function revealLines(
+  unit: SceneCardUnit,
+  stage: number,
+  liState: Pick<SceneCardState, "points" | "bondPlayed">,
+): { hidden: string[]; known: string[] } {
+  const bible = unit.bible!;
+  // Only once the bond reveals are written: a finale before they are keeps its stage secrets, rather than losing every
+  // reveal it had.
+  if (stage >= LAST_STAGE && bible.bond?.length) {
+    const rank = bondRankFrom(liState);
+    const known = (bible.bond ?? [])
+      .filter((entry) => entry.level <= rank)
+      .sort((a, b) => b.level - a.level)
+      .map((entry) => entry.truth);
+    // Reached no rank yet: the route's secrets are still all she has, so they stay on the card rather than vanishing.
+    if (known.length) return { hidden: [], known };
+  }
+  return {
+    hidden: bible.secrets.filter((secret) => secret.revealAt.stage > stage).flatMap((secret) => secret.tells),
+    known: bible.secrets
+      .filter((secret) => secret.revealAt.stage <= stage)
+      .sort((a, b) => b.revealAt.stage - a.revealAt.stage)
+      .map((secret) => secret.truth),
+  };
+}
+
+function render(
+  unit: SceneCardUnit,
+  stage: number,
+  learnedTells: readonly number[],
+  limits: Limits,
+  bond: Pick<SceneCardState, "points" | "bondPlayed"> = {},
+): string {
   const { pronouns } = unit;
   const header = `${clip(unit.name, NAME_MAX)} (${pronouns.subject}/${pronouns.object})`;
   const bible = unit.bible;
@@ -663,11 +718,7 @@ function render(unit: SceneCardUnit, stage: number, learnedTells: readonly numbe
       .filter(([, value]) => value)
       .map(([label, value]) => `${label}${value}.`)
       .join(" ");
-  const hidden = bible.secrets.filter((secret) => secret.revealAt.stage > stage).flatMap((secret) => secret.tells);
-  const known = bible.secrets
-    .filter((secret) => secret.revealAt.stage <= stage)
-    .sort((a, b) => b.revealAt.stage - a.revealAt.stage)
-    .map((secret) => secret.truth);
+  const { hidden, known } = revealLines(unit, stage, bond);
   // An index the bible no longer has (an edited bible) names nothing.
   const learned = learnedTells.map((index) => bible.mask.tells[index] ?? "").filter((tell) => tell.trim());
   const meta = stageRow(stage);
@@ -716,13 +767,13 @@ export function otomeSceneCard(unit: SceneCardUnit, liState: SceneCardState): st
   const stage = stageRow(liState.stage).stage;
   let limits: Limits = { list: LIST_MAX, scalar: 160, item: 100 };
   const learned = liState.tellsLearned ?? [];
-  let card = render(unit, stage, learned, limits);
+  let card = render(unit, stage, learned, limits, liState);
   while (estimateTextTokens(card) > SCENE_CARD_MAX_TOKENS && limits.item > 12) {
     limits =
       limits.list > 1
         ? { ...limits, list: limits.list - 1 }
         : { list: 1, scalar: Math.floor(limits.scalar * 0.85), item: Math.floor(limits.item * 0.85) };
-    card = render(unit, stage, learned, limits);
+    card = render(unit, stage, learned, limits, liState);
   }
   return estimateTextTokens(card) > SCENE_CARD_MAX_TOKENS ? sliceTextToTokenBudget(card, SCENE_CARD_MAX_TOKENS) : card;
 }
@@ -1058,6 +1109,71 @@ export function intimacyMessages({
   ];
 }
 
+// ── Bond reveals (0.23.0) ──
+
+export const BOND_SHAPE = '"bond": [{"level": 11, "truth": ""}, {"level": 12, "truth": ""}]';
+
+/**
+ * The ten bond reveals, written in one call the first time his finale is read (S/bond.ts). They are what the protagonist
+ * learns about him as the relationship settles, so they continue his arc rather than repeat his stage secrets: each
+ * rank's focus comes from C/shared/bond.ts. Under SFW Heat they stay what he wants and never asks for; a kink is named
+ * plainly only when NSFW Heat allows it. One call for all ten, so they never contradict one another.
+ */
+export function bondRevealMessages({
+  world,
+  player,
+  cast,
+}: {
+  world: World;
+  player: Player;
+  cast: Awaited<ReturnType<typeof castOf>>[number];
+}): OtomeMessage[] {
+  const { unit } = cast;
+  const bible = unit.bible!;
+  const nsfw = intimacyOpen(world.content);
+  const system = [
+    "You add one part to the hidden character bible of a love interest in an otome story: what the protagonist learns about him as their relationship settles after the confession. Every other part of the bible stays as it is.",
+    "Reply with ONLY a JSON object of this shape:",
+    `{${BOND_SHAPE}}`,
+    "FIELDS",
+    "- bond: exactly ten entries, one for each bond rank 11 to 20, in order. truth: one or two sentences, in the bible's voice, saying what the protagonist learns about him at that rank. It is a fact about him (what he wants, fears, remembers, plans), never a scene.",
+    "RANKS",
+    ...BOND_RANKS.map((rank: BondRank) => `- ${rank.level} ${rank.name}: ${rank.reveal}.`),
+    "RULES",
+    "- Build on who he already is (the bible and the card below); never contradict them, and never restate a stage secret as if it were new: these reveal the relationship after it.",
+    `- Write every truth in ${world.language}.`,
+    nsfw
+      ? "- Rank 14 may name what he wants in bed plainly, following his intimacy block."
+      : "- This story is SFW: rank 14 says what he wants and never asks for, with no sexual content.",
+    "",
+    otomeContentContract({ world, lis: [{ name: unit.name }], kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "THIS LOVE INTEREST",
+    castEntry(cast),
+    `Role: ${bible.role}. Public face: ${bible.publicFace}. True self: ${bible.trueSelf.is}`,
+    `Want: ${bible.want}. Need: ${bible.need}. Fear: ${bible.fear}`,
+    bible.secrets.length
+      ? `Secrets already revealed on his route: ${bible.secrets.map((secret) => secret.truth).join("; ")}`
+      : "",
+    bible.intimacy
+      ? `Tastes in intimacy: ${[...bible.intimacy.preferences, ...bible.intimacy.attractions].join("; ")}`
+      : "",
+    "",
+    "PROTAGONIST",
+    protagonistEntry(player),
+    "",
+    `Write ${unit.name}'s ten bond reveals now.`,
+    otomeContractReminder("planner"),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
 // ── P14: music briefs (structured, 0.7) ──
 // The chapter theme brief (label chapter-music-brief) is S/audio/music.ts chapterMusicBrief: the kit's
 // forgeMusicBriefMessages with musicScenario, the chapter's public fields and its own one-line scene, written there.
@@ -1202,6 +1318,11 @@ function savedBackgrounds(world: Pick<World, "places">): string {
 }
 
 const liStateOf = (state: RunState, li: LiId): LiState => state.lis[li] ?? defaultLiState();
+/** His card's state with the bond stories he has played (0.23.0), so the card names the rank he stands at. */
+const cardStateOf = (state: RunState, li: LiId): LiState & { bondPlayed: number } => ({
+  ...liStateOf(state, li),
+  bondPlayed: bondStoriesPlayed(state.chapters, li),
+});
 const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
 
 /**
@@ -1235,15 +1356,20 @@ function seenBy(liState: LiState, li: LiId, knows: readonly LiId[]): LiState {
 /**
  * What a love interest's own reader (M3's note P16 and chat reply P17) may know of the state, as a planner for them
  * sees it: their state without another love interest's own chapter (seenBy), and their latest relationship and
- * off-screen lines among the rows they may see (knownRows), "" for none.
+ * off-screen lines among the rows they may see (knownRows), "" for none. `bondPlayed` is the bond stories he has
+ * played (0.23.0), so his card names the rank he stands at.
  */
-export function ownView(state: RunState, li: LiId): { liState: LiState; relationship: string; offscreen: string } {
+export function ownView(
+  state: RunState,
+  li: LiId,
+): { liState: LiState; relationship: string; offscreen: string; bondPlayed: number } {
   const latest = (rows: RunState["ledgers"]["offscreen"]) =>
     [...knownRows(rows, [li])].reverse().find((row) => row.li === li)?.line ?? "";
   return {
     liState: seenBy(liStateOf(state, li), li, [li]),
     relationship: latest(state.ledgers.relationship),
     offscreen: latest(state.ledgers.offscreen),
+    bondPlayed: bondStoriesPlayed(state.chapters, li),
   };
 }
 
@@ -1270,13 +1396,31 @@ function romanceLine(name: string, stage: number): string {
 }
 
 /**
+ * The affection the player sees, as the model is told it (0.23.0): level 1–20, and past his finale the bond rank he
+ * stands at, so a settled couple writes like one instead of like a confession from yesterday.
+ */
+function affectionLine(name: string, liState: LiState, played = 0): string {
+  const open = liState.stage >= LAST_STAGE;
+  const level = bondRankOf(liState.points, open, played);
+  const rank = open ? bondRankAt(level) : undefined;
+  const settled = rank
+    ? ` They are together, past their confession, at bond rank ${rank.level} of 20: ${rank.focus}`
+    : "";
+  return `Affection level ${level} of 20: how drawn ${name} is to the protagonist. The higher it is, the more it shows in what ${name} does and says, within what their stage allows.${settled}`;
+}
+
+/**
  * What stands between them and the protagonist: trust and tension in words, open grievances (with their ids, so a
  * node can resolve them), a rupture, and what the protagonist has told them. The grievances shown are the newest
  * three, the rupture's and those `also` names (the ones a node may resolve), or every one with "all" (the planner).
  * ponytail: written beside the scene card rather than on it, so the card keeps M1's 250-token budget; fold it into
  * otomeSceneCard once its budget is re-measured with these lines.
  */
-export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: readonly string[] | "all" = []): string {
+export function betweenYou(
+  unit: Pick<Unit, "name">,
+  liState: LiState & { bondPlayed?: number },
+  also: readonly string[] | "all" = [],
+): string {
   const trust = TRUST_WORDS[Math.max(0, Math.min(6, liState.trust + 3))];
   const tension = TENSION_WORDS[Math.max(0, Math.min(3, liState.tension))];
   const open = liState.grievances.filter(
@@ -1293,7 +1437,7 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
     `Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`,
     romanceLine(unit.name, liState.stage),
     // The affection level the player sees: how drawn they are, shown within what the stage allows (2026-11-10).
-    `Affection level ${levelOf(liState.points)} of 10: how drawn ${unit.name} is to the protagonist. The higher it is, the more it shows in what ${unit.name} does and says, within what their stage allows.`,
+    affectionLine(unit.name, liState, liState.bondPlayed ?? 0),
   ];
   for (const grievance of shown) {
     const holder = grievance.by === "li" ? unit.name : "the protagonist";
@@ -1496,10 +1640,19 @@ function groupIntimacyFor(world: Pick<World, "content">, present: readonly Unit[
 export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], world: Pick<World, "content">): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
   // Intimacy (#1936) never rides in the bible's JSON: only an NSFW story gets it, as its own guarded line.
-  const { look: _look, play: _play, intimacy: _intimacy, ...bible } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
+  const {
+    look: _look,
+    play: _play,
+    intimacy: _intimacy,
+    bond: bondReveals,
+    ...bible
+  } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
+  // 0.23.0: so are the bond reveals past the rank he stands at, which the protagonist does not know yet.
+  const rank = bondRankOf(liState.points, liState.stage >= LAST_STAGE, bondStoriesPlayed(state.chapters, unit.id));
+  const bond = bondReveals?.filter((entry) => entry.level <= rank);
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
-    `BIBLE: ${JSON.stringify(bible)}`,
+    `BIBLE: ${JSON.stringify(bond?.length ? { ...bible, bond } : bible)}`,
     ...[appearanceLine(unit), intimacyLine(world, unit)].filter(Boolean),
     // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
     // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
@@ -1526,7 +1679,11 @@ function webBlock(
 }
 
 /** A love interest's scene card and what stands between them and the protagonist (every prompt but the planners'). */
-export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[] = []): string {
+export function sceneCardBlock(
+  unit: Unit,
+  liState: LiState & { bondPlayed?: number },
+  resolves: readonly string[] = [],
+): string {
   return [`id ${unit.id}:`, otomeSceneCard(unit, liState), appearanceLine(unit), betweenYou(unit, liState, resolves)]
     .filter(Boolean)
     .join("\n");
@@ -2111,6 +2268,7 @@ export interface BeatMessagesInput {
     | "grievance"
     | "date"
     | "prestige"
+    | "bond"
     | "thoughts"
     | "hisSide"
   >;
@@ -2160,7 +2318,11 @@ export function beatMessages({
   // their card holds only what they may know (ownView), as the date's plan did.
   const date = chapter.kind === "date" ? chapter.date : undefined;
   const partner = date ? units.find((unit) => unit.id === date.li) : undefined;
-  const cardState = (li: LiId) => (date ? ownView(state, li).liState : liStateOf(state, li));
+  // 0.23.0: with the bond stories he has played, so the card names the rank he stands at (Dottore, #2254).
+  const cardState = (li: LiId): LiState & { bondPlayed: number } => ({
+    ...(date ? ownView(state, li).liState : liStateOf(state, li)),
+    bondPlayed: bondStoriesPlayed(state.chapters, li),
+  });
   // The narrator's instructions are the same for every node: what a node changes (who may think aloud, whether it is
   // the chapter's last and may end on a big choice, its key-image rules, a date's or side-with's choice) is told with
   // the task, so a chapter's scenes share one cached prompt (#2066, #2091).
@@ -2477,6 +2639,20 @@ function prestigeFraming(name: string, prestige: NonNullable<Chapter["prestige"]
 }
 
 /**
+ * 0.23.0: what P6 adds to a bond story (`story-bond-<li>-<level>`, S/story/bond.ts) in place of the Character Story's
+ * framing. It IS canon (unlike an extra story): it is where the relationship settles one rank further, so it may reveal
+ * the rank's truth, which the Character Story framing forbids.
+ */
+function bondFraming(name: string, bond: NonNullable<Chapter["bond"]>, nodes: number): string[] {
+  const rank = bondRankAt(bond.rank);
+  return [
+    `This is a BOND STORY of ${name}'s, the one that settles bond rank ${bond.rank}${rank ? ` (${rank.name})` : ""}: ${rank?.focus ?? ""} It is canon, part of the love story, and it happens after the finale: they are together, past the confession, and this is how the relationship grows.`,
+    `It is a ${nodes}-scene story with its own small arc, ending on its last. Its truth comes out in the scene, in ${name}'s own way, and once it is said the protagonist knows it: ${bond.reveal}`,
+    `No other love interest appears unless the story truly calls for it. It never resolves the mystery and never contradicts the story so far.`,
+  ];
+}
+
+/**
  * #2155: what P6 adds to his side (`side-<li>-<arc>`, S/story/his-side.ts) in place of the Character Story's framing: a
  * scene beside the one above that the protagonist never saw, from his point of view, as things stood then.
  */
@@ -2527,9 +2703,11 @@ function arcFraming({
     lines.push(
       ...(chapter.hisSide
         ? hisSideFraming(name)
-        : chapter.prestige
-          ? prestigeFraming(name, chapter.prestige, nodes)
-          : storyFraming(name, nodes)),
+        : chapter.bond
+          ? bondFraming(name, chapter.bond, nodes)
+          : chapter.prestige
+            ? prestigeFraming(name, chapter.prestige, nodes)
+            : storyFraming(name, nodes)),
     );
   }
   // #1980: the arc's planned reveal, and its big event on the last chapter. Only a stamped node gets a reveal, so the
@@ -2590,7 +2768,16 @@ function arcPlanFields(world: Pick<World, "content">): string[] {
 function othersBlock(units: readonly Unit[], state: RunState, li: LiId): string {
   return units
     .filter((unit) => unit.id !== li)
-    .map((unit) => sceneCardBlock(unit, seenBy(liStateOf(state, unit.id), unit.id, [li]), []))
+    .map((unit) =>
+      sceneCardBlock(
+        unit,
+        {
+          ...seenBy(liStateOf(state, unit.id), unit.id, [li]),
+          bondPlayed: bondStoriesPlayed(state.chapters, unit.id),
+        },
+        [],
+      ),
+    )
     .join("\n\n");
 }
 
@@ -2810,7 +2997,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          sceneCardBlock(unit, cardStateOf(state, unit.id), node.resolves ?? []),
           upsetLine(unit, liStateOf(state, unit.id)),
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
         ]
@@ -2906,7 +3093,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          sceneCardBlock(unit, cardStateOf(state, unit.id), node.resolves ?? []),
           upsetLine(unit, liStateOf(state, unit.id)),
           // The partner's notebook (#1945), as P12 gives the opponent theirs; a bystander's is never here.
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
@@ -3139,6 +3326,8 @@ export interface ChatReplyInput {
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
+  /** 0.23.0: the bond stories he has played, so his card names the rank he stands at (absent: the first). */
+  bondPlayed?: number;
   /** The open conversation's newest messages, oldest first; the last is the protagonist's unless he writes first. */
   tail: readonly PhoneMessage[];
   /** His memories of conversations that are over, oldest first. */
@@ -3162,6 +3351,7 @@ export function chatReplyMessages({
   player,
   unit,
   liState,
+  bondPlayed,
   tail,
   memories,
   story,
@@ -3215,8 +3405,8 @@ export function chatReplyMessages({
     .join("\n");
   const user = [
     "WHO YOU ARE",
-    otomeSceneCard(unit, liState),
-    betweenYou(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
+    betweenYou(unit, { ...liState, bondPlayed }),
     upsetLine(unit, liState),
     // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
     ...(known ? [known] : []),
@@ -3327,7 +3517,7 @@ export interface GroupChatInput {
   world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases" | "web">;
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   /** The members in cast order: each one's unit, state as the whole cast may know it (sharedState), own stickers. */
-  members: ReadonlyArray<{ unit: Unit; liState: LiState; stickers: readonly ReplySticker[] }>;
+  members: ReadonlyArray<{ unit: Unit; liState: LiState; bondPlayed?: number; stickers: readonly ReplySticker[] }>;
   /** The protagonist's stickers, which any of them may send too. */
   yours: readonly ReplySticker[];
   /** Names the thread's stickers (S/art/stickers.ts stickerLookup). */
@@ -3393,7 +3583,9 @@ export function groupChatMessages({
   const context = [
     "WHO IS IN IT",
     members
-      .map(({ unit, liState }) => [otomeSceneCard(unit, liState), betweenYou(unit, liState)].join("\n"))
+      .map(({ unit, liState, bondPlayed }) =>
+        [otomeSceneCard(unit, { ...liState, bondPlayed }), betweenYou(unit, { ...liState, bondPlayed })].join("\n"),
+      )
       .join("\n\n"),
     "",
     ties ? `THEIR TIES\n${ties}` : "",
@@ -3623,6 +3815,8 @@ export interface NoteInput {
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
+  /** 0.23.0: the bond stories he has played, so his card names the rank he stands at (absent: the first). */
+  bondPlayed?: number;
   today: NoteDay;
   /** One thing he may know, from his own recall (reader: him), or "". */
   recalled: string;
@@ -3644,6 +3838,7 @@ export function noteMessages({
   player,
   unit,
   liState,
+  bondPlayed,
   today,
   recalled,
   offscreen,
@@ -3682,8 +3877,8 @@ export function noteMessages({
     protagonistLine(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
-    betweenYou(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
+    betweenYou(unit, { ...liState, bondPlayed }),
     ...(known ? [known] : []),
     "",
     "TODAY",
@@ -3822,6 +4017,9 @@ export interface ReadMePromptInput {
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** Their state as their own reader may know it (ownView), their own notebook with it. */
   liState: LiState;
+  /** 0.23.0: the bond stories they have played, so their card names the rank they stand at (absent: the first). */
+  bondPlayed?: number;
+
   /** One thing they may know, from their own recall (reader: them), or "". */
   recalled: string;
   /** Their newest relationship and off-screen ledger lines among those they may know (ownView). */
@@ -3829,7 +4027,15 @@ export interface ReadMePromptInput {
 }
 
 /** The Read Me prompt: the READ_ME_GUESSES guesses of one set, as `messages` in the plan's order (§1.7). */
-export function readMeMessages({ world, player, unit, liState, recalled, lately }: ReadMePromptInput): OtomeMessage[] {
+export function readMeMessages({
+  world,
+  player,
+  unit,
+  liState,
+  bondPlayed,
+  recalled,
+  lately,
+}: ReadMePromptInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
   const voice = `${name}'s own voice, said to the protagonist ("you")`;
@@ -3876,8 +4082,8 @@ export function readMeMessages({ world, player, unit, liState, recalled, lately 
     protagonistBlock(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
-    betweenYou(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
+    betweenYou(unit, { ...liState, bondPlayed }),
     lately.length ? `\nLately: ${lately.join(" ")}` : "",
     recalled.trim()
       ? `\nWhat ${name} may know of the story (${name} remembers only what ${name} was there for or was told):\n${recalled.trim()}`
@@ -4043,6 +4249,8 @@ export interface TarotPromptInput {
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** Their state as their own reader may know it (ownView), their own notebook with it. */
   liState: LiState;
+  /** 0.23.0: the bond stories they have played, so their card names the rank they stand at (absent: the first). */
+  bondPlayed?: number;
   /** Their newest relationship and off-screen ledger lines among those they may know (ownView). */
   lately: string[];
   /** THE ROAD AHEAD (S/minigames/tarot.ts roadAhead); [] for none. */
@@ -4065,7 +4273,7 @@ export const TAROT_POSITION_NAMES: Record<TarotPosition, string> = {
 
 /** The Tarot night prompt: one reading, as `messages` (system, then the user turn with THE SPREAD last). */
 export function tarotMessages(input: TarotPromptInput): OtomeMessage[] {
-  const { world, player, unit, liState, lately, road, memory, recalls = "", mode, cards } = input;
+  const { world, player, unit, liState, bondPlayed, lately, road, memory, recalls = "", mode, cards } = input;
   const name = unit.name;
   const face = `"${FACES.join("|")}|"`;
   const line = `{"line": "...", "face": ${face}}`;
@@ -4125,12 +4333,12 @@ export function tarotMessages(input: TarotPromptInput): OtomeMessage[] {
     protagonistBlock(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
     known,
     lately.length ? `Lately: ${lately.join(" ")}` : "",
     "",
     "BETWEEN YOU",
-    betweenYou(unit, liState),
+    betweenYou(unit, { ...liState, bondPlayed }),
     "",
     road.length ? `THE ROAD AHEAD (for the Future card only; neither of you knows it)\n${road.join("\n")}` : "",
     "",
@@ -4160,6 +4368,9 @@ export interface ReadHimPromptInput {
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** His state as his own reader may know it (ownView). */
   liState: LiState;
+  /** 0.23.0: the bond stories they have played, so their card names the rank they stand at (absent: the first). */
+  bondPlayed?: number;
+
   /** One thing he may know, from his own recall (reader: him), or "". */
   recalled: string;
   /** His newest relationship and off-screen ledger lines among those he may know (ownView). */
@@ -4170,6 +4381,7 @@ export interface ReadHimPromptInput {
 
 /** P25: the five rounds of one Read Him set, as `messages` in the plan's order (§1.7). */
 export function readHimMessages({
+  bondPlayed,
   world,
   player,
   unit,
@@ -4217,8 +4429,8 @@ export function readHimMessages({
     aboutLine(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
-    betweenYou(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
+    betweenYou(unit, { ...liState, bondPlayed }),
     ...(known ? [known] : []),
     "",
     "MASK TELLS (by index)",
@@ -5077,6 +5289,84 @@ export function prestigePlanMessages({
   );
 }
 
+// ── The bond plan (0.23.0, structured, `planner`): a bond story, canon, one rank further ──
+
+export interface BondPlanInput {
+  world: World;
+  player: Player;
+  unit: Unit;
+  state: RunState;
+  /** The rank it opens (C/shared/bond.ts), and the reveal it is written around. */
+  rank: BondRank;
+  reveal: string;
+  /** Recalled memory for [li] (the kit's text), or "". */
+  memory: string;
+}
+
+/** The bond story plan: P21's side story, but canon and post-confession, built around the rank's reveal. */
+export function bondPlanMessages({ world, player, unit, state, rank, reveal, memory }: BondPlanInput): OtomeMessage[] {
+  const name = unit.name;
+  const li = unit.id;
+  const liState = state.lis[li] ?? defaultLiState();
+  const known = knowsAboutYou(unit, liState);
+  const tastes = intimacyLine(world, unit);
+  const shape = `{"title": "...", "tags": ["..."], "summary": "...", "nodes": [{"kind": "beat|moment", "moment": "read-him|call|date", "guide": "...", "cast": ["${li}"], "place": "..."}], "ledger": {"relationship": [{"li": "${li}", "line": "..."}], "conflict": [], "offscreen": []}}`;
+  const system = [
+    "You are the Bond Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic; each is a human, even if a monster.",
+    `${name} and the protagonist are together, past the confession, and the relationship keeps growing. Bond rank ${rank.level}, ${rank.name}, is where it settles next: ${rank.focus} Plan the story that settles it, told as ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
+    "It IS canon: it is part of the love story, it may change how close they are within what the rank allows, and what it reveals the protagonist then knows.",
+    "Reply with ONLY a JSON object of this shape:",
+    shape,
+    "FIELDS",
+    "- title: a short title. summary: one or two lines on it, without giving away its turns (the player reads it).",
+    `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the story really holds; [] when none apply.`,
+    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (time together that turns on something real).",
+    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: exactly ["${li}"]. place: where it opens (optional).`,
+    `- ledger.relationship: one line on what moved between ${name} and the protagonist. ledger.conflict: optional: complicate or escalate an open conflict by its id, or plant a new seed (type from: ${ANGST_TYPES.join(", ")}). ledger.offscreen: [].`,
+    "RULES",
+    `- ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes of kind beat or moment (no confrontation). ${name} is in every node. It is ${name}'s story: another love interest appears only when the story truly calls for it.`,
+    `- The reveal is the heart of it: by the last node the protagonist knows it, in the scene, in ${name}'s own way: ${reveal} Never state it as a summary; let it come out of what happens.`,
+    `- Do not restate what his route already revealed, and do not resolve the mystery. An open grievance stays open unless the story resolves it through the ledgers.`,
+    `- This is a settled couple, past the confession, not a slow burn: no will-they-won't-they, no first confession, no mask between them. They may still clash, hurt each other and keep things back.`,
+    "- Continue from the story so far: everything already played is canon and is never undone, contradicted or staged again.",
+    `- Write every text field in ${world.language}.`,
+    "- Omit an optional field rather than writing null.",
+    "",
+    STORY_PACING_INSTRUCTION,
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
+    "",
+    otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "WORLD",
+    world.setting.trim() || world.premise.trim(),
+    ...plannerPremise(world),
+    world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
+    "",
+    "PROTAGONIST",
+    protagonistBlock(player),
+    "",
+    `${name.toUpperCase()} (stage ${liState.stage}, bond rank ${rank.level} of 20; whose bond story this is)`,
+    bibleBlock(unit, state, [li], world),
+    ...(known ? [known] : []),
+    ...(tastes ? [tastes] : []),
+    "",
+    memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
+    "",
+    `Plan bond rank ${rank.level}'s story with ${name} now (id ${li}).`,
+    otomeContractReminder("planner"),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  return forgeChoicePlanMessages(
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    true,
+  );
+}
+
 // ── P19 (he noticed) and P24 (Show {{name}}): one line about the protagonist's look ──
 
 export interface LookLineInput {
@@ -5115,7 +5405,7 @@ function lookUser({ player, unit, state, look }: LookLineInput, task: string, ki
   return [
     "LOVE INTEREST",
     // As their own reader sees it (M3's ownView, as P16 and P17): nothing of another love interest's own chapters.
-    sceneCardBlock(unit, ownView(state, unit.id).liState),
+    sceneCardBlock(unit, (({ liState, bondPlayed }) => ({ ...liState, bondPlayed }))(ownView(state, unit.id))),
     "",
     "PROTAGONIST",
     // THE LOOK below is the one this line is about (P19: the one worn now), so the block names no other.

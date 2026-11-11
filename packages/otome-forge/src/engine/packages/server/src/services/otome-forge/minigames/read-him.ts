@@ -395,7 +395,7 @@ export async function startReadHim(
     const unit = run.units.find((entry) => entry.id === li);
     if (!unit || !run.state.lis[li]) throw liNotFound();
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
-    const { liState, relationship, offscreen } = ownView(run.state, li);
+    const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
     const lately = [relationship, offscreen].filter((line) => !!line.trim());
     const [recalled, sets] = await Promise.all([
       recalledLine(deps.memory, runId, unit, lately, debugMode),
@@ -415,6 +415,7 @@ export async function startReadHim(
         player: run.player,
         unit,
         liState,
+        bondPlayed,
         recalled,
         lately,
         recent,

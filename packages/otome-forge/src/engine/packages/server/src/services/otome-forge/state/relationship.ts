@@ -30,7 +30,8 @@ import type {
   LiState,
   RunState,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { WALKOUT_RUPTURE_TRUST } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { LAST_STAGE, WALKOUT_RUPTURE_TRUST } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { bondStoriesPlayed } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   BEAT_SHIFT_MAX,
@@ -81,6 +82,15 @@ export function readChapterDelta(value: unknown): LiState["chapterDelta"] {
 
 /** A grievance still owed: open, or left to fester. */
 const isUnresolved = (grievance: Grievance) => grievance.status === "open" || grievance.status === "festering";
+
+/**
+ * Where a loss stops for this love interest (0.23.0): his current level's floor, or at the last bond rank the last extra
+ * story unlocked. Bond ranks only open past his finale (`li.stage`), and only one beyond the bond stories he has played,
+ * so the floor has to know both.
+ */
+function floorOf(id: string, li: LiState, state: RunState): number {
+  return affectionFloorOf(li.points, li.stage >= LAST_STAGE, bondStoriesPlayed(state.chapters, id));
+}
 
 /** Where a pick happened, and what its node's plan allows. */
 export interface ChoiceContext {
@@ -265,7 +275,7 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
 
   for (const id of harmed) {
     const li = lis[id]!;
-    const points = Math.max(affectionFloorOf(li.points), li.points - 15);
+    const points = Math.max(floorOf(id, li, state), li.points - 15);
     if (points !== li.points) {
       lis[id] = { ...li, points };
       rememberedBy.add(id);
@@ -275,9 +285,7 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     const li = lis[id]!;
     // #2156: no gain while his grievance stands.
     const points =
-      amount > 0
-        ? li.points + (heldAgainst(li) ? 0 : amount)
-        : Math.max(affectionFloorOf(li.points), li.points + amount);
+      amount > 0 ? li.points + (heldAgainst(li) ? 0 : amount) : Math.max(floorOf(id, li, state), li.points + amount);
     if (points !== li.points) {
       lis[id] = { ...li, points };
       rememberedBy.add(id);

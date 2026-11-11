@@ -1251,11 +1251,12 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 0.18.1: the canon writing rule now names an existing world's characters, so every date prompt's bytes moved.
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
 // 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
+// 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "70349a6080871ea5",
-  scene1: "96fc6bc78f5b2dbc",
-  scene2: "cc74f2f6b2b2cc49",
-  scene3: "90da4545425a7488",
+  plan: "b3c579261e58824b",
+  scene1: "0d699d12b155b71a",
+  scene2: "a38949ed1a5b1df7",
+  scene3: "897c14e6df7c4225",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

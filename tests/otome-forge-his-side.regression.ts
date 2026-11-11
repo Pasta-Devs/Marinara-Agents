@@ -822,10 +822,11 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   assert.ok(/PLAYER CHOICES/u.test(mainMessages[1]!.content), "the fixture reaches the choice rules");
   // Retaken 2026-11-10: betweenYou's slow burn and affection level lines changed on purpose.
   // Retaken 2026-11-11: the last scene's open-decision rule and the no-assumed-choice rule.
-  assert.equal(sha(mainMessages), "3e9c6eb76c26c38d8c588ea9261f647bd7dadec72309b2706b06f9c25b35c419", "a main chapter");
+  // Retaken 0.23.0: the affection line reads "of 20" (the bond ranks).
+  assert.equal(sha(mainMessages), "efd76e01e7f26f16144a65197ed9f9b7dface032840b3d4e4867c2f77c840965", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "0292be37a23716bf1c2ee26d86b8abb08d0c42687c8f1197a2f5e2db6811711f",
+    "8d416d40caed3217b30744738dbf6ec2c548bf6d416d5dfa116d696018d34c17",
     "a Character Story, even with a scene handed to it",
   );
 });

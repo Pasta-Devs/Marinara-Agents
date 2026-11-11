@@ -1638,7 +1638,7 @@
   "ui.otomeForge.story.planning": "Planning chapter {{number}} with {{name}}…",
   "ui.otomeForge.story.planningHint": "It can take a minute. The first scene comes next.",
   "ui.otomeForge.story.prestige": "Prestige",
-  "ui.otomeForge.story.prestigeHint": "Past level 10, every 300 affection earns a prestige point. Three unlock an extra story you imagine together, just for fun: a what-if, another world, or more. It never changes the main story.",
+  "ui.otomeForge.story.prestigeHint": "Past the last bond rank, every 300 affection earns a prestige point. Three unlock an extra story you imagine together, just for fun: a what-if, another world, or more. It never changes the main story.",
   "ui.otomeForge.story.prestigeLocked": "No new story with {{name}} is unlocked yet. Three prestige points unlock the next one.",
   "ui.otomeForge.story.prestigeNew": "A new story with {{name}}",
   "ui.otomeForge.story.prestigeOf": "{{name}}: prestige {{points}} of {{max}}",
@@ -1942,5 +1942,13 @@
   "ui.otomeForge.wish.wishing": "Wishing…",
   "ui.otomeForge.wish.with": "with {{name}}",
   "ui.otomeForge.wish.writing": "Writing this fortnight’s Memories, looks and Snapshots…",
-  "ui.otomeForge.wish.writingTitle": "Writing new wishes"
+  "ui.otomeForge.wish.writingTitle": "Writing new wishes",
+  "ui.otomeForge.story.levelBond": "Level {{level}} · {{rank}}",
+  "ui.otomeForge.story.levelOfBond": "{{name}}: affection level {{level}} of {{max}}, bond rank {{bond}} of {{bondMax}}",
+  "ui.otomeForge.story.bondOpen": "Open {{rank}}",
+  "ui.otomeForge.story.bondWaiting": "A new bond story with {{name}} is ready: {{rank}}.",
+  "ui.otomeForge.story.bondHint": "Past level 10, after their story's finale, affection opens ten more ranks, one at a time: each rank's story is played before the next opens. At the last, every 300 affection earns a prestige point.",
+  "ui.otomeForge.story.bondNew": "A new bond story with {{name}}",
+  "ui.otomeForge.arcs.planningBond": "Writing the bond story…",
+  "ui.otomeForge.arcs.bondLocked": "Open this bond rank after the one before it."
 }
