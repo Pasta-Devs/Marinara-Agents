@@ -877,7 +877,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.24.0",
+    version: "0.24.1",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),

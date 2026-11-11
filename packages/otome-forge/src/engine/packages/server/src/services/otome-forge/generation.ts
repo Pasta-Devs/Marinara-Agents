@@ -23,10 +23,11 @@
 //    cache use is logged too, when the provider reports it.
 // 5. Call: chatComplete with the reply's output size alone (the maintainer's rule): no temperature, no JSON mode, no
 //    other sampling or reasoning setting, so what the connection saves (its temperature, its reasoning effort) is what
-//    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A prompt with cache marks also asks
-//    for the hour-long cache (cacheTtl "1h", capability API 1.815; an older Engine ignores it and keeps the
-//    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote;
-//    a request may ask for the five-minute one instead (0.20.2: a message thread's replies, which come closer). A
+//    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A prompt with cache marks asks for
+//    the five-minute cache (cacheTtl "5m", capability API 1.815; an older Engine ignores it and keeps the connection's
+//    own cache time): every prompt that marks reads replays what it wrote within a minute or two (a scene's lookahead,
+//    a chapter's scenes), where the five-minute write costs 1.25x the input and the hour-long one 2x, so the hour buys
+//    almost no extra read and doubles every miss. A request may ask for the hour-long one where it knows better. A
 //    background call holds its job's connection admission slot throughout; it names that connection and never takes a
 //    second slot here.
 // 6. Parse: parseJsonish (or the request's own `parse` for a plain-text shape), then the schema, then `normalize`. On
@@ -324,12 +325,13 @@ export async function generateJson<T extends object>(
     const sent = fitted.messages;
     logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });
     // The output size alone (see the header); debugMode and signal are the Engine's own, never sent on. A prompt with
-    // cache marks asks for the hour-long cache (capability API 1.815): a chapter's calls come minutes apart.
+    // cache marks asks for the five-minute cache (capability API 1.815): its reads come within a minute or two, and the
+    // hour-long write costs 2x the input against the five-minute one's 1.25x.
     const options = {
       maxTokens: fitted.maxTokens,
       debugMode: request.debugMode,
       signal: request.signal,
-      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: request.cacheTtl ?? ("1h" as const) } : {}),
+      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: request.cacheTtl ?? ("5m" as const) } : {}),
     };
     const reply = await model.chatComplete(sent, options);
     logCacheUse(runtime, label, request.debugMode, reply.usage);
