@@ -257,9 +257,9 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerHis: "5947904ed3d99148",
   bannerMemories: "de4eb263f10caae0",
   bannerMine: "cf8f54efbd1364ef",
-  beat: "808bd572768d055f",
-  beatWithCg: "5b3da6eaaa372b37",
-  chapterPlan: "0d5ddd3f9f813b42",
+  beat: "cb05551ed9032f85",
+  beatWithCg: "4690142457d27a5d",
+  chapterPlan: "b12acac8f22c887f",
   closer: "663c9500db89c7ce",
   confrontation: "658aefba2567ec54",
   repairPlan: "fa4071e8c2321d76",
@@ -270,13 +270,14 @@ const EXPECTED_ANGST: Record<string, string> = {
 // repairPlan digests moved.
 // 0.19.1: the chapter plan's climax is optional, so both chapterPlan digests moved.
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
+// 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "598ed4c244d58365",
   bannerMemories: "661517d0ecfa33a4",
   bannerMine: "e80d96d733b1735e",
-  beat: "07f760b11397eac2",
-  beatWithCg: "413bf77e2a5fb7c0",
-  chapterPlan: "40174bcc96f32008",
+  beat: "8905371572ec6f0a",
+  beatWithCg: "e3fea6301752766e",
+  chapterPlan: "32691b026c34245f",
   closer: "08dcc1e9fc2ce342",
   confrontation: "3e3fbf0b86a48841",
   repairPlan: "7f493b0866f1b176",

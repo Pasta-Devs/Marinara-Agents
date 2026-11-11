@@ -1147,6 +1147,18 @@ const RECENT_LEDGER = 8;
  * What a chapter's closing decision must be, for P5's plan and P6's last node (#1949): unlike the recent ones, which
  * the story memory's chapter summaries name, so chapters do not all end on whom the protagonist goes with.
  */
+/**
+ * A chapter's last scene never ends on a decision left for later in the prose (the maintainer, 2026-11-11): the
+ * narrator's big choice is optional, so a planned "she will decide tomorrow" became a chapter that ended with no choice,
+ * and the next one went on as if one had been made. The decision is the player's choice now, or the scene settles it.
+ */
+const DECIDED_HERE =
+  '- If what happens here leaves a decision to the protagonist, end on ONE big choice that puts it to the player. Never end with the decision put off in the narration ("you can decide tomorrow", "it can wait"): either the player makes it now, or the scene settles it.';
+
+/** Only the choices the story so far records were made (2026-11-11): never write as if the protagonist chose one it never offered. */
+const ONLY_CHOICES_MADE =
+  '- Only the choices the story so far shows the protagonist making were made. A decision the story left open was never made: never write as if it was ("whatever you chose"). If it still matters, the protagonist faces it again.';
+
 const VARIED_DECISION =
   "a different kind of decision from the recent chapters' (the story memory names each choice the protagonist made): not always whom the protagonist goes with, and never a choice between love interests two chapters running";
 
@@ -1899,7 +1911,8 @@ export function chapterPlanMessages({
       ? `- If this chapter has a climax, it is a ${climax}: the last two climaxes were both ${climax === "closer" ? "confrontation" : "closer"}s.`
       : `- If it has one, choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
     "- The Lead is in most nodes and in the climax, if any; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
-    `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
+    `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}, and its guide says the scene ends on that choice for the player; never plan a decision the protagonist puts off until later.`,
+    ONLY_CHOICES_MADE,
     // #2047: a climax-last plan has no big choice at its end, so it could never close on the judgment.
     ...(judgment
       ? [
@@ -2236,11 +2249,13 @@ export function beatMessages({
       ? `- Thought lines: ${pov.name} only.`
       : `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
     ...choices.own,
+    ONLY_CHOICES_MADE,
     // A planned chapter's last node; the prologue offers its own choices, a date never ends on a big one, and his side
     // offers none.
     ...(last && !date && !pov && chapter.kind !== "prologue"
       ? [
           `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
+          DECIDED_HERE,
           ...(node.judgment ? [judgmentLine(node.judgment)] : []),
         ]
       : []),

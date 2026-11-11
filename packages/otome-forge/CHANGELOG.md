@@ -1,8 +1,12 @@
 # Otome Hearth release notes
 
-## 0.22.5 — 2026-11-10
+## 0.22.6 — 2026-11-11
 
 - **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to "Expressions" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.
+
+## 0.22.5 — 2026-11-11
+
+- **A chapter no longer ends on a choice you never get to make.** When a chapter's last scene leaves a decision to you, it now ends on that choice for you to pick, instead of saying you'll decide later. The next chapter also never acts as if you chose something you weren't offered.
 
 ## 0.22.4 — 2026-11-10
 
