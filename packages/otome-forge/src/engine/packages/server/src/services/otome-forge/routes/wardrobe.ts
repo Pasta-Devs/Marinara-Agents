@@ -36,7 +36,8 @@ import type {
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { AFFECTION_EARNINGS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
-import { isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
+import { FACES, isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { figurineSceneKey, giftsFor } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import {
   BASE_LOOK,
@@ -207,9 +208,11 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
         .map((item) => marked(itemLook(runId, item, unit.id, unit.wornOutfit, run.world))),
     ];
     him[unit.id] = views.map((view) => {
-      // His faces are read on the painted look, before it is shown as its cut-out.
+      // His faces are read on the painted look, before it is shown as its cut-out. Painted means all five are Otome's
+      // paints: an Engine sprite's saved cut-out is a gallery file too, so this is read before cutLook swaps them in.
       const faces = view.url ? readyFaces(run.world, unit, view.url) : undefined;
-      return cutLook(unit, faces ? { ...view, faces } : view);
+      const painted = !!faces && FACES.every((face) => faces[face] && !isEngineArt(faces[face]));
+      return cutLook(unit, faces ? { ...view, faces, ...(painted ? { facesPainted: true as const } : {}) } : view);
     });
   }
   const shownTo = (look: string) =>
