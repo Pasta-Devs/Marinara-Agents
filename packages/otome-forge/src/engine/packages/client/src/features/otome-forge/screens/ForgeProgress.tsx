@@ -25,7 +25,7 @@ import { forgeStepErrorKey, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { CostHint } from "../components/CostHint";
 import { PromptReviewDialog, type ImagePrompt } from "../components/PromptReviewDialog";
-import { bibleQueryKey, patchRun, runQueryKey, useRun, useSampledAccents } from "../hooks/use-run";
+import { bibleQueryKey, patchRun, runQueryKey, useRun } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
 import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunLiView, RunView } from "../shared/api-types";
@@ -87,7 +87,6 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const queryClient = useQueryClient();
   const { reviewImagePromptsBeforeSend, debugMode } = useOtomeProps();
   const run = useRun(runKey);
-  useSampledAccents(run.data);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Where the last action was started, so its failure shows beside that control: the paint offer or the steps.
