@@ -65,7 +65,10 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
       toast.success(success);
       return true;
     } catch (cause) {
-      setError(errorMessage(cause));
+      const message = errorMessage(cause);
+      setError(message);
+      // The refresh after a failed job can remount this page and drop the line above, so say it once more.
+      toast.error(message);
       return false;
     } finally {
       setJob(null);
@@ -143,6 +146,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
           <input
             type="date"
             className={inputClass}
+            style={{ minHeight: 44 }}
             value={target}
             min={minDay}
             max={maxDay}
@@ -165,6 +169,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
         <input
           type="text"
           className={inputClass}
+          style={{ minHeight: 44 }}
           value={label}
           maxLength={80}
           disabled={busy}
@@ -209,7 +214,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
                       {formatFullTime(checkpoint.worldDate, locale)}
                     </span>
                   </p>
-                  <p className="mt-1 truncate text-xs text-[var(--slurp-muted)]">
+                  <p className="mt-1 break-words text-xs text-[var(--slurp-muted)]">
                     {[
                       checkpoint.label,
                       t("ui.slurp.worldClock.counts", { creators: checkpoint.creators, posts: checkpoint.posts }),
@@ -261,7 +266,10 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
                 await setKeep.mutateAsync(value);
                 return true;
               } catch (cause) {
-                setError(errorMessage(cause));
+                const message = errorMessage(cause);
+                setError(message);
+                // The refresh after a failed job can remount this page and drop the line above, so say it once more.
+                toast.error(message);
                 return false;
               }
             }}

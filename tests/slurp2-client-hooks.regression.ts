@@ -589,12 +589,12 @@ assert.deepEqual(
     // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
     // 0.3.44: +2 (the import and the trends row query).
     // 0.3.63: +1 (its useQueryClient). Long-Term Memory recall: +1 (useSlurpMemoryStatus).
-    useQuery: 316,
+    useQuery: 319,
     useInfiniteQuery: 9,
     // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
     // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).
     // Life panel: +3 useMutation, +4 useQuery, +1 invalidateQueries, +3 onError.
-    invalidateQueries: 163,
+    invalidateQueries: 166,
     setQueryData: 32,
     cancelQueries: 7,
     removeQueries: 1,
@@ -602,9 +602,9 @@ assert.deepEqual(
     onMutate: 2,
     // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
     // onError no longer counts as state-layer code. +1: SlpDeskQuickReplies (R2) toasts a failed save.
-    onError: 99,
+    onError: 102,
     // 0.3.63: +1 (the sexting buy refreshes the thread when settled).
-    onSettled: 46,
+    onSettled: 43,
   },
   "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
 );

@@ -90,37 +90,49 @@ function useRefreshEverything() {
 
 export function useSkipSlpWorldDays() {
   const refresh = useRefreshEverything();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { days: number; onProgress?: (job: SlurpBackupJob) => void }) =>
       waitForSlpTimelineJob(
         await api.post<SlurpBackupJob>("/slurp2/world/clock/skip", { days: input.days }),
         input.onProgress,
       ),
-    onSettled: refresh,
+    onSuccess: refresh,
+    // A failed job leaves the data as it was (the server rolls back), so only the checkpoint list needs a refetch.
+    // Refreshing every query here remounted the page and dropped the error line.
+    onError: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
   });
 }
 
 export function useCreateSlpCheckpoint() {
   const refresh = useRefreshEverything();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { label?: string; onProgress?: (job: SlurpBackupJob) => void }) =>
       waitForSlpTimelineJob(
         await api.post<SlurpBackupJob>("/slurp2/world/clock/checkpoints", { label: input.label }),
         input.onProgress,
       ),
-    onSettled: refresh,
+    onSuccess: refresh,
+    // A failed job leaves the data as it was (the server rolls back), so only the checkpoint list needs a refetch.
+    // Refreshing every query here remounted the page and dropped the error line.
+    onError: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
   });
 }
 
 export function useRestoreSlpCheckpoint() {
   const refresh = useRefreshEverything();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { id: string; onProgress?: (job: SlurpBackupJob) => void }) =>
       waitForSlpTimelineJob(
         await api.post<SlurpBackupJob>(`/slurp2/world/clock/checkpoints/${encodeURIComponent(input.id)}/restore`, {}),
         input.onProgress,
       ),
-    onSettled: refresh,
+    onSuccess: refresh,
+    // A failed job leaves the data as it was (the server rolls back), so only the checkpoint list needs a refetch.
+    // Refreshing every query here remounted the page and dropped the error line.
+    onError: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
   });
 }
 
