@@ -21,7 +21,7 @@ import { TopBar } from "./components/TopBar";
 import { INDEX_QUERY_KEY, useOtomeIndex } from "./hooks/use-index";
 import { useLook, type LookPreference } from "./hooks/use-look";
 import { OtomeAudioProvider } from "./hooks/use-otome-audio";
-import { fetchRunView, runQueryKey, useRun } from "./hooks/use-run";
+import { fetchRunView, runQueryKey, useRun, useSampledAccents } from "./hooks/use-run";
 import { accentOf } from "./lib/accent";
 import { dropStaleCareNotes } from "./lib/cycle-storage";
 import { localDay } from "./lib/tap-mood";
@@ -119,6 +119,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const shown = waiting ? "loading" : failed ? "error" : screen;
   // Settings → Connections' daily messages, on any screen; the thread open on the phone never gets one.
   useDailyMessages(activeRun, view, screen === "phone" ? (phoneOpen?.li ?? null) : null);
+  // His colour from his portrait, on any screen: an LI added mid-story (#2251) is picked the moment his card is linked,
+  // where the forge screen alone would have left him on the colour his name hashes to.
+  useSampledAccents(view ?? undefined);
 
   // Once the active story has loaded, its opening screen stays put: a world that finishes forging while the player
   // watches keeps showing the forge (its cast and paint offer) until they choose to go Home.
