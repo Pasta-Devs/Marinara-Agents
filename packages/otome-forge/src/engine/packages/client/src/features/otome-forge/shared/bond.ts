@@ -85,8 +85,7 @@ export const BOND_RANKS: readonly BondRank[] = [
 ] as const;
 
 /** The rank for a level, or undefined below 11 and above 20. */
-export const bondRankAt = (level: number): BondRank | undefined =>
-  BOND_RANKS[Math.trunc(level) - BOND_RANKS[0]!.level];
+export const bondRankAt = (level: number): BondRank | undefined => BOND_RANKS[Math.trunc(level) - BOND_RANKS[0]!.level];
 
 /** `story-bond-<li>-<level>`: the bond story that opens `level`. Its key needs no new chapter regex (S/ids.ts). */
 export const bondStoryKey = (li: LiId, level: number) => `story-bond-${li}-${level}`;
@@ -103,7 +102,10 @@ export function bondStoryLevel(key: string, li: LiId): number | null {
  * How many of his bond stories are played (read to their end). Derived from the chapters, never stored, so a rank cannot
  * be skipped by banking affection and an older story needs no new state field.
  */
-export function bondStoriesPlayed(chapters: Record<string, { completed: string | null } | undefined>, li: LiId): number {
+export function bondStoriesPlayed(
+  chapters: Record<string, { completed: string | null } | undefined>,
+  li: LiId,
+): number {
   return Object.entries(chapters).filter(([key, progress]) => !!progress?.completed && bondStoryLevel(key, li) !== null)
     .length;
 }
