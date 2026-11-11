@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.22.6",
+          "date": "2026-11-11",
+          "notes": "- **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to \"Expressions\" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.",
+          "highlight": false
+        },
+        {
           "version": "0.22.5",
           "date": "2026-11-11",
           "notes": "- **A chapter no longer ends on a choice you never get to make.** When a chapter's last scene leaves a decision to you, it now ends on that choice for you to pick, instead of saying you'll decide later. The next chapter also never acts as if you chose something you weren't offered.",
@@ -800,12 +806,6 @@
           "date": "2026-11-08",
           "notes": "- **Long stories remember their beginnings in detail.** As a story grows, its early chapters are condensed again and again. Now each main chapter brings back up to three earlier chapters that matter to it, by their original summaries, in its plan and every scene. Only chapters everyone in it may know come back, and nothing changes when none is close enough.\n- **Stories you already have too.** Chapter summaries are indexed in the background when you open a story and after each new summary, with no model call. The built-in model runs on this computer and its index is stored with the story.\n- **Memory recall embeddings.** In **Settings → Connections**, choose **Built-in (local)** or an Engine connection with its own embedding model, for example one better at your story's language. An older Engine offers only Built-in. Beside it you see how many summaries are indexed, or why indexing failed, with **Retry indexing**.",
           "highlight": true
-        },
-        {
-          "version": "0.18.2",
-          "date": "2026-11-08",
-          "notes": "- **Their side shows what you never saw.** A love interest's side of a big moment is now a scene you weren't there for, just before it or right after you left, instead of the same scene told again. It opens once they reach **Wound**; earlier moments don't count.",
-          "highlight": false
         }
       ]
     },

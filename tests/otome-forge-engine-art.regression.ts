@@ -14,7 +14,11 @@ import type {
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { ARCHETYPE_IDS } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/archetypes.ts";
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
-import { FACES } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
+import { isEngineArt } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/engine-art.ts";
+import {
+  FACES,
+  type Face,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import {
   cutoutView,
   cutoutsSettled,
@@ -670,6 +674,57 @@ test("Engine faces show without painting; the kit pays only for the missing ones
   assert.equal(repainted.state, "ready");
   assert.equal(t.paid.length, paidBefore + FACES.length);
   assert.ok(t.deleted.every((id) => !id.includes("sprites")));
+});
+
+test("Wardrobe: the Expressions check is for five painted faces only, never his Engine sprites or their cut-outs", async () => {
+  const t = await artWorld({ runKey: "r-facespainted-aaaaaa", images: { expressions: true } });
+  const base = "/api/sprites/card-kai/file/full_neutral.png";
+  const sprite = (face: Face) => `/api/sprites/card-kai/file/full_${face}.png`;
+  const painted = (face: Face) => `${GALLERY}/kai-${face}.png`;
+  /** His base look with a ready set of `faces`, and saved cut-outs of `cut` (each its own gallery file). */
+  const kaiLook = async (faces: Partial<Record<Face, string>>, cut: string[] = []) => {
+    await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+      ...unit,
+      cardId: "card-kai",
+      portrait: base,
+      art: { state: "ready", at, url: base },
+      expressions: {
+        [base]: {
+          state: "ready",
+          at,
+          images: Object.fromEntries(
+            Object.entries(faces).map(([face, url]) => [
+              face,
+              isEngineArt(url) ? { url } : { url, ref: `global-gallery:${face}` },
+            ]),
+          ),
+        },
+      },
+      cutouts: Object.fromEntries(cut.map((url, i) => [url, { state: "ready", at, url: `${GALLERY}/cut-${i}.png` }])),
+    }));
+    return (await wardrobeView(t.deps, t.runId)).him[KAI]![0]!;
+  };
+  const all = (url: (face: Face) => string) => Object.fromEntries(FACES.map((face) => [face, url(face)]));
+
+  const sprites = await kaiLook(all(sprite));
+  assert.equal(Object.keys(sprites.faces ?? {}).length, FACES.length, "all five faces are there");
+  assert.equal(sprites.facesPainted, undefined, "five Engine sprites are not painted");
+
+  // Their cut-outs are gallery files: the check is read on the faces as they are, before they are swapped in.
+  const cutSprites = await kaiLook(all(sprite), FACES.map(sprite));
+  assert.ok(
+    Object.values(cutSprites.faces ?? {}).every((url) => !isEngineArt(url)),
+    "the faces are shown cut out",
+  );
+  assert.equal(cutSprites.facesPainted, undefined, "cut-out sprites are still not painted");
+
+  const mixed = await kaiLook({ ...all(painted), angry: sprite("angry") });
+  assert.equal(mixed.facesPainted, undefined, "four painted and one sprite are not a painted set");
+  const four = await kaiLook(Object.fromEntries(FACES.filter((face) => face !== "angry").map((f) => [f, painted(f)])));
+  assert.equal(four.facesPainted, undefined, "four painted faces are not a set");
+
+  assert.equal((await kaiLook(all(painted))).facesPainted, true, "five painted faces");
+  assert.equal((await kaiLook(all(painted), FACES.map(painted))).facesPainted, true, "also once they are cut out");
 });
 
 test("Ask before painting: an adopted sprite base keeps only the faces it has, and nothing is painted untapped", async (context) => {
