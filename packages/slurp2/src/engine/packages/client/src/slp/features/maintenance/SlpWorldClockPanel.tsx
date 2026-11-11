@@ -16,6 +16,7 @@ import {
   useRestoreSlpCheckpoint,
   useSetSlpAutoCheckpointKeep,
   useSkipSlpWorldDays,
+  useSlpTimelineError,
   useSlpWorldClock,
 } from "./slp-timeline";
 
@@ -33,7 +34,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
   const remove = useDeleteSlpCheckpoint();
   const setKeep = useSetSlpAutoCheckpointKeep();
   const [job, setJob] = useState<SlurpBackupJob | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useSlpTimelineError();
   const [skipTo, setSkipTo] = useState("");
   const [label, setLabel] = useState("");
   const busy = skip.isPending || create.isPending || restore.isPending || remove.isPending;
