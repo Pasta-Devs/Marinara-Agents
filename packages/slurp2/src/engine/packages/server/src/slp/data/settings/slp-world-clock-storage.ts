@@ -5,6 +5,7 @@ import {
   slpCreatorFirstPostJobs,
   slpCreatorReserveState,
   slpRefreshRuns,
+  slurpAudienceTies,
   slurpCommissions,
   slurpContentCampaignStages,
   slurpContentCampaigns,
@@ -14,6 +15,7 @@ import {
   slurpDemandTrends,
   slurpFollowUps,
   slurpLiveShows,
+  slurpPopulation,
   slurpReplyBubbles,
   slurpThreads,
 } from "../../../db/schema/slurp.js";
@@ -77,8 +79,11 @@ const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> =
   [slurpContentCampaignStages, ["dueAt"]],
   [slurpContinuityFacts, ["expiresAt"]],
   [slurpContinuityEvents, ["expiresAt"]],
-  [slurpDemandTrends, ["expiresAt"]],
+  [slurpDemandTrends, ["firstSeenAt", "lastSeenAt", "expiresAt"]],
   [slurpLiveShows, ["endsAt"]],
+  // Renewal and churn read these against "now": a skip must neither bill nor lapse anyone.
+  [slurpAudienceTies, ["paidThroughAt", "lastSeenAt"]],
+  [slurpPopulation, ["lastActiveAt"]],
 ];
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
