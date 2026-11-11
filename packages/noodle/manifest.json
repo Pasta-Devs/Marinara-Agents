@@ -39,7 +39,7 @@
     }
   },
   "engine": {
-    "min": "2.5.1",
+    "min": "2.5.2",
     "maxExclusive": "4.0.0"
   },
   "kind": [

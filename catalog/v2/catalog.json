@@ -291,7 +291,7 @@
         "version": "1.1.10",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
-          "min": "2.4.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -343,7 +343,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.1.10.zip",
-        "sha256": "ea7e28b8897f34dfe190f1e6333206ffc70e41dc93cb67214a32aeb9e7000289",
+        "sha256": "9bc4e5a67aba2c57895d4f5413c75275d5b1d5b9e080c7434f4c8b7f6be1a94d",
         "bytes": 563809
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
@@ -2959,7 +2959,7 @@
           }
         },
         "engine": {
-          "min": "2.5.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -3041,7 +3041,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.15.zip",
-        "sha256": "1518ca70b7a34e00208f01bf2b17d52cad0749056d0285a549f668767302f4ec",
+        "sha256": "401301494552039b86e729c14d37559adc0aba58ad69bdb1257fb4036d28de55",
         "bytes": 1298113
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
@@ -4143,7 +4143,7 @@
           }
         },
         "engine": {
-          "min": "2.4.6",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -4244,7 +4244,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.20.zip",
-        "sha256": "eb94baa1457c435cb193465a39e7d83d49eacac7698c8dc989605ca4bc058f1c",
+        "sha256": "bccd7f8587fe2c073c0c7575ff80cc9553891ef69d2dee82f239c38146aa27cd",
         "bytes": 6118878
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"

@@ -13,7 +13,7 @@
   "version": "1.1.10",
   "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
   "engine": {
-    "min": "2.4.1",
+    "min": "2.5.2",
     "maxExclusive": "4.0.0"
   },
   "kind": [

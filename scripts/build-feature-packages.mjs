@@ -425,7 +425,7 @@ const features = [
   {
     id: "noodle",
     version: "1.5.15",
-    minEngineVersion: "2.5.1",
+    minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
     capabilityApi: HOST_CHARACTERS_CAPABILITY_API,
     builtAgainst: HOST_CHARACTERS_BUILT_AGAINST,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
@@ -505,7 +505,7 @@ const features = [
   {
     id: "slurp2",
     version: "0.4.20",
-    minEngineVersion: "2.4.6",
+    minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
     description:
@@ -736,7 +736,7 @@ const features = [
     id: "conversation-calls",
     name: "Calls",
     version: "1.1.10",
-    minEngineVersion: "2.4.1",
+    minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
     capabilityApi: HOST_CHARACTERS_CAPABILITY_API,
     builtAgainst: HOST_CHARACTERS_BUILT_AGAINST,
     description: "Adds live audio and video calls with Conversation characters.",
