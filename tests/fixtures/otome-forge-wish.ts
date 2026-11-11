@@ -117,9 +117,14 @@ export function wishRoutes(deps: RouteDeps, runKey: string, active?: () => boole
   };
 }
 
-/** The art fixture's world with the Wish routes; `replies` are the model's, in order. */
+/**
+ * The art fixture's world with the Wish routes; `replies` are the model's, in order. The world is created today: its
+ * banner rotation counts from the creation day against the real clock, so the shared `at` (a fixed date) would drift
+ * into rotation 1 fourteen days after it was written.
+ */
 export async function wishWorld(options: Parameters<typeof artWorld>[0]) {
   const t = await artWorld(options);
+  await ageWorld(t, 0);
   return { ...t, call: wishRoutes(t.deps, options.runKey) };
 }
 
