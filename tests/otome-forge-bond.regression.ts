@@ -12,7 +12,16 @@ import {
   bondStoryLevel,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/bond.ts";
 import * as economy from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
-import { otomeSceneCard } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
+  beatMessages,
+  otomeSceneCard,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
+  runDocTarget,
+  stateId,
+  unitId,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { stateAtMoment } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/his-side.ts";
 import {
   normalizeState,
   toRunView,
@@ -21,7 +30,7 @@ import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/serve
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { waitingBondRank } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/bond.ts";
-import { KAI, bible } from "./fixtures/otome-forge-story.ts";
+import { KAI, bible, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const L10 = economy.MAX_LEVEL_POINTS;
 /** A story state with `played` bond stories read to their end. */
@@ -161,4 +170,134 @@ test("past the finale the scene card sends the bond reveals, not the stage secre
   assert.ok(!tested.includes("BOND-TRUTH-12"), "older ones fall off the card's list, as any list there does");
   assert.ok(!tested.includes("BOND-TRUTH-16"), "rank 16 is not known yet");
   assert.ok(!tested.includes("Hidden ("), "nothing is hidden any more: the route revealed his secrets");
+});
+
+// ── Dottore's proofs (#2254): the rank reaches every prompt through its production caller, and his side stops where
+// his moment did ──
+
+/** Kai's bible with all ten bond truths, so a card that reaches rank 15 can show them. */
+const bondTruths = (): Bible["bond"] =>
+  BOND_RANKS.map((entry) => ({ level: entry.level, truth: `BOND-TRUTH-${entry.level}` }));
+
+/** The reply each prompt kind wants, whichever caller asks: the note, a chat reply, a Read Me set, a Read Him set. */
+const anyReply = (list: ReadonlyArray<{ content: string }>) => {
+  const text = list.map((message) => message.content).join("\n");
+  if (text.includes("message of the day in an otome visual novel"))
+    return JSON.stringify({
+      text: "The lamp room was warm.",
+      face: "tender",
+      mood: { word: "calm", reason: "harbour" },
+    });
+  if (text.includes("in your private message thread"))
+    return JSON.stringify({ messages: [{ text: "Awake. Barely." }], suggestions: [] });
+  if (text.includes('"Read Me", a mini-game'))
+    return JSON.stringify({
+      context: "Kai studies you over the sea wall.",
+      guesses: ["likes", "fears", "habits", "dreams"].map((category, i) => ({
+        category,
+        line: `You would rather sit out the storm indoors, would you not? (${i})`,
+        face: "tender",
+        fact: `Ines keeps her own hours, case ${i}.`,
+        reactions: {
+          right: { line: "I knew it.", face: "tender" },
+          close: { line: "Nearly.", face: "" },
+          wrong: { line: "Hm. Noted.", face: "cold" },
+        },
+      })),
+    });
+  if (text.includes('", a mini-game in an otome visual novel. Each round'))
+    return JSON.stringify({
+      rounds: Array.from({ length: 5 }, (_, i) => ({
+        context: `Kai polishes the lamp glass, moment ${i}.`,
+        line: "You are early today.",
+        face: "guarded",
+        readings: ["He is glad you came.", "He wants the room to himself.", "He is counting the bells."],
+        trueIndex: 0,
+        thought: "She came back.",
+        tell: null,
+      })),
+    });
+  throw new Error(`Unexpected prompt: ${text.slice(0, 120)}`);
+};
+
+test("a rank 15 love interest is named at rank 15 by the note, chat, Read Me and Read Him callers", async () => {
+  // Dottore (#2254): a test that passes bondPlayed in itself proves nothing; these go through the functions the routes
+  // call, which read the count from the run state. Reverting one caller's `bondPlayed` makes its line read 11 of 20.
+  const { serveNote } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts");
+  const { sendMessage } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts");
+  const { startReadMe } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-me.ts");
+  const { startReadHim } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts");
+  const t = await storyWorld({
+    runKey: "r-bond15car-aaaaaa",
+    lis: { [KAI]: { stage: 6, points: economy.levelFloor(15) } },
+    replies: Array.from({ length: 24 }, () => anyReply),
+  });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    chapters: { ...state.chapters, ...playedChapters(4) } as never,
+  }));
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) =>
+    unit ? { ...unit, bible: unit.bible ? { ...unit.bible, bond: bondTruths() } : unit.bible } : unit,
+  );
+  await serveNote(t.deps, t.runId, KAI, { debugMode: false });
+  await sendMessage(t.deps, t.runId, KAI, { text: "Are you awake?" }, { debugMode: false });
+  await startReadMe(t.deps, t.runId, KAI, { debugMode: false });
+  await startReadHim(t.deps, t.runId, KAI, { debugMode: false });
+
+  const prompts = t.calls.map((call) => call.messages.map((message) => message.content).join("\n"));
+  assert.equal(prompts.length, 4, "one call per caller: the note, the reply, the two sets");
+  for (const text of prompts) {
+    assert.ok(text.includes("bond rank 15 of 20"), "each caller names the rank he stands at");
+    assert.ok(text.includes("BOND-TRUTH-15"), "each knows rank 15's reveal");
+    assert.ok(!text.includes("BOND-TRUTH-16"), "and none past it");
+  }
+});
+
+test("his side stops at the moment it retells: a bond story played since is not counted", () => {
+  // Dottore (#2254): stateAtMoment rewinds his card but used to keep today's chapters, so a scene of one afternoon was
+  // annotated with the ranks learned weeks later.
+  const state = normalizeState({
+    lis: { [KAI]: { stage: 6, points: economy.levelFloor(15) } },
+    chapters: playedChapters(4) as never,
+  });
+  const moment = {
+    arc: 0,
+    ref: "main-1/0",
+    moment: "truth" as const,
+    stage: 6,
+    trust: 0,
+    tension: 0,
+    open: [],
+    rupture: null,
+    at: "2026-09-01T00:00:00.000Z",
+  };
+  const then = stateAtMoment(state, KAI, moment);
+  for (let level = 11; level <= 14; level += 1)
+    assert.equal(then.chapters[bondStoryKey(KAI, level)], undefined, `rank ${level}'s story is not there yet`);
+  const unit = normalizeUnit({ id: KAI, name: "Kai", source: "archetype", bible: bible({ bond: bondTruths() }) })!;
+  const node = { i: 0, kind: "beat" as const, guide: "At the lamp.", cast: [KAI] };
+  const card = (at: typeof state) =>
+    beatMessages({
+      world: normalizeWorld({ language: "English" }),
+      player: normalizePlayer({ name: "Ines" }),
+      units: [unit],
+      state: at,
+      chapter: { key: "story-bond-1", kind: "story", li: KAI, lead: KAI, title: "After", nodes: [node] },
+      node,
+      storySoFar: [],
+      memory: "",
+    })
+      .map((message) => message.content)
+      .join("\n");
+  const held = card(then);
+  assert.ok(held.includes("bond rank 11 of 20"), "the rank he held at the moment");
+  assert.ok(!held.includes("BOND-TRUTH-12"), "nothing learned after it");
+  // The same scene read now: every rank played is his again.
+  const now = card(state);
+  assert.ok(now.includes("bond rank 15 of 20"));
+  assert.ok(!now.includes("BOND-TRUTH-16"), "still not past the rank he stands at");
 });

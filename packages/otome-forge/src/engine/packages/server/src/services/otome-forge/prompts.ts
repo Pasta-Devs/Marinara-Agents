@@ -1356,15 +1356,20 @@ function seenBy(liState: LiState, li: LiId, knows: readonly LiId[]): LiState {
 /**
  * What a love interest's own reader (M3's note P16 and chat reply P17) may know of the state, as a planner for them
  * sees it: their state without another love interest's own chapter (seenBy), and their latest relationship and
- * off-screen lines among the rows they may see (knownRows), "" for none.
+ * off-screen lines among the rows they may see (knownRows), "" for none. `bondPlayed` is the bond stories he has
+ * played (0.23.0), so his card names the rank he stands at.
  */
-export function ownView(state: RunState, li: LiId): { liState: LiState; relationship: string; offscreen: string } {
+export function ownView(
+  state: RunState,
+  li: LiId,
+): { liState: LiState; relationship: string; offscreen: string; bondPlayed: number } {
   const latest = (rows: RunState["ledgers"]["offscreen"]) =>
     [...knownRows(rows, [li])].reverse().find((row) => row.li === li)?.line ?? "";
   return {
     liState: seenBy(liStateOf(state, li), li, [li]),
     relationship: latest(state.ledgers.relationship),
     offscreen: latest(state.ledgers.offscreen),
+    bondPlayed: bondStoriesPlayed(state.chapters, li),
   };
 }
 
@@ -3401,7 +3406,7 @@ export function chatReplyMessages({
   const user = [
     "WHO YOU ARE",
     otomeSceneCard(unit, { ...liState, bondPlayed }),
-    betweenYou(unit, liState),
+    betweenYou(unit, { ...liState, bondPlayed }),
     upsetLine(unit, liState),
     // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
     ...(known ? [known] : []),
@@ -3579,7 +3584,7 @@ export function groupChatMessages({
     "WHO IS IN IT",
     members
       .map(({ unit, liState, bondPlayed }) =>
-        [otomeSceneCard(unit, { ...liState, bondPlayed }), betweenYou(unit, liState)].join("\n"),
+        [otomeSceneCard(unit, { ...liState, bondPlayed }), betweenYou(unit, { ...liState, bondPlayed })].join("\n"),
       )
       .join("\n\n"),
     "",
@@ -3873,7 +3878,7 @@ export function noteMessages({
     "",
     "LOVE INTEREST",
     otomeSceneCard(unit, { ...liState, bondPlayed }),
-    betweenYou(unit, liState),
+    betweenYou(unit, { ...liState, bondPlayed }),
     ...(known ? [known] : []),
     "",
     "TODAY",
@@ -4078,7 +4083,7 @@ export function readMeMessages({
     "",
     "LOVE INTEREST",
     otomeSceneCard(unit, { ...liState, bondPlayed }),
-    betweenYou(unit, liState),
+    betweenYou(unit, { ...liState, bondPlayed }),
     lately.length ? `\nLately: ${lately.join(" ")}` : "",
     recalled.trim()
       ? `\nWhat ${name} may know of the story (${name} remembers only what ${name} was there for or was told):\n${recalled.trim()}`
@@ -4244,6 +4249,8 @@ export interface TarotPromptInput {
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** Their state as their own reader may know it (ownView), their own notebook with it. */
   liState: LiState;
+  /** 0.23.0: the bond stories they have played, so their card names the rank they stand at (absent: the first). */
+  bondPlayed?: number;
   /** Their newest relationship and off-screen ledger lines among those they may know (ownView). */
   lately: string[];
   /** THE ROAD AHEAD (S/minigames/tarot.ts roadAhead); [] for none. */
@@ -4266,7 +4273,7 @@ export const TAROT_POSITION_NAMES: Record<TarotPosition, string> = {
 
 /** The Tarot night prompt: one reading, as `messages` (system, then the user turn with THE SPREAD last). */
 export function tarotMessages(input: TarotPromptInput): OtomeMessage[] {
-  const { world, player, unit, liState, lately, road, memory, recalls = "", mode, cards } = input;
+  const { world, player, unit, liState, bondPlayed, lately, road, memory, recalls = "", mode, cards } = input;
   const name = unit.name;
   const face = `"${FACES.join("|")}|"`;
   const line = `{"line": "...", "face": ${face}}`;
@@ -4326,12 +4333,12 @@ export function tarotMessages(input: TarotPromptInput): OtomeMessage[] {
     protagonistBlock(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
     known,
     lately.length ? `Lately: ${lately.join(" ")}` : "",
     "",
     "BETWEEN YOU",
-    betweenYou(unit, liState),
+    betweenYou(unit, { ...liState, bondPlayed }),
     "",
     road.length ? `THE ROAD AHEAD (for the Future card only; neither of you knows it)\n${road.join("\n")}` : "",
     "",
@@ -4423,7 +4430,7 @@ export function readHimMessages({
     "",
     "LOVE INTEREST",
     otomeSceneCard(unit, { ...liState, bondPlayed }),
-    betweenYou(unit, liState),
+    betweenYou(unit, { ...liState, bondPlayed }),
     ...(known ? [known] : []),
     "",
     "MASK TELLS (by index)",
@@ -5398,7 +5405,7 @@ function lookUser({ player, unit, state, look }: LookLineInput, task: string, ki
   return [
     "LOVE INTEREST",
     // As their own reader sees it (M3's ownView, as P16 and P17): nothing of another love interest's own chapters.
-    sceneCardBlock(unit, ownView(state, unit.id).liState),
+    sceneCardBlock(unit, (({ liState, bondPlayed }) => ({ ...liState, bondPlayed }))(ownView(state, unit.id))),
     "",
     "PROTAGONIST",
     // THE LOOK below is the one this line is about (P19: the one worn now), so the block names no other.

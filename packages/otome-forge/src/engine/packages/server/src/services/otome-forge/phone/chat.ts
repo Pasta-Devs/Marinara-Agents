@@ -380,7 +380,7 @@ async function writeReply(
     listed: memories.map((session) => sessionSourceId(li, session)),
     debugMode,
   });
-  const { liState, offscreen } = ownView(run.state, li);
+  const { liState, offscreen, bondPlayed } = ownView(run.state, li);
   const stickers = replyStickers(runId, run, li);
   const { value } = await generateJson(deps, {
     runId,
@@ -391,6 +391,7 @@ async function writeReply(
       player: run.player,
       unit,
       liState,
+      bondPlayed,
       tail,
       memories,
       story: story.text,

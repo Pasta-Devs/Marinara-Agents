@@ -222,7 +222,7 @@ export async function serveNote(
     const unit = run.units.find((entry) => entry.id === li);
     if (!unit || !run.state.lis[li]) throw new OtomeForgeError(404, "No such love interest.", "not-found");
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
-    const { liState, relationship, offscreen } = ownView(run.state, li);
+    const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
     const [recalled, recent] = await Promise.all([
       recalledLine(deps.memory, runId, unit, [relationship, offscreen].filter(Boolean), debugMode),
       recentNotes(deps.store, runId, li, dayKey),
@@ -237,6 +237,7 @@ export async function serveNote(
         player: run.player,
         unit,
         liState,
+        bondPlayed,
         today: noteDay(unit, run.world, now),
         recalled,
         offscreen,
