@@ -29,7 +29,7 @@ import { SLURP_SUPPORT_NAME } from "../../modules/messages/slp-dm-roles.js";
 import { isSlurpSupportThread } from "../../modules/messages/slp-support.js";
 import { slpArcsLive, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type SlurpThread = NonNullable<Awaited<ReturnType<ReturnType<typeof createSlurpMessagesStorage>["getThreadById"]>>>;
 export type SlurpThreadDetails = Awaited<
   ReturnType<ReturnType<typeof createSlurpMessagesStorage>["getDetailsOverrides"]>

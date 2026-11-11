@@ -25,7 +25,7 @@ import type {
 import { mapAccount } from "../../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../../host/slp-storage-context.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export function createReserveStorage1(context: SlurpStorageContext) {
   const {
     db,

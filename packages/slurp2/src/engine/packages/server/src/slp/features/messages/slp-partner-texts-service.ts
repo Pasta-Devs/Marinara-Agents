@@ -17,7 +17,7 @@ import {
 import { resolveSlurpExplicitLevel } from "../../data/settings/slp-post-guidance-storage.js";
 import { SLP_EXPLICIT_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const HOUR = 3_600_000;
 
 export async function textSlurpPartners(db: DB, at = slurpWorldNow()): Promise<void> {

@@ -8,7 +8,7 @@ import {
   applySlurpWorldSkip,
   setSlurpWorldOffset,
 } from "../../data/settings/slp-world-clock-storage.js";
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import type { SlpBackupJobs } from "./slp-backup-jobs.js";

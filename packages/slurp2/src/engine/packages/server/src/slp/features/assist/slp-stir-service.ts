@@ -57,7 +57,7 @@ import type {
   SlpStirView,
 } from "../../../../../shared/src/slp/slp-stir.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Account = {
   id: string;
   displayName: string;

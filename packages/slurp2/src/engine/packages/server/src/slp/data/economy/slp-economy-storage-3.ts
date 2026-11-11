@@ -16,7 +16,7 @@ import { NOODLER_FAN_IDENTITY_PREFIX } from "../../modules/audience/slp-fan-iden
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createEconomyStorage3(context: SlurpStorageContext) {
   const {
     db,

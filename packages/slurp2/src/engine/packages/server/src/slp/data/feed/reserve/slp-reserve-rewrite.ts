@@ -12,7 +12,7 @@ import { slurpPlanRewritable, slurpPreparedRewriteCost } from "../../../modules/
 import { findSlurpOpportunityBySlot } from "../slp-opportunity-storage.js";
 import { listOpenSlurpCampaignStages } from "../slp-campaign-storage.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 async function preparedFor(db: DB, creatorAccountId: string) {
   return (
     await db

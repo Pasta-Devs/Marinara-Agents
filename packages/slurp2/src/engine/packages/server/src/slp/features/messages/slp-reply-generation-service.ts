@@ -55,7 +55,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /**

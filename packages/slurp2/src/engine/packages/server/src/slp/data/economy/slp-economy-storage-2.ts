@@ -30,7 +30,7 @@ import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { CREATOR_PRICES_KEY } from "../host/slp-storage-constants.js";
 import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createEconomyStorage2(context: SlurpStorageContext) {
   const {
     db,

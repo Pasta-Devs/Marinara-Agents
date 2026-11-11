@@ -7,7 +7,7 @@
 import { readSlurpRapportWeights, type SlurpRapport, type SlurpRapportWeights } from "./slp-rapport.js";
 import { slurpRotationHash } from "../feed/slp-post-variation.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Storage key for the per-creator messaging settings blob. Mirrors the creator-prices key. */
 export const SLURP_CREATOR_MESSAGING_KEY = "slurp2.creator.messaging";
 

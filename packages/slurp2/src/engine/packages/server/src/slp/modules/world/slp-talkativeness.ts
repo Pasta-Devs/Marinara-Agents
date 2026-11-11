@@ -1,4 +1,4 @@
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Talkativeness: use generated schedule personality traits to shape reply behavior.
  *

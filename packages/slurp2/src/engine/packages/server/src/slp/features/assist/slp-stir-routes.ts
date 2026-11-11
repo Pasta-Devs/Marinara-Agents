@@ -25,7 +25,7 @@ import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js"
 import { slpSupportPlayOnce } from "../../modules/assist/slp-stir-play.js";
 import { dismissSlurpStirSuggestion } from "../../data/assist/slp-stir-plays-storage.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Stir (W) over HTTP: preview one action or a list of steps, turn words into a plan, do a play,
  * undo it, and the Stir tab's view. Every play runs through the action layer's one runner.

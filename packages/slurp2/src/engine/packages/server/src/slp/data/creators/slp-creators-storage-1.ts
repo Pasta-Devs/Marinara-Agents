@@ -61,7 +61,7 @@ import { mapViewer, sourceAccountFromEntity } from "../host/slp-storage-mappers.
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { countSlurpActiveCreators, slurpSizedPostsPerDay } from "../../base/model/slp-model-worker.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createCreatorsStorage1(context: SlurpStorageContext) {
   const {
     db,

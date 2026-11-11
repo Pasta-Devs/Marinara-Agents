@@ -1,6 +1,6 @@
 import { SLURP_DEFAULT_REPLY_DELAYS, slurpDelayInRange, type SlurpReplyDelays } from "../messages/slp-messaging.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type CreatorSource = { kind: string; entityId: string; displayName: string };
 
 /** `status` is the Engine's presence for the block; a routine read from the card has none. */

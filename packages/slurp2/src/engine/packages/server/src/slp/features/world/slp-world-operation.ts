@@ -79,7 +79,7 @@ import {
   claimWorldTick,
 } from "./slp-world-tick-state.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A stable number in [0, 1) for one string. Same shape as the other Slurp rule modules use. */
 function slurpDeterministicUnit(value: string): number {
   let out = 0x811c9dc5;

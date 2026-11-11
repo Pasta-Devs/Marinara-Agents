@@ -5,7 +5,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { replyToSlurpMessage } from "../messages/slp-messages-contract.js";
 import { slurpIsCouplePage } from "../projects/slp-projects-contract.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 const PAYMENT_REACTION_QUIET_MS = 2 * 60 * 60_000;
 /**
  * How often a payment earns a reply at all. A tip or a commission is a gesture aimed at her; an

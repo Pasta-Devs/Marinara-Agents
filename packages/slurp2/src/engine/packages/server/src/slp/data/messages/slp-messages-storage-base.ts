@@ -77,7 +77,7 @@ import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 import { countSlurpUnreadThreads } from "../../modules/messages/slp-unread-count.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createMessagesStorageBase(context: SlurpMessagesContext) {
   const {
     db,

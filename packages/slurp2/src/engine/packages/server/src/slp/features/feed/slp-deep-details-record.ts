@@ -6,7 +6,7 @@ import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 import type { SlurpWardrobeSelection } from "../../modules/feed/slp-wardrobe-selection.js";
 import type { SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const numberOrNull = (value: unknown) => (typeof value === "number" ? value : null);
 
 /** The generator's state at the moment a post was written, as the Deep details record. */

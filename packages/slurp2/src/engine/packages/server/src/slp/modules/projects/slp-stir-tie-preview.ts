@@ -30,7 +30,7 @@ import { slurpAddToCouple, slurpCoupleMembers, slurpNameList } from "./slp-coupl
 import type { SlpActionPreview, SlpStirNote } from "../../../../../shared/src/slp/slp-stir.js";
 import { slurpSyncExBonds, slurpEndBond, slurpSetBond, type SlurpBond } from "./slp-creator-bonds.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const bondPlural = (kind: string) => (kind === "ex" ? "exes" : kind === "family" ? "family" : `${kind}s`);
 export const SLURP_TIE_LEVERS = [
   "suggest-collab",

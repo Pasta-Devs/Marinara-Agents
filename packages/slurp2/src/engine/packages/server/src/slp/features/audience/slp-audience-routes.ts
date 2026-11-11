@@ -36,7 +36,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpFanVoiceDraftSchema } from "../../modules/audience/slp-fan-voice-draft.js";
 import { draftSlpFanTypeVoice } from "./slp-fan-voice-draft-service.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
 const SLP_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
 export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps) {

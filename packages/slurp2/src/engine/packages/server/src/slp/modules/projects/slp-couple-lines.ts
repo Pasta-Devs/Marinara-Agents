@@ -7,7 +7,7 @@ import { slurpForcedCoupleLine } from "./slp-couple-words.js";
 import { slurpCouplePartners, slurpNameList } from "./slp-couple-group.js";
 import { slpGenderWords } from "../../../../../shared/src/slp/slp-gender.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** An ex stays on a Creator's mind (and in their posts and chats) this long after the breakup. */
 export const SLURP_EX_DAYS = 30;
 

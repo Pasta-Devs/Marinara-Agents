@@ -41,7 +41,7 @@ import { composeSlpCreatorPage, protectSlpCreatorPage } from "./slp-creator-page
 import { suggestSlpPageStyle } from "./slp-page-style-service.js";
 import { SlpStrategyConflictError } from "../../modules/creators/slp-creator-strategy.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
   location: z.string().trim().max(120).optional(),

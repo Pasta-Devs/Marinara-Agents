@@ -32,7 +32,7 @@ import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export class SlurpArcGenerationFailure extends Error {
   constructor(
     message: string,

@@ -13,7 +13,7 @@ import {
 import { createSlurpStorage } from "../slp-storage.js";
 import { slurpPausedNow } from "./slp-pause-storage.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const KEY = "slurp2.extrasOffer";
 
 // ponytail: an in-process queue like the trends; two Engine processes writing at once could lose one change.

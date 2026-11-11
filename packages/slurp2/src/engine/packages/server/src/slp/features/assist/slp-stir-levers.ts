@@ -53,7 +53,7 @@ import { slurpTrendClean } from "../../modules/discovery/slp-trends.js";
 import { undoSlpDeskLever, type SlpDeskUndo } from "./slp-desk-levers.js";
 import { readSlurpStirDramas, undoSlurpDramaLever, type SlurpDramaUndo } from "../world/slp-world-contract.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** What one Undo takes back. Kept in the plays ledger; never sent to the app. */
 type SteeringPatch = Partial<Omit<SlpCreatorSteering, "nudges" | "support">>;
 

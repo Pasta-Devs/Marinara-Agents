@@ -21,7 +21,7 @@ import { withSlurpLiveShow } from "./slp-live-lock.js";
 import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 import { notifySlurpLiveStart, postSlurpLiveSummary } from "./slp-live-news.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const MINUTE = 60_000;
 /** ponytail: a fixed cap keeps the code simulation cheap; make it a setting if players want busier evenings. */
 const MAX_OPEN_SHOWS = 3;

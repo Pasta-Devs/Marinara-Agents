@@ -13,7 +13,7 @@ import { slurpImageNegativePrompt, slurpLevelPhoto } from "../../modules/feed/sl
 import { generateCreatorPostImage } from "../media/slp-media-contract.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Takes a live picture when one is due (LIVE-V3-PLAN.md "Pictures"). Marks the show as shooting at once, then
  * draws in the background; the stage keeps the last picture until this one lands. Only called while

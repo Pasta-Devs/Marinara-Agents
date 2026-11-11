@@ -6,7 +6,7 @@ import type { DB } from "../../../db/connection.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import type { SlpStirPlay } from "../../../../../shared/src/slp/slp-stir.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLURP_STIR_PLAYS_KEY = "slurp2.stir-plays";
 const KEEP = 40;
 

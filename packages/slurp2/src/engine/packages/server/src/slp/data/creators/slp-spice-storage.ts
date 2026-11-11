@@ -31,7 +31,7 @@ import { readSlurpCreatorSteering, slurpSteeringKey } from "./slp-steering-stora
 import { createSlurpStorage } from "../slp-storage.js";
 import { SLURP_GUIDANCE_PRESETS, SLURP_HOUSE_STYLE_GUIDANCE } from "../../modules/settings/slp-settings-guidance.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 // One blob behind concurrent writes (a like and a tip landing together) loses the earlier one.
 // ponytail: in-process queue like the post guidance blob; needs a row lock if Engine ever runs
 // more than one process.

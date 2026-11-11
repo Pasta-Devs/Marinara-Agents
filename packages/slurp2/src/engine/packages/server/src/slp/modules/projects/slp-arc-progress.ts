@@ -21,7 +21,7 @@ import {
 import { slpStorylineEdges, slpStorylineNext } from "../../../../../shared/src/slp/slp-storyline.js";
 import { slurpProjectSync, slurpProjectView, slurpStageInsert, slurpStoryLine } from "./slp-project-storyline.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 const PACE_MULTIPLIER: Record<SlurpArcPace, number> = { slow: 1.5, normal: 1, fast: 0.5 };
 
 /**

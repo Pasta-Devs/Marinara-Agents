@@ -32,7 +32,7 @@ import {
   type PublicIdentity,
 } from "../feed/slp-feed-contract.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlpCreatorPageComposeResult =
   { ok: true; page: SlpCreatorPage } | { ok: false; status: 404 | 409 | 429 | 502; error: string };
 

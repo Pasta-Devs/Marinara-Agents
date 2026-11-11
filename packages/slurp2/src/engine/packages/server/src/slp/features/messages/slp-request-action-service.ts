@@ -9,7 +9,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 import { slurpRequestActionEffect, type SlurpRequestAction } from "../../modules/messages/slp-request-actions.js";
 import { normalizeSlurpDemandTopic } from "../../modules/feed/slp-demand.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpThreadRequest = {
   id: string;
   text: string;

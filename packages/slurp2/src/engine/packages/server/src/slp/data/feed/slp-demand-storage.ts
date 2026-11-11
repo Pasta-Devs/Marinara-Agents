@@ -4,7 +4,7 @@ import { slurpDemandTrends } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import { normalizeSlurpDemandTopic, SLURP_DEMAND_MAX_AGE_MS } from "../../modules/feed/slp-demand.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpDemandTrend = { topic: string; count: number; lastSeenAt: string };
 
 /** Count one more ask for a topic. Returns the new count, or 0 for an empty topic. */

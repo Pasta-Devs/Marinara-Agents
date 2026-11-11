@@ -16,7 +16,7 @@ import { slpDeskAdjust } from "../../../../../../shared/src/slp/slp-support-desk
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../../shared/src/slp/slp-support.js";
 import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export const SLP_DESK_OFF = "The Support desk is switched off in Backstage.";
 
 const personaBody = z.object({ personaId: z.string().trim().min(1), creatorAccountId: z.string().trim().min(1) });

@@ -14,7 +14,7 @@ import { advanceSlurpLive } from "../features/live/slp-live-contract.js";
 import { advanceSlurpTrends } from "../features/discovery/slp-discovery-contract.js";
 import { slurpPausedNow } from "../data/settings/slp-pause-storage.js";
 
-import { slurpWorldNow } from "../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../shared/src/slp/slp-world-clock.js";
 let modelDrains: Promise<void> | null = null;
 
 /** World work that runs when the player opens the notification stream. Each step fails soft. */

@@ -11,7 +11,7 @@ import {
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slurpCollabPostIdsForCreator } from "../projects/slp-projects-contract.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const slpCreatorViewerFeedQuerySchema = slpCreatorViewerPersonaSchema
   .extend({
     tab: z.enum(["following", "all"]).default("all"),

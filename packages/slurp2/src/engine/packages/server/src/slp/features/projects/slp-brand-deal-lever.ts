@@ -19,7 +19,7 @@ import { loadSlurpDealAds, loadSlurpDealSpice } from "./slp-brand-deal-source.js
 import { loadSlurpTieCreators } from "./slp-creator-ties-service.js";
 import { slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpBrandDealLeverInput = { accountId: string; brandId?: string; productId?: string; happen?: boolean };
 
 /** What the lever shows before "Do it": who, which brand and product, the fee, fit notes, or why not. */

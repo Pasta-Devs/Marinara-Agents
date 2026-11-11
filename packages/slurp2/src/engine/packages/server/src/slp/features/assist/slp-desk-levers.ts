@@ -35,7 +35,7 @@ import type { SlpActionParsed } from "../../../../../shared/src/slp/slp-actions.
 import type { SlpActionPreview } from "../../../../../shared/src/slp/slp-stir.js";
 import type { SlpAssistOutcome } from "./slp-assist-service.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLP_DESK_LEVERS = [
   "grant-perk",
   "set-challenge",

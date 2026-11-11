@@ -29,7 +29,7 @@ import { slurpSextingPhase } from "../../modules/messages/slp-sexting.js";
 import { slurpRapportDoorTier } from "../../modules/messages/slp-rapport.js";
 import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const INITIAL_DELAY_MS = 60_000; // Start after 1 minute
 const POLL_MS = 120_000; // Check every 2 minutes
 

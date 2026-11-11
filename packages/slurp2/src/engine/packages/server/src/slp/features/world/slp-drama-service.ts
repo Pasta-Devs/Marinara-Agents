@@ -51,7 +51,7 @@ import { mutateSlurpCreatorTies, readSlurpCreatorTiesDocument } from "../../data
 import { slurpApplyDramaTie } from "../../modules/projects/slp-drama-ties.js";
 import type { SlurpTieCreator } from "../../modules/projects/slp-creator-ties.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The world is loaded at most this often; due beats go out on every tick. */
 const ADVANCE_EVERY_MS = 20 * 60_000;
 /** A comment goes on a post from the last few days, or waits for one. */

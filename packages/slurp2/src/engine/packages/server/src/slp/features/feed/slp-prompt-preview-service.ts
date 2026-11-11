@@ -23,7 +23,7 @@ import { slurpContentAxesInstruction, slurpPostAxes } from "../../modules/feed/s
 import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
 import type { SlurpPromptId } from "../../base/prompting/slp-prompt-blocks.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpPromptBlockPreview = {
   id: string;
   /** Empty when this block contributes nothing for the chosen Creator, which is itself worth seeing. */

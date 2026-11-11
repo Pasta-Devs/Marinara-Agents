@@ -36,7 +36,7 @@ import {
   slurpTrendStage,
 } from "../discovery/slp-discovery-contract.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Account = {
   id: string;
   displayName: string;

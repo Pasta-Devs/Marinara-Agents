@@ -6,7 +6,7 @@
 import type { DB } from "../../../db/connection.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const KEY = "slurp2.fan-notes";
 const KEEP = 300;
 

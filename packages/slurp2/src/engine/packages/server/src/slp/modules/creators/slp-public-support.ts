@@ -8,7 +8,7 @@ import { basename } from "path";
 import { parseSlpAvatarCrop } from "../records/slp-storage-model.js";
 import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function parseRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {

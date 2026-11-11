@@ -5,7 +5,7 @@ import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js"
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { loadSlurpStoryState } from "./slp-story-state-service.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The Life panel (docs/STORYLINES.md, "State"): a Creator's conditions and what reaches the prompts. */
 export async function slpStoryStateRoutes(app: FastifyInstance, { noodle }: SlpRouteDeps) {
   app.get("/story/state/:accountId", async (req, reply) => {

@@ -34,7 +34,7 @@ import { resolveSlurpExplicitLevel } from "../../data/settings/slp-post-guidance
 import { slpSpiceFromExplicit } from "../../../../../shared/src/slp/slp-spice.js";
 import { slurpPlayerCoupleView, type SlurpPlayerCoupleView } from "../../modules/projects/slp-player-couple.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A storyline about two Creators getting together: a live crossover whose words are romance. */
 const ROMANCE =
   /\b(romance|romantic|crush\w*|dat(e|es|ing)|falling for|love story|first kiss|in love|flirt\w*|verliebt)\b/iu;

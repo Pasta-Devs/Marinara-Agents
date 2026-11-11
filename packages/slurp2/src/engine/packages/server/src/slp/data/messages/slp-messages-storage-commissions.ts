@@ -63,7 +63,7 @@ import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import { slurpCommissionWasCharged } from "./slp-messages-storage-refunds.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const briefCreations = new Map<string, Promise<unknown>>();
 
 export function createMessagesStorageCommissions(context: SlurpMessagesContext) {

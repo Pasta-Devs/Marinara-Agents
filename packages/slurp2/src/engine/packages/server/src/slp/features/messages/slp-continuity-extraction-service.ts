@@ -39,7 +39,7 @@ import {
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const CHECKPOINT_KEY = "slurp2.continuity-checkpoints";
 /** Threads one drain reads. The rest wait for the next open; nothing here is urgent. */
 const SLURP_EXTRACTION_IDLE_MS = 30 * 60_000;

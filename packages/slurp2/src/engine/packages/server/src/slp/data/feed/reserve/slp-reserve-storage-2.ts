@@ -29,7 +29,7 @@ import { linkSlurpPurposePost } from "../slp-purpose-storage.js";
 import { findSlurpOpportunityBySlot, recordSlurpPromiseKept } from "../slp-opportunity-storage.js";
 import { slurpTrendQuoteOf } from "../../../modules/discovery/slp-trends.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 // One publish pass at a time: the startup reconcile and the first poll could overlap, and two
 // passes both read a row as "prepared" before either marks it published (#35).
 let publishing: Promise<number> | null = null;

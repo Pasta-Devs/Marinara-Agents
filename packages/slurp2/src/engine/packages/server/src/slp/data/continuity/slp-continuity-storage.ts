@@ -37,7 +37,7 @@ import {
 } from "../../modules/continuity/slp-continuity-rules.js";
 import { slurpExtractionSourceHash } from "../../modules/continuity/slp-continuity-extraction.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 function parseJson<T>(value: unknown, fallback: T): T {
   try {
     return typeof value === "string" ? (JSON.parse(value) as T) : fallback;

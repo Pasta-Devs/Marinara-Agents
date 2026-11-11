@@ -25,7 +25,7 @@ import {
 } from "../../../../../../shared/src/slp/slp-support-desk.js";
 import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export async function applySlurpDeskTalk(
   db: DB,
   input: {

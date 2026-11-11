@@ -11,7 +11,7 @@ import {
 import type { SlurpSettings } from "../settings/slp-settings.js";
 import type { SlpPromptImageCandidate } from "../../base/media/slp-vision.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLP_PAST_MEMORY_MIN_AGE_MS = 48 * 60 * 60 * 1000;
 /** Behavior when a Noodle setting's `enableEnhancedTimelineWriting` is off — reproduces the exact pre-toggle defaults. */
 export const SLP_LEGACY_PAST_MEMORY_MAX_ITEMS = 3;

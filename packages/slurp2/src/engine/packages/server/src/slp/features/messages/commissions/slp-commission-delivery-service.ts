@@ -16,7 +16,7 @@ import { enqueueSlurpPendingText } from "../../world/slp-world-contract.js";
 import { slurpMessageMediaUrl } from "../../../base/media/slp-media.js";
 import { slurpChatLanguage, slurpCommissionDeliveryNote } from "../../../modules/world/slp-world-copy.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpCommissionDeliveryOutcome =
   | { status: "delivered"; commission: SlurpCommission }
   /** The delivery message could not be written. `deliverCommission` refunded the fan. */

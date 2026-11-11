@@ -39,7 +39,7 @@ import {
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Ads read as feed content, so the artwork is product photography rather than a poster. */
 function adImagePrompt(ad: GarnishAd): string {
   return [

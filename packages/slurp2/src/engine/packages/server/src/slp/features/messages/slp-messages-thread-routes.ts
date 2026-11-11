@@ -32,7 +32,7 @@ import { readSlurpSupportDesk } from "../../data/creators/slp-support-desk-stora
 import { reconcileSlpThreadScene } from "./scenes/slp-roleplay-scene-origin.js";
 import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const messagePageSchema = personaQuerySchema.extend({
   cursorAt: z.string().datetime().optional(),
   cursorId: z.string().trim().min(1).max(200).optional(),

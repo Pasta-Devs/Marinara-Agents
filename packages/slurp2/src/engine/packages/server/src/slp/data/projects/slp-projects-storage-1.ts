@@ -56,7 +56,7 @@ import { addSlurpModifier } from "../../modules/creators/slp-creator-state.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { slpArcsLive, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createProjectsStorage1(context: SlurpStorageContext) {
   const {
     db,

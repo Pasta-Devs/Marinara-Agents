@@ -1,3 +1,4 @@
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { z } from "zod";
 import { slpFilledDefault } from "./slp-schema-defaults.js";
 
@@ -185,7 +186,7 @@ export type SlurpModelBudgetLedger = {
 const hourKey = (at: Date) => at.toISOString().slice(0, 13);
 const dayKey = (at: Date) => at.toISOString().slice(0, 10);
 
-export function readSlurpModelBudgetLedger(raw: string | null | undefined, at = new Date()): SlurpModelBudgetLedger {
+export function readSlurpModelBudgetLedger(raw: string | null | undefined, at = slurpWorldNow()): SlurpModelBudgetLedger {
   let parsed: Partial<SlurpModelBudgetLedger> = {};
   try {
     parsed = raw ? (JSON.parse(raw) as Partial<SlurpModelBudgetLedger>) : {};
@@ -291,7 +292,7 @@ export function slurpModelBudgetRetryAt(
   budget: SlurpModelBudget,
   ledger: SlurpModelBudgetLedger,
   kind: SlurpModelJobKind,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): string | null {
   const policy = budget.jobs[kind];
   if (!policy.enabled || budget.callsPerHour === 0 || budget.callsPerDay === 0 || policy.maxPerDay === 0) return null;

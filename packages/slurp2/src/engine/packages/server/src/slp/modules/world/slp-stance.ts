@@ -28,7 +28,7 @@ import type { SlurpMoodTone } from "./slp-mood.js";
 import type { SlurpRapportTier } from "../messages/slp-rapport.js";
 import { describeSlurpMood } from "./slp-mood.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * How long a creator stays away once they have had enough.
  *

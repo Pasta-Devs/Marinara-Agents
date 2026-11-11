@@ -15,7 +15,7 @@ import {
   type SlurpDayVibe,
 } from "../../modules/world/slp-day-vibe.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Where the cached vibe lives. One entry per creator per day, like `slurp-studio-snapshot.ts`. */
 const key = (creatorAccountId: string) => `slurp2.creator.${creatorAccountId}.dayvibe`;
 

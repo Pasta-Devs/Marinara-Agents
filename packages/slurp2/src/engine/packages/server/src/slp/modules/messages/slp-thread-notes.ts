@@ -1,4 +1,4 @@
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * What one creator has learned about one fan, as two short lists.
  *

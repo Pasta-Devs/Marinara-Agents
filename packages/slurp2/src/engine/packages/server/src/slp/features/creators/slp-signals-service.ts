@@ -22,7 +22,7 @@ import {
 } from "../../modules/continuity/slp-signals.js";
 import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const SIGNAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const SIGNAL_LIMIT = 100;
 

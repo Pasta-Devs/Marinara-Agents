@@ -75,7 +75,7 @@ import { bookSlurpHeldSlot, readSlurpSlotTimes } from "../feed/slp-held-slots-co
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 import { slpBrandDealsPace, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Storage = ReturnType<typeof createSlurpStorage>;
 type Account = Awaited<ReturnType<Storage["listNoodlerAccounts"]>>[number];
 

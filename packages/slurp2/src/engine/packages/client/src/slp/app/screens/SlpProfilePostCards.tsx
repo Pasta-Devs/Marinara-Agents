@@ -20,6 +20,7 @@ import type { StageProfileViewModel } from "./slp-profile-view-model";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
 import { createSlpLightboxImage, SLP_CARD_STACK_CLASS } from "../../modules/post/SlpPostHelpers";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Stories younger than this still wear the ring on the profile's Story row. */
 const STORY_LIVE_MS = 24 * 60 * 60 * 1000;
 
@@ -257,7 +258,7 @@ export function SlpProfilePostCards({ model }: { model: StageProfileViewModel })
               <SlurpMomentShelfTile
                 key={moment.post.id}
                 moment={moment}
-                isNew={Date.now() - Date.parse(moment.post.createdAt) < STORY_LIVE_MS}
+                isNew={slurpWorldNowMs() - Date.parse(moment.post.createdAt) < STORY_LIVE_MS}
                 onOpen={() => setActiveStoryId(moment.post.id)}
               />
             ))}

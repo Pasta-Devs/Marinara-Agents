@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Creator-initiated follow-up messages with promise tracking.
  *

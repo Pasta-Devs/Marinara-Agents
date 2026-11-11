@@ -55,7 +55,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpPendingKind = "commission" | "question" | "opener" | "delivery" | "desk";
 
 /** Rewritten per drain. Small: a long absence must not stall the first read behind a queue. */

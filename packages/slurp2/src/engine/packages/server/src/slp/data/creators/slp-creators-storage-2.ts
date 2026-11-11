@@ -60,7 +60,7 @@ import type { SlurpSettings, SlurpSettingsUpdateInput } from "../../modules/sett
 import { mapAccount } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createCreatorsStorage2(context: SlurpStorageContext) {
   const {
     db,

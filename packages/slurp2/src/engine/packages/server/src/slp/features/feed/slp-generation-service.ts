@@ -99,7 +99,7 @@ import type {
   SlpCreatorPostGenerationInput,
 } from "./slp-generation-contract.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type { GeneratedCreatorPostResult, PreparedCreatorPostResult } from "./slp-generation-contract.js";
 
 const SLP_CREATOR_POST_MAX_TOKENS = 2048;

@@ -69,7 +69,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }

@@ -81,7 +81,7 @@ import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { mapAccount, snapshotForAccount, mapPost, mapInteraction } from "./slp-storage-mappers.js";
 import { slpArcsLive, slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createSlurpStorageContext(db: DB) {
   const settingsStore = createAppSettingsStorage(db);
 

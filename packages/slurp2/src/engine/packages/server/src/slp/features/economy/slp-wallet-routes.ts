@@ -30,7 +30,7 @@ import { slpCreatorPageCursorSchema, SLP_CREATOR_FEED_PAGE_SIZE } from "../../mo
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { markSlurpExtrasReached } from "../../data/settings/slp-extras-offer-storage.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * A subscriber row, widened for the generated audience.
  *

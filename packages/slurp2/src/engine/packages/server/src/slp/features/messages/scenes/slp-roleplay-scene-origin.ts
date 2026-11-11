@@ -29,7 +29,7 @@ import {
 } from "../../../../../../shared/src/slp/slp-roleplay-scene.js";
 import { protectCreatorGeneratedIdentity, resolveNoodlerPublicIdentity } from "../../feed/slp-feed-contract.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 /** The recap line's id: one per scene, so a repeated release finds it instead of writing a second. */
 export const slpSceneRecapMessageId = (sceneChatId: string) => `scene-${sceneChatId}`;
 

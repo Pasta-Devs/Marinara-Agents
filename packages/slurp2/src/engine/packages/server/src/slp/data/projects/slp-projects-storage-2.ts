@@ -34,7 +34,7 @@ import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.j
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { slurpPackGate } from "../../modules/world/events/slp-content-packs.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createProjectsStorage2(context: SlurpStorageContext) {
   const {
     db,

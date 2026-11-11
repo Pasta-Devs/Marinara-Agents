@@ -73,7 +73,7 @@ import type {
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
   const {
     db,

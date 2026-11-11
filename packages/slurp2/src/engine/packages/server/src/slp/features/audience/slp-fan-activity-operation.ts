@@ -63,7 +63,7 @@ import {
 } from "../../base/model/slp-model-worker.js";
 import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
 
 /** People who have acted before and may act again, so a Creator gets recognisable regulars. */

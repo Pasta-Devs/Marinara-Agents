@@ -9,7 +9,7 @@ import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 import { reconcileSlpThreadScene } from "./scenes/slp-roleplay-scene-origin.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const INITIAL_DELAY_MS = 15_000;
 // Delayed reply bubbles are timed in seconds, and a 60 s poll delivered every second bubble a
 // minute later. A tick is cheap reads unless something is due.

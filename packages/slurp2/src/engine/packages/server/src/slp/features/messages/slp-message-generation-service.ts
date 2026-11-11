@@ -111,7 +111,7 @@ import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
 import { slpSceneInviteAllowed } from "../../modules/messages/slp-roleplay-scene-rules.js";
 import { buildSlurpMessageDeepDetailsRecord } from "./slp-message-deep-details-record.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A DM has more room than a comment reply. The reply is split into bubbles, so this is only a
  *  ceiling against a runaway answer; 900 cut ordinary long replies short (#101). */
 export const SLURP_MESSAGE_CONTENT_MAX_LENGTH = 2400;

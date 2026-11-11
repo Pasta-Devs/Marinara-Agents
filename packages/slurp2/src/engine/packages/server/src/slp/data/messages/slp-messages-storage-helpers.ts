@@ -10,7 +10,7 @@ import type { SlurpMessageKind, SlurpThreadState } from "../../modules/messages/
 import { readSlurpSexting } from "../../modules/messages/slp-sexting.js";
 import type { SlurpCommission, SlurpMessage, SlurpThread } from "./slp-messages-storage-types.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const now = () => slurpWorldNow().toISOString();
 export const DAY = 86_400_000;
 

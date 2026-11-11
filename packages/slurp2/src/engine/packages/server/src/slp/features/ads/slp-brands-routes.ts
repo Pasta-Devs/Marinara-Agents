@@ -17,7 +17,7 @@ import { SLURP_GARNISH_PLATFORM } from "./slp-garnish-context.js";
 import { unlinkGarnishAdImage } from "./slp-garnish-image.js";
 import { storeGarnishPicture } from "./slp-garnish-image-service.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const picture = z
   .string()
   .max(16_000_000)

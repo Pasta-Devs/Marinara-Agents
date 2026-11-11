@@ -10,7 +10,7 @@ import type { FastifyInstance } from "fastify";
 import { personaQuerySchema } from "../../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "../slp-messages-context.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 const commissionBriefSchema = z.object({
   personaId: z.string().trim().min(1),
   creatorAccountId: z.string().trim().min(1),

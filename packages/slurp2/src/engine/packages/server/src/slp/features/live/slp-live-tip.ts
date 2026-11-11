@@ -11,7 +11,7 @@ import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpLiveTipResult = "booked" | "ended" | "missing" | "processing" | "broke" | "taken" | "hosting";
 
 /**

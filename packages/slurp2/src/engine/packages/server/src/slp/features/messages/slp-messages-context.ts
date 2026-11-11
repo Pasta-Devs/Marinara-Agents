@@ -6,7 +6,7 @@ import { createCharactersStorage } from "../../../lib/host-characters-storage.js
 import type { FastifyInstance } from "fastify";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Storage handles and access checks shared by every message route. Created once per mount. */
 export function createSlpMessagesContext(
   app: FastifyInstance,

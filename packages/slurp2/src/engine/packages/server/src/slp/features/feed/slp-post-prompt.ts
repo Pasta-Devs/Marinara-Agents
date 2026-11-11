@@ -47,7 +47,7 @@ import {
   slpCreatorIdentityInstruction,
 } from "./slp-public-identity.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type FormattedCreatorGenerationRequest = SlpCreatorGenerationRequest & {
   /** The composer asked for an image on this post, whatever the scheduler's image setting is. */
   generateImage?: boolean;

@@ -1,7 +1,7 @@
 import { slurpPpvPrice } from "../economy/slp-media-offer.js";
 import { SLURP_RAPPORT_CUSTOM_DISCOUNT, slurpRapportOpens, type SlurpRapport } from "./slp-rapport.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Paid sexting sessions (docs/SPICY.md, item 2): the fan buys 20 minutes of her, the heat rises in three
  * phases, she answers fast, and once she offers a PPV picture of what she is doing right now.

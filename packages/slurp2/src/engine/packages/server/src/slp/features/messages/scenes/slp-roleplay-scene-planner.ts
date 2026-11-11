@@ -37,7 +37,7 @@ import { describeSlurpRapport } from "../../../modules/messages/slp-rapport.js";
 import { buildSlpScenePlanMessages, readSlpScenePlan } from "../../../modules/messages/slp-roleplay-scene-prompt.js";
 import { slpSceneTranscript } from "../../../modules/messages/slp-roleplay-scene-rules.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /** A refusal the route turns into a status code; anything else is a 500. */

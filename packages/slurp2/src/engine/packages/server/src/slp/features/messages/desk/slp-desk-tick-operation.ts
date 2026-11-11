@@ -38,7 +38,7 @@ import {
   type SlpSupportDesk,
 } from "../../../../../../shared/src/slp/slp-support-desk.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 const DAY_MS = 86_400_000;
 const MILESTONES = [100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000];
 

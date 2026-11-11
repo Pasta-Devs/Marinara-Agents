@@ -36,7 +36,7 @@ import {
 import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 import type { SlurpTieCreator } from "../../modules/projects/slp-creator-ties.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The world tick runs often; the posts are read at most this often. */
 const SCAN_EVERY_MS = 30 * 60_000;
 let lastScanAt = 0;

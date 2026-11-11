@@ -16,7 +16,7 @@ import { gameStateSnapshots } from "../../../db/schema/game-state.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpLatelyLine } from "../../modules/creators/slp-creator-flavour.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A tracker row older than this is not "lately" any more. */
 const FRESH_DAYS = 30;
 const LINE_MAX = 160;

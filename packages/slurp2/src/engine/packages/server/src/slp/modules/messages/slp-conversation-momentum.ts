@@ -1,4 +1,4 @@
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Conversation momentum: tracks whether a thread is in active flow or has gone cold.
  *

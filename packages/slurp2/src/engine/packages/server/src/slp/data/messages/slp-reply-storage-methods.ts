@@ -7,7 +7,7 @@ import { mapThread, now } from "./slp-messages-storage-helpers.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import type { SlurpThread } from "./slp-messages-storage-types.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createSlurpReplyMethods(db: DB) {
   /**
    * The fan's newest message in a thread: the one a reply owes an answer to. A Support desk notice or

@@ -34,7 +34,7 @@ import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "../feed/slp-feed-contract
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type GarnishTone = "corporate" | "scammy" | "local" | "luxury" | "unhinged";
 export type GarnishEra = "present" | "nineties" | "cyberpunk" | "retrofuture";
 

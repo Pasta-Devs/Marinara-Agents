@@ -25,7 +25,7 @@ import {
   slurpWorldEpoch,
   slurpWorldNowMs,
   slurpWorldOffsetMs,
-} from "../../base/clock/slp-world-clock.js";
+} from "../../../../../shared/src/slp/slp-world-clock.js";
 import { SLURP_SETTINGS_NAMESPACE } from "../host/slp-storage-constants.js";
 
 export const WORLD_OFFSET_KEY = "slurp2.world.clockOffsetMs";

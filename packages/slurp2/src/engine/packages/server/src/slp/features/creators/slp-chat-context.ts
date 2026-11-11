@@ -29,7 +29,7 @@ import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-sto
 import { SLURP_CONTINUITY_FACT_LABELS } from "../../modules/continuity/slp-continuity-prompt.js";
 import { slpArcsLive } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type WrapFormat = "xml" | "markdown" | "none";
 
 /** The part of the Engine's prompt-context request this reads. Older Engines send no wrapFormat. */

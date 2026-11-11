@@ -31,7 +31,7 @@ import { slurpSupportDeskKey } from "../creators/slp-support-desk-storage.js";
 import { slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 import { slurpPackGate } from "../../modules/world/events/slp-content-packs.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createStoryEngineStorage(context: SlurpStorageContext) {
   const { settingsStore } = context;
   const wardrobe = createWardrobeStorage(context);

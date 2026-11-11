@@ -10,7 +10,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { slurpGoalProgress } from "../../modules/projects/slp-goal.js";
 import { resolveSlurpPostStance, slurpPostStanceInstruction } from "../../modules/feed/slp-post-stance.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The "how you are today" block for one Creator, or null when today adds nothing.
  *

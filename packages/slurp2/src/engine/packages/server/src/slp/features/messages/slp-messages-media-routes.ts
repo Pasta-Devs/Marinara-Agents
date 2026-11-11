@@ -23,7 +23,7 @@ import type { SlpMessagesContext } from "./slp-messages-context.js";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
 import { SLURP_SUPPORT_NAME } from "../../modules/messages/slp-dm-roles.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
 class SlurpMessageMediaRequestError extends Error {

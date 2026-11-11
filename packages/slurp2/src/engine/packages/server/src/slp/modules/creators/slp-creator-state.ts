@@ -1,4 +1,4 @@
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The state that makes one Slurp Creator more than a single mood number.
  *

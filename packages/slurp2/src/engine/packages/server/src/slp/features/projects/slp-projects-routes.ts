@@ -34,7 +34,7 @@ import { SLP_STORYLINES_OFF, slpExtensionOn } from "../../../../../shared/src/sl
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;
   // Storylines off: nothing new starts or moves on; ending, editing and deleting still work.

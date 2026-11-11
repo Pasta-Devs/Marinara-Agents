@@ -18,7 +18,7 @@ import {
 } from "../messages/slp-messages-contract.js";
 import { slurpPaused } from "../../base/model/slp-pause.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The background half of the world clock.
  *

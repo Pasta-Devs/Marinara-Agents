@@ -14,7 +14,7 @@ import {
 } from "../../modules/feed/slp-refresh-schedule.js";
 import { slpExtensionOn, slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const SLP_SCHEDULER_INITIAL_DELAY_MS = 20_000;
 const SLP_SCHEDULER_MAX_POLL_MS = 60_000;
 // Nothing is scheduled while automatic refresh is off, so the poll only needs to notice that the

@@ -50,7 +50,7 @@ import {
 import type { SlurpGoalProgress } from "../projects/slp-goal.js";
 import type { SlurpStanceEvidence } from "../world/slp-stance.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpPostStance = {
   /** The prompt lines, already ordered. Empty when there is nothing worth saying. */
   instructions: string[];

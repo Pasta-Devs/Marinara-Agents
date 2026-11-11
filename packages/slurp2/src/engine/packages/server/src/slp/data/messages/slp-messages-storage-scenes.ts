@@ -12,7 +12,7 @@ import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 import type { SlurpThread } from "./slp-messages-storage-types.js";
 import type { SlpSceneLine } from "../../../../../shared/src/slp/slp-roleplay-scene.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createMessagesStorageScenes(context: SlurpMessagesContext) {
   const { db } = context;
   return {

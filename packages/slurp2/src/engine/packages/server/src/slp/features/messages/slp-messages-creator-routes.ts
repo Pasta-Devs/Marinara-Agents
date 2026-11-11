@@ -17,7 +17,7 @@ import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 import { SLURP_FUNNEL_STAGES } from "../../../../../shared/src/slp/slp-population.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * An image a paid message carries.
  *

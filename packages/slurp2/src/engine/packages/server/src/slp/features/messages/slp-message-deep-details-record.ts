@@ -4,7 +4,7 @@ import type { SlurpRapport } from "../../modules/messages/slp-rapport.js";
 import type { SlurpThreadNote } from "../../modules/messages/slp-thread-notes.js";
 import type { SlurpStance } from "../../modules/world/slp-stance.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const numberOrNull = (value: unknown) => (typeof value === "number" ? value : null);
 
 /** The reply generator's state at the moment a direct message was written, as its Deep details record. */

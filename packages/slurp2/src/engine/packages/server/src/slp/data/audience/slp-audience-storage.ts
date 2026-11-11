@@ -13,7 +13,7 @@ import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { mapAccount, sourceAccountFromEntity } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createAudienceStorage1(context: SlurpStorageContext) {
   const {
     db,

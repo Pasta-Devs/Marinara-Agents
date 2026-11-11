@@ -28,7 +28,7 @@ import { composeSlurpPromptBlocks } from "../../base/prompting/slp-prompt-blocks
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Growing the free comment bank.
  *

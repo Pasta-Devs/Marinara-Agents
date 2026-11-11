@@ -40,7 +40,7 @@ import {
 } from "../../../data/feed/slp-opportunity-storage.js";
 import { slpCreatorsInScene } from "../../messages/slp-messages-contract.js";
 
-import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 class SlpCreatorAttemptUnavailableError extends Error {

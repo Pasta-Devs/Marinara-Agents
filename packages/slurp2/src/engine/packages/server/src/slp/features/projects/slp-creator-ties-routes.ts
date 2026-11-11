@@ -51,7 +51,7 @@ import {
   type SlurpBondError,
 } from "../../modules/projects/slp-creator-bonds.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const RECENT = 8;
 const ERRORS: Record<SlurpTieError | "notFound" | "notOpen", [number, string]> = {
   notFound: [404, "That request is gone."],

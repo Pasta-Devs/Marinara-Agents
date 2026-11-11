@@ -13,7 +13,7 @@ import type { SlurpBootstrap } from "../../modules/settings/slp-settings.js";
 import { mapManagedPost, mapPostUnlock } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createEconomyTailStorage1(context: SlurpStorageContext) {
   const {
     db,

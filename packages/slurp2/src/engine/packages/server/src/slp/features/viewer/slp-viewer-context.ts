@@ -28,7 +28,7 @@ import { slurpLockedPostTeaser } from "../../modules/feed/slp-post-purpose.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteHost } from "./slp-route-host.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Viewer projection: which persona is looking, what it may see, and how posts are priced for it. */
 export function createSlpViewerContext(
   app: FastifyInstance,

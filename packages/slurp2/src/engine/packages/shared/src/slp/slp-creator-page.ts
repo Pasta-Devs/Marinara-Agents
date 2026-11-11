@@ -1,3 +1,4 @@
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { z } from "zod";
 
 /**
@@ -204,7 +205,7 @@ export function normalizeSlpCreatorPage(
   value: unknown,
   fallback: { composedBy: SlpCreatorPage["composedBy"]; now: string } = {
     composedBy: "player",
-    now: new Date().toISOString(),
+    now: slurpWorldNow().toISOString(),
   },
 ): SlpCreatorPage | null {
   const raw = record(value);

@@ -24,7 +24,7 @@ import {
 import type { SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
 import { slurpAudienceWeeklySpend } from "../../../../../shared/src/slp/slp-audience-subscription.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT, type SlurpFunnelStage };
 
 export type SlurpAudienceTie = {

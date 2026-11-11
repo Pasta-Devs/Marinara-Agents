@@ -17,7 +17,7 @@ import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.j
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;
   app.get("/slurp/studio", async (req, reply) => {

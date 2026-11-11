@@ -10,7 +10,7 @@
  */
 import type { SlurpRapport } from "./slp-rapport.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Calculate next check-in interval in minutes.
  *

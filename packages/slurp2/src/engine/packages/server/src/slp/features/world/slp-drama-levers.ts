@@ -30,7 +30,7 @@ import { advanceSlurpDrama, loadDramaWorld } from "./slp-drama-service.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 import { SLP_STORYLINES_OFF, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLURP_DRAMA_LEVERS = ["start-drama", "end-drama"] as const;
 export type SlurpDramaLever = (typeof SLURP_DRAMA_LEVERS)[number];
 export const isSlurpDramaLever = (name: string): name is SlurpDramaLever =>

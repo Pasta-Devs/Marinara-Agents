@@ -6,7 +6,7 @@ import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { slurpReplyBubbleStale } from "../../modules/messages/slp-messaging.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpReplyBubble = {
   id: string;
   batchId: string;

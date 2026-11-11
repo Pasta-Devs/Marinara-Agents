@@ -22,7 +22,7 @@ import { slurpSextingPrice, slurpSextingStart } from "../../modules/messages/slp
 import { isSlurpSupportThread } from "../../modules/messages/slp-support.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const sendSchema = z.object({
   personaId: z.string().trim().min(1),
   creatorAccountId: z.string().trim().min(1),

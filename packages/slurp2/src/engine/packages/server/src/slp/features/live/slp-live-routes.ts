@@ -10,7 +10,7 @@ import { endSlurpLiveShow, hostSlurpLiveShow, simulateSlurpLiveShow } from "./sl
 import { beatSlurpLiveShow } from "./slp-live-beat.js";
 import { tipSlurpLiveShow } from "./slp-live-tip.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const LIVE_OFF = "Live is switched off in Backstage.";
 const TIP_ERRORS = {
   missing: [404, "No such show"],

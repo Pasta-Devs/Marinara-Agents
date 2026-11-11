@@ -42,7 +42,7 @@ import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;
   const autopurgePreviewSchema = z.object({

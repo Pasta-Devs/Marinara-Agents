@@ -37,7 +37,7 @@ import { planSlurpCreatorPeerReactions, type SlurpWorldAction } from "../../../.
 import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { slurpPulseTieAdvance, type SlurpPulseAction } from "../../../../../shared/src/slp/slp-world-pulse.js";
 
-import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The local day, so a per-pair roll is made once a day rather than on every page load. */
 /** The Creator the player's page is with, when the fans know: they write about her now and then. */
 async function publicPartnerName(db: DB, pageId: string): Promise<string | null> {

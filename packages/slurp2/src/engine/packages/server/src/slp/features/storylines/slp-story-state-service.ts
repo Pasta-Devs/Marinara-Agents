@@ -9,7 +9,7 @@ import {
 } from "../../modules/storylines/slp-story-state.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
-import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The image instructions plus a standing condition's look ("Right now: …"), so every picture of a
  * pregnant Creator shows it. Best effort: a failed read returns the instructions unchanged.
