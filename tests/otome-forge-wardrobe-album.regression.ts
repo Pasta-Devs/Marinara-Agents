@@ -236,8 +236,9 @@ async function itemsWorld(
   const player = async () => (await t.store.readDoc(playerId(t.runId), normalizePlayer))!;
   const unit = async (li: string) => (await t.store.readDoc(unitId(t.runId, li), normalizeUnit))!;
   const open = (id: string, body: object = {}) => call("POST", "/runs/:run/items/:item/open", body, { item: id });
+  const tapOne = (id: string, body: object = {}) => call("POST", "/runs/:run/items/:item/art", body, { item: id });
   const painted = (id: string) => until(async () => (await stored(id)).art?.state === "ready", `the art of ${id}`);
-  return { ...t, deps, art, call, outfitCalls, faces, stored, player, unit, open, painted };
+  return { ...t, deps, art, call, outfitCalls, faces, stored, player, unit, open, tapOne, painted };
 }
 
 test("imageless Wardrobe describes owned looks without reading stories, secrets or paying for images", async () => {
@@ -528,9 +529,12 @@ test("a four-star Moment paints once on concurrent first opens and remains a pla
   assert.equal(memory.read, "unread");
   assert.equal(memory.cg, undefined, "no private art brief leaks to the client");
   assert.equal((await t.open(original.id)).body.art.url, saved.art!.url);
+  // 0.22.7: a tap on the painted illustration repaints it (one more image), and the picture it painted over goes.
   const tap = await t.call("POST", "/runs/:run/items/:item/art", {}, { item: original.id });
-  assert.equal(tap.body.art.url, saved.art!.url);
-  assert.equal(t.paid.length, 1, "reopening and paint taps reuse the saved picture");
+  assert.equal(tap.body.art.state, "ready");
+  assert.notEqual(tap.body.art.url, saved.art!.url);
+  assert.equal(t.paid.length, 2, "reopening paints nothing; a repaint costs one image");
+  assert.deepEqual(t.deleted, [saved.art!.ref!.slice("global-gallery:".length)]);
 });
 
 test("four-star Moment art respects consent, prompt review and explicit failed-paint retry", async () => {
@@ -706,6 +710,23 @@ test("Ask before painting and prompt review hold a first open's paint for the ta
   assert.ok(sent.prompt.startsWith("MY OWN WORDS") && sent.prompt.includes("safe for work"));
   assert.ok(sent.negativePrompt.includes("child"), "the adult negatives stay");
   assert.equal(sent.unit.personaId, "persona-ines", "her persona keeps her likeness");
+
+  // 0.22.7: repainting a painted look costs one more image, and the wardrobe's entry follows the new picture, so
+  // wearing it never shows the one the repaint replaced.
+  const looksPaid = t.outfitCalls.length;
+  const hisLook = (await t.unit(KAI)).outfits[0]!;
+  const repainted = await t.tapOne(ITEMS.hisLook.id);
+  assert.equal(repainted.status, 200, JSON.stringify(repainted.body));
+  assert.equal(repainted.body.art.state, "ready");
+  assert.notEqual(repainted.body.art.url, hisLook.url);
+  assert.equal(t.outfitCalls.length, looksPaid + 1, "a repainted look is one more paid image");
+  const afterRepaint = await t.unit(KAI);
+  assert.deepEqual(
+    afterRepaint.outfits.map((outfit) => [outfit.id, outfit.url, outfit.ref]),
+    [[ITEMS.hisLook.id, repainted.body.art.url, repainted.body.art.ref]],
+    "the wardrobe's one entry shows the new picture",
+  );
+  assert.deepEqual(t.deleted, [hisLook.ref!.slice("global-gallery:".length)]);
 });
 
 test("her 5★ look gets a first-wear scene with the love interest of its couple set, once, also when opened before", async () => {

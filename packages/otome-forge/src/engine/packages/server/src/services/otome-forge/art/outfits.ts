@@ -52,9 +52,13 @@ import {
   paintSlot,
   paintView,
   readSubject,
+  releaseReplacedImage,
+  repainting,
+  samePicture,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -119,10 +123,16 @@ export function itemArtView(runId: string, item: Pick<Item, "id" | "art" | "bann
 }
 
 /**
- * A featured 5★'s painted picture becomes its banner's art too, so the banner never pays for it again. Never throws:
- * the item's own art is saved already, and its image must stay.
+ * A featured 5★'s painted picture becomes its banner's art too, so the banner never pays for it again — and (0.22.7) a
+ * repaint of it replaces the banner's copy of the picture it painted over. Never throws: the item's own art is saved
+ * already, and its image must stay.
  */
-async function shareWithBanner(deps: Pick<ArtDeps, "store" | "runtime">, runId: string, item: Item): Promise<void> {
+async function shareWithBanner(
+  deps: Pick<ArtDeps, "store" | "runtime">,
+  runId: string,
+  item: Item,
+  replaced?: Paint | null,
+): Promise<void> {
   const art = item.art;
   if (!isFeatured(item) || art?.state !== "ready") return;
   try {
@@ -130,7 +140,10 @@ async function shareWithBanner(deps: Pick<ArtDeps, "store" | "runtime">, runId: 
       deps.store,
       runDocTarget("banner", bannerId(runId, item.banner)),
       normalizeBanner,
-      (banner) => (banner.key === item.banner && banner.art?.state !== "ready" ? { ...banner, art } : undefined),
+      (banner) =>
+        banner.key === item.banner && (banner.art?.state !== "ready" || samePicture(banner.art, replaced))
+          ? { ...banner, art }
+          : undefined,
     );
   } catch (error) {
     deps.runtime.logger.warn(
@@ -156,21 +169,28 @@ export function outfitOf(item: Item): Outfit | null {
 }
 
 /**
- * Adds a painted look to its wearer's `outfits` once (the wardrobe can wear it from then on). Resolves the wearer's
+ * Adds a painted look to its wearer's `outfits` (the wardrobe can wear it from then on), and (0.22.7) keeps that entry
+ * on the picture a repaint of the look now shows. With `repoint`, only an entry already there is moved: a repaint of a
+ * look's picture elsewhere (its banner's) never makes a look the player has not opened wearable. Resolves the wearer's
  * document as saved or as it stands, or null when the look is not painted or the run is gone.
  */
 export async function addOutfit(
   deps: Pick<ArtDeps, "store">,
   runId: string,
   item: Item,
+  { repoint = false }: { repoint?: boolean } = {},
 ): Promise<Unit | Player | null> {
   const outfit = outfitOf(item);
   const wearer = lookWearer(item);
   if (!outfit || !wearer) return null;
-  const add = <T extends { outfits: Outfit[] }>(current: T) =>
-    current.outfits.some((entry) => entry.id === outfit.id)
-      ? undefined
-      : { ...current, outfits: [...current.outfits, outfit] };
+  const add = <T extends { outfits: Outfit[] }>(current: T) => {
+    const at = current.outfits.findIndex((entry) => entry.id === outfit.id);
+    if (at < 0) return repoint ? undefined : { ...current, outfits: [...current.outfits, outfit] };
+    if (current.outfits[at].url === outfit.url) return undefined;
+    const outfits = [...current.outfits];
+    outfits[at] = outfit;
+    return { ...current, outfits };
+  };
   const saved =
     wearer === "player"
       ? await updateIfChanged(deps.store, runDocTarget("player", playerId(runId)), normalizePlayer, add)
@@ -310,12 +330,17 @@ async function paintItem(
   { debugMode, consent, edited }: { debugMode: boolean; consent: boolean; edited?: Partial<ImagePrompt> },
 ): Promise<Paint | null> {
   const save = async (art: Paint) => {
-    const saved = await updateIfChanged(deps.store, itemTarget(runId, item.id), normalizeItem, (current) =>
-      current.id && current.art?.state === "pending" && current.art.at === at ? { ...current, art } : undefined,
-    );
+    let replaced: Paint | undefined;
+    const saved = await updateIfChanged(deps.store, itemTarget(runId, item.id), normalizeItem, (current) => {
+      if (!(current.id && current.art?.state === "pending" && current.art.at === at)) return undefined;
+      replaced = current.art;
+      return { ...current, art: withKeptPicture(art, replaced) };
+    });
     if (!saved?.changed) return false;
     // Still in the slot: the banner's own paint, queued behind this one, then finds its record replaced.
-    await shareWithBanner(deps, runId, saved.value);
+    await shareWithBanner(deps, runId, saved.value, replaced);
+    // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+    if (saved.value.art?.state === "ready") await releaseReplacedImage(deps, replaced, saved.value.art);
     return true;
   };
   const left = await paintRecord(deps, {
@@ -330,7 +355,8 @@ async function paintItem(
       ]);
       if (!current || !world || current.art?.state !== "pending" || current.art.at !== at) return "gone";
       // Its banner's art (the same picture) is painted: it is this item's art too, and nothing more is paid for.
-      if (banner?.key === item.banner && banner.art?.state === "ready") {
+      // 0.22.7: unless it is the very picture this repaint replaces, which the pending record still shows.
+      if (banner?.key === item.banner && banner.art?.state === "ready" && !samePicture(banner.art, current.art)) {
         await save(banner.art);
         return "gone";
       }
@@ -396,8 +422,8 @@ export async function queueItemArt(
 
 /**
  * POST /runs/:run/items/:item/art: the tap that paints an owned item's art now (Ask's consent, a reviewed prompt, or
- * Retry). Waits for the paint and resolves the record as left; a ready one is returned as it is, and a tap while it
- * paints waits for that paint, so no tap pays twice.
+ * Retry), or (0.22.7) repaints a ready one. Waits for the paint and resolves the record as left; a tap while it paints
+ * waits for that paint, so no tap pays twice. A repainted look's picture is its `outfits` entry's too.
  */
 export async function paintItemNow(
   deps: ItemArtDeps,
@@ -422,19 +448,13 @@ export async function paintItemNow(
       return { value: art, art: art ?? undefined };
     },
     async () => {
-      const item = await read();
-      if (item.art?.state === "ready") {
-        await addOutfit(deps, runId, item);
-        return item.art;
-      }
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) throw notFound("Otome Forge run");
       const connectionId = world.images.connectionId;
       if (!connectionId) throw noConnection();
       const at = new Date().toISOString();
-      const pending: Paint = { state: "pending", at };
       const claimed = await updateIfChanged(deps.store, itemTarget(runId, id), normalizeItem, (current) =>
-        current.art?.state === "ready" ? undefined : { ...current, art: pending },
+        current.id ? { ...current, art: repainting(current.art, at) } : undefined,
       );
       if (!claimed) throw notFound("item");
       if (claimed.changed)

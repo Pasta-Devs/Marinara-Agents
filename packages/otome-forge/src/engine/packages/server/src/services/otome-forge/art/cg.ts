@@ -35,9 +35,12 @@ import {
   imagesOf,
   paintRecord,
   paintView,
+  releaseReplacedImage,
+  repainting,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -487,12 +490,44 @@ async function paintCg(
       });
     },
     async save(art) {
-      const saved = await updateCg(deps, runId, beat, writtenAt, (cg) =>
-        cg.art?.state === "pending" && cg.art.at === at ? { ...cg, art } : null,
-      );
-      return !!saved?.changed;
+      let replaced: Paint | undefined;
+      const saved = await updateCg(deps, runId, beat, writtenAt, (cg) => {
+        if (cg.art?.state !== "pending" || cg.art.at !== at) return null;
+        replaced = cg.art;
+        return { ...cg, art: withKeptPicture(art, replaced) };
+      });
+      if (!saved?.changed) return false;
+      const now = saved.beat.cg?.art;
+      // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted, and only once
+      // the Album shows the new picture too.
+      if (now?.state === "ready") {
+        await updateAlbumPicture(deps, runId, albumKey(beat.key, beat.i), now);
+        await releaseReplacedImage(deps, replaced, now);
+      }
+      return true;
     },
   });
+}
+
+/**
+ * Points the Album's CG entry for `key` at the picture its record now shows (0.22.7: a repaint of an unlocked CG), so
+ * the keepsake follows the beat instead of holding the image the repaint replaced. Never throws: the CG is painted.
+ */
+async function updateAlbumPicture(deps: ArtDeps, runId: string, key: string, art: Paint): Promise<void> {
+  if (!art.url || !art.ref) return;
+  await updateIfChanged(deps.store, runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+    const at = current.album.cgs.findIndex((entry) => entry.key === key);
+    if (at < 0 || current.album.cgs[at].ref === art.ref) return undefined;
+    const cgs = [...current.album.cgs];
+    cgs[at] = { ...cgs[at], url: art.url!, ref: art.ref! };
+    return { ...current, album: { ...current.album, cgs } };
+  }).catch((error: unknown) =>
+    deps.runtime.logger.warn(
+      "[otome-forge] moving the album's key image %s to its new picture failed: %s",
+      key,
+      error instanceof Error ? error.message : String(error),
+    ),
+  );
 }
 
 /** Each CG whose record a start is writing, by run and owner (see startBeatCg). */
@@ -562,8 +597,9 @@ export async function paintBeatCg(deps: ArtDeps, runId: string, written: Beat, o
 }
 
 /**
- * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, or Retry). Waits for the paint and resolves
- * the CG's record as left; a ready one is returned as it is, and a tap while it is painting waits for that paint.
+ * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, Retry, or 0.22.7 a repaint of a ready one).
+ * Waits for the paint and resolves the CG's record as left; a tap while it is painting waits for that paint, so no tap
+ * pays twice.
  */
 export async function paintCgNow(
   deps: ArtDeps,
@@ -587,15 +623,15 @@ export async function paintCgNow(
       return { value: art, art };
     },
     async () => {
-      if (beat.cg!.art?.state === "ready") return beat.cg!.art;
       const run = await readRun(deps.store, runId);
       if (!run) throw runNotFound();
       const connectionId = run.world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
-      const saved = await updateCg(deps, runId, beat, beat.written.at, (cg) =>
-        cg.art?.state === "ready" ? null : { ...cg, art: { state: "pending", at } },
-      );
+      const saved = await updateCg(deps, runId, beat, beat.written.at, (cg) => ({
+        ...cg,
+        art: repainting(cg.art, at),
+      }));
       if (!saved) throw new OtomeForgeError(409, "This scene changed. Open it again.", "conflict");
       if (saved.changed) {
         await paintCg(deps, runId, saved.beat, at, connectionId, { debugMode, consent: true, edited, active });

@@ -70,6 +70,8 @@ export function CardGrid({ runKey, view, cards, actions, onView }: CardGridProps
         const error = target ? actions.errors[target.id] : undefined;
         const titleId = `${id}-${card.key}`;
         const consent = card.art.state === "waiting-consent";
+        // 0.22.7: a painted card can be painted again; its picture stays until the new one is saved.
+        const repaint = !!url && card.art.state === "ready";
         return (
           <li key={card.key} className="of-album-card">
             {url ? (
@@ -99,34 +101,39 @@ export function CardGrid({ runKey, view, cards, actions, onView }: CardGridProps
                 <span id={titleId} className="of-album-cg-title">
                   {title}
                 </span>
-                {images && target && paintWaits(card.art) ? (
-                  <>
-                    <button
-                      type="button"
-                      className="of-button of-button--quiet of-button--small of-glass"
-                      aria-describedby={titleId}
-                      aria-disabled={busy}
-                      onClick={() => {
-                        if (!busy) void actions.paint(target);
-                      }}
-                    >
-                      {consent ? (
-                        <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
-                      ) : (
-                        <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
-                      )}
-                      {consent ? t("ui.otomeForge.wish.paint") : t("ui.otomeForge.wish.paintRetry")}
-                    </button>
-                    <CostHint images={1} />
-                  </>
-                ) : null}
-                {error ? (
-                  <span className="of-error" role="alert">
-                    {error}
-                  </span>
-                ) : null}
               </>
             )}
+            {images && target && (paintWaits(card.art) || repaint) ? (
+              <>
+                <button
+                  type="button"
+                  className="of-button of-button--quiet of-button--small of-glass"
+                  aria-describedby={url ? undefined : titleId}
+                  aria-label={repaint ? t("ui.otomeForge.album.repaintCard", { title }) : undefined}
+                  aria-disabled={busy}
+                  onClick={() => {
+                    if (!busy) void actions.paint(target);
+                  }}
+                >
+                  {consent || repaint ? (
+                    <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
+                  ) : (
+                    <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
+                  )}
+                  {repaint
+                    ? t("ui.otomeForge.album.repaintCardShort")
+                    : consent
+                      ? t("ui.otomeForge.wish.paint")
+                      : t("ui.otomeForge.wish.paintRetry")}
+                </button>
+                <CostHint images={1} />
+              </>
+            ) : null}
+            {error ? (
+              <span className="of-error" role="alert">
+                {error}
+              </span>
+            ) : null}
           </li>
         );
       })}

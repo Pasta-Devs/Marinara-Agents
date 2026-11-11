@@ -1942,5 +1942,15 @@
   "ui.otomeForge.wish.wishing": "Wishing…",
   "ui.otomeForge.wish.with": "with {{name}}",
   "ui.otomeForge.wish.writing": "Writing this fortnight’s Memories, looks and Snapshots…",
-  "ui.otomeForge.wish.writingTitle": "Writing new wishes"
+  "ui.otomeForge.wish.writingTitle": "Writing new wishes",
+  "ui.otomeForge.reader.cgRepaint": "Repaint this moment · 1 image",
+  "ui.otomeForge.reader.cgRepaintLabel": "Paint this moment again (1 image)",
+  "ui.otomeForge.reader.placeRepaint": "Repaint · 1 image",
+  "ui.otomeForge.reader.placeRepaintLabel": "Paint {{place}} again (1 image)",
+  "ui.otomeForge.wish.repaintBanner": "Repaint the banner",
+  "ui.otomeForge.wardrobe.repaintLook": "Repaint {{look}}",
+  "ui.otomeForge.tarot.repaintCard": "Repaint",
+  "ui.otomeForge.tarot.repaintCardLabel": "Paint {{name}} again",
+  "ui.otomeForge.album.repaintCard": "Paint {{title}} again",
+  "ui.otomeForge.album.repaintCardShort": "Repaint"
 }

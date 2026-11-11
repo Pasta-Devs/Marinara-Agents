@@ -197,6 +197,45 @@ export function paintSlot<T>(connectionId: string, task: () => Promise<T>, lane:
   });
 }
 
+// ── Repainting a picture that is already there ──
+
+/**
+ * The record an explicit repaint starts on (0.22.7): pending, keeping the picture it showed, so it is still on screen
+ * while the new one paints and still there if it fails, as a base look's portrait stays until its new one is saved.
+ * Only a tap starts one: every automatic paint leaves a ready record alone (places.ts automatic, cg.ts startBeatCg,
+ * outfits.ts queueItemArt, tarot-deck.ts claimDeckCards).
+ */
+export function repainting(art: Paint | null | undefined, at: string): Paint {
+  return { ...art, state: "pending", at, error: undefined };
+}
+
+/** The record a paint settles on: its new picture, or the one it replaced kept beside a failure. */
+export function withKeptPicture(art: Paint, replaced: Paint | null | undefined): Paint {
+  if (art.state === "ready" || !replaced?.url) return art;
+  return { ...art, url: replaced.url, ...(replaced.ref ? { ref: replaced.ref } : {}) };
+}
+
+/** True when two records show the same picture (a banner and its featured 5★ share one). */
+export function samePicture(a: Paint | null | undefined, b: Paint | null | undefined): boolean {
+  return !!a && !!b && ((!!a.ref && a.ref === b.ref) || (!!a.url && a.url === b.url));
+}
+
+/**
+ * Deletes the gallery image a repaint replaced, once its new picture is saved. Only a `global-gallery:` image is ever
+ * deleted; one a document still holds is refused by the Engine and simply kept.
+ */
+export async function releaseReplacedImage(
+  deps: ArtDeps,
+  replaced: Paint | null | undefined,
+  saved: Paint | null | undefined,
+): Promise<void> {
+  const ref = replaced?.ref;
+  if (!ref?.startsWith(GALLERY_REF_PREFIX) || ref === saved?.ref) return;
+  await imagesOf(deps)
+    .deleteGalleryImage(ref.slice(GALLERY_REF_PREFIX.length))
+    .catch(() => false);
+}
+
 // ── Writes that may change nothing ──
 
 const UNCHANGED = Symbol("unchanged");
