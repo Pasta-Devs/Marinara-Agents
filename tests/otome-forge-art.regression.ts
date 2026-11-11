@@ -517,6 +517,39 @@ test("a CG unlocks only once it is ready and shown, exactly once", async () => {
   assert.equal((await u.state()).album.cgs.length, 0);
 });
 
+test("a picture kept through a failed repaint is the one unlocked: the Album takes what was on screen", async () => {
+  // 0.24.0 (Dottore, #2255): a repaint keeps the old picture on screen while it paints, and keeps it if it fails, so the
+  // picture the reader saw is the one that enters the Album — not a 409 because the record's state moved on.
+  const t = await sceneWorld("r-m2bart09-iiiiii");
+  await t.write(1, { cg: CG });
+  const stored = (await readStoredBeat(t.store, t.runId, 1))!;
+  const kept = stored.cg!.art!;
+  await saveBeat(t.store, t.runId, {
+    ...stored,
+    readThrough: CG.at,
+    cg: { ...stored.cg!, art: { ...kept, state: "failed", error: "provider down" } },
+  });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  const seen = await t.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 });
+  assert.equal(seen.status, 200, "the picture was seen, whatever its repaint did");
+  assert.equal(seen.body.unlocked, true);
+  assert.equal(seen.body.album[0].ref, kept.ref, "the Album takes the picture that stayed on screen");
+
+  // A record with no picture at all still refuses: nothing was shown, so nothing is unlocked.
+  const bare = await sceneWorld("r-m2bart10-jjjjjj");
+  await setImages(bare.store, bare.runId, { ask: true });
+  await bare.write(1, { cg: CG });
+  await saveBeat(bare.store, bare.runId, { ...(await readStoredBeat(bare.store, bare.runId, 1))!, readThrough: 2 });
+  await bare.store.updateDoc(runDocTarget("state", stateId(bare.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  assert.equal((await bare.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 409);
+});
+
 test("a failed paint waits for a tap; a rewrite while a CG paints gets nothing, and its image is deleted", async () => {
   const t = await sceneWorld("r-m2bart07-gggggg", {
     runKey: "r-m2bart07-gggggg",

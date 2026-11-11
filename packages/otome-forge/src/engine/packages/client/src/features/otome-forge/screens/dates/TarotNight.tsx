@@ -805,6 +805,8 @@ function Spread({ runKey, view, li, reading, deck, turned, next, actions, onTurn
                   {repaint ? t("ui.otomeForge.tarot.repaintCard") : t("ui.otomeForge.wish.paintRetry")}
                 </button>
               ) : null}
+              {/* 0.24.0: a repaint spends one image, so the price stands beside the button that spends it. */}
+              {repaint ? <CostHint images={1} /> : null}
               {error ? (
                 <p className="of-notice of-notice--error" role="alert">
                   {error}

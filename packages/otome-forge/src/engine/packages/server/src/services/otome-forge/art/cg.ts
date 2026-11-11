@@ -656,8 +656,10 @@ export function queueScenePaints(deps: ArtDeps, runId: string, beat: Beat, optio
 // ── Unlocking ──
 
 /**
- * POST /runs/:run/art/cg/seen: adds the beat's CG to the album once it is ready and the beat has been read to the
- * segment it opens on (POST .../read reports how far). `unlocked` is true only on the request that added it.
+ * POST /runs/:run/art/cg/seen: adds the beat's CG to the album once it has a picture and the beat has been read to the
+ * segment it opens on (POST .../read reports how far). `unlocked` is true only on the request that added it. The picture
+ * counts whatever its state: a repaint in flight, failed or stopped keeps the old one on screen, so it is the one seen
+ * (0.24.0); updateAlbumPicture moves the entry when the new picture lands.
  */
 export async function markCgSeen(
   deps: ArtDeps,
@@ -670,7 +672,7 @@ export async function markCgSeen(
   const cg = beat.cg;
   if (!cg) throw noCg();
   const art = cg.art;
-  if (art?.state !== "ready" || !art.url || !art.ref) {
+  if (!art?.url || !art.ref) {
     throw new OtomeForgeError(409, "This key image is not painted yet.", "conflict");
   }
   // An Ease off before the CG's segment keeps readThrough below it, and a beat written ahead (its CG painted with it,

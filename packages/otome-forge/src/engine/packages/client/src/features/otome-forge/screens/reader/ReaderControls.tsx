@@ -367,7 +367,9 @@ export function ReaderControls(props: ReaderControlsProps) {
                 type="button"
                 className="of-reader-chip of-reader-chip--paint"
                 aria-disabled={props.cgPaint.busy}
-                aria-label={t("ui.otomeForge.reader.cgRepaintLabel")}
+                aria-label={t(
+                  props.cgPaint.retry ? "ui.otomeForge.reader.cgRetryLabel" : "ui.otomeForge.reader.cgRepaintLabel",
+                )}
                 onClick={(event) => {
                   event.stopPropagation();
                   if (!props.cgPaint?.busy) props.cgPaint?.onPaint();
@@ -378,7 +380,13 @@ export function ReaderControls(props: ReaderControlsProps) {
                 ) : (
                   <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
                 )}
-                {t(props.cgPaint.busy ? "ui.otomeForge.wish.painting" : "ui.otomeForge.reader.cgRepaint")}
+                {t(
+                  props.cgPaint.busy
+                    ? "ui.otomeForge.wish.painting"
+                    : props.cgPaint.retry
+                      ? "ui.otomeForge.reader.cgRetry"
+                      : "ui.otomeForge.reader.cgRepaint",
+                )}
               </button>
             </li>
           ) : null}
