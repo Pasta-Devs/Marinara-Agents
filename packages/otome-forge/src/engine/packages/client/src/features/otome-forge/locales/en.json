@@ -1950,5 +1950,5 @@
   "ui.otomeForge.story.bondHint": "Past level 10, after their story's finale, affection opens ten more ranks, one at a time: each rank's story is played before the next opens. At the last, every 300 affection earns a prestige point.",
   "ui.otomeForge.story.bondNew": "A new bond story with {{name}}",
   "ui.otomeForge.arcs.planningBond": "Writing the bond story…",
-  "ui.otomeForge.arcs.bondLocked": "Play the bond rank before it first."
+  "ui.otomeForge.arcs.bondLocked": "Open this bond rank after the one before it."
 }

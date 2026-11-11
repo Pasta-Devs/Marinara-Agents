@@ -13,7 +13,10 @@
 // reads the chapter again first, and with nothing new unlocked the latest one is returned, so two taps write one story.
 import type { Chapter, LiId } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { LAST_STAGE } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { bondStoriesPlayed } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import {
+  BOND_MAX_LEVEL,
+  bondRankOf,
   nextPrestige,
   prestigeOf,
   type PrestigeKind,
@@ -86,7 +89,11 @@ export async function ensurePrestigeStory(
   const liState = run.state.lis[li];
   if (!unit || !liState) throw notFound("love interest");
   const written = await prestigeStories(deps.store, runId, li);
-  const n = nextPrestige(liState.points, written.length, liState.stage >= LAST_STAGE) ?? written.length;
+  // 0.23.0: the extra stories open at the last bond rank, not merely past the finale (Dottore, #2254).
+  const lastRank =
+    bondRankOf(liState.points, liState.stage >= LAST_STAGE, bondStoriesPlayed(run.state.chapters, li)) ===
+    BOND_MAX_LEVEL;
+  const n = (lastRank ? nextPrestige(liState.points, written.length, true) : null) ?? written.length;
   if (!n) throw locked(`No extra story with ${unit.name} is unlocked yet.`);
   const key = prestigeKey(li, n);
   const read = () => deps.store.readDoc(chapterId(runId, key), normalizeChapter);
@@ -97,7 +104,13 @@ export async function ensurePrestigeStory(
     // Read again in the queue: the state the story is written against is the one of this moment.
     const now = (await readRun(deps.store, runId)) ?? run;
     const nowState = now.state.lis[li];
-    if (prestigeOf(nowState?.points ?? 0, (nowState?.stage ?? 0) >= LAST_STAGE).unlocked < n) {
+    const stillLast =
+      bondRankOf(
+        nowState?.points ?? 0,
+        (nowState?.stage ?? 0) >= LAST_STAGE,
+        bondStoriesPlayed(now.state.chapters, li),
+      ) === BOND_MAX_LEVEL;
+    if (!stillLast || prestigeOf(nowState?.points ?? 0, true).unlocked < n) {
       throw locked(`No extra story with ${unit.name} is unlocked yet.`);
     }
     const memory = await recallText(deps, runId, {

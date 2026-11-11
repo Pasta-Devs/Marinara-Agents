@@ -139,7 +139,8 @@ export function affectionProgressOf(points: number, open = false, played = 0): {
   if (level === BOND_MAX_LEVEL || (level === MAX_LEVEL && !open))
     return { current: LEVEL_COSTS.at(-1)!, required: LEVEL_COSTS.at(-1)! };
   const cost = [...LEVEL_COSTS, ...BOND_COSTS][level - MIN_LEVEL]!;
-  return { current: Math.max(0, safe - levelFloor(level)), required: cost };
+  // A rank held back by its unplayed story shows a full bar, never more than it needs: the points past it wait there.
+  return { current: Math.min(cost, Math.max(0, safe - levelFloor(level))), required: cost };
 }
 
 // ── Prestige (#2025): past level 20, affection keeps counting. Every POINTS_PER_LEVEL is a prestige point, and every

@@ -42,6 +42,25 @@ const L10 = 3600;
 const L20 = economy.BOND_MAX_POINTS;
 const PLANNER = "You are the Extra Story planner";
 
+/**
+ * 0.23.0: marks the ten bond stories played for `li`, so they stand at the last rank and the extra stories open
+ * (S/story/bond.ts counts the played ones, and prestige needs rank 20).
+ */
+async function playBondRanks(t: Awaited<ReturnType<typeof storyWorld>>, li = KAI) {
+  const { bondStoriesPlayed, bondStoryKey } =
+    await import("../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/bond.ts");
+  const saved = await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state: RunState) => ({
+    ...state,
+    chapters: {
+      ...state.chapters,
+      ...Object.fromEntries(
+        Array.from({ length: 10 }, (_, i) => [bondStoryKey(li, 11 + i), { beatsRead: 1, completed: "x", applied: [] }]),
+      ),
+    },
+  }));
+  assert.equal(bondStoriesPlayed(saved!.chapters, li), 10, "the ten bond ranks are played");
+}
+
 /** A valid P25 reply: a what-if for Kai, three nodes (Mireille named in one is left out). */
 function prestigePlan(changes: Partial<PrestigePlanReply> = {}): PrestigePlanReply {
   return {
@@ -238,6 +257,7 @@ test("each unlocked extra story is written once, however often it is asked for, 
       json(prestigePlan({ kind: "au", title: "Vampire Harbour", premise: "PREMISE-VAMPIRE: the harbour at night." })),
     ],
   });
+  await playBondRanks(t);
   const claim = (li: string) => t.call("POST", "/runs/:run/prestige/:li", {}, { li });
   const key = `prestige-${KAI}-1`;
   assert.deepEqual((await t.call("GET", "/runs/:run/story")).body.prestige, [{ li: KAI, key }]);
@@ -323,6 +343,7 @@ test("an extra story plays as his private side story, imagined: its picks change
     lis: { [KAI]: { points: L20 + 900, stage: 6 } },
     replies,
   });
+  await playBondRanks(t);
   const key = `prestige-${KAI}-1`;
   assert.equal((await t.call("POST", "/runs/:run/prestige/:li", {}, { li: KAI })).status, 200);
   const before = await t.state();

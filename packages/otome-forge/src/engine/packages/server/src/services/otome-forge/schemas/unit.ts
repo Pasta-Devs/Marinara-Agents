@@ -86,11 +86,7 @@ export function normalizeBondReveals(data: unknown): BibleBond[] | undefined {
     seen.add(parsed.data.level);
     entries.push({ level: parsed.data.level, truth });
   }
-  return entries.length === BOND_LEVELS
-    ? entries.sort((a, b) => a.level - b.level)
-    : entries.length
-      ? entries.sort((a, b) => a.level - b.level)
-      : undefined;
+  return entries.length ? entries.sort((a, b) => a.level - b.level) : undefined;
 }
 
 /** The block trimmed to a handful of short labels, or the problem when nothing usable is left. */

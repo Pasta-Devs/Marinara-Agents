@@ -45,7 +45,11 @@ import { bondStoriesPlayed, bondStoryKey } from "../../../../../client/src/featu
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
-import { nextPrestige } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import {
+  BOND_MAX_LEVEL,
+  bondRankOf,
+  nextPrestige,
+} from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   generateJson,
   readOrGenerate,
@@ -793,11 +797,16 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     prestige: ready
       ? cast.flatMap((li) => {
           const liState = run.state.lis[li];
-          const n = nextPrestige(
-            liState?.points ?? 0,
-            chapters.filter((chapter) => chapter.prestige && chapter.li === li).length,
-            (liState?.stage ?? 0) >= LAST_STAGE,
-          );
+          const played = bondStoriesPlayed(run.state.chapters, li);
+          // 0.23.0: the extra stories open at the last bond rank, not merely past the finale.
+          const n =
+            bondRankOf(liState?.points ?? 0, (liState?.stage ?? 0) >= LAST_STAGE, played) === BOND_MAX_LEVEL
+              ? nextPrestige(
+                  liState?.points ?? 0,
+                  chapters.filter((chapter) => chapter.prestige && chapter.li === li).length,
+                  true,
+                )
+              : null;
           return n ? [{ li, key: prestigeKey(li, n) }] : [];
         })
       : [],

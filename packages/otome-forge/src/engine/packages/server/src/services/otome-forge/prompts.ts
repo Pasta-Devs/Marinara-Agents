@@ -211,7 +211,12 @@ import {
   STORY_PLACE,
   stillToMend,
 } from "../../../../client/src/features/otome-forge/shared/dates.js";
-import { BOND_RANKS, bondRankAt, type BondRank } from "../../../../client/src/features/otome-forge/shared/bond.js";
+import {
+  BOND_RANKS,
+  bondRankAt,
+  bondStoriesPlayed,
+  type BondRank,
+} from "../../../../client/src/features/otome-forge/shared/bond.js";
 import { bondRankOf, type PrestigeKind } from "../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   FACES,
@@ -670,7 +675,9 @@ function revealLines(
   liState: Pick<SceneCardState, "points" | "bondPlayed">,
 ): { hidden: string[]; known: string[] } {
   const bible = unit.bible!;
-  if (stage >= LAST_STAGE) {
+  // Only once the bond reveals are written: a finale before they are keeps its stage secrets, rather than losing every
+  // reveal it had.
+  if (stage >= LAST_STAGE && bible.bond?.length) {
     const rank = bondRankFrom(liState);
     const known = (bible.bond ?? [])
       .filter((entry) => entry.level <= rank)
@@ -1310,6 +1317,11 @@ function savedBackgrounds(world: Pick<World, "places">): string {
 }
 
 const liStateOf = (state: RunState, li: LiId): LiState => state.lis[li] ?? defaultLiState();
+/** His card's state with the bond stories he has played (0.23.0), so the card names the rank he stands at. */
+const cardStateOf = (state: RunState, li: LiId): SceneCardState => ({
+  ...liStateOf(state, li),
+  bondPlayed: bondStoriesPlayed(state.chapters, li),
+});
 const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
 
 /**
@@ -1618,10 +1630,19 @@ function groupIntimacyFor(world: Pick<World, "content">, present: readonly Unit[
 export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], world: Pick<World, "content">): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
   // Intimacy (#1936) never rides in the bible's JSON: only an NSFW story gets it, as its own guarded line.
-  const { look: _look, play: _play, intimacy: _intimacy, ...bible } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
+  const {
+    look: _look,
+    play: _play,
+    intimacy: _intimacy,
+    bond: bondReveals,
+    ...bible
+  } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
+  // 0.23.0: so are the bond reveals past the rank he stands at, which the protagonist does not know yet.
+  const rank = bondRankOf(liState.points, liState.stage >= LAST_STAGE, bondStoriesPlayed(state.chapters, unit.id));
+  const bond = bondReveals?.filter((entry) => entry.level <= rank);
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
-    `BIBLE: ${JSON.stringify(bible)}`,
+    `BIBLE: ${JSON.stringify(bond?.length ? { ...bible, bond } : bible)}`,
     ...[appearanceLine(unit), intimacyLine(world, unit)].filter(Boolean),
     // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
     // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
@@ -2341,7 +2362,7 @@ export function beatMessages({
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []),
+          sceneCardBlock(unit, cardState(unit.id) as LiState, node.resolves ?? []),
           // #2156: never a date's scenes, as never its plan (P26).
           date ? "" : upsetLine(unit, cardState(unit.id)),
           knowsAboutYou(unit, cardState(unit.id)),
@@ -2729,7 +2750,16 @@ function arcPlanFields(world: Pick<World, "content">): string[] {
 function othersBlock(units: readonly Unit[], state: RunState, li: LiId): string {
   return units
     .filter((unit) => unit.id !== li)
-    .map((unit) => sceneCardBlock(unit, seenBy(liStateOf(state, unit.id), unit.id, [li]), []))
+    .map((unit) =>
+      sceneCardBlock(
+        unit,
+        {
+          ...seenBy(liStateOf(state, unit.id), unit.id, [li]),
+          bondPlayed: bondStoriesPlayed(state.chapters, unit.id),
+        } as LiState,
+        [],
+      ),
+    )
     .join("\n\n");
 }
 
@@ -2949,7 +2979,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          sceneCardBlock(unit, cardStateOf(state, unit.id) as LiState, node.resolves ?? []),
           upsetLine(unit, liStateOf(state, unit.id)),
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
         ]
@@ -3045,7 +3075,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          sceneCardBlock(unit, cardStateOf(state, unit.id) as LiState, node.resolves ?? []),
           upsetLine(unit, liStateOf(state, unit.id)),
           // The partner's notebook (#1945), as P12 gives the opponent theirs; a bystander's is never here.
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
@@ -3278,6 +3308,8 @@ export interface ChatReplyInput {
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
+  /** 0.23.0: the bond stories he has played, so his card names the rank he stands at (absent: the first). */
+  bondPlayed?: number;
   /** The open conversation's newest messages, oldest first; the last is the protagonist's unless he writes first. */
   tail: readonly PhoneMessage[];
   /** His memories of conversations that are over, oldest first. */
@@ -3301,6 +3333,7 @@ export function chatReplyMessages({
   player,
   unit,
   liState,
+  bondPlayed,
   tail,
   memories,
   story,
@@ -3354,7 +3387,7 @@ export function chatReplyMessages({
     .join("\n");
   const user = [
     "WHO YOU ARE",
-    otomeSceneCard(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
     betweenYou(unit, liState),
     upsetLine(unit, liState),
     // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
@@ -3466,7 +3499,7 @@ export interface GroupChatInput {
   world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases" | "web">;
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   /** The members in cast order: each one's unit, state as the whole cast may know it (sharedState), own stickers. */
-  members: ReadonlyArray<{ unit: Unit; liState: LiState; stickers: readonly ReplySticker[] }>;
+  members: ReadonlyArray<{ unit: Unit; liState: LiState; bondPlayed?: number; stickers: readonly ReplySticker[] }>;
   /** The protagonist's stickers, which any of them may send too. */
   yours: readonly ReplySticker[];
   /** Names the thread's stickers (S/art/stickers.ts stickerLookup). */
@@ -3532,7 +3565,9 @@ export function groupChatMessages({
   const context = [
     "WHO IS IN IT",
     members
-      .map(({ unit, liState }) => [otomeSceneCard(unit, liState), betweenYou(unit, liState)].join("\n"))
+      .map(({ unit, liState, bondPlayed }) =>
+        [otomeSceneCard(unit, { ...liState, bondPlayed }), betweenYou(unit, liState)].join("\n"),
+      )
       .join("\n\n"),
     "",
     ties ? `THEIR TIES\n${ties}` : "",
@@ -3762,6 +3797,8 @@ export interface NoteInput {
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
+  /** 0.23.0: the bond stories he has played, so his card names the rank he stands at (absent: the first). */
+  bondPlayed?: number;
   today: NoteDay;
   /** One thing he may know, from his own recall (reader: him), or "". */
   recalled: string;
@@ -3783,6 +3820,7 @@ export function noteMessages({
   player,
   unit,
   liState,
+  bondPlayed,
   today,
   recalled,
   offscreen,
@@ -3821,7 +3859,7 @@ export function noteMessages({
     protagonistLine(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
     betweenYou(unit, liState),
     ...(known ? [known] : []),
     "",
@@ -3961,6 +3999,9 @@ export interface ReadMePromptInput {
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** Their state as their own reader may know it (ownView), their own notebook with it. */
   liState: LiState;
+  /** 0.23.0: the bond stories they have played, so their card names the rank they stand at (absent: the first). */
+  bondPlayed?: number;
+
   /** One thing they may know, from their own recall (reader: them), or "". */
   recalled: string;
   /** Their newest relationship and off-screen ledger lines among those they may know (ownView). */
@@ -3968,7 +4009,15 @@ export interface ReadMePromptInput {
 }
 
 /** The Read Me prompt: the READ_ME_GUESSES guesses of one set, as `messages` in the plan's order (§1.7). */
-export function readMeMessages({ world, player, unit, liState, recalled, lately }: ReadMePromptInput): OtomeMessage[] {
+export function readMeMessages({
+  world,
+  player,
+  unit,
+  liState,
+  bondPlayed,
+  recalled,
+  lately,
+}: ReadMePromptInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
   const voice = `${name}'s own voice, said to the protagonist ("you")`;
@@ -4015,7 +4064,7 @@ export function readMeMessages({ world, player, unit, liState, recalled, lately 
     protagonistBlock(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
     betweenYou(unit, liState),
     lately.length ? `\nLately: ${lately.join(" ")}` : "",
     recalled.trim()
@@ -4299,6 +4348,9 @@ export interface ReadHimPromptInput {
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** His state as his own reader may know it (ownView). */
   liState: LiState;
+  /** 0.23.0: the bond stories they have played, so their card names the rank they stand at (absent: the first). */
+  bondPlayed?: number;
+
   /** One thing he may know, from his own recall (reader: him), or "". */
   recalled: string;
   /** His newest relationship and off-screen ledger lines among those he may know (ownView). */
@@ -4309,6 +4361,7 @@ export interface ReadHimPromptInput {
 
 /** P25: the five rounds of one Read Him set, as `messages` in the plan's order (§1.7). */
 export function readHimMessages({
+  bondPlayed,
   world,
   player,
   unit,
@@ -4356,7 +4409,7 @@ export function readHimMessages({
     aboutLine(player),
     "",
     "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
+    otomeSceneCard(unit, { ...liState, bondPlayed }),
     betweenYou(unit, liState),
     ...(known ? [known] : []),
     "",

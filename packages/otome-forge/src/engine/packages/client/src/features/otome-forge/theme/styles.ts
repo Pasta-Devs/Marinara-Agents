@@ -1587,7 +1587,9 @@ ${R} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; c
 ${R} .of-heart { position: relative; display: inline-flex; color: var(--of-border-strong); }
 ${R} .of-heart[data-on="true"] { color: var(--of-li-accent, var(--of-rose)); }
 ${R} .of-heart-inner { position: absolute; inset-inline-start: 50%; top: 50%; translate: -50% -54%; color: var(--of-border-strong); }
-${R} .of-heart-inner[data-inner-on="true"] { color: var(--of-li-accent, var(--of-rose)); }
+/* A reached rank sits inside a filled outer heart, so it takes the surface behind the row rather than the accent: the
+   same colour there would be an invisible heart within a heart. */
+${R} .of-heart-inner[data-inner-on="true"] { color: var(--of-surface, var(--of-ink)); }
 ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
 /* Prestige past level 10 (#2025): three pips, and the extra story they unlock. */
 ${R} .of-affection:has(.of-prestige) {
