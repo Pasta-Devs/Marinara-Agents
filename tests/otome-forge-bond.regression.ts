@@ -15,7 +15,9 @@ import * as economy from "../packages/otome-forge/src/engine/packages/client/src
 import {
   beatMessages,
   otomeSceneCard,
+  SCENE_CARD_MAX_TOKENS,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import {
   runDocTarget,
   stateId,
@@ -30,7 +32,7 @@ import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/serve
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { waitingBondRank } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/bond.ts";
-import { KAI, bible, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { KAI, bible, beatReply, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const L10 = economy.MAX_LEVEL_POINTS;
 /** A story state with `played` bond stories read to their end. */
@@ -163,13 +165,31 @@ test("past the finale the scene card sends the bond reveals, not the stage secre
   assert.ok(named.includes("BOND-TRUTH-11"));
   assert.ok(!named.includes("BOND-TRUTH-12"), "rank 12 is not known yet");
   assert.ok(!named.includes("HIDDEN-TRUTH"), "his stage secrets leave the card");
-  // The card keeps its three newest known reveals (the list's cap), newest first: 15, 14, 13.
+  // Every reveal up to the rank he stands at is settled ground, so the card keeps all five, not the three a list keeps.
   const tested = card(6, 4);
-  assert.ok(tested.includes("BOND-TRUTH-15"), "rank 15's reveal is the newest she learns");
-  assert.ok(tested.includes("BOND-TRUTH-14") && tested.includes("BOND-TRUTH-13"));
-  assert.ok(!tested.includes("BOND-TRUTH-12"), "older ones fall off the card's list, as any list there does");
+  for (let level = 11; level <= 15; level += 1) {
+    assert.ok(tested.includes(`BOND-TRUTH-${level}`), `rank ${level}'s reveal is one she has learned`);
+  }
   assert.ok(!tested.includes("BOND-TRUTH-16"), "rank 16 is not known yet");
   assert.ok(!tested.includes("Hidden ("), "nothing is hidden any more: the route revealed his secrets");
+  // The ladder stays inside the card's 250-token budget, so it never crowds out his voice or the red lines.
+  const full = normalizeUnit({
+    id: KAI,
+    name: "Kai",
+    source: "archetype",
+    bible: bible({
+      redLines: ["never cruel to her"],
+      bond: BOND_RANKS.map((entry) => ({
+        level: entry.level,
+        truth: `BOND-TRUTH-${entry.level}: two full sentences of what she learns about him at this rank, in the bible's voice, at the length a generated reveal runs. The second adds the detail that makes it his.`,
+      })),
+    }),
+  })!;
+  for (const played of [0, 4, 9]) {
+    const whole = otomeSceneCard(full, { stage: 6, points: 99_999, bondPlayed: played });
+    assert.ok(estimateTextTokens(whole) <= SCENE_CARD_MAX_TOKENS, `rank ${11 + played}'s card fits the budget`);
+    assert.ok(whole.includes("Red lines:"), "the ladder never pushes the red lines off the card");
+  }
 });
 
 // ── Dottore's proofs (#2254): the rank reaches every prompt through its production caller, and his side stops where
@@ -188,6 +208,10 @@ const anyReply = (list: ReadonlyArray<{ content: string }>) => {
       face: "tender",
       mood: { word: "calm", reason: "harbour" },
     });
+  if (text.includes("This is the group chat of an otome visual novel"))
+    return JSON.stringify({ messages: [{ speaker: "Kai", text: "Some of us sleep." }] });
+  // The narrator's node: the fixture's own P6 reply, under the story context every scene opens with.
+  if (text.includes("You are the narrator of an otome visual novel")) return json(beatReply());
   if (text.includes("in your private message thread"))
     return JSON.stringify({ messages: [{ text: "Awake. Barely." }], suggestions: [] });
   if (text.includes('"Read Me", a mini-game'))
@@ -220,41 +244,158 @@ const anyReply = (list: ReadonlyArray<{ content: string }>) => {
   throw new Error(`Unexpected prompt: ${text.slice(0, 120)}`);
 };
 
-test("a rank 15 love interest is named at rank 15 by the note, chat, Read Me and Read Him callers", async () => {
-  // Dottore (#2254): a test that passes bondPlayed in itself proves nothing; these go through the functions the routes
-  // call, which read the count from the run state. Reverting one caller's `bondPlayed` makes its line read 11 of 20.
+/** Every prompt the rank contract names, built through the production caller that sends it, in the run's order. */
+async function rankPrompts(
+  t: Awaited<ReturnType<typeof storyWorld>>,
+  { stage, points, played }: { stage: number; points: number; played: number },
+) {
   const { serveNote } =
     await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts");
   const { sendMessage } =
     await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts");
+  const { sendToGroup } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/group.ts");
   const { startReadMe } =
     await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-me.ts");
   const { startReadHim } =
     await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts");
-  const t = await storyWorld({
-    runKey: "r-bond15car-aaaaaa",
-    lis: { [KAI]: { stage: 6, points: economy.levelFloor(15) } },
-    replies: Array.from({ length: 24 }, () => anyReply),
-  });
+  const { serveBeat } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts");
+  const { chapterPlanMessages } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts");
+  const { normalizeChapter } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts");
+  const { chapterId } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts");
+
+  // One run, one rank state, every card in it read from `run.state.chapters` by the caller that builds the prompt.
   await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    chapters: { ...state.chapters, ...playedChapters(4) } as never,
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, stage, points } },
+    chapters: { ...state.chapters, ...playedChapters(played) } as never,
   }));
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) =>
     unit ? { ...unit, bible: unit.bible ? { ...unit.bible, bond: bondTruths() } : unit.bible } : unit,
   );
+  // The group chat needs two met love interests (the fixture's cast is), and the scene a chapter with Kai in it.
+  const node = { i: 0, kind: "beat" as const, guide: "Kai waits alone at the lamp.", cast: [KAI] };
+  await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, "main-2")), normalizeChapter, () => ({
+    key: "main-2",
+    kind: "main",
+    number: 2,
+    lead: KAI,
+    title: "The Bell",
+    tags: [],
+    summary: "",
+    nodes: [node],
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: "2026-10-28T10:00:00.000Z",
+    connectionId: "conn-text",
+  }));
+
+  const before = t.calls.length;
   await serveNote(t.deps, t.runId, KAI, { debugMode: false });
   await sendMessage(t.deps, t.runId, KAI, { text: "Are you awake?" }, { debugMode: false });
+  await sendToGroup(t.deps, t.runId, { text: "Who is up?" }, { debugMode: false });
   await startReadMe(t.deps, t.runId, KAI, { debugMode: false });
   await startReadHim(t.deps, t.runId, KAI, { debugMode: false });
+  await serveBeat(t.deps, t.runId, "main-2", 0, { debugMode: false });
 
-  const prompts = t.calls.map((call) => call.messages.map((message) => message.content).join("\n"));
-  assert.equal(prompts.length, 4, "one call per caller: the note, the reply, the two sets");
-  for (const text of prompts) {
-    assert.ok(text.includes("bond rank 15 of 20"), "each caller names the rank he stands at");
-    assert.ok(text.includes("BOND-TRUTH-15"), "each knows rank 15's reveal");
-    assert.ok(!text.includes("BOND-TRUTH-16"), "and none past it");
+  const calls = t.calls.slice(before).map((call) => call.messages.map((message) => message.content).join("\n"));
+  // The planner's bible block is built from the same run state, as its prompt sends it (P5's Lead is Kai).
+  const { readRun } =
+    await import("../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts");
+  const run = (await readRun(t.store, t.runId))!;
+  const unit = run.units.find((entry) => entry.id === KAI)!;
+  const plan = chapterPlanMessages({
+    world: run.world,
+    player: run.player,
+    units: run.units,
+    state: run.state,
+    number: 2,
+    lead: KAI,
+    memory: "",
+  })
+    .map((message) => message.content)
+    .join("\n");
+  return {
+    note: calls[0]!,
+    chat: calls[1]!,
+    group: calls[2]!,
+    readMe: calls[3]!,
+    readHim: calls[4]!,
+    scene: calls[5]!,
+    plan,
+    unit,
+  };
+}
+
+test("a rank 15 love interest is named at rank 15 by every prompt, through its production caller", async () => {
+  // Dottore (#2254): a test that passes bondPlayed in itself proves nothing; these go through the functions the routes
+  // call, which read the count from the run state. Reverting one caller's `bondPlayed` makes its line read 11 of 20.
+  const t = await storyWorld({
+    runKey: "r-bond15car-aaaaaa",
+    lis: { [KAI]: { stage: 6, points: economy.levelFloor(15) } },
+    replies: Array.from({ length: 40 }, () => anyReply),
+  });
+  const prompts = await rankPrompts(t, { stage: 6, points: economy.levelFloor(15), played: 4 });
+  // Kai at stage 6 with rank 15's points and four bond stories played stands at rank 15 exactly.
+  assert.equal(economy.bondRankOf(prompts.unit ? economy.levelFloor(15) : 0, true, 4), 15);
+  const every = {
+    note: prompts.note,
+    chat: prompts.chat,
+    group: prompts.group,
+    readMe: prompts.readMe,
+    readHim: prompts.readHim,
+    scene: prompts.scene,
+  };
+  for (const [kind, text] of Object.entries(every)) {
+    assert.ok(text.includes("bond rank 15 of 20"), `${kind} names the rank he stands at`);
+    assert.ok(text.includes('"tested"'), `${kind} names that rank's word`);
+    // The scene card's reveals: ranks 11-15's truths, and none of 16's.
+    if (kind === "scene" || kind === "group") {
+      for (let level = 11; level <= 15; level += 1) {
+        assert.ok(text.includes(`BOND-TRUTH-${level}`), `${kind} carries rank ${level}'s truth`);
+      }
+    }
+    assert.ok(text.includes("BOND-TRUTH-15"), `${kind} knows rank 15's truth`);
+    assert.ok(!text.includes("BOND-TRUTH-16"), `${kind} knows nothing past the rank`);
+    assert.ok(!text.includes("HIDDEN-TRUTH"), `${kind} keeps no stage secret: his route revealed them`);
   }
+  // The planner's bible JSON carries the same limit, in his bible block.
+  assert.ok(prompts.plan.includes("bond rank 15 of 20"), "the planner names the rank");
+  const bibleJson = /BIBLE: (\{[^]*?\})\n/u.exec(prompts.plan)?.[1];
+  assert.ok(bibleJson, "P5 sends the bible as JSON");
+  const bond = (JSON.parse(bibleJson) as { bond?: Array<{ level: number }> }).bond ?? [];
+  assert.deepEqual(
+    bond.map((entry) => entry.level),
+    [11, 12, 13, 14, 15],
+    "the bible JSON keeps the reached ranks and none past them",
+  );
+});
+
+test("before the finale no prompt names a bond rank, and his stage secrets stay", async () => {
+  const t = await storyWorld({
+    runKey: "r-bond5car-aaaaaa",
+    lis: { [KAI]: { stage: 5, points: 99_999 } },
+    replies: Array.from({ length: 40 }, () => anyReply),
+  });
+  // Four stories are on record, but the finale is unread, so no rank opens.
+  const prompts = await rankPrompts(t, { stage: 5, points: 99_999, played: 4 });
+  for (const [kind, text] of Object.entries({
+    note: prompts.note,
+    chat: prompts.chat,
+    group: prompts.group,
+    readMe: prompts.readMe,
+    readHim: prompts.readHim,
+    scene: prompts.scene,
+    plan: prompts.plan,
+  })) {
+    assert.ok(!text.includes("bond rank"), `${kind} names no bond rank before his finale`);
+    assert.ok(!text.includes("BOND-TRUTH"), `${kind} carries no bond reveal before the finale`);
+  }
+  // His stage-4 secret was revealed by stage 5, so it stays on the card as it always was.
+  assert.ok(prompts.scene.includes("HIDDEN-TRUTH"), "the scene still knows his revealed secret");
 });
 
 test("his side stops at the moment it retells: a bond story played since is not counted", () => {
