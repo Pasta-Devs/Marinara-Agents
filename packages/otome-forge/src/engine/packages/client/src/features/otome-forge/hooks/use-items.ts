@@ -141,7 +141,7 @@ export const paintWaits = (art: Paint | null | undefined) =>
   !!art && (art.state === "waiting-consent" || art.state === "failed" || art.state === "stopped");
 
 /**
- * The picture a record shows: its own once ready, and (0.22.7) the one a repaint kept on screen while the new one
+ * The picture a record shows: its own once ready, and (0.24.0) the one a repaint kept on screen while the new one
  * paints and after it failed. Only a repaint puts a url on a record that is not ready, as a base look's portrait stays.
  */
 export const readyArt = (art: Paint | null | undefined): string | null => art?.url || null;

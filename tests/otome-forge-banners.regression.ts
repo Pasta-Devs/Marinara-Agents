@@ -571,7 +571,7 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
     assert.equal(banner.five.art?.url, banner.art?.url);
     assert.equal((await readItem(t.store, t.runId, banner.four[0]!.id))?.art, null);
   }
-  // 0.22.7: a tap on ready art repaints it (see the repaint test below); it is still ready when it answers.
+  // 0.24.0: a tap on ready art repaints it (see the repaint test below); it is still ready when it answers.
   assert.equal((await t.call("POST", "/runs/:run/wish/art", { banner: "memories-0" })).body.art.state, "ready");
   assert.equal(t.paid.length, 4);
 
@@ -650,7 +650,7 @@ test("a featured 5★ and its banner share one picture: whichever paints first i
   await queueItemArt(v.deps, v.runId, await item(v, "memories-0-f"), { debugMode: false });
   const cg = await paintItemNow(v.deps, v.runId, "memories-0-f", { debugMode: false });
   assert.equal(cg?.state, "ready");
-  // 0.22.7: a tap on a painted banner repaints it. Its featured 5★ held that same picture, so the item follows the new
+  // 0.24.0: a tap on a painted banner repaints it. Its featured 5★ held that same picture, so the item follows the new
   // one rather than keeping the image the repaint replaced, which then leaves the gallery.
   const again = await v.call("POST", "/runs/:run/wish/art", { banner: "memories-0" });
   assert.equal(again.body.art.state, "ready");

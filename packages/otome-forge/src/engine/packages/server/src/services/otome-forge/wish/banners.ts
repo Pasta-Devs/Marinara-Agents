@@ -697,7 +697,7 @@ function paintBanner(
       return { ...banner, art: withKeptPicture(art, replaced) };
     });
     if (!saved?.changed) return false;
-    // The banner's art is its featured item's own picture: the item takes it while its own is not painted, and (0.22.7)
+    // The banner's art is its featured item's own picture: the item takes it while its own is not painted, and (0.24.0)
     // while its own is the picture this repaint replaces, so one repaint moves both rather than leaving the item behind.
     // Still in the slot, and never thrown: the banner's art is saved already, and its image must stay.
     const five = saved.value.items.five[0];
@@ -721,7 +721,7 @@ function paintBanner(
       // A wardrobe banner's 5★ is a look: its place in the wardrobe follows the picture the banner now shows too.
       if (shared?.changed) await addOutfit(deps, runId, shared.value, { repoint: true });
     }
-    // 0.22.7: a repaint replaces the picture it painted over; only a gallery image neither the banner nor its item still
+    // 0.24.0: a repaint replaces the picture it painted over; only a gallery image neither the banner nor its item still
     // holds is deleted (the Engine refuses to delete one a document refers to).
     if (saved.value.art?.state === "ready") await releaseReplacedImage(deps, replaced, saved.value.art);
     return true;
@@ -737,7 +737,7 @@ function paintBanner(
       ]);
       if (!world || !banner || !mine(banner)) return "gone";
       // Its featured item's art (the same picture) is painted: it is the banner's art too, and nothing more is paid.
-      // 0.22.7: unless it is the very picture this repaint replaces, which the pending record still shows.
+      // 0.24.0: unless it is the very picture this repaint replaces, which the pending record still shows.
       const five = banner.items.five[0];
       const featured = five ? await readItem(deps.store, runId, five) : null;
       if (featured?.art?.state === "ready" && !samePicture(featured.art, banner.art)) {
@@ -760,7 +760,7 @@ function paintBanner(
 }
 
 /**
- * POST /runs/:run/wish/art: the tap that paints a banner's art now (its consent, Retry, or 0.22.7 a repaint of a ready
+ * POST /runs/:run/wish/art: the tap that paints a banner's art now (its consent, Retry, or 0.24.0 a repaint of a ready
  * one, which its featured item follows). A tap while it paints waits for that paint, so no tap pays twice.
  */
 export async function paintBannerArtNow(

@@ -123,7 +123,7 @@ export function itemArtView(runId: string, item: Pick<Item, "id" | "art" | "bann
 }
 
 /**
- * A featured 5★'s painted picture becomes its banner's art too, so the banner never pays for it again — and (0.22.7) a
+ * A featured 5★'s painted picture becomes its banner's art too, so the banner never pays for it again — and (0.24.0) a
  * repaint of it replaces the banner's copy of the picture it painted over. Never throws: the item's own art is saved
  * already, and its image must stay.
  */
@@ -173,7 +173,7 @@ export function outfitOf(item: Item): Outfit | null {
 }
 
 /**
- * Adds a painted look to its wearer's `outfits` (the wardrobe can wear it from then on), and (0.22.7) keeps that entry
+ * Adds a painted look to its wearer's `outfits` (the wardrobe can wear it from then on), and (0.24.0) keeps that entry
  * on the picture a repaint of the look now shows. With `repoint`, only an entry already there is moved: a repaint of a
  * look's picture elsewhere (its banner's) never makes a look the player has not opened wearable. Resolves the wearer's
  * document as saved or as it stands, or null when the look is not painted or the run is gone.
@@ -360,7 +360,7 @@ async function paintItem(
       ]);
       if (!current || !world || current.art?.state !== "pending" || current.art.at !== at) return "gone";
       // Its banner's art (the same picture) is painted: it is this item's art too, and nothing more is paid for.
-      // 0.22.7: unless it is the very picture this repaint replaces, which the pending record still shows.
+      // 0.24.0: unless it is the very picture this repaint replaces, which the pending record still shows.
       if (banner?.key === item.banner && banner.art?.state === "ready" && !samePicture(banner.art, current.art)) {
         await save(banner.art);
         return "gone";
@@ -378,7 +378,7 @@ async function paintItem(
     // The wearer's entry moves to the new picture before the old one is released: the Engine refuses to delete an image
     // a document still holds, so releasing first would leave the replaced picture in the gallery.
     await addOutfit(deps, runId, saved);
-    // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+    // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
     await releaseReplacedImage(deps, replaced, saved.art);
   }
   return left;
@@ -433,7 +433,7 @@ export async function queueItemArt(
 
 /**
  * POST /runs/:run/items/:item/art: the tap that paints an owned item's art now (Ask's consent, a reviewed prompt, or
- * Retry), or (0.22.7) repaints a ready one. Waits for the paint and resolves the record as left; a tap while it paints
+ * Retry), or (0.24.0) repaints a ready one. Waits for the paint and resolves the record as left; a tap while it paints
  * waits for that paint, so no tap pays twice. A repainted look's picture is its `outfits` entry's too.
  */
 export async function paintItemNow(
@@ -450,7 +450,7 @@ export async function paintItemNow(
   };
   // The banner's art is the same picture: a tap while it paints waits for it, and pays only if it did not land.
   const first = await read();
-  // Only a picture that was already painted when the tap began is one the tap repaints (0.22.7). One that lands while the
+  // Only a picture that was already painted when the tap began is one the tap repaints (0.24.0). One that lands while the
   // tap waits for it — the banner's shared paint above — is the tap's answer, so adopting it is what keeps a tap from
   // paying twice for the same picture.
   const painted = first.art?.state === "ready";

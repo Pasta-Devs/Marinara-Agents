@@ -15,7 +15,7 @@
 //   given), and the image is saved only onto that entry. A failure is kept with its error and painted again only by a
 //   tap (POST /runs/:run/art/tarot: consent, a reviewed prompt or Retry, which never pays twice); a pending entry with
 //   no live paint in this process reads as stopped. An automatic pass never repaints a ready card; only a tap does
-//   (0.22.7), which replaces the picture and deletes the gallery image it painted over.
+//   (0.24.0), which replaces the picture and deletes the gallery image it painted over.
 // - The picture (S/prompts.ts tarotCardPrompt) is the illustration only, at a story CG's size: its people as a picture
 //   kept outside the story (at most Suggestive), with each person's likeness as a keepsake sends it (cgSubjects by id
 //   and role, so a likeness whose pictures fail to load stops before the paid call), or a card of nobody as a place.
@@ -211,7 +211,7 @@ function paintDeckCard(
         return { ...current, cards: { ...current.cards, [key]: { ...entry, art: withKeptPicture(art, replaced) } } };
       });
       if (!saved?.changed) return false;
-      // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
       if (saved.value.cards[key]?.art.state === "ready")
         await releaseReplacedImage(deps, replaced, saved.value.cards[key]?.art);
       return true;
@@ -308,7 +308,7 @@ export async function tarotCardArtPrompt(
 
 /**
  * POST /runs/:run/art/tarot {li, card, prompt?, negativePrompt?}: the tap that paints a drawn card now (Ask's consent,
- * a reviewed prompt, Retry, or 0.22.7 a repaint of a ready one). Waits for the paint and resolves its record as left;
+ * a reviewed prompt, Retry, or 0.24.0 a repaint of a ready one). Waits for the paint and resolves its record as left;
  * a tap while it paints waits for that paint, so no tap pays twice. 409 `locked` for a card never drawn with them, 503
  * `no-connection` without an image connection.
  */

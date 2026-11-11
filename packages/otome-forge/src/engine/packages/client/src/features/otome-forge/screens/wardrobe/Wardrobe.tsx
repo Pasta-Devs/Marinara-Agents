@@ -435,7 +435,7 @@ function LookCard({
   // Wearing one of theirs paints its faces in the background when they are not painted yet (S/routes/wardrobe.ts).
   const wearPaintsFaces = look.owner !== "me" && images && view.world.images.expressions && faces.length < FACES.length;
   const held = paintWaits(look.art);
-  // 0.22.7: a painted look can be painted again, as the base look's Repaint does; its picture stays until a new one lands.
+  // 0.24.0: a painted look can be painted again, as the base look's Repaint does; its picture stays until a new one lands.
   const repaint = !held && look.art?.state === "ready" && images;
   const shownAll = look.owner === "me" && view.lis.length > 0 && view.lis.every((li) => look.shownTo?.includes(li.id));
   const single = view.lis.length === 1 ? view.lis[0]! : null;

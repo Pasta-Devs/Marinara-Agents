@@ -4,7 +4,7 @@
 // A place is recorded the first time a written beat names it, under placeKey(name), with the beat's English tags. With
 // an image connection it is painted then, in the background, unless Ask before painting is on (or the player reviews
 // image prompts): then it waits for the tap (`waiting-consent`). A place with no tags is never painted; it takes the
-// tags of a later beat that describes it. Only a tap paints a failed or stopped place again, or (0.22.7) repaints a
+// tags of a later beat that describes it. Only a tap paints a failed or stopped place again, or (0.24.0) repaints a
 // ready one; an automatic pass always leaves a ready place alone. Without an image connection the place is kept with no
 // gradient. Painting goes through paintRecord (art/paint.ts): one paid image at a time per connection, the record
 // re-checked right before the call, and the image saved only onto the record that asked for it.
@@ -269,7 +269,7 @@ async function paintPlace(
         };
       });
       if (!result?.changed) return false;
-      // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
       if (result.value.places[key]?.art?.state === "ready")
         await releaseReplacedImage(deps, replaced, result.value.places[key]?.art);
       return true;
@@ -278,7 +278,7 @@ async function paintPlace(
 }
 
 /**
- * POST /runs/:run/art/place: the tap that paints a place now (its consent, Retry, or 0.22.7 a repaint of a ready one).
+ * POST /runs/:run/art/place: the tap that paints a place now (its consent, Retry, or 0.24.0 a repaint of a ready one).
  * Waits for the paint and resolves the place as left; a tap while it is painting waits for that same paint, so no tap
  * pays twice.
  */

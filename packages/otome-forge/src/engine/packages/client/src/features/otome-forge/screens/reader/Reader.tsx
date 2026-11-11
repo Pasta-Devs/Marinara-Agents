@@ -243,7 +243,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // From its line until the scene moves to another place (0.21.1: it stayed to the end of the scene).
   const cg = reader.cg && current && cgOnLine(reader.timeline, reader.cg, reader.lineIndex) ? reader.cg : null;
   const cgUrl = readyUrl(cg?.art);
-  // 0.22.7: a painted place offers a repaint while it is the picture on screen (not under a key image); the picture
+  // 0.24.0: a painted place offers a repaint while it is the picture on screen (not under a key image); the picture
   // it shows stays until a new one is saved.
   const placeRepaint = placeState === "ready" && !!placeUrl && !cgUrl;
   const placePaint =
@@ -442,7 +442,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           }
           placePaint={placePaint}
           cgPaint={
-            // 0.22.7: a key image on screen can be painted again; one whose repaint failed keeps its picture and a Retry.
+            // 0.24.0: a key image on screen can be painted again; one whose repaint failed keeps its picture and a Retry.
             reading && cg && cgUrl && canPaint
               ? {
                   retry: cg.art?.state === "failed" || cg.art?.state === "stopped",

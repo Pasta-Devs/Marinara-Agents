@@ -200,7 +200,7 @@ export function paintSlot<T>(connectionId: string, task: () => Promise<T>, lane:
 // ── Repainting a picture that is already there ──
 
 /**
- * The record an explicit repaint starts on (0.22.7): pending, keeping the picture it showed, so it is still on screen
+ * The record an explicit repaint starts on (0.24.0): pending, keeping the picture it showed, so it is still on screen
  * while the new one paints and still there if it fails, as a base look's portrait stays until its new one is saved.
  * Only a tap starts one: every automatic paint leaves a ready record alone (places.ts automatic, cg.ts startBeatCg,
  * outfits.ts queueItemArt, tarot-deck.ts claimDeckCards).

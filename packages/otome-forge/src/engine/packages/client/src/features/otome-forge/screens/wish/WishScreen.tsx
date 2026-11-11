@@ -494,7 +494,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
   const viewerBlocked = actions.busy.size > 0 || !!actions.review;
   useEffect(() => setExpanded(false), [art, viewerBlocked]);
   const held = paintWaits(banner.art) ? banner.art : null;
-  // 0.22.7: a painted banner can be painted again; its picture stays on the hero until the new one is saved.
+  // 0.24.0: a painted banner can be painted again; its picture stays on the hero until the new one is saved.
   const repaint = !held && banner.art?.state === "ready" && imagesOn(view);
   const heldId = `banner:${banner.key}`;
   const pity = wish.pity[banner.kind];

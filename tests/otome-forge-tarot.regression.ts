@@ -937,7 +937,7 @@ test("a card's tap pays once, a failure waits for Retry, a painted card repaints
   assert.equal(t.paid.length, 2, "a double tap pays once");
   assert.equal(one.body.art.state, "ready");
   assert.deepEqual(two.body.art, one.body.art);
-  // 0.22.7: a tap on a painted card repaints it, one more image, and the picture it painted over leaves the gallery.
+  // 0.24.0: a tap on a painted card repaints it, one more image, and the picture it painted over leaves the gallery.
   // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
   t.deps.images = { ...t.deps.images!, deleteGalleryImage: engineDeletes(t.fake.rows, t.deleted) };
   const repainted = await t.call("POST", ART, { li: KAI, card: "hermit" });

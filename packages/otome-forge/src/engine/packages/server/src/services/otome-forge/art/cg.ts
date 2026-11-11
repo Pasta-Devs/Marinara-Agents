@@ -498,7 +498,7 @@ async function paintCg(
       });
       if (!saved?.changed) return false;
       const now = saved.beat.cg?.art;
-      // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted, and only once
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted, and only once
       // the Album shows the new picture too.
       if (now?.state === "ready") {
         await updateAlbumPicture(deps, runId, albumKey(beat.key, beat.i), now);
@@ -510,7 +510,7 @@ async function paintCg(
 }
 
 /**
- * Points the Album's CG entry for `key` at the picture its record now shows (0.22.7: a repaint of an unlocked CG), so
+ * Points the Album's CG entry for `key` at the picture its record now shows (0.24.0: a repaint of an unlocked CG), so
  * the keepsake follows the beat instead of holding the image the repaint replaced. Never throws: the CG is painted.
  */
 async function updateAlbumPicture(deps: ArtDeps, runId: string, key: string, art: Paint): Promise<void> {
@@ -597,7 +597,7 @@ export async function paintBeatCg(deps: ArtDeps, runId: string, written: Beat, o
 }
 
 /**
- * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, Retry, or 0.22.7 a repaint of a ready one).
+ * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, Retry, or 0.24.0 a repaint of a ready one).
  * Waits for the paint and resolves the CG's record as left; a tap while it is painting waits for that paint, so no tap
  * pays twice.
  */

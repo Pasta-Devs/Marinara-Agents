@@ -18,7 +18,7 @@
 // - The deck: each card shows its painting once it is ready (crossfading in), our SVG card until then with a small
 //   "Painting…" badge while it paints (this screen reads the deck again every few seconds meanwhile, the Done screen
 //   too); turned cards held for consent offer one Paint these cards bar, a failed or stopped one Try painting it again,
-//   and (0.22.7) a painted one Repaint this card (a face-down card is never named, by its prompt review either). Without
+//   and (0.24.0) a painted one Repaint this card (a face-down card is never named, by its prompt review either). Without
 //   an image connection the cards are ours, with no paint controls.
 import {
   useEffect,
@@ -468,7 +468,7 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
   );
 }
 
-/** The picture a card shows: its own once ready, and (0.22.7) the one a repaint kept on screen while it paints. */
+/** The picture a card shows: its own once ready, and (0.24.0) the one a repaint kept on screen while it paints. */
 const readyArt = (entry: TarotDeckCard | undefined) => entry?.art.url || null;
 
 /** "Past: The Tower, reversed". */
@@ -758,7 +758,7 @@ function Spread({ runKey, view, li, reading, deck, turned, next, actions, onTurn
           const art = entry?.art;
           const painting = actions.busy.has(target.id) || art?.state === "pending";
           const retry = images && up && !painting && (art?.state === "failed" || art?.state === "stopped");
-          // 0.22.7: a painted card can be painted again, its picture staying until the new one is saved.
+          // 0.24.0: a painted card can be painted again, its picture staying until the new one is saved.
           const repaint = images && up && !painting && art?.state === "ready";
           const error = actions.errors[target.id];
           return (

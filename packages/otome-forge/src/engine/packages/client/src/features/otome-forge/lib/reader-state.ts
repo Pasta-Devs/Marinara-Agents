@@ -211,7 +211,7 @@ export const worldPlaces = (world: WorldView): PlaceArt[] => Object.values(world
 
 /** A paint's image URL once it is ready. */
 /**
- * The picture a record shows: its own once ready, and (0.22.7) the one a repaint kept on screen while the new one
+ * The picture a record shows: its own once ready, and (0.24.0) the one a repaint kept on screen while the new one
  * paints and after it failed (the place, CG or side chip beside it offers Retry then).
  */
 export const readyUrl = (paint: Paint | undefined | null): string | null => paint?.url || null;

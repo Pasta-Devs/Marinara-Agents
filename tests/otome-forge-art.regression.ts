@@ -438,7 +438,7 @@ test("Ask before painting holds every scene paint until its tap, and a tap never
   assert.deepEqual(second.body.art, first.body.art);
   assert.equal(t.paid.length, 1);
   assert.equal(t.paid[0]!.method, "generateBannerArt");
-  // 0.22.7: tapping a ready CG again repaints it (one more image), and the picture it painted over is deleted.
+  // 0.24.0: tapping a ready CG again repaints it (one more image), and the picture it painted over is deleted.
   const repainted = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
   assert.equal(repainted.body.art.state, "ready");
   assert.notEqual(repainted.body.art.ref, first.body.art.ref);

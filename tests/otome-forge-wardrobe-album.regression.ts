@@ -529,7 +529,7 @@ test("a four-star Moment paints once on concurrent first opens and remains a pla
   assert.equal(memory.read, "unread");
   assert.equal(memory.cg, undefined, "no private art brief leaks to the client");
   assert.equal((await t.open(original.id)).body.art.url, saved.art!.url);
-  // 0.22.7: a tap on the painted illustration repaints it (one more image), and the picture it painted over goes.
+  // 0.24.0: a tap on the painted illustration repaints it (one more image), and the picture it painted over goes.
   const tap = await t.call("POST", "/runs/:run/items/:item/art", {}, { item: original.id });
   assert.equal(tap.body.art.state, "ready");
   assert.notEqual(tap.body.art.url, saved.art!.url);
@@ -711,7 +711,7 @@ test("Ask before painting and prompt review hold a first open's paint for the ta
   assert.ok(sent.negativePrompt.includes("child"), "the adult negatives stay");
   assert.equal(sent.unit.personaId, "persona-ines", "her persona keeps her likeness");
 
-  // 0.22.7: repainting a painted look costs one more image, and the wardrobe's entry follows the new picture, so
+  // 0.24.0: repainting a painted look costs one more image, and the wardrobe's entry follows the new picture, so
   // wearing it never shows the one the repaint replaced.
   // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
   t.deps.images = {

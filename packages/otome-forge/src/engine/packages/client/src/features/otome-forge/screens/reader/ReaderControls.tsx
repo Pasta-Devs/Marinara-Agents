@@ -133,7 +133,7 @@ interface ReaderControlsProps {
   placePaint?: { retry: boolean; repaint: boolean; busy: boolean; onPaint: () => void };
   /** 0.20.0: the speaking side character's sprite waits for a tap (Ask before painting) or a Retry. */
   sidePaint?: { name: string; retry: boolean; busy: boolean; onPaint: () => void };
-  /** 0.22.7: the key image on screen is painted, so it can be painted again (or, if that failed, tried again). */
+  /** 0.24.0: the key image on screen is painted, so it can be painted again (or, if that failed, tried again). */
   cgPaint?: { retry: boolean; busy: boolean; onPaint: () => void };
   /** #2147: opens the Engine's backgrounds for the place, with or without an image connection. */
   onPlaceBackground?: () => void;

@@ -70,7 +70,7 @@ export function CardGrid({ runKey, view, cards, actions, onView }: CardGridProps
         const error = target ? actions.errors[target.id] : undefined;
         const titleId = `${id}-${card.key}`;
         const consent = card.art.state === "waiting-consent";
-        // 0.22.7: a painted card can be painted again; its picture stays until the new one is saved.
+        // 0.24.0: a painted card can be painted again; its picture stays until the new one is saved.
         const repaint = !!url && card.art.state === "ready";
         return (
           <li key={card.key} className="of-album-card">
