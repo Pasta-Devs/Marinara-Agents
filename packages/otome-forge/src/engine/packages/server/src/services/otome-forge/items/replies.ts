@@ -52,6 +52,20 @@ export interface PrestigePlanReply extends Pick<ChapterPlanReply, "title" | "tag
   premise: string;
 }
 
+// ── The bond story plan's reply (0.23.0; the prompt: S/prompts.ts bondPlanMessages) ──
+
+/** The bond story plan: the Character Story plan's fields, canon, with the rank the story settles. */
+export type BondPlanReply = Pick<ChapterPlanReply, "title" | "tags" | "summary" | "nodes"> & {
+  ledger: ChapterPlanReply["ledger"];
+};
+export const BondPlanSchema = z.object({
+  title: PLAN_FIELDS.title!,
+  tags: PLAN_FIELDS.tags!,
+  summary: PLAN_FIELDS.summary!,
+  nodes: PLAN_FIELDS.nodes!,
+  ledger: PLAN_FIELDS.ledger!,
+}) as unknown as ZodType<BondPlanReply>;
+
 export const PrestigePlanSchema = z.object({
   kind: z.string().max(40),
   premise: z.string().min(1).max(600),

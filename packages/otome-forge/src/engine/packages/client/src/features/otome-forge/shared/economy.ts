@@ -45,7 +45,7 @@ export const LEVEL_COSTS: readonly number[] = Array.from({ length: 9 }, (_, i) =
 /**
  * 0.23.0, the bond ranks: levels 11–20 continue the same curve past the finale, 50 more per level (650 … 1,100), so the
  * ladder is one rule and a choice loss stops where it always did. Rank n is reached at the sum of every cost before it:
- * level 11 at 3,600 (level 10's floor) and level 20 at 12,350. They open only for a love interest past his finale
+ * rank 11 at 4,250 (level 10's 3,600 plus 650) and rank 20 at 12,350. They open only for a love interest past his finale
  * (S/schemas/state.ts bondOpen) and one rank at a time, each rank's story played first (bondRankOf).
  * The maintainer's, 2026-11-11: "let's not make it easy to reach".
  */

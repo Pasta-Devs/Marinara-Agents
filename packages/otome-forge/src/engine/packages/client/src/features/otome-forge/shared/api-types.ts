@@ -372,6 +372,17 @@ export interface Bible {
   play: { style: string; cheat: ClawCheat };
   /** Optional (#1936): written for adult NSFW stories only, and added to an older bible only on request. */
   intimacy?: BibleIntimacy;
+  /**
+   * Optional (0.23.0): one entry per bond rank (11-20), written in one call the first time his finale is read. Past the
+   * finale the scene card sends these, up to the rank he stands at, instead of his stage secrets.
+   */
+  bond?: BibleBond[];
+}
+
+/** One bond rank's reveal: what the protagonist learns about him at that rank. */
+export interface BibleBond {
+  level: number;
+  truth: string;
 }
 
 /** `${R}:unit:${li}`: the fields the forge kit expects of a character, plus the bible. */
@@ -1057,6 +1068,11 @@ export interface Chapter {
    */
   prestige?: { kind: PrestigeKind; premise: string };
   /**
+   * A bond story (0.23.0, kind "story", key `story-bond-<li>-<level>`): the rank it opens, and the reveal it is written
+   * around (hidden from the client, which reads the reveal from the bible once it is due).
+   */
+  bond?: { rank: number; reveal: string };
+  /**
    * #2127: a main chapter's copy of the Your thoughts… its plan read, so each of its scenes carries them too (hidden
    * from the client).
    */
@@ -1444,8 +1460,21 @@ export interface StoryView {
    * /runs/:run/prestige/:li writes it). Optional while an older view is cached.
    */
   prestige?: PrestigeEntry[];
+  /**
+   * 0.23.0: each love interest's bond rank waiting to be opened (`story-bond-<li>-<level>`, POST /runs/:run/bond/:li).
+   * Optional while an older view is cached.
+   */
+  bond?: BondEntry[];
   /** #2155: each love interest's side waiting in Routes, or being read. Optional while an older view is cached. */
   hisSides?: HisSideEntry[];
+}
+
+/** A bond rank whose story is waiting to be opened (0.23.0). */
+export interface BondEntry {
+  li: LiId;
+  key: string;
+  rank: number;
+  name: string;
 }
 
 /** An unlocked extra story waiting to be written (#2025). */
