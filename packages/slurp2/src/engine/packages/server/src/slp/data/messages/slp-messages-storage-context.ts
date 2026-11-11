@@ -148,7 +148,7 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
           effectsAppliedAt: null,
           failedAt: null,
           createdAt: timestamp,
-          updatedAt: timestamp,
+          updatedAt: realNow(),
         });
       } catch (error) {
         if (!isSlurpFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;

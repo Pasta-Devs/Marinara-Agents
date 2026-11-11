@@ -377,5 +377,10 @@ assert.match(
   /\{ updatedAt: target\.toISOString\(\), \.\.\.state \}/u,
   "a thread state with no stored updatedAt gets one at the skip",
 );
+assert.match(
+  read("data/messages/slp-messages-storage-context.ts"),
+  /status: "charged",[\s\S]{0,500}updatedAt: realNow\(\)/u,
+  "a compensation inserted as charged is stamped on the clock its recovery check reads",
+);
 
 console.log("slurp2 world clock regression: ok");
