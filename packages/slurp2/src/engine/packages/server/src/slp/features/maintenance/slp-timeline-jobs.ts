@@ -148,19 +148,59 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
   };
 
   /**
-   * Forward date skip. The checkpoint comes first and a failed checkpoint aborts
-   * the skip. The skip itself only moves dates (`applySlurpWorldSkip`): no tick, post, message,
-   * stipend or purge runs, now or later.
+   * Replace everything with `archive` and bring the world date and paused flag back to
+   * what `to` and `priorPaused` say. Slurp stays paused for the whole replace and the
+   * epoch is bumped before and after, so late model or image answers are refused.
+   * The caller holds the exclusive run.
+   */
+  const replaceWith = async (job: Job, archive: Buffer, to: CheckpointMeta, priorPaused: boolean, expectedMedia?: number) => {
+    await noodle.updateSlurpSettings({ paused: true });
+    // The first fence: model and image answers that return after this point are refused.
+    await bumpSlurpWorldEpoch(app.db);
+    job.skipped = [];
+    job.mediaCompleted = 0;
+    job.mediaBytes = 0;
+    await applyRestoreArchive(job, archive, true, true);
+    if (job.skipped.length > 0) throw new Error(`The restore skipped ${job.skipped.length} archive entries.`);
+    if (expectedMedia !== undefined && job.mediaCompleted !== expectedMedia) throw new Error("Not every media file was restored.");
+    await setSlurpWorldOffset(app.db, to.worldNowMs - Date.now());
+    await bumpSlurpWorldEpoch(app.db);
+    await noodle.updateSlurpSettings({ paused: priorPaused });
+  };
+
+  /** Put `from` back after a failed step; reports both failures if the rollback fails too. */
+  const rollBack = async (job: Job, from: CheckpointMeta, priorPaused: boolean, error: unknown): Promise<never> => {
+    const reason = error instanceof Error ? error.message : String(error);
+    job.stage = "rolling-back";
+    job.detail = "That failed. Putting the previous state back.";
+    try {
+      await replaceWith(job, await readFile(join(CHECKPOINT_DIR, `${from.id}.zip`)), from, priorPaused);
+    } catch (rollbackError) {
+      const rollbackReason = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+      throw new Error(`${reason} The rollback failed too (${rollbackReason}). Checkpoint ${from.id} still holds the previous state.`);
+    }
+    throw new Error(`${reason} The previous state is back.`);
+  };
+
+  /**
+   * Forward date skip. The checkpoint comes first and a failed checkpoint aborts the skip.
+   * The skip itself only moves dates (`applySlurpWorldSkip`): no tick, post, message,
+   * stipend or purge runs, now or later. If moving the dates fails half way, the checkpoint is put back.
    */
   const createSkipJob = (days: number) => {
     const job = newBackupJob("export", "Waiting for the date skip worker.");
     return run(job, async () => {
+      const target = slurpSkipTarget(slurpWorldNowMs(), days, MAX_SKIP_DAYS);
       job.stage = "checkpoint";
-      await writeCheckpoint(job, "auto", `Before skipping ${days} day${days === 1 ? "" : "s"}`);
+      const meta = await writeCheckpoint(job, "auto", `Before skipping ${days} day${days === 1 ? "" : "s"}`);
+      const priorPaused = (await noodle.getSlurpSettings()).paused;
       job.stage = "skipping";
       job.detail = "Moving the world date.";
-      // Same time of day, later date: the date picker only chooses days.
-      await applySlurpWorldSkip(app.db, new Date(slurpSkipTarget(slurpWorldNowMs(), days, MAX_SKIP_DAYS)));
+      try {
+        await applySlurpWorldSkip(app.db, new Date(target));
+      } catch (error) {
+        return rollBack(job, meta, priorPaused, error);
+      }
       await pruneCheckpoints(await readAutoCheckpointKeep(app.db));
       finish(job, `World date moved ${days} day${days === 1 ? "" : "s"} forward. Nothing was simulated.`);
     });
@@ -194,41 +234,11 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       job.stage = "safety-checkpoint";
       job.detail = "Saving the current state first.";
       const safety = await writeCheckpoint(job, "safety", `Before restoring ${meta.worldDate.slice(0, 10)}`);
-      const safetyArchive = await readFile(join(CHECKPOINT_DIR, `${safety.id}.zip`));
-
       const priorPaused = (await noodle.getSlurpSettings()).paused;
-      const settle = async (to: CheckpointMeta) => {
-        await setSlurpWorldOffset(app.db, to.worldNowMs - Date.now());
-        await bumpSlurpWorldEpoch(app.db);
-        await noodle.updateSlurpSettings({ paused: priorPaused });
-      };
-      await noodle.updateSlurpSettings({ paused: true });
-      // The first fence: model and image answers that return after this point are refused.
-      await bumpSlurpWorldEpoch(app.db);
       try {
-        await applyRestoreArchive(job, archive, true);
-        if (job.skipped.length > 0) throw new Error(`The restore skipped ${job.skipped.length} archive entries.`);
-        if (job.mediaCompleted !== inspection.mediaEntries.length) throw new Error("Not every media file was restored.");
-        await settle(meta);
+        await replaceWith(job, archive, meta, priorPaused, inspection.mediaEntries.length);
       } catch (error) {
-        job.stage = "rolling-back";
-        job.detail = "The restore failed. Putting the previous state back.";
-        try {
-          job.skipped = [];
-          job.mediaCompleted = 0;
-          job.mediaBytes = 0;
-          await applyRestoreArchive(job, safetyArchive, true);
-          await settle(safety);
-        } catch (rollbackError) {
-          throw new Error(
-            `The restore failed (${error instanceof Error ? error.message : String(error)}) and the rollback failed too (${
-              rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
-            }). The safety checkpoint ${safety.id} still holds the previous state.`,
-          );
-        }
-        throw new Error(
-          `The restore failed and the previous state is back: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        return rollBack(job, safety, priorPaused, error);
       }
       await pruneCheckpoints(await readAutoCheckpointKeep(app.db));
       finish(job, `Restored the checkpoint from world date ${meta.worldDate}. A safety checkpoint of the previous state was kept.`);

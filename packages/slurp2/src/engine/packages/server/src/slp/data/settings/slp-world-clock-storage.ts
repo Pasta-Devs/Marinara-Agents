@@ -2,7 +2,6 @@ import { eq, like } from "../../../db/file-query.js";
 import type { DB } from "../../../db/connection.js";
 import {
   slpAccounts,
-  slpCreatorFirstPostJobs,
   slpCreatorReserveState,
   slpRefreshRuns,
   slurpAudienceTies,
@@ -70,7 +69,6 @@ export async function bumpSlurpWorldEpoch(db: DB): Promise<number> {
 const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> = [
   [slpCreatorReserveState, ["preparationNotBefore"]],
   [slpRefreshRuns, ["nextAttemptAt"]],
-  [slpCreatorFirstPostJobs, ["nextAttemptAt"]],
   [slurpThreads, ["replyNotBeforeAt", "coolUntil", "extendedOnlineUntil"]],
   [slurpFollowUps, ["scheduledAt", "firstDueAt"]],
   [slurpCommissions, ["deliverAt"]],
@@ -104,11 +102,7 @@ const UNSHIFTED_KEYS = new Set([
  * The caller makes the checkpoint first and holds the schedulers.
  */
 export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
-  const before = slurpWorldNowMs();
-  const deltaMs = target.getTime() - before;
-  await setSlurpWorldOffset(db, slurpWorldOffsetMs() + deltaMs);
-  const marks = createAppSettingsStorage(db);
-  for (const key of [TICK_KEY, MAINTENANCE_KEY, PULSE_KEY]) await marks.set(key, target.toISOString());
+  const deltaMs = target.getTime() - slurpWorldNowMs();
 
   for (const [table, columns] of SHIFTED_COLUMNS) {
     for (const row of (await db.select().from(table)) as Array<Record<string, unknown>>) {
@@ -150,4 +144,9 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
     const shifted = JSON.stringify(shiftSlurpDueJson(parsed, deltaMs));
     if (shifted !== JSON.stringify(parsed)) await db.update(slpAccounts).set({ settings: shifted }).where(eq(slpAccounts.id, row.id));
   }
+
+  // Last, so nothing that reads the clock sees a new date before the due times have moved with it.
+  const marks = createAppSettingsStorage(db);
+  for (const key of [TICK_KEY, MAINTENANCE_KEY, PULSE_KEY]) await marks.set(key, target.toISOString());
+  await setSlurpWorldOffset(db, slurpWorldOffsetMs() + deltaMs);
 }

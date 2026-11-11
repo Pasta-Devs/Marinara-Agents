@@ -42,3 +42,5 @@ Locks and claim leases, job and file ages, retry and backoff, scheduler poll spa
 
 - One offset and one epoch per process, as with the pause flag.
 - Time-since fields that are not in `SHIFTED_COLUMNS` or in a due-style key do not move. Add a new due-style column to the list.
+- The epoch check covers each model or image call. A job that makes several calls can make call 1 before a restore and call 2 after it. The restore holds the backup lock and pauses Slurp, so only a call already in flight can cross it. Checking the epoch once per job would close that gap.
+- Claim and lease stamps (reply, follow-up, commission delivery, image and pending-text claims) use the real clock, like their stale checks.

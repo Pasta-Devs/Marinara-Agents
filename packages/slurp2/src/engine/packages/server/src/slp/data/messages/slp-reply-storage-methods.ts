@@ -3,7 +3,7 @@ import type { DB } from "../../../db/connection.js";
 import { slurpMessageClaims, slurpMessages, slurpThreads } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
-import { mapThread, now } from "./slp-messages-storage-helpers.js";
+import { mapThread, now, realNow } from "./slp-messages-storage-helpers.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import type { SlurpThread } from "./slp-messages-storage-types.js";
 
@@ -75,7 +75,7 @@ export function createSlurpReplyMethods(db: DB) {
           creatorAccountId,
           replyMessageId: null,
           generationEpoch: String(thread.generationEpoch ?? "0"),
-          claimedAt: now(),
+          claimedAt: realNow(),
         });
         return { status: "claimed", claimId: id };
       } catch (error) {

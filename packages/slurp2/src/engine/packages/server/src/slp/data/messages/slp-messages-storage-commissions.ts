@@ -51,7 +51,7 @@ import {
 } from "../../modules/messages/slp-rapport.js";
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
 import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../../modules/economy/slp-creator-pricing.js";
-import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slp-messages-storage-helpers.js";
+import { DAY, int, json, mapCommission, mapMessage, mapThread, now, realNow } from "./slp-messages-storage-helpers.js";
 import type {
   SlurpCommission,
   SlurpMessage,
@@ -679,7 +679,7 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
           : isNull(slurpCommissions.deliveryClaimToken);
         await tx
           .update(slurpCommissions)
-          .set({ deliveryId, deliveryClaimToken, deliveryClaimedAt: now(), updatedAt: now() })
+          .set({ deliveryId, deliveryClaimToken, deliveryClaimedAt: realNow(), updatedAt: now() })
           .where(and(eq(slurpCommissions.id, id), eq(slurpCommissions.state, "accepted"), previousClaim));
         const owned = (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
         return owned?.deliveryClaimToken === deliveryClaimToken;

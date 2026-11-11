@@ -12,6 +12,8 @@ import type { SlurpCommission, SlurpMessage, SlurpThread } from "./slp-messages-
 
 import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const now = () => slurpWorldNow().toISOString();
+/** Claim and lease stamps read the real clock: their stale checks do, and a world skip must not trip a lease. */
+export const realNow = () => new Date().toISOString();
 export const DAY = 86_400_000;
 
 export const int = (value: string | null | undefined, fallback = 0): number => {

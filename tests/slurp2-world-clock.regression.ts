@@ -121,15 +121,36 @@ assert.doesNotMatch(read("features/world/slp-world-scheduler-service.ts"), /last
 assert.match(read("features/world/slp-world-operation.ts"), /advanceSlurpWorld\(db: DB, until = slurpWorldNow\(\)\)/u);
 
 // ── 6. Restore ───────────────────────────────────────────────────────────────
+const inOrder = (text: string, steps: string[], message: string) => {
+  const at = steps.map((step) => text.indexOf(step));
+  assert.ok(at.every((index) => index !== -1), `${message}: a step is missing`);
+  assert.deepEqual([...at].sort((x, y) => x - y), at, message);
+};
+const replace = jobs.slice(jobs.indexOf("const replaceWith"), jobs.indexOf("const rollBack"));
+inOrder(
+  replace,
+  ["paused: true", "The first fence", "applyRestoreArchive(job, archive, true, true)", "job.skipped.length > 0", "setSlurpWorldOffset(app.db, to.worldNowMs - Date.now())", "paused: priorPaused"],
+  "replace order: pause, fence, replace (kept paused), verify, world date, prior paused state",
+);
+assert.match(replace, /Not every media file was restored/u, "the media count is verified");
 const restore = jobs.slice(jobs.indexOf("const createRestoreCheckpointJob"), jobs.indexOf("return { createCheckpointJob"));
-const order = ["inspectRestoreArchive(archive)", "writeCheckpoint(job, \"safety\"", "paused: true", "The first fence", "applyRestoreArchive(job, archive, true)", "applyRestoreArchive(job, safetyArchive, true)"].map((step) => restore.indexOf(step));
-assert.ok(order.every((index) => index !== -1), "every restore step is present");
-assert.deepEqual([...order].sort((a, b) => a - b), order, "restore order: verify, safety checkpoint, pause, fence, replace, roll back");
-assert.match(restore, /const priorPaused = \(await noodle\.getSlurpSettings\(\)\)\.paused/u, "the paused state is read before the restore");
-assert.match(restore, /updateSlurpSettings\(\{ paused: priorPaused \}\)/u, "the paused state is put back after the restore and after a rollback");
-assert.match(restore, /mediaCount|inspection\.mediaEntries\.length/u, "the media count is verified");
-assert.match(restore, /job\.skipped\.length > 0/u, "a skipped archive entry fails the restore");
-assert.match(jobs, /setSlurpWorldOffset\(app\.db, to\.worldNowMs - Date\.now\(\)\)/u, "the world date returns to the checkpoint's date");
+inOrder(
+  restore,
+  ["inspectRestoreArchive(archive)", "writeCheckpoint(job, \"safety\"", "replaceWith(job, archive, meta", "rollBack(job, safety"],
+  "restore order: verify, safety checkpoint, replace, roll back",
+);
+assert.match(restore, /priorPaused = \(await noodle\.getSlurpSettings\(\)\)\.paused/u, "the paused state is read before the restore");
+assert.match(restore, /archive\.length !== meta\.bytes/u, "the archive size is checked");
+assert.match(skipJob, /rollBack\(job, meta/u, "a skip that fails half way puts its checkpoint back");
+assert.match(read("features/maintenance/slp-backup-jobs.ts"), /if \(keepPaused\) await noodle\.updateSlurpSettings\(\{ paused: true \}\)/u, "imported settings cannot unpause a restore");
+
+// Claim and lease stamps share the real clock with their stale checks.
+assert.match(read("data/messages/slp-reply-storage-methods.ts"), /claimedAt: realNow\(\)/u);
+assert.match(read("data/messages/slp-messages-storage-commissions.ts"), /deliveryClaimedAt: realNow\(\)/u);
+assert.match(read("data/messages/slp-messages-storage-follow-ups.ts"), /const timestamp = realNow\(\);[\s\S]{0,1200}status: "claimed"/u);
+assert.match(read("features/world/slp-world-scheduler-service.ts"), /isSlurpBackupActive\(\)\) return/u, "the world tick waits while a skip or restore holds the data");
+// A skip moves the offset and marks last, after the due times moved.
+assert.ok(storage.lastIndexOf("setSlurpWorldOffset(db, slurpWorldOffsetMs() + deltaMs)") > storage.indexOf("for (const [table, columns] of SHIFTED_COLUMNS)"), "the offset moves after the due times");
 
 // In-flight model and image work is fenced by the epoch.
 assert.match(read("base/model/slp-provider-retry.ts"), /assertSlurpWorldEpoch\(epoch\)/u);

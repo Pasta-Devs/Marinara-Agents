@@ -62,7 +62,7 @@ import {
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
 import { unlinkCreatorMedia } from "../../base/media/slp-media.js";
 import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../../modules/economy/slp-creator-pricing.js";
-import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slp-messages-storage-helpers.js";
+import { DAY, int, json, mapCommission, mapMessage, mapThread, now, realNow } from "./slp-messages-storage-helpers.js";
 import type {
   SlurpCommission,
   SlurpMessage,
@@ -160,7 +160,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
       await context.storage.cancelScheduledFollowUp(threadId, followUpId);
     },
     async claimScheduledFollowUp(followUpId: string): Promise<boolean> {
-      const timestamp = now();
+      const timestamp = realNow();
       const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
       return db.transaction(async (tx) => {
         const current = (

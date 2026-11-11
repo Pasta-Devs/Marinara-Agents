@@ -108,7 +108,7 @@ assert.match(fallback, /countUnread: \(\) => \(\{ unread: 0, inboundUnread: 0 \}
 // and the Backstage asks only the open page's queries.
 const creatorsStorage = read("server/src/slp/data/creators/slp-creators-storage-3.ts");
 assert.match(creatorsStorage, /\["slurp2_accounts", "characters", "personas"\]/u);
-assert.match(creatorsStorage, /cached\?\.key === key && Date\.now\(\) - cached\.at < 15_000/u);
+assert.match(creatorsStorage, /cached\?\.key === key && (?:Date\.now|slurpWorldNowMs)\(\) - cached\.at < 15_000/u);
 assert.match(
   read("client/src/slp/features/audience/slp-audience-backstage-contract.ts"),
   /useSlurpAudienceCharacters\(target === "audience"\)/u,

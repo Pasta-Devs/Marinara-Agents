@@ -364,7 +364,7 @@ export async function drainSlurpPendingText(
       const attempts = Math.max(0, Number.parseInt(String(row.attempts ?? "0"), 10) || 0) + 1;
       await db
         .update(slurpPendingText)
-        .set({ status: "running", attempts: String(attempts), claimedAt: now() })
+        .set({ status: "running", attempts: String(attempts), claimedAt: new Date().toISOString() })
         .where(eq(slurpPendingText.id, id));
       if (!(await claimSlurpModelBudget(db, settings.modelBudget, jobKind, undefined, paced ? undefined : false))) {
         await db

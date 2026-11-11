@@ -16,6 +16,7 @@ import {
   drainSlurpContinuityExtraction,
   textSlurpPartners,
 } from "../messages/slp-messages-contract.js";
+import { isSlurpBackupActive } from "../../base/locking/slp-backup-state.js";
 import { slurpPaused } from "../../base/model/slp-pause.js";
 
 import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
@@ -66,7 +67,8 @@ export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (s
       const { clock } = (await createSlurpStorage(app.db).getSettings()).simulationTuning;
       pollMs = clock.tickMinutes * 60_000;
       // "Pause all": the world stands still (the settings read above keeps the flag in step).
-      if (slurpPaused()) return;
+      // A skip or restore holds the backup lock; ticks wait for it to finish.
+      if (slurpPaused() || isSlurpBackupActive()) return;
       // While the player is here the free tick runs every wake (R1-106): likes, follows and
       // storylines move while they watch, not only when the Inbox opens.
       const present = slurpPlayerPresent();
