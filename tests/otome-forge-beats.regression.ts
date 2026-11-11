@@ -277,8 +277,17 @@ test("moment nodes are written as beats with their framing; a confrontation node
     prompt(6).includes(`This is the chapter's last node: if it ends on a big choice, make it a different kind`),
   );
   assert.ok(prompt(6).includes(varied) && !prompt(5).includes(varied), "the last node only");
+  // 2026-11-11: a decision the last scene leaves to the protagonist is the player's choice now, never put off in the
+  // prose; and no scene writes as if a choice the story never offered was made.
+  assert.ok(
+    prompt(6).includes("end on ONE big choice that puts it to the player. Never end with the decision put off"),
+  );
+  assert.ok(!prompt(5).includes("Never end with the decision put off"), "the last node only");
+  for (const i of [5, 6]) assert.ok(prompt(i).includes('never write as if it was ("whatever you chose")'), `node ${i}`);
   const plan = system(t.calls.find((entry) => isPlanner(entry.messages))!.messages);
   assert.ok(plan.includes("Never plan a chapter on the template of the ones before it") && plan.includes(varied));
+  assert.ok(plan.includes("its guide says the scene ends on that choice for the player; never plan a decision"));
+  assert.ok(plan.includes('never write as if it was ("whatever you chose")'), "the planner never assumes one either");
   assert.match(
     plan,
     /The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist/,
