@@ -719,7 +719,16 @@ function paintBanner(
         return null;
       });
       // A wardrobe banner's 5★ is a look: its place in the wardrobe follows the picture the banner now shows too.
-      if (shared?.changed) await addOutfit(deps, runId, shared.value, { repoint: true });
+      // Never thrown, for the same reason as the item update: the banner's art is saved, and its image must stay.
+      if (shared?.changed)
+        await addOutfit(deps, runId, shared.value, { repoint: true }).catch((error: unknown) => {
+          deps.runtime.logger.warn(
+            "[otome-forge] moving banner %s's look in the wardrobe failed: %s",
+            key,
+            error instanceof Error ? error.message : String(error),
+          );
+          return null;
+        });
     }
     // 0.24.0: a repaint replaces the picture it painted over; only a gallery image neither the banner nor its item still
     // holds is deleted (the Engine refuses to delete one a document refers to).
@@ -775,8 +784,12 @@ export async function paintBannerArtNow(
     return banner;
   };
   const owner = bannerArtOwner(key);
+  const before = await read();
   // The featured item's art is the same picture: a tap while that paints waits for it (it then becomes this art).
-  const five = (await read()).items.five[0];
+  const five = before.items.five[0];
+  // Only a picture that was already painted when the tap began is one the tap repaints (0.24.0). One that lands while the
+  // tap waits — the item's shared paint above — is the tap's answer, so adopting it keeps a tap from paying twice.
+  const painted = before.art?.state === "ready";
   if (five) await paintSettled(runId, itemArtOwner(five));
   return tapPaint(
     runId,
@@ -786,6 +799,8 @@ export async function paintBannerArtNow(
       return { value: art, art: art ?? undefined };
     },
     async () => {
+      const current = await read();
+      if (!painted && current.art?.state === "ready") return bannerArtView(runId, current);
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) throw runNotFound();
       const connectionId = world.images.connectionId;

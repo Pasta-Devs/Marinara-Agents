@@ -83,8 +83,13 @@ export function CardGrid({ runKey, view, cards, actions, onView }: CardGridProps
               >
                 <span className="of-tarot-card">
                   <TarotFace card={card.card} art={url} />
+                  {busy || card.art.state === "pending" ? (
+                    <span className="of-tarot-badge" role="status">
+                      {t("ui.otomeForge.wish.painting")}
+                    </span>
+                  ) : null}
                 </span>
-                <span className="of-album-cg-title" aria-hidden="true">
+                <span id={titleId} className="of-album-cg-title" aria-hidden="true">
                   {title}
                 </span>
               </button>
@@ -108,7 +113,7 @@ export function CardGrid({ runKey, view, cards, actions, onView }: CardGridProps
                 <button
                   type="button"
                   className="of-button of-button--quiet of-button--small of-glass"
-                  aria-describedby={url ? undefined : titleId}
+                  aria-describedby={titleId}
                   aria-label={repaint ? t("ui.otomeForge.album.repaintCard", { title }) : undefined}
                   aria-disabled={busy}
                   onClick={() => {
