@@ -53,13 +53,25 @@ export function useSlpWorldClock() {
 
 const jobFailed = (job: SlurpBackupJob): Error => new Error(job.error ?? job.detail);
 
+/** One failed status read is not a verdict on the job: ask again a few times before giving up. */
+async function readJobWithRetry(id: string): Promise<SlurpBackupJob> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await getSlurpBackupJob(id);
+    } catch (error) {
+      if (attempt >= 4) throw error;
+      await new Promise((resolve) => window.setTimeout(resolve, 1000 * attempt));
+    }
+  }
+}
+
 /** Poll a timeline job (skip, checkpoint, restore) until it ends. Rejects with the server's reason. */
 export async function waitForSlpTimelineJob(job: SlurpBackupJob, onProgress?: (job: SlurpBackupJob) => void) {
   let current = job;
   while (current.state !== "completed") {
     if (current.state === "error") throw jobFailed(current);
     await new Promise((resolve) => window.setTimeout(resolve, 800));
-    current = await getSlurpBackupJob(current.id);
+    current = await readJobWithRetry(current.id);
     onProgress?.(current);
   }
   return current;
@@ -69,7 +81,10 @@ export async function waitForSlpTimelineJob(job: SlurpBackupJob, onProgress?: (j
 function useRefreshEverything() {
   const queryClient = useQueryClient();
   return async () => {
-    await queryClient.invalidateQueries({ queryKey: ["slurp"] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["slurp"] }),
+      queryClient.invalidateQueries({ queryKey: slpKeys.all }),
+    ]);
   };
 }
 

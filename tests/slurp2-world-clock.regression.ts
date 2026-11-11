@@ -22,7 +22,9 @@ import {
   slurpWorldOffsetMs,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-clock.ts";
 import {
+  WALLET_DUE_KEY,
   selectCheckpointsToPrune,
+  setSlurpMarkJson,
   shiftSlurpDueJson,
   slurpSkipTarget,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/maintenance/slp-timeline.ts";
@@ -242,5 +244,69 @@ const clientClock = readFileSync(
   "utf8",
 );
 assert.match(clientClock, /setNow\(slurpWorldNowMs\(\)\)/u, "the minute clock stays on world time");
+
+// Wallet subscription ends move with a skip, so no renewal is billed for skipped days; receipts keep their dates.
+const wallet = {
+  coins: 4,
+  subscriptions: { c1: { paidThroughAt: "2026-03-10T00:00:00.000Z" } },
+  receipts: [{ at: "2026-03-01T00:00:00.000Z" }],
+};
+const movedWallet = shiftSlurpDueJson(wallet, 5 * DAY, "", WALLET_DUE_KEY) as typeof wallet;
+assert.equal(
+  movedWallet.subscriptions.c1.paidThroughAt,
+  "2026-03-15T00:00:00.000Z",
+  "a wallet subscription end moves with the skip",
+);
+assert.equal(movedWallet.receipts[0].at, wallet.receipts[0].at, "wallet receipts keep their dates");
+assert.equal(
+  (shiftSlurpDueJson(wallet, 5 * DAY) as typeof wallet).subscriptions.c1.paidThroughAt,
+  wallet.subscriptions.c1.paidThroughAt,
+  "outside the wallet, paidThroughAt is not a shifted key",
+);
+
+// "Last advanced" stamps are set to the skip target, so ties, drama and Creator mood see zero elapsed time.
+const marks = setSlurpMarkJson(
+  {
+    advancedAt: "2026-02-01T00:00:00.000Z",
+    ties: { a: { advancedAt: "2026-02-02T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z" } },
+  },
+  "2026-04-01T00:00:00.000Z",
+  new Set(["advancedAt"]),
+) as {
+  advancedAt: string;
+  ties: { a: { advancedAt: string; createdAt: string } };
+};
+assert.equal(marks.advancedAt, "2026-04-01T00:00:00.000Z");
+assert.equal(marks.ties.a.advancedAt, "2026-04-01T00:00:00.000Z", "nested marks are set too");
+assert.equal(marks.ties.a.createdAt, "2026-01-01T00:00:00.000Z", "other stamps are untouched");
+for (const key of ["slurp2.creator-ties", "slurp2.drama.state", "slurp2.creator.state"]) {
+  assert.ok(storage.includes(`"${key}"`), `the skip sets the elapsed-time marks of ${key}`);
+}
+assert.match(storage, /WALLET_KEY\.test\(row\.key\) \? WALLET_DUE_KEY/u, "wallet settings use the wallet key rule");
+
+// A restore can move the world clock back; the support desk guard must not stall on a negative gap.
+assert.match(
+  read("features/messages/desk/slp-desk-tick-operation.ts"),
+  /sinceLastPass >= 0 && sinceLastPass < PASS_MS/u,
+);
+// The charged-payment freshness stamp and its check share the real clock; the bank lease reads the real clock.
+assert.match(read("data/messages/slp-messages-storage-context.ts"), /status: "charged", updatedAt: realNow\(\)/u);
+assert.match(
+  read("data/messages/slp-messages-storage-base.ts"),
+  /row\.updatedAt\)\) > Date\.now\(\) - 5 \* 60 \* 1000/u,
+);
+assert.match(
+  read("features/world/slp-reaction-bank-operation.ts"),
+  /tryBackgroundConnection\(connection\.id, new Date\(\)\)/u,
+);
+// A failed cleanup does not fail a committed skip or restore.
+assert.match(jobs, /pruneQuietly = async[\s\S]{0,200}logger\.warn/u);
+assert.doesNotMatch(jobs, /await pruneCheckpoints\(await readAutoCheckpointKeep\(app\.db\)\);\n\s+finish/u);
+// Client: a restore refreshes every Slurp query, one failed status read does not end the wait, the sexting bar reads live.
+const client = (path: string) =>
+  readFileSync(join(import.meta.dirname, "../packages/slurp2/src/engine/packages/client/src/slp", path), "utf8");
+assert.match(client("features/maintenance/slp-timeline.ts"), /invalidateQueries\(\{ queryKey: slpKeys\.all \}\)/u);
+assert.match(client("features/maintenance/slp-timeline.ts"), /readJobWithRetry\(current\.id\)/u);
+assert.match(client("features/messages/SlpSextingBar.tsx"), /const now = slurpWorldNowMs\(\);/u);
 
 console.log("slurp2 world clock regression: ok");

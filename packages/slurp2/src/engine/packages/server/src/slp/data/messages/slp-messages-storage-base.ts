@@ -175,7 +175,7 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       for (let row of rows) {
         // A fresh `charged` row is a payment still between debit and its message write. Compensating
         // it refunded the fan while the tip or unlock went on to land anyway.
-        if (row.status === "charged" && Date.parse(String(row.updatedAt)) > slurpWorldNowMs() - 5 * 60 * 1000) continue;
+        if (row.status === "charged" && Date.parse(String(row.updatedAt)) > Date.now() - 5 * 60 * 1000) continue;
         if (row.status === "settled") {
           await applySlurpTipEffects(slurp, String(row.id)).catch((error) =>
             logger.warn(error, "[slurp] Durable tip-effect recovery failed for %s", row.id),

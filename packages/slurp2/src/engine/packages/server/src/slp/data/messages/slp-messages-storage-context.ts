@@ -400,7 +400,7 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
     if (!db) throw new Error("Slurp compensation database is unavailable");
     await db
       .update(slurpPaymentCompensations)
-      .set({ status: "charged", updatedAt: now() })
+      .set({ status: "charged", updatedAt: realNow() })
       .where(eq(slurpPaymentCompensations.id, compensationId));
   }
 

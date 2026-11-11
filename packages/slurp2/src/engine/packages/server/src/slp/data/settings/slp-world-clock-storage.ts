@@ -28,7 +28,12 @@ import {
   slurpWorldOffsetMs,
 } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { isSlurpPreferenceSettingKey } from "../../modules/maintenance/slp-backup.js";
-import { shiftSlurpDueJson, shiftSlurpIso } from "../../modules/maintenance/slp-timeline.js";
+import {
+  WALLET_DUE_KEY,
+  setSlurpMarkJson,
+  shiftSlurpDueJson,
+  shiftSlurpIso,
+} from "../../modules/maintenance/slp-timeline.js";
 import { SLURP_SETTINGS_NAMESPACE } from "../host/slp-storage-constants.js";
 
 export const WORLD_OFFSET_KEY = "slurp2.world.clockOffsetMs";
@@ -87,6 +92,14 @@ const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> =
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
+/** Settings keys whose "last advanced" stamps are set to the skip target (zero elapsed). */
+const MARK_KEYS: Record<string, ReadonlySet<string>> = {
+  "slurp2.creator-ties": new Set(["advancedAt"]),
+  "slurp2.drama.state": new Set(["advancedAt"]),
+  "slurp2.creator.state": new Set(["updatedAt"]),
+};
+const WALLET_KEY = /^slurp2\.viewer\.[^.]+\.wallet$/u;
+
 /** Keys that hold clock state themselves or must never be rewritten by a skip. */
 const UNSHIFTED_KEYS = new Set([WORLD_OFFSET_KEY, WORLD_EPOCH_KEY, TICK_KEY, MAINTENANCE_KEY, PULSE_KEY]);
 
@@ -127,7 +140,10 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
     } catch {
       continue;
     }
-    const shifted = JSON.stringify(shiftSlurpDueJson(parsed, deltaMs));
+    let next = shiftSlurpDueJson(parsed, deltaMs, "", WALLET_KEY.test(row.key) ? WALLET_DUE_KEY : undefined);
+    const markKeys = MARK_KEYS[row.key];
+    if (markKeys) next = setSlurpMarkJson(next, target.toISOString(), markKeys);
+    const shifted = JSON.stringify(next);
     if (shifted !== JSON.stringify(parsed)) await settings.set(row.key, shifted);
   }
 

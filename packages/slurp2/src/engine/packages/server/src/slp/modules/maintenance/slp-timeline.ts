@@ -19,11 +19,27 @@ export function shiftSlurpIso(value: unknown, deltaMs: number): unknown {
  * `dueAt`, `expiresAt`, `startedAt`). Content stamps (`createdAt`, `publishedAt`,
  * `sentAt`) are left alone: history keeps its dates.
  */
-export function shiftSlurpDueJson(value: unknown, deltaMs: number, key = ""): unknown {
-  if (typeof value === "string") return DUE_KEY.test(key) ? shiftSlurpIso(value, deltaMs) : value;
-  if (Array.isArray(value)) return value.map((item) => shiftSlurpDueJson(item, deltaMs, key));
+export function shiftSlurpDueJson(value: unknown, deltaMs: number, key = "", pattern: RegExp = DUE_KEY): unknown {
+  if (typeof value === "string") return pattern.test(key) ? shiftSlurpIso(value, deltaMs) : value;
+  if (Array.isArray(value)) return value.map((item) => shiftSlurpDueJson(item, deltaMs, key, pattern));
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shiftSlurpDueJson(v, deltaMs, k)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shiftSlurpDueJson(v, deltaMs, k, pattern)]));
+  }
+  return value;
+}
+
+/** The wallet's subscription ends (`paidThroughAt`) move with a skip too, so no renewal is billed for skipped days. */
+export const WALLET_DUE_KEY = new RegExp(`${DUE_KEY.source}|paidthroughat`, "i");
+
+/**
+ * Set every `markKeys` timestamp in a JSON value to `iso`. Elapsed-time gates (ties, drama, Creator mood decay)
+ * read these as "last advanced", so they are set to the skip target instead of shifted: the gap is zero.
+ */
+export function setSlurpMarkJson(value: unknown, iso: string, markKeys: ReadonlySet<string>, key = ""): unknown {
+  if (typeof value === "string") return markKeys.has(key) && ISO.test(value) ? iso : value;
+  if (Array.isArray(value)) return value.map((item) => setSlurpMarkJson(item, iso, markKeys, key));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, setSlurpMarkJson(v, iso, markKeys, k)]));
   }
   return value;
 }

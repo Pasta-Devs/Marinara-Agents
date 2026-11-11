@@ -346,7 +346,9 @@ const PASS_MS = 30 * 60_000;
  * Creator's pass runs inside that desk's own update, so a play at the same moment waits its turn.
  */
 export async function advanceSlurpSupportDesk(db: DB, at = slurpWorldNow()): Promise<void> {
-  if (at.getTime() - lastPassMs < PASS_MS) return;
+  // A restore can move the world clock back behind the last pass: a negative gap is not "too soon".
+  const sinceLastPass = at.getTime() - lastPassMs;
+  if (sinceLastPass >= 0 && sinceLastPass < PASS_MS) return;
   lastPassMs = at.getTime();
   const storage = createSlurpStorage(db);
   const allSettings = await storage.getSettings();

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DATA_DIR } from "../../../utils/data-dir.js";
+import { logger } from "../../../lib/logger.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import {
   bumpSlurpWorldEpoch,
@@ -135,6 +136,15 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
     }
   };
 
+  /** The skip or restore already committed; a failed cleanup must not turn it into a failed job. */
+  const pruneQuietly = async () => {
+    try {
+      await pruneCheckpoints(await readAutoCheckpointKeep(app.db));
+    } catch (error) {
+      logger.warn(error, "[slurp-timeline] Could not prune old checkpoints");
+    }
+  };
+
   const finish = (job: Job, detail: string) => {
     job.stage = "completed";
     job.state = "completed";
@@ -219,7 +229,7 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       } catch (error) {
         return rollBack(job, meta, priorPaused, error);
       }
-      await pruneCheckpoints(await readAutoCheckpointKeep(app.db));
+      await pruneQuietly();
       finish(job, `World date moved ${days} day${days === 1 ? "" : "s"} forward. Nothing was simulated.`);
     });
   };
@@ -259,7 +269,7 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       } catch (error) {
         return rollBack(job, safety, priorPaused, error);
       }
-      await pruneCheckpoints(await readAutoCheckpointKeep(app.db));
+      await pruneQuietly();
       finish(
         job,
         `Restored the checkpoint from world date ${meta.worldDate}. A safety checkpoint of the previous state was kept.`,
