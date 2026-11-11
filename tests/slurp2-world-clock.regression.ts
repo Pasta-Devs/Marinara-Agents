@@ -318,11 +318,13 @@ assert.match(
   "per-Creator state rows get their mood mark set too",
 );
 assert.match(storage, /THREAD_STATE_MARK_KEYS/u, "a thread's mood clock is set to the skip target");
-assert.match(
-  jobs,
-  /readAutoCheckpointKeep\(app\.db\);\n\s+await noodle\.updateSlurpSettings\(\{ paused: true \}\)[\s\S]{0,900}AUTO_CHECKPOINT_KEEP_KEY, String\(keep\)/u,
-  "a restore puts the player's keep count back",
+assert.match(jobs, /AUTO_CHECKPOINT_KEEP_KEY, String\(keep\)/u, "a restore puts the player's keep count back");
+assert.equal(
+  jobs.match(/const keep = await readAutoCheckpointKeep\(app\.db\);/gu)?.length,
+  2,
+  "the skip and restore jobs read the keep count once, before any replace",
 );
+assert.match(jobs, /priorPaused,\s*keep,\s*error/u, "a rollback uses the keep count the job read, not the archive's");
 assert.doesNotMatch(
   read("features/maintenance/slp-timeline-routes.ts").slice(
     read("features/maintenance/slp-timeline-routes.ts").indexOf('"/world/clock/settings"'),

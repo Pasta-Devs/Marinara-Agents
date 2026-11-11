@@ -276,6 +276,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
             onSave={async (value) => {
               try {
                 await setKeep.mutateAsync(value);
+                setError("");
                 return true;
               } catch (cause) {
                 setError(failText(cause));

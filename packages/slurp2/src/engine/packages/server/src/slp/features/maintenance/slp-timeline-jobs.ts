@@ -177,10 +177,10 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
     archive: Buffer,
     to: CheckpointMeta,
     priorPaused: boolean,
+    keep: number,
     expectedMedia?: number,
   ) => {
-    // The archive carries the keep count it was saved with; the player's current choice wins.
-    const keep = await readAutoCheckpointKeep(app.db);
+    // The archive carries the keep count it was saved with; `keep` is the player's choice, read once by the job before any replace.
     await noodle.updateSlurpSettings({ paused: true });
     // The first fence: model and image answers that return after this point are refused.
     await bumpSlurpWorldEpoch(app.db);
@@ -198,12 +198,18 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
   };
 
   /** Put `from` back after a failed step; reports both failures if the rollback fails too. */
-  const rollBack = async (job: Job, from: CheckpointMeta, priorPaused: boolean, error: unknown): Promise<never> => {
+  const rollBack = async (
+    job: Job,
+    from: CheckpointMeta,
+    priorPaused: boolean,
+    keep: number,
+    error: unknown,
+  ): Promise<never> => {
     const reason = error instanceof Error ? error.message : String(error);
     job.stage = "rolling-back";
     job.detail = "That failed. Putting the previous state back.";
     try {
-      await replaceWith(job, await readFile(join(CHECKPOINT_DIR, `${from.id}.zip`)), from, priorPaused);
+      await replaceWith(job, await readFile(join(CHECKPOINT_DIR, `${from.id}.zip`)), from, priorPaused, keep);
     } catch (rollbackError) {
       const rollbackReason = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
       throw new Error(
@@ -225,12 +231,13 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       job.stage = "checkpoint";
       const meta = await writeCheckpoint(job, "auto", `Before skipping ${days} day${days === 1 ? "" : "s"}`);
       const priorPaused = (await noodle.getSlurpSettings()).paused;
+      const keep = await readAutoCheckpointKeep(app.db);
       job.stage = "skipping";
       job.detail = "Moving the world date.";
       try {
         await applySlurpWorldSkip(app.db, new Date(target));
       } catch (error) {
-        return rollBack(job, meta, priorPaused, error);
+        return rollBack(job, meta, priorPaused, keep, error);
       }
       await pruneQuietly();
       finish(job, `World date moved ${days} day${days === 1 ? "" : "s"} forward. Nothing was simulated.`);
@@ -267,10 +274,11 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       job.detail = "Saving the current state first.";
       const safety = await writeCheckpoint(job, "safety", `Before restoring ${meta.worldDate.slice(0, 10)}`);
       const priorPaused = (await noodle.getSlurpSettings()).paused;
+      const keep = await readAutoCheckpointKeep(app.db);
       try {
-        await replaceWith(job, archive, meta, priorPaused, inspection.mediaEntries.length);
+        await replaceWith(job, archive, meta, priorPaused, keep, inspection.mediaEntries.length);
       } catch (error) {
-        return rollBack(job, safety, priorPaused, error);
+        return rollBack(job, safety, priorPaused, keep, error);
       }
       await pruneQuietly();
       finish(
