@@ -489,7 +489,9 @@ function Affection({
                   aria-valuetext={
                     // The server reports a finished ladder as a full meter (600 of 600 at level 10 with the gate shut,
                     // 1,100 of 1,100 at the last rank); level 10 with his finale read is 0 of 650 toward rank 11.
-                    li.affectionProgress.current >= li.affectionProgress.required
+                    // A full bar with bond ranks open is not the end: the rank is reached and its story waits, so nine
+                    // ranks can remain behind a meter that reads as finished (Dottore, #2254).
+                    li.affectionProgress.current >= li.affectionProgress.required && !li.bond
                       ? t("ui.otomeForge.story.affectionProgressMax")
                       : t("ui.otomeForge.story.affectionProgressValue", li.affectionProgress)
                   }
