@@ -13,7 +13,7 @@ import {
   type SlurpModelJobKind,
 } from "../../../../../shared/src/slp/slp-model-budget.js";
 
-import { slurpWorldNow } from "../clock/slp-world-clock.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export * from "../../../../../shared/src/slp/slp-model-budget.js";
 
 const LEDGER_KEY = "slurp2.model-budget-ledger";

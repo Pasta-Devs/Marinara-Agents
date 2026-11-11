@@ -26,6 +26,7 @@ import {
   slurpWorldNowMs,
   slurpWorldOffsetMs,
 } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { shiftSlurpDueJson, shiftSlurpIso } from "../../modules/maintenance/slp-timeline.js";
 import { SLURP_SETTINGS_NAMESPACE } from "../host/slp-storage-constants.js";
 
 export const WORLD_OFFSET_KEY = "slurp2.world.clockOffsetMs";
@@ -80,22 +81,7 @@ const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> =
   [slurpLiveShows, ["endsAt"]],
 ];
 
-const DUE_KEY = /(until|due|notbefore|nextattempt|nextrun|expires|endsat|startedat|chapterstarted|pollclosesat|scheduledat|deliverat)/i;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-
-const shiftIso = (value: string, deltaMs: number): string => new Date(Date.parse(value) + deltaMs).toISOString();
-
-/** Shift due-style ISO strings inside a JSON value; returns the same reference when nothing moved. */
-export function shiftSlurpDueJson(value: unknown, deltaMs: number, key = ""): unknown {
-  if (typeof value === "string") return DUE_KEY.test(key) && ISO.test(value) ? shiftIso(value, deltaMs) : value;
-  if (Array.isArray(value)) return value.map((item) => shiftSlurpDueJson(item, deltaMs, key));
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, shiftSlurpDueJson(v, deltaMs, k)]),
-    );
-  }
-  return value;
-}
 
 /** Keys that hold clock state themselves or must never be rewritten by a skip. */
 const UNSHIFTED_KEYS = new Set([
@@ -123,7 +109,7 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
       const patch: Record<string, string> = {};
       for (const column of columns) {
         const value = row[column];
-        if (typeof value === "string" && ISO.test(value)) patch[column] = shiftIso(value, deltaMs);
+        if (typeof value === "string" && ISO.test(value)) patch[column] = shiftSlurpIso(value, deltaMs) as string;
       }
       if (Object.keys(patch).length > 0) await db.update(table).set(patch).where(eq(table.id, row.id as string));
     }

@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.20 — 2026-11-11
+
+- Added: Backstage > World clock. Slurp now has its own date. You can skip it forward by whole days, and you can go back only by restoring a checkpoint. A skip changes the date and nothing else: no posts, messages, events, stipends, income or cleanups are made for the days you skipped, and queued replies keep the wait they had left. Slurp saves a checkpoint before every skip and keeps the newest five by default. Manual checkpoints are never deleted. A restore saves a safety checkpoint first, brings back the data, settings, pictures and world date, keeps Slurp paused if it was paused, and puts the old state back if anything fails.
+
 ## 0.4.19 — 2026-11-10 [highlight]
 
 - Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Slurp versions read every persona there as blank: no name, description, appearance or About Me in feeds, profiles, messages and pictures. Slurp now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)

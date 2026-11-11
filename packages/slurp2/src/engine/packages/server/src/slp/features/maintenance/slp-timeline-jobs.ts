@@ -9,6 +9,7 @@ import {
   setSlurpWorldOffset,
 } from "../../data/settings/slp-world-clock-storage.js";
 import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { selectCheckpointsToPrune, slurpSkipTarget } from "../../modules/maintenance/slp-timeline.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import type { SlpBackupJobs } from "./slp-backup-jobs.js";
@@ -44,7 +45,6 @@ export const SAFETY_CHECKPOINT_KEEP = 3;
 export const AUTO_CHECKPOINT_KEEP_KEY = "slurp2.world.autoCheckpointKeep";
 /** A skip can go this far ahead of the current world date. */
 export const MAX_SKIP_DAYS = 3650;
-const DAY_MS = 86_400_000;
 const CHECKPOINT_ID = /^[0-9a-f-]{36}$/;
 
 export async function readAutoCheckpointKeep(db: FastifyInstance["db"]): Promise<number> {
@@ -84,9 +84,8 @@ export async function removeCheckpoint(id: string): Promise<boolean> {
 
 /** Keep the newest `keep` auto and `SAFETY_CHECKPOINT_KEEP` safety checkpoints; manual ones are never touched. */
 export async function pruneCheckpoints(keep: number): Promise<void> {
-  const all = await listCheckpoints();
-  for (const [kind, limit] of [["auto", keep], ["safety", SAFETY_CHECKPOINT_KEEP]] as const) {
-    for (const old of all.filter((meta) => meta.kind === kind).slice(limit)) await removeCheckpoint(old.id);
+  for (const old of selectCheckpointsToPrune(await listCheckpoints(), keep, SAFETY_CHECKPOINT_KEEP)) {
+    await removeCheckpoint(old.id);
   }
 }
 
@@ -161,7 +160,7 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       job.stage = "skipping";
       job.detail = "Moving the world date.";
       // Same time of day, later date: the date picker only chooses days.
-      await applySlurpWorldSkip(app.db, new Date(slurpWorldNowMs() + days * DAY_MS));
+      await applySlurpWorldSkip(app.db, new Date(slurpSkipTarget(slurpWorldNowMs(), days, MAX_SKIP_DAYS)));
       await pruneCheckpoints(await readAutoCheckpointKeep(app.db));
       finish(job, `World date moved ${days} day${days === 1 ? "" : "s"} forward. Nothing was simulated.`);
     });

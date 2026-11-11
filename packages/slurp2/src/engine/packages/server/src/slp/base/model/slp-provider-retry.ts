@@ -1,4 +1,4 @@
-import { assertSlurpWorldEpoch, slurpWorldEpoch } from "../clock/slp-world-clock.js";
+import { assertSlurpWorldEpoch, slurpWorldEpoch } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { assertSlurpNotPaused } from "./slp-pause.js";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";

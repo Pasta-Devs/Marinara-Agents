@@ -54,7 +54,6 @@ import { SlpHubDiscover } from "./SlpHubDiscover";
 import { useSlurpSettings, useTurnOnSlurpAutoPosting } from "../../features/settings/slp-settings-hooks";
 import { SlpHubTopCards } from "./SlpHubTopCards";
 
-import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 // ---------------------------------------------------------------------------
 // Local types
 // ---------------------------------------------------------------------------
@@ -150,7 +149,7 @@ export function ViewerHub({
   const momentCutoff = momentNow - storyLifetimeHours * 60 * 60 * 1000;
   const inlineAdsQuery = useSlurpInlineAds(scope?.viewer.entityId ?? null, null, [
     tab === "all" ? "discover" : "following",
-    slurpWorldNow().getHours() >= 18 ? "night" : "day",
+    new Date().getHours() >= 18 ? "night" : "day",
   ]);
   const hideSlurpAd = useHideSlurpAd();
   const hideSlurpAdBrand = useHideSlurpAdBrand();
