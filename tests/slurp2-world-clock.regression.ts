@@ -346,4 +346,13 @@ assert.match(
   "the image retry reads the epoch once per run",
 );
 
+// A failed job's reason reaches the page: `errorMessage` returns nothing for a plain Error (seen live), so the panel reads it first.
+const panel = client("features/maintenance/SlpWorldClockPanel.tsx");
+assert.match(panel, /cause instanceof Error && cause\.message/u);
+assert.doesNotMatch(
+  panel,
+  /setError\(errorMessage\(cause\)\)/u,
+  "no handler passes a job failure to errorMessage alone",
+);
+
 console.log("slurp2 world clock regression: ok");

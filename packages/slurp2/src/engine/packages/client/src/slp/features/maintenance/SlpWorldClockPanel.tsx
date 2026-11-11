@@ -20,6 +20,15 @@ import {
   useSlpWorldClock,
 } from "./slp-timeline";
 
+/**
+ * A failed timeline job is a plain Error carrying the server's reason. `errorMessage` only reads API errors
+ * (it returns nothing usable for a plain Error), so the reason is read here first.
+ */
+const failText = (cause: unknown): string =>
+  cause instanceof Error && cause.message && typeof (cause as { status?: unknown }).status !== "number"
+    ? cause.message
+    : errorMessage(cause);
+
 const DAY = 24 * 60 * 60_000;
 const dayStart = (key: string) => new Date(`${key}T00:00`).getTime();
 const inputClass = `h-11 min-w-0 flex-1 rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm ${focusRing}`;
@@ -66,7 +75,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
       toast.success(success);
       return true;
     } catch (cause) {
-      setError(errorMessage(cause));
+      setError(failText(cause));
       return false;
     } finally {
       setJob(null);
@@ -111,7 +120,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
     });
     if (!confirmed) return;
     setError("");
-    remove.mutate(checkpoint.id, { onError: (cause) => setError(errorMessage(cause)) });
+    remove.mutate(checkpoint.id, { onError: (cause) => setError(failText(cause)) });
   };
 
   return (
@@ -269,7 +278,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
                 await setKeep.mutateAsync(value);
                 return true;
               } catch (cause) {
-                setError(errorMessage(cause));
+                setError(failText(cause));
                 return false;
               }
             }}
