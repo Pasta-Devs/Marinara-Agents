@@ -57,15 +57,20 @@ import type {
   RouteEntry,
   RunLiView,
   RunView,
+  BondEntry,
   StoryChapterEntry,
   StoryView,
 } from "../../shared/api-types";
 import { hisSideLiOf, stageRow, type HisSideEntry, type StageName } from "../../shared/arcs";
-import { GRIEVANCE_CLEARED_AFFECTION, PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
+import {
+  BOND_MAX_LEVEL,
+  GRIEVANCE_CLEARED_AFFECTION,
+  MAX_LEVEL,
+  PRESTIGE_POINTS_PER_STORY,
+} from "../../shared/economy";
+import { BOND_RANKS } from "../../shared/bond";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
 import { PersonalityQuiz } from "./PersonalityQuiz";
-
-const MAX_LEVEL = 10;
 
 const STATE_KEYS: Record<StoryChapterEntry["state"], string> = {
   unplanned: "ui.otomeForge.story.stateUnplanned",
@@ -151,6 +156,8 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const routes = Array.isArray(story.data.routes) ? story.data.routes : [];
   const repairs = Array.isArray(story.data.repairs) ? story.data.repairs : [];
   const prestige = Array.isArray(story.data.prestige) ? story.data.prestige : [];
+  // 0.23.0: each love interest's bond rank whose story is waiting (POST /runs/:run/bond/:li opens it).
+  const bond = Array.isArray(story.data.bond) ? story.data.bond : [];
   // #2156: each love interest whose grievance with her stands (his repair carries the space it waits for).
   const held = new Set(repairs.flatMap((repair) => (repair.space ? [repair.li] : [])));
   const sides = Array.isArray(story.data.hisSides) ? story.data.hisSides : [];
@@ -247,6 +254,8 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         images={view.world.images}
         prestige={prestige}
         onPrestige={(entry) => openArc({ kind: "prestige", li: entry.li, key: entry.key })}
+        bondStories={bond}
+        onBond={(entry) => openArc({ kind: "bond", li: entry.li, key: entry.key })}
       />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
       {arcPlan && (arcPlan.kind !== "side" || sideDialog === arcPlan) ? (
@@ -383,6 +392,8 @@ function Affection({
   images,
   prestige,
   onPrestige,
+  bondStories,
+  onBond,
 }: {
   lis: RunLiView[];
   /** #2156: whose affection is paused while their grievance with her stands. */
@@ -390,6 +401,9 @@ function Affection({
   images: RunView["world"]["images"];
   prestige: PrestigeEntry[];
   onPrestige: (entry: PrestigeEntry) => void;
+  /** 0.23.0: each love interest's bond rank whose story waits. */
+  bondStories: BondEntry[];
+  onBond: (entry: BondEntry) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -400,7 +414,12 @@ function Affection({
       <ul className="of-affection-list">
         {lis.map((li) => {
           const accent = accentOf(li);
-          const level = Math.max(1, Math.min(MAX_LEVEL, li.level));
+          // 0.23.0: ten outer hearts for levels 1-10, and an inner heart in each for a bond rank once his finale is
+          // read (rank 11 is the first inner heart), so the row shows both ladders at a glance.
+          const level = Math.max(1, Math.min(BOND_MAX_LEVEL, li.level));
+          const outer = Math.min(MAX_LEVEL, level);
+          const bond = li.bond;
+          const inner = bond ? Math.max(0, Math.min(BOND_RANKS.length, bond.level - MAX_LEVEL)) : 0;
           return (
             <li key={li.id} className="of-affection" style={{ "--of-li-accent": accent } as CSSProperties}>
               <Avatar name={li.name} url={li.portrait} accent={accent} size={38} />
@@ -408,21 +427,37 @@ function Affection({
               <span
                 className="of-hearts"
                 role="img"
-                aria-label={t("ui.otomeForge.story.levelOf", { name: li.name, level, max: MAX_LEVEL })}
+                aria-label={
+                  bond
+                    ? t("ui.otomeForge.story.levelOfBond", {
+                        name: li.name,
+                        level: outer,
+                        max: MAX_LEVEL,
+                        bond: inner,
+                        bondMax: BOND_RANKS.length,
+                      })
+                    : t("ui.otomeForge.story.levelOf", { name: li.name, level: outer, max: MAX_LEVEL })
+                }
               >
                 {Array.from({ length: MAX_LEVEL }, (_, index) => (
-                  <Heart
-                    key={index}
-                    size={11}
-                    strokeWidth={2}
-                    fill={index < level ? "currentColor" : "none"}
-                    data-on={index < level}
-                    aria-hidden="true"
-                  />
+                  <span key={index} className="of-heart" data-on={index < outer} aria-hidden="true">
+                    <Heart size={16} strokeWidth={1.8} fill={index < outer ? "currentColor" : "none"} />
+                    {bond ? (
+                      <Heart
+                        className="of-heart-inner"
+                        size={7}
+                        strokeWidth={2.4}
+                        fill={index < inner ? "currentColor" : "none"}
+                        data-inner-on={index < inner}
+                      />
+                    ) : null}
+                  </span>
                 ))}
               </span>
               <span className="of-affection-level" aria-hidden="true">
-                {t("ui.otomeForge.story.level", { level })}
+                {bond
+                  ? t("ui.otomeForge.story.levelBond", { level: outer, rank: bond.name })
+                  : t("ui.otomeForge.story.level", { level: outer })}
               </span>
               {level === MAX_LEVEL && li.prestige ? (
                 <span
@@ -461,6 +496,19 @@ function Affection({
               ) : null}
               {held.has(li.id) ? (
                 <span className="of-affection-paused">{t("ui.otomeForge.story.affectionPaused")}</span>
+              ) : null}
+              {li.bond && bondStories.some((entry) => entry.li === li.id) ? (
+                <button
+                  type="button"
+                  className="of-button of-button--primary of-button--small of-bond-open"
+                  onClick={() => {
+                    const entry = bondStories.find((candidate) => candidate.li === li.id);
+                    if (entry) onBond(entry);
+                  }}
+                >
+                  <BookHeart size={14} strokeWidth={2} aria-hidden="true" />
+                  {t("ui.otomeForge.story.bondOpen", { rank: li.bond.name })}
+                </button>
               ) : null}
               {level === MAX_LEVEL && li.prestige ? (
                 <PrestigeRow
@@ -1088,13 +1136,13 @@ function useDialogFocus(
  * when it has no plan yet.
  */
 type ArcTarget =
-  | { kind: "route" | "repair" | "prestige"; li: string; key: string }
+  | { kind: "route" | "repair" | "prestige" | "bond"; li: string; key: string }
   /** His side of story arc `arc` (#2155): the route always needs the arc it belongs to. */
   | { kind: "side"; li: string; key: string; arc: number };
 
-const ARC_PATHS = { repair: "repairs", prestige: "prestige", side: "sides" } as const;
+const ARC_PATHS = { repair: "repairs", prestige: "prestige", bond: "bond", side: "sides" } as const;
 
-/** POST /runs/:run/routes/:li/next, /repairs/:li, /prestige/:li or /sides/:li. */
+/** POST /runs/:run/routes/:li/next, /repairs/:li, /prestige/:li, /bond/:li or /sides/:li. */
 const arcPath = (target: ArcTarget) =>
   target.kind === "route"
     ? `/routes/${encodeURIComponent(target.li)}/next`
@@ -1115,6 +1163,12 @@ const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: stri
     title: "ui.otomeForge.story.prestigeNew",
     planning: "ui.otomeForge.arcs.planningPrestige",
     locked: "ui.otomeForge.story.prestigeLocked",
+  },
+  // 0.23.0: a bond rank's story, planned on the tap like the others.
+  bond: {
+    title: "ui.otomeForge.story.bondNew",
+    planning: "ui.otomeForge.arcs.planningBond",
+    locked: "ui.otomeForge.arcs.bondLocked",
   },
   side: {
     title: "ui.otomeForge.arcs.sideTitle",

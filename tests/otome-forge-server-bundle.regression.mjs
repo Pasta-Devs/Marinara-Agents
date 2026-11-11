@@ -112,6 +112,7 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "POST /api/otome-forge/runs/:run/audio/brief",
     "POST /api/otome-forge/runs/:run/audio/settings",
     "POST /api/otome-forge/runs/:run/audio/track",
+    "POST /api/otome-forge/runs/:run/bond/:li",
     "POST /api/otome-forge/runs/:run/cancel",
     "POST /api/otome-forge/runs/:run/care-note",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i",

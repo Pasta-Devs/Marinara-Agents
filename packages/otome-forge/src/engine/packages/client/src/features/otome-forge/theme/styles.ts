@@ -1582,7 +1582,12 @@ ${R} .of-affection-progress {
   font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--of-text-soft);
 }
 ${R} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; color: var(--of-li-accent, var(--of-rose)); }
-${R} .of-hearts svg[data-on="false"] { color: var(--of-border-strong); }
+/* 0.23.0: ten outer hearts (levels 1-10) with a bond rank's inner heart inside each; the wrapper owns the "off" colour
+   so it reaches both hearts, and the inner one sits a little high, in the outer heart's hollow. */
+${R} .of-heart { position: relative; display: inline-flex; color: var(--of-border-strong); }
+${R} .of-heart[data-on="true"] { color: var(--of-li-accent, var(--of-rose)); }
+${R} .of-heart-inner { position: absolute; inset-inline-start: 50%; top: 50%; translate: -50% -54%; color: var(--of-border-strong); }
+${R} .of-heart-inner[data-inner-on="true"] { color: var(--of-li-accent, var(--of-rose)); }
 ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
 /* Prestige past level 10 (#2025): three pips, and the extra story they unlock. */
 ${R} .of-affection:has(.of-prestige) {
