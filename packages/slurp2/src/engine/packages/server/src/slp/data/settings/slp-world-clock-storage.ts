@@ -28,6 +28,7 @@ import {
   slurpWorldNowMs,
   slurpWorldOffsetMs,
 } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { isSlurpPreferenceSettingKey } from "../../modules/maintenance/slp-backup.js";
 import { shiftSlurpDueJson, shiftSlurpIso } from "../../modules/maintenance/slp-timeline.js";
 import { SLURP_SETTINGS_NAMESPACE } from "../host/slp-storage-constants.js";
 
@@ -126,7 +127,8 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
     .where(like(appSettings.key, `${SLURP_SETTINGS_NAMESPACE}%`));
   const settings = createAppSettingsStorage(db);
   for (const row of rows) {
-    if (UNSHIFTED_KEYS.has(row.key)) continue;
+    // Preferences (settings, connections, guidance) hold choices, not run state.
+    if (UNSHIFTED_KEYS.has(row.key) || isSlurpPreferenceSettingKey(row.key)) continue;
     let parsed: unknown;
     try {
       parsed = JSON.parse(String(row.value));

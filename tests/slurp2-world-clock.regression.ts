@@ -60,10 +60,12 @@ const state = {
   createdAt: "2026-02-20T09:00:00.000Z",
   nested: [{ dueAt: "2026-03-02T00:00:00.000Z", note: "2026-03-02T00:00:00.000Z" }],
   startedAt: "not a date",
+  occurrence: { startsAt: "2026-03-03T00:00:00.000Z", endsAt: "2026-03-04T00:00:00.000Z" },
 };
 const shifted = shiftSlurpDueJson(state, 5 * DAY) as typeof state;
 assert.equal(shifted.coolUntil, "2026-03-06T12:00:00.000Z", "a due time moves with the skip");
 assert.equal(shifted.nested[0].dueAt, "2026-03-07T00:00:00.000Z", "nested due times move");
+assert.equal(shifted.occurrence.startsAt, "2026-03-08T00:00:00.000Z", "a running event window moves, so nothing starts or ends because of the skip");
 assert.equal(shifted.createdAt, state.createdAt, "history keeps its dates");
 assert.equal(shifted.nested[0].note, state.nested[0].note, "only due-style keys move");
 assert.equal(shifted.startedAt, "not a date", "a value that is not a timestamp is untouched");

@@ -5,7 +5,7 @@
 export type TimelineCheckpointRef = { id: string; kind: "manual" | "auto" | "safety"; createdAt: string };
 
 const DAY_MS = 86_400_000;
-const DUE_KEY = /(until|due|notbefore|nextattempt|nextrun|expires|endsat|startedat|chapterstarted|pollclosesat|scheduledat|deliverat)/i;
+const DUE_KEY = /(until|due|notbefore|nextattempt|nextrun|expires|startsat|endsat|startedat|chapterstarted|pollclosesat|scheduledat|deliverat)/i;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 /** Move one ISO timestamp, or return the value as it was when it is not one. */
