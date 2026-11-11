@@ -254,16 +254,16 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "5947904ed3d99148",
-  bannerMemories: "de4eb263f10caae0",
-  bannerMine: "cf8f54efbd1364ef",
-  beat: "cb05551ed9032f85",
-  beatWithCg: "4690142457d27a5d",
-  chapterPlan: "b12acac8f22c887f",
-  closer: "663c9500db89c7ce",
-  confrontation: "658aefba2567ec54",
-  repairPlan: "fa4071e8c2321d76",
-  routePlan: "ad0105614b0bccc9",
+  bannerHis: "6e47164811bd8861",
+  bannerMemories: "da6b10bf47f78dbc",
+  bannerMine: "4585fe576a2ebd07",
+  beat: "635dec769700f422",
+  beatWithCg: "e38834da5a770b96",
+  chapterPlan: "78854a0c14b148ec",
+  closer: "9165baa3c4c2c54a",
+  confrontation: "49eea03b48de25b1",
+  repairPlan: "412c6284ab2099d6",
+  routePlan: "eb0be47b77e46d87",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
 // 0.20.2: P10 and P11 open with the story context their chapter's scenes cache, so both sets' routePlan and
@@ -271,17 +271,18 @@ const EXPECTED_ANGST: Record<string, string> = {
 // 0.19.1: the chapter plan's climax is optional, so both chapterPlan digests moved.
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
 // 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
+// 0.23.0: the affection line reads "of 20" (the bond ranks), so both sets moved again.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "598ed4c244d58365",
-  bannerMemories: "661517d0ecfa33a4",
-  bannerMine: "e80d96d733b1735e",
-  beat: "8905371572ec6f0a",
-  beatWithCg: "e3fea6301752766e",
-  chapterPlan: "32691b026c34245f",
-  closer: "08dcc1e9fc2ce342",
-  confrontation: "3e3fbf0b86a48841",
-  repairPlan: "7f493b0866f1b176",
-  routePlan: "db011cf9947d8088",
+  bannerHis: "3fa309853d0c98cf",
+  bannerMemories: "d9e3c8fbae4fc450",
+  bannerMine: "61ce5145213aa88f",
+  beat: "16f20bf4ce079973",
+  beatWithCg: "f4025b0093ac67b3",
+  chapterPlan: "98319f0ac1b42181",
+  closer: "56d49a2373a9102d",
+  confrontation: "87e5f5182e5c15cd",
+  repairPlan: "e960ace510ca2da8",
+  routePlan: "9b16ece98594f175",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

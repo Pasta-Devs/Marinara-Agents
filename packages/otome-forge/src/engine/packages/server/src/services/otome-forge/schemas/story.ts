@@ -268,6 +268,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
         return parsed.success ? parsed.data : undefined;
       },
       prestige: z.object({ kind: z.enum(PRESTIGE_KINDS), premise: short(600) }).optional(),
+      bond: z.object({ rank: z.number().int().min(11).max(20), reveal: short(600) }).optional(),
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
       gift: z.enum(GIFT_IDS).optional(),
       hisSide: HisSideNoteSchema.optional(),
@@ -369,6 +370,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     grievance: _grievance,
     date: _date,
     prestige: _prestige,
+    bond: _bond,
     thoughts: _thoughts,
     gift: _gift,
     hisSide: _hisSide,

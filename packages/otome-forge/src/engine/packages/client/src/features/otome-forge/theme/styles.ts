@@ -1582,7 +1582,18 @@ ${R} .of-affection-progress {
   font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--of-text-soft);
 }
 ${R} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; color: var(--of-li-accent, var(--of-rose)); }
-${R} .of-hearts svg[data-on="false"] { color: var(--of-border-strong); }
+/* 0.23.0: ten outer hearts (levels 1-10) with a bond rank's inner heart inside each; the wrapper owns the "off" colour
+   so it reaches both hearts, and the inner one sits a little high, in the outer heart's hollow. */
+${R} .of-heart { position: relative; display: inline-flex; color: var(--of-border-strong); }
+${R} .of-heart[data-on="true"] { color: var(--of-li-accent, var(--of-rose)); }
+/* Both inner states sit on the accent fill of a reached outer heart (a bond rank opens only at level 11, so all ten
+   outer hearts are filled), so they take --of-on-accent, the ink for text and marks on an accent, rather than
+   --of-surface: the surface is translucent over that fill (2.5:1 on Midnight) and on Pearl lighter than the accent
+   (1.4:1), and --of-border-strong (1.2:1) was a smudge. Every accent is a light pastel, so only a dark ink clears
+   3:1 on all of them; at 7px the fill/no-fill difference is a couple of pixels, so an unopened rank is also drawn at
+   0.85 against a reached one's solid ink. Lowest across 368 accents: 4.3:1 Midnight, 3.4:1 Pearl filtered. */
+${R} .of-heart-inner { position: absolute; inset-inline-start: 50%; top: 50%; translate: -50% -54%; color: var(--of-on-accent); opacity: 0.85; }
+${R} .of-heart-inner[data-inner-on="true"] { opacity: 1; }
 ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
 /* Prestige past level 10 (#2025): three pips, and the extra story they unlock. */
 ${R} .of-affection:has(.of-prestige) {

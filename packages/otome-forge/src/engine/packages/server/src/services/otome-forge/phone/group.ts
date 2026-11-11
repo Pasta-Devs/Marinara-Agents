@@ -56,6 +56,7 @@ import { generateJson, resolveConnectionId } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, mainChapterKey, runDocTarget, worldId } from "../ids.js";
 import { groupChatMessages, nameList, renderThread, chatMemoryMessages, sharedState } from "../prompts.js";
+import { bondStoriesPlayed } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import { defaultLiState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { listArcs } from "../story/arc.js";
@@ -230,6 +231,7 @@ async function writeGroup(
         unit,
         // Everyone in the group reads all of it, so as the whole cast may know it (see the header).
         liState: sharedState(run.state.lis[unit.id] ?? defaultLiState()),
+        bondPlayed: bondStoriesPlayed(run.state.chapters, unit.id),
         stickers: stickers.own.get(unit.id) ?? [],
       })),
       yours: stickers.yours,

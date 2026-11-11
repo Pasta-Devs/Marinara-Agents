@@ -40,11 +40,16 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { LAST_STAGE, type ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { bondStoriesPlayed, bondStoryKey } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
-import { nextPrestige } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import {
+  BOND_MAX_LEVEL,
+  bondRankOf,
+  nextPrestige,
+} from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   generateJson,
   readOrGenerate,
@@ -76,6 +81,7 @@ import { hisSideOffers } from "./his-side.js";
 import { removeLoveInterest } from "./introduce.js";
 import type { RecallIndex } from "../memory/recall-index.js";
 import { readBeat, recallText, type StoryMemory } from "./canon.js";
+import { waitingBondRank } from "./bond.js";
 import { chapterPlanMessages, knownRows } from "../prompts.js";
 import {
   ANGST_TYPES,
@@ -790,11 +796,30 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     // #2025: an extra story unlocked and not written yet, per love interest (S/items/prestige.ts writes it on the tap).
     prestige: ready
       ? cast.flatMap((li) => {
-          const n = nextPrestige(
-            run.state.lis[li]?.points ?? 0,
-            chapters.filter((chapter) => chapter.prestige && chapter.li === li).length,
-          );
+          const liState = run.state.lis[li];
+          const played = bondStoriesPlayed(run.state.chapters, li);
+          // 0.23.0: the extra stories open at the last bond rank, not merely past the finale.
+          const n =
+            bondRankOf(liState?.points ?? 0, (liState?.stage ?? 0) >= LAST_STAGE, played) === BOND_MAX_LEVEL
+              ? nextPrestige(
+                  liState?.points ?? 0,
+                  chapters.filter((chapter) => chapter.prestige && chapter.li === li).length,
+                  true,
+                )
+              : null;
           return n ? [{ li, key: prestigeKey(li, n) }] : [];
+        })
+      : [],
+    // 0.23.0: each love interest's bond rank whose story is waiting, once his finale is read (S/story/bond.ts).
+    bond: ready
+      ? cast.flatMap((li) => {
+          const liState = run.state.lis[li];
+          if (!liState) return [];
+          const played = bondStoriesPlayed(run.state.chapters, li);
+          const rank = waitingBondRank(liState, played);
+          return rank && !chapters.some((chapter) => chapter.key === bondStoryKey(li, rank.level))
+            ? [{ li, key: bondStoryKey(li, rank.level), rank: rank.level, name: rank.name }]
+            : [];
         })
       : [],
     // #2155: each love interest's side waiting in Routes, or being read (S/story/his-side.ts).

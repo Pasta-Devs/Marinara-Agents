@@ -4,6 +4,13 @@
 
 - **You can paint a picture again.** Any picture Otome Hearth has already painted can now be painted a second time when you want a different take: a scene's key image, the place it happens in, a Wish banner, a look in the Wardrobe, or a tarot card. The new picture costs one image, and the old one stays on screen while it paints, so nothing goes blank if the paint fails. Once the new one arrives it replaces the old one everywhere it showed, including your Album, and the old image leaves your gallery.
 
+## 0.23.0 — 2026-11-11
+
+- **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.
+- **One rank at a time.** A rank's story is played before the next opens, so banked affection skips none; each level from 11 to 20 costs 650, then 50 more.
+- **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.
+- **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.
+
 ## 0.22.7 — 2026-11-11
 
 - **A new love interest gets his own colour.** A love interest who joins the story after it has started, such as one an arc adds, now has his name tag and glow picked from his own portrait like everyone else's, instead of keeping a colour that could match another love interest's. Names that don't share a portrait yet spread across the colour wheel, so two of them rarely look alike. A story already in progress picks its colours again when it is opened.
