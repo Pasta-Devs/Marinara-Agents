@@ -154,10 +154,14 @@ async function shareWithBanner(
   }
 }
 
-/** A painted look in the kit's outfit shape; null until its art is ready. */
+/**
+ * A painted look in the kit's outfit shape; null until it has a picture. A repaint keeps the picture it paints over on
+ * its record (art/paint.ts repainting/withKeptPicture), so a look stays its wearer's while that paints and after a
+ * failure: the picture on screen is still the one to wear, and the Wardrobe never drops the entry under it.
+ */
 export function outfitOf(item: Item): Outfit | null {
   const art = item.art;
-  if (!isLookKind(item.kind) || !item.look || art?.state !== "ready" || !art.url) return null;
+  if (!isLookKind(item.kind) || !item.look || !art?.url) return null;
   return {
     id: item.id,
     name: item.look.name,
@@ -329,18 +333,19 @@ async function paintItem(
   connectionId: string,
   { debugMode, consent, edited }: { debugMode: boolean; consent: boolean; edited?: Partial<ImagePrompt> },
 ): Promise<Paint | null> {
+  // The picture this paint replaced, kept until the wearer has moved off it (released below).
+  let replaced: Paint | undefined;
   const save = async (art: Paint) => {
-    let replaced: Paint | undefined;
+    let previous: Paint | undefined;
     const saved = await updateIfChanged(deps.store, itemTarget(runId, item.id), normalizeItem, (current) => {
       if (!(current.id && current.art?.state === "pending" && current.art.at === at)) return undefined;
-      replaced = current.art;
-      return { ...current, art: withKeptPicture(art, replaced) };
+      previous = current.art;
+      return { ...current, art: withKeptPicture(art, previous) };
     });
     if (!saved?.changed) return false;
+    replaced ??= previous;
     // Still in the slot: the banner's own paint, queued behind this one, then finds its record replaced.
-    await shareWithBanner(deps, runId, saved.value, replaced);
-    // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
-    if (saved.value.art?.state === "ready") await releaseReplacedImage(deps, replaced, saved.value.art);
+    await shareWithBanner(deps, runId, saved.value, previous);
     return true;
   };
   const left = await paintRecord(deps, {
@@ -369,7 +374,13 @@ async function paintItem(
     save,
   });
   const saved = await readItem(deps, runId, item.id);
-  if (saved?.art?.state === "ready") await addOutfit(deps, runId, saved);
+  if (saved?.art?.state === "ready") {
+    // The wearer's entry moves to the new picture before the old one is released: the Engine refuses to delete an image
+    // a document still holds, so releasing first would leave the replaced picture in the gallery.
+    await addOutfit(deps, runId, saved);
+    // 0.22.7: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+    await releaseReplacedImage(deps, replaced, saved.art);
+  }
   return left;
 }
 

@@ -753,7 +753,13 @@ test("owned Snapshots are private memory of their love interest, in the order th
 test("a tap on a painted banner repaints it, and its featured 5★ follows the picture it now shows", async () => {
   // Its own connection, so the lane it waits on is nobody else's (the suite's shared one may still be held).
   const connectionId = "conn-repaint-banner";
-  const t = await wishWorld({ runKey: "r-m4bann17-qqqqqq", images: { connectionId }, replies: rotationReplies() });
+  // Deletes answer as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+  const t = await wishWorld({
+    runKey: "r-m4bann17-qqqqqq",
+    images: { connectionId },
+    replies: rotationReplies(),
+    engineDeletes: true,
+  });
   const opened = await t.call("POST", "/runs/:run/wish/open");
   assert.equal(opened.status, 200, JSON.stringify(opened.body));
   await paintSlot(connectionId, async () => undefined);

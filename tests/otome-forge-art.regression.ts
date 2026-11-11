@@ -914,6 +914,8 @@ test("a repaint keeps the picture it paints over on screen, keeps it again if it
       if (fail && call.method === "generateBannerArt") throw new Error("provider down");
       if (call.method === "generateBannerArt") await held;
     },
+    // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+    engineDeletes: true,
   });
   await t.write(1, { cg: CG });
   const painted = (await readStoredBeat(t.store, t.runId, 1))!;

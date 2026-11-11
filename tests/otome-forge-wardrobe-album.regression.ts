@@ -44,7 +44,7 @@ import {
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { artWorld, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
+import { artWorld, engineDeletes, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
 import { KAI, MIR, SOL, at, beatReply, json } from "./fixtures/otome-forge-story.ts";
 
 const item = (id: string, changes: Partial<Item>): Item => ({
@@ -713,6 +713,11 @@ test("Ask before painting and prompt review hold a first open's paint for the ta
 
   // 0.22.7: repainting a painted look costs one more image, and the wardrobe's entry follows the new picture, so
   // wearing it never shows the one the repaint replaced.
+  // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+  t.deps.images = {
+    ...t.deps.images!,
+    deleteGalleryImage: engineDeletes(t.fake.rows, t.deleted),
+  };
   const looksPaid = t.outfitCalls.length;
   const hisLook = (await t.unit(KAI)).outfits[0]!;
   const repainted = await t.tapOne(ITEMS.hisLook.id);
@@ -726,7 +731,41 @@ test("Ask before painting and prompt review hold a first open's paint for the ta
     [[ITEMS.hisLook.id, repainted.body.art.url, repainted.body.art.ref]],
     "the wardrobe's one entry shows the new picture",
   );
-  assert.deepEqual(t.deleted, [hisLook.ref!.slice("global-gallery:".length)]);
+  assert.deepEqual(
+    t.deleted,
+    [hisLook.ref!.slice("global-gallery:".length)],
+    "the replaced image leaves the gallery once the wearer shows the new one",
+  );
+});
+
+test("a look whose repaint fails keeps the picture it wears and stays in the wardrobe", async () => {
+  let fails = false;
+  const t = await itemsWorld("r-m4bfail-aaaaaa", {
+    before: () => {
+      if (fails) throw new Error("provider down");
+    },
+  });
+  const first = await t.tapOne(ITEMS.hisLook.id);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.art.state, "ready");
+  const before = (await t.unit(KAI)).outfits[0]!;
+  assert.deepEqual([before.id, before.ref], [ITEMS.hisLook.id, first.body.art.ref]);
+
+  fails = true;
+  const failed = await t.tapOne(ITEMS.hisLook.id);
+  assert.equal(failed.status, 200, JSON.stringify(failed.body));
+  assert.equal(failed.body.art.state, "failed");
+  assert.deepEqual(
+    [failed.body.art.url, failed.body.art.ref],
+    [first.body.art.url, first.body.art.ref],
+    "the picture it painted over stays on screen",
+  );
+  const wardrobe = (await t.call("GET", "/runs/:run/wardrobe")).body;
+  const card = wardrobe.him[KAI].find((look: { id: string }) => look.id === ITEMS.hisLook.id);
+  assert.deepEqual([card.wearable, card.url], [true, first.body.art.url], "the look is what it still shows");
+  const wear = await t.call("POST", "/runs/:run/wardrobe/wear", { owner: KAI, look: ITEMS.hisLook.id });
+  assert.equal(wear.status, 200, JSON.stringify(wear.body));
+  assert.deepEqual(t.deleted, [], "a failed repaint deletes nothing");
 });
 
 test("her 5★ look gets a first-wear scene with the love interest of its couple set, once, also when opened before", async () => {
