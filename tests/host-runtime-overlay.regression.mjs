@@ -2,7 +2,8 @@
 // sources/host-runtime-overlay replaces each vendored copy of a stateful Engine service. This loads the overlay
 // modules as the package build stacks them and checks the binding, the pre-activation log buffer, delegation to
 // the host members, the "needs a newer Marinara Engine" answer (HTTP 501) when a member is missing, the
-// Calls schedule update, and persona reads through api.runtime.resources (Pasta-Devs/Marinara-Agents#2230).
+// Calls schedule update, and characters and personas through api.runtime.resources (Pasta-Devs/Marinara-Agents#2230,
+// #2242).
 // Run: node --experimental-transform-types tests/host-runtime-overlay.regression.mjs
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -289,46 +290,151 @@ try {
   );
   assert.match(memorySource, /"long-term-memory:recall"/u);
 
-  // --- Personas -----------------------------------------------------------------------------------------------
-  // Engine storage format 11 keeps a persona's fields in one `data` column, which the bundled flat `personas`
-  // declaration reads as blank, so persona reads go to api.runtime.resources and the bundled ones refuse.
-  const { withHostPersonas } = await load("lib/host-personas.ts");
-  const bundled = {
-    getById: async (id) => ({ id, data: "{}" }),
-    getPersona: async () => ({ name: "" }),
-    listPersonas: async () => [{ name: "" }],
-    listPersonasPage: async () => ({ items: [] }),
-    updatePersona: async () => "written",
+  // --- Characters and personas -------------------------------------------------------------------------------
+  // The overlay replaces the Engine's characters storage at the same path, so nothing reads Engine characters or
+  // personas through a bundled copy of the storage and its table declarations (Pasta-Devs/Marinara-Agents#2242).
+  const { createCharactersStorage } = await load("services/storage/characters.storage.ts");
+  const { createCharactersStorage: fromLib } = await load("lib/host-characters-storage.ts");
+  assert.equal(fromLib, createCharactersStorage, "lib/host-characters-storage.js re-exports the overlay storage");
+  const characters = createCharactersStorage({ ignored: "db" });
+  const mira = {
+    id: "c1",
+    data: JSON.stringify({ name: "Mira" }),
+    comment: "",
+    avatarPath: "/avatars/mira.png",
+    createdAt: "2026-11-01T00:00:00.000Z",
+    updatedAt: "2026-11-02T00:00:00.000Z",
   };
-  const personas = withHostPersonas(bundled);
+  const group = {
+    id: "g1",
+    name: "Crew",
+    description: "",
+    avatarPath: null,
+    characterIds: '["c1"]',
+    createdAt: "2026-11-01T00:00:00.000Z",
+    updatedAt: "2026-11-01T00:00:00.000Z",
+  };
   const personaRow = { id: "p1", name: "Mira", description: "Paints at night.", isActive: "true" };
-  const asked = [];
-  const unbindPersonas = host.bindHostRuntime({
+  const hostCalls = [];
+  const resources = {
+    listPersonas: async (ids) => {
+      hostCalls.push(["listPersonas", ids]);
+      return !ids || ids.includes("p1") ? [{ id: "p1", data: personaRow }] : [];
+    },
+    getCharacters: async (ids) => {
+      hostCalls.push(["getCharacters", ids]);
+      return !ids || ids.includes("c1") ? [mira] : [];
+    },
+    listCharacterGroups: async () => [group],
+    listCharactersPage: async (options) => {
+      hostCalls.push(["listCharactersPage", options]);
+      return { items: [mira], limit: options.limit, offset: options.offset, hasMore: false };
+    },
+    listCharacterSummaries: async (ids) => {
+      hostCalls.push(["listCharacterSummaries", ids]);
+      return [{ id: "c1", name: "Mira", avatarUrl: null, avatarCrop: null }];
+    },
+    updateCharacterExtensions: async (id, patch) => {
+      hostCalls.push(["updateCharacterExtensions", id, patch]);
+      return id === "c1" ? mira : null;
+    },
+  };
+  const unbindCharacters = host.bindHostRuntime({ logger: runtimeLogger, persistence: {}, resources });
+  assert.deepEqual(await characters.getById("c1"), mira, "a character reads through the host, avatar and dates too");
+  assert.equal(await characters.getById("gone"), null);
+  // A host that answers with another row (or all of them) is not taken at its word.
+  const strayRows = {
+    ...resources,
+    getCharacters: async () => [mira],
+    listPersonas: async () => [{ id: "p1", data: personaRow }],
+  };
+  const unbindStray = host.bindHostRuntime({ logger: runtimeLogger, persistence: {}, resources: strayRows });
+  assert.equal(await characters.getById("c2"), null, "only the asked id counts");
+  assert.equal(await characters.getPersona("p2"), null, "only the asked persona id counts");
+  unbindStray();
+  host.bindHostRuntime({ logger: runtimeLogger, persistence: {}, resources });
+  assert.deepEqual(await characters.list(), [mira]);
+  assert.deepEqual(await characters.listGroups(), [group]);
+  const pageOptions = { includeBuiltIn: true, limit: 30, offset: 0, search: "mi", sort: "name-asc" };
+  assert.deepEqual((await characters.listPage(pageOptions)).items, [mira]);
+  assert.equal((await characters.listSummariesByIds(["c1"]))[0].name, "Mira");
+  assert.equal(await characters.updateExtensions("c1", { characterMemories: [] }), mira);
+  assert.equal(await characters.updateExtensions("gone", { characterMemories: [] }), null);
+  assert.deepEqual(await characters.getPersona("p1"), personaRow, "a persona reads through the host");
+  assert.equal(await characters.getPersona("gone"), null);
+  assert.deepEqual(await characters.listPersonas(), [personaRow]);
+  assert.deepEqual(hostCalls, [
+    ["getCharacters", ["c1"]],
+    ["getCharacters", ["gone"]],
+    ["getCharacters", undefined],
+    ["listCharactersPage", pageOptions],
+    ["listCharacterSummaries", ["c1"]],
+    ["updateCharacterExtensions", "c1", { characterMemories: [] }],
+    ["updateCharacterExtensions", "gone", { characterMemories: [] }],
+    ["listPersonas", ["p1"]],
+    ["listPersonas", ["gone"]],
+    ["listPersonas", undefined],
+  ]);
+  // The whole-card write and every other Engine storage method refuse by name instead of going missing.
+  for (const method of ["update", "create", "remove", "updatePersona", "listPersonasPage", "getGroupById"]) {
+    await assert.rejects(
+      characters[method]("c1", {}),
+      new RegExp(`^Error: ${method} is not available to packages`, "u"),
+    );
+  }
+  unbindCharacters();
+
+  // An Engine before 1.819 has resources but none of the character members: "needs a newer Marinara Engine".
+  const unbindOld = host.bindHostRuntime({
     logger: runtimeLogger,
     persistence: {},
-    resources: {
-      listPersonas: async (ids) => {
-        asked.push(ids);
-        return !ids || ids.includes("p1") ? [{ id: "p1", data: personaRow }] : [];
-      },
-    },
+    resources: { listPersonas: resources.listPersonas },
   });
-  assert.deepEqual(await personas.getPersona("p1"), personaRow, "a persona reads through the host");
-  assert.equal(await personas.getPersona("gone"), null);
-  assert.deepEqual(await personas.listPersonas(), [personaRow]);
-  assert.deepEqual(asked, [["p1"], ["gone"], undefined]);
-  assert.deepEqual(await personas.getById("c1"), { id: "c1", data: "{}" }, "characters stay on the bundled storage");
-  await assert.rejects(personas.updatePersona("p1", {}), /api\.runtime\.resources/u, "bundled persona writes refuse");
-  await assert.rejects(personas.listPersonasPage({}), /api\.runtime\.resources/u, "other bundled persona reads refuse");
-  unbindPersonas();
+  for (const [run, feature] of [
+    [() => characters.getById("c1"), "Reading characters"],
+    [() => characters.list(), "Reading characters"],
+    [() => characters.listGroups(), "Reading character groups"],
+    [() => characters.listPage(pageOptions), "Listing characters"],
+    [() => characters.listSummariesByIds(["c1"]), "Listing characters"],
+    [() => characters.updateExtensions("c1", {}), "Saving to a character"],
+  ]) {
+    await assert.rejects(run(), {
+      name: "HostFeatureUnavailableError",
+      message: `${feature} needs a newer Marinara Engine.`,
+    });
+  }
+  unbindOld();
   const unbindWithoutResources = host.bindHostRuntime({ logger: runtimeLogger, persistence: {} });
-  await assert.rejects(personas.getPersona("p1"), {
+  await assert.rejects(characters.getPersona("p1"), {
     name: "HostFeatureUnavailableError",
     message: "Reading personas needs a newer Marinara Engine.",
   });
   unbindWithoutResources();
 
-  // No package builds the bundled characters storage directly: it would read format-11 personas as blank.
+  // Calls' [memory] and Slurp's schedule refresh send only the keys they change, never the whole extensions object.
+  const callsRoutes = await readFile(
+    join(root, "packages/conversation-calls/src/engine/packages/server/src/routes/conversation-calls.routes.ts"),
+    "utf8",
+  );
+  assert.ok(
+    callsRoutes.includes(
+      "const saved = await input.chars.updateExtensions(target.id, { characterMemories: memories })",
+    ),
+  );
+  assert.match(callsRoutes, /if \(!saved\) \{[^}]*logger\.warn\(/u);
+  assert.doesNotMatch(callsRoutes, /chars\.update\(/u);
+  const slurpCreators = await readFile(
+    join(root, "packages/slurp2/src/engine/packages/server/src/slp/features/creators/slp-creators-routes.ts"),
+    "utf8",
+  );
+  assert.match(
+    slurpCreators,
+    /const saved = await characters\.updateExtensions\(source\.entityId, \{\s+conversationSchedule:/u,
+  );
+  assert.match(slurpCreators, /if \(!saved\) return reply\.code\(404\)/u);
+  assert.doesNotMatch(slurpCreators, /characters\.update\(/u);
+
+  // No package imports the storage path directly; lib/host-characters-storage.js is the one way in.
   for (const id of ["conversation-calls", "noodle", "slurp2"]) {
     const sourceRoot = join(root, "packages", id, "src");
     for (const entry of await readdir(sourceRoot, { recursive: true, withFileTypes: true })) {
