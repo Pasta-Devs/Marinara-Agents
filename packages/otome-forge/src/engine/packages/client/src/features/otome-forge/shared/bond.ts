@@ -106,6 +106,8 @@ export function bondStoriesPlayed(
   chapters: Record<string, { completed: string | null } | undefined>,
   li: LiId,
 ): number {
-  return Object.entries(chapters).filter(([key, progress]) => !!progress?.completed && bondStoryLevel(key, li) !== null)
-    .length;
+  // A bare state (a prompt built from a partial one) reads as no story played.
+  return Object.entries(chapters ?? {}).filter(
+    ([key, progress]) => !!progress?.completed && bondStoryLevel(key, li) !== null,
+  ).length;
 }

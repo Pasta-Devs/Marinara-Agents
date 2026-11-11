@@ -89,7 +89,7 @@ export async function ensurePrestigeStory(
   const liState = run.state.lis[li];
   if (!unit || !liState) throw notFound("love interest");
   const written = await prestigeStories(deps.store, runId, li);
-  // 0.23.0: the extra stories open at the last bond rank, not merely past the finale (Dottore, #2254).
+  // 0.23.0: the extra stories open at the last bond rank, not merely past the finale.
   const lastRank =
     bondRankOf(liState.points, liState.stage >= LAST_STAGE, bondStoriesPlayed(run.state.chapters, li)) ===
     BOND_MAX_LEVEL;

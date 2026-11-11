@@ -683,7 +683,8 @@ function revealLines(
       .filter((entry) => entry.level <= rank)
       .sort((a, b) => b.level - a.level)
       .map((entry) => entry.truth);
-    return { hidden: [], known };
+    // Reached no rank yet: the route's secrets are still all she has, so they stay on the card rather than vanishing.
+    if (known.length) return { hidden: [], known };
   }
   return {
     hidden: bible.secrets.filter((secret) => secret.revealAt.stage > stage).flatMap((secret) => secret.tells),
@@ -1318,7 +1319,7 @@ function savedBackgrounds(world: Pick<World, "places">): string {
 
 const liStateOf = (state: RunState, li: LiId): LiState => state.lis[li] ?? defaultLiState();
 /** His card's state with the bond stories he has played (0.23.0), so the card names the rank he stands at. */
-const cardStateOf = (state: RunState, li: LiId): SceneCardState => ({
+const cardStateOf = (state: RunState, li: LiId): LiState & { bondPlayed: number } => ({
   ...liStateOf(state, li),
   bondPlayed: bondStoriesPlayed(state.chapters, li),
 });
@@ -1673,7 +1674,11 @@ function webBlock(
 }
 
 /** A love interest's scene card and what stands between them and the protagonist (every prompt but the planners'). */
-export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[] = []): string {
+export function sceneCardBlock(
+  unit: Unit,
+  liState: LiState & { bondPlayed?: number },
+  resolves: readonly string[] = [],
+): string {
   return [`id ${unit.id}:`, otomeSceneCard(unit, liState), appearanceLine(unit), betweenYou(unit, liState, resolves)]
     .filter(Boolean)
     .join("\n");
@@ -2308,7 +2313,11 @@ export function beatMessages({
   // their card holds only what they may know (ownView), as the date's plan did.
   const date = chapter.kind === "date" ? chapter.date : undefined;
   const partner = date ? units.find((unit) => unit.id === date.li) : undefined;
-  const cardState = (li: LiId) => (date ? ownView(state, li).liState : liStateOf(state, li));
+  // 0.23.0: with the bond stories he has played, so the card names the rank he stands at (Dottore, #2254).
+  const cardState = (li: LiId): LiState & { bondPlayed: number } => ({
+    ...(date ? ownView(state, li).liState : liStateOf(state, li)),
+    bondPlayed: bondStoriesPlayed(state.chapters, li),
+  });
   // The narrator's instructions are the same for every node: what a node changes (who may think aloud, whether it is
   // the chapter's last and may end on a big choice, its key-image rules, a date's or side-with's choice) is told with
   // the task, so a chapter's scenes share one cached prompt (#2066, #2091).
@@ -2366,7 +2375,7 @@ export function beatMessages({
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, cardState(unit.id) as LiState, node.resolves ?? []),
+          sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []),
           // #2156: never a date's scenes, as never its plan (P26).
           date ? "" : upsetLine(unit, cardState(unit.id)),
           knowsAboutYou(unit, cardState(unit.id)),
@@ -2760,7 +2769,7 @@ function othersBlock(units: readonly Unit[], state: RunState, li: LiId): string 
         {
           ...seenBy(liStateOf(state, unit.id), unit.id, [li]),
           bondPlayed: bondStoriesPlayed(state.chapters, unit.id),
-        } as LiState,
+        },
         [],
       ),
     )
@@ -2983,7 +2992,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, cardStateOf(state, unit.id) as LiState, node.resolves ?? []),
+          sceneCardBlock(unit, cardStateOf(state, unit.id), node.resolves ?? []),
           upsetLine(unit, liStateOf(state, unit.id)),
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
         ]
@@ -3079,7 +3088,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     present
       .map((unit) =>
         [
-          sceneCardBlock(unit, cardStateOf(state, unit.id) as LiState, node.resolves ?? []),
+          sceneCardBlock(unit, cardStateOf(state, unit.id), node.resolves ?? []),
           upsetLine(unit, liStateOf(state, unit.id)),
           // The partner's notebook (#1945), as P12 gives the opponent theirs; a bystander's is never here.
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
