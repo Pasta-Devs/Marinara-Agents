@@ -279,8 +279,8 @@ const marks = setSlurpMarkJson(
 assert.equal(marks.advancedAt, "2026-04-01T00:00:00.000Z");
 assert.equal(marks.ties.a.advancedAt, "2026-04-01T00:00:00.000Z", "nested marks are set too");
 assert.equal(marks.ties.a.createdAt, "2026-01-01T00:00:00.000Z", "other stamps are untouched");
-for (const key of ["slurp2.creator-ties", "slurp2.drama.state", "slurp2.creator.state"]) {
-  assert.ok(storage.includes(`"${key}"`), `the skip sets the elapsed-time marks of ${key}`);
+for (const key of ["slurp2.creator-ties", "slurp2.drama.state", "SLURP_CREATOR_STATE_KEY"]) {
+  assert.ok(storage.includes(key), `the skip sets the elapsed-time marks of ${key}`);
 }
 assert.match(storage, /WALLET_KEY\.test\(row\.key\) \? WALLET_DUE_KEY/u, "wallet settings use the wallet key rule");
 
@@ -308,5 +308,42 @@ const client = (path: string) =>
 assert.match(client("features/maintenance/slp-timeline.ts"), /invalidateQueries\(\{ queryKey: slpKeys\.all \}\)/u);
 assert.match(client("features/maintenance/slp-timeline.ts"), /readJobWithRetry\(current\.id\)/u);
 assert.match(client("features/messages/SlpSextingBar.tsx"), /const now = slurpWorldNowMs\(\);/u);
+
+// Second review round: more due marks move, restore keeps the keep count, the keep count only stores.
+for (const column of ['"publishAt"', '"moodUpdatedAt"', '"watchedAt"'])
+  assert.ok(storage.includes(column), `the skip moves ${column}`);
+assert.match(
+  storage,
+  /MARK_KEYS\[row\.key\][\s\S]{0,40}startsWith\(`\$\{SLURP_CREATOR_STATE_KEY\}\./u,
+  "per-Creator state rows get their mood mark set too",
+);
+assert.match(storage, /THREAD_STATE_MARK_KEYS/u, "a thread's mood clock is set to the skip target");
+assert.match(
+  jobs,
+  /readAutoCheckpointKeep\(app\.db\);\n\s+await noodle\.updateSlurpSettings\(\{ paused: true \}\)[\s\S]{0,900}AUTO_CHECKPOINT_KEEP_KEY, String\(keep\)/u,
+  "a restore puts the player's keep count back",
+);
+assert.doesNotMatch(
+  read("features/maintenance/slp-timeline-routes.ts").slice(
+    read("features/maintenance/slp-timeline-routes.ts").indexOf('"/world/clock/settings"'),
+  ),
+  /pruneCheckpoints/u,
+  "storing the keep count deletes nothing",
+);
+assert.match(
+  read("features/discovery/slp-trends-service.ts"),
+  /Date\.now\(\) - lastScanAt < SCAN_EVERY_MS/u,
+  "the trend scan throttle uses the real clock",
+);
+assert.match(
+  read("data/creators/slp-agent-memory-source.ts"),
+  /Date\.now\(\) - Date\.parse\(String\(chat\.updatedAt\)\)/u,
+  "chat freshness uses the real clock",
+);
+assert.match(
+  read("base/media/slp-image-retry.ts"),
+  /const epoch = slurpWorldEpoch\(\);\n\s+for \(let attempt/u,
+  "the image retry reads the epoch once per run",
+);
 
 console.log("slurp2 world clock regression: ok");

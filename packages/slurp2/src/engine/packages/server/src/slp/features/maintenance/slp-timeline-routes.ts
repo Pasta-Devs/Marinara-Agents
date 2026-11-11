@@ -11,7 +11,6 @@ import {
   MAX_SKIP_DAYS,
   createSlpTimelineJobs,
   listCheckpoints,
-  pruneCheckpoints,
   readAutoCheckpointKeep,
   removeCheckpoint,
 } from "./slp-timeline-jobs.js";
@@ -66,7 +65,7 @@ export function slpTimelineRoutes(app: FastifyInstance, deps: SlpRouteDeps, back
     const body = keepSchema.safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     await createAppSettingsStorage(app.db).set(AUTO_CHECKPOINT_KEEP_KEY, String(body.data.autoCheckpointKeep));
-    await pruneCheckpoints(body.data.autoCheckpointKeep);
+    // Stored only. A lower count takes effect at the next skip or restore, so stepping the value down never deletes anything by itself.
     return { autoCheckpointKeep: body.data.autoCheckpointKeep };
   });
 }

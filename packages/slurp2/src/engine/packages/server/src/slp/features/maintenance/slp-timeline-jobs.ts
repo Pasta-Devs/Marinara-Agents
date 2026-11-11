@@ -179,6 +179,8 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
     priorPaused: boolean,
     expectedMedia?: number,
   ) => {
+    // The archive carries the keep count it was saved with; the player's current choice wins.
+    const keep = await readAutoCheckpointKeep(app.db);
     await noodle.updateSlurpSettings({ paused: true });
     // The first fence: model and image answers that return after this point are refused.
     await bumpSlurpWorldEpoch(app.db);
@@ -189,6 +191,7 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
     if (job.skipped.length > 0) throw new Error(`The restore skipped ${job.skipped.length} archive entries.`);
     if (expectedMedia !== undefined && job.mediaCompleted !== expectedMedia)
       throw new Error("Not every media file was restored.");
+    await createAppSettingsStorage(app.db).set(AUTO_CHECKPOINT_KEEP_KEY, String(keep));
     await setSlurpWorldOffset(app.db, to.worldNowMs - Date.now());
     await bumpSlurpWorldEpoch(app.db);
     await noodle.updateSlurpSettings({ paused: priorPaused });

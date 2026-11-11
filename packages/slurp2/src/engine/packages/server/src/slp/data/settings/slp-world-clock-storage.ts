@@ -2,6 +2,7 @@ import { eq, like } from "../../../db/file-query.js";
 import type { DB } from "../../../db/connection.js";
 import {
   slpAccounts,
+  slpCreatorPreparedPosts,
   slpCreatorReserveState,
   slpRefreshRuns,
   slurpAudienceTies,
@@ -34,7 +35,7 @@ import {
   shiftSlurpDueJson,
   shiftSlurpIso,
 } from "../../modules/maintenance/slp-timeline.js";
-import { SLURP_SETTINGS_NAMESPACE } from "../host/slp-storage-constants.js";
+import { SLURP_CREATOR_STATE_KEY, SLURP_SETTINGS_NAMESPACE } from "../host/slp-storage-constants.js";
 
 export const WORLD_OFFSET_KEY = "slurp2.world.clockOffsetMs";
 export const WORLD_EPOCH_KEY = "slurp2.world.epoch";
@@ -73,8 +74,10 @@ export async function bumpSlurpWorldEpoch(db: DB): Promise<number> {
 // ponytail: explicit list; a new due-style column must be added here.
 const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> = [
   [slpCreatorReserveState, ["preparationNotBefore"]],
+  // A prepared post publishes when `publishAt` passes: it moves with the skip (`generatedAt` is history and stays).
+  [slpCreatorPreparedPosts, ["publishAt"]],
   [slpRefreshRuns, ["nextAttemptAt"]],
-  [slurpThreads, ["replyNotBeforeAt", "coolUntil", "extendedOnlineUntil"]],
+  [slurpThreads, ["replyNotBeforeAt", "coolUntil", "extendedOnlineUntil", "moodUpdatedAt"]],
   [slurpFollowUps, ["scheduledAt", "firstDueAt"]],
   [slurpCommissions, ["deliverAt"]],
   [slurpReplyBubbles, ["deliverAt"]],
@@ -84,7 +87,7 @@ const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> =
   [slurpContinuityFacts, ["expiresAt"]],
   [slurpContinuityEvents, ["expiresAt"]],
   [slurpDemandTrends, ["firstSeenAt", "lastSeenAt", "expiresAt"]],
-  [slurpLiveShows, ["endsAt"]],
+  [slurpLiveShows, ["startedAt", "watchedAt", "endsAt"]],
   // Renewal and churn read these against "now": a skip must neither bill nor lapse anyone.
   [slurpAudienceTies, ["paidThroughAt", "lastSeenAt"]],
   [slurpPopulation, ["lastActiveAt"]],
@@ -96,8 +99,9 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 const MARK_KEYS: Record<string, ReadonlySet<string>> = {
   "slurp2.creator-ties": new Set(["advancedAt"]),
   "slurp2.drama.state": new Set(["advancedAt"]),
-  "slurp2.creator.state": new Set(["updatedAt"]),
+  [SLURP_CREATOR_STATE_KEY]: new Set(["updatedAt"]),
 };
+const THREAD_STATE_MARK_KEYS: ReadonlySet<string> = new Set(["updatedAt"]);
 const WALLET_KEY = /^slurp2\.viewer\.[^.]+\.wallet$/u;
 
 /** Keys that hold clock state themselves or must never be rewritten by a skip. */
@@ -126,6 +130,19 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
     }
   }
 
+  // A thread's mood decays from its `updatedAt`: set it to the skip target so the skipped span is not counted.
+  for (const row of await db.select().from(slurpThreads)) {
+    let state: unknown;
+    try {
+      state = JSON.parse(row.threadState);
+    } catch {
+      continue;
+    }
+    const marked = JSON.stringify(setSlurpMarkJson(state, target.toISOString(), THREAD_STATE_MARK_KEYS));
+    if (marked !== JSON.stringify(state))
+      await db.update(slurpThreads).set({ threadState: marked }).where(eq(slurpThreads.id, row.id));
+  }
+
   const rows = await db
     .select()
     .from(appSettings)
@@ -141,7 +158,9 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
       continue;
     }
     let next = shiftSlurpDueJson(parsed, deltaMs, "", WALLET_KEY.test(row.key) ? WALLET_DUE_KEY : undefined);
-    const markKeys = MARK_KEYS[row.key];
+    const markKeys =
+      MARK_KEYS[row.key] ??
+      (row.key.startsWith(`${SLURP_CREATOR_STATE_KEY}.`) ? MARK_KEYS[SLURP_CREATOR_STATE_KEY] : undefined);
     if (markKeys) next = setSlurpMarkJson(next, target.toISOString(), markKeys);
     const shifted = JSON.stringify(next);
     if (shifted !== JSON.stringify(parsed)) await settings.set(row.key, shifted);

@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { api } from "../../../lib/api-client.js";
 import { setSlurpWorldOffsetMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
@@ -40,14 +39,15 @@ const clockKey = () => [...slpKeys.settings(), "world-clock"] as const;
 export function useSlpWorldClock() {
   const query = useQuery({
     queryKey: clockKey(),
-    queryFn: () => api.get<SlpWorldClock>("/slurp2/world/clock"),
+    queryFn: async () => {
+      const clock = await api.get<SlpWorldClock>("/slurp2/world/clock");
+      // Before any render reads the data, so no screen shows new data with the old offset.
+      setSlurpWorldOffsetMs(clock.offsetMs);
+      return clock;
+    },
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   });
-  const offsetMs = query.data?.offsetMs;
-  useEffect(() => {
-    if (offsetMs !== undefined) setSlurpWorldOffsetMs(offsetMs);
-  }, [offsetMs]);
   return query;
 }
 

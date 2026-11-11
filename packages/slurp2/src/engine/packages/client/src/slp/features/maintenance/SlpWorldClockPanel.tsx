@@ -1,6 +1,7 @@
 import { FastForward, History, Loader2, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { formatFullTime, slpDayKey } from "../../base/ui/slp-date-time";
 import { AdvancedGroup, Field, NumberSetting } from "../../modules/settings/SlpSettingsControls";
@@ -55,7 +56,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
   const target = skipTo || minDay;
   const days = Math.round((dayStart(target) - dayStart(today)) / DAY);
   const daysValid = Number.isInteger(days) && days >= 1 && days <= maxSkipDays;
-  const landing = formatFullTime(new Date(worldMs + days * DAY).toISOString(), locale);
+  const landing = daysValid ? formatFullTime(new Date(worldMs + days * DAY).toISOString(), locale) : "";
 
   const run = async (work: (onProgress: (job: SlurpBackupJob) => void) => Promise<unknown>, success: string) => {
     setError("");
@@ -73,13 +74,18 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
   };
 
   const runSkip = async () => {
+    // The page's snapshot can be minutes old: work out the day count again from the live world time.
+    const liveMs = slurpWorldNowMs();
+    const liveDays = Math.round((dayStart(target) - dayStart(slpDayKey(liveMs))) / DAY);
+    if (!(liveDays >= 1 && liveDays <= maxSkipDays)) return;
+    const liveLanding = formatFullTime(new Date(liveMs + liveDays * DAY).toISOString(), locale);
     const confirmed = await showConfirmDialog({
-      title: t("ui.slurp.worldClock.skipConfirmTitle", { date: landing }),
+      title: t("ui.slurp.worldClock.skipConfirmTitle", { date: liveLanding }),
       message: t("ui.slurp.worldClock.skipConfirm"),
       confirmLabel: t("ui.slurp.worldClock.skipButton"),
     });
     if (!confirmed) return;
-    if (await run((onProgress) => skip.mutateAsync({ days, onProgress }), t("ui.slurp.worldClock.skipDone")))
+    if (await run((onProgress) => skip.mutateAsync({ days: liveDays, onProgress }), t("ui.slurp.worldClock.skipDone")))
       setSkipTo("");
   };
 

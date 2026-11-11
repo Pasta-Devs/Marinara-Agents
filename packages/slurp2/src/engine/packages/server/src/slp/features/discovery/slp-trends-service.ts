@@ -84,8 +84,9 @@ export async function startSlurpTrend(db: DB, input: SlurpTrendStart, at: Date):
  * post and a player-run page's post are read the same way; only the starter's label differs.
  */
 export async function advanceSlurpTrends(db: DB, at = slurpWorldNow()): Promise<void> {
-  if (at.getTime() - lastScanAt < SCAN_EVERY_MS || !(await trendsOn(db))) return;
-  lastScanAt = at.getTime();
+  // The scan throttle is a rate limit, so it reads the real clock: a restore must not stall it.
+  if (Date.now() - lastScanAt < SCAN_EVERY_MS || !(await trendsOn(db))) return;
+  lastScanAt = Date.now();
   try {
     const before = await readSlurpTrendList(db);
     if (!slurpTrendMayStart(before, "", at)) return;

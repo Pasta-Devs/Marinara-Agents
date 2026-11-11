@@ -16,7 +16,7 @@ Slurp has its own date. Simulation reads the world clock, and infrastructure rea
 2. It adds the skipped days to the offset.
 3. It sets the world marks (`slurp2.world.tick`, `.maintenance`, `.pulse`) to the new date, so the next tick sees no elapsed time.
 4. It moves every pending due time by the skipped span, so a queued reply still waits the time it had left and nothing expires because the date jumped. The columns are listed in `slp-world-clock-storage.ts` (`SHIFTED_COLUMNS`), and due-style keys in settings JSON and Creator profiles move too (`shiftSlurpDueJson`). Content stamps such as `createdAt` keep their dates.
-5. It keeps the newest five automatic checkpoints (1 to 50 in Backstage > World clock). Manual checkpoints are never deleted.
+5. It keeps the newest five automatic checkpoints (1 to 50 in Backstage > World clock). Manual checkpoints are never deleted. Lowering the count only stores it; older automatic checkpoints go at the next skip or restore. A restore keeps the count you set, not the one in the archive.
 
 Purges (autopurge, deleted-post expiry, continuity and fan-plan retention, trend pruning) read the real clock. A skip therefore ages nothing out. Content written after a skip carries world dates ahead of the real clock, so it ages in real time from the moment the real clock reaches it.
 
