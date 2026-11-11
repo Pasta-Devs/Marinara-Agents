@@ -33,6 +33,7 @@ import { tryCreatorAccountOperation } from "../../base/locking/slp-account-opera
 import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../../../services/agents/agent-concurrency.js";
 
+import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
 export type GenerateAndApplyCreatorPostResult =
   | {
       status: "generated";
@@ -239,9 +240,9 @@ export async function refreshTargetedCreatorsNow(
         );
       // A Creator busy with the scheduler or another run used to be skipped at once, and the batch
       // still read as done. An explicit request waits for that run to finish instead.
-      const startedAt = Date.now();
+      const startedAt = slurpWorldNowMs();
       let result = await run();
-      while (result.status === "busy" && Date.now() - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS) {
+      while (result.status === "busy" && slurpWorldNowMs() - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS) {
         await new Promise((resolve) => setTimeout(resolve, MANUAL_REFRESH_BUSY_POLL_MS));
         result = await run();
       }

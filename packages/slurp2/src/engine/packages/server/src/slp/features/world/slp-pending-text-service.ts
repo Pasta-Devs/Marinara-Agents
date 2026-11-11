@@ -55,6 +55,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 
+import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
 export type SlurpPendingKind = "commission" | "question" | "opener" | "delivery" | "desk";
 
 /** Rewritten per drain. Small: a long absence must not stall the first read behind a queue. */
@@ -272,7 +273,7 @@ export async function drainSlurpPendingText(
     // A row that failed for good never reaches the expiry check below, so expire those here.
     for (const failed of await db.select().from(slurpPendingText).where(eq(slurpPendingText.status, "failed"))) {
       const failedExpiry = failed.expiresAt ? Date.parse(String(failed.expiresAt)) : Number.NaN;
-      if (Number.isFinite(failedExpiry) && failedExpiry <= Date.now()) {
+      if (Number.isFinite(failedExpiry) && failedExpiry <= slurpWorldNowMs()) {
         await db.delete(slurpPendingText).where(eq(slurpPendingText.id, String(failed.id)));
       }
     }
@@ -341,7 +342,7 @@ export async function drainSlurpPendingText(
     for (const row of rows) {
       const id = String(row.id);
       const expiresAt = row.expiresAt ? Date.parse(String(row.expiresAt)) : Number.POSITIVE_INFINITY;
-      if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+      if (Number.isFinite(expiresAt) && expiresAt <= slurpWorldNowMs()) {
         await db.delete(slurpPendingText).where(eq(slurpPendingText.id, id));
         continue;
       }

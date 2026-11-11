@@ -29,6 +29,7 @@ import {
 } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
 export function createFeedPostStorage2(context: SlurpStorageContext) {
   const {
     db,

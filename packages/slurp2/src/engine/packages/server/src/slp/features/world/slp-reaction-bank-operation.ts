@@ -28,6 +28,7 @@ import { composeSlurpPromptBlocks } from "../../base/prompting/slp-prompt-blocks
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
+import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 /**
  * Growing the free comment bank.
  *
@@ -84,7 +85,7 @@ export async function topUpSlurpReactionBank(
   if (!connection) return "unavailable";
   // The bank is the least urgent work Slurp does, so it yields to everything: anything the player
   // started, and any other background run already holding this connection.
-  const admission = tryBackgroundConnection(connection.id, new Date());
+  const admission = tryBackgroundConnection(connection.id, slurpWorldNow());
   if (!admission.acquired) return "busy";
 
   try {

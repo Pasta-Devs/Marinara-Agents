@@ -30,7 +30,7 @@ export function mutateSlurpTrends<T>(
   const run = queue.then(async () => {
     const next = change(await readSlurpTrendList(db));
     if (!next) return null;
-    await createAppSettingsStorage(db).set(SLURP_TRENDS_KEY, JSON.stringify(pruneSlurpTrends(next.trends, at)));
+    await createAppSettingsStorage(db).set(SLURP_TRENDS_KEY, JSON.stringify(pruneSlurpTrends(next.trends, new Date())));
     return next.result;
   });
   queue = run.catch(() => undefined);

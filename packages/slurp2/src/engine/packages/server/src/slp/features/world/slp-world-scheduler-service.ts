@@ -18,6 +18,7 @@ import {
 } from "../messages/slp-messages-contract.js";
 import { slurpPaused } from "../../base/model/slp-pause.js";
 
+import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 /**
  * The background half of the world clock.
  *
@@ -82,7 +83,7 @@ export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (s
       // Live shows run on the world clock whether or not the player watches (LIVE-V3-PLAN.md).
       await advanceSlurpLive(app.db).catch((error: unknown) => logger.warn(error, "[slurp-live] Live tick failed"));
       // A post that took off may become a trend (docs/TRENDS.md); it never fails the tick.
-      await advanceSlurpTrends(app.db, new Date()).catch((error: unknown) =>
+      await advanceSlurpTrends(app.db, slurpWorldNow()).catch((error: unknown) =>
         logger.warn(error, "[slurp-trends] Trends tick failed"),
       );
       // A Creator who is with the player texts like a partner, a few times a day.

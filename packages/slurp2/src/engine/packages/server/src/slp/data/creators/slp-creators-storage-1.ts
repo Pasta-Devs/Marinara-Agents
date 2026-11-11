@@ -61,6 +61,7 @@ import { mapViewer, sourceAccountFromEntity } from "../host/slp-storage-mappers.
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { countSlurpActiveCreators, slurpSizedPostsPerDay } from "../../base/model/slp-model-worker.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 export function createCreatorsStorage1(context: SlurpStorageContext) {
   const {
     db,
@@ -182,11 +183,11 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
     },
     async getCreatorState(creatorAccountId: string): Promise<SlurpCreatorState> {
       const raw = await settingsStore.get(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`);
-      const fallback = new Date().toISOString();
+      const fallback = slurpWorldNow().toISOString();
       const state = readSlurpCreatorState(raw, fallback);
       const parsedUpdatedAt = Date.parse(state.updatedAt);
       const elapsedHours = Number.isFinite(parsedUpdatedAt)
-        ? Math.max(0, (Date.now() - parsedUpdatedAt) / 3_600_000)
+        ? Math.max(0, (slurpWorldNowMs() - parsedUpdatedAt) / 3_600_000)
         : 0;
       if (elapsedHours <= 0) return state;
       const recovered = decaySlurpCreatorState(state, elapsedHours, fallback);
@@ -207,7 +208,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
           ...current,
           ...patch,
           emotionIntensity,
-          updatedAt: patch.updatedAt ?? new Date().toISOString(),
+          updatedAt: patch.updatedAt ?? slurpWorldNow().toISOString(),
         }),
       );
     },
@@ -219,7 +220,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
      */
     async adjustCreatorState(creatorAccountId: string, changes: SlurpStateDelta): Promise<SlurpCreatorState> {
       const current = await this.getCreatorState(creatorAccountId);
-      const next = applySlurpCreatorStateDelta(current, changes, new Date().toISOString());
+      const next = applySlurpCreatorStateDelta(current, changes, slurpWorldNow().toISOString());
       await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
       return next;
     },
@@ -246,7 +247,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
       const current = await this.getCreatorState(creatorAccountId);
       const next = signals.reduce(
         (state, signal) =>
-          applySlurpCreatorStateDelta(state, creatorStateDeltaForSignal(signal), new Date().toISOString()),
+          applySlurpCreatorStateDelta(state, creatorStateDeltaForSignal(signal), slurpWorldNow().toISOString()),
         current,
       );
       await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));

@@ -77,6 +77,7 @@ import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 import { countSlurpUnreadThreads } from "../../modules/messages/slp-unread-count.js";
 
+import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
 export function createMessagesStorageBase(context: SlurpMessagesContext) {
   const {
     db,
@@ -174,7 +175,7 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       for (let row of rows) {
         // A fresh `charged` row is a payment still between debit and its message write. Compensating
         // it refunded the fan while the tip or unlock went on to land anyway.
-        if (row.status === "charged" && Date.parse(String(row.updatedAt)) > Date.now() - 5 * 60 * 1000) continue;
+        if (row.status === "charged" && Date.parse(String(row.updatedAt)) > slurpWorldNowMs() - 5 * 60 * 1000) continue;
         if (row.status === "settled") {
           await applySlurpTipEffects(slurp, String(row.id)).catch((error) =>
             logger.warn(error, "[slurp] Durable tip-effect recovery failed for %s", row.id),
@@ -527,7 +528,7 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       const subscriptions = await slurp.listSubscriptionsForViewer(viewerAccountId);
       const active = subscriptions.find((entry) => entry.creatorAccountId === creatorAccountId);
       facts.subscribed = Boolean(active);
-      facts.subscribedDays = active ? Math.max(0, (Date.now() - Date.parse(active.createdAt)) / DAY) : 0;
+      facts.subscribedDays = active ? Math.max(0, (slurpWorldNowMs() - Date.parse(active.createdAt)) / DAY) : 0;
 
       const tie = (await createSlurpPopulationStorage(db).listTiesForCreator(creatorAccountId)).find(
         (entry) => entry.memberId === viewerAccountId,
@@ -560,7 +561,7 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
             ? 0
             : fromViewer.reduce((sum, message) => sum + message.content.length, 0) / fromViewer.length;
         const last = fromViewer[fromViewer.length - 1];
-        facts.daysSinceViewerMessage = last ? Math.max(0, (Date.now() - Date.parse(last.createdAt)) / DAY) : null;
+        facts.daysSinceViewerMessage = last ? Math.max(0, (slurpWorldNowMs() - Date.parse(last.createdAt)) / DAY) : null;
         facts.commissionsDelivered = messages.filter((message) => message.kind === "commission_delivery").length;
       }
       // Paid through a period that has ended, with no live subscription row, is a lapse.

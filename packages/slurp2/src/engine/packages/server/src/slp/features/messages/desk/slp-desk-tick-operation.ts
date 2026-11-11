@@ -38,6 +38,7 @@ import {
   type SlpSupportDesk,
 } from "../../../../../../shared/src/slp/slp-support-desk.js";
 
+import { slurpWorldNow } from "../../../base/clock/slp-world-clock.js";
 const DAY_MS = 86_400_000;
 const MILESTONES = [100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000];
 
@@ -344,7 +345,7 @@ const PASS_MS = 30 * 60_000;
  * scale with the time since a Creator's last pass, so the pace does not change the odds). Each
  * Creator's pass runs inside that desk's own update, so a play at the same moment waits its turn.
  */
-export async function advanceSlurpSupportDesk(db: DB, at = new Date()): Promise<void> {
+export async function advanceSlurpSupportDesk(db: DB, at = slurpWorldNow()): Promise<void> {
   if (at.getTime() - lastPassMs < PASS_MS) return;
   lastPassMs = at.getTime();
   const storage = createSlurpStorage(db);

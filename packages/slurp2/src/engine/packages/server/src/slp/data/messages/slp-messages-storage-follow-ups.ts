@@ -73,6 +73,7 @@ import type {
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
+import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
   const {
     db,
@@ -286,7 +287,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
     /**
      * Get all threads with pending follow-ups that are due.
      */
-    async getThreadsWithDueFollowUps(now: string = new Date().toISOString()): Promise<
+    async getThreadsWithDueFollowUps(now: string = slurpWorldNow().toISOString()): Promise<
       Array<{
         id: string;
         viewerAccountId: string;

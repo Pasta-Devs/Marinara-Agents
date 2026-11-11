@@ -63,6 +63,7 @@ import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import { slurpCommissionWasCharged } from "./slp-messages-storage-refunds.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
+import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 const briefCreations = new Map<string, Promise<unknown>>();
 
 export function createMessagesStorageCommissions(context: SlurpMessagesContext) {
@@ -509,7 +510,7 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
       const acceptedUndelivered =
         (commission.state === "accepted" || commission.state === "cancellation_pending") &&
         by === "viewer" &&
-        (!commission.deliverAt || commission.deliverAt <= new Date().toISOString());
+        (!commission.deliverAt || commission.deliverAt <= slurpWorldNow().toISOString());
       if (commission.state === "accepted" && by === "viewer" && !acceptedUndelivered) return commission;
       if (!acceptedUndelivered && commission.state !== "brief" && commission.state !== "quoted") return commission;
       if (acceptedUndelivered) {
@@ -533,7 +534,7 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
             // A delivery claim holds for five minutes, as in `deliverCommissionUnlocked`. A delivery
             // that threw kept its claim forever, and the fan's cancel then did nothing.
             (current.deliveryId && Date.parse(String(current.deliveryClaimedAt ?? "")) > Date.now() - 5 * 60 * 1000) ||
-            (current.deliverAt && String(current.deliverAt) > new Date().toISOString())
+            (current.deliverAt && String(current.deliverAt) > slurpWorldNow().toISOString())
           )
             return false;
           await tx

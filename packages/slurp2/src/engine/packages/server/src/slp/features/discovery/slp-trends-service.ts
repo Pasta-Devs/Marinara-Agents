@@ -36,6 +36,7 @@ import {
 import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 import type { SlurpTieCreator } from "../../modules/projects/slp-creator-ties.js";
 
+import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 /** The world tick runs often; the posts are read at most this often. */
 const SCAN_EVERY_MS = 30 * 60_000;
 let lastScanAt = 0;
@@ -82,7 +83,7 @@ export async function startSlurpTrend(db: DB, input: SlurpTrendStart, at: Date):
  * On the world tick: the best post that took off becomes a trend, at most one per scan. A Creator's
  * post and a player-run page's post are read the same way; only the starter's label differs.
  */
-export async function advanceSlurpTrends(db: DB, at = new Date()): Promise<void> {
+export async function advanceSlurpTrends(db: DB, at = slurpWorldNow()): Promise<void> {
   if (at.getTime() - lastScanAt < SCAN_EVERY_MS || !(await trendsOn(db))) return;
   lastScanAt = at.getTime();
   try {
@@ -281,7 +282,7 @@ export type SlurpTrendView = {
 };
 
 /** The live trends for Discover. */
-export async function listSlurpTrendViews(db: DB, at = new Date()): Promise<SlurpTrendView[]> {
+export async function listSlurpTrendViews(db: DB, at = slurpWorldNow()): Promise<SlurpTrendView[]> {
   if (!(await trendsOn(db))) return [];
   const live = slurpLiveTrends(await readSlurpTrendList(db), at);
   const storage = createSlurpStorage(db);
@@ -303,7 +304,7 @@ export async function listSlurpTrendViews(db: DB, at = new Date()): Promise<Slur
 }
 
 /** Take a started trend away again, while nobody has joined it. */
-export async function undoSlurpTrend(db: DB, id: string, at = new Date()): Promise<boolean> {
+export async function undoSlurpTrend(db: DB, id: string, at = slurpWorldNow()): Promise<boolean> {
   return Boolean(
     await mutateSlurpTrends(db, at, (trends) => {
       const trend = trends.find((entry) => entry.id === id);
@@ -319,7 +320,7 @@ export async function steerSlurpTrend(
   db: DB,
   id: string,
   rawLean: string | null,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{ before: string | null } | undefined> {
   const lean = slurpTrendClean(rawLean, SLURP_TREND_LEAN_MAX) || null;
   const done = await mutateSlurpTrends(db, at, (trends) => {

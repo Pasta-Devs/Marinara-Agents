@@ -41,6 +41,7 @@ import { composeSlpCreatorPage, protectSlpCreatorPage } from "./slp-creator-page
 import { suggestSlpPageStyle } from "./slp-page-style-service.js";
 import { SlpStrategyConflictError } from "../../modules/creators/slp-creator-strategy.js";
 
+import { slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
   location: z.string().trim().max(120).optional(),
@@ -134,7 +135,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const { id } = req.params as { id: string };
     const body = z.object({ page: z.unknown() }).strict().safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
-    const now = new Date().toISOString();
+    const now = slurpWorldNow().toISOString();
     const page =
       body.data.page === null ? null : normalizeSlpCreatorPage(body.data.page, { composedBy: "player", now });
     if (body.data.page !== null && !page) return reply.code(400).send({ error: "The Page has no valid block." });
@@ -241,7 +242,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
           `The generation connection did not return a complete schedule. ${error instanceof Error ? error.message : ""}`.trim(),
       });
     }
-    const today = new Date();
+    const today = slurpWorldNow();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
     monday.setHours(0, 0, 0, 0);
@@ -264,7 +265,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   // enough creator profiles for this to show up in the request time.
   app.get("/slurp/account-connection-counts", async (_req, _reply) => {
     const creators = await noodle.listNoodlerAccounts();
-    const at = new Date();
+    const at = slurpWorldNow();
     // Real followers come from the audience funnel, and only from there. Following also moves the
     // funnel now, so adding the social following list on top would count the same person twice —
     // at 25x weight each.

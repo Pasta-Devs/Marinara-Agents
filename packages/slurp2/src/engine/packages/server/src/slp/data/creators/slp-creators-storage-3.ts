@@ -70,6 +70,7 @@ import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.j
 import { mapAccount } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNowMs } from "../../base/clock/slp-world-clock.js";
 const stageProfilesCache = new WeakMap<
   object,
   { key: string; at: number; value: Promise<SlurpManagedStageProfile[]> }
@@ -270,10 +271,10 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         .map((table) => store?.getTableWriteGeneration?.(table))
         .join("|");
       const cached = store ? stageProfilesCache.get(store) : undefined;
-      if (store?.getTableWriteGeneration && cached?.key === key && Date.now() - cached.at < 15_000) return cached.value;
+      if (store?.getTableWriteGeneration && cached?.key === key && slurpWorldNowMs() - cached.at < 15_000) return cached.value;
       const value = this.buildNoodlerStageProfiles();
       if (store?.getTableWriteGeneration) {
-        stageProfilesCache.set(store, { key, at: Date.now(), value });
+        stageProfilesCache.set(store, { key, at: slurpWorldNowMs(), value });
         value.catch(() => stageProfilesCache.delete(store));
       }
       return value;

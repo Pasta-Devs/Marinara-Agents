@@ -10,7 +10,8 @@ import type { SlurpMessageKind, SlurpThreadState } from "../../modules/messages/
 import { readSlurpSexting } from "../../modules/messages/slp-sexting.js";
 import type { SlurpCommission, SlurpMessage, SlurpThread } from "./slp-messages-storage-types.js";
 
-export const now = () => new Date().toISOString();
+import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
+export const now = () => slurpWorldNow().toISOString();
 export const DAY = 86_400_000;
 
 export const int = (value: string | null | undefined, fallback = 0): number => {
@@ -67,8 +68,8 @@ export function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpC
         : fallbackUpdatedAt,
   };
   const parsedUpdatedAt = Date.parse(state.updatedAt);
-  const elapsedHours = Number.isFinite(parsedUpdatedAt) ? Math.max(0, (Date.now() - parsedUpdatedAt) / 3_600_000) : 0;
-  return elapsedHours > 0 ? decaySlurpThreadState(state, elapsedHours, new Date().toISOString()) : state;
+  const elapsedHours = Number.isFinite(parsedUpdatedAt) ? Math.max(0, (slurpWorldNowMs() - parsedUpdatedAt) / 3_600_000) : 0;
+  return elapsedHours > 0 ? decaySlurpThreadState(state, elapsedHours, slurpWorldNow().toISOString()) : state;
 }
 
 export const mapMessage = (row: Record<string, unknown>): SlurpMessage => ({

@@ -32,6 +32,7 @@ import {
   type PublicIdentity,
 } from "../feed/slp-feed-contract.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../base/clock/slp-world-clock.js";
 export type SlpCreatorPageComposeResult =
   { ok: true; page: SlpCreatorPage } | { ok: false; status: 404 | 409 | 429 | 502; error: string };
 
@@ -215,7 +216,7 @@ export async function composeSlpCreatorPage(
     logger.warn({ accountId: account.id, error }, "[slurp-creator-page] Model call failed");
     return { ok: false, status: 502, error: "The connection failed while designing the Page. Try again." };
   }
-  const now = new Date().toISOString();
+  const now = slurpWorldNow().toISOString();
   const keepPostIds = new Set(
     (current?.blocks ?? []).flatMap((block) => (block.kind === "collage" ? block.postIds : [])),
   );
@@ -258,7 +259,7 @@ let running: Promise<void> | null = null;
  * open keeps it rare and cheap; the next open takes the next. Never awaited by the caller, and never
  * twice at once, so two tabs opening together do not pay twice.
  */
-export function refreshSlurpCreatorPages(db: DB, now = Date.now()): Promise<void> {
+export function refreshSlurpCreatorPages(db: DB, now = slurpWorldNowMs()): Promise<void> {
   running ??= runRefresh(db, now).finally(() => {
     running = null;
   });
