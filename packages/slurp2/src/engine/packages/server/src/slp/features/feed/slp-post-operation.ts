@@ -240,9 +240,9 @@ export async function refreshTargetedCreatorsNow(
         );
       // A Creator busy with the scheduler or another run used to be skipped at once, and the batch
       // still read as done. An explicit request waits for that run to finish instead.
-      const startedAt = slurpWorldNowMs();
+      const startedAt = Date.now();
       let result = await run();
-      while (result.status === "busy" && slurpWorldNowMs() - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS) {
+      while (result.status === "busy" && Date.now() - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS) {
         await new Promise((resolve) => setTimeout(resolve, MANUAL_REFRESH_BUSY_POLL_MS));
         result = await run();
       }

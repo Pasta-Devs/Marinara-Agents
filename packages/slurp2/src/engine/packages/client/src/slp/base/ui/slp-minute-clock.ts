@@ -5,7 +5,7 @@ import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.j
 export function useSlpMinuteClock(): number {
   const [now, setNow] = useState(() => slurpWorldNowMs());
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    const timer = window.setInterval(() => setNow(slurpWorldNowMs()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
   return now;

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import { slurpWorldEpoch, slurpWorldNow, slurpWorldOffsetMs } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { isSlurpBackupActive } from "../../base/locking/slp-backup-state.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import type { SlpBackupJobs } from "./slp-backup-jobs.js";
 import {
@@ -51,6 +52,8 @@ export function slpTimelineRoutes(app: FastifyInstance, deps: SlpRouteDeps, back
   });
 
   app.delete("/world/clock/checkpoints/:id", async (req, reply) => {
+    // A restore may be reading the checkpoint it will roll back to.
+    if (isSlurpBackupActive()) return reply.code(409).send({ error: "Slurp data is busy. Try again shortly." });
     const removed = await removeCheckpoint((req.params as { id: string }).id);
     return reply.code(removed ? 204 : 404).send();
   });

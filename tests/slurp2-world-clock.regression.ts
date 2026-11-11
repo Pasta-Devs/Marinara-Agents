@@ -225,4 +225,22 @@ assert.match(
 // A load after a restore never lowers the epoch.
 assert.match(storage, /Math\.max\(slurpWorldEpoch\(\)/u);
 
+// TTLs written with the real clock are compared with the real clock.
+assert.match(read("features/world/slp-story-routes.ts"), /const now = Date\.now\(\); \/\/ preview TTL/u);
+assert.doesNotMatch(
+  read("features/world/slp-pending-text-service.ts"),
+  /<= slurpWorldNowMs\(\)/u,
+  "pending-text expiry uses the clock that wrote it",
+);
+assert.match(
+  read("features/maintenance/slp-timeline-routes.ts"),
+  /isSlurpBackupActive\(\)\) return reply\.code\(409\)/u,
+  "a checkpoint cannot be deleted while a restore runs",
+);
+const clientClock = readFileSync(
+  join(import.meta.dirname, "../packages/slurp2/src/engine/packages/client/src/slp/base/ui/slp-minute-clock.ts"),
+  "utf8",
+);
+assert.match(clientClock, /setNow\(slurpWorldNowMs\(\)\)/u, "the minute clock stays on world time");
+
 console.log("slurp2 world clock regression: ok");

@@ -59,7 +59,7 @@ const RESERVED_PACK_IDS = () =>
 export async function slpStoryRoutes(app: FastifyInstance, { noodle }: SlpRouteDeps) {
   const previews = new Map<string, StagedPreview>();
   const prune = () => {
-    const now = slurpWorldNowMs();
+    const now = Date.now(); // preview TTL: infrastructure, real clock
     for (const [id, staged] of previews) if (staged.expiresAt <= now) previews.delete(id);
   };
 
