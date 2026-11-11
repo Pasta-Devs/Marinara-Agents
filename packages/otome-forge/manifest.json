@@ -16,18 +16,24 @@
     "min": "2.5.1",
     "maxExclusive": "4.0.0"
   },
-  "kind": ["agent"],
+  "kind": [
+    "agent"
+  ],
   "entrypoints": {
     "agents": "agents.json",
     "server": "server.mjs",
     "client": "client.js"
   },
   "contributions": {
-    "slots": ["home-browser-tab"],
+    "slots": [
+      "home-browser-tab"
+    ],
     "homeBrowserTab": {
       "label": "Otome Hearth",
       "ariaLabel": "Open Otome Hearth",
-      "iconPaths": ["otome-hearth-tab-heart.png"]
+      "iconPaths": [
+        "otome-hearth-tab-heart.png"
+      ]
     }
   },
   "files": [
@@ -43,8 +49,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "7de58ccc17d43617946ff72443fbbca8bef3b964a9716e224fcb63102860dd9b",
-      "bytes": 1377068
+      "sha256": "4174d8f878919d9d01250eef327f031513cff33e43063f4dcffa37e4b9a804dd",
+      "bytes": 1377074
     },
     {
       "path": "otome-hearth-icon.png",
@@ -62,6 +68,10 @@
       "bytes": 4558
     }
   ],
-  "permissions": ["routes", "storage", "ui"],
+  "permissions": [
+    "routes",
+    "storage",
+    "ui"
+  ],
   "restartRequired": true
 }

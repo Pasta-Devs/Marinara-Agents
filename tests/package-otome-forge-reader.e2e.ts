@@ -2468,7 +2468,15 @@ test("Otome Hearth polls a free cut-out replacement while keeping its previous i
   const completed = reads();
   await page.clock.runFor(10_000);
   expect(reads(), "ready cleanup stops polling without a model or paid image request").toBe(completed);
-  expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+  expect(
+    stub.calls.filter(
+      (call) =>
+        call.method === "POST" &&
+        !call.path.endsWith("/index/opened") &&
+        // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+        !call.path.endsWith("/accent"),
+    ),
+  ).toHaveLength(0);
 });
 
 for (const outcome of ["ready", "uncut"] as const) {
@@ -2532,7 +2540,13 @@ for (const outcome of ["ready", "uncut"] as const) {
     await page.screenshot({ path: testInfo.outputPath("expression-pending-neutral.png") });
     // Replay opens its stored beat with the normal POST; cleanup must add no mutation or regeneration request.
     const packagePosts = () =>
-      stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"));
+      stub.calls.filter(
+        (call) =>
+          call.method === "POST" &&
+          !call.path.endsWith("/index/opened") &&
+          // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+          !call.path.endsWith("/accent"),
+      );
     const opened = packagePosts();
     expect(opened).toHaveLength(1);
     expect(opened[0]!.path).toBe(`/api/otome-forge/runs/${RUN}/chapters/main-1/beats/0`);
@@ -2638,7 +2652,15 @@ test("Otome Hearth stands him in a first-wear scene's look, not the look he wear
   const front = root.locator('.of-face-img[data-front="true"]');
   await expect(front).toHaveAttribute("src", suitCold);
   await expect(front).toHaveAttribute("data-cut", "true");
-  expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(1);
+  expect(
+    stub.calls.filter(
+      (call) =>
+        call.method === "POST" &&
+        !call.path.endsWith("/index/opened") &&
+        // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+        !call.path.endsWith("/accent"),
+    ),
+  ).toHaveLength(1);
 });
 
 test("Otome Hearth waits for a first-wear scene's look while it paints, with expressions off, then stands him in it", async ({

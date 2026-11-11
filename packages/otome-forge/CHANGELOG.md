@@ -7,6 +7,10 @@
 - **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.
 - **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.
 
+## 0.22.7 — 2026-11-11
+
+- **A new love interest gets his own colour.** A love interest who joins the story after it has started, such as one an arc adds, now has his name tag and glow picked from his own portrait like everyone else's, instead of keeping a colour that could match another love interest's. Names that don't share a portrait yet spread across the colour wheel, so two of them rarely look alike. A story already in progress picks its colours again when it is opened.
+
 ## 0.22.6 — 2026-11-11
 
 - **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to "Expressions" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.
