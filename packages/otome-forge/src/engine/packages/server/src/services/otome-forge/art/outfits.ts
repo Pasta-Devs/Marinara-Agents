@@ -450,6 +450,10 @@ export async function paintItemNow(
   };
   // The banner's art is the same picture: a tap while it paints waits for it, and pays only if it did not land.
   const first = await read();
+  // Only a picture that was already painted when the tap began is one the tap repaints (0.22.7). One that lands while the
+  // tap waits for it — the banner's shared paint above — is the tap's answer, so adopting it is what keeps a tap from
+  // paying twice for the same picture.
+  const painted = first.art?.state === "ready";
   if (isFeatured(first)) await paintSettled(runId, bannerArtOwner(first.banner));
   return tapPaint(
     runId,
@@ -459,6 +463,11 @@ export async function paintItemNow(
       return { value: art, art: art ?? undefined };
     },
     async () => {
+      const current = await read();
+      if (!painted && current.art?.state === "ready") {
+        await addOutfit(deps, runId, current);
+        return itemArtView(runId, current);
+      }
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) throw notFound("Otome Forge run");
       const connectionId = world.images.connectionId;
