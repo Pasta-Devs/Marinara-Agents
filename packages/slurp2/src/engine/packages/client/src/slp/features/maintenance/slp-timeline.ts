@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { api } from "../../../lib/api-client.js";
 import { setSlurpWorldOffsetMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
@@ -151,28 +151,4 @@ export function useSetSlpAutoCheckpointKeep() {
       api.put<{ autoCheckpointKeep: number }>("/slurp2/world/clock/settings", { autoCheckpointKeep }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
   });
-}
-
-let lastTimelineError = "";
-const errorListeners = new Set<() => void>();
-
-/**
- * The last failed skip, checkpoint or restore. It lives outside the component and the query cache:
- * a failed job can remount the Backstage page, and the line must still be there afterwards.
- */
-export function useSlpTimelineError(): readonly [string, (message: string) => void] {
-  const error = useSyncExternalStore(
-    (listener) => {
-      errorListeners.add(listener);
-      return () => errorListeners.delete(listener);
-    },
-    () => lastTimelineError,
-  );
-  return [
-    error,
-    (message: string) => {
-      lastTimelineError = message;
-      errorListeners.forEach((listener) => listener());
-    },
-  ] as const;
 }

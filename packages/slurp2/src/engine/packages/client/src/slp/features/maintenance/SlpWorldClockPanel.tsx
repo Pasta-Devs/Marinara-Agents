@@ -16,7 +16,6 @@ import {
   useRestoreSlpCheckpoint,
   useSetSlpAutoCheckpointKeep,
   useSkipSlpWorldDays,
-  useSlpTimelineError,
   useSlpWorldClock,
 } from "./slp-timeline";
 
@@ -34,7 +33,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
   const remove = useDeleteSlpCheckpoint();
   const setKeep = useSetSlpAutoCheckpointKeep();
   const [job, setJob] = useState<SlurpBackupJob | null>(null);
-  const [error, setError] = useSlpTimelineError();
+  const [error, setError] = useState("");
   const [skipTo, setSkipTo] = useState("");
   const [label, setLabel] = useState("");
   const busy = skip.isPending || create.isPending || restore.isPending || remove.isPending;
@@ -66,10 +65,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
       toast.success(success);
       return true;
     } catch (cause) {
-      const message = errorMessage(cause);
-      setError(message);
-      // The refresh after a failed job can remount this page and drop the line above, so say it once more.
-      toast.error(message);
+      setError(errorMessage(cause));
       return false;
     } finally {
       setJob(null);
@@ -267,10 +263,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
                 await setKeep.mutateAsync(value);
                 return true;
               } catch (cause) {
-                const message = errorMessage(cause);
-                setError(message);
-                // The refresh after a failed job can remount this page and drop the line above, so say it once more.
-                toast.error(message);
+                setError(errorMessage(cause));
                 return false;
               }
             }}
