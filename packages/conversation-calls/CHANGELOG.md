@@ -1,5 +1,9 @@
 # Calls release notes
 
+## 1.1.10 — 2026-11-11
+
+- Changed: Calls reads characters through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. The `[memory]` command saves only the character's memories, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)
+
 ## 1.1.9 — 2026-11-10 [highlight]
 
 - Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Calls versions read every persona there as blank: no name, description, appearance or About Me in calls, call prompts and persona videos. Calls now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)

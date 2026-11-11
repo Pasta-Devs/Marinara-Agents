@@ -92,6 +92,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.1.10",
+          "date": "2026-11-11",
+          "notes": "- Changed: Calls reads characters through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. The `[memory]` command saves only the character's memories, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)",
+          "highlight": false
+        },
+        {
           "version": "1.1.9",
           "date": "2026-11-10",
           "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Calls versions read every persona there as blank: no name, description, appearance or About Me in calls, call prompts and persona videos. Calls now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
@@ -558,6 +564,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.15",
+          "date": "2026-11-11",
+          "notes": "- Changed: Noodle reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)",
+          "highlight": false
+        },
+        {
           "version": "1.5.14",
           "date": "2026-11-10",
           "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Noodle versions read every persona there as blank: no name, description, appearance or About Me in posts, profiles and pictures. Noodle now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
@@ -669,12 +681,6 @@
           "version": "1.2.25",
           "date": "2026-09-24",
           "notes": "- Widgets on Homescreen now available.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.24",
-          "date": "2026-09-15",
-          "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
           "highlight": false
         }
       ]
@@ -1076,6 +1082,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.20",
+          "date": "2026-11-11",
+          "notes": "- Changed: Slurp reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Refreshing a Creator's conversation schedule saves only the schedule keys, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)",
+          "highlight": false
+        },
+        {
           "version": "0.4.19",
           "date": "2026-11-10",
           "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Slurp versions read every persona there as blank: no name, description, appearance or About Me in feeds, profiles, messages and pictures. Slurp now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
@@ -1187,12 +1199,6 @@
           "version": "0.4.1",
           "date": "2026-10-24",
           "notes": "- Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.",
-          "highlight": true
-        },
-        {
-          "version": "0.4.0",
-          "date": "2026-10-23",
-          "notes": "One release for everything built since 0.3.53 (unreleased 0.3.54 to 0.3.65 folded in):\n\n- Storylines: arcs, dramas and situations run on one storyline engine; Story Packs import v2 files, one JSON `fit`, one Packs list with a gate and Remove, topic switches `<pack>:<topic>`.\n- Packs (off by default): Family pack and five kink packs (Lingerie, Cosplay, Feet, Dom/sub, Exhibition).\n- Intimacy ladder: rapport tiers open doors in DMs (`slurpRapportDoors`), the highest tier is kept.\n- Paid sexting sessions (`SlpSextingBar`); Stir as a slide-up sheet (`SlpStirDeck`); Stories in Slurp's own layer.\n- Fixes: DM prompts know the player's latest public posts, @tagged Creators join the picture cast, tag-list looks go over whole, picture prompt rewrite floor 8192, wardrobe tag commas, neutral wording; Images > Advanced \"Keep original picture files\".",
           "highlight": true
         }
       ]
