@@ -1410,7 +1410,11 @@ function affectionLine(name: string, liState: LiState, played = 0): string {
  * ponytail: written beside the scene card rather than on it, so the card keeps M1's 250-token budget; fold it into
  * otomeSceneCard once its budget is re-measured with these lines.
  */
-export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: readonly string[] | "all" = []): string {
+export function betweenYou(
+  unit: Pick<Unit, "name">,
+  liState: LiState & { bondPlayed?: number },
+  also: readonly string[] | "all" = [],
+): string {
   const trust = TRUST_WORDS[Math.max(0, Math.min(6, liState.trust + 3))];
   const tension = TENSION_WORDS[Math.max(0, Math.min(3, liState.tension))];
   const open = liState.grievances.filter(
@@ -1427,7 +1431,7 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
     `Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`,
     romanceLine(unit.name, liState.stage),
     // The affection level the player sees: how drawn they are, shown within what the stage allows (2026-11-10).
-    affectionLine(unit.name, liState),
+    affectionLine(unit.name, liState, liState.bondPlayed ?? 0),
   ];
   for (const grievance of shown) {
     const holder = grievance.by === "li" ? unit.name : "the protagonist";
