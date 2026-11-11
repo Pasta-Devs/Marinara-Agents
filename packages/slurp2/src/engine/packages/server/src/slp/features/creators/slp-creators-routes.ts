@@ -245,12 +245,10 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const monday = new Date(today);
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
     monday.setHours(0, 0, 0, 0);
-    await characters.update(source.entityId, {
-      extensions: {
-        ...extensions,
-        conversationSchedule: { ...generated, weekStart: monday.toISOString() },
-        conversationSchedulesEnabled: true,
-      },
+    // Only the keys this changes: the Engine keeps the card's other extensions as they are when it saves.
+    await characters.updateExtensions(source.entityId, {
+      conversationSchedule: { ...generated, weekStart: monday.toISOString() },
+      conversationSchedulesEnabled: true,
     });
     return {
       state: "active",

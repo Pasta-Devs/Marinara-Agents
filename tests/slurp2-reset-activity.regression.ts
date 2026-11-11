@@ -48,8 +48,8 @@ async function main() {
       force: true,
     });
     // Slurp2's schema takes the host's `slurp.ts` name; the host's legacy schema stays in its barrel.
-    // Slurp builds on the host-runtime overlay, whose lib/host-characters-storage.ts reads personas through the
-    // Engine (Marinara-Agents#2230). Here the live Engine source is the host, so its own storage stands in.
+    // Slurp builds on the host-runtime overlay, whose characters storage reads characters and personas through the
+    // Engine (Marinara-Agents#2230, #2242). Here the live Engine source is the host, so its own storage stands in.
     await writeFile(
       join(overlayRoot, "packages/server/src/lib/host-characters-storage.ts"),
       'export { createCharactersStorage } from "../services/storage/characters.storage.js";\n',
