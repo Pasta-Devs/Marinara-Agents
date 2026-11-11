@@ -416,7 +416,12 @@ try {
     join(root, "packages/conversation-calls/src/engine/packages/server/src/routes/conversation-calls.routes.ts"),
     "utf8",
   );
-  assert.ok(callsRoutes.includes("chars.updateExtensions(target.id, { characterMemories: memories })"));
+  assert.ok(
+    callsRoutes.includes(
+      "const saved = await input.chars.updateExtensions(target.id, { characterMemories: memories })",
+    ),
+  );
+  assert.match(callsRoutes, /if \(!saved\) \{[^}]*logger\.warn\(/u);
   assert.doesNotMatch(callsRoutes, /chars\.update\(/u);
   const slurpCreators = await readFile(
     join(root, "packages/slurp2/src/engine/packages/server/src/slp/features/creators/slp-creators-routes.ts"),

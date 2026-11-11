@@ -1500,7 +1500,12 @@ async function applyCallMemoryCommand(input: {
     createdAt: new Date().toISOString(),
   });
   // Only the key this changes: the Engine keeps the card's other extensions as they are when it saves.
-  await input.chars.updateExtensions(target.id, { characterMemories: memories });
+  const saved = await input.chars.updateExtensions(target.id, { characterMemories: memories });
+  if (!saved) {
+    // Null: the card was deleted during the call, so nothing was saved.
+    logger.warn("[conversation-call] Memory target character no longer exists: %s", input.command.target);
+    return;
+  }
   logger.info("[conversation-call] Memory saved from %s to %s", sourceName, String(targetData.name ?? target.id));
 }
 
