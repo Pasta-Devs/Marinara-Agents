@@ -1,4 +1,8 @@
-import { SlurpWorldEpochChangedError, assertSlurpWorldEpoch, slurpWorldEpoch } from "../../../../../shared/src/slp/slp-world-clock.js";
+import {
+  SlurpWorldEpochChangedError,
+  assertSlurpWorldEpoch,
+  slurpWorldEpoch,
+} from "../../../../../shared/src/slp/slp-world-clock.js";
 import { assertSlurpNotPaused } from "../model/slp-pause.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 

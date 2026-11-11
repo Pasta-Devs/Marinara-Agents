@@ -192,7 +192,13 @@ export function createEconomyStorage3(context: SlurpStorageContext) {
           const wallet = await getWalletNow(recipientId);
           const credited = await writeWallet(
             recipientId,
-            credit(wallet, "topUp", slurpPayoutCoins(amount, crowdWeight), slurpWorldNow(), `payout: ${creator.handle}`),
+            credit(
+              wallet,
+              "topUp",
+              slurpPayoutCoins(amount, crowdWeight),
+              slurpWorldNow(),
+              `payout: ${creator.handle}`,
+            ),
           );
           return { status: "paid" as const, earnings: next, wallet: credited };
         } catch (error) {

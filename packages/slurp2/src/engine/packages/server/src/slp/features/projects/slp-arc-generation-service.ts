@@ -205,7 +205,8 @@ export async function generateSlurpArc(
       storyHooks: [
         ...(await slurp.listArcOpportunities().catch(() => []))
           .filter(
-            (item) => item.creatorId === creator.id && (!item.expiresAt || Date.parse(item.expiresAt) > slurpWorldNowMs()),
+            (item) =>
+              item.creatorId === creator.id && (!item.expiresAt || Date.parse(item.expiresAt) > slurpWorldNowMs()),
           )
           .map((item) => `- Themes: ${item.storyTags.join(", ")}`),
         ...(await slurp.listStoryFacts().catch(() => []))

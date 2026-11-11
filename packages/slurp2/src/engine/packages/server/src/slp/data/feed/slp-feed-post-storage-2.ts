@@ -117,7 +117,12 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         .where(eq(slpPosts.id, id));
       return this.getPostById(id);
     },
-    async claimPostImage(id: string, token: string, leaseUntil: string, at = new Date().toISOString()): Promise<SlpPost | null> {
+    async claimPostImage(
+      id: string,
+      token: string,
+      leaseUntil: string,
+      at = new Date().toISOString(),
+    ): Promise<SlpPost | null> {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(slpPosts).where(eq(slpPosts.id, id));
         const row = rows[0];
@@ -145,7 +150,12 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         return mapPost(row);
       });
     },
-    async renewPostImageClaim(id: string, token: string, leaseUntil: string, at = new Date().toISOString()): Promise<boolean> {
+    async renewPostImageClaim(
+      id: string,
+      token: string,
+      leaseUntil: string,
+      at = new Date().toISOString(),
+    ): Promise<boolean> {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(slpPosts).where(eq(slpPosts.id, id));
         const row = rows[0];

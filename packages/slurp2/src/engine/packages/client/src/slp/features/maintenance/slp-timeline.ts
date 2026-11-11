@@ -77,7 +77,10 @@ export function useSkipSlpWorldDays() {
   const refresh = useRefreshEverything();
   return useMutation({
     mutationFn: async (input: { days: number; onProgress?: (job: SlurpBackupJob) => void }) =>
-      waitForSlpTimelineJob(await api.post<SlurpBackupJob>("/slurp2/world/clock/skip", { days: input.days }), input.onProgress),
+      waitForSlpTimelineJob(
+        await api.post<SlurpBackupJob>("/slurp2/world/clock/skip", { days: input.days }),
+        input.onProgress,
+      ),
     onSettled: refresh,
   });
 }

@@ -96,7 +96,12 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     if (!show) return reply.code(404).send({ error: "No such show" });
     return {
       beat: result,
-      show: slpLiveView(show, slurpWorldNowMs(), personaId ? `persona:${personaId}` : null, (await noodle.getSettings()).live),
+      show: slpLiveView(
+        show,
+        slurpWorldNowMs(),
+        personaId ? `persona:${personaId}` : null,
+        (await noodle.getSettings()).live,
+      ),
     };
   });
 

@@ -186,7 +186,10 @@ export type SlurpModelBudgetLedger = {
 const hourKey = (at: Date) => at.toISOString().slice(0, 13);
 const dayKey = (at: Date) => at.toISOString().slice(0, 10);
 
-export function readSlurpModelBudgetLedger(raw: string | null | undefined, at = slurpWorldNow()): SlurpModelBudgetLedger {
+export function readSlurpModelBudgetLedger(
+  raw: string | null | undefined,
+  at = slurpWorldNow(),
+): SlurpModelBudgetLedger {
   let parsed: Partial<SlurpModelBudgetLedger> = {};
   try {
     parsed = raw ? (JSON.parse(raw) as Partial<SlurpModelBudgetLedger>) : {};

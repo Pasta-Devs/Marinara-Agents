@@ -65,7 +65,8 @@ export async function listCheckpoints(): Promise<CheckpointMeta[]> {
     try {
       const meta = JSON.parse(await readFile(join(CHECKPOINT_DIR, name), "utf8")) as CheckpointMeta;
       // A sidecar without its archive (or a half-written pair) is not a checkpoint.
-      if (!CHECKPOINT_ID.test(meta.id) || !(await stat(join(CHECKPOINT_DIR, `${meta.id}.zip`)).catch(() => null))) continue;
+      if (!CHECKPOINT_ID.test(meta.id) || !(await stat(join(CHECKPOINT_DIR, `${meta.id}.zip`)).catch(() => null)))
+        continue;
       found.push(meta);
     } catch {
       /* unreadable sidecar: ignore */
@@ -91,7 +92,15 @@ export async function pruneCheckpoints(keep: number): Promise<void> {
 
 export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, backup: SlpBackupJobs) {
   const { noodle } = deps;
-  const { newBackupJob, failJob, runExclusive, writeBackupArchive, applyRestoreArchive, inspectRestoreArchive, backupJobs } = backup;
+  const {
+    newBackupJob,
+    failJob,
+    runExclusive,
+    writeBackupArchive,
+    applyRestoreArchive,
+    inspectRestoreArchive,
+    backupJobs,
+  } = backup;
   type Job = ReturnType<typeof newBackupJob>;
 
   /** Write one checkpoint. The caller holds the exclusive run. Writes to a temp name first, so a crash leaves no half pair. */
@@ -153,7 +162,13 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
    * epoch is bumped before and after, so late model or image answers are refused.
    * The caller holds the exclusive run.
    */
-  const replaceWith = async (job: Job, archive: Buffer, to: CheckpointMeta, priorPaused: boolean, expectedMedia?: number) => {
+  const replaceWith = async (
+    job: Job,
+    archive: Buffer,
+    to: CheckpointMeta,
+    priorPaused: boolean,
+    expectedMedia?: number,
+  ) => {
     await noodle.updateSlurpSettings({ paused: true });
     // The first fence: model and image answers that return after this point are refused.
     await bumpSlurpWorldEpoch(app.db);
@@ -162,7 +177,8 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
     job.mediaBytes = 0;
     await applyRestoreArchive(job, archive, true, true);
     if (job.skipped.length > 0) throw new Error(`The restore skipped ${job.skipped.length} archive entries.`);
-    if (expectedMedia !== undefined && job.mediaCompleted !== expectedMedia) throw new Error("Not every media file was restored.");
+    if (expectedMedia !== undefined && job.mediaCompleted !== expectedMedia)
+      throw new Error("Not every media file was restored.");
     await setSlurpWorldOffset(app.db, to.worldNowMs - Date.now());
     await bumpSlurpWorldEpoch(app.db);
     await noodle.updateSlurpSettings({ paused: priorPaused });
@@ -177,7 +193,9 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       await replaceWith(job, await readFile(join(CHECKPOINT_DIR, `${from.id}.zip`)), from, priorPaused);
     } catch (rollbackError) {
       const rollbackReason = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-      throw new Error(`${reason} The rollback failed too (${rollbackReason}). Checkpoint ${from.id} still holds the previous state.`);
+      throw new Error(
+        `${reason} The rollback failed too (${rollbackReason}). Checkpoint ${from.id} still holds the previous state.`,
+      );
     }
     throw new Error(`${reason} The previous state is back.`);
   };
@@ -223,7 +241,8 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
       job.stage = "verifying";
       job.detail = "Checking the checkpoint archive.";
       const archive = await readFile(join(CHECKPOINT_DIR, `${id}.zip`));
-      if (archive.length !== meta.bytes) throw new Error("The checkpoint archive is damaged (size differs from its record).");
+      if (archive.length !== meta.bytes)
+        throw new Error("The checkpoint archive is damaged (size differs from its record).");
       const inspection = inspectRestoreArchive(archive);
       const expectedMedia = inspection.manifest.mediaCount;
       if (typeof expectedMedia === "number" && expectedMedia !== inspection.mediaEntries.length) {
@@ -241,7 +260,10 @@ export function createSlpTimelineJobs(app: FastifyInstance, deps: SlpRouteDeps, 
         return rollBack(job, safety, priorPaused, error);
       }
       await pruneCheckpoints(await readAutoCheckpointKeep(app.db));
-      finish(job, `Restored the checkpoint from world date ${meta.worldDate}. A safety checkpoint of the previous state was kept.`);
+      finish(
+        job,
+        `Restored the checkpoint from world date ${meta.worldDate}. A safety checkpoint of the previous state was kept.`,
+      );
     });
   };
 

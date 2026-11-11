@@ -228,7 +228,10 @@ export function isFollowUpOverdue(followUp: { createdAt?: string }, now: Date = 
   return Number.isFinite(promised) && now.getTime() - promised > SLURP_FOLLOW_UP_OVERDUE_MS;
 }
 /** Whether a wait may end this follow-up: an old opener only. */
-export function slurpFollowUpExpires(followUp: { type: string; createdAt?: string }, now: Date = slurpWorldNow()): boolean {
+export function slurpFollowUpExpires(
+  followUp: { type: string; createdAt?: string },
+  now: Date = slurpWorldNow(),
+): boolean {
   return followUp.type === "opener" && isFollowUpOverdue(followUp, now);
 }
 

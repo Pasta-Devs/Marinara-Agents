@@ -271,7 +271,8 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         .map((table) => store?.getTableWriteGeneration?.(table))
         .join("|");
       const cached = store ? stageProfilesCache.get(store) : undefined;
-      if (store?.getTableWriteGeneration && cached?.key === key && slurpWorldNowMs() - cached.at < 15_000) return cached.value;
+      if (store?.getTableWriteGeneration && cached?.key === key && slurpWorldNowMs() - cached.at < 15_000)
+        return cached.value;
       const value = this.buildNoodlerStageProfiles();
       if (store?.getTableWriteGeneration) {
         stageProfilesCache.set(store, { key, at: slurpWorldNowMs(), value });

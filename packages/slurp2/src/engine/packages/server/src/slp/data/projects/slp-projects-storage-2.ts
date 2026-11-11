@@ -257,7 +257,10 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
     },
     /** Store a model-invented arc the player asked for. It waits as a suggestion until accepted. */
     async addGeneratedProject(creatorAccountId: string, raw: unknown): Promise<SlurpProject | null> {
-      const project = slurpGeneratedArcProject(newId(), raw, slurpWorldNow(), { origin: "manual", status: "suggested" });
+      const project = slurpGeneratedArcProject(newId(), raw, slurpWorldNow(), {
+        origin: "manual",
+        status: "suggested",
+      });
       if (!project) return null;
       const projects = await this.listProjects(creatorAccountId);
       await writeProjects(creatorAccountId, [project, ...projects]);

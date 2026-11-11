@@ -202,7 +202,11 @@ async function readPlans(db: DB, at = slurpWorldNow(), prune = true) {
   if (!prune) return plans;
   // Retention reads the real clock: a world skip must never age plans out.
   const realNow = new Date();
-  const cutoff = new Date(realNow.getFullYear(), realNow.getMonth(), realNow.getDate() - FAN_PLAN_RETENTION_DAYS).getTime();
+  const cutoff = new Date(
+    realNow.getFullYear(),
+    realNow.getMonth(),
+    realNow.getDate() - FAN_PLAN_RETENTION_DAYS,
+  ).getTime();
   const retained = [];
   for (const plan of plans) {
     const [year, month, day] = plan.localDate.split("-").map(Number);

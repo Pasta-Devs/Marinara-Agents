@@ -44,7 +44,11 @@ setSlurpWorldEpoch(4);
 const started = slurpWorldEpoch();
 assert.doesNotThrow(() => assertSlurpWorldEpoch(started));
 setSlurpWorldEpoch(5);
-assert.throws(() => assertSlurpWorldEpoch(started), SlurpWorldEpochChangedError, "work from before a restore is refused");
+assert.throws(
+  () => assertSlurpWorldEpoch(started),
+  SlurpWorldEpochChangedError,
+  "work from before a restore is refused",
+);
 setSlurpWorldEpoch(0);
 
 // ── 3. Skip rules ────────────────────────────────────────────────────────────
@@ -65,7 +69,11 @@ const state = {
 const shifted = shiftSlurpDueJson(state, 5 * DAY) as typeof state;
 assert.equal(shifted.coolUntil, "2026-03-06T12:00:00.000Z", "a due time moves with the skip");
 assert.equal(shifted.nested[0].dueAt, "2026-03-07T00:00:00.000Z", "nested due times move");
-assert.equal(shifted.occurrence.startsAt, "2026-03-08T00:00:00.000Z", "a running event window moves, so nothing starts or ends because of the skip");
+assert.equal(
+  shifted.occurrence.startsAt,
+  "2026-03-08T00:00:00.000Z",
+  "a running event window moves, so nothing starts or ends because of the skip",
+);
 assert.equal(shifted.createdAt, state.createdAt, "history keeps its dates");
 assert.equal(shifted.nested[0].note, state.nested[0].note, "only due-style keys move");
 assert.equal(shifted.startedAt, "not a date", "a value that is not a timestamp is untouched");
@@ -82,7 +90,9 @@ const all = [
   ref("m2", "manual", 2),
   ...Array.from({ length: 5 }, (_, i) => ref(`s${i}`, "safety", i + 1)),
 ];
-const doomed = selectCheckpointsToPrune(all, 5, 3).map((meta) => meta.id).sort();
+const doomed = selectCheckpointsToPrune(all, 5, 3)
+  .map((meta) => meta.id)
+  .sort();
 assert.deepEqual(doomed, ["a0", "a1", "s0", "s1"], "the newest 5 auto and 3 safety stay, the oldest go");
 assert.ok(!doomed.includes("m1") && !doomed.includes("m2"), "manual checkpoints are never pruned");
 assert.deepEqual(selectCheckpointsToPrune(all, 50, 50), [], "nothing is pruned under the limit");
@@ -91,17 +101,28 @@ assert.deepEqual(selectCheckpointsToPrune(all, 50, 50), [], "nothing is pruned u
 const jobs = read("features/maintenance/slp-timeline-jobs.ts");
 const skipJob = jobs.slice(jobs.indexOf("const createSkipJob"), jobs.indexOf("const createRestoreCheckpointJob"));
 assert.ok(
-  skipJob.indexOf("writeCheckpoint(job, \"auto\"") !== -1 &&
-    skipJob.indexOf("writeCheckpoint(job, \"auto\"") < skipJob.indexOf("applySlurpWorldSkip"),
+  skipJob.indexOf('writeCheckpoint(job, "auto"') !== -1 &&
+    skipJob.indexOf('writeCheckpoint(job, "auto"') < skipJob.indexOf("applySlurpWorldSkip"),
   "the automatic checkpoint is awaited before the skip, so a failed checkpoint aborts it",
 );
-assert.doesNotMatch(skipJob, /advanceSlurp|tickSlurp|drain|topUp|runSlurpAutopurge/u, "a skip runs no simulation or purge");
+assert.doesNotMatch(
+  skipJob,
+  /advanceSlurp|tickSlurp|drain|topUp|runSlurpAutopurge/u,
+  "a skip runs no simulation or purge",
+);
 const storage = read("data/settings/slp-world-clock-storage.ts");
 const tickState = read("features/world/slp-world-tick-state.ts");
 for (const key of ["slurp2.world.tick", "slurp2.world.maintenance", "slurp2.world.pulse"]) {
-  assert.ok(storage.includes(`"${key}"`) && tickState.includes(`"${key}"`), `the skip resets the ${key} mark the world reads`);
+  assert.ok(
+    storage.includes(`"${key}"`) && tickState.includes(`"${key}"`),
+    `the skip resets the ${key} mark the world reads`,
+  );
 }
-assert.match(storage, /setSlurpWorldOffset\(db, slurpWorldOffsetMs\(\) \+ deltaMs\)/u, "a skip only adds to the offset");
+assert.match(
+  storage,
+  /setSlurpWorldOffset\(db, slurpWorldOffsetMs\(\) \+ deltaMs\)/u,
+  "a skip only adds to the offset",
+);
 assert.match(jobs, /AUTO_CHECKPOINT_KEEP_DEFAULT = 5/u, "five automatic checkpoints are kept by default");
 
 // Purges read the real clock, so a skip never ages anything out.
@@ -123,39 +144,84 @@ assert.match(read("features/world/slp-world-operation.ts"), /advanceSlurpWorld\(
 // ── 6. Restore ───────────────────────────────────────────────────────────────
 const inOrder = (text: string, steps: string[], message: string) => {
   const at = steps.map((step) => text.indexOf(step));
-  assert.ok(at.every((index) => index !== -1), `${message}: a step is missing`);
-  assert.deepEqual([...at].sort((x, y) => x - y), at, message);
+  assert.ok(
+    at.every((index) => index !== -1),
+    `${message}: a step is missing`,
+  );
+  assert.deepEqual(
+    [...at].sort((x, y) => x - y),
+    at,
+    message,
+  );
 };
 const replace = jobs.slice(jobs.indexOf("const replaceWith"), jobs.indexOf("const rollBack"));
 inOrder(
   replace,
-  ["paused: true", "The first fence", "applyRestoreArchive(job, archive, true, true)", "job.skipped.length > 0", "setSlurpWorldOffset(app.db, to.worldNowMs - Date.now())", "paused: priorPaused"],
+  [
+    "paused: true",
+    "The first fence",
+    "applyRestoreArchive(job, archive, true, true)",
+    "job.skipped.length > 0",
+    "setSlurpWorldOffset(app.db, to.worldNowMs - Date.now())",
+    "paused: priorPaused",
+  ],
   "replace order: pause, fence, replace (kept paused), verify, world date, prior paused state",
 );
 assert.match(replace, /Not every media file was restored/u, "the media count is verified");
-const restore = jobs.slice(jobs.indexOf("const createRestoreCheckpointJob"), jobs.indexOf("return { createCheckpointJob"));
+const restore = jobs.slice(
+  jobs.indexOf("const createRestoreCheckpointJob"),
+  jobs.indexOf("return { createCheckpointJob"),
+);
 inOrder(
   restore,
-  ["inspectRestoreArchive(archive)", "writeCheckpoint(job, \"safety\"", "replaceWith(job, archive, meta", "rollBack(job, safety"],
+  [
+    "inspectRestoreArchive(archive)",
+    'writeCheckpoint(job, "safety"',
+    "replaceWith(job, archive, meta",
+    "rollBack(job, safety",
+  ],
   "restore order: verify, safety checkpoint, replace, roll back",
 );
-assert.match(restore, /priorPaused = \(await noodle\.getSlurpSettings\(\)\)\.paused/u, "the paused state is read before the restore");
+assert.match(
+  restore,
+  /priorPaused = \(await noodle\.getSlurpSettings\(\)\)\.paused/u,
+  "the paused state is read before the restore",
+);
 assert.match(restore, /archive\.length !== meta\.bytes/u, "the archive size is checked");
 assert.match(skipJob, /rollBack\(job, meta/u, "a skip that fails half way puts its checkpoint back");
-assert.match(read("features/maintenance/slp-backup-jobs.ts"), /if \(keepPaused\) await noodle\.updateSlurpSettings\(\{ paused: true \}\)/u, "imported settings cannot unpause a restore");
+assert.match(
+  read("features/maintenance/slp-backup-jobs.ts"),
+  /if \(keepPaused\) await noodle\.updateSlurpSettings\(\{ paused: true \}\)/u,
+  "imported settings cannot unpause a restore",
+);
 
 // Claim and lease stamps share the real clock with their stale checks.
 assert.match(read("data/messages/slp-reply-storage-methods.ts"), /claimedAt: realNow\(\)/u);
 assert.match(read("data/messages/slp-messages-storage-commissions.ts"), /deliveryClaimedAt: realNow\(\)/u);
-assert.match(read("data/messages/slp-messages-storage-follow-ups.ts"), /const timestamp = realNow\(\);[\s\S]{0,1200}status: "claimed"/u);
-assert.match(read("features/world/slp-world-scheduler-service.ts"), /isSlurpBackupActive\(\)\) return/u, "the world tick waits while a skip or restore holds the data");
+assert.match(
+  read("data/messages/slp-messages-storage-follow-ups.ts"),
+  /const timestamp = realNow\(\);[\s\S]{0,1200}status: "claimed"/u,
+);
+assert.match(
+  read("features/world/slp-world-scheduler-service.ts"),
+  /isSlurpBackupActive\(\)\) return/u,
+  "the world tick waits while a skip or restore holds the data",
+);
 // A skip moves the offset and marks last, after the due times moved.
-assert.ok(storage.lastIndexOf("setSlurpWorldOffset(db, slurpWorldOffsetMs() + deltaMs)") > storage.indexOf("for (const [table, columns] of SHIFTED_COLUMNS)"), "the offset moves after the due times");
+assert.ok(
+  storage.lastIndexOf("setSlurpWorldOffset(db, slurpWorldOffsetMs() + deltaMs)") >
+    storage.indexOf("for (const [table, columns] of SHIFTED_COLUMNS)"),
+  "the offset moves after the due times",
+);
 
 // In-flight model and image work is fenced by the epoch.
 assert.match(read("base/model/slp-provider-retry.ts"), /assertSlurpWorldEpoch\(epoch\)/u);
 assert.match(read("base/media/slp-image-retry.ts"), /assertSlurpWorldEpoch\(epoch\)/u);
-assert.match(read("base/media/slp-image-retry.ts"), /instanceof SlurpWorldEpochChangedError\) throw error/u, "a fenced image is not retried");
+assert.match(
+  read("base/media/slp-image-retry.ts"),
+  /instanceof SlurpWorldEpochChangedError\) throw error/u,
+  "a fenced image is not retried",
+);
 // A load after a restore never lowers the epoch.
 assert.match(storage, /Math\.max\(slurpWorldEpoch\(\)/u);
 

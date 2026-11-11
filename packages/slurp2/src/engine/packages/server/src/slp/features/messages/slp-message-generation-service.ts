@@ -492,7 +492,9 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const source = await slurp.resolveAccountSource(input.creator);
   const characters = createCharactersStorage(input.db);
   const [scheduleContext, recentPostRows] = await Promise.all([
-    source ? resolveSlurpCreatorScheduleContext(characters, source, undefined, slurpWorldNow()) : Promise.resolve(undefined),
+    source
+      ? resolveSlurpCreatorScheduleContext(characters, source, undefined, slurpWorldNow())
+      : Promise.resolve(undefined),
     slurp
       .listNoodlerPostsByAccounts([input.creator.id], RECENT_POSTS)
       .then((byAccount) => byAccount.get(input.creator.id) ?? [])

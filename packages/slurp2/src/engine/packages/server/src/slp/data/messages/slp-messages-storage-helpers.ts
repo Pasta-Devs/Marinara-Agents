@@ -70,7 +70,9 @@ export function readThreadState(raw: unknown, fallbackUpdatedAt: string): SlurpC
         : fallbackUpdatedAt,
   };
   const parsedUpdatedAt = Date.parse(state.updatedAt);
-  const elapsedHours = Number.isFinite(parsedUpdatedAt) ? Math.max(0, (slurpWorldNowMs() - parsedUpdatedAt) / 3_600_000) : 0;
+  const elapsedHours = Number.isFinite(parsedUpdatedAt)
+    ? Math.max(0, (slurpWorldNowMs() - parsedUpdatedAt) / 3_600_000)
+    : 0;
   return elapsedHours > 0 ? decaySlurpThreadState(state, elapsedHours, slurpWorldNow().toISOString()) : state;
 }
 

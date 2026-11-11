@@ -146,7 +146,8 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
       // delivery is due — which may be after a restart, so the file cannot stay staged.
       drawn.promote();
       const deliverAt = new Date(
-        slurpWorldNowMs() + slurpCommissionDeliveryDelayMs({ price: accepted.price, briefLength: commission.brief.length }),
+        slurpWorldNowMs() +
+          slurpCommissionDeliveryDelayMs({ price: accepted.price, briefLength: commission.brief.length }),
       ).toISOString();
       const scheduled = await messages.scheduleCommissionDelivery(commission.id, {
         deliverAt,

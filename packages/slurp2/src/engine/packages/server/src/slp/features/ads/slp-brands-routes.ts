@@ -88,7 +88,9 @@ export async function slpBrandsRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     const next: GarnishBrand = {
       ...brand,
       ...patch,
-      ...(enabled === undefined ? {} : { disabledAt: enabled ? null : (brand.disabledAt ?? slurpWorldNow().toISOString()) }),
+      ...(enabled === undefined
+        ? {}
+        : { disabledAt: enabled ? null : (brand.disabledAt ?? slurpWorldNow().toISOString()) }),
       ...(logo === undefined ? {} : { logoUrl: logo ? storeGarnishPicture(brand.id, logo) : null }),
     };
     const saved = await pool.saveBrand(next);

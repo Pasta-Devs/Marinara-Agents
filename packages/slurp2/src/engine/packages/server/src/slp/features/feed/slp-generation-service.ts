@@ -99,7 +99,7 @@ import type {
   SlpCreatorPostGenerationInput,
 } from "./slp-generation-contract.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
-import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { slurpWorldNow as worldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type { GeneratedCreatorPostResult, PreparedCreatorPostResult } from "./slp-generation-contract.js";
 
 const SLP_CREATOR_POST_MAX_TOKENS = 2048;
@@ -130,7 +130,7 @@ export async function generateCreatorPost(
     fallbackConnection,
     admissionMode: input.admissionMode ?? { kind: "foreground" },
   });
-  const at = input.generatedAt ?? slurpWorldNow();
+  const at = input.generatedAt ?? worldNow();
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const otherCreatorSubjects = await listSlurpOtherCreatorSubjects(db, account.id, at);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
@@ -210,7 +210,7 @@ export async function generateCreatorPost(
     preview: input.previewOnly === true,
     model: { connection: input.connection, fallbackConnection, background: input.admissionMode?.kind === "background" },
     recentPosts,
-    at: input.generatedAt ?? slurpWorldNow(),
+    at: input.generatedAt ?? worldNow(),
     publishAt: input.publicationTime,
   });
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
@@ -238,7 +238,7 @@ export async function generateCreatorPost(
     previewOnly: input.previewOnly,
     singlePicture: input.prepareOnly === true,
     slotId: input.slotId,
-    at: input.generatedAt ?? slurpWorldNow(),
+    at: input.generatedAt ?? worldNow(),
     dueAt: input.publicationTime ?? null,
     beats:
       settings.postPlanner === "beats"
@@ -316,7 +316,7 @@ export async function generateCreatorPost(
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
-  const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? slurpWorldNow());
+  const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? worldNow());
   const contentMenu = await resolveSlurpCreatorMenu(db, account.id).catch(() => "");
   // How far this Creator's pictures go. A read failure must not cost a post, and the shipped level
   // is what an install with nothing configured would have used anyway. A collab goes as far as both pages.
@@ -383,7 +383,7 @@ export async function generateCreatorPost(
       : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
     eventInstruction:
-      (await resolveSlurpEventInstruction(db, account.id, input.publicationTime ?? input.generatedAt ?? slurpWorldNow())) ??
+      (await resolveSlurpEventInstruction(db, account.id, input.publicationTime ?? input.generatedAt ?? worldNow())) ??
       undefined,
     accessInstruction: [
       await resolveSlurpPostGuidance(db, account.id, input.request.access),
@@ -414,7 +414,7 @@ export async function generateCreatorPost(
     beatCompany: variation?.company,
     beatDay: beat ? beatRun.day : null,
     storyNow: slurpStoryNow(story.state, account.id, sequence, steering?.avoid, !(beat || directed || project)),
-    generatedAt: input.generatedAt ?? slurpWorldNow(),
+    generatedAt: input.generatedAt ?? worldNow(),
     publicationTime: input.publicationTime,
   });
   let compiledPrompt = messages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
@@ -548,7 +548,7 @@ export async function generateCreatorPost(
         theme: axes.intent,
         campaignId,
         shotsTaken: axes.delivery === "multi_image_set" ? 3 : 1,
-        at: input.generatedAt ?? slurpWorldNow(),
+        at: input.generatedAt ?? worldNow(),
       }).catch((error: unknown) => {
         // A post must never fail over continuity bookkeeping.
         logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
@@ -747,7 +747,7 @@ export async function generateCreatorPost(
       shootId,
       opportunity,
       campaignId,
-      at: input.generatedAt ?? slurpWorldNow(),
+      at: input.generatedAt ?? worldNow(),
       previewOnly: input.previewOnly,
     });
     return post;

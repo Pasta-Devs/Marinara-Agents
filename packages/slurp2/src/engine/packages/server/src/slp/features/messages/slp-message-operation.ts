@@ -233,7 +233,8 @@ export async function replyToSlurpMessage(
   if ((pacing.mode === "queued" || pacing.mode === "delayed") && input.force !== true) {
     // A wait already running is kept. Each new fan message used to restart it, so a fan who kept
     // writing never got an answer until they stopped.
-    const running = thread.needsReply && thread.replyNotBeforeAt && thread.replyNotBeforeAt > slurpWorldNow().toISOString();
+    const running =
+      thread.needsReply && thread.replyNotBeforeAt && thread.replyNotBeforeAt > slurpWorldNow().toISOString();
     if (!running) {
       await messagesStore.setReplyNotBefore(thread.id, new Date(slurpWorldNowMs() + pacing.notBeforeMs).toISOString());
     }
@@ -710,7 +711,8 @@ export async function replyToSlurpMessage(
     if (error instanceof SlurpMessageBudgetUnavailableError) {
       // Only the scheduler backs itself off. A player pressing the button must never push their own
       // reply an hour further away by pressing it again.
-      const retryAt = error.retryAt ?? (input.background ? new Date(slurpWorldNowMs() + 60 * 60_000).toISOString() : null);
+      const retryAt =
+        error.retryAt ?? (input.background ? new Date(slurpWorldNowMs() + 60 * 60_000).toISOString() : null);
       if (retryAt) {
         await messagesStore.setReplyNotBefore(thread.id, retryAt);
         // Said plainly to the player: "away" hid that the AI budget, not the Creator, was the reason.

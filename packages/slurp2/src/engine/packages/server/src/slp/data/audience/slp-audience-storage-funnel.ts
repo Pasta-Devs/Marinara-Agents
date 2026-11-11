@@ -110,7 +110,11 @@ export function createSlurpPopulationStorage(db: DB) {
      * The seed is the identity. Two calls with the same seed return the same person whether or not
      * a row existed, so nothing has to be materialised before it is interesting.
      */
-    async ensure(seed: string, at = slurpWorldNow(), fanTypes?: readonly SlurpFanType[]): Promise<SlurpPopulationMember> {
+    async ensure(
+      seed: string,
+      at = slurpWorldNow(),
+      fanTypes?: readonly SlurpFanType[],
+    ): Promise<SlurpPopulationMember> {
       const generated = generateSlurpPopulationMember(seed, at, fanTypes);
       const existing = await db.select().from(slurpPopulation).where(eq(slurpPopulation.id, generated.id));
       if (existing[0]) return mapMember(existing[0] as Record<string, unknown>);

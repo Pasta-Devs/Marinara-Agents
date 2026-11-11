@@ -189,7 +189,9 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
           }),
         ),
       ...preparedPosts
-        .filter((row) => Date.parse(row.publishAt) > slurpWorldNowMs() || !terminal.has(row.state) || recent(row.updatedAt))
+        .filter(
+          (row) => Date.parse(row.publishAt) > slurpWorldNowMs() || !terminal.has(row.state) || recent(row.updatedAt),
+        )
         .map((row) =>
           task({
             id: `prepared:${row.id}`,

@@ -36,7 +36,11 @@ export async function countSlurpPreparedRewrite(
 }
 
 /** Back to scheduled slots, like a post written for an older card. Returns how many. */
-export async function rewriteSlurpPreparedPosts(db: DB, creatorAccountId: string, at = slurpWorldNow()): Promise<number> {
+export async function rewriteSlurpPreparedPosts(
+  db: DB,
+  creatorAccountId: string,
+  at = slurpWorldNow(),
+): Promise<number> {
   const rows = (await preparedFor(db, creatorAccountId)).filter(
     (row) => row.state === "prepared" && Date.parse(row.publishAt) > at.getTime(),
   );

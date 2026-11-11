@@ -152,7 +152,9 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
           accountIds: accounts.map((account) => account.id),
           creatorSearchAccountIds,
           search: parsed.data.search,
-          since: new Date(slurpWorldNowMs() - (await noodle.getSettings()).storyLifetimeHours * 60 * 60 * 1000).toISOString(),
+          since: new Date(
+            slurpWorldNowMs() - (await noodle.getSettings()).storyLifetimeHours * 60 * 60 * 1000,
+          ).toISOString(),
         });
     const feedItems = [
       ...page.items,

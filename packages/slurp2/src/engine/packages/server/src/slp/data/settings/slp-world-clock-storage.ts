@@ -88,13 +88,7 @@ const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> =
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 /** Keys that hold clock state themselves or must never be rewritten by a skip. */
-const UNSHIFTED_KEYS = new Set([
-  WORLD_OFFSET_KEY,
-  WORLD_EPOCH_KEY,
-  TICK_KEY,
-  MAINTENANCE_KEY,
-  PULSE_KEY,
-]);
+const UNSHIFTED_KEYS = new Set([WORLD_OFFSET_KEY, WORLD_EPOCH_KEY, TICK_KEY, MAINTENANCE_KEY, PULSE_KEY]);
 
 /**
  * Move the world forward to `target` without running anything: every mark that
@@ -111,7 +105,11 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
         const value = row[column];
         if (typeof value === "string" && ISO.test(value)) patch[column] = shiftSlurpIso(value, deltaMs) as string;
       }
-      if (Object.keys(patch).length > 0) await db.update(table).set(patch).where(eq(table.id, row.id as string));
+      if (Object.keys(patch).length > 0)
+        await db
+          .update(table)
+          .set(patch)
+          .where(eq(table.id, row.id as string));
     }
   }
 
@@ -142,7 +140,8 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
       continue;
     }
     const shifted = JSON.stringify(shiftSlurpDueJson(parsed, deltaMs));
-    if (shifted !== JSON.stringify(parsed)) await db.update(slpAccounts).set({ settings: shifted }).where(eq(slpAccounts.id, row.id));
+    if (shifted !== JSON.stringify(parsed))
+      await db.update(slpAccounts).set({ settings: shifted }).where(eq(slpAccounts.id, row.id));
   }
 
   // Last, so nothing that reads the clock sees a new date before the due times have moved with it.
