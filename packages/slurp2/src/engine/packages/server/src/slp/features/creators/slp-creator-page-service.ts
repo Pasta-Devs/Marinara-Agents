@@ -266,11 +266,14 @@ export function refreshSlurpCreatorPages(db: DB, now = slurpWorldNowMs()): Promi
   return running;
 }
 
+// Backoff is infrastructure: stored and compared on the real clock, so a restore cannot stretch it.
 async function runRefresh(db: DB, now: number): Promise<void> {
   const noodle = createSlurpStorage(db);
-  const accounts = (await noodle.listNoodlerAccounts()).filter((account) => (restingUntil.get(account.id) ?? 0) <= now);
+  const accounts = (await noodle.listNoodlerAccounts()).filter(
+    (account) => (restingUntil.get(account.id) ?? 0) <= Date.now(),
+  );
   const rest = (accountId: string, error: string, what: string) => {
-    restingUntil.set(accountId, now + REST_MS);
+    restingUntil.set(accountId, Date.now() + REST_MS);
     logger.warn({ accountId, error }, `[slurp-creator-page] ${what} failed`);
   };
   // First a new AI Creator's first Page. One try: a failure clears the wish, the button stays.

@@ -59,7 +59,7 @@ export async function beatSlurpLiveShow(
   },
   now = slurpWorldNow(),
 ): Promise<SlurpLiveBeatResult> {
-  const t0 = slurpWorldNowMs();
+  const t0 = Date.now();
   const noodle = createSlurpStorage(db);
   const storage = createSlurpLiveStorage(db);
   const settings = await noodle.getSettings();
@@ -146,7 +146,7 @@ export async function beatSlurpLiveShow(
       const fresh = await storage.get(show.id);
       if (!fresh || fresh.endedAt) return;
       // The model took a few seconds: the beat starts now, not when it was asked for.
-      const ready = at + (slurpWorldNowMs() - t0);
+      const ready = at + (Date.now() - t0);
       // A newer cut-in already wrote its answer; this beat would cut it away.
       if ((cutIn.get(show.id) ?? 0) > call) {
         logYou(fresh.state, ready);
@@ -174,7 +174,7 @@ export async function beatSlurpLiveShow(
       await storage.save(fresh.id, { state: fresh.state });
     });
     // Pictures follow the talk: a beat that just landed is what the camera shows.
-    void shootSlurpLivePicture(db, show.id, at + (slurpWorldNowMs() - t0), settings.live).catch((error: unknown) =>
+    void shootSlurpLivePicture(db, show.id, at + (Date.now() - t0), settings.live).catch((error: unknown) =>
       logger.warn(error, "[slurp-live] Picture failed"),
     );
     return kept || stale || (hosting && beat) ? "written" : "failed";

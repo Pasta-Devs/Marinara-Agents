@@ -200,8 +200,9 @@ async function readPlans(db: DB, at = slurpWorldNow(), prune = true) {
     }
   });
   if (!prune) return plans;
-  // Retention reads the real clock: a world skip must never age plans out.
-  const realNow = new Date();
+  // Retention reads the real clock (and never later than `at`): a skip must not age plans out, and a restore that
+  // leaves the world behind real time must not delete the current plan.
+  const realNow = new Date(Math.min(Date.now(), at.getTime()));
   const cutoff = new Date(
     realNow.getFullYear(),
     realNow.getMonth(),

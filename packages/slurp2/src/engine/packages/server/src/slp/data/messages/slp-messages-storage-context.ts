@@ -445,7 +445,7 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
     }
     await db
       .update(slurpPaymentCompensations)
-      .set({ status: "charged", updatedAt: now() })
+      .set({ status: "charged", updatedAt: realNow() })
       .where(and(eq(slurpPaymentCompensations.id, row.id), eq(slurpPaymentCompensations.status, "charging")));
   }
 

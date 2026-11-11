@@ -83,7 +83,7 @@ export async function drainSlurpContinuityExtraction(
   const checkpoints = await readCheckpoints(db);
   const threads = (await db.select().from(slurpThreads))
     .filter((thread) => String(thread.lastMessageAt) > (checkpoints[String(thread.id)] ?? ""))
-    .filter((thread) => (failedUntil.get(String(thread.id)) ?? 0) <= at.getTime())
+    .filter((thread) => (failedUntil.get(String(thread.id)) ?? 0) <= Date.now())
     // Wait for a quiet thread: one call per message spent half the day's budget on "<3" and payment
     // markers. Read once the exchange has settled, as one batch.
     .filter((thread) => Date.parse(String(thread.lastMessageAt)) <= at.getTime() - SLURP_EXTRACTION_IDLE_MS)
@@ -259,7 +259,7 @@ export async function drainSlurpContinuityExtraction(
       checkpoints[threadId] = nextCheckpoint;
       failedUntil.delete(threadId);
     } catch (error) {
-      failedUntil.set(threadId, at.getTime() + FAILED_THREAD_WAIT_MS);
+      failedUntil.set(threadId, Date.now() + FAILED_THREAD_WAIT_MS);
       // The checkpoint stays put, so the same batch is read again next time.
       logger.warn(error, "[slurp-continuity] Extraction failed for one thread; it is retried later");
     } finally {

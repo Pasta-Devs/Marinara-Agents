@@ -138,7 +138,12 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
     } catch {
       continue;
     }
-    const marked = JSON.stringify(setSlurpMarkJson(state, target.toISOString(), THREAD_STATE_MARK_KEYS));
+    // A state without a stored `updatedAt` decays from the thread's own dates, so write one.
+    const base =
+      state && typeof state === "object" && !Array.isArray(state)
+        ? { updatedAt: target.toISOString(), ...state }
+        : state;
+    const marked = JSON.stringify(setSlurpMarkJson(base, target.toISOString(), THREAD_STATE_MARK_KEYS));
     if (marked !== JSON.stringify(state))
       await db.update(slurpThreads).set({ threadState: marked }).where(eq(slurpThreads.id, row.id));
   }

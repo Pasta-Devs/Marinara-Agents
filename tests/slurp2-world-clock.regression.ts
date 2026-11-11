@@ -133,7 +133,7 @@ for (const [file, needle] of [
   ["data/feed/slp-feed-post-storage-2.ts", /listExpiredDeletedNoodlerPostIds\(at = Date\.now\(\)\)/u],
   ["data/continuity/slp-continuity-storage.ts", /pruneSlurpContinuity\(db, input\.creatorAccountId\)/u],
   ["data/discovery/slp-trends-storage.ts", /pruneSlurpTrends\(next\.trends, new Date\(\)\)/u],
-  ["features/audience/slp-fan-activity-operation.ts", /const realNow = new Date\(\)/u],
+  ["features/audience/slp-fan-activity-operation.ts", /const realNow = new Date\(Math\.min\(Date\.now\(\)/u],
 ] as const) {
   assert.match(read(file), needle, `${file} must keep purging on the real clock`);
 }
@@ -355,6 +355,27 @@ assert.doesNotMatch(
   panel,
   /setError\(errorMessage\(cause\)\)/u,
   "no handler passes a job failure to errorMessage alone",
+);
+
+// Third review round: infrastructure waits stay on the real clock; a restore never deletes the current fan plan.
+assert.match(
+  read("features/audience/slp-fan-activity-operation.ts"),
+  /new Date\(Math\.min\(Date\.now\(\), at\.getTime\(\)\)\)/u,
+);
+assert.match(
+  read("features/creators/slp-creator-page-service.ts"),
+  /restingUntil\.set\(accountId, Date\.now\(\) \+ REST_MS\)/u,
+);
+assert.match(
+  read("features/messages/slp-continuity-extraction-service.ts"),
+  /failedUntil\.set\(threadId, Date\.now\(\) \+ FAILED_THREAD_WAIT_MS\)/u,
+);
+assert.match(read("features/live/slp-live-beat.ts"), /const t0 = Date\.now\(\)/u);
+assert.match(read("data/messages/slp-messages-storage-context.ts"), /status: "charged", updatedAt: realNow\(\)/u);
+assert.match(
+  storage,
+  /\{ updatedAt: target\.toISOString\(\), \.\.\.state \}/u,
+  "a thread state with no stored updatedAt gets one at the skip",
 );
 
 console.log("slurp2 world clock regression: ok");
