@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.22.5 — 2026-11-11
+
+- **A chapter no longer ends on a choice you never get to make.** When a chapter's last scene leaves a decision to you, it now ends on that choice for you to pick, instead of saying you'll decide later. The next chapter also never acts as if you chose something you weren't offered.
+
 ## 0.22.4 — 2026-11-10
 
 - **Firsts are remembered for good.** A love interest's first kiss, first time and first confession with you are now kept permanently. When a chapter's summary is written, it notes any of the three that happened there for the first time, in one sentence saying how and in which chapter, and that sentence goes with them into every later scene, so the story never treats it as a first again. Each one also joins the Love Timeline, and the calendar marks it every year, as "First kiss with Kai". Stories you've already started begin with none noted.

@@ -377,9 +377,10 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // 0.18.1: the canon writing rule now names an existing world's characters, so these prompts' bytes moved.
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so every prompt
 // with a love interest's card moved (the bible, which has none, did not).
+// 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "6e5c66a808dce9a8",
-  callScene: "d114f4fe8ec04a9a",
+  scene: "e383bf2ff3fbc953",
+  callScene: "b2949d779148c317",
   confrontation: "abb1ce9a36a31e21",
   closer: "858e88fdfc2f6942",
   bible: "a500b0070a43282e",
