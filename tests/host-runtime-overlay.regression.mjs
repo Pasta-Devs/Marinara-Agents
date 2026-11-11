@@ -342,6 +342,17 @@ try {
   const unbindCharacters = host.bindHostRuntime({ logger: runtimeLogger, persistence: {}, resources });
   assert.deepEqual(await characters.getById("c1"), mira, "a character reads through the host, avatar and dates too");
   assert.equal(await characters.getById("gone"), null);
+  // A host that answers with another row (or all of them) is not taken at its word.
+  const strayRows = {
+    ...resources,
+    getCharacters: async () => [mira],
+    listPersonas: async () => [{ id: "p1", data: personaRow }],
+  };
+  const unbindStray = host.bindHostRuntime({ logger: runtimeLogger, persistence: {}, resources: strayRows });
+  assert.equal(await characters.getById("c2"), null, "only the asked id counts");
+  assert.equal(await characters.getPersona("p2"), null, "only the asked persona id counts");
+  unbindStray();
+  host.bindHostRuntime({ logger: runtimeLogger, persistence: {}, resources });
   assert.deepEqual(await characters.list(), [mira]);
   assert.deepEqual(await characters.listGroups(), [group]);
   const pageOptions = { includeBuiltIn: true, limit: 30, offset: 0, search: "mi", sort: "name-asc" };

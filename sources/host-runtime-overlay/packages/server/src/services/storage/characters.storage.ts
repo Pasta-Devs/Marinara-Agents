@@ -81,8 +81,8 @@ export function createCharactersStorage(_db?: unknown) {
 
     async getById(id: string): Promise<CharacterRow | null> {
       const host = resources("Reading characters");
-      const [row] = await member("Reading characters", host.getCharacters?.bind(host))([id]);
-      return row ?? null;
+      const rows = await member("Reading characters", host.getCharacters?.bind(host))([id]);
+      return rows.find((row) => row.id === id) ?? null;
     },
 
     /** Every character, most recently updated first. */
@@ -114,8 +114,8 @@ export function createCharactersStorage(_db?: unknown) {
     },
 
     async getPersona(id: string): Promise<any> {
-      const [record] = await resources("Reading personas").listPersonas([id]);
-      return record?.data ?? null;
+      const records = await resources("Reading personas").listPersonas([id]);
+      return records.find((record) => record.id === id)?.data ?? null;
     },
 
     async listPersonas(): Promise<any[]> {
