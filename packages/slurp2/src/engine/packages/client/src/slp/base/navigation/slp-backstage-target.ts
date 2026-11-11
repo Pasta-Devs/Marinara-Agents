@@ -54,6 +54,7 @@ export const SLP_BACKSTAGE_TARGETS = [
   "spice",
   "prompts",
   "autopurge",
+  "clock",
   "stir",
   "live",
 ] as const;
@@ -65,7 +66,7 @@ export type SlpBackstageTarget = (typeof SLP_BACKSTAGE_TARGETS)[number];
  */
 export const SLP_BACKSTAGE_TARGETS_BY_SECTION: Record<SlpBackstageSection, readonly SlpBackstageTarget[]> = {
   overview: ["overview"],
-  basic: ["basic", "connections", "general", "audience", "images", "messaging", "wallet", "autopurge"],
+  basic: ["basic", "connections", "general", "audience", "images", "messaging", "wallet", "autopurge", "clock"],
   creators: ["creators", "improve", "tags"],
   spice: ["spice"],
   prompts: ["prompts"],
@@ -128,6 +129,7 @@ export const SLP_BACKSTAGE_TARGET_LABELS: Record<SlpBackstageTarget, string> = {
   spice: "Spice",
   prompts: "Prompts",
   autopurge: "Storage and backup",
+  clock: "World clock",
   stir: "Support desk",
   live: "Live shows",
 };

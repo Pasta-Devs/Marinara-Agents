@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
+  Clock,
   ChevronRight,
   Gauge,
   Globe2,
@@ -25,7 +26,8 @@ import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpBackstagePageProps } from "./slp-backstage-contract";
 import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
-import { formatDateTime } from "../../base/ui/slp-date-time";
+import { formatDateTime, formatFullTime } from "../../base/ui/slp-date-time";
+import { useSlpWorldClock } from "../maintenance/slp-maintenance-contract";
 import { formatBytes } from "../../modules/settings/slp-backstage-format";
 import { OverviewCard, OverviewActivity } from "../../modules/settings/SlpBackstageKit";
 import { CompactSwitch } from "../../modules/settings/SlpSettingsControls";
@@ -70,6 +72,7 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
     schedulesRefreshing,
     setSchedulesRefreshing,
   } = page;
+  const worldClock = useSlpWorldClock();
   // One at a time: each refresh is a model call, and a second click must not start another round.
   const refreshSchedules = async () => {
     setSchedulesRefreshing(true);
@@ -503,6 +506,16 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
               : maintenanceSummary.isError
                 ? t("ui.slurp.settings.overview.activity.notAvailable")
                 : "…"}
+          </span>
+        </span>
+        <ChevronRight size={18} className="shrink-0 rtl:rotate-180" aria-hidden="true" />
+      </button>
+      <button type="button" onClick={() => go("basic", "clock")} className={`${panelClass} ${rowClass}`}>
+        <Clock size={18} className="shrink-0 text-[var(--slurp-violet)]" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold">{t("ui.slurp.settings.backstage.targets.clock")}</span>
+          <span className="block text-xs text-[var(--slurp-muted)] tabular-nums">
+            {worldClock.data ? formatFullTime(worldClock.data.worldNow, i18n.language) : "…"}
           </span>
         </span>
         <ChevronRight size={18} className="shrink-0 rtl:rotate-180" aria-hidden="true" />
