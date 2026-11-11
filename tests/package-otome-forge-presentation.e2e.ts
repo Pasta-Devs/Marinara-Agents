@@ -3747,7 +3747,7 @@ test("Otome Hearth affection shows per-level progress below Level beside its hea
 /** The story so far (#2040), as GET /runs/:run/memory/overview serves it: never shown here, where no arc is planned. */
 const SO_FAR = ["Marin taught you to read the tide tables.", "You kept the lighthouse key he left on the sill."];
 
-test("Otome Hearth shows prestige past level 10 and writes an unlocked extra story on its tap (#2025)", async ({
+test("Otome Hearth shows prestige at the last bond rank and writes an unlocked extra story on its tap (#2025)", async ({
   page,
   isMobile,
 }, testInfo) => {
@@ -3762,9 +3762,20 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
     ...lis[2]!,
     id: MARIN,
     name: "Marin",
-    level: 10,
-    affectionProgress: { current: 300, required: 300 },
+    // 0.23.0: prestige opens at the last bond rank (20), the ten bond stories played, never at level 10.
+    level: 20,
+    bond: { level: 20, name: "always", played: 10, next: null },
+    affectionProgress: { current: 1100, required: 1100 },
     prestige: { unlocked: 1, points: 2, current: 120, required: 300 },
+  });
+  // A love interest past his finale, at the first bond rank: the ladder is under way and no prestige row yet.
+  lis.push({
+    ...lis[2]!,
+    id: "li-mid-0006",
+    name: "Ren",
+    level: 11,
+    bond: { level: 11, name: "named", played: 0, next: 11 },
+    affectionProgress: { current: 0, required: 650 },
   });
   const key = `prestige-${MARIN}-1`;
   let release!: () => void;
@@ -3796,7 +3807,18 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
   await expect(row.getByRole("meter", { name: "Marin: affection progress", exact: true })).toHaveCount(0);
   await expect(row.getByRole("img", { name: "Marin: prestige 2 of 3", exact: true })).toBeVisible();
   await expect(
-    section.getByText("Past level 10, every 300 affection earns a prestige point.", { exact: false }),
+    row.getByRole("img", { name: "Marin: affection level 10 of 10, bond rank 10 of 10", exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByText("Past the last bond rank, every 300 affection earns a prestige point.", { exact: false }),
+  ).toBeVisible();
+  // The bond ladder is under way at rank 11: no prestige row yet, and the level text names the rank.
+  const mid = section.getByRole("listitem").filter({ hasText: "Ren" });
+  await expect(mid.locator(".of-prestige")).toHaveCount(0);
+  await expect(mid.getByRole("meter", { name: "Ren: affection progress", exact: true })).toHaveText("0 / 650");
+  await expect(mid.locator(".of-affection-level")).toHaveText("Level 10 · named");
+  await expect(
+    mid.getByRole("img", { name: "Ren: affection level 10 of 10, bond rank 1 of 10", exact: true }),
   ).toBeVisible();
   const other = section.getByRole("listitem").filter({ hasText: lis[0]!.name });
   await expect(other.locator(".of-prestige")).toHaveCount(0);

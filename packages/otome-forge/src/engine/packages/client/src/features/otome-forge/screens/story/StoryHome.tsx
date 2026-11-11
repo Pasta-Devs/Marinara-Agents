@@ -383,8 +383,9 @@ function NodePath({
 }
 
 /**
- * Each love interest's affection level (1–10, it only rises), as ten hearts. At level 10 (#2025), prestige: three pips,
- * progress toward the next one, and a way to the extra story three of them unlock, while it waits to be written.
+ * Each love interest's affection level (1–20, it only rises), as ten outer hearts for levels 1-10 and an inner heart in
+ * each for a bond rank once his finale is read (0.23.0). At the last rank (#2025), prestige: three pips, progress toward
+ * the next one, and a way to the extra story three of them unlock, while it waits to be written.
  */
 function Affection({
   lis,
@@ -459,7 +460,7 @@ function Affection({
                   ? t("ui.otomeForge.story.levelBond", { level: outer, rank: bond.name })
                   : t("ui.otomeForge.story.level", { level: outer })}
               </span>
-              {level === MAX_LEVEL && li.prestige ? (
+              {level === BOND_MAX_LEVEL && li.prestige ? (
                 <span
                   className="of-affection-progress"
                   role="meter"
@@ -486,7 +487,9 @@ function Affection({
                   aria-valuemax={li.affectionProgress.required}
                   aria-valuenow={li.affectionProgress.current}
                   aria-valuetext={
-                    level === MAX_LEVEL
+                    // The server reports a finished ladder as a full meter (600 of 600 at level 10 with the gate shut,
+                    // 1,100 of 1,100 at the last rank); level 10 with his finale read is 0 of 650 toward rank 11.
+                    li.affectionProgress.current >= li.affectionProgress.required
                       ? t("ui.otomeForge.story.affectionProgressMax")
                       : t("ui.otomeForge.story.affectionProgressValue", li.affectionProgress)
                   }
@@ -510,7 +513,7 @@ function Affection({
                   {t("ui.otomeForge.story.bondOpen", { rank: li.bond.name })}
                 </button>
               ) : null}
-              {level === MAX_LEVEL && li.prestige ? (
+              {level === BOND_MAX_LEVEL && li.prestige ? (
                 <PrestigeRow
                   li={li}
                   images={images}
@@ -523,9 +526,7 @@ function Affection({
         })}
       </ul>
       <p className="of-hint">{t("ui.otomeForge.story.affectionHint")}</p>
-      {lis.some((li) => li.level >= MAX_LEVEL && li.prestige) ? (
-        <p className="of-hint">{t("ui.otomeForge.story.prestigeHint")}</p>
-      ) : null}
+      {lis.some((li) => li.prestige) ? <p className="of-hint">{t("ui.otomeForge.story.prestigeHint")}</p> : null}
     </section>
   );
 }
