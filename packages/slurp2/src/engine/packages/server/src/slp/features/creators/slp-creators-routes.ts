@@ -246,10 +246,12 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
     monday.setHours(0, 0, 0, 0);
     // Only the keys this changes: the Engine keeps the card's other extensions as they are when it saves.
-    await characters.updateExtensions(source.entityId, {
+    const saved = await characters.updateExtensions(source.entityId, {
       conversationSchedule: { ...generated, weekStart: monday.toISOString() },
       conversationSchedulesEnabled: true,
     });
+    // Null: the card was deleted while the model ran, so nothing was saved.
+    if (!saved) return reply.code(404).send({ error: "Linked Engine character not found." });
     return {
       state: "active",
       blocks: Object.values(generated.days).reduce((count, day) => count + day.length, 0),

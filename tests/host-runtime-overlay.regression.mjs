@@ -422,7 +422,11 @@ try {
     join(root, "packages/slurp2/src/engine/packages/server/src/slp/features/creators/slp-creators-routes.ts"),
     "utf8",
   );
-  assert.match(slurpCreators, /characters\.updateExtensions\(source\.entityId, \{\s+conversationSchedule:/u);
+  assert.match(
+    slurpCreators,
+    /const saved = await characters\.updateExtensions\(source\.entityId, \{\s+conversationSchedule:/u,
+  );
+  assert.match(slurpCreators, /if \(!saved\) return reply\.code\(404\)/u);
   assert.doesNotMatch(slurpCreators, /characters\.update\(/u);
 
   // No package imports the storage path directly; lib/host-characters-storage.js is the one way in.
