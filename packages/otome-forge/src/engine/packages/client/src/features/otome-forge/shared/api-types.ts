@@ -1318,6 +1318,7 @@ export type ChapterView = Omit<
   | "hisSide"
   | "recalled"
   | "memories"
+  | "context"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;

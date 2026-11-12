@@ -623,6 +623,8 @@ export async function planNextChapter(
       connectionId,
       ...(thoughts ? { thoughts: thoughts.text } : {}),
       ...(memory.recalled ? { recalled: memory.recalled } : {}),
+      // 0.24.2: the story context the plan read, which every scene of the chapter sends (S/story/beats.ts).
+      ...(memory.text ? { context: memory.text } : {}),
     };
     const saved = await deps.store.mutateDoc(
       runDocTarget("chapter", chapterId(runId, key)),

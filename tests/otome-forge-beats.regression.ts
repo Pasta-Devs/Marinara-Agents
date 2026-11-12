@@ -3745,6 +3745,11 @@ test("a chapter's scenes keep the story context it opened with, though memory up
   assert.equal(typeof stored.context, "string", "the first scene saved the context it read");
   assert.ok(stored.context!.includes("HEAD: the harbour before."), stored.context);
 
+  // The lookahead wrote scene 2 from the context as it stood; drop it, so the scene below is generated AFTER the
+  // rewrite and the prompt asserted is one the freeze actually governs.
+  await t.settle();
+  assert.equal(await t.store.removeDoc(beatId(t.runId, "main-1", 1)), true, "the lookahead's scene is dropped");
+
   // Upkeep finishes mid-chapter: the timeline is rewritten under the open chapter.
   await saveStoryMemory(t.store, t.runId, { head: "HEAD: MOVED BY UPKEEP.", summaries: { "main-1": "SUMMARY: two" } });
   const second = await t.call("POST", beatPath, {}, node(1));
