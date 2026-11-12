@@ -3760,3 +3760,21 @@ test("a chapter's scenes keep the story context it opened with, though memory up
   assert.ok(prompt.includes("HEAD: the harbour before."), "the second scene sends the context the chapter opened with");
   assert.ok(!prompt.includes("HEAD: MOVED BY UPKEEP."), "never the story as it is now");
 });
+
+test("a chapter whose story context is longer than 200,000 characters keeps it too", async () => {
+  // recallText caps nothing (the fitter trims what is sent), so the stored context must not have a length the read
+  // rejects: a dropped one reads as never saved and every scene goes back to the live story (Dottore, #2262).
+  const t = await storyWorld({ runKey: "r-longctx-aaaaaa", replies: router() });
+  const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const long = `HEAD: the harbour before. ${"canon in full. ".repeat(14_000)}`;
+  assert.ok(long.length > 200_000, "the fixture is over the old bound");
+  await t.store.updateDoc(
+    runDocTarget("chapter", chapterId(t.runId, "main-1")),
+    normalizeChapter,
+    (chapter) => chapter && { ...chapter, context: long },
+  );
+  const stored = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
+  assert.equal(stored.context?.length, long.length, "a long context survives the read");
+  assert.equal(stored.context, long);
+});
