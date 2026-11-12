@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.24.2",
+          "date": "2026-11-12",
+          "notes": "- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.",
+          "highlight": false
+        },
+        {
           "version": "0.24.1",
           "date": "2026-11-12",
           "notes": "- **Cheaper prompts.** Every prompt Otome Hearth sends to Claude now asks for the five-minute prompt cache instead of the hour-long one. A cached prompt is usually read again within a minute or two (the next scene, the next beat of a chapter), where the five-minute cache costs a quarter of the input to write and the hour-long one twice it — so the hour mostly doubled the price of a prompt that was read seconds later. Group replies, which had been paying the hour-long price, now use the five-minute one too.",
@@ -800,12 +806,6 @@
           "date": "2026-11-08",
           "notes": "- **The top left button is a house.** It takes you Home, as before, and its circle is in the colour of whoever is with you there, beside their name.\n- **New items have a dot.** Anything you win from Wish shows a small dot in the Wardrobe or the Album: on the dock, on the tab that holds it, and by the item itself. The dot goes once you click the item (or one of its buttons).",
           "highlight": true
-        },
-        {
-          "version": "0.20.4",
-          "date": "2026-11-08",
-          "notes": "- **Every scene of a chapter remembers the same small moments.** A chapter now picks its small memories (message exchanges, Snapshots, Read Him, Claw Machine and Tarot rounds, Read Me notes and dates) once, for everyone in it, and each of its scenes is written with the same ones, marked with who knows them. On an Anthropic connection, after the first scene they're sent at the cached price instead of in full every time. Something that happens during a chapter is remembered from the next one.",
-          "highlight": false
         }
       ]
     },

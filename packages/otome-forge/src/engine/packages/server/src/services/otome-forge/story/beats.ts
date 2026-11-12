@@ -776,6 +776,24 @@ async function generateBeat(
     const kept = saved?.memories;
     if (kept && kept.join("\n") !== chosen.join("\n")) memory = await recall(kept);
   }
+  // 0.24.2, the maintainer's rule: what the chapter was planned with is what each of its scenes gets. recallText reads
+  // the story as it is NOW, so background upkeep finishing mid-chapter (a summary saved, the timeline folded, his side
+  // read) would hand the later scenes a different context from the earlier ones' — the same chapter, told two ways,
+  // and a cache that misses every time the text moves. The text is saved on the chapter by its first scene and sent by
+  // every one after it, as `recalled` and the pool ids already are.
+  if (!told) {
+    const savedContext = chapter.context;
+    if (savedContext) memory = { ...memory, text: savedContext };
+    else if (memory.text) {
+      const written = await deps.store.updateDoc(
+        runDocTarget("chapter", chapterId(runId, key)),
+        normalizeChapter,
+        (current) => (!current || current.context ? current : { ...current, context: memory.text }),
+      );
+      // Another scene wrote first: send its text, not this one's.
+      if (written?.context && written.context !== memory.text) memory = { ...memory, text: written.context };
+    }
+  }
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";

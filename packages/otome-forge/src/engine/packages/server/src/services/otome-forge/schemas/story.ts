@@ -273,6 +273,8 @@ export function normalizeChapter(data: unknown): Chapter | null {
       gift: z.enum(GIFT_IDS).optional(),
       hisSide: HisSideNoteSchema.optional(),
       recalled: z.array(z.string().refine(isChapterKey)).min(1).max(RECALL_MAX).optional(),
+      // 0.24.2: the story context its plan or first scene read, sent by every scene (S/story/beats.ts).
+      context: z.string().min(1).max(200_000).optional(),
       // 0.20.4: its small memories' ids, [] when it has none (S/story/beats.ts).
       memories: z.array(z.string().min(1).max(300)).max(200).optional(),
     },
@@ -376,6 +378,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     hisSide: _hisSide,
     recalled: _recalled,
     memories: _memories,
+    context: _context,
     music,
     ...rest
   } = chapter;

@@ -1093,6 +1093,12 @@ export interface Chapter {
    */
   recalled?: string[];
   /**
+   * 0.24.2: the chapter's story context (S/prompts.ts storyContext's `memory`), saved by its plan or its first scene and
+   * sent by every scene of the chapter (hidden from the client). Background memory upkeep can finish mid-chapter, and
+   * this is what keeps a scene's context the one the chapter opened with, in the prompt and the cache alike.
+   */
+  context?: string;
+  /**
    * 0.20.4: the chapter's small memories, by id, in the order they go, chosen by its first scene for everyone in it so
    * every scene sends the same ones; [] when it has none (S/story/beats.ts; hidden from the client).
    */

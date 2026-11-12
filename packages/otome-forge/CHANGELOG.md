@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.24.2 — 2026-11-12
+
+- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.
+
 ## 0.24.1 — 2026-11-12
 
 - **Cheaper prompts.** Every prompt Otome Hearth sends to Claude now asks for the five-minute prompt cache instead of the hour-long one. A cached prompt is usually read again within a minute or two (the next scene, the next beat of a chapter), where the five-minute cache costs a quarter of the input to write and the hour-long one twice it — so the hour mostly doubled the price of a prompt that was read seconds later. Group replies, which had been paying the hour-long price, now use the five-minute one too.
