@@ -14,7 +14,8 @@
 // - Right before the paid call the entry is checked again (the same pending entry, the same connection, consent still
 //   given), and the image is saved only onto that entry. A failure is kept with its error and painted again only by a
 //   tap (POST /runs/:run/art/tarot: consent, a reviewed prompt or Retry, which never pays twice); a pending entry with
-//   no live paint in this process reads as stopped. A ready card is never painted again: there is no repaint.
+//   no live paint in this process reads as stopped. An automatic pass never repaints a ready card; only a tap does
+//   (0.24.0), which replaces the picture and deletes the gallery image it painted over.
 // - The picture (S/prompts.ts tarotCardPrompt) is the illustration only, at a story CG's size: its people as a picture
 //   kept outside the story (at most Suggestive), with each person's likeness as a keepsake sends it (cgSubjects by id
 //   and role, so a likeness whose pictures fail to load stops before the paid call), or a card of nobody as a place.
@@ -45,9 +46,12 @@ import {
   imagesOf,
   paintRecord,
   paintView,
+  releaseReplacedImage,
+  repainting,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type PaintCheck,
   type PaintOwner,
 } from "./paint.js";
@@ -198,15 +202,20 @@ function paintDeckCard(
     },
     // Built now, so the looks, the rating and the 18+ gate are the ones in force at the paid call.
     paint: async () => (await buildCard(deps, runId, key, edited)).paint(connectionId, debugMode),
-    save: async (art) =>
-      !!(
-        await updateIfChanged(deps.store, deckTarget(runId), normalizeDeck, (current) => {
-          const entry = current.cards[key];
-          return entry?.art.state === "pending" && entry.art.at === at
-            ? { ...current, cards: { ...current.cards, [key]: { ...entry, art } } }
-            : undefined;
-        })
-      )?.changed,
+    save: async (art) => {
+      let replaced: Paint | undefined;
+      const saved = await updateIfChanged(deps.store, deckTarget(runId), normalizeDeck, (current) => {
+        const entry = current.cards[key];
+        if (!(entry?.art.state === "pending" && entry.art.at === at)) return undefined;
+        replaced = entry.art;
+        return { ...current, cards: { ...current.cards, [key]: { ...entry, art: withKeptPicture(art, replaced) } } };
+      });
+      if (!saved?.changed) return false;
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+      if (saved.value.cards[key]?.art.state === "ready")
+        await releaseReplacedImage(deps, replaced, saved.value.cards[key]?.art);
+      return true;
+    },
   });
 }
 
@@ -299,9 +308,9 @@ export async function tarotCardArtPrompt(
 
 /**
  * POST /runs/:run/art/tarot {li, card, prompt?, negativePrompt?}: the tap that paints a drawn card now (Ask's consent,
- * a reviewed prompt, or Retry). Waits for the paint and resolves its record as left; a ready card is returned as it
- * is, and a tap while it paints waits for that paint, so no tap pays twice. 409 `locked` for a card never drawn with
- * them, 503 `no-connection` without an image connection.
+ * a reviewed prompt, Retry, or 0.24.0 a repaint of a ready one). Waits for the paint and resolves its record as left;
+ * a tap while it paints waits for that paint, so no tap pays twice. 409 `locked` for a card never drawn with them, 503
+ * `no-connection` without an image connection.
  */
 export async function paintTarotCardNow(
   deps: ItemArtDeps,
@@ -323,15 +332,14 @@ export async function paintTarotCardNow(
       return { value: art, art };
     },
     async () => {
-      const { run, entry } = await readEntry(deps, runId, li, card);
-      if (entry.art.state === "ready") return entry.art;
+      const { run } = await readEntry(deps, runId, li, card);
       const connectionId = run.world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
       const claimed = await updateIfChanged(deps.store, deckTarget(runId), normalizeDeck, (current) => {
         const latest = current.cards[key];
-        return latest && latest.art.state !== "ready"
-          ? { ...current, cards: { ...current.cards, [key]: { ...latest, art: { state: "pending" as const, at } } } }
+        return latest
+          ? { ...current, cards: { ...current.cards, [key]: { ...latest, art: repainting(latest.art, at) } } }
           : undefined;
       });
       if (!claimed) throw notFound("Otome Forge run");

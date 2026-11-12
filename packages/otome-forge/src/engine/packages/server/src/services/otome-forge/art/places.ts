@@ -4,8 +4,8 @@
 // A place is recorded the first time a written beat names it, under placeKey(name), with the beat's English tags. With
 // an image connection it is painted then, in the background, unless Ask before painting is on (or the player reviews
 // image prompts): then it waits for the tap (`waiting-consent`). A place with no tags is never painted; it takes the
-// tags of a later beat that describes it. Only a tap paints a failed or stopped place again, and
-// a ready one is never repainted. Without an image connection the place is kept with no art, and the reader shows its
+// tags of a later beat that describes it. Only a tap paints a failed or stopped place again, or (0.24.0) repaints a
+// ready one; an automatic pass always leaves a ready place alone. Without an image connection the place is kept with no
 // gradient. Painting goes through paintRecord (art/paint.ts): one paid image at a time per connection, the record
 // re-checked right before the call, and the image saved only onto the record that asked for it.
 // #2147: the player may instead choose a background from the Engine's library for any place (chooseBackground), which
@@ -26,9 +26,12 @@ import {
   imagesOf,
   paintRecord,
   paintView,
+  releaseReplacedImage,
+  repainting,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -256,19 +259,28 @@ async function paintPlace(
       return images.uploadToGallery({ image, name: place.name, prompt });
     },
     async save(art) {
-      const result = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) =>
-        ours(current)
-          ? { ...current, places: { ...current.places, [key]: { ...current.places[key]!, art } } }
-          : undefined,
-      );
-      return !!result?.changed;
+      let replaced: Paint | undefined;
+      const result = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
+        if (!ours(current)) return undefined;
+        replaced = current.places[key]!.art;
+        return {
+          ...current,
+          places: { ...current.places, [key]: { ...current.places[key]!, art: withKeptPicture(art, replaced) } },
+        };
+      });
+      if (!result?.changed) return false;
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+      if (result.value.places[key]?.art?.state === "ready")
+        await releaseReplacedImage(deps, replaced, result.value.places[key]?.art);
+      return true;
     },
   });
 }
 
 /**
- * POST /runs/:run/art/place: the tap that paints a place now (its consent, or Retry). Waits for the paint and resolves
- * the place as left; a ready place is returned as it is, and a tap while it is painting waits for that same paint.
+ * POST /runs/:run/art/place: the tap that paints a place now (its consent, Retry, or 0.24.0 a repaint of a ready one).
+ * Waits for the paint and resolves the place as left; a tap while it is painting waits for that same paint, so no tap
+ * pays twice.
  */
 export async function paintPlaceNow(
   deps: ArtDeps,
@@ -294,18 +306,16 @@ export async function paintPlaceNow(
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
       if (!world.places[key]) throw notFound();
-      if (world.places[key].art?.state === "ready") return read();
       if (!world.places[key].tags.trim()) throw untagged();
       const connectionId = world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
-      const pending: Paint = { state: "pending", at };
       const claim = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
         const place = current.places[key];
         if (!place) throw notFound();
         if (!place.tags.trim()) throw untagged();
-        return place.art?.state !== "ready" && current.images.connectionId === connectionId
-          ? { ...current, places: { ...current.places, [key]: { ...place, art: pending } } }
+        return current.images.connectionId === connectionId
+          ? { ...current, places: { ...current.places, [key]: { ...place, art: repainting(place.art, at) } } }
           : undefined;
       });
       if (!claim) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");

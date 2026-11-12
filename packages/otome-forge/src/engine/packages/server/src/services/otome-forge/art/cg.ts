@@ -35,9 +35,12 @@ import {
   imagesOf,
   paintRecord,
   paintView,
+  releaseReplacedImage,
+  repainting,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -487,12 +490,44 @@ async function paintCg(
       });
     },
     async save(art) {
-      const saved = await updateCg(deps, runId, beat, writtenAt, (cg) =>
-        cg.art?.state === "pending" && cg.art.at === at ? { ...cg, art } : null,
-      );
-      return !!saved?.changed;
+      let replaced: Paint | undefined;
+      const saved = await updateCg(deps, runId, beat, writtenAt, (cg) => {
+        if (cg.art?.state !== "pending" || cg.art.at !== at) return null;
+        replaced = cg.art;
+        return { ...cg, art: withKeptPicture(art, replaced) };
+      });
+      if (!saved?.changed) return false;
+      const now = saved.beat.cg?.art;
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted, and only once
+      // the Album shows the new picture too.
+      if (now?.state === "ready") {
+        await updateAlbumPicture(deps, runId, albumKey(beat.key, beat.i), now);
+        await releaseReplacedImage(deps, replaced, now);
+      }
+      return true;
     },
   });
+}
+
+/**
+ * Points the Album's CG entry for `key` at the picture its record now shows (0.24.0: a repaint of an unlocked CG), so
+ * the keepsake follows the beat instead of holding the image the repaint replaced. Never throws: the CG is painted.
+ */
+async function updateAlbumPicture(deps: ArtDeps, runId: string, key: string, art: Paint): Promise<void> {
+  if (!art.url || !art.ref) return;
+  await updateIfChanged(deps.store, runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+    const at = current.album.cgs.findIndex((entry) => entry.key === key);
+    if (at < 0 || current.album.cgs[at].ref === art.ref) return undefined;
+    const cgs = [...current.album.cgs];
+    cgs[at] = { ...cgs[at], url: art.url!, ref: art.ref! };
+    return { ...current, album: { ...current.album, cgs } };
+  }).catch((error: unknown) =>
+    deps.runtime.logger.warn(
+      "[otome-forge] moving the album's key image %s to its new picture failed: %s",
+      key,
+      error instanceof Error ? error.message : String(error),
+    ),
+  );
 }
 
 /** Each CG whose record a start is writing, by run and owner (see startBeatCg). */
@@ -562,8 +597,9 @@ export async function paintBeatCg(deps: ArtDeps, runId: string, written: Beat, o
 }
 
 /**
- * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, or Retry). Waits for the paint and resolves
- * the CG's record as left; a ready one is returned as it is, and a tap while it is painting waits for that paint.
+ * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, Retry, or 0.24.0 a repaint of a ready one).
+ * Waits for the paint and resolves the CG's record as left; a tap while it is painting waits for that paint, so no tap
+ * pays twice.
  */
 export async function paintCgNow(
   deps: ArtDeps,
@@ -587,15 +623,15 @@ export async function paintCgNow(
       return { value: art, art };
     },
     async () => {
-      if (beat.cg!.art?.state === "ready") return beat.cg!.art;
       const run = await readRun(deps.store, runId);
       if (!run) throw runNotFound();
       const connectionId = run.world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
-      const saved = await updateCg(deps, runId, beat, beat.written.at, (cg) =>
-        cg.art?.state === "ready" ? null : { ...cg, art: { state: "pending", at } },
-      );
+      const saved = await updateCg(deps, runId, beat, beat.written.at, (cg) => ({
+        ...cg,
+        art: repainting(cg.art, at),
+      }));
       if (!saved) throw new OtomeForgeError(409, "This scene changed. Open it again.", "conflict");
       if (saved.changed) {
         await paintCg(deps, runId, saved.beat, at, connectionId, { debugMode, consent: true, edited, active });
@@ -620,8 +656,10 @@ export function queueScenePaints(deps: ArtDeps, runId: string, beat: Beat, optio
 // ── Unlocking ──
 
 /**
- * POST /runs/:run/art/cg/seen: adds the beat's CG to the album once it is ready and the beat has been read to the
- * segment it opens on (POST .../read reports how far). `unlocked` is true only on the request that added it.
+ * POST /runs/:run/art/cg/seen: adds the beat's CG to the album once it has a picture and the beat has been read to the
+ * segment it opens on (POST .../read reports how far). `unlocked` is true only on the request that added it. The picture
+ * counts whatever its state: a repaint in flight, failed or stopped keeps the old one on screen, so it is the one seen
+ * (0.24.0); updateAlbumPicture moves the entry when the new picture lands.
  */
 export async function markCgSeen(
   deps: ArtDeps,
@@ -634,7 +672,7 @@ export async function markCgSeen(
   const cg = beat.cg;
   if (!cg) throw noCg();
   const art = cg.art;
-  if (art?.state !== "ready" || !art.url || !art.ref) {
+  if (!art?.url || !art.ref) {
     throw new OtomeForgeError(409, "This key image is not painted yet.", "conflict");
   }
   // An Ease off before the CG's segment keeps readThrough below it, and a beat written ahead (its CG painted with it,
@@ -662,6 +700,17 @@ export async function markCgSeen(
       : { ...current, album: { ...current.album, cgs: keepNewest([...current.album.cgs, entry], STATE_LIMITS.album) } },
   );
   if (!result) throw runNotFound();
+  // A repaint that saved between the read above and this write already moved its entry, and found none: the Album now
+  // holds the picture the repaint replaced, which it released. Read the beat again and follow it when it moved on
+  // (Dottore, #2255); one that lands later moves the entry itself through updateAlbumPicture.
+  const now = await readBeat(deps.store, runId, key, i);
+  const current = now?.cg?.art;
+  if (result.changed && current?.url && current.ref && current.ref !== entry.ref) {
+    await updateAlbumPicture(deps, runId, entry.key, current);
+    // The response answers with what the Album holds now, not with the picture the repaint already replaced.
+    const moved = await deps.store.readDoc(stateId(runId), normalizeState);
+    if (moved) return { unlocked: true, album: moved.album.cgs };
+  }
   return { unlocked: result.changed, album: result.value.album.cgs };
 }
 

@@ -242,6 +242,9 @@ async function writeGroup(
       ...(squabble ? { squabble: squabble.map(name) } : {}),
     }),
     memory: story,
+    // Everyone's answer comes minutes after the last, as a thread's replies do, so the cheaper five-minute write
+    // carries it (0.24.1: the default moved with it, and this is said where the reply is asked for).
+    cacheTtl: "5m",
     schema: GroupReplySchema,
     normalize: (raw) =>
       normalizeGroupReply(

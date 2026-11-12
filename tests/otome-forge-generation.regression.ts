@@ -107,8 +107,9 @@ test("a cache mark is sent as it is, through the fit and the repair turn, for an
       messages,
       "both marks reach the Engine, and the part that changes has none",
     );
-    // #2091: a chapter's calls come minutes apart, so a marked prompt asks for the hour-long cache.
-    assert.equal((call.options as { cacheTtl?: string }).cacheTtl, "1h");
+    // 0.24.1: a marked prompt asks for the five-minute cache. Its reads come within a minute or two, and the hour-long
+    // write costs 2x the input against the five-minute one's 1.25x, so the hour doubled every miss for little extra read.
+    assert.equal((call.options as { cacheTtl?: string }).cacheTtl, "5m");
   }
   assert.equal(calls[1]!.messages.length, 5, "the repair turn adds its two messages after them");
   const cached = logs.filter((entry) => entry.level === "debugOverride" && /Prompt cache/u.test(entry.message));

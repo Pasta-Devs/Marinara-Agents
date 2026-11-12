@@ -56,15 +56,19 @@ import {
 import { cgReferences, cgSubjects, warnUnmatched } from "../art/cg.js";
 import { viewCutouts } from "../art/cutout.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
-import { bannerArtOwner, itemArtOwner, lookWearer } from "../art/outfits.js";
+import { addOutfit, bannerArtOwner, itemArtOwner, lookWearer } from "../art/outfits.js";
 import {
   imagesOf,
   paintRecord,
   paintSettled,
   paintView,
+  releaseReplacedImage,
+  repainting,
+  samePicture,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type PaintCheck,
 } from "../art/paint.js";
 import {
@@ -686,25 +690,49 @@ function paintBanner(
   const mine = (banner: Banner | null) =>
     banner?.key === key && banner.art?.state === "pending" && banner.art.at === at;
   const save = async (art: Paint) => {
-    const saved = await updateIfChanged(deps.store, target, normalizeBanner, (banner) =>
-      mine(banner) ? { ...banner, art } : undefined,
-    );
+    let replaced: Paint | null | undefined;
+    const saved = await updateIfChanged(deps.store, target, normalizeBanner, (banner) => {
+      if (!mine(banner)) return undefined;
+      replaced = banner.art;
+      return { ...banner, art: withKeptPicture(art, replaced) };
+    });
     if (!saved?.changed) return false;
-    // The banner's art is its featured item's own picture: the item takes it while its own is not painted, so its
-    // first open (S/items/open.ts) finds it painted, and a claim of its own still waiting stops before paying. Still in
-    // the slot, and never thrown: the banner's art is saved already, and its image must stay.
+    // The banner's art is its featured item's own picture: the item takes it while its own is not painted, and (0.24.0)
+    // while its own is the picture this repaint replaces, so one repaint moves both rather than leaving the item behind.
+    // Still in the slot, and never thrown: the banner's art is saved already, and its image must stay.
     const five = saved.value.items.five[0];
     if (art.state === "ready" && five) {
-      await updateIfChanged(deps.store, runDocTarget("item", itemId(runId, five)), normalizeItem, (item) =>
-        item.id === five && item.art?.state !== "ready" ? { ...item, art } : undefined,
-      ).catch((error: unknown) =>
+      const shared = await updateIfChanged(
+        deps.store,
+        runDocTarget("item", itemId(runId, five)),
+        normalizeItem,
+        (item) =>
+          item.id === five && (item.art?.state !== "ready" || samePicture(item.art, replaced))
+            ? { ...item, art: withKeptPicture(art, item.art ?? undefined) }
+            : undefined,
+      ).catch((error: unknown) => {
         deps.runtime.logger.warn(
           "[otome-forge] sharing banner %s's art with its item failed: %s",
           key,
           error instanceof Error ? error.message : String(error),
-        ),
-      );
+        );
+        return null;
+      });
+      // A wardrobe banner's 5★ is a look: its place in the wardrobe follows the picture the banner now shows too.
+      // Never thrown, for the same reason as the item update: the banner's art is saved, and its image must stay.
+      if (shared?.changed)
+        await addOutfit(deps, runId, shared.value, { repoint: true }).catch((error: unknown) => {
+          deps.runtime.logger.warn(
+            "[otome-forge] moving banner %s's look in the wardrobe failed: %s",
+            key,
+            error instanceof Error ? error.message : String(error),
+          );
+          return null;
+        });
     }
+    // 0.24.0: a repaint replaces the picture it painted over; only a gallery image neither the banner nor its item still
+    // holds is deleted (the Engine refuses to delete one a document refers to).
+    if (saved.value.art?.state === "ready") await releaseReplacedImage(deps, replaced, saved.value.art);
     return true;
   };
   return paintRecord(deps, {
@@ -718,9 +746,10 @@ function paintBanner(
       ]);
       if (!world || !banner || !mine(banner)) return "gone";
       // Its featured item's art (the same picture) is painted: it is the banner's art too, and nothing more is paid.
+      // 0.24.0: unless it is the very picture this repaint replaces, which the pending record still shows.
       const five = banner.items.five[0];
       const featured = five ? await readItem(deps.store, runId, five) : null;
-      if (featured?.art?.state === "ready") {
+      if (featured?.art?.state === "ready" && !samePicture(featured.art, banner.art)) {
         await save(featured.art);
         return "gone";
       }
@@ -740,8 +769,8 @@ function paintBanner(
 }
 
 /**
- * POST /runs/:run/wish/art: the tap that paints a banner's art now (its consent, or Retry). A ready one is returned as
- * it is; a tap while it paints waits for that paint, so no tap pays twice.
+ * POST /runs/:run/wish/art: the tap that paints a banner's art now (its consent, Retry, or 0.24.0 a repaint of a ready
+ * one, which its featured item follows). A tap while it paints waits for that paint, so no tap pays twice.
  */
 export async function paintBannerArtNow(
   deps: WishDeps,
@@ -755,8 +784,12 @@ export async function paintBannerArtNow(
     return banner;
   };
   const owner = bannerArtOwner(key);
+  const before = await read();
   // The featured item's art is the same picture: a tap while that paints waits for it (it then becomes this art).
-  const five = (await read()).items.five[0];
+  const five = before.items.five[0];
+  // Only a picture that was already painted when the tap began is one the tap repaints (0.24.0). One that lands while the
+  // tap waits — the item's shared paint above — is the tap's answer, so adopting it keeps a tap from paying twice.
+  const painted = before.art?.state === "ready";
   if (five) await paintSettled(runId, itemArtOwner(five));
   return tapPaint(
     runId,
@@ -766,8 +799,8 @@ export async function paintBannerArtNow(
       return { value: art, art: art ?? undefined };
     },
     async () => {
-      const banner = await read();
-      if (banner.art?.state === "ready") return banner.art;
+      const current = await read();
+      if (!painted && current.art?.state === "ready") return bannerArtView(runId, current);
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) throw runNotFound();
       const connectionId = world.images.connectionId;
@@ -777,10 +810,7 @@ export async function paintBannerArtNow(
         deps.store,
         runDocTarget("banner", bannerId(runId, key)),
         normalizeBanner,
-        (current) =>
-          current.key === key && current.art?.state !== "ready"
-            ? { ...current, art: { state: "pending" as const, at } }
-            : undefined,
+        (current) => (current.key === key ? { ...current, art: repainting(current.art, at) } : undefined),
       );
       if (!saved?.value.key) throw bannerNotFound();
       if (saved.changed) await paintBanner(deps, runId, key, at, connectionId, { ...options, consent: true });

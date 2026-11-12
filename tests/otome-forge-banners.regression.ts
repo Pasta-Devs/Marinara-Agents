@@ -11,6 +11,7 @@ import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs"
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import * as wish from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import {
+  addOutfit,
   itemArtPrompt,
   paintItemNow,
   queueItemArt,
@@ -21,10 +22,12 @@ import {
   itemId,
   runDocTarget,
   stateId,
+  unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import {
   normalizeBanner,
   normalizeItem,
@@ -568,9 +571,9 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
     assert.equal(banner.five.art?.url, banner.art?.url);
     assert.equal((await readItem(t.store, t.runId, banner.four[0]!.id))?.art, null);
   }
-  // A tap on ready art pays nothing.
+  // 0.24.0: a tap on ready art repaints it (see the repaint test below); it is still ready when it answers.
   assert.equal((await t.call("POST", "/runs/:run/wish/art", { banner: "memories-0" })).body.art.state, "ready");
-  assert.equal(t.paid.length, 3);
+  assert.equal(t.paid.length, 4);
 
   // Ask before painting: nothing paints by itself; two taps at once pay once.
   const u = await wishWorld({ runKey: "r-m4bann09-iiiiii", images: { ask: true }, replies: rotationReplies() });
@@ -647,8 +650,15 @@ test("a featured 5★ and its banner share one picture: whichever paints first i
   await queueItemArt(v.deps, v.runId, await item(v, "memories-0-f"), { debugMode: false });
   const cg = await paintItemNow(v.deps, v.runId, "memories-0-f", { debugMode: false });
   assert.equal(cg?.state, "ready");
+  // 0.24.0: a tap on a painted banner repaints it. Its featured 5★ held that same picture, so the item follows the new
+  // one rather than keeping the image the repaint replaced, which then leaves the gallery.
   const again = await v.call("POST", "/runs/:run/wish/art", { banner: "memories-0" });
-  assert.deepEqual([again.body.art.state, again.body.art.url, v.paid.length], ["ready", cg?.url, 1]);
+  assert.equal(again.body.art.state, "ready");
+  assert.notEqual(again.body.art.ref, cg?.ref);
+  assert.equal(v.paid.filter((call) => call.method === "generateBannerArt").length, 2, "one more paid picture");
+  const shared = (await item(v, "memories-0-f"))!;
+  assert.deepEqual([shared.art?.url, shared.art?.ref], [again.body.art.url, again.body.art.ref]);
+  assert.deepEqual(v.deleted, [cg!.ref!.slice("global-gallery:".length)]);
 });
 
 test("a banner tap and its 5★'s open that both claimed pay once: whichever paints shares it inside the lane", async () => {
@@ -738,4 +748,132 @@ test("owned Snapshots are private memory of their love interest, in the order th
   }
   // Banners and items go with the run when it is deleted (RUN_DOC_KINDS).
   assert.ok(normalizeBanner(t.fake.rows.get(bannerId(t.runId, "memories-0"))!.data).key);
+});
+
+test("a tap on a painted banner repaints it, and its featured 5★ follows the picture it now shows", async () => {
+  // Its own connection, so the lane it waits on is nobody else's (the suite's shared one may still be held).
+  const connectionId = "conn-repaint-banner";
+  // Deletes answer as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+  const t = await wishWorld({
+    runKey: "r-m4bann17-qqqqqq",
+    images: { connectionId },
+    replies: rotationReplies(),
+    engineDeletes: true,
+  });
+  const opened = await t.call("POST", "/runs/:run/wish/open");
+  assert.equal(opened.status, 200, JSON.stringify(opened.body));
+  await paintSlot(connectionId, async () => undefined);
+  const shown = (await t.call("GET", "/runs/:run/wish")).body as wish.WishView;
+  const banner = shown.banners[0]!;
+  const before = banner.art!;
+  assert.equal(before.state, "ready");
+  const five = banner.five.id;
+  assert.deepEqual((await readItem(t.store, t.runId, five))?.art, before, "the item holds the same picture");
+  const paid = t.paid.length;
+
+  const again = await t.call("POST", "/runs/:run/wish/art", { banner: banner.key });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(again.body.art.state, "ready");
+  assert.notEqual(again.body.art.ref, before.ref, "a new picture, not the same one returned");
+  assert.equal(t.paid.length, paid + 1, "a repaint costs one image");
+  // The banner and its 5★ share one picture: the item moves to the new one with it, so neither keeps the replaced image.
+  assert.deepEqual(
+    [(await readItem(t.store, t.runId, five))?.art?.url, (await readItem(t.store, t.runId, five))?.art?.ref],
+    [again.body.art.url, again.body.art.ref],
+  );
+  assert.deepEqual(t.deleted, [before.ref!.slice("global-gallery:".length)], "the replaced image leaves the gallery");
+  // The picture it painted over is gone from both, so nothing points at it any more.
+  assert.notEqual((await readBanner(t.store, t.runId, banner.key))?.art?.ref, before.ref);
+
+  // A wardrobe banner's 5★ is a look: once it is in his wardrobe (its open put it there), a repaint of the banner moves
+  // that entry too, so wearing it shows the new picture rather than the one the repaint replaced.
+  const lookId = shown.banners.find((entry) => entry.kind === "his-wardrobe")!.five.id;
+  const look = (await readItem(t.store, t.runId, lookId))!;
+  assert.equal(look.art?.state, "ready");
+  await addOutfit(t.deps, t.runId, look);
+  const worn = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.outfits.find(
+    (entry) => entry.id === lookId,
+  );
+  assert.ok(worn, "the painted look is in his wardrobe");
+  const repaintedLook = await t.call("POST", "/runs/:run/wish/art", { banner: shown.banners[1]!.key });
+  assert.equal(repaintedLook.body.art.state, "ready");
+  const afterLook = (await readItem(t.store, t.runId, lookId))!;
+  assert.deepEqual([afterLook.art?.url, afterLook.art?.ref], [repaintedLook.body.art.url, repaintedLook.body.art.ref]);
+  const wornNow = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.outfits.find(
+    (entry) => entry.id === lookId,
+  );
+  assert.deepEqual([wornNow?.url, wornNow?.ref], [afterLook.art?.url, afterLook.art?.ref], "worn from the new picture");
+});
+
+test("a banner tap made while its 5★ paints adopts the shared picture instead of painting it again", async () => {
+  const u = await wishWorld({ runKey: "r-m4bann18-rrrrrr", replies: rotationReplies() });
+  await u.call("POST", "/runs/:run/wish/open");
+  await u.store.updateDoc(runDocTarget("state", stateId(u.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: { items: [...state.owned.items, "memories-0-f"] },
+  }));
+  const five = "memories-0-f";
+  // Neither painted yet: the 5★'s own tap paints first, and the banner tap is made while that paint is in the lane.
+  await u.store.updateDoc(runDocTarget("banner", bannerId(u.runId, "memories-0")), normalizeBanner, (banner) => ({
+    ...banner,
+    art: undefined,
+  }));
+  await u.store.updateDoc(runDocTarget("item", itemId(u.runId, five)), normalizeItem, (item) => ({
+    ...item,
+    art: null,
+  }));
+  let open = () => {};
+  const held = paintSlot("conn-image", () => new Promise<void>((resolve) => (open = resolve)));
+  const before = u.paid.filter((call) => call.method === "generateBannerArt").length;
+  const itemPainting = paintItemNow(u.deps, u.runId, five, { debugMode: false });
+  // The 5★'s paint must own its slot before the banner tap looks, or the tap's wait finds nothing to wait for.
+  await until(async () => (await readItem(u.store, u.runId, five))?.art?.state === "pending", "the 5★'s claim");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const tap = paintBannerArtNow(u.deps, u.runId, "memories-0", { debugMode: false });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  open();
+  await held;
+  const painted = await itemPainting;
+  const tapped = await tap;
+  await paintsDone();
+  // One picture, shared: the item's paint is the banner's, so the banner tap pays nothing more.
+  assert.equal(u.paid.filter((call) => call.method === "generateBannerArt").length, before + 1, "no second picture");
+  assert.equal(tapped?.state, "ready");
+  assert.deepEqual([tapped?.url, tapped?.ref], [painted?.url, painted?.ref], "the item's picture became the banner's");
+  assert.deepEqual((await readItem(u.store, u.runId, five))?.art?.ref, tapped?.ref);
+});
+
+test("a banner repaint whose wardrobe write fails still saves its picture and warns", async () => {
+  const t = await wishWorld({
+    runKey: "r-m4bann19-ssssss",
+    images: { connectionId: "conn-fail-outfit" },
+    replies: rotationReplies(),
+  });
+  await t.call("POST", "/runs/:run/wish/open");
+  await paintSlot("conn-fail-outfit", async () => undefined);
+  const shown = (await t.call("GET", "/runs/:run/wish")).body as wish.WishView;
+  const wardrobe = shown.banners.find((banner) => banner.kind === "his-wardrobe")!;
+  assert.equal(wardrobe.art?.state, "ready");
+  const before = wardrobe.art!.ref;
+  // The look is already in his wardrobe, so the repaint has an entry to move.
+  await addOutfit(t.deps, t.runId, (await readItem(t.store, t.runId, wardrobe.five.id))!);
+  // The wearer's own document refuses every write, as a store failure does mid-repaint.
+  const store = Object.create(t.store) as typeof t.store;
+  store.updateDoc = async (id, normalize, change) => {
+    if (String((id as { id?: unknown }).id ?? id).includes(":unit:")) throw new Error("storage is read-only");
+    return t.store.updateDoc(id, normalize, change);
+  };
+  const deps = { ...t.deps, store };
+  const paid = t.paid.length;
+  const repainted = await paintBannerArtNow(deps, t.runId, wardrobe.key, { debugMode: false });
+  await paintsDone();
+  // The banner holds its new picture and the replaced one is released; the wardrobe write is what was lost, and it warned.
+  assert.equal(repainted?.state, "ready");
+  assert.notEqual(repainted?.ref, before);
+  assert.equal(t.paid.length, paid + 1);
+  assert.ok(
+    t.logs.some((entry) => entry.level === "warn" && String(entry.message).includes("wardrobe")),
+    "the lost wardrobe write is warned about",
+  );
+  assert.deepEqual(t.deleted, [before!.slice("global-gallery:".length)], "the replaced image still leaves the gallery");
 });
