@@ -6,7 +6,7 @@ export type TimelineCheckpointRef = { id: string; kind: "manual" | "auto" | "saf
 
 const DAY_MS = 86_400_000;
 const DUE_KEY =
-  /(until|due|notbefore|nextattempt|nextrun|expires|startsat|endsat|startedat|chapterstarted|pollclosesat|scheduledat|deliverat)/i;
+  /(until|due|notbefore|nextattempt|nextrun|expires|startsat|endsat|startedat|chapterstarted|pollclosesat|scheduledat|deliverat|askedat|offeredat|plannedat|dropat|stageat|changedat|since|answeredat|pricedat|weekstart)/i;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 /** Move one ISO timestamp, or return the value as it was when it is not one. */
@@ -30,6 +30,9 @@ export function shiftSlurpDueJson(value: unknown, deltaMs: number, key = "", pat
 
 /** The wallet's subscription ends (`paidThroughAt`) move with a skip too, so no renewal is billed for skipped days. */
 export const WALLET_DUE_KEY = new RegExp(`${DUE_KEY.source}|paidthroughat`, "i");
+
+/** The Support extras offer compares these with "now": first seen (3-day trigger), last offer (1-day cooldown), pending offer. */
+export const EXTRAS_OFFER_DUE_KEY = new RegExp(`${DUE_KEY.source}|firstseenat|lastofferat|^at$`, "i");
 
 /**
  * Set every `markKeys` timestamp in a JSON value to `iso`. Elapsed-time gates (ties, drama, Creator mood decay)

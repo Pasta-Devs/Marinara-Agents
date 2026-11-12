@@ -10,7 +10,7 @@ import {
   normalizeSlurpDiscoveryTags,
 } from "../../modules/discovery/slp-discovery-profile.js";
 import { SLURP_ARC_LIBRARY_SEED } from "../../modules/projects/slp-arc-library.js";
-import { isSlurpPreferenceSettingKey } from "../../modules/maintenance/slp-backup.js";
+import { isSlurpPreferenceSettingKey, isSlurpSpendLedgerKey } from "../../modules/maintenance/slp-backup.js";
 import {
   slpAccounts,
   slpAccountSubscriptions,
@@ -302,7 +302,8 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
       const carriesKeys = Object.keys(backup.settings ?? {}).some((key) => key.startsWith(SLURP_SETTINGS_NAMESPACE));
       const replaceSettings = backup.importSettings === true && carriesKeys;
       // Data keys (wallets, earnings, storylines…) come back with the tables; preferences only on opt-in.
-      const restoresKey = (key: string) => replaceSettings || !isSlurpPreferenceSettingKey(key);
+      const restoresKey = (key: string) =>
+        !isSlurpSpendLedgerKey(key) && (replaceSettings || !isSlurpPreferenceSettingKey(key));
       const written: Record<string, number> = {};
       const incoming = backup.tables ?? {};
       for (const name of Object.keys(incoming)) {

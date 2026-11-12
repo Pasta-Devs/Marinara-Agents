@@ -39,7 +39,7 @@ import {
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
-import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { slurpWorldEpoch, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const CHECKPOINT_KEY = "slurp2.continuity-checkpoints";
 /** Threads one drain reads. The rest wait for the next open; nothing here is urgent. */
 const SLURP_EXTRACTION_IDLE_MS = 30 * 60_000;
@@ -80,6 +80,7 @@ export async function drainSlurpContinuityExtraction(
   const slurp = createSlurpStorage(db);
   const settings = await slurp.getSettings();
   if (!slurpModelWorkerAllows(settings.modelBudget, context)) return 0;
+  const startEpoch = slurpWorldEpoch();
   const checkpoints = await readCheckpoints(db);
   const threads = (await db.select().from(slurpThreads))
     .filter((thread) => String(thread.lastMessageAt) > (checkpoints[String(thread.id)] ?? ""))
@@ -266,6 +267,8 @@ export async function drainSlurpContinuityExtraction(
       extractionInFlight.delete(threadId);
     }
   }
+  // A restore while the model calls ran replaced the checkpoint map with the restored one: do not write the old one back.
+  if (slurpWorldEpoch() !== startEpoch) return recorded;
   await createAppSettingsStorage(db).set(CHECKPOINT_KEY, JSON.stringify(checkpoints));
   return recorded;
 }

@@ -14,6 +14,7 @@ import { join } from "node:path";
 import {
   SlurpWorldEpochChangedError,
   assertSlurpWorldEpoch,
+  onSlurpWorldOffsetChange,
   setSlurpWorldEpoch,
   setSlurpWorldOffsetMs,
   slurpWorldEpoch,
@@ -22,6 +23,7 @@ import {
   slurpWorldOffsetMs,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-clock.ts";
 import {
+  EXTRAS_OFFER_DUE_KEY,
   WALLET_DUE_KEY,
   selectCheckpointsToPrune,
   setSlurpMarkJson,
@@ -132,7 +134,7 @@ for (const [file, needle] of [
   ["data/host/slp-storage-constants.ts", /const cutoff = Date\.now\(\) - 30/u],
   ["data/feed/slp-feed-post-storage-2.ts", /listExpiredDeletedNoodlerPostIds\(at = Date\.now\(\)\)/u],
   ["data/continuity/slp-continuity-storage.ts", /pruneSlurpContinuity\(db, input\.creatorAccountId\)/u],
-  ["data/discovery/slp-trends-storage.ts", /pruneSlurpTrends\(next\.trends, new Date\(\)\)/u],
+  ["data/discovery/slp-trends-storage.ts", /pruneSlurpTrends\(next\.trends, new Date\(Math\.min\(Date\.now\(\)/u],
   ["features/audience/slp-fan-activity-operation.ts", /const realNow = new Date\(Math\.min\(Date\.now\(\)/u],
 ] as const) {
   assert.match(read(file), needle, `${file} must keep purging on the real clock`);
@@ -314,7 +316,7 @@ for (const column of ['"publishAt"', '"moodUpdatedAt"', '"watchedAt"'])
   assert.ok(storage.includes(column), `the skip moves ${column}`);
 assert.match(
   storage,
-  /MARK_KEYS\[row\.key\][\s\S]{0,40}startsWith\(`\$\{SLURP_CREATOR_STATE_KEY\}\./u,
+  /MARK_KEYS\[row\.key\][\s\S]{0,160}startsWith\(`\$\{SLURP_CREATOR_STATE_KEY\}\./u,
   "per-Creator state rows get their mood mark set too",
 );
 assert.match(storage, /THREAD_STATE_MARK_KEYS/u, "a thread's mood clock is set to the skip target");
@@ -382,5 +384,127 @@ assert.match(
   /status: "charged",[\s\S]{0,500}updatedAt: realNow\(\)/u,
   "a compensation inserted as charged is stamped on the clock its recovery check reads",
 );
+
+// Fourth review round, behavior: the extras offer and a paid sexting session move with a skip; the offset change is announced.
+const extras = {
+  firstSeenAt: "2026-03-01T00:00:00.000Z",
+  lastOfferAt: "2026-03-02T00:00:00.000Z",
+  pending: { at: "2026-03-03T00:00:00.000Z", id: "x" },
+  answered: [{ at: "2026-02-01T00:00:00.000Z" }],
+};
+const extrasMoved = shiftSlurpDueJson(extras, 5 * DAY, "", EXTRAS_OFFER_DUE_KEY) as typeof extras;
+assert.equal(extrasMoved.firstSeenAt, "2026-03-06T00:00:00.000Z", "the 3-day trigger keeps its days of use");
+assert.equal(extrasMoved.lastOfferAt, "2026-03-07T00:00:00.000Z", "the 1-day cooldown keeps its remainder");
+assert.equal(extrasMoved.pending.at, "2026-03-08T00:00:00.000Z");
+const sexting = { startedAt: "2026-03-01T10:00:00.000Z", endsAt: "2026-03-01T10:20:00.000Z", pictureOffered: true };
+const sextingMoved = shiftSlurpDueJson(sexting, 2 * DAY) as typeof sexting;
+assert.equal(sextingMoved.endsAt, "2026-03-03T10:20:00.000Z", "a paid 20-minute session keeps its window");
+assert.equal(sextingMoved.pictureOffered, true, "other fields are untouched");
+let offsetEvents = 0;
+const stopListening = onSlurpWorldOffsetChange(() => {
+  offsetEvents += 1;
+});
+setSlurpWorldOffsetMs(7 * DAY);
+setSlurpWorldOffsetMs(7 * DAY);
+assert.equal(offsetEvents, 1, "a changed offset is announced once, an unchanged one not at all");
+setSlurpWorldOffsetMs(0);
+assert.equal(offsetEvents, 2);
+stopListening();
+setSlurpWorldOffsetMs(1);
+assert.equal(offsetEvents, 2, "an unsubscribed listener hears nothing");
+setSlurpWorldOffsetMs(0);
+
+// Fourth review round, wiring.
+assert.match(storage, /"moodUpdatedAt", "lastStrikeAt"/u, "a thread strike keeps its age across a skip");
+assert.match(storage, /patch\.sexting = moved/u, "a paid sexting session is shifted");
+assert.match(storage, /status === "pending" \|\| row\.status === "claimed"/u, "waiting openers keep their age");
+assert.match(storage, /EXTRAS_OFFER_KEY \? EXTRAS_OFFER_DUE_KEY/u, "the extras offer stamps are shifted");
+assert.match(
+  read("features/maintenance/slp-backup-jobs.ts"),
+  /job\.skipped = result\.skipped;[\s\S]{0,260}await loadSlurpWorldClock\(app\.db\);/u,
+  "the restored offset is loaded right after the import",
+);
+assert.match(
+  read("features/messages/slp-continuity-extraction-service.ts"),
+  /slurpWorldEpoch\(\) !== startEpoch\) return recorded/u,
+  "an extraction that ran across a restore does not write its checkpoint map",
+);
+assert.match(
+  read("data/discovery/slp-trends-storage.ts"),
+  /new Date\(Math\.min\(Date\.now\(\), at\.getTime\(\)\)\)/u,
+  "the trend prune never runs ahead of the world date",
+);
+assert.match(
+  read("features/live/slp-live-picture.ts"),
+  /const t0 = Date\.now\(\)/u,
+  "a live picture's draw time is measured on the real clock",
+);
+const timestamp = client("base/ui/SlpTimestamp.tsx");
+assert.match(
+  timestamp,
+  /onSlurpWorldOffsetChange\(\(\) => \{[\s\S]{0,80}now = slurpWorldNowMs\(\)/u,
+  "mounted timestamps follow an offset change",
+);
+
+// Fifth round (systematic audit): contracts, stages, answer windows, quotes, budget and backoffs.
+const ties = {
+  collabs: [
+    {
+      askedAt: "2026-03-01T00:00:00.000Z",
+      plannedAt: "2026-03-06T00:00:00.000Z",
+      dropAt: "2026-03-07T00:00:00.000Z",
+      createdAt: "2026-02-01T00:00:00.000Z",
+    },
+  ],
+  rivalries: [{ stageAt: "2026-03-02T00:00:00.000Z" }],
+  bonds: [{ changedAt: "2026-03-03T00:00:00.000Z", since: "2026-01-01T00:00:00.000Z" }],
+  deals: [{ offeredAt: "2026-03-04T00:00:00.000Z", answeredAt: "2026-03-05T00:00:00.000Z" }],
+  contract: { weekStart: "2026-03-01T00:00:00.000Z" },
+};
+const tiesMoved = shiftSlurpDueJson(ties, 14 * DAY) as typeof ties;
+for (const [name, value, was] of [
+  ["a collab answer window", tiesMoved.collabs[0].askedAt, ties.collabs[0].askedAt],
+  ["a planned collab", tiesMoved.collabs[0].plannedAt, ties.collabs[0].plannedAt],
+  ["a collab drop", tiesMoved.collabs[0].dropAt, ties.collabs[0].dropAt],
+  ["a rivalry stage", tiesMoved.rivalries[0].stageAt, ties.rivalries[0].stageAt],
+  ["a bond change", tiesMoved.bonds[0].changedAt, ties.bonds[0].changedAt],
+  ["a deal offer", tiesMoved.deals[0].offeredAt, ties.deals[0].offeredAt],
+  ["a deal reminder", tiesMoved.deals[0].answeredAt, ties.deals[0].answeredAt],
+  ["the desk contract week", tiesMoved.contract.weekStart, ties.contract.weekStart],
+] as const) {
+  assert.equal(
+    Date.parse(value) - Date.parse(was),
+    14 * DAY,
+    `${name} moves with the skip, so nothing resolves because of it`,
+  );
+}
+assert.equal(tiesMoved.collabs[0].createdAt, ties.collabs[0].createdAt, "history keeps its dates");
+assert.match(
+  storage,
+  /DESK_KEY\.test\(row\.key\) \? DESK_MARK_KEYS/u,
+  "the Support desk's last pass is set to the skip target",
+);
+assert.match(storage, /BARE_ISO_KEY\.test\(row\.key\)/u, "a bare cooldown value moves too");
+assert.match(storage, /"audienceArcSince"/u);
+assert.match(storage, /row\.state === "quoted"/u, "an open quote keeps the wait it had left");
+assert.match(
+  read("data/creators/slp-creators-storage-1.ts"),
+  /!isSlurpSpendLedgerKey\(key\) &&/u,
+  "a restore leaves the AI call ledger alone",
+);
+assert.doesNotMatch(
+  read("base/model/slp-model-worker.ts"),
+  /slurpWorldNow/u,
+  "the AI call budget runs on the real clock: a skip hands back no calls",
+);
+assert.doesNotMatch(
+  readFileSync(
+    join(import.meta.dirname, "../packages/slurp2/src/engine/packages/shared/src/slp/slp-model-budget.ts"),
+    "utf8",
+  ),
+  /slurpWorldNow/u,
+);
+assert.match(read("features/feed/slp-shared-preseed-service.ts"), /failedUntil\.set\(key, Date\.now\(\)/u);
+assert.match(read("data/creators/slp-canon-anchor-storage.ts"), /failedUntil\.set\(accountId, Date\.now\(\)/u);
 
 console.log("slurp2 world clock regression: ok");

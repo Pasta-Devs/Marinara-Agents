@@ -299,6 +299,8 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
     job.detail = `Restoring ${job.creators} creator${job.creators === 1 ? "" : "s"} and ${job.posts} post${job.posts === 1 ? "" : "s"}.`;
     const result = await noodle.importSlurpBackup({ settings, tables, importSettings });
     job.skipped = result.skipped;
+    // The archive's world offset is in the database now: load it before anything else reads the clock.
+    await loadSlurpWorldClock(app.db);
     // The archive's settings carry their own paused flag; the timeline jobs keep Slurp stopped until they finish.
     if (keepPaused) await noodle.updateSlurpSettings({ paused: true });
     // An older backup keeps Slurp Support's lines inside persona chats; give them Support's own threads.

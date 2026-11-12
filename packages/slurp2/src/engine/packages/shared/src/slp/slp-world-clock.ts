@@ -20,8 +20,19 @@ export const slurpWorldNow = (): Date => new Date(slurpWorldNowMs());
 
 export const slurpWorldOffsetMs = (): number => offsetMs;
 
+const offsetListeners = new Set<() => void>();
+
+/** Called when the offset changes (a skip or a restore reached this process). Returns the unsubscribe function. */
+export function onSlurpWorldOffsetChange(listener: () => void): () => void {
+  offsetListeners.add(listener);
+  return () => offsetListeners.delete(listener);
+}
+
 export function setSlurpWorldOffsetMs(value: number): void {
-  offsetMs = Number.isFinite(value) ? Math.trunc(value) : 0;
+  const next = Number.isFinite(value) ? Math.trunc(value) : 0;
+  if (next === offsetMs) return;
+  offsetMs = next;
+  offsetListeners.forEach((listener) => listener());
 }
 
 /**

@@ -30,6 +30,7 @@ import {
 } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { isSlurpPreferenceSettingKey } from "../../modules/maintenance/slp-backup.js";
 import {
+  EXTRAS_OFFER_DUE_KEY,
   WALLET_DUE_KEY,
   setSlurpMarkJson,
   shiftSlurpDueJson,
@@ -77,7 +78,10 @@ const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> =
   // A prepared post publishes when `publishAt` passes: it moves with the skip (`generatedAt` is history and stays).
   [slpCreatorPreparedPosts, ["publishAt"]],
   [slpRefreshRuns, ["nextAttemptAt"]],
-  [slurpThreads, ["replyNotBeforeAt", "coolUntil", "extendedOnlineUntil", "moodUpdatedAt"]],
+  [
+    slurpThreads,
+    ["replyNotBeforeAt", "coolUntil", "extendedOnlineUntil", "moodUpdatedAt", "lastStrikeAt", "lastMessageAt"],
+  ],
   [slurpFollowUps, ["scheduledAt", "firstDueAt"]],
   [slurpCommissions, ["deliverAt"]],
   [slurpReplyBubbles, ["deliverAt"]],
@@ -89,7 +93,7 @@ const SHIFTED_COLUMNS: ReadonlyArray<[table: any, columns: readonly string[]]> =
   [slurpDemandTrends, ["firstSeenAt", "lastSeenAt", "expiresAt"]],
   [slurpLiveShows, ["startedAt", "watchedAt", "endsAt"]],
   // Renewal and churn read these against "now": a skip must neither bill nor lapse anyone.
-  [slurpAudienceTies, ["paidThroughAt", "lastSeenAt"]],
+  [slurpAudienceTies, ["paidThroughAt", "lastSeenAt", "audienceArcSince"]],
   [slurpPopulation, ["lastActiveAt"]],
 ];
 
@@ -102,6 +106,12 @@ const MARK_KEYS: Record<string, ReadonlySet<string>> = {
   [SLURP_CREATOR_STATE_KEY]: new Set(["updatedAt"]),
 };
 const THREAD_STATE_MARK_KEYS: ReadonlySet<string> = new Set(["updatedAt"]);
+const EXTRAS_OFFER_KEY = "slurp2.extrasOffer";
+// Support desk JSON (`slurp2.creator.<id>.desk`): its `tickedAt` is the last pass, so decay and risk see no elapsed span.
+const DESK_KEY = /^slurp2\.creator\.[^.]+\.desk$/u;
+const DESK_MARK_KEYS: ReadonlySet<string> = new Set(["tickedAt"]);
+// A bare ISO value (a cooldown): moved with the skip.
+const BARE_ISO_KEY = /\.arcAutoAt$/u;
 const WALLET_KEY = /^slurp2\.viewer\.[^.]+\.wallet$/u;
 
 /** Keys that hold clock state themselves or must never be rewritten by a skip. */
@@ -131,21 +141,53 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
   }
 
   // A thread's mood decays from its `updatedAt`: set it to the skip target so the skipped span is not counted.
+  // A paid sexting session (`sexting` JSON) keeps its remaining minutes: its window moves with the skip.
   for (const row of await db.select().from(slurpThreads)) {
-    let state: unknown;
+    const patch: Record<string, string> = {};
     try {
-      state = JSON.parse(row.threadState);
+      const state: unknown = JSON.parse(row.threadState);
+      // A state without a stored `updatedAt` decays from the thread's own dates, so write one.
+      const base =
+        state && typeof state === "object" && !Array.isArray(state)
+          ? { updatedAt: target.toISOString(), ...state }
+          : state;
+      const marked = JSON.stringify(setSlurpMarkJson(base, target.toISOString(), THREAD_STATE_MARK_KEYS));
+      if (marked !== JSON.stringify(state)) patch.threadState = marked;
     } catch {
-      continue;
+      /* malformed state: left as it is */
     }
-    // A state without a stored `updatedAt` decays from the thread's own dates, so write one.
-    const base =
-      state && typeof state === "object" && !Array.isArray(state)
-        ? { updatedAt: target.toISOString(), ...state }
-        : state;
-    const marked = JSON.stringify(setSlurpMarkJson(base, target.toISOString(), THREAD_STATE_MARK_KEYS));
-    if (marked !== JSON.stringify(state))
-      await db.update(slurpThreads).set({ threadState: marked }).where(eq(slurpThreads.id, row.id));
+    try {
+      const moved = JSON.stringify(shiftSlurpDueJson(JSON.parse(row.sexting), deltaMs));
+      if (moved !== JSON.stringify(JSON.parse(row.sexting))) patch.sexting = moved;
+    } catch {
+      /* no session, or malformed: left as it is */
+    }
+    if (Object.keys(patch).length > 0) await db.update(slurpThreads).set(patch).where(eq(slurpThreads.id, row.id));
+  }
+
+  // An opener that waits in the queue ages from `createdAt`: shift it for rows still waiting, so a postpone is not cancelled.
+  // Sent, failed and cancelled rows are history and keep their dates.
+  for (const row of await db.select().from(slurpFollowUps)) {
+    if (
+      (row.status === "pending" || row.status === "claimed") &&
+      typeof row.createdAt === "string" &&
+      ISO.test(row.createdAt)
+    ) {
+      await db
+        .update(slurpFollowUps)
+        .set({ createdAt: shiftSlurpIso(row.createdAt, deltaMs) as string })
+        .where(eq(slurpFollowUps.id, row.id));
+    }
+  }
+
+  // A quote waits for the fan's answer from its last update: shift it for quotes still open, so the wait keeps its remainder.
+  for (const row of await db.select().from(slurpCommissions)) {
+    if (row.state === "quoted" && typeof row.updatedAt === "string" && ISO.test(row.updatedAt)) {
+      await db
+        .update(slurpCommissions)
+        .set({ updatedAt: shiftSlurpIso(row.updatedAt, deltaMs) as string })
+        .where(eq(slurpCommissions.id, row.id));
+    }
   }
 
   const rows = await db
@@ -156,15 +198,25 @@ export async function applySlurpWorldSkip(db: DB, target: Date): Promise<void> {
   for (const row of rows) {
     // Preferences (settings, connections, guidance) hold choices, not run state.
     if (UNSHIFTED_KEYS.has(row.key) || isSlurpPreferenceSettingKey(row.key)) continue;
+    if (BARE_ISO_KEY.test(row.key) && ISO.test(String(row.value))) {
+      await settings.set(row.key, shiftSlurpIso(String(row.value), deltaMs) as string);
+      continue;
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(String(row.value));
     } catch {
       continue;
     }
-    let next = shiftSlurpDueJson(parsed, deltaMs, "", WALLET_KEY.test(row.key) ? WALLET_DUE_KEY : undefined);
+    let next = shiftSlurpDueJson(
+      parsed,
+      deltaMs,
+      "",
+      WALLET_KEY.test(row.key) ? WALLET_DUE_KEY : row.key === EXTRAS_OFFER_KEY ? EXTRAS_OFFER_DUE_KEY : undefined,
+    );
     const markKeys =
       MARK_KEYS[row.key] ??
+      (DESK_KEY.test(row.key) ? DESK_MARK_KEYS : undefined) ??
       (row.key.startsWith(`${SLURP_CREATOR_STATE_KEY}.`) ? MARK_KEYS[SLURP_CREATOR_STATE_KEY] : undefined);
     if (markKeys) next = setSlurpMarkJson(next, target.toISOString(), markKeys);
     const shifted = JSON.stringify(next);

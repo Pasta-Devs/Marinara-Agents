@@ -34,6 +34,12 @@ A checkpoint is a normal Slurp backup archive (all tables, all `slurp2.*` settin
 
 Restore needs the backup lock: it refuses while a write, an account operation or another backup is running.
 
+## Also moved or kept by a skip
+
+- Moved by the skipped span: Support desk contract week and extras-offer stamps, collab and deal windows (`askedAt`, `offeredAt`, `plannedAt`, `dropAt`, `answeredAt`), stage clocks of drama, rivalries, couples and bonds (`stageAt`, `changedAt`, `since`), a paid sexting session's window, thread strike and last-message times, audience arc start, waiting openers and open quotes, and bare cooldown values (`arcAutoAt`).
+- Set to the skip target (zero elapsed): the Support desk's last pass, thread mood and Creator mood marks.
+- Real clock: the AI call budget and its ledger (a skip hands back no calls, and a restore keeps the ledger as it is), failure backoffs, the trend scan throttle and chat freshness.
+
 ## Real clock on purpose
 
 Locks and claim leases, job and file ages, retry and backoff, scheduler poll spacing and request timing keep `Date.now()`. A skip must not trip a lease or fire a poll.
@@ -41,6 +47,7 @@ Locks and claim leases, job and file ages, retry and backoff, scheduler poll spa
 ## Ceilings
 
 - One offset and one epoch per process, as with the pause flag.
+- A fan-activity run lease (`claimedAt`) is stamped on the world clock. The skip holds the backup lock, so no run is in flight across it.
 - Time-since fields that are not in `SHIFTED_COLUMNS` or in a due-style key do not move. Add a new due-style column to the list.
 - The epoch check covers each model or image call. A job that makes several calls can make call 1 before a restore and call 2 after it. The restore holds the backup lock and pauses Slurp, so only a call already in flight can cross it. Checking the epoch once per job would close that gap.
 - Claim and lease stamps (reply, follow-up, commission delivery, image and pending-text claims) use the real clock, like their stale checks.

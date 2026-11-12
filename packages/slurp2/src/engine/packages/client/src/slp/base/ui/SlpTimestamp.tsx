@@ -3,7 +3,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { formatFullTime, formatRelativeTime } from "./slp-date-time";
 
-import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { onSlurpWorldOffsetChange, slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 // One clock for every timestamp on screen, ticking while any is mounted, so "4m" becomes "5m".
 let now = slurpWorldNowMs();
 let timer: number | undefined;
@@ -25,6 +25,12 @@ function subscribe(listener: () => void) {
     }
   };
 }
+
+// A skip or restore changes the offset: every mounted timestamp re-reads the clock now, not at the next tick.
+onSlurpWorldOffsetChange(() => {
+  now = slurpWorldNowMs();
+  for (const notify of listeners) notify();
+});
 
 /**
  * A relative time ("4m", "Tue") with the full date on hover. `tappable` also shows the full date on

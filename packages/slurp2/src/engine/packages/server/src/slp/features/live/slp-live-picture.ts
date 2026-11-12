@@ -13,7 +13,6 @@ import { slurpImageNegativePrompt, slurpLevelPhoto } from "../../modules/feed/sl
 import { generateCreatorPostImage } from "../media/slp-media-contract.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
 
-import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Takes a live picture when one is due (LIVE-V3-PLAN.md "Pictures"). Marks the show as shooting at once, then
  * draws in the background; the stage keeps the last picture until this one lands. Only called while
@@ -36,7 +35,7 @@ export async function shootSlurpLivePicture(db: DB, showId: string, at: number, 
     await storage.save(show.id, { state: show.state });
   });
   if (!scene) return;
-  const t0 = slurpWorldNowMs();
+  const t0 = Date.now();
   const path = await drawLivePicture(db, hostId, scene).catch((error: unknown) => {
     logger.warn(error, "[slurp-live] Picture failed");
     return null;
@@ -51,7 +50,7 @@ export async function shootSlurpLivePicture(db: DB, showId: string, at: number, 
       await storage.save(show.id, { state: show.state });
       return;
     }
-    show.state.pictures = [...(show.state.pictures ?? []), { at: at + (slurpWorldNowMs() - t0), path: path.mediaPath }];
+    show.state.pictures = [...(show.state.pictures ?? []), { at: at + (Date.now() - t0), path: path.mediaPath }];
     // Saved first: a failed save must not leave a promoted file that nothing points to.
     await storage.save(show.id, { state: show.state }).catch((error: unknown) => {
       path.compensate();

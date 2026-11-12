@@ -13,7 +13,6 @@ import {
   type SlurpModelJobKind,
 } from "../../../../../shared/src/slp/slp-model-budget.js";
 
-import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export * from "../../../../../shared/src/slp/slp-model-budget.js";
 
 const LEDGER_KEY = "slurp2.model-budget-ledger";
@@ -56,7 +55,7 @@ export function claimSlurpModelBudget(
   db: DB,
   budget: SlurpModelBudget,
   kind: SlurpModelJobKind,
-  at = slurpWorldNow(),
+  at = new Date(),
   /** False when the player asked for this upkeep job now ("Rewrite all pending"): the day's caps still hold. */
   paced = SLURP_UPKEEP_JOB_KINDS.has(kind),
 ): Promise<boolean> {
@@ -83,13 +82,13 @@ export async function slurpModelBudgetPaceOpen(
   db: DB,
   budget: SlurpModelBudget,
   kind: SlurpModelJobKind,
-  at = slurpWorldNow(),
+  at = new Date(),
 ): Promise<boolean> {
   const effective = await slurpEffectiveModelBudget(db, budget);
   return spendSlurpModelBudget(effective, await getSlurpModelBudgetLedger(db, at), kind, at) !== null;
 }
 
-export async function getSlurpModelBudgetLedger(db: DB, at = slurpWorldNow()): Promise<SlurpModelBudgetLedger> {
+export async function getSlurpModelBudgetLedger(db: DB, at = new Date()): Promise<SlurpModelBudgetLedger> {
   return readSlurpModelBudgetLedger(await createAppSettingsStorage(db).get(LEDGER_KEY), at);
 }
 
