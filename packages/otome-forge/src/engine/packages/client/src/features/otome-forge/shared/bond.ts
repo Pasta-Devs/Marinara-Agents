@@ -111,3 +111,18 @@ export function bondStoriesPlayed(
     ([key, progress]) => !!progress?.completed && bondStoryLevel(key, li) !== null,
   ).length;
 }
+
+/**
+ * 0.24.5: what his route shows past his finale (Story → Routes): the rank he stands at while its story waits, else the
+ * next rank (rank 11 before he has one), else nothing at the last rank, where the route is complete. `bond` is his
+ * view's (RunLiView.bond), absent below rank 11.
+ */
+export function bondStepOf(
+  bond: { level: number; next: number | null } | undefined,
+  waits: boolean,
+): { waiting: BondRank } | { next: BondRank } | null {
+  const reached = bond && bondRankAt(bond.level);
+  if (reached && waits) return { waiting: reached };
+  const next = bondRankAt(bond ? (bond.next ?? 0) : BOND_RANKS[0]!.level);
+  return next ? { next } : null;
+}

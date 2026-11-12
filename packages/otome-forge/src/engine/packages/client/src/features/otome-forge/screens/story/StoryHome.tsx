@@ -68,7 +68,7 @@ import {
   MAX_LEVEL,
   PRESTIGE_POINTS_PER_STORY,
 } from "../../shared/economy";
-import { BOND_RANKS } from "../../shared/bond";
+import { BOND_RANKS, bondStepOf } from "../../shared/bond";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
 import { PersonalityQuiz } from "./PersonalityQuiz";
 
@@ -244,6 +244,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             if (repair) openArc({ kind: "repair", li, key: repair.key });
           }}
           sides={sides}
+          bondStories={bond}
           planning={arcPlanning.planning}
           onReadSide={(entry) => openArc({ kind: "side", li: entry.li, key: entry.key, arc: entry.arc })}
         />
@@ -1296,6 +1297,7 @@ function Routes({
   onOpen,
   onMakeItRight,
   sides,
+  bondStories,
   planning,
   onReadSide,
 }: {
@@ -1307,6 +1309,8 @@ function Routes({
   onOpen: (route: RouteEntry) => void;
   onMakeItRight: (li: string) => void;
   sides: HisSideEntry[];
+  /** 0.24.5: each love interest's bond rank whose story waits, so his card says so past his finale. */
+  bondStories: BondEntry[];
   /** The key being opened (usePlanChapter's `planning`), so a side's Read shows the wait. */
   planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
@@ -1334,6 +1338,7 @@ function Routes({
               onOpen={() => onOpen(route)}
               onMakeItRight={() => onMakeItRight(route.li)}
               sides={sides.filter((entry) => entry.li === route.li)}
+              bondWaits={bondStories.some((entry) => entry.li === route.li)}
               planning={planning}
               onReadSide={onReadSide}
             />
@@ -1354,6 +1359,7 @@ function RouteCard({
   onOpen,
   onMakeItRight,
   sides,
+  bondWaits,
   planning,
   onReadSide,
 }: {
@@ -1367,6 +1373,8 @@ function RouteCard({
   onOpen: () => void;
   onMakeItRight: () => void;
   sides: HisSideEntry[];
+  /** 0.24.5: his bond rank is reached and its story waits (GET /runs/:run/story `bond`). */
+  bondWaits: boolean;
   planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
 }) {
@@ -1374,6 +1382,10 @@ function RouteCard({
   const accent = accentOf(li);
   const next = route.next;
   const values = pronounValues(li);
+  // 0.24.5: past his finale (no next stage) the route goes on in the bond ranks, 11-20, so the card names the next one,
+  // or the one whose story waits, and is complete only at the last rank (C/shared/bond.ts bondStepOf). It said
+  // "complete" from the finale on, with ten ranks still ahead.
+  const step = next ? null : bondStepOf(li.bond, bondWaits);
   const state = !next
     ? "complete"
     : next.blockedBy === "rupture"
@@ -1405,12 +1417,24 @@ function RouteCard({
           <span className="of-badge of-badge--soft">
             {t("ui.otomeForge.arcs.stageNext", { name: t(stageNameKey(next.stage)) })}
           </span>
+        ) : step && "next" in step ? (
+          <span className="of-badge of-badge--soft">{t("ui.otomeForge.arcs.stageNext", { name: step.next.name })}</span>
         ) : null}
       </div>
       {next ? (
         <p className="of-route-line">
           <Heart size={12} strokeWidth={2} fill="currentColor" aria-hidden="true" />
           {t("ui.otomeForge.arcs.nextChapter", { ...values, level: next.requires.level })}
+        </p>
+      ) : step && "waiting" in step ? (
+        <p className="of-route-line">
+          <BookHeart size={12} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.arcs.bondWaiting", { ...values, rank: step.waiting.name })}
+        </p>
+      ) : step ? (
+        <p className="of-route-line">
+          <Heart size={12} strokeWidth={2} fill="currentColor" aria-hidden="true" />
+          {t("ui.otomeForge.arcs.bondNext", { ...values, level: step.next.level, rank: step.next.name })}
         </p>
       ) : (
         <p className="of-route-line">{t("ui.otomeForge.arcs.complete", values)}</p>
