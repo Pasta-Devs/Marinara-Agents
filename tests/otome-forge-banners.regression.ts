@@ -144,6 +144,31 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
   assert.equal(t.calls.length, 3);
 });
 
+test("a Memories banner's art prompt follows the Image style with a comma, as a wardrobe banner's and a repaint's do", async () => {
+  // A Memories banner is a CG (S/prompts.ts cgPrompt): its sentences run on with spaces, which once ran the style into
+  // the first one ("soft watercolor At the lamp.").
+  const promptOf = async (runKey: string, style: string, banner: string) => {
+    const t = await wishWorld({
+      runKey,
+      images: { ask: true, style },
+      replies: rotationReplies(),
+    });
+    assert.equal((await t.call("POST", "/runs/:run/wish/open")).status, 200);
+    await paintsDone();
+    const { status, body } = await t.call("POST", "/runs/:run/wish/art/prompt", { banner });
+    assert.equal(status, 200, JSON.stringify(body));
+    assert.equal(t.paid.length, 0, "reading a prompt paints nothing");
+    return body.prompt as string;
+  };
+  for (const [n, banner] of ["memories-0", "his-wardrobe-0"].entries()) {
+    const prompt = await promptOf(`r-bstyle0${n}-aaaaaa`, "soft watercolor", banner);
+    assert.match(prompt, /^soft watercolor, [^,\s]/u, `${banner}: ${prompt}`);
+  }
+  // A style that ends with its own comma keeps one.
+  const ended = await promptOf("r-bstyle02-aaaaaa", "soft watercolor, ", "memories-0");
+  assert.match(ended, /^soft watercolor, [^,\s]/u, ended);
+});
+
 test("every banner stores a Snapshot's optional English illustration brief without painting unowned rewards", async () => {
   const kinds = ["memories", "his-wardrobe", "my-wardrobe"] as const;
   const brief = `A quiet shared cup of tea beside the lantern.\nKeep the authored spacing  here. ${"Evening light and the quiet room. ".repeat(150)}FINAL ILLUSTRATION DETAIL.`;

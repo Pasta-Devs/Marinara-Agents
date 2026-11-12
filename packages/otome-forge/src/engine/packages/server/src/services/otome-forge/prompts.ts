@@ -5895,15 +5895,21 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
   return finish(
     world,
     () => ({
+      // The Image style ends with a comma, as in every other picture's prompt (lookPrompt); the sentences after it
+      // run on with spaces.
       prompt: [
-        style.styleText,
-        sentence(input.brief),
-        ...looks,
-        ...staging,
-        mergeTags(input.framing ?? CG_FRAMING, required, style.positiveTags),
+        style.styleText.trim().replace(/[,\s]+$/, ""),
+        [
+          sentence(input.brief),
+          ...looks,
+          ...staging,
+          mergeTags(input.framing ?? CG_FRAMING, required, style.positiveTags),
+        ]
+          .filter(Boolean)
+          .join(" "),
       ]
         .filter(Boolean)
-        .join(" "),
+        .join(", "),
       // One person: nobody else may appear. Two or more: the Engine's own "extra people" is left out on purpose.
       negativePrompt: mergeTags(CG_NEGATIVE, people.length <= 1 ? "extra people" : "", negative, style.negativeTags),
     }),
