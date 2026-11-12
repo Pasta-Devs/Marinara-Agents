@@ -690,7 +690,7 @@
         {
           "version": "0.24.2",
           "date": "2026-11-12",
-          "notes": "- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.",
+          "notes": "- **A chapter keeps the story it was opened with.** The story so far a chapter is planned with (or, for a chapter with no plan of its own, the one its first scene is written from) is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again. This holds on smaller connections too: a scene that has to leave out some older chapters to fit leaves them out of the chapter's own story, never swapping in the newer one.",
           "highlight": false
         },
         {

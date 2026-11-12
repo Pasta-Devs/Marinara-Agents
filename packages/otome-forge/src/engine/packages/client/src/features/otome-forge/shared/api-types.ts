@@ -1032,6 +1032,18 @@ export interface ChapterLedger {
   offscreen: Array<{ li: LiId; line: string }>;
 }
 
+/**
+ * 0.24.2: a chapter's story context as its plan or first scene read it (Chapter.context): the parts the kit's memory
+ * context is rendered from (@forge-kit/story-memory-fit.mjs forgeMemoryContext), so every scene rebuilds the same one.
+ */
+export interface ChapterContext {
+  overview: string;
+  details: Array<{ kind: string; title: string; content: string }>;
+  prefix: string;
+  fate: string;
+  optional: string[];
+}
+
 /** `${R}:chapter:${key}`: a chapter's plan. */
 export interface Chapter {
   key: string;
@@ -1095,9 +1107,11 @@ export interface Chapter {
   /**
    * 0.24.2: the chapter's story context (S/prompts.ts storyContext's `memory`), saved by its plan or its first scene and
    * sent by every scene of the chapter (hidden from the client). Background memory upkeep can finish mid-chapter, and
-   * this is what keeps a scene's context the one the chapter opened with, in the prompt and the cache alike.
+   * this is what keeps a scene's context the one the chapter opened with, in the prompt and the cache alike. It keeps
+   * what the context is rendered from, not its text, so a scene that must shed part of it sheds part of this one
+   * (S/story/canon.ts frozenContext).
    */
-  context?: string;
+  context?: ChapterContext;
   /**
    * 0.20.4: the chapter's small memories, by id, in the order they go, chosen by its first scene for everyone in it so
    * every scene sends the same ones; [] when it has none (S/story/beats.ts; hidden from the client).

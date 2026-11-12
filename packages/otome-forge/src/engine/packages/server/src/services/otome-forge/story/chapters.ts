@@ -80,7 +80,7 @@ import { cancellable } from "./beats.js";
 import { hisSideOffers } from "./his-side.js";
 import { removeLoveInterest } from "./introduce.js";
 import type { RecallIndex } from "../memory/recall-index.js";
-import { readBeat, recallText, type StoryMemory } from "./canon.js";
+import { chapterContextOf, readBeat, recallText, type StoryMemory } from "./canon.js";
 import { waitingBondRank } from "./bond.js";
 import { chapterPlanMessages, knownRows } from "../prompts.js";
 import {
@@ -624,7 +624,7 @@ export async function planNextChapter(
       ...(thoughts ? { thoughts: thoughts.text } : {}),
       ...(memory.recalled ? { recalled: memory.recalled } : {}),
       // 0.24.2: the story context the plan read, which every scene of the chapter sends (S/story/beats.ts).
-      ...(memory.text ? { context: memory.text } : {}),
+      ...(memory.text ? { context: chapterContextOf(memory) } : {}),
     };
     const saved = await deps.store.mutateDoc(
       runDocTarget("chapter", chapterId(runId, key)),

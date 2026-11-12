@@ -3742,8 +3742,8 @@ test("a chapter's scenes keep the story context it opened with, though memory up
   assert.equal(first.status, 200, JSON.stringify(first.body));
   await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(0));
   const stored = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
-  assert.equal(typeof stored.context, "string", "the first scene saved the context it read");
-  assert.ok(stored.context!.includes("HEAD: the harbour before."), stored.context);
+  assert.equal(typeof stored.context, "object", "the chapter saved the context it read");
+  assert.ok(stored.context!.overview.includes("HEAD: the harbour before."), JSON.stringify(stored.context));
 
   // The lookahead wrote scene 2 from the context as it stood; drop it, so the scene below is generated AFTER the
   // rewrite and the prompt asserted is one the freeze actually governs.
@@ -3767,14 +3767,67 @@ test("a chapter whose story context is longer than 200,000 characters keeps it t
   const t = await storyWorld({ runKey: "r-longctx-aaaaaa", replies: router() });
   const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
   assert.equal(planned.status, 200, JSON.stringify(planned.body));
-  const long = `HEAD: the harbour before. ${"canon in full. ".repeat(14_000)}`;
+  const long = `# Canon in full: Night 0\n${"canon in full. ".repeat(14_000)}`;
   assert.ok(long.length > 200_000, "the fixture is over the old bound");
-  await t.store.updateDoc(
-    runDocTarget("chapter", chapterId(t.runId, "main-1")),
-    normalizeChapter,
-    (chapter) => chapter && { ...chapter, context: long },
+  const context = { overview: "HEAD: the harbour before.", details: [], prefix: long, fate: "", optional: [long] };
+  await t.store.updateDoc(runDocTarget("chapter", chapterId(t.runId, "main-1")), normalizeChapter, (chapter) =>
+    chapter ? { ...chapter, context } : chapter,
   );
   const stored = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
-  assert.equal(stored.context?.length, long.length, "a long context survives the read");
-  assert.equal(stored.context, long);
+  assert.deepEqual(stored.context, context, "a long context survives the read");
+});
+
+test("a scene that must shed some of the story sheds the chapter's own context, never the story as it is now", async () => {
+  // The fitter renders a context again from its parts when the prompt does not fit, so a chapter that kept only its
+  // context's text would be sent the live story the moment a scene had to shed anything (0.24.2 review).
+  const t = await storyWorld({
+    runKey: "r-ctxshed-aaaaaa",
+    replies: router(),
+    model: { maxContext: 32_768, maxOutputTokens: null },
+  });
+  const words = (tag: string) => [
+    `${tag}-START`,
+    ...Array.from({ length: 25 }, (_, n) =>
+      Array.from({ length: 100 }, (__, w) => `${tag.toLowerCase()}${(n + w) % 89}`).join(" "),
+    ),
+  ];
+  const titles = ["Night 1", "Night 2", "Night 3", "Night 4"];
+  for (const [n, tag] of ["NIGHTONE", "NIGHTTWO", "NIGHTTHREE"].entries()) {
+    await completeChapter(
+      t,
+      { key: `main-${n + 1}`, kind: "main", number: n + 1, lead: KAI, title: titles[n]! },
+      words(tag),
+      `2026-10-28T0${n + 1}:00:00.000Z`,
+    );
+  }
+  await completeChapter(
+    t,
+    { key: "main-4", kind: "main", number: 4, lead: KAI, title: titles[3]! },
+    "NIGHT-FOUR: noon.",
+    "2026-10-28T05:00:00.000Z",
+  );
+  await saveStoryMemory(t.store, t.runId, { head: "HEAD: the harbour before." });
+  const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const at = (i: number) => ({ key: "main-5", i: String(i) });
+  const first = await t.call("POST", beatPath, {}, at(0));
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  await t.call("POST", `${beatPath}/read`, { segment: 99 }, at(0));
+  const stored = (await t.store.readDoc(chapterId(t.runId, "main-5"), normalizeChapter))!;
+  assert.ok(stored.context?.overview.includes("HEAD: the harbour before."), JSON.stringify(stored.context?.overview));
+  assert.equal(stored.context?.optional.length, 3, "the three older chapters in full are what may give way");
+
+  await t.settle();
+  await t.store.removeDoc(beatId(t.runId, "main-5", 1));
+  // Upkeep finishes mid-chapter: the timeline is rewritten under the open chapter.
+  await saveStoryMemory(t.store, t.runId, { head: "HEAD: MOVED BY UPKEEP." });
+  const before = t.calls.length;
+  const second = await t.call("POST", beatPath, {}, at(1));
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  const scene = t.calls.slice(before).find((call) => /Narrate node 2 of/u.test(call.messages.at(-1)!.content));
+  assert.ok(scene, "the second scene was written after the rewrite");
+  const prompt = whole(scene.messages);
+  assert.ok(!prompt.includes("NIGHTONE-START"), "the scene had to shed: the oldest chapter in full gave way");
+  assert.ok(prompt.includes("HEAD: the harbour before."), "what it sheds is the chapter's own context");
+  assert.ok(!prompt.includes("HEAD: MOVED BY UPKEEP."), "never the story as it is now");
 });
