@@ -356,7 +356,10 @@ test("Otome Hearth grievances: his space, paused affection and waiting dates; I'
 
   // I'm upset with her, beside her route at stage 6: asked first, and Escape sends nothing.
   const mirRoute = root.locator(".of-route").filter({ has: page.getByRole("heading", { name: "Mireille" }) });
-  await expect(mirRoute).toContainText("Mireille’s route is complete.");
+  // Past her finale at level 10 the route goes on in the bond ranks: the card names rank 11, never "complete" (0.24.5).
+  await expect(mirRoute).toContainText("Affection 11 · named, her next bond story");
+  await expect(mirRoute).toContainText("Next: named");
+  await expect(mirRoute).not.toContainText("route is complete");
   const toggle = mirRoute.getByRole("button", { name: "I’m upset with her" });
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await tallEnough(toggle);

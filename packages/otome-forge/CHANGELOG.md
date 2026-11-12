@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.24.5 — 2026-11-12
+
+- **A route past its finale shows the bond ranks ahead.** Once a love interest's finale was read, their card in Routes said their route was complete, though affection keeps going to level 20 through the bond ranks. The card now names the next rank (rank 11, "named", first) and the affection it needs, says when a rank's story is waiting for you, and only calls the route complete at the last rank.
+
 ## 0.24.4 — 2026-11-12
 
 - **The Image style is set off with a comma everywhere.** A Memories banner's art (Wish → paint the banner), key images, outfit scenes, keepsakes, Photo Shoot photos and tarot cards with people ran your Image style straight into the first sentence of the picture's prompt ("soft watercolor The lamp room at night…"). They now follow it with a comma, as a cast repaint and every other picture already did.
