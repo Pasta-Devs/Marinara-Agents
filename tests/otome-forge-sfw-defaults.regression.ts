@@ -432,7 +432,7 @@ test("SFW images keep their safety prompts and negatives, and tagged faces retai
         negativePrompt: `${CG_NEGATIVE}, ${SAFE}`,
       },
       cgOne: {
-        prompt: `anime screencap At the lamp. Kai: tall man, grey eyes; keeper's coat. ${cgTail}, adult man, masterpiece`,
+        prompt: `anime screencap, At the lamp. Kai: tall man, grey eyes; keeper's coat. ${cgTail}, adult man, masterpiece`,
         negativePrompt: `${CG_NEGATIVE}, extra people, ${SAFE}, lowres`,
       },
       pair: {

@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.24.4",
+          "date": "2026-11-12",
+          "notes": "- **The Image style is set off with a comma everywhere.** A Memories banner's art (Wish → paint the banner), key images, outfit scenes, keepsakes, Photo Shoot photos and tarot cards with people ran your Image style straight into the first sentence of the picture's prompt (\"soft watercolor The lamp room at night…\"). They now follow it with a comma, as a cast repaint and every other picture already did.",
+          "highlight": false
+        },
+        {
           "version": "0.24.2",
           "date": "2026-11-12",
           "notes": "- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.",
@@ -800,12 +806,6 @@
           "date": "2026-11-09",
           "notes": "- **A scene's key image gives way when the scene moves on.** Once the story goes to another place, that place's background takes over instead of the image staying until the end of the scene. Naming the same room again keeps it.",
           "highlight": false
-        },
-        {
-          "version": "0.21.0",
-          "date": "2026-11-08",
-          "notes": "- **The top left button is a house.** It takes you Home, as before, and its circle is in the colour of whoever is with you there, beside their name.\n- **New items have a dot.** Anything you win from Wish shows a small dot in the Wardrobe or the Album: on the dock, on the tab that holds it, and by the item itself. The dot goes once you click the item (or one of its buttons).",
-          "highlight": true
         }
       ]
     },
