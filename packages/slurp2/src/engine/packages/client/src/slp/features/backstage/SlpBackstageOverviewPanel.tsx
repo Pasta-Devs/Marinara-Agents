@@ -1,3 +1,4 @@
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 import {
   Activity,
   AlertTriangle,
@@ -515,7 +516,7 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
         <span className="min-w-0 flex-1">
           <span className="block font-bold">{t("ui.slurp.settings.backstage.targets.clock")}</span>
           <span className="block text-xs text-[var(--slurp-muted)] tabular-nums">
-            {worldClock.data ? formatFullTime(worldClock.data.worldNow, i18n.language) : "…"}
+            {worldClock.data ? formatFullTime(new Date(slurpWorldNowMs()).toISOString(), i18n.language) : "…"}
           </span>
         </span>
         <ChevronRight size={18} className="shrink-0 rtl:rotate-180" aria-hidden="true" />

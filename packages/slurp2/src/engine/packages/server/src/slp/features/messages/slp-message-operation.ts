@@ -69,7 +69,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
-import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { slurpWorldNowMs, slurpWorldNow, slurpWorldOffsetMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }
@@ -711,8 +711,12 @@ export async function replyToSlurpMessage(
     if (error instanceof SlurpMessageBudgetUnavailableError) {
       // Only the scheduler backs itself off. A player pressing the button must never push their own
       // reply an hour further away by pressing it again.
-      const retryAt =
-        error.retryAt ?? (input.background ? new Date(slurpWorldNowMs() + 60 * 60_000).toISOString() : null);
+      // The budget's retry time is real-clock; reply-not-before is compared with world time, so move it by the offset.
+      const retryAt = error.retryAt
+        ? new Date(Date.parse(error.retryAt) + slurpWorldOffsetMs()).toISOString()
+        : input.background
+          ? new Date(slurpWorldNowMs() + 60 * 60_000).toISOString()
+          : null;
       if (retryAt) {
         await messagesStore.setReplyNotBefore(thread.id, retryAt);
         // Said plainly to the player: "away" hid that the AI budget, not the Creator, was the reason.

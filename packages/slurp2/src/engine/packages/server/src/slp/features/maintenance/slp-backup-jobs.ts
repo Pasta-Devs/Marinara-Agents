@@ -196,7 +196,7 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
         read: () => readFile(media.absolutePath),
       })),
     ];
-    const output = createWriteStream(filePath);
+    const output = createWriteStream(filePath, { mode: 0o600 });
     const outputFinished = finished(output);
     await Promise.all([
       writeStoredZip(output, entries, ({ index, total, bytes, name }) => {

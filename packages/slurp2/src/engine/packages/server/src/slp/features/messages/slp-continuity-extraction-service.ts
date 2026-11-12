@@ -39,7 +39,11 @@ import {
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
-import { slurpWorldEpoch, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+import {
+  SlurpWorldEpochChangedError,
+  slurpWorldEpoch,
+  slurpWorldNow,
+} from "../../../../../shared/src/slp/slp-world-clock.js";
 const CHECKPOINT_KEY = "slurp2.continuity-checkpoints";
 /** Threads one drain reads. The rest wait for the next open; nothing here is urgent. */
 const SLURP_EXTRACTION_IDLE_MS = 30 * 60_000;
@@ -260,7 +264,9 @@ export async function drainSlurpContinuityExtraction(
       checkpoints[threadId] = nextCheckpoint;
       failedUntil.delete(threadId);
     } catch (error) {
-      failedUntil.set(threadId, Date.now() + FAILED_THREAD_WAIT_MS);
+      // A restore during the model call is not this thread's failure: no wait, the next batch reads the restored state.
+      if (!(error instanceof SlurpWorldEpochChangedError))
+        failedUntil.set(threadId, Date.now() + FAILED_THREAD_WAIT_MS);
       // The checkpoint stays put, so the same batch is read again next time.
       logger.warn(error, "[slurp-continuity] Extraction failed for one thread; it is retried later");
     } finally {

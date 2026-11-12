@@ -507,4 +507,32 @@ assert.doesNotMatch(
 assert.match(read("features/feed/slp-shared-preseed-service.ts"), /failedUntil\.set\(key, Date\.now\(\)/u);
 assert.match(read("data/creators/slp-canon-anchor-storage.ts"), /failedUntil\.set\(accountId, Date\.now\(\)/u);
 
+// Sixth round: caches on the real clock, restore errors are not failures, archives are private, retry times convert.
+assert.match(read("data/creators/slp-creators-storage-3.ts"), /Date\.now\(\) - cached\.at < 15_000/u);
+assert.match(
+  read("data/continuity/slp-continuity-storage.ts"),
+  /at = new Date\(Math\.min\(Date\.now\(\), slurpWorldNow\(\)\.getTime\(\)\)\)/u,
+  "continuity retention never runs ahead of the world date",
+);
+assert.match(
+  read("features/maintenance/slp-backup-jobs.ts"),
+  /createWriteStream\(filePath, \{ mode: 0o600 \}\)/u,
+  "archives are written owner-only",
+);
+assert.match(
+  read("features/messages/slp-continuity-extraction-service.ts"),
+  /!\(error instanceof SlurpWorldEpochChangedError\)\)\s*failedUntil\.set/u,
+  "a restore during a call sets no retry wait",
+);
+assert.match(
+  read("features/messages/slp-message-operation.ts"),
+  /Date\.parse\(error\.retryAt\) \+ slurpWorldOffsetMs\(\)/u,
+  "a real-clock budget retry time is moved to world time before it is stored",
+);
+assert.match(
+  client("features/maintenance/slp-timeline.ts"),
+  /useCreateSlpCheckpoint\(\) \{\n\s+const queryClient = useQueryClient\(\);\n\s+return useMutation/u,
+  "saving a checkpoint refreshes only the checkpoint list",
+);
+
 console.log("slurp2 world clock regression: ok");

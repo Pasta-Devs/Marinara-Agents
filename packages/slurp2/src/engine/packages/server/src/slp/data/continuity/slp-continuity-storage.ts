@@ -317,7 +317,12 @@ export async function listSlurpContinuityFor(
 }
 
 /** Retention for one Creator: finished events past their window, then the oldest over the cap. */
-export async function pruneSlurpContinuity(db: DB, creatorAccountId: string, at = new Date()): Promise<number> {
+// Real clock, never later than the world date: a restore to an earlier date must not prune events written after it.
+export async function pruneSlurpContinuity(
+  db: DB,
+  creatorAccountId: string,
+  at = new Date(Math.min(Date.now(), slurpWorldNow().getTime())),
+): Promise<number> {
   const rows = await db
     .select()
     .from(slurpContinuityEvents)

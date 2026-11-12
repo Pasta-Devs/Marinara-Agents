@@ -99,13 +99,11 @@ export function useSkipSlpWorldDays() {
       ),
     onSuccess: refresh,
     // A failed job leaves the data as it was (the server rolls back), so only the checkpoint list needs a refetch.
-    // Refreshing every query here remounted the page and dropped the error line.
     onError: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
   });
 }
 
 export function useCreateSlpCheckpoint() {
-  const refresh = useRefreshEverything();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { label?: string; onProgress?: (job: SlurpBackupJob) => void }) =>
@@ -113,10 +111,8 @@ export function useCreateSlpCheckpoint() {
         await api.post<SlurpBackupJob>("/slurp2/world/clock/checkpoints", { label: input.label }),
         input.onProgress,
       ),
-    onSuccess: refresh,
-    // A failed job leaves the data as it was (the server rolls back), so only the checkpoint list needs a refetch.
-    // Refreshing every query here remounted the page and dropped the error line.
-    onError: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
+    // A checkpoint copies the data and changes none of it: only the checkpoint list is out of date.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
   });
 }
 
@@ -131,7 +127,6 @@ export function useRestoreSlpCheckpoint() {
       ),
     onSuccess: refresh,
     // A failed job leaves the data as it was (the server rolls back), so only the checkpoint list needs a refetch.
-    // Refreshing every query here remounted the page and dropped the error line.
     onError: () => queryClient.invalidateQueries({ queryKey: clockKey() }),
   });
 }
