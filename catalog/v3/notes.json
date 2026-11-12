@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.24.1",
+          "date": "2026-11-12",
+          "notes": "- **Cheaper prompts.** Every prompt Otome Hearth sends to Claude now asks for the five-minute prompt cache instead of the hour-long one. A cached prompt is usually read again within a minute or two (the next scene, the next beat of a chapter), where the five-minute cache costs a quarter of the input to write and the hour-long one twice it — so the hour mostly doubled the price of a prompt that was read seconds later. Group replies, which had been paying the hour-long price, now use the five-minute one too.",
+          "highlight": false
+        },
+        {
           "version": "0.24.0",
           "date": "2026-11-11",
           "notes": "- **You can paint a picture again.** Any picture Otome Hearth has already painted can now be painted a second time when you want a different take: a scene's key image, the place it happens in, a Wish banner, a look in the Wardrobe, or a tarot card. The new picture costs one image, and the old one stays on screen while it paints, so nothing goes blank if the paint fails. Once the new one arrives it replaces the old one everywhere it showed, including your Album, and the old image leaves your gallery.",
@@ -799,12 +805,6 @@
           "version": "0.20.4",
           "date": "2026-11-08",
           "notes": "- **Every scene of a chapter remembers the same small moments.** A chapter now picks its small memories (message exchanges, Snapshots, Read Him, Claw Machine and Tarot rounds, Read Me notes and dates) once, for everyone in it, and each of its scenes is written with the same ones, marked with who knows them. On an Anthropic connection, after the first scene they're sent at the cached price instead of in full every time. Something that happens during a chapter is remembered from the next one.",
-          "highlight": false
-        },
-        {
-          "version": "0.20.3",
-          "date": "2026-11-08",
-          "notes": "- **Route and repair chapters cost less to start.** Their plan now opens with the same story the chapter's scenes are written from, and on an Anthropic connection caches it, so the first scene reads it at the cached price instead of writing it all again. The plan sees the same things as before, in a different order. This works when your Planning and Narration connections are the same, as for main chapters.",
           "highlight": false
         }
       ]

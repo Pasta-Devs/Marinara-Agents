@@ -896,7 +896,8 @@ test("a chapter's plan and scenes share their cached prefix byte for byte; only 
     );
   }
   // The Confrontation is given the same story context, marked alone (its instructions are its own), and every marked
-  // prompt asks for the hour-long cache.
+  // prompt asks for the five-minute cache (0.24.1: its reads come within a minute or two, and the hour-long write
+  // costs 2x the input against the five-minute one's 1.25x).
   const climax = t.calls.find((call) => isConfrontationPrompt(call.messages))!;
   assert.equal(climax.messages[0]!.content, plan[0]!.content);
   assert.deepEqual(
@@ -904,7 +905,7 @@ test("a chapter's plan and scenes share their cached prefix byte for byte; only 
     climax.messages.map((_, index) => index === 0),
   );
   for (const call of t.calls.filter((entry) => entry.messages[0]!.cacheBreakpoint)) {
-    assert.equal((call.options as { cacheTtl?: string } | undefined)?.cacheTtl, "1h");
+    assert.equal((call.options as { cacheTtl?: string } | undefined)?.cacheTtl, "5m");
   }
   // Every scene's prompt before its last message is where the next one's begins: the settled scenes, in order, the
   // newest of them marked.
