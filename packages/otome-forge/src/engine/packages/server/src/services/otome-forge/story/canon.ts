@@ -115,6 +115,7 @@ import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   Beat,
   Chapter,
+  ChapterContext,
   LiId,
   RunState,
   Segment,
@@ -567,6 +568,34 @@ function contextOf(
     .join("\n\n");
   return forgeMemoryContext(result, { prefix, optional: optional.map((entry) => entry.text), renderMemory });
 }
+
+/** 0.24.2: what a chapter keeps of its story context (Chapter.context): the parts it is rendered from (frozenContext). */
+export const chapterContextOf = ({
+  overview,
+  details,
+  prefix,
+  fate,
+  optional,
+}: ForgeMemoryContext): ChapterContext => ({
+  overview,
+  details: details.map(({ kind, title, content }) => ({ kind, title, content })),
+  prefix,
+  fate,
+  optional: [...optional],
+});
+
+/**
+ * 0.24.2: `live` with the chapter's story context in place of its own: rebuilt from what the chapter kept, not only its
+ * text, so the fitter, which renders a context again from its parts when the prompt must shed some, sheds this one's.
+ * The connection's limit, the recalls and the pool stay `live`'s.
+ */
+export const frozenContext = (saved: ChapterContext, live: StoryContext): StoryContext => ({
+  ...live,
+  ...forgeMemoryContext(
+    { overview: saved.overview, details: saved.details, maxContext: live.maxContext },
+    { prefix: saved.prefix, fate: saved.fate, optional: saved.optional, renderMemory },
+  ),
+});
 
 /**
  * The story before a prompt, as the kit's memory context (see the header): the generation core fits it to the

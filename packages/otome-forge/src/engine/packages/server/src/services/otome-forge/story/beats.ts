@@ -120,6 +120,8 @@ import { noteSideSpeakers, type SideCastDeps } from "./side-cast.js";
 import {
   OWN_ANSWER_LABEL,
   type StoryContext,
+  chapterContextOf,
+  frozenContext,
   chapterScenes,
   chapterSoFar,
   readBeat,
@@ -779,20 +781,26 @@ async function generateBeat(
   // 0.24.2, the maintainer's rule: what the chapter was planned with is what each of its scenes gets. recallText reads
   // the story as it is NOW, so background upkeep finishing mid-chapter (a summary saved, the timeline folded, his side
   // read) would hand the later scenes a different context from the earlier ones' — the same chapter, told two ways,
-  // and a cache that misses every time the text moves. The text is saved on the chapter by its first scene and sent by
-  // every one after it, as `recalled` and the pool ids already are.
+  // and a cache that misses every time the text moves. The context is saved on the chapter by its plan (a main one)
+  // or its first scene, and every scene sends it, as `recalled` and the pool ids already are: rebuilt from its parts,
+  // so a scene that must shed some of it sheds the chapter's, never the story as it is now (frozenContext).
   if (!told) {
-    const savedContext = chapter.context;
-    if (savedContext) memory = { ...memory, text: savedContext };
-    else if (memory.text) {
-      const written = await deps.store.updateDoc(
-        runDocTarget("chapter", chapterId(runId, key)),
-        normalizeChapter,
-        (current) => (!current || current.context ? current : { ...current, context: memory.text }),
-      );
-      // Another scene wrote first: send its text, not this one's.
-      if (written?.context && written.context !== memory.text) memory = { ...memory, text: written.context };
-    }
+    const live = memory;
+    const saved =
+      chapter.context ??
+      (live.text
+        ? // Another scene wrote first: the first save wins, so every scene sends that one.
+          (
+            await deps.store.updateDoc(runDocTarget("chapter", chapterId(runId, key)), normalizeChapter, (current) =>
+              !current || current.context ? current : { ...current, context: chapterContextOf(live) },
+            )
+          )?.context
+        : undefined);
+    // ponytail: the chapter keeps its context even when a later, longer scene cannot fit what of it cannot give way
+    // (the summaries that always stay, the previous chapter's first and last scenes); that scene answers `capacity`
+    // until the connection is larger, where before upkeep folding the backlog could have rescued it. Ceiling: a
+    // chapter opened on a connection already at its limit. Upgrade path: on `capacity`, retry once with `live`.
+    if (saved) memory = frozenContext(saved, live);
   }
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
