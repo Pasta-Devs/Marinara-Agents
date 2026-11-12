@@ -17,6 +17,7 @@ import type {
   StageLines,
   StickerSet,
   Unit,
+  BibleBond,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { STICKER_EMOTION, STICKERS_PER_LI } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -66,6 +67,27 @@ export const IntimacySchema: ZodType<BibleIntimacy> = z.object({
 });
 
 const INTIMACY_ITEM_MAX = 120;
+
+/** A bond rank's reveal (0.23.0); the list holds one per rank 11-20. */
+const BOND_LEVELS = 10;
+
+export const BondSchema: ZodType<BibleBond> = z.object({ level: z.number().int().min(11).max(20), truth: text() });
+
+/** His bond reveals, one per rank 11-20, trimmed, or undefined when none reads; a damaged list reads as none. */
+export function normalizeBondReveals(data: unknown): BibleBond[] | undefined {
+  if (!Array.isArray(data)) return undefined;
+  const seen = new Set<number>();
+  const entries: BibleBond[] = [];
+  for (const row of data) {
+    const parsed = BondSchema.safeParse(row);
+    if (!parsed.success) continue;
+    const truth = parsed.data.truth.replace(/\s+/g, " ").trim();
+    if (!truth || seen.has(parsed.data.level)) continue;
+    seen.add(parsed.data.level);
+    entries.push({ level: parsed.data.level, truth });
+  }
+  return entries.length ? entries.sort((a, b) => a.level - b.level) : undefined;
+}
 
 /** The block trimmed to a handful of short labels, or the problem when nothing usable is left. */
 export function normalizeIntimacy(value: BibleIntimacy): BibleIntimacy | string {
@@ -143,6 +165,7 @@ const BIBLE_FIELDS: { [K in keyof Bible]-?: ZodType<Bible[K]> } = {
   }),
   play: z.object({ style: text(300), cheat: z.enum(["steady", "nudge", "extra", "freeze", "calculate"]) }),
   intimacy: IntimacySchema.optional(),
+  bond: z.array(BondSchema).max(BOND_LEVELS).optional(),
 };
 
 export const BibleSchema: ZodType<Bible> = z.object(BIBLE_FIELDS);

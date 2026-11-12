@@ -1867,7 +1867,15 @@ for (const outcome of ["ready", "uncut", "load-error"] as const) {
     const completed = reads();
     await page.clock.runFor(20_000);
     expect(reads(), "ready or unavailable cleanup stops Home polling").toBe(completed);
-    expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+    expect(
+      stub.calls.filter(
+        (call) =>
+          call.method === "POST" &&
+          !call.path.endsWith("/index/opened") &&
+          // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+          !call.path.endsWith("/accent"),
+      ),
+    ).toHaveLength(0);
     expect(spoken).toEqual([]);
   });
 }

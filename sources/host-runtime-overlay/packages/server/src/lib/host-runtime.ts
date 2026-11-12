@@ -183,14 +183,65 @@ export interface HostCommandParse {
   payload: string | null;
 }
 
+/** Capability API 1.819: a character as the Engine stores it; `data` is the card's JSON string. */
+export interface HostCharacterRow {
+  id: string;
+  data: string;
+  comment: string;
+  avatarPath: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Capability API 1.819: a character group; `characterIds` is the stored JSON array string. */
+export interface HostCharacterGroupRow {
+  id: string;
+  name: string;
+  description: string;
+  avatarPath: string | null;
+  characterIds: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HostCharacterPageOptions {
+  limit: number;
+  offset: number;
+  search?: string;
+  sort?: string;
+  favoriteFilter?: string;
+  includeBuiltIn?: boolean;
+}
+
+export interface HostCharacterSummary {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarCrop: unknown;
+  conversationStatus?: string;
+}
+
 /** The members of api.runtime the packages read. Structural: the Engine's own type is the authority. */
 export interface HostRuntime {
   logger: HostRuntimeLogger;
   integrations?: HostIntegrations;
   persistence: HostPersistence;
-  /** Capability API 1.6: personas as the Engine's live storage reads them, in the flat persona row shape. */
+  /**
+   * Capability API 1.6: personas as the Engine's live storage reads them, in the flat persona row shape. The character
+   * members are 1.819; `updateCharacterExtensions` needs the `character-write` permission.
+   */
   resources?: {
     listPersonas(personaIds?: string[]): Promise<Array<{ id: string; data: unknown }>>;
+    getCharacters?(characterIds?: string[]): Promise<HostCharacterRow[]>;
+    listCharacterGroups?(): Promise<HostCharacterGroupRow[]>;
+    listCharactersPage?(options: HostCharacterPageOptions): Promise<{
+      items: HostCharacterRow[];
+      limit: number;
+      offset: number;
+      hasMore: boolean;
+    }>;
+    listCharacterSummaries?(characterIds: string[]): Promise<HostCharacterSummary[]>;
+    updateCharacterExtensions?(characterId: string, patch: Record<string, unknown>): Promise<HostCharacterRow | null>;
   };
   /** Capability API 1.341: another package's service registered with api.registerService. */
   services?: { get<T = unknown>(key: string): T | null };

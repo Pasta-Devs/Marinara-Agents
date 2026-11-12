@@ -1490,7 +1490,7 @@ async function applyCallMemoryCommand(input: {
   const targetData = parseCharacterDataRecord(target);
   const extensions =
     targetData.extensions && typeof targetData.extensions === "object" && !Array.isArray(targetData.extensions)
-      ? { ...(targetData.extensions as Record<string, unknown>) }
+      ? (targetData.extensions as Record<string, unknown>)
       : {};
   const memories = Array.isArray(extensions.characterMemories) ? [...extensions.characterMemories] : [];
   memories.push({
@@ -1499,8 +1499,13 @@ async function applyCallMemoryCommand(input: {
     summary: input.command.summary,
     createdAt: new Date().toISOString(),
   });
-  extensions.characterMemories = memories;
-  await input.chars.update(target.id, { extensions } as any);
+  // Only the key this changes: the Engine keeps the card's other extensions as they are when it saves.
+  const saved = await input.chars.updateExtensions(target.id, { characterMemories: memories });
+  if (!saved) {
+    // Null: the card was deleted during the call, so nothing was saved.
+    logger.warn("[conversation-call] Memory target character no longer exists: %s", input.command.target);
+    return;
+  }
   logger.info("[conversation-call] Memory saved from %s to %s", sourceName, String(targetData.name ?? target.id));
 }
 

@@ -1,8 +1,12 @@
 # Slurp release notes
 
-## 0.4.20 — 2026-11-11
+## 0.4.21 — 2026-11-12
 
 - Added: Backstage > World clock. Slurp now has its own date. You can skip it forward by whole days, and you can go back only by restoring a checkpoint. A skip changes the date and nothing else: no posts, messages, events, stipends, income or cleanups are made for the days you skipped, and queued replies keep the wait they had left. Slurp saves a checkpoint before every skip and keeps the newest five by default. Manual checkpoints are never deleted. A restore saves a safety checkpoint first, brings back the data, settings, pictures and world date, keeps Slurp paused if it was paused, and puts the old state back if anything fails.
+
+## 0.4.20 — 2026-11-11
+
+- Changed: Slurp reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Refreshing a Creator's conversation schedule saves only the schedule keys, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)
 
 ## 0.4.19 — 2026-11-10 [highlight]
 

@@ -491,7 +491,7 @@ export async function startTarot(
       if (!run) throw runNotFound();
       const unit = tarotPartner(run, li);
       const cards = drawCards(picks);
-      const { liState, relationship, offscreen } = ownView(run.state, li);
+      const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
       const lately = [relationship, offscreen].filter((line) => !!line.trim());
       const memory = await recallText(deps, runId, {
         job: "narration",
@@ -515,6 +515,7 @@ export async function startTarot(
           player: run.player,
           unit,
           liState,
+          bondPlayed,
           lately,
           road,
           memory: memory.text,

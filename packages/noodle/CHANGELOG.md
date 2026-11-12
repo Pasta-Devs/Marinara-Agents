@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.5.15 — 2026-11-11
+
+- Changed: Noodle reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)
+
 ## 1.5.14 — 2026-11-10 [highlight]
 
 - Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Noodle versions read every persona there as blank: no name, description, appearance or About Me in posts, profiles and pictures. Noodle now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)

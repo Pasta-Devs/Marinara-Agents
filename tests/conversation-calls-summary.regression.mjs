@@ -86,8 +86,8 @@ assert.deepEqual(buildCallSummaryCompletionOptions(selected.model), {
 
 const packageRoot = join(repoRoot, "packages/conversation-calls");
 const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
-assert.equal(manifest.version, "1.1.9");
-assert.equal(manifest.engine.min, "2.4.1");
+assert.equal(manifest.version, "1.1.10");
+assert.equal(manifest.engine.min, "2.5.2");
 for (const payload of manifest.files) {
   const bytes = await readFile(join(packageRoot, payload.path));
   assert.equal(payload.bytes, bytes.byteLength, `${payload.path} byte count`);

@@ -8,6 +8,7 @@ import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type { RunState } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import * as economy from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 import {
   nextPrestige,
   prestigeOf,
@@ -36,9 +37,29 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import { applyChoiceEffects } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
 import { CAST, KAI, MIR, beatReply, bible, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
-/** Level 10 is reached at 3600 affection (200 for level 2, then 50 more per level). */
+/** Level 10 is reached at 3600 affection (200 for level 2, then 50 more per level); level 20 at 12,350. */
 const L10 = 3600;
+const L20 = economy.BOND_MAX_POINTS;
 const PLANNER = "You are the Extra Story planner";
+
+/**
+ * 0.23.0: marks the ten bond stories played for `li`, so they stand at the last rank and the extra stories open
+ * (S/story/bond.ts counts the played ones, and prestige needs rank 20).
+ */
+async function playBondRanks(t: Awaited<ReturnType<typeof storyWorld>>, li = KAI) {
+  const { bondStoriesPlayed, bondStoryKey } =
+    await import("../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/bond.ts");
+  const saved = await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state: RunState) => ({
+    ...state,
+    chapters: {
+      ...state.chapters,
+      ...Object.fromEntries(
+        Array.from({ length: 10 }, (_, i) => [bondStoryKey(li, 11 + i), { beatsRead: 1, completed: "x", applied: [] }]),
+      ),
+    },
+  }));
+  assert.equal(bondStoriesPlayed(saved!.chapters, li), 10, "the ten bond ranks are played");
+}
 
 /** A valid P25 reply: a what-if for Kai, three nodes (Mireille named in one is left out). */
 function prestigePlan(changes: Partial<PrestigePlanReply> = {}): PrestigePlanReply {
@@ -65,27 +86,35 @@ const system = (messages: ReadonlyArray<{ content: string }>) =>
     .join("\n\n");
 const user = (messages: ReadonlyArray<{ content: string }>) => messages.at(-1)!.content;
 
-test("prestige is derived from his points: none below level 10, a point per 300 past it, a story per three", () => {
+test("prestige is derived from his points: none before level 20, a point per 300 past it, a story per three", () => {
   const zero = { unlocked: 0, points: 0, current: 0, required: 300 };
-  assert.deepEqual(prestigeOf(0), zero, "below level 10: none");
-  assert.deepEqual(prestigeOf(L10 - 1), zero, "below level 10: none");
-  assert.deepEqual(prestigeOf(L10), zero, "exactly level 10: no point yet");
-  assert.deepEqual(prestigeOf(L10 + 299), { ...zero, current: 299 });
-  assert.deepEqual(prestigeOf(L10 + 300), { ...zero, points: 1 }, "+300: one point");
-  assert.deepEqual(prestigeOf(L10 + 600), { ...zero, points: 2 });
-  assert.deepEqual(prestigeOf(L10 + 900), { ...zero, unlocked: 1 }, "+900: one story, and the points start again");
-  assert.deepEqual(prestigeOf(L10 + 2000), { ...zero, unlocked: 2, current: 200 }, "+2000: two stories, 200/300");
-  assert.deepEqual(prestigeOf(Number.NaN), zero);
+  assert.deepEqual(prestigeOf(0, true), zero, "before level 20: none");
+  assert.deepEqual(prestigeOf(L20 - 1, true), zero, "before level 20: none");
+  assert.deepEqual(prestigeOf(L20, true), zero, "exactly level 20: no point yet");
+  assert.deepEqual(prestigeOf(L20 + 299, true), { ...zero, current: 299 });
+  assert.deepEqual(prestigeOf(L20 + 300, true), { ...zero, points: 1 }, "+300: one point");
+  assert.deepEqual(prestigeOf(L20 + 600, true), { ...zero, points: 2 });
   assert.deepEqual(
-    [nextPrestige(L10 + 899, 0), nextPrestige(L10 + 900, 0), nextPrestige(L10 + 900, 1)],
+    prestigeOf(L20 + 900, true),
+    { ...zero, unlocked: 1 },
+    "+900: one story, and the points start again",
+  );
+  assert.deepEqual(prestigeOf(L20 + 2000, true), { ...zero, unlocked: 2, current: 200 }, "+2000: two stories, 200/300");
+  assert.deepEqual(prestigeOf(Number.NaN, true), zero);
+  // 0.23.0: the origin needs his finale's gate, so banked points alone open nothing.
+  assert.deepEqual(prestigeOf(L20 + 2000), zero, "no gate, no prestige");
+  assert.deepEqual(prestigeOf(L20 + 2000, false), zero, "the gate shut reads the same");
+  assert.deepEqual(
+    [nextPrestige(L20 + 899, 0, true), nextPrestige(L20 + 900, 0, true), nextPrestige(L20 + 900, 1, true)],
     [null, 1, null],
   );
-  assert.equal(nextPrestige(L10 + 2000, 1), 2, "the next one is the first not written");
+  assert.equal(nextPrestige(L20 + 2000, 1, true), 2, "the next one is the first not written");
+  assert.equal(nextPrestige(L20 + 2000, 1, false), null, "and nothing without the gate");
 });
 
-test("the run view shows prestige at level 10 only, never his points", () => {
+test("the run view shows prestige at the last bond rank (20) only, never his points", () => {
   const unit = normalizeUnit({ id: KAI, name: "Kai", source: "archetype" })!;
-  const view = (points: number) =>
+  const view = (points: number, stage = 6) =>
     JSON.parse(
       JSON.stringify(
         toRunView(
@@ -93,30 +122,57 @@ test("the run view shows prestige at level 10 only, never his points", () => {
           normalizeWorld({}),
           normalizePlayer({}),
           [unit],
-          normalizeState({ lis: { [KAI]: { points } } }),
+          normalizeState({ lis: { [KAI]: { points, stage } } }),
         ),
       ),
     ).lis[0];
-  assert.equal("prestige" in view(L10 - 1), false, "below level 10 there is no prestige");
-  assert.deepEqual(view(L10).prestige, { unlocked: 0, points: 0, current: 0, required: 300 });
-  const past = view(L10 + 2000);
-  assert.equal(past.level, 10);
+  assert.equal("prestige" in view(L20 - 1), false, "before level 20 there is no prestige");
+  // He cannot be at 20 in one jump: the last ten bond stories played are what the ranks are.
+  const played = Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [
+      `story-bond-${KAI}-${11 + i}`,
+      { beatsRead: 1, completed: "x", applied: [] },
+    ]),
+  );
+  const past = JSON.parse(
+    JSON.stringify(
+      toRunView(
+        "r-prestige-abcdef",
+        normalizeWorld({}),
+        normalizePlayer({}),
+        [unit],
+        normalizeState({ lis: { [KAI]: { points: L20 + 2000, stage: 6 } }, chapters: played }),
+      ),
+    ),
+  ).lis[0];
+  assert.equal(past.level, 20);
   assert.deepEqual(past.prestige, { unlocked: 2, points: 0, current: 200, required: 300 });
   assert.equal("points" in past, false, "his affection points stay private");
+  // The gate shut: whatever his points, level 10 and no prestige.
+  const shut = view(L20 + 2000, 5);
+  assert.equal(shut.level, 10);
+  assert.equal("prestige" in shut, false);
+  assert.equal("bond" in shut, false);
 });
 
 test("a choice loss never takes an unlocked extra story back", () => {
+  const ended = Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [
+      `story-bond-${KAI}-${11 + i}`,
+      { beatsRead: 1, completed: "x", applied: [] },
+    ]),
+  );
   const hurt = (points: number) => {
-    const state = normalizeState({ lis: { [KAI]: { points } } });
+    const state = normalizeState({ lis: { [KAI]: { points, stage: 6 } }, chapters: ended });
     return applyChoiceEffects(state, [{ li: KAI, trust: -1 }], { key: "main-1", choice: "choice-1", at: "x", i: 0 })
       .state.lis[KAI]!.points;
   };
-  assert.equal(hurt(L10 + 900), L10 + 900, "the story just unlocked stays unlocked");
-  assert.equal(prestigeOf(hurt(L10 + 900)).unlocked, 1);
-  assert.equal(hurt(L10 + 905), L10 + 900);
-  assert.equal(hurt(L10 + 1800), L10 + 1800, "the second one too");
-  assert.equal(hurt(L10 + 950), L10 + 935, "within a cycle, points may fall as they do within a level");
-  assert.equal(hurt(L10 + 5), L10, "level 10 itself still holds");
+  assert.equal(hurt(L20 + 900), L20 + 900, "the story just unlocked stays unlocked");
+  assert.equal(prestigeOf(hurt(L20 + 900), true).unlocked, 1);
+  assert.equal(hurt(L20 + 905), L20 + 900);
+  assert.equal(hurt(L20 + 1800), L20 + 1800, "the second one too");
+  assert.equal(hurt(L20 + 950), L20 + 935, "within a cycle, points may fall as they do within a level");
+  assert.equal(hurt(L20 + 5), L20, "level 20 itself still holds");
   assert.equal(hurt(205), 200, "below level 10 nothing changes");
   assert.equal(hurt(320), 305);
 });
@@ -195,12 +251,13 @@ test("P25's reply is checked: a kind this world has (no kink under SFW), a premi
 test("each unlocked extra story is written once, however often it is asked for, and only once unlocked", async () => {
   const t = await storyWorld({
     runKey: "r-prestige-aaaaaa",
-    lis: { [KAI]: { points: L10 + 900 }, [MIR]: { points: L10 + 800 } },
+    lis: { [KAI]: { points: L20 + 900, stage: 6 }, [MIR]: { points: L20 + 800, stage: 6 } },
     replies: [
       json(prestigePlan()),
       json(prestigePlan({ kind: "au", title: "Vampire Harbour", premise: "PREMISE-VAMPIRE: the harbour at night." })),
     ],
   });
+  await playBondRanks(t);
   const claim = (li: string) => t.call("POST", "/runs/:run/prestige/:li", {}, { li });
   const key = `prestige-${KAI}-1`;
   assert.deepEqual((await t.call("GET", "/runs/:run/story")).body.prestige, [{ li: KAI, key }]);
@@ -237,7 +294,7 @@ test("each unlocked extra story is written once, however often it is asked for, 
 
   await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state: RunState) => ({
     ...state,
-    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, points: L10 + 2000 } },
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, points: L20 + 2000 } },
   }));
   assert.deepEqual((await t.call("GET", "/runs/:run/story")).body.prestige, [{ li: KAI, key: `prestige-${KAI}-2` }]);
   const second = await claim(KAI);
@@ -281,7 +338,12 @@ test("an extra story plays as his private side story, imagined: its picks change
     if (system(messages).includes(PLANNER)) return json(prestigePlan());
     return json(user(messages).includes("Narrate node 1 of") ? told : beatReply());
   });
-  const t = await storyWorld({ runKey: "r-prestigeplay-aaaaaa", lis: { [KAI]: { points: L10 + 900 } }, replies });
+  const t = await storyWorld({
+    runKey: "r-prestigeplay-aaaaaa",
+    lis: { [KAI]: { points: L20 + 900, stage: 6 } },
+    replies,
+  });
+  await playBondRanks(t);
   const key = `prestige-${KAI}-1`;
   assert.equal((await t.call("POST", "/runs/:run/prestige/:li", {}, { li: KAI })).status, 200);
   const before = await t.state();

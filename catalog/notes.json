@@ -92,6 +92,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.1.10",
+          "date": "2026-11-11",
+          "notes": "- Changed: Calls reads characters through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. The `[memory]` command saves only the character's memories, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)",
+          "highlight": false
+        },
+        {
           "version": "1.1.9",
           "date": "2026-11-10",
           "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Calls versions read every persona there as blank: no name, description, appearance or About Me in calls, call prompts and persona videos. Calls now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
@@ -558,6 +564,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.15",
+          "date": "2026-11-11",
+          "notes": "- Changed: Noodle reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)",
+          "highlight": false
+        },
+        {
           "version": "1.5.14",
           "date": "2026-11-10",
           "notes": "- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Noodle versions read every persona there as blank: no name, description, appearance or About Me in posts, profiles and pictures. Noodle now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)",
@@ -670,17 +682,29 @@
           "date": "2026-09-24",
           "notes": "- Widgets on Homescreen now available.",
           "highlight": false
-        },
-        {
-          "version": "1.2.24",
-          "date": "2026-09-15",
-          "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
-          "highlight": false
         }
       ]
     },
     "otome-forge": {
       "versions": [
+        {
+          "version": "0.23.1",
+          "date": "2026-11-11",
+          "notes": "- **Each bond rank's truth stays with you.** Past the finale, the story keeps every bond reveal you have reached, rather than the three newest, so a truth learned at rank 11 still holds at rank 15; the card's own size limit still governs what it sends.\n- **The story speaks of the rank by name.** A settled couple's card and every prompt that writes their words now read the rank's word beside its number (\"bond rank 15 of 20 — tested\"), the same rank the Story screen shows.\n- **An afternoon stays an afternoon.** A scene told from their side counts only the bond ranks reached by the moment it retells, so it never carries what was learned weeks later.",
+          "highlight": false
+        },
+        {
+          "version": "0.23.0",
+          "date": "2026-11-11",
+          "notes": "- **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.\n- **One rank at a time.** A rank's story is played before the next opens, so banked affection skips none; each level from 11 to 20 costs 650, then 50 more.\n- **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.\n- **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.",
+          "highlight": true
+        },
+        {
+          "version": "0.22.7",
+          "date": "2026-11-11",
+          "notes": "- **A new love interest gets his own colour.** A love interest who joins the story after it has started, such as one an arc adds, now has his name tag and glow picked from his own portrait like everyone else's, instead of keeping a colour that could match another love interest's. Names that don't share a portrait yet spread across the colour wheel, so two of them rarely look alike. A story already in progress picks its colours again when it is opened.",
+          "highlight": false
+        },
         {
           "version": "0.22.6",
           "date": "2026-11-11",
@@ -782,24 +806,6 @@
           "date": "2026-11-08",
           "notes": "- **Messages cost less.** When you text a love interest on an Anthropic connection, everything that stays the same through the conversation (their card, what they know of the story, your earlier conversations) is cached for five minutes, so each reply after the first sends it at the cached price instead of in full. A daily message they send first is cached the same way for your answer.",
           "highlight": false
-        },
-        {
-          "version": "0.20.0",
-          "date": "2026-11-08",
-          "notes": "- **Side characters who keep coming back get a sprite.** Turn on **Side character sprites** in **Settings → Images**. Once a side character has spoken in two different chapters, their one full-body sprite stands where a love interest's figure does while they speak. It's one neutral picture, with no expressions. Stories you already started count the scenes you've read.\n- **Your own characters look like themselves.** Someone whose name matches one of your Engine character cards gets their sprite as soon as they speak, painted with that card's avatar and full-body sprite as references. Two cards with the same name are never guessed between.\n- **What it costs.** Each one takes 1 call on your Planning connection to write their look (none for a character card), then 1 image. With **Ask before painting** on, tap **Paint** beside the place while they speak.",
-          "highlight": true
-        },
-        {
-          "version": "0.19.1",
-          "date": "2026-11-08",
-          "notes": "- **Not every chapter ends in a Confrontation or a Closer.** A main chapter has one only when it builds to it, and otherwise ends on an ordinary scene or a moment. A story arc's last chapter still has one for its big event. Confrontations and Closers still alternate, counting only chapters that have one.",
-          "highlight": false
-        },
-        {
-          "version": "0.19.0",
-          "date": "2026-11-08",
-          "notes": "- **Long stories remember their beginnings in detail.** As a story grows, its early chapters are condensed again and again. Now each main chapter brings back up to three earlier chapters that matter to it, by their original summaries, in its plan and every scene. Only chapters everyone in it may know come back, and nothing changes when none is close enough.\n- **Stories you already have too.** Chapter summaries are indexed in the background when you open a story and after each new summary, with no model call. The built-in model runs on this computer and its index is stored with the story.\n- **Memory recall embeddings.** In **Settings → Connections**, choose **Built-in (local)** or an Engine connection with its own embedding model, for example one better at your story's language. An older Engine offers only Built-in. Beside it you see how many summaries are indexed, or why indexing failed, with **Retry indexing**.",
-          "highlight": true
         }
       ]
     },
@@ -1076,9 +1082,15 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.21",
+          "date": "2026-11-12",
+          "notes": "- Added: Backstage > World clock. Slurp now has its own date. You can skip it forward by whole days, and you can go back only by restoring a checkpoint. A skip changes the date and nothing else: no posts, messages, events, stipends, income or cleanups are made for the days you skipped, and queued replies keep the wait they had left. Slurp saves a checkpoint before every skip and keeps the newest five by default. Manual checkpoints are never deleted. A restore saves a safety checkpoint first, brings back the data, settings, pictures and world date, keeps Slurp paused if it was paused, and puts the old state back if anything fails.",
+          "highlight": false
+        },
+        {
           "version": "0.4.20",
           "date": "2026-11-11",
-          "notes": "- Added: Backstage > World clock. Slurp now has its own date. You can skip it forward by whole days, and you can go back only by restoring a checkpoint. A skip changes the date and nothing else: no posts, messages, events, stipends, income or cleanups are made for the days you skipped, and queued replies keep the wait they had left. Slurp saves a checkpoint before every skip and keeps the newest five by default. Manual checkpoints are never deleted. A restore saves a safety checkpoint first, brings back the data, settings, pictures and world date, keeps Slurp paused if it was paused, and puts the old state back if anything fails.",
+          "notes": "- Changed: Slurp reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Refreshing a Creator's conversation schedule saves only the schedule keys, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)",
           "highlight": false
         },
         {
@@ -1187,12 +1199,6 @@
           "version": "0.4.2",
           "date": "2026-10-26",
           "notes": "- Slurp starts again on Engine builds with zod 4. Settings sections with nested defaults are filled in again, so the server no longer stops at load with \"Cannot read properties of undefined (reading 'curve')\".\n- On zod 4 Engines, saving part of the Slurp settings, a Garnish ad or a creator account no longer resets the fields you did not send to their defaults. Creator access and auto-posting defaults are filled in again too.",
-          "highlight": true
-        },
-        {
-          "version": "0.4.1",
-          "date": "2026-10-24",
-          "notes": "- Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.",
           "highlight": true
         }
       ]

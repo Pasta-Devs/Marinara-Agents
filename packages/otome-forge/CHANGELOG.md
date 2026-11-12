@@ -1,5 +1,22 @@
 # Otome Hearth release notes
 
+## 0.23.1 — 2026-11-11
+
+- **Each bond rank's truth stays with you.** Past the finale, the story keeps every bond reveal you have reached, rather than the three newest, so a truth learned at rank 11 still holds at rank 15; the card's own size limit still governs what it sends.
+- **The story speaks of the rank by name.** A settled couple's card and every prompt that writes their words now read the rank's word beside its number ("bond rank 15 of 20 — tested"), the same rank the Story screen shows.
+- **An afternoon stays an afternoon.** A scene told from their side counts only the bond ranks reached by the moment it retells, so it never carries what was learned weeks later.
+
+## 0.23.0 — 2026-11-11
+
+- **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.
+- **One rank at a time.** A rank's story is played before the next opens, so banked affection skips none; each level from 11 to 20 costs 650, then 50 more.
+- **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.
+- **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.
+
+## 0.22.7 — 2026-11-11
+
+- **A new love interest gets his own colour.** A love interest who joins the story after it has started, such as one an arc adds, now has his name tag and glow picked from his own portrait like everyone else's, instead of keeping a colour that could match another love interest's. Names that don't share a portrait yet spread across the colour wheel, so two of them rarely look alike. A story already in progress picks its colours again when it is opened.
+
 ## 0.22.6 — 2026-11-11
 
 - **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to "Expressions" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.

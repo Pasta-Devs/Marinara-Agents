@@ -280,18 +280,18 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 341
+          "minor": 819
         },
         "builtAgainst": {
-          "engineVersion": "2.5.0",
-          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+          "engineVersion": "2.5.2",
+          "engineCommit": "c18c1af639cd2c253c13f8ca392ac450065025d3"
         },
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.1.9",
+        "version": "1.1.10",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
-          "min": "2.4.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -318,8 +318,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "b150c98befecfad159166a05a1fd677f44e11d25d9208dba7ddfba2cda094ee7",
-            "bytes": 405990
+            "sha256": "c1f6d4a9669a4311fcc841dcc1753927fd24ad4f40cd506e89aad9172cb9fc72",
+            "bytes": 390813
           },
           {
             "path": "client.js",
@@ -329,6 +329,7 @@
         ],
         "permissions": [
           "agent-runtime",
+          "character-write",
           "chat-read",
           "chat-write",
           "network",
@@ -341,9 +342,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.1.9.zip",
-        "sha256": "5ba5b1ea656455b6bbbc616cc12bc79996da577663e76d0810335bb8b69403f7",
-        "bytes": 578962
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.1.10.zip",
+        "sha256": "9bc4e5a67aba2c57895d4f5413c75275d5b1d5b9e080c7434f4c8b7f6be1a94d",
+        "bytes": 563809
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -2921,15 +2922,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 341
+          "minor": 819
         },
         "builtAgainst": {
-          "engineVersion": "2.5.1",
-          "engineCommit": "42d64368e82340a46e35c0f4489d9f41024d6032"
+          "engineVersion": "2.5.2",
+          "engineCommit": "c18c1af639cd2c253c13f8ca392ac450065025d3"
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.5.14",
+        "version": "1.5.15",
         "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -2958,7 +2959,7 @@
           }
         },
         "engine": {
-          "min": "2.5.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -3012,8 +3013,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "87b1a5a8873492f114c6cd4da188ebb3e5aaa448890ad5670e1b0828f091dd06",
-            "bytes": 547374
+            "sha256": "b28901a4df650e198ca6be248f926d48e71659e12d3f2619f31823d760c40466",
+            "bytes": 532052
           },
           {
             "path": "client.js",
@@ -3039,9 +3040,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.14.zip",
-        "sha256": "1bb336cc0541322d386d503cde31767a8da6065038233f1a97c96f2d6450c31b",
-        "bytes": 1313435
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.15.zip",
+        "sha256": "401301494552039b86e729c14d37559adc0aba58ad69bdb1257fb4036d28de55",
+        "bytes": 1298113
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -3058,7 +3059,7 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.22.6",
+        "version": "0.23.1",
         "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
@@ -3092,13 +3093,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "29ce3d12d28b04977a6e8e78ff111a4a2dba19cb0a83cdf339e2b0dc787aa9e3",
-            "bytes": 680326
+            "sha256": "29371ffb1240ad5de47a5870d44e760dc718b98183a2dc612cce4710292256a0",
+            "bytes": 695157
           },
           {
             "path": "client.js",
-            "sha256": "e3f8cc1121c394f7d56df191d8285c51a4a98a96b9706e404785ee9412ddea28",
-            "bytes": 1372966
+            "sha256": "deb4d351f14bba72119409e7ed5fd04448a50bcdeb439c817e0ba898af6b9abe",
+            "bytes": 1377797
           },
           {
             "path": "otome-hearth-icon.png",
@@ -3126,9 +3127,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.22.6.zip",
-        "sha256": "fccafde614edef1aba82a1caf0803fa94478c6f985ebdad81eef609326f41f54",
-        "bytes": 2204944
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.23.1.zip",
+        "sha256": "c3733955fd03c40b29ec3e91998f54f1706d3e732062befb8e7bf2a32f8d205a",
+        "bytes": 2224606
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },
@@ -4105,15 +4106,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 341
+          "minor": 819
         },
         "builtAgainst": {
-          "engineVersion": "2.5.0",
-          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+          "engineVersion": "2.5.2",
+          "engineCommit": "c18c1af639cd2c253c13f8ca392ac450065025d3"
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.20",
+        "version": "0.4.21",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -4142,7 +4143,7 @@
           }
         },
         "engine": {
-          "min": "2.4.6",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -4182,13 +4183,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "5fc9516dee5fdb64d2e3b45b941f1547f1a3f8655064dfa421ba79d4eeaf06f7",
-            "bytes": 2176085
+            "sha256": "147544febfcee554033eecc35c87bf41b32d5424ace9d3bdf3cafbf7eaf689f6",
+            "bytes": 2160711
           },
           {
             "path": "client.js",
-            "sha256": "16f39a29779d0d16b9a11849c91af166f7bbae4314d9ed128a764326d8090611",
-            "bytes": 2922799
+            "sha256": "05bacd4b8ba09ec2c5be9b590f287b4dbd823350791315dc75f79a84580a309c",
+            "bytes": 2923013
           },
           {
             "path": "slurp2-logo.png",
@@ -4227,6 +4228,7 @@
           }
         ],
         "permissions": [
+          "character-write",
           "chat-read",
           "mari-actions",
           "network",
@@ -4241,9 +4243,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.20.zip",
-        "sha256": "68b60fa23ea86c05eaccd145f4c8a7d310863b2fd5632a889e1c97fb3263458b",
-        "bytes": 6166501
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.21.zip",
+        "sha256": "715d89cf8dd3b301b2fd1f8c5c20051796d4e2224db472f840a2da36e1d70966",
+        "bytes": 6151364
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

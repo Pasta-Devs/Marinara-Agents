@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.20";
+export const SLURP2_VERSION = "0.4.21";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -15,10 +15,17 @@ export interface Slurp2ReleaseEntry {
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
+    version: "0.4.21",
+    date: "2026-11-12",
+    notes: [
+      "Slurp has its own date now. In Backstage > World clock you can move it forward by whole days. The days you skip stay empty, and a checkpoint is saved first. To go back, restore a checkpoint.",
+    ],
+  },
+  {
     version: "0.4.20",
     date: "2026-11-11",
     notes: [
-      "Slurp has its own date now. In Backstage > World clock you can move it forward by whole days. The days you skip stay empty, and a checkpoint is saved first. To go back, restore a checkpoint.",
+      "Slurp now reads your characters through Marinara Engine, so they keep their names, profiles and pictures when a later Engine update changes how characters are stored.",
     ],
   },
   {

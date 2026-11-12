@@ -89,6 +89,14 @@ const PACKAGE_BUILT_AGAINST = Object.freeze({
 // that leaves recall to this package installs the version that learns from chat messages (Pasta-Devs/Marinara-Agents#1744).
 // Capability API 1.390 lets the Engine draw the agent page header (agentDetail.header: "engine").
 const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 390 });
+// Capability API 1.819 gives packages characters on api.runtime.resources and the `character-write` permission
+// (Pasta-Devs/Marinara-Engine#9043), so Calls, Noodle and Slurp stop bundling the Engine's characters storage
+// (Pasta-Devs/Marinara-Agents#2242). Built against the Engine commit that added it.
+const HOST_CHARACTERS_CAPABILITY_API = Object.freeze({ major: 1, minor: 819 });
+const HOST_CHARACTERS_BUILT_AGAINST = Object.freeze({
+  engineVersion: "2.5.2",
+  engineCommit: "c18c1af639cd2c253c13f8ca392ac450065025d3",
+});
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -416,10 +424,10 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.14",
-    minEngineVersion: "2.5.1",
-    capabilityApi: PACKAGE_CAPABILITY_API,
-    builtAgainst: { engineVersion: "2.5.1", engineCommit: "42d64368e82340a46e35c0f4489d9f41024d6032" },
+    version: "1.5.15",
+    minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
+    capabilityApi: HOST_CHARACTERS_CAPABILITY_API,
+    builtAgainst: HOST_CHARACTERS_BUILT_AGAINST,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "A pretend social network where your characters post, share photos, and talk about your chats.",
@@ -496,8 +504,8 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.20",
-    minEngineVersion: "2.4.6",
+    version: "0.4.21",
+    minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
     description:
@@ -534,7 +542,8 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["chat-read", "network", "prompt-context", "routes", "storage", "ui"],
+    // `character-write`: the creator schedule refresh saves the schedule on the character card.
+    permissions: ["character-write", "chat-read", "network", "prompt-context", "routes", "storage", "ui"],
     // Professor Mari may list and run Slurp's actions (`mari-actions:slurp2`, Engine PR #6800). The
     // Engine accepts that permission only with capabilityApi 1.50, and an older Engine refuses a
     // manifest that names it, so it is emitted once `capabilityApi` below reaches 1.50. Until then
@@ -550,8 +559,8 @@ const features = [
     clientImport: "packages/client/src/slp/slp-client-entry.tsx",
     packageSourceRoot: slurp2SourceRoot,
     ownedSourcePaths: slurp2OwnedSourcePaths,
-    capabilityApi: PACKAGE_CAPABILITY_API,
-    builtAgainst: PACKAGE_BUILT_AGAINST,
+    capabilityApi: HOST_CHARACTERS_CAPABILITY_API,
+    builtAgainst: HOST_CHARACTERS_BUILT_AGAINST,
     libraryHidden: true,
     // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
     // package-asset content types, so the route 404s it whatever the manifest declares. The coin
@@ -726,14 +735,15 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.1.9",
-    minEngineVersion: "2.4.1",
-    capabilityApi: PACKAGE_CAPABILITY_API,
-    builtAgainst: PACKAGE_BUILT_AGAINST,
+    version: "1.1.10",
+    minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
+    capabilityApi: HOST_CHARACTERS_CAPABILITY_API,
+    builtAgainst: HOST_CHARACTERS_BUILT_AGAINST,
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
     modes: ["conversation"],
-    permissions: ["agent-runtime", "chat-read", "chat-write", "network", "routes", "storage", "ui"],
+    // `character-write`: the [memory] command saves a memory on the character it names.
+    permissions: ["agent-runtime", "character-write", "chat-read", "chat-write", "network", "routes", "storage", "ui"],
     serverImport: "packages/server/src/routes/conversation-calls.routes.ts",
     serverExport: "conversationCallsRoutes",
     prefix: "/api/conversation-calls",
@@ -867,7 +877,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.22.6",
+    version: "0.23.1",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),
