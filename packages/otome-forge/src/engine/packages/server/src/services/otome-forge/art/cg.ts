@@ -700,6 +700,17 @@ export async function markCgSeen(
       : { ...current, album: { ...current.album, cgs: keepNewest([...current.album.cgs, entry], STATE_LIMITS.album) } },
   );
   if (!result) throw runNotFound();
+  // A repaint that saved between the read above and this write already moved its entry, and found none: the Album now
+  // holds the picture the repaint replaced, which it released. Read the beat again and follow it when it moved on
+  // (Dottore, #2255); one that lands later moves the entry itself through updateAlbumPicture.
+  const now = await readBeat(deps.store, runId, key, i);
+  const current = now?.cg?.art;
+  if (result.changed && current?.url && current.ref && current.ref !== entry.ref) {
+    await updateAlbumPicture(deps, runId, entry.key, current);
+    // The response answers with what the Album holds now, not with the picture the repaint already replaced.
+    const moved = await deps.store.readDoc(stateId(runId), normalizeState);
+    if (moved) return { unlocked: true, album: moved.album.cgs };
+  }
   return { unlocked: result.changed, album: result.value.album.cgs };
 }
 

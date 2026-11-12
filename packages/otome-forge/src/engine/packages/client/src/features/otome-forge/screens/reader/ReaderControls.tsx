@@ -384,7 +384,7 @@ export function ReaderControls(props: ReaderControlsProps) {
                   props.cgPaint.busy
                     ? "ui.otomeForge.wish.painting"
                     : props.cgPaint.retry
-                      ? "ui.otomeForge.reader.cgRetry"
+                      ? "ui.otomeForge.reader.cgRetryChip"
                       : "ui.otomeForge.reader.cgRepaint",
                 )}
               </button>

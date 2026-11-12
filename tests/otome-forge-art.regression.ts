@@ -550,6 +550,56 @@ test("a picture kept through a failed repaint is the one unlocked: the Album tak
   assert.equal((await bare.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 409);
 });
 
+test("a repaint that saves while its key image unlocks leaves the Album on the picture the record shows", async () => {
+  // 0.24.0 (Dottore, #2255): the unlock reads the beat, then writes the Album some awaits later. A repaint saving in
+  // that gap moves an entry that does not exist yet and releases the picture the unlock is about to file, so the entry
+  // is read back and followed to the record's picture.
+  const t = await sceneWorld("r-m2bart11-kkkkkk");
+  await t.write(1, { cg: CG });
+  const stored = (await readStoredBeat(t.store, t.runId, 1))!;
+  const kept = stored.cg!.art!;
+  await saveBeat(t.store, t.runId, { ...stored, readThrough: CG.at });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  const repainted = {
+    state: "ready" as const,
+    at: "2026-10-28T12:00:00.000Z",
+    url: "/api/global-gallery/file/img9.png",
+    ref: "global-gallery:img9",
+  };
+  let saved = false;
+  const store = {
+    ...t.store,
+    async updateDoc(...args: Parameters<typeof t.store.updateDoc>) {
+      // The repaint's save lands just before the unlock's own Album write.
+      if (!saved && args[0].id === stateId(t.runId)) {
+        saved = true;
+        await saveBeat(t.store, t.runId, {
+          ...(await readStoredBeat(t.store, t.runId, 1))!,
+          cg: { ...stored.cg!, art: repainted },
+        });
+      }
+      return t.store.updateDoc(...args);
+    },
+  } as typeof t.store;
+  const call = routesOf(
+    registerArtRoutes,
+    { ...t.deps, store, art: createOtomeArt({ ...t.deps, store }) },
+    "r-m2bart11-kkkkkk",
+  );
+  const seen = await call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 });
+  assert.equal(seen.status, 200);
+  assert.equal(seen.body.unlocked, true);
+  assert.equal(saved, true, "the repaint saved in the gap");
+  const entry = (await t.state()).album.cgs.find((cg) => cg.key === `${KEY}/1`)!;
+  assert.equal(entry.ref, repainted.ref, "the Album ends on the picture the record shows");
+  assert.equal(entry.url, repainted.url);
+  assert.equal(seen.body.album.find((cg: { key: string }) => cg.key === `${KEY}/1`).ref, repainted.ref);
+  assert.notEqual(entry.ref, kept.ref, "never the picture the repaint replaced");
+});
+
 test("a failed paint waits for a tap; a rewrite while a CG paints gets nothing, and its image is deleted", async () => {
   const t = await sceneWorld("r-m2bart07-gggggg", {
     runKey: "r-m2bart07-gggggg",
