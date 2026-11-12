@@ -264,9 +264,10 @@ export async function drainSlurpContinuityExtraction(
       checkpoints[threadId] = nextCheckpoint;
       failedUntil.delete(threadId);
     } catch (error) {
-      // A restore during the model call is not this thread's failure: no wait, the next batch reads the restored state.
-      if (!(error instanceof SlurpWorldEpochChangedError))
-        failedUntil.set(threadId, Date.now() + FAILED_THREAD_WAIT_MS);
+      // A restore during the model call is not this thread's failure: no wait, and the drain stops, because the
+      // threads it has left were read before the restore. The next batch reads the restored state.
+      if (error instanceof SlurpWorldEpochChangedError || slurpWorldEpoch() !== startEpoch) return recorded;
+      failedUntil.set(threadId, Date.now() + FAILED_THREAD_WAIT_MS);
       // The checkpoint stays put, so the same batch is read again next time.
       logger.warn(error, "[slurp-continuity] Extraction failed for one thread; it is retried later");
     } finally {

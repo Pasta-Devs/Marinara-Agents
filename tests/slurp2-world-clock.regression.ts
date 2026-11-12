@@ -521,8 +521,8 @@ assert.match(
 );
 assert.match(
   read("features/messages/slp-continuity-extraction-service.ts"),
-  /!\(error instanceof SlurpWorldEpochChangedError\)\)\s*failedUntil\.set/u,
-  "a restore during a call sets no retry wait",
+  /error instanceof SlurpWorldEpochChangedError \|\| slurpWorldEpoch\(\) !== startEpoch\) return recorded;[\s\S]{0,80}failedUntil\.set/u,
+  "a restore during a call sets no retry wait and stops the drain",
 );
 assert.match(
   read("features/messages/slp-message-operation.ts"),
