@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.24.6 — 2026-11-12
+
+- **The bible shows the bond ranks.** Past a love interest's finale, their bible now has a Bond ranks section: each rank from 11 ("named") to 20 ("always") with the truth it reveals about them. The truths are written when their first bond story, rank 11, opens; until then the section says so.
+
 ## 0.24.5 — 2026-11-12
 
 - **A route past its finale shows the bond ranks ahead.** Once a love interest's finale was read, their card in Routes said their route was complete, though affection keeps going to level 20 through the bond ranks. The card now names the next rank (rank 11, "named", first) and the affection it needs, says when a rank's story is waiting for you, and only calls the route complete at the last rank.

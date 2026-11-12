@@ -25,6 +25,8 @@ import {
   type BibleProblem,
 } from "../shared/bible";
 import { intimacyOpen } from "../shared/content";
+import { LAST_STAGE } from "../shared/arcs";
+import { BOND_RANKS } from "../shared/bond";
 import { TextField } from "./setup/parts";
 
 type FieldKind = "text" | "long" | "lines" | "number" | "choice";
@@ -736,6 +738,27 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
               );
             })}
           </Block>
+
+          {/* 0.24.5: past the finale the arc goes on in the bond ranks (C/shared/bond.ts): each rank's truth, written
+              in one call when rank 11's story first opens (S/bond.ts fillBondReveals). Shown, never edited here: an
+              edit carries them through as they are. */}
+          {li.stage >= LAST_STAGE ? (
+            <Block title={t("ui.otomeForge.setup.bibleBondRanks")}>
+              {shown.bond?.length ? null : (
+                <p className="of-hint">{t("ui.otomeForge.setup.bibleBondRanksLater", { name: li.name })}</p>
+              )}
+              <dl className="of-bible-fields">
+                {BOND_RANKS.map((rank) => (
+                  <div key={rank.level} className="of-bible-row">
+                    <dt>{t("ui.otomeForge.setup.bibleBondRank", { level: rank.level, name: rank.name })}</dt>
+                    <dd>
+                      <ReadValue value={shown.bond?.find((entry) => entry.level === rank.level)?.truth} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Block>
+          ) : null}
 
           {Object.keys(shown.web).length ? (
             <Block title={t("ui.otomeForge.setup.bibleWeb")}>
