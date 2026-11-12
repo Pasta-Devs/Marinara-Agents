@@ -4,6 +4,10 @@
 
 - **The Image style is set off with a comma everywhere.** A Memories banner's art (Wish → paint the banner), key images, outfit scenes, keepsakes, Photo Shoot photos and tarot cards with people ran your Image style straight into the first sentence of the picture's prompt ("soft watercolor The lamp room at night…"). They now follow it with a comma, as a cast repaint and every other picture already did.
 
+## 0.24.3 — 2026-11-12
+
+- **A chapter keeps its story on smaller connections too.** 0.24.2 kept the story a chapter opened with, but a scene that had to leave out some older chapters to fit a smaller connection rebuilt the story from scratch to do it, and so went back to the newer version after all. A chapter now keeps every part of its story, so a scene that has to leave something out leaves it out of the chapter's own.
+
 ## 0.24.2 — 2026-11-12
 
 - **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.

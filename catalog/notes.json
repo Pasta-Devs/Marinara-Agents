@@ -694,6 +694,12 @@
           "highlight": false
         },
         {
+          "version": "0.24.3",
+          "date": "2026-11-12",
+          "notes": "- **A chapter keeps its story on smaller connections too.** 0.24.2 kept the story a chapter opened with, but a scene that had to leave out some older chapters to fit a smaller connection rebuilt the story from scratch to do it, and so went back to the newer version after all. A chapter now keeps every part of its story, so a scene that has to leave something out leaves it out of the chapter's own.",
+          "highlight": false
+        },
+        {
           "version": "0.24.2",
           "date": "2026-11-12",
           "notes": "- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.",
@@ -799,12 +805,6 @@
           "version": "0.21.2",
           "date": "2026-11-09",
           "notes": "- **The next main chapter carries on from a Character Story.** When a Character Story is the last thing you played, the next main chapter picks up from how it ended, including any choice you made at its end. Love interests who weren't in it still don't know what happened there.",
-          "highlight": false
-        },
-        {
-          "version": "0.21.1",
-          "date": "2026-11-09",
-          "notes": "- **A scene's key image gives way when the scene moves on.** Once the story goes to another place, that place's background takes over instead of the image staying until the end of the scene. Naming the same room again keeps it.",
           "highlight": false
         }
       ]
