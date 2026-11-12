@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.24.6 — 2026-11-12
+
+- **The bible shows the bond ranks.** Past a love interest's finale, their bible now has a Bond ranks section: each rank from 11 ("named") to 20 ("always") with the truth it reveals about them. The truths are written when their first bond story, rank 11, opens; until then the section says so.
+
 ## 0.24.4 — 2026-11-12
 
 - **The Image style is set off with a comma everywhere.** A Memories banner's art (Wish → paint the banner), key images, outfit scenes, keepsakes, Photo Shoot photos and tarot cards with people ran your Image style straight into the first sentence of the picture's prompt ("soft watercolor The lamp room at night…"). They now follow it with a comma, as a cast repaint and every other picture already did.

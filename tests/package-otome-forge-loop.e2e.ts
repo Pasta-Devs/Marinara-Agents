@@ -596,7 +596,14 @@ function createLoopStub({ seeded = false } = {}) {
     const bibleMatch = /^\/runs\/[^/]+\/lis\/([^/]+)\/bible$/u.exec(path);
     if (bibleMatch) {
       const li = lis().find((entry) => entry.id === bibleMatch[1])!;
-      return { status: 200, json: { bible: bible(li.name, li.pronouns) } };
+      const bond =
+        li.stage === 6
+          ? [
+              { level: 11, truth: "Being with her is the first quiet the clocks have ever let them have." },
+              { level: 12, truth: "They learned she hums when she is frightened, before anything else." },
+            ]
+          : undefined;
+      return { status: 200, json: { bible: { ...bible(li.name, li.pronouns), ...(bond ? { bond } : {}) } } };
     }
     // A failed summary: Settings → Connections (#2039) and Debug show it with its Retry.
     if (path === `${base}/memory/status`) {
@@ -907,6 +914,9 @@ function createLoopStub({ seeded = false } = {}) {
     for (const step of view.forge.steps) step.state = "done";
     view.forge.phase = "ready";
     view.world.forge = view.forge;
+    // Rosalind is past her finale, with her first two bond truths written (0.24.5: the bible shows the ranks).
+    const ros = (view.lis as Json[]).find((entry) => entry.id === ROS)!;
+    Object.assign(ros, { stage: 6, level: 11, bond: { level: 11, name: "named", played: 0, next: 12 } });
     index.runs.push({ runKey: RUN, title: view.world.title, createdAt: now(), lastPlayedAt: now() });
     index.activeRun = RUN;
   }
@@ -1684,6 +1694,12 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
     await auditScreen(page, root, "bible: spoiler wall");
     await root.getByRole("button", { name: "Show spoilers" }).click();
     await expect(root.getByText("Built the clock that stopped.")).toBeVisible();
+    // 0.24.5: past her finale the bible shows the bond ranks, each truth once written and a dash until then.
+    const ranks = root.locator("details").filter({ has: page.getByText("Bond ranks", { exact: true }) });
+    await expect(ranks.getByText("Rank 11 · named", { exact: true })).toBeVisible();
+    await expect(ranks).toContainText("Being with her is the first quiet the clocks have ever let them have.");
+    await expect(ranks).toContainText("Rank 20 · always");
+    await expect(ranks.locator(".of-bible-row")).toHaveCount(10);
     await auditScreen(page, root, "bible: open");
     await root.getByRole("button", { name: "Back", exact: true }).click();
     await root.getByRole("button", { name: "Back", exact: true }).click();

@@ -10,7 +10,7 @@
   },
   "id": "otome-forge",
   "name": "Otome Hearth",
-  "version": "0.24.4",
+  "version": "0.24.6",
   "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
   "engine": {
     "min": "2.5.1",
@@ -49,8 +49,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "922bf1fe7a5513ac6e22a2fd076fc4fcb8bfa826910ce1822df433f9f49ec78f",
-      "bytes": 1380095
+      "sha256": "e68f6e048395b89a60ef94accc73b8ac49e53bd0b25403f82c5755eaf45edd1e",
+      "bytes": 1380814
     },
     {
       "path": "otome-hearth-icon.png",

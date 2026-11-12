@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.24.6",
+          "date": "2026-11-12",
+          "notes": "- **The bible shows the bond ranks.** Past a love interest's finale, their bible now has a Bond ranks section: each rank from 11 (\"named\") to 20 (\"always\") with the truth it reveals about them. The truths are written when their first bond story, rank 11, opens; until then the section says so.",
+          "highlight": false
+        },
+        {
           "version": "0.24.4",
           "date": "2026-11-12",
           "notes": "- **The Image style is set off with a comma everywhere.** A Memories banner's art (Wish → paint the banner), key images, outfit scenes, keepsakes, Photo Shoot photos and tarot cards with people ran your Image style straight into the first sentence of the picture's prompt (\"soft watercolor The lamp room at night…\"). They now follow it with a comma, as a cast repaint and every other picture already did.",
@@ -799,12 +805,6 @@
           "version": "0.21.3",
           "date": "2026-11-10",
           "notes": "- **Love interests stop repeating their habits.** The signs written in a love interest's bible (how they act when stressed, their tics, what gives them away) are now only some of the ways they can react. They show one now and then among other, fresh reactions, and never repeat the same gesture or sentence within a chapter.",
-          "highlight": false
-        },
-        {
-          "version": "0.21.2",
-          "date": "2026-11-09",
-          "notes": "- **The next main chapter carries on from a Character Story.** When a Character Story is the last thing you played, the next main chapter picks up from how it ended, including any choice you made at its end. Love interests who weren't in it still don't know what happened there.",
           "highlight": false
         }
       ]
