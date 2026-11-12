@@ -28,6 +28,7 @@ import type { SlurpMoodTone } from "./slp-mood.js";
 import type { SlurpRapportTier } from "../messages/slp-rapport.js";
 import { describeSlurpMood } from "./slp-mood.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * How long a creator stays away once they have had enough.
  *
@@ -47,7 +48,7 @@ export const SLURP_COOL_OFF_HOURS = 6;
 export const SLURP_STRIKE_WINDOW_DAYS = 14;
 
 /** Strikes still inside the window. An old one has been served and no longer counts. */
-export function activeSlurpStrikes(strikes: number, lastStrikeAt: string | null, at = new Date()): number {
+export function activeSlurpStrikes(strikes: number, lastStrikeAt: string | null, at = slurpWorldNow()): number {
   if (!lastStrikeAt) return 0;
   const days = (at.getTime() - Date.parse(lastStrikeAt)) / 86_400_000;
   if (!Number.isFinite(days) || days > SLURP_STRIKE_WINDOW_DAYS) return 0;

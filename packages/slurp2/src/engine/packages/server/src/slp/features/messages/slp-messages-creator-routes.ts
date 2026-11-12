@@ -17,6 +17,7 @@ import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 import { SLURP_FUNNEL_STAGES } from "../../../../../shared/src/slp/slp-population.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * An image a paid message carries.
  *
@@ -315,7 +316,7 @@ export async function slpMessagesCreatorRoutes(app: FastifyInstance, messaging: 
       creatorState: await slurp.getCreatorState(thread.creatorAccountId),
       dayVibe:
         details.dayVibe !== undefined ? details.dayVibe : await describeSlurpDayVibe(app.db, thread.creatorAccountId),
-      coolingOff: Boolean(thread.coolUntil && thread.coolUntil > new Date().toISOString()),
+      coolingOff: Boolean(thread.coolUntil && thread.coolUntil > slurpWorldNow().toISOString()),
       strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
       connection,
       availability,

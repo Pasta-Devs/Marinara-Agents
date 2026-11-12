@@ -70,6 +70,7 @@ import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.j
 import { mapAccount } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 const stageProfilesCache = new WeakMap<
   object,
   { key: string; at: number; value: Promise<SlurpManagedStageProfile[]> }

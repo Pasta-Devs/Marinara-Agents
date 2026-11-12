@@ -14,6 +14,7 @@ import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { cn } from "../../../lib/utils";
 import { SectionTitle } from "../../modules/settings/SlpSettingsControls";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const fieldClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm";
 const buttonClass =
@@ -69,7 +70,7 @@ export function SlurpPlatformEventsSettings({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SlurpPlatformEvent | null>(null);
   const timeline = useSlpStoryTimeline();
-  const activeIds = slurpRunningPlatformEventIds(events, timeline.data?.occurrences ?? [], new Date());
+  const activeIds = slurpRunningPlatformEventIds(events, timeline.data?.occurrences ?? [], slurpWorldNow());
   const sorted = [...events].sort((a, b) => eventOrder(a) - eventOrder(b) || a.name.localeCompare(b.name));
   const valid = draft ? slurpPlatformEventSchema.safeParse(draft).success : false;
 
@@ -82,7 +83,7 @@ export function SlurpPlatformEventsSettings({
     setDraft({ ...item });
   };
   const add = () => {
-    const today = new Date();
+    const today = slurpWorldNow();
     const item: SlurpPlatformEvent = {
       id: `custom-${Date.now().toString(36)}`,
       contentId: `custom-${Date.now().toString(36)}`,

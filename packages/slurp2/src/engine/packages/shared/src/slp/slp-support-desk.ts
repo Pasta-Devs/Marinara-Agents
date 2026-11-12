@@ -9,6 +9,7 @@
  * Pure: the server stores it and runs the tick, the client shows it. Every reader goes through
  * `normalizeSlpSupportDesk`, so an old or broken record never breaks the desk.
  */
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { z } from "zod";
 
 export const SLP_DESK_TIERS = ["wary", "neutral", "cooperative", "partner"] as const;
@@ -403,7 +404,7 @@ export function slpDeskAdjust(
   desk: SlpSupportDesk,
   change: { trust?: number; suspicion?: number; text: string },
   settings: Pick<SlpSupportDeskSettings, "trustRate" | "suspicionRate"> = SLP_DEFAULT_SUPPORT_DESK_SETTINGS,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): SlpSupportDesk {
   const trustDelta = Math.round((change.trust ?? 0) * RATE[settings.trustRate]);
   const lowTrust = desk.trust < -25 ? 1.5 : 1;
@@ -436,7 +437,7 @@ export function slpDeskAdjust(
 export function slpDeskAsk(
   desk: SlpSupportDesk,
   settings: Pick<SlpSupportDeskSettings, "trustRate" | "suspicionRate"> = SLP_DEFAULT_SUPPORT_DESK_SETTINGS,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): SlpSupportDesk {
   const recent = desk.asks.filter((entry) => at.getTime() - Date.parse(entry) < DAY_MS);
   const next = { ...desk, asks: [...recent, at.toISOString()].slice(-ASKS_MAX) };
@@ -462,11 +463,11 @@ export function slpDeskDecay(desk: SlpSupportDesk, elapsedMs: number): SlpSuppor
   return fade <= 0 ? desk : { ...desk, suspicion: Math.max(0, desk.suspicion - fade) };
 }
 
-export const slpDeskActive = (until: string | null | undefined, at = new Date()) =>
+export const slpDeskActive = (until: string | null | undefined, at = slurpWorldNow()) =>
   Boolean(until && Date.parse(until) > at.getTime());
 
 /** The reach multiplier the desk puts on a Creator's posts right now (throttle, Discover feature). */
-export function slpDeskReachFactor(desk: SlpSupportDesk, at = new Date()): number {
+export function slpDeskReachFactor(desk: SlpSupportDesk, at = slurpWorldNow()): number {
   if (desk.pausedAt) return 0;
   let factor = 1;
   if (desk.throttle && slpDeskActive(desk.throttle.until, at)) factor *= desk.throttle.factor;
@@ -613,7 +614,7 @@ export function slpDeskTicketTopic(
   desk: SlpSupportDesk,
   situation: SlpDeskSituation,
   roll: number,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): SlpDeskTicketTopic | null {
   const resting = new Set(
     desk.ticketTopics
@@ -644,7 +645,7 @@ export function slpDeskGrantPerk(
   desk: SlpSupportDesk,
   perk: SlpDeskPerk,
   settings: Pick<SlpSupportDeskSettings, "trustRate" | "suspicionRate"> = SLP_DEFAULT_SUPPORT_DESK_SETTINGS,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): SlpSupportDesk {
   let next: SlpSupportDesk = { ...desk, favours: Math.min(20, desk.favours + 1) };
   if (perk.kind === "badge" && perk.badge && !next.badges.includes(perk.badge))
@@ -665,7 +666,7 @@ export function slpDeskPerkLine(perk: SlpDeskPerk): string {
 /** The start of a desk record: Creators Support signed up start warm, everyone else neutral. */
 export function slpDeskSeed(desk: SlpSupportDesk, input: { signedUpBySupport: boolean; at?: Date }): SlpSupportDesk {
   if (desk.seededAt) return desk;
-  const at = input.at ?? new Date();
+  const at = input.at ?? slurpWorldNow();
   return {
     ...desk,
     trust: input.signedUpBySupport ? 20 : 0,

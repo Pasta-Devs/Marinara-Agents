@@ -36,6 +36,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpFanVoiceDraftSchema } from "../../modules/audience/slp-fan-voice-draft.js";
 import { draftSlpFanTypeVoice } from "./slp-fan-voice-draft-service.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
 const SLP_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
 export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -236,7 +237,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const creator = await noodle.getNoodlerAccountById(id);
     if (!creator) return reply.code(404).send({ error: "Slurp stage profile not found" });
     const population = createSlurpPopulationStorage(app.db);
-    const at = new Date();
+    const at = slurpWorldNow();
     const followerFloor = SLURP_FUNNEL_STAGES.indexOf("follower");
     const followersSettings = await noodle.getSettings();
     const items = (await population.listNamedCast(id, SLURP_NAMED_CAST_LIMIT * 3))

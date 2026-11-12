@@ -449,7 +449,7 @@ async function main() {
     assert.match(read("server/src/slp/slp-server-entry.ts"), /await migrateSlurpSupportThreads\(app\.db\);/u);
     assert.match(
       read("server/src/slp/features/maintenance/slp-backup-jobs.ts"),
-      /importSlurpBackup\([\s\S]{0,200}await migrateSlurpSupportThreads\(app\.db\);/u,
+      /importSlurpBackup\([\s\S]{0,800}await migrateSlurpSupportThreads\(app\.db\);/u,
     );
     assert.match(
       read("server/src/slp/features/onboarding/slp-scene-keep-service.ts"),

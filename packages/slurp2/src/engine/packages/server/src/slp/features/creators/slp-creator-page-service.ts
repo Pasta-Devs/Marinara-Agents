@@ -32,6 +32,7 @@ import {
   type PublicIdentity,
 } from "../feed/slp-feed-contract.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlpCreatorPageComposeResult =
   { ok: true; page: SlpCreatorPage } | { ok: false; status: 404 | 409 | 429 | 502; error: string };
 
@@ -215,7 +216,7 @@ export async function composeSlpCreatorPage(
     logger.warn({ accountId: account.id, error }, "[slurp-creator-page] Model call failed");
     return { ok: false, status: 502, error: "The connection failed while designing the Page. Try again." };
   }
-  const now = new Date().toISOString();
+  const now = slurpWorldNow().toISOString();
   const keepPostIds = new Set(
     (current?.blocks ?? []).flatMap((block) => (block.kind === "collage" ? block.postIds : [])),
   );
@@ -258,18 +259,21 @@ let running: Promise<void> | null = null;
  * open keeps it rare and cheap; the next open takes the next. Never awaited by the caller, and never
  * twice at once, so two tabs opening together do not pay twice.
  */
-export function refreshSlurpCreatorPages(db: DB, now = Date.now()): Promise<void> {
+export function refreshSlurpCreatorPages(db: DB, now = slurpWorldNowMs()): Promise<void> {
   running ??= runRefresh(db, now).finally(() => {
     running = null;
   });
   return running;
 }
 
+// Backoff is infrastructure: stored and compared on the real clock, so a restore cannot stretch it.
 async function runRefresh(db: DB, now: number): Promise<void> {
   const noodle = createSlurpStorage(db);
-  const accounts = (await noodle.listNoodlerAccounts()).filter((account) => (restingUntil.get(account.id) ?? 0) <= now);
+  const accounts = (await noodle.listNoodlerAccounts()).filter(
+    (account) => (restingUntil.get(account.id) ?? 0) <= Date.now(),
+  );
   const rest = (accountId: string, error: string, what: string) => {
-    restingUntil.set(accountId, now + REST_MS);
+    restingUntil.set(accountId, Date.now() + REST_MS);
     logger.warn({ accountId, error }, `[slurp-creator-page] ${what} failed`);
   };
   // First a new AI Creator's first Page. One try: a failure clears the wish, the button stays.

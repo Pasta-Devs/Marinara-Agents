@@ -6,6 +6,7 @@ import { createCharactersStorage } from "../../../lib/host-characters-storage.js
 import type { FastifyInstance } from "fastify";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Storage handles and access checks shared by every message route. Created once per mount. */
 export function createSlpMessagesContext(
   app: FastifyInstance,
@@ -32,7 +33,7 @@ export function createSlpMessagesContext(
           createCharactersStorage(app.db),
           source,
           undefined,
-          new Date(),
+          slurpWorldNow(),
           latestPost?.createdAt ?? null,
           await slurp.getSettings(),
         )
@@ -41,7 +42,7 @@ export function createSlpMessagesContext(
     // Check if this specific thread has extended online availability
     if (threadId) {
       const thread = await messages.getThreadById(threadId);
-      if (thread?.extendedOnlineUntil && thread.extendedOnlineUntil > new Date().toISOString()) {
+      if (thread?.extendedOnlineUntil && thread.extendedOnlineUntil > slurpWorldNow().toISOString()) {
         availability = { online: true, activity: "chatting", minutesUntilOnline: 0 };
       }
     }

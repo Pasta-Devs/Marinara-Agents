@@ -12,6 +12,7 @@ import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 import type { SlurpThread } from "./slp-messages-storage-types.js";
 import type { SlpSceneLine } from "../../../../../shared/src/slp/slp-roleplay-scene.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createMessagesStorageScenes(context: SlurpMessagesContext) {
   const { db } = context;
   return {
@@ -20,7 +21,7 @@ export function createMessagesStorageScenes(context: SlurpMessagesContext) {
       return db.transaction(async (tx) => {
         const current = (await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)))[0];
         if (!current || current.state !== "active" || current.sceneChatId) return false;
-        const timestamp = new Date().toISOString();
+        const timestamp = slurpWorldNow().toISOString();
         await tx
           .update(slurpThreads)
           .set({ sceneChatId, sceneStartedAt: timestamp, updatedAt: timestamp })
@@ -35,7 +36,7 @@ export function createMessagesStorageScenes(context: SlurpMessagesContext) {
         if (!current || current.sceneChatId !== sceneChatId) return false;
         await tx
           .update(slurpThreads)
-          .set({ sceneChatId: null, sceneStartedAt: null, updatedAt: new Date().toISOString() })
+          .set({ sceneChatId: null, sceneStartedAt: null, updatedAt: slurpWorldNow().toISOString() })
           .where(eq(slurpThreads.id, threadId));
         return true;
       });

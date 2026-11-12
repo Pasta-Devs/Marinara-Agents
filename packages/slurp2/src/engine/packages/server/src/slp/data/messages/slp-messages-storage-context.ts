@@ -59,7 +59,7 @@ import {
 } from "../../modules/messages/slp-rapport.js";
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
 import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../../modules/economy/slp-creator-pricing.js";
-import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slp-messages-storage-helpers.js";
+import { DAY, int, json, mapCommission, mapMessage, mapThread, now, realNow } from "./slp-messages-storage-helpers.js";
 import type {
   SlurpCommission,
   SlurpMessage,
@@ -148,7 +148,7 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
           effectsAppliedAt: null,
           failedAt: null,
           createdAt: timestamp,
-          updatedAt: timestamp,
+          updatedAt: realNow(),
         });
       } catch (error) {
         if (!isSlurpFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
@@ -379,7 +379,7 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
     const claimToken = newId();
     await db
       .update(slurpPaymentCompensations)
-      .set({ status: "charging", claimToken, updatedAt: now() })
+      .set({ status: "charging", claimToken, updatedAt: realNow() })
       .where(and(eq(slurpPaymentCompensations.id, compensationId), eq(slurpPaymentCompensations.status, "created")));
     const claimed = (
       await db
@@ -400,7 +400,7 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
     if (!db) throw new Error("Slurp compensation database is unavailable");
     await db
       .update(slurpPaymentCompensations)
-      .set({ status: "charged", updatedAt: now() })
+      .set({ status: "charged", updatedAt: realNow() })
       .where(eq(slurpPaymentCompensations.id, compensationId));
   }
 
@@ -445,7 +445,7 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
     }
     await db
       .update(slurpPaymentCompensations)
-      .set({ status: "charged", updatedAt: now() })
+      .set({ status: "charged", updatedAt: realNow() })
       .where(and(eq(slurpPaymentCompensations.id, row.id), eq(slurpPaymentCompensations.status, "charging")));
   }
 

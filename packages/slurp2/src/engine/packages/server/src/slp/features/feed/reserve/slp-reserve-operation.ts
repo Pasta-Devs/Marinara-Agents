@@ -40,6 +40,7 @@ import {
 } from "../../../data/feed/slp-opportunity-storage.js";
 import { slpCreatorsInScene } from "../../messages/slp-messages-contract.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 class SlpCreatorAttemptUnavailableError extends Error {
@@ -60,7 +61,7 @@ export function isCreatorNightQuietTime(at: Date): boolean {
   return hour >= 23 || hour < 7;
 }
 
-export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Promise<SlurpReservePollOutcome> {
+export async function prepareNextCreatorReservePost(db: DB, at = slurpWorldNow()): Promise<SlurpReservePollOutcome> {
   const noodle = createSlurpStorage(db);
   // "feed.posting-rate" events scale posts per day; the reserve storage reads the same value (R1-112).
   const settings = await noodle.getPostingSettings(at);
@@ -376,7 +377,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
           };
         }
       }
-      const completedAt = new Date();
+      const completedAt = slurpWorldNow();
       try {
         const filled = await noodle.fillNoodlerScheduledPost(selectedSlotId, {
           generatedAt: completedAt.toISOString(),
@@ -421,7 +422,7 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
   return locked.acquired ? locked.value : "busy";
 }
 
-export async function reconcileCreatorReserve(db: DB, at = new Date()): Promise<number> {
+export async function reconcileCreatorReserve(db: DB, at = slurpWorldNow()): Promise<number> {
   const noodle = createSlurpStorage(db);
   await noodle.reconcileNoodlerPreparedPosts(at);
   return noodle.publishDueNoodlerPreparedPosts(at);
@@ -429,7 +430,7 @@ export async function reconcileCreatorReserve(db: DB, at = new Date()): Promise<
 
 export async function runCreatorAutoPostPoll(
   db: DB,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{ published: number; reserve: Awaited<ReturnType<typeof prepareNextCreatorReservePost>> }> {
   const noodle = createSlurpStorage(db);
   return runSlurpAutoPostPollOperations({

@@ -42,6 +42,7 @@ const maintenance = (...terms: string[]) => place("autopurge", "all-slurp", ...t
  */
 export const SLP_BACKSTAGE_PAGE_PLACEMENT: Record<string, SlpBackstagePlacement> = {
   spice: slurp("spice", "spice", "spicy", "adult", "heat", "level", "tastes", "language"),
+  clock: slurp("clock", "world clock", "world date", "skip days", "checkpoints", "restore"),
 };
 
 /** One searchable, canonical Backstage home for every persisted setting. */

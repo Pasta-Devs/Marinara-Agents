@@ -29,6 +29,7 @@ import {
 } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createFeedPostStorage2(context: SlurpStorageContext) {
   const {
     db,
@@ -116,7 +117,12 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         .where(eq(slpPosts.id, id));
       return this.getPostById(id);
     },
-    async claimPostImage(id: string, token: string, leaseUntil: string, at = now()): Promise<SlpPost | null> {
+    async claimPostImage(
+      id: string,
+      token: string,
+      leaseUntil: string,
+      at = new Date().toISOString(),
+    ): Promise<SlpPost | null> {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(slpPosts).where(eq(slpPosts.id, id));
         const row = rows[0];
@@ -144,7 +150,12 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         return mapPost(row);
       });
     },
-    async renewPostImageClaim(id: string, token: string, leaseUntil: string, at = now()): Promise<boolean> {
+    async renewPostImageClaim(
+      id: string,
+      token: string,
+      leaseUntil: string,
+      at = new Date().toISOString(),
+    ): Promise<boolean> {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(slpPosts).where(eq(slpPosts.id, id));
         const row = rows[0];

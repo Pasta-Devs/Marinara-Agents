@@ -277,7 +277,10 @@ const slurpStorage = read(join(server, "services/storage/slurp.storage.ts"));
 // a viewer threw "toISOString is not a function" and returned a 500.
 // The Creator's own subscription price is now read into `basePrice` between `at` and
 // `existingWallet` (platform-event pricing), so the two declarations are no longer adjacent.
-assert.match(slurpStorage, /const at = new Date\(\);[\s\S]*?const existingWallet = settings\.walletEnabled/u);
+assert.match(
+  slurpStorage,
+  /const at = (?:new Date|slurpWorldNow)\(\);[\s\S]*?const existingWallet = settings\.walletEnabled/u,
+);
 // The persona switcher read the Engine's own wallet field, which defaults to 999_999.
 assert.match(slurpStorage, /listViewerWallets[\s\S]{0,700}?coins: \(await getWalletNow\(personaId\)\)\.coins/u);
 

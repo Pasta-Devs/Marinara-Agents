@@ -1,3 +1,4 @@
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Talkativeness: use generated schedule personality traits to shape reply behavior.
  *
@@ -84,7 +85,7 @@ export function talkativenessTypingMultiplier(talkativeness: number): number {
 export function hasConversationGoneIdle(
   lastFanMessageAt: string | null,
   inactivityThresholdMinutes: number,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
 ): boolean {
   if (!lastFanMessageAt) return true;
 

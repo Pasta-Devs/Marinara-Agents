@@ -48,5 +48,5 @@ assert.match(settings, /walletEnabled: true/u);
 assert.doesNotMatch(settings, /Wallet economy\. Off by default/u);
 
 // 7. The trends tick never fails the world tick.
-assert.match(scheduler, /advanceSlurpTrends\(app\.db, new Date\(\)\)\.catch\(/u);
+assert.match(scheduler, /advanceSlurpTrends\(app\.db, slurpWorldNow\(\)\)\.catch\(/u);
 console.log("slurp2 quick wins ok");

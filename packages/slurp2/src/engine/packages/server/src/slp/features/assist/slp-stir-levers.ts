@@ -53,6 +53,7 @@ import { slurpTrendClean } from "../../modules/discovery/slp-trends.js";
 import { undoSlpDeskLever, type SlpDeskUndo } from "./slp-desk-levers.js";
 import { readSlurpStirDramas, undoSlurpDramaLever, type SlurpDramaUndo } from "../world/slp-world-contract.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** What one Undo takes back. Kept in the plays ledger; never sent to the app. */
 type SteeringPatch = Partial<Omit<SlpCreatorSteering, "nudges" | "support">>;
 
@@ -89,7 +90,7 @@ const running = (occurrence: { status: string; endsAt: string }, at: Date) =>
   occurrence.status === "active" && occurrence.endsAt > at.toISOString();
 
 /** The ids and names every world lever takes. Reads only. */
-export async function readSlpStirWorld(db: DB, at = new Date()): Promise<SlpStirWorld & SlpStirTrends> {
+export async function readSlpStirWorld(db: DB, at = slurpWorldNow()): Promise<SlpStirWorld & SlpStirTrends> {
   const storage = createSlurpStorage(db);
   const [ties, settings, occurrences, accounts] = await Promise.all([
     readSlurpStirTies(db),
@@ -156,7 +157,7 @@ async function startSlpEventOnce(
   input: SlpActionParsed<"start-event">,
 ): Promise<SlpAssistOutcome<{ occurrenceId: string }> | LeverDone<{ occurrenceId: string }>> {
   const storage = createSlurpStorage(db);
-  const at = new Date();
+  const at = slurpWorldNow();
   if (
     (await storage.listStoryOccurrences()).some(
       (occurrence: { blueprintId: string; status: string; endsAt: string }) =>
@@ -382,7 +383,7 @@ export async function runSlpStartTrend(
   const trend = await startSlurpTrend(
     db,
     { label: input.label, source: "stir", starterId: input.accountId ?? null, lean: input.lean },
-    new Date(),
+    slurpWorldNow(),
   );
   if (!trend) return { ok: false, status: 409, error: "Slurp has enough trends going, or that one already is." };
   return { ok: true, value: { trendId: trend.id }, undo: { kind: "trend", id: trend.id } };

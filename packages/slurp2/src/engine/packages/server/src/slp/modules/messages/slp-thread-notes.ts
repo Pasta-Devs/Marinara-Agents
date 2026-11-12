@@ -1,3 +1,4 @@
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * What one creator has learned about one fan, as two short lists.
  *
@@ -271,7 +272,7 @@ export function incrementFollowUpCount(note: SlurpThreadNote): SlurpThreadNote {
     metadata: {
       ...note.metadata,
       followUpCount: (note.metadata?.followUpCount ?? 0) + 1,
-      lastFollowUp: new Date().toISOString(),
+      lastFollowUp: slurpWorldNow().toISOString(),
     },
   };
 }

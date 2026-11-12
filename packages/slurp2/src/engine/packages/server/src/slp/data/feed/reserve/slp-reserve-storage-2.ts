@@ -29,6 +29,7 @@ import { linkSlurpPurposePost } from "../slp-purpose-storage.js";
 import { findSlurpOpportunityBySlot, recordSlurpPromiseKept } from "../slp-opportunity-storage.js";
 import { slurpTrendQuoteOf } from "../../../modules/discovery/slp-trends.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 // One publish pass at a time: the startup reconcile and the first poll could overlap, and two
 // passes both read a row as "prepared" before either marks it published (#35).
 let publishing: Promise<number> | null = null;
@@ -64,7 +65,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
   const storage = {
     /** `skipCreatorIds`: Creators busy in a roleplay scene (docs/SCENES.md); their posts wait. */
     async publishDueNoodlerPreparedPosts(
-      at = new Date(),
+      at = slurpWorldNow(),
       skipCreatorIds: ReadonlySet<string> = new Set(),
     ): Promise<number> {
       while (publishing) await publishing.catch(() => 0);
@@ -280,7 +281,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
         publishing = null;
       }
     },
-    async reconcileNoodlerPreparedPosts(at = new Date()): Promise<number> {
+    async reconcileNoodlerPreparedPosts(at = slurpWorldNow()): Promise<number> {
       // Posting settings: "feed.posting-rate" events scale posts per day here (R1-112).
       const settings = await this.getPostingSettings();
       const repaired = await db.transaction(async (tx) => {
@@ -425,7 +426,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
       }
       return repaired + discarded.length;
     },
-    async getNoodlerReserveStatus(at = new Date()): Promise<SlurpReserveStatus> {
+    async getNoodlerReserveStatus(at = slurpWorldNow()): Promise<SlurpReserveStatus> {
       // Posting settings: "feed.posting-rate" events scale posts per day here (R1-112).
       const settings = await this.getPostingSettings();
       const state = await this.ensureNoodlerReserveState(at);

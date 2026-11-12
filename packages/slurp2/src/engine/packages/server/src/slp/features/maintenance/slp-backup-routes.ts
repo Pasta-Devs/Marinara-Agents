@@ -7,11 +7,13 @@ import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { isRestoreInspectionExpired, restoreImportSettingsRequested } from "../../modules/maintenance/slp-backup.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slpTimelineRoutes } from "./slp-timeline-routes.js";
 import { createSlpBackupJobs, type SlpBackupJobs } from "./slp-backup-jobs.js";
 
 type RestoreInspection = Parameters<SlpBackupJobs["restoreInspections"]["set"]>[1];
 
 export async function slpBackupRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
+  const jobs = createSlpBackupJobs(app, deps);
   const {
     createBackupJob,
     backupJobs,
@@ -20,7 +22,8 @@ export async function slpBackupRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     RESTORE_INSPECTION_RETENTION_MS,
     restoreInspections,
     createRestoreJob,
-  } = createSlpBackupJobs(app, deps);
+  } = jobs;
+  slpTimelineRoutes(app, deps, jobs);
   app.post("/backup/jobs", async (_req, reply) => reply.code(202).send(await createBackupJob()));
   app.get("/backup/jobs/:id", async (req, reply) => {
     const job = backupJobs.get((req.params as { id: string }).id);

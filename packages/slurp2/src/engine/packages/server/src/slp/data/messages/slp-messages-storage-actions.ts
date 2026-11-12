@@ -76,6 +76,7 @@ import type {
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createMessagesStorageActions(context: SlurpMessagesContext) {
   const {
     db,
@@ -414,7 +415,7 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
       await db
         .update(slurpThreads)
         .set({
-          coolUntil: new Date(Date.now() + hours * 3_600_000).toISOString(),
+          coolUntil: new Date(slurpWorldNowMs() + hours * 3_600_000).toISOString(),
           strikes: String(activeSlurpStrikes(thread.strikes, thread.lastStrikeAt) + 1),
           lastStrikeAt: timestamp,
           updatedAt: timestamp,
@@ -541,7 +542,7 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
 
     /** Keep the Creator online in this thread for at least `minutes` more. Never shortens a longer window. */
     async keepOnlineFor(threadId: string, minutes: number): Promise<void> {
-      const until = new Date(Date.now() + minutes * 60_000).toISOString();
+      const until = new Date(slurpWorldNowMs() + minutes * 60_000).toISOString();
       const current = (await context.storage.getThreadById(threadId))?.extendedOnlineUntil ?? null;
       if (current && current >= until) return;
       await context.storage.setExtendedOnline(threadId, until);

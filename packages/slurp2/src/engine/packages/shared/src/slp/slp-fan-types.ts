@@ -14,6 +14,7 @@
  * same reason: a hand-edited or imported type lands on the nearest legal value instead of throwing
  * the whole audience away.
  */
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { z } from "zod";
 import { slpFilledDefault } from "./slp-schema-defaults.js";
 
@@ -419,7 +420,7 @@ export type SlurpFanMemorySubject = {
  */
 export function slurpFanMemoryForPrompt(
   tie: SlurpFanMemorySubject | null | undefined,
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): string | undefined {
   if (!tie) return undefined;
   const days = (value: string | null | undefined): number | null => {

@@ -128,14 +128,14 @@ export async function slurpCanonAnchorsFor(
   if (!text.trim()) return cached?.anchors ?? null;
   const key = anchorKey(text);
   if (cached?.key === key) return cached.anchors;
-  if (!inFlight.has(accountId) && (failedUntil.get(accountId) ?? 0) <= at.getTime()) {
+  if (!inFlight.has(accountId) && (failedUntil.get(accountId) ?? 0) <= Date.now()) {
     inFlight.add(accountId);
     void storeReading(db, accountId, key, read)
       .then(() => failedUntil.delete(accountId))
       .catch((error: unknown) => {
         // A busy connection sent nothing: the next post tries again.
         if (slpIsAdmissionFailure(error)) return;
-        failedUntil.set(accountId, at.getTime() + FAILED_WAIT_MS);
+        failedUntil.set(accountId, Date.now() + FAILED_WAIT_MS);
         logger.warn(error, "[slurp] Canon anchor extraction failed; posts stay on the classic planner for now");
       })
       .finally(() => inFlight.delete(accountId));

@@ -3,10 +3,11 @@ import type { DB } from "../../../db/connection.js";
 import { slurpMessageClaims, slurpMessages, slurpThreads } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
-import { mapThread, now } from "./slp-messages-storage-helpers.js";
+import { mapThread, now, realNow } from "./slp-messages-storage-helpers.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import type { SlurpThread } from "./slp-messages-storage-types.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createSlurpReplyMethods(db: DB) {
   /**
    * The fan's newest message in a thread: the one a reply owes an answer to. A Support desk notice or
@@ -74,7 +75,7 @@ export function createSlurpReplyMethods(db: DB) {
           creatorAccountId,
           replyMessageId: null,
           generationEpoch: String(thread.generationEpoch ?? "0"),
-          claimedAt: now(),
+          claimedAt: realNow(),
         });
         return { status: "claimed", claimId: id };
       } catch (error) {
@@ -120,7 +121,7 @@ export function createSlurpReplyMethods(db: DB) {
         .from(slurpThreads)
         .where(inArray(slurpThreads.state, ["active", "request"]))
         .orderBy(asc(slurpThreads.lastMessageAt));
-      const nowMs = Date.now();
+      const nowMs = slurpWorldNowMs();
       const nowIso = new Date(nowMs).toISOString();
       // A Creator in a roleplay scene answers nobody until it ends; her threads keep their obligation
       // but must not take the oldest-first slots from everyone else (docs/SCENES.md).

@@ -18,7 +18,7 @@ const targeted = operation.slice(operation.indexOf("export async function refres
 assert.match(targeted, /\{ allowStory: false, playerAsked: true \}/u, "manual refresh must not produce Stories");
 assert.match(
   targeted,
-  /while \(result\.status === "busy" && Date\.now\(\) - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS\)/u,
+  /while \(result\.status === "busy" && (?:Date\.now|slurpWorldNowMs)\(\) - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS\)/u,
 );
 
 const generation = read("server/src/services/slurp/slurp-generation.service.ts");

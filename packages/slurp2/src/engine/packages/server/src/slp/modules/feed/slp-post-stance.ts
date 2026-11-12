@@ -50,6 +50,7 @@ import {
 import type { SlurpGoalProgress } from "../projects/slp-goal.js";
 import type { SlurpStanceEvidence } from "../world/slp-stance.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpPostStance = {
   /** The prompt lines, already ordered. Empty when there is nothing worth saying. */
   instructions: string[];
@@ -117,7 +118,7 @@ export function resolveSlurpPostStance(input: SlurpPostStanceInput): SlurpPostSt
   }
 
   // Rule 4. What is true right now, in its own words.
-  for (const modifier of activeSlurpModifiers(state, input.at ?? new Date())) {
+  for (const modifier of activeSlurpModifiers(state, input.at ?? slurpWorldNow())) {
     instructions.push(SLURP_MODIFIERS[modifier.kind].line);
     evidence.push({ layer: "right now", value: modifier.kind, effect: modifier.source || "in effect" });
   }

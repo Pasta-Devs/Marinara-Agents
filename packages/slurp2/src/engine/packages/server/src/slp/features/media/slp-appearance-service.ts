@@ -27,6 +27,7 @@ import {
 import type { SlpAppearanceProfileMode } from "../../../../../shared/src/slp/slp-social.types.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const MISSING_APPEARANCE = "Add an appearance to this Creator or its linked character before generating pictures.";
 const appearanceFlights = new Map<string, Promise<string>>();
 
@@ -101,7 +102,7 @@ async function resolveImageAppearanceOnce(input: Parameters<typeof resolveImageA
       sourceRevisionToken: evidence.sourceRevisionToken,
       confidence: candidate.confidence,
       accepted: shouldAutoAcceptSlpAppearance(input.mode, candidate.confidence),
-      now: new Date().toISOString(),
+      now: slurpWorldNow().toISOString(),
     });
     const saved = await storage.saveNoodlerAppearanceProfile(input.account.id, profile, input.regenerate);
     if (!saved) throw new Error("The character card changed while preparing its appearance. Try again.");

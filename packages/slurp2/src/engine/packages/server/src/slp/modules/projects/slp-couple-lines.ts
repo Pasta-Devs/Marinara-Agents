@@ -7,6 +7,7 @@ import { slurpForcedCoupleLine } from "./slp-couple-words.js";
 import { slurpCouplePartners, slurpNameList } from "./slp-couple-group.js";
 import { slpGenderWords } from "../../../../../shared/src/slp/slp-gender.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** An ex stays on a Creator's mind (and in their posts and chats) this long after the breakup. */
 export const SLURP_EX_DAYS = 30;
 
@@ -60,7 +61,7 @@ function oneRelationshipLine(
   names: ReadonlyMap<string, string>,
   options: SlurpRelationshipOptions,
 ): string {
-  const at = options.at ?? new Date();
+  const at = options.at ?? slurpWorldNow();
   const withThem = options.withId ? slurpCoupleOf(couples, creatorId, options.withId) : null;
   const couple = withThem ?? slurpCoupleFor(couples, creatorId) ?? slurpRecentEx(couples, creatorId, at);
   if (!couple) return "";

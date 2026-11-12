@@ -34,6 +34,7 @@ import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.j
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { slurpPackGate } from "../../modules/world/events/slp-content-packs.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createProjectsStorage2(context: SlurpStorageContext) {
   const {
     db,
@@ -86,7 +87,7 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
      * Move on every arc whose chapter has run out of time. Returns the arcs that moved, so the world
      * tick can tell the player about them. Writes nothing when nothing moved.
      */
-    async tickProjects(creatorAccountId: string, at = new Date()): Promise<SlurpProject[]> {
+    async tickProjects(creatorAccountId: string, at = slurpWorldNow()): Promise<SlurpProject[]> {
       const projects = await this.listProjects(creatorAccountId);
       const { pace } = await this.resolveArcConfig(creatorAccountId);
       const ticked: SlurpProject[] = [];
@@ -118,7 +119,7 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
      */
     async rollAutoArc(
       creatorAccountId: string,
-      at = new Date(),
+      at = slurpWorldNow(),
       /** Asks the model for an arc; resolves the raw JSON or null. Without it, generated picks start nothing. */
       generate?: (creatorAccountId: string, partnerIds: string[]) => Promise<unknown>,
     ): Promise<SlurpProject | null> {
@@ -256,7 +257,10 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
     },
     /** Store a model-invented arc the player asked for. It waits as a suggestion until accepted. */
     async addGeneratedProject(creatorAccountId: string, raw: unknown): Promise<SlurpProject | null> {
-      const project = slurpGeneratedArcProject(newId(), raw, new Date(), { origin: "manual", status: "suggested" });
+      const project = slurpGeneratedArcProject(newId(), raw, slurpWorldNow(), {
+        origin: "manual",
+        status: "suggested",
+      });
       if (!project) return null;
       const projects = await this.listProjects(creatorAccountId);
       await writeProjects(creatorAccountId, [project, ...projects]);

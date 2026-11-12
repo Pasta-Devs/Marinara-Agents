@@ -14,6 +14,7 @@ import {
 } from "../../modules/feed/slp-refresh-schedule.js";
 import { slpExtensionOn, slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const SLP_SCHEDULER_INITIAL_DELAY_MS = 20_000;
 const SLP_SCHEDULER_MAX_POLL_MS = 60_000;
 // Nothing is scheduled while automatic refresh is off, so the poll only needs to notice that the
@@ -132,7 +133,7 @@ export function startSlpRefreshScheduler(
     polling = true;
     let nextDelay = SLP_SCHEDULER_MAX_POLL_MS;
     try {
-      const now = new Date();
+      const now = slurpWorldNow();
       const settings = await noodle.getSettings();
       // "Pause all": no feed refresh while Slurp is paused.
       if (settings.paused) return;
@@ -172,7 +173,7 @@ export function startSlpRefreshScheduler(
         payload: { mode: "noodler" },
       } satisfies InjectOptions;
       const response = await (runInternalRoute ? runInternalRoute(request) : app.inject(request));
-      const completedAt = new Date();
+      const completedAt = slurpWorldNow();
       const latest = await noodle.ensureRefreshSchedule(completedAt);
       if (response.statusCode >= 200 && response.statusCode < 300) {
         const latestDueTimes = dueSlpRefreshTimes(latest, completedAt);
@@ -195,7 +196,7 @@ export function startSlpRefreshScheduler(
       const failed = await persistFailure(latest, responseError(response.payload), response.statusCode, completedAt);
       nextDelay = nextSlpSchedulerPollDelayMs(failed, completedAt);
     } catch (error) {
-      const at = new Date();
+      const at = slurpWorldNow();
       const message = error instanceof Error ? error.message : String(error);
       try {
         const schedule = await noodle.ensureRefreshSchedule(at);

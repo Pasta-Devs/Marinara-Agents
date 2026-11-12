@@ -4,6 +4,7 @@ import { slurpDemandTrends } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import { normalizeSlurpDemandTopic, SLURP_DEMAND_MAX_AGE_MS } from "../../modules/feed/slp-demand.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpDemandTrend = { topic: string; count: number; lastSeenAt: string };
 
 /** Count one more ask for a topic. Returns the new count, or 0 for an empty topic. */
@@ -11,7 +12,7 @@ export async function bumpSlurpDemandTrend(
   db: DB,
   creatorAccountId: string,
   rawTopic: string,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<number> {
   const topic = normalizeSlurpDemandTopic(rawTopic);
   if (!topic) return 0;
@@ -45,7 +46,7 @@ export async function bumpSlurpDemandTrend(
 export async function topSlurpDemandTrend(
   db: DB,
   creatorAccountId: string,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpDemandTrend | null> {
   const rows = await db
     .select()

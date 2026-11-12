@@ -47,6 +47,7 @@ import { now } from "../../../utils/id-generator.js";
 import { SlpCreatorPostSortKey } from "../../modules/feed/slp-post-page.js";
 import { slurpCreatorPostingIntervalMs } from "../../modules/feed/slp-posting-interval.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Newest candidates the image-retry poll inspects per pass. */
 export const IMAGE_RETRY_SCAN_LIMIT = 200;
 

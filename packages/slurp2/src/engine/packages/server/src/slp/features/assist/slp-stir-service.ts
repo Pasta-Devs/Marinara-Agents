@@ -57,6 +57,7 @@ import type {
   SlpStirView,
 } from "../../../../../shared/src/slp/slp-stir.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Account = {
   id: string;
   displayName: string;
@@ -275,7 +276,7 @@ export async function planSlpStir(
 export async function playSlpStir(
   db: DB,
   input: { steps: readonly SlpStirStep[]; origin: SlpStirOrigin; personaId?: string },
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{ play: SlpStirPlay; results: { ok: boolean; value: unknown; error: string | null }[] }> {
   const { steps, results, undo } = await slpRunStirSteps<SlpActionUndo>(input.steps, (action, stepInput) =>
     runSlpActionWithUndo(db, action, stepInput),
@@ -348,7 +349,7 @@ export async function undoSlpStirPlay(
 export async function readSlpStirView(
   db: DB,
   own: (account: Account) => boolean,
-  at = new Date(),
+  at = slurpWorldNow(),
   personaId?: string,
 ): Promise<SlpStirView> {
   const storage = createSlurpStorage(db);

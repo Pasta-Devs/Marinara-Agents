@@ -55,6 +55,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpPendingKind = "commission" | "question" | "opener" | "delivery" | "desk";
 
 /** Rewritten per drain. Small: a long absence must not stall the first read behind a queue. */
@@ -363,7 +364,7 @@ export async function drainSlurpPendingText(
       const attempts = Math.max(0, Number.parseInt(String(row.attempts ?? "0"), 10) || 0) + 1;
       await db
         .update(slurpPendingText)
-        .set({ status: "running", attempts: String(attempts), claimedAt: now() })
+        .set({ status: "running", attempts: String(attempts), claimedAt: new Date().toISOString() })
         .where(eq(slurpPendingText.id, id));
       if (!(await claimSlurpModelBudget(db, settings.modelBudget, jobKind, undefined, paced ? undefined : false))) {
         await db

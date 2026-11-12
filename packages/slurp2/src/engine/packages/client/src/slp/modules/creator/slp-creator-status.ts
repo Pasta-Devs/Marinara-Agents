@@ -1,3 +1,4 @@
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Whether a Creator reads as around right now.
  *
@@ -32,7 +33,7 @@ export function slurpCreatorStatus(
     /** Schedule availability is authoritative when the Creator has one. */
     scheduledOnline?: boolean;
   },
-  now: number = Date.now(),
+  now: number = slurpWorldNowMs(),
 ): SlurpCreatorStatus {
   if (input.scheduledOnline === true) return "online";
   if (input.scheduledOnline === false) return "away";
@@ -56,7 +57,7 @@ export function slurpCreatorDetailedStatus(
     activity?: string | null;
     minutesUntilOnline?: number | null;
   },
-  now: number = Date.now(),
+  now: number = slurpWorldNowMs(),
 ): SlurpCreatorDetailedStatus {
   const basicStatus = slurpCreatorStatus(input, now);
 

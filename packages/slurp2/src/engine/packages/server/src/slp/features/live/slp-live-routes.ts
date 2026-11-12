@@ -10,6 +10,7 @@ import { endSlurpLiveShow, hostSlurpLiveShow, simulateSlurpLiveShow } from "./sl
 import { beatSlurpLiveShow } from "./slp-live-beat.js";
 import { tipSlurpLiveShow } from "./slp-live-tip.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const LIVE_OFF = "Live is switched off in Backstage.";
 const TIP_ERRORS = {
   missing: [404, "No such show"],
@@ -28,7 +29,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
   app.get("/slurp/live", async () => {
     // Nobody is live while Live is off: an empty list keeps the polling screen's console clean.
     if (!(await liveOn())) return { shows: [] };
-    const now = Date.now();
+    const now = slurpWorldNowMs();
     const shows = (await storage.listOpen()).filter((show) => Date.parse(show.endsAt) > now);
     return {
       shows: shows.map((show) => ({
@@ -49,7 +50,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     const { personaId } = z.object({ personaId: z.string().trim().min(1).optional() }).parse(req.query);
     const stored = await storage.get((req.params as { id: string }).id);
     if (!stored) return reply.code(404).send({ error: "No such show" });
-    const at = new Date();
+    const at = slurpWorldNow();
     // Watching moves the show to now, so the screen never waits for the next world tick.
     const show = stored.endedAt ? stored : await simulateSlurpLiveShow(app.db, stored, settings, at);
     if (!show.endedAt) await storage.save(show.id, { watchedAt: at.toISOString() });
@@ -95,7 +96,12 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     if (!show) return reply.code(404).send({ error: "No such show" });
     return {
       beat: result,
-      show: slpLiveView(show, Date.now(), personaId ? `persona:${personaId}` : null, (await noodle.getSettings()).live),
+      show: slpLiveView(
+        show,
+        slurpWorldNowMs(),
+        personaId ? `persona:${personaId}` : null,
+        (await noodle.getSettings()).live,
+      ),
     };
   });
 
@@ -122,7 +128,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     if (result !== "booked") return reply.code(TIP_ERRORS[result][0]).send({ error: TIP_ERRORS[result][1] });
     const show = await storage.get(showId);
     return show
-      ? slpLiveView(show, Date.now(), `persona:${parsed.data.personaId}`, (await noodle.getSettings()).live)
+      ? slpLiveView(show, slurpWorldNowMs(), `persona:${parsed.data.personaId}`, (await noodle.getSettings()).live)
       : reply.code(404).send({ error: "No such show" });
   });
 
@@ -147,7 +153,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     if (result !== "booked") return reply.code(TIP_ERRORS[result][0]).send({ error: TIP_ERRORS[result][1] });
     const show = await storage.get(showId);
     return show
-      ? slpLiveView(show, Date.now(), `persona:${parsed.data.personaId}`, (await noodle.getSettings()).live)
+      ? slpLiveView(show, slurpWorldNowMs(), `persona:${parsed.data.personaId}`, (await noodle.getSettings()).live)
       : reply.code(404).send({ error: "No such show" });
   });
 
@@ -168,7 +174,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     if (result === "missing") return reply.code(404).send({ error: "No such Creator" });
     if (result === "live") return reply.code(409).send({ error: "This Creator is already live" });
     const settings = await noodle.getSettings();
-    return slpLiveView(result.show, Date.now(), `persona:${parsed.data.personaId}`, settings.live);
+    return slpLiveView(result.show, slurpWorldNowMs(), `persona:${parsed.data.personaId}`, settings.live);
   });
 
   app.post("/slurp/live/:id/end", async (req, reply) => {
@@ -177,6 +183,6 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     const show = await endSlurpLiveShow(app.db, { showId: (req.params as { id: string }).id, ...parsed.data });
     if (show === "missing") return reply.code(404).send({ error: "No such show" });
     const settings = await noodle.getSettings();
-    return slpLiveView(show, Date.now(), `persona:${parsed.data.personaId}`, settings.live);
+    return slpLiveView(show, slurpWorldNowMs(), `persona:${parsed.data.personaId}`, settings.live);
   });
 }

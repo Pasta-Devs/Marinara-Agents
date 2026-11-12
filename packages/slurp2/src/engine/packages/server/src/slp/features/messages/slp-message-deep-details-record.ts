@@ -4,6 +4,7 @@ import type { SlurpRapport } from "../../modules/messages/slp-rapport.js";
 import type { SlurpThreadNote } from "../../modules/messages/slp-thread-notes.js";
 import type { SlurpStance } from "../../modules/world/slp-stance.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const numberOrNull = (value: unknown) => (typeof value === "number" ? value : null);
 
 /** The reply generator's state at the moment a direct message was written, as its Deep details record. */
@@ -35,7 +36,7 @@ export function buildSlurpMessageDeepDetailsRecord(ctx: {
   const options = ctx.options as Record<string, unknown>;
   return {
     version: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt: slurpWorldNow().toISOString(),
     model: {
       provider: String(input.connection.provider ?? ""),
       model: String(input.connection.model ?? ""),

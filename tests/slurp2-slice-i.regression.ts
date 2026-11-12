@@ -469,7 +469,7 @@ const creator = (id: string, text: string, tags: string[], over: Partial<SlurpTi
   );
   assert.match(
     server("features/projects/slp-creator-ties-routes.ts"),
-    /owesPost: slurpDealOwesPost\(deal, new Date\(\)\)/u,
+    /owesPost: slurpDealOwesPost\(deal, (?:new Date|slurpWorldNow)\(\)\)/u,
   );
   const panel = client("features/projects/SlpCollabsPanel.tsx");
   assert.match(panel, /deal\.creatorId === creatorId && deal\.owesPost/u);
