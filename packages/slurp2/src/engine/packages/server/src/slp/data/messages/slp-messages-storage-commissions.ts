@@ -51,7 +51,7 @@ import {
 } from "../../modules/messages/slp-rapport.js";
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
 import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../../modules/economy/slp-creator-pricing.js";
-import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slp-messages-storage-helpers.js";
+import { DAY, int, json, mapCommission, mapMessage, mapThread, now, realNow } from "./slp-messages-storage-helpers.js";
 import type {
   SlurpCommission,
   SlurpMessage,
@@ -63,6 +63,7 @@ import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import { slurpCommissionWasCharged } from "./slp-messages-storage-refunds.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const briefCreations = new Map<string, Promise<unknown>>();
 
 export function createMessagesStorageCommissions(context: SlurpMessagesContext) {
@@ -509,7 +510,7 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
       const acceptedUndelivered =
         (commission.state === "accepted" || commission.state === "cancellation_pending") &&
         by === "viewer" &&
-        (!commission.deliverAt || commission.deliverAt <= new Date().toISOString());
+        (!commission.deliverAt || commission.deliverAt <= slurpWorldNow().toISOString());
       if (commission.state === "accepted" && by === "viewer" && !acceptedUndelivered) return commission;
       if (!acceptedUndelivered && commission.state !== "brief" && commission.state !== "quoted") return commission;
       if (acceptedUndelivered) {
@@ -533,7 +534,7 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
             // A delivery claim holds for five minutes, as in `deliverCommissionUnlocked`. A delivery
             // that threw kept its claim forever, and the fan's cancel then did nothing.
             (current.deliveryId && Date.parse(String(current.deliveryClaimedAt ?? "")) > Date.now() - 5 * 60 * 1000) ||
-            (current.deliverAt && String(current.deliverAt) > new Date().toISOString())
+            (current.deliverAt && String(current.deliverAt) > slurpWorldNow().toISOString())
           )
             return false;
           await tx
@@ -678,7 +679,7 @@ export function createMessagesStorageCommissions(context: SlurpMessagesContext) 
           : isNull(slurpCommissions.deliveryClaimToken);
         await tx
           .update(slurpCommissions)
-          .set({ deliveryId, deliveryClaimToken, deliveryClaimedAt: now(), updatedAt: now() })
+          .set({ deliveryId, deliveryClaimToken, deliveryClaimedAt: realNow(), updatedAt: now() })
           .where(and(eq(slurpCommissions.id, id), eq(slurpCommissions.state, "accepted"), previousClaim));
         const owned = (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
         return owned?.deliveryClaimToken === deliveryClaimToken;

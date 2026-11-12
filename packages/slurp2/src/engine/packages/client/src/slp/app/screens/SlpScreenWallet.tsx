@@ -33,6 +33,7 @@ import { showSlpSubscriptionCancelledToast } from "../../modules/chrome/slp-subs
 import { SlpCreatorFrame } from "./SlpHomeHelpers";
 import { SlpCollectCard } from "./SlpCollectCard";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 type LedgerEntry = { kind: string; amount: number; at: string; note?: string; binding?: { creatorAccountId: string } };
 
 // Icon tiles in tokens only (design language §2): money warm, spends on Creators pink, locks violet.
@@ -106,7 +107,7 @@ export function SlurpWalletView({
   useEffect(() => {
     if (!nextRefillAt || refillReady) return;
     // Clamped to the 32-bit timer limit; a later boundary re-arms after the next read.
-    const wait = Math.min(Math.max(0, new Date(nextRefillAt).getTime() - Date.now()) + 500, 2_000_000_000);
+    const wait = Math.min(Math.max(0, new Date(nextRefillAt).getTime() - slurpWorldNowMs()) + 500, 2_000_000_000);
     const timer = window.setTimeout(() => void refetchWallet(), wait);
     return () => window.clearTimeout(timer);
   }, [nextRefillAt, refillReady, refetchWallet]);
@@ -203,7 +204,7 @@ export function SlurpWalletView({
           defaultValue: "Next refill {{time}}",
           // Today: the clock time only; a later day names the weekday first.
           time:
-            slpDayKey(nextRefillAt) === slpDayKey(Date.now())
+            slpDayKey(nextRefillAt) === slpDayKey(slurpWorldNowMs())
               ? formatClockTime(nextRefillAt, i18n.language)
               : `${formatUpcomingDay(nextRefillAt, i18n.language)} ${formatClockTime(nextRefillAt, i18n.language)}`,
         })

@@ -37,6 +37,7 @@ import { planSlurpCreatorPeerReactions, type SlurpWorldAction } from "../../../.
 import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { slurpPulseTieAdvance, type SlurpPulseAction } from "../../../../../shared/src/slp/slp-world-pulse.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The local day, so a per-pair roll is made once a day rather than on every page load. */
 /** The Creator the player's page is with, when the fans know: they write about her now and then. */
 async function publicPartnerName(db: DB, pageId: string): Promise<string | null> {
@@ -320,7 +321,7 @@ export async function applyPulse(
   if (!actor) return false;
   const isComment = action.kind === "comment";
   const pulseContext = () => {
-    const now = Date.now();
+    const now = slurpWorldNowMs();
     for (const [postId, entry] of PULSE_CONTEXTS) if (now - entry.at > PULSE_CONTEXT_MS) PULSE_CONTEXTS.delete(postId);
     const entry = PULSE_CONTEXTS.get(action.postId) ?? { at: now, context: slurpCommentContext(noodle, action.postId) };
     PULSE_CONTEXTS.set(action.postId, entry);

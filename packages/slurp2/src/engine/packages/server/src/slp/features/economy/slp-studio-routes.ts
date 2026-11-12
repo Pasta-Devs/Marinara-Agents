@@ -17,6 +17,7 @@ import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.j
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;
   app.get("/slurp/studio", async (req, reply) => {
@@ -36,7 +37,7 @@ export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     const studioFunnel = await population.countFollowersForCreators(operated.map((account) => account.id));
     const studioScaleSettings = await noodle.getSettings();
     const studioScale = slurpPlatformScaleMultiplier(studioScaleSettings.platformScale);
-    const at = new Date();
+    const at = slurpWorldNow();
     const stored = await readSlurpStudioSnapshot(app.db, viewer.id);
     // A visit measures from the last visit's mark; the reads after it measure from the same point.
     const snapshot = visit ? stored : (stored?.baseline ?? stored);
@@ -213,7 +214,7 @@ export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       if (interaction.type === "reply") entry.replies += 1;
       realCounts.set(interaction.postId, entry);
     }
-    const at = new Date();
+    const at = slurpWorldNow();
     const creators = await Promise.all(
       accounts.map(async (account) => {
         const followers = slurpCreatorReach(

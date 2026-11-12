@@ -17,6 +17,7 @@ import {
   type SlpSteeringSupportNote,
 } from "../../../../../shared/src/slp/slp-creator-steering.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const slurpSteeringKey = (creatorAccountId: string) => `slurp2.creator.${creatorAccountId}.steering`;
 
 export async function readSlurpCreatorSteering(db: DB, creatorAccountId: string): Promise<SlpCreatorSteering> {
@@ -69,7 +70,7 @@ export async function addSlurpCreatorNudge(
   db: DB,
   creatorAccountId: string,
   input: { text: string; story: boolean },
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlpCreatorSteering | null> {
   const current = await readSlurpCreatorSteering(db, creatorAccountId);
   if (current.nudges.length >= SLP_STEERING_NUDGES_MAX) return null;

@@ -56,6 +56,7 @@ import { addSlurpModifier } from "../../modules/creators/slp-creator-state.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { slpArcsLive, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createProjectsStorage1(context: SlurpStorageContext) {
   const {
     db,
@@ -95,7 +96,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
         return null;
       }
       const earnings = await this.getEarnings(creatorAccountId);
-      const goal = openSlurpGoal(label, target, earnings.lifetime, new Date());
+      const goal = openSlurpGoal(label, target, earnings.lifetime, slurpWorldNow());
       if (!goal) return null;
       await settingsStore.set(slurpGoalKey(creatorAccountId), JSON.stringify(goal));
       return goal;
@@ -220,7 +221,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       const type = input.typeId
         ? ((await this.getSettings()).arcLibrary.find((entry) => entry.id === input.typeId) ?? null)
         : null;
-      const made = makeSlurpProject(newId(), { ...input, type }, new Date());
+      const made = makeSlurpProject(newId(), { ...input, type }, slurpWorldNow());
       if (!made) return null;
       const project = slurpCrossoverStart(made, creatorIds);
       const rest = project.intensity === "focus" ? slurpArcsWithoutFocus(projects) : projects;
@@ -340,7 +341,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       const index = projects.findIndex((project) => project.id === projectId);
       if (index < 0) return null;
       const current = projects[index]!;
-      const at = new Date();
+      const at = slurpWorldNow();
       // The first published post that carries a poll opens the chapter's choice.
       // ponytail: two posts prepared before the first publishes both carry the poll; only the first one's votes count.
       const pollPost =
@@ -381,7 +382,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       const current = projects[index]!;
       if (action === "resume" && !(await this.arcHasRoom(creatorAccountId, current))) return null;
       const votes = action === "choose" ? await this.projectPollVotes(current) : [];
-      const next = slurpProjectDirect(current, action, new Date(), value, Math.random, votes);
+      const next = slurpProjectDirect(current, action, slurpWorldNow(), value, Math.random, votes);
       if (!next) return null;
       projects[index] = next;
       await writeProjects(creatorAccountId, projects);
@@ -389,7 +390,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       return next;
     },
     /** The Creator's story tags, for a stage's `when` ways out. */
-    async storyTags(creatorAccountId: string, at = new Date()): Promise<ReadonlySet<string>> {
+    async storyTags(creatorAccountId: string, at = slurpWorldNow()): Promise<ReadonlySet<string>> {
       return new Set(slurpStoryState({ facts: await this.listStoryFacts(), creatorId: creatorAccountId, at }).tags);
     },
     /**
@@ -469,7 +470,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
           sourceKind: "arc",
           sourceId: `${after.id}:${after.stage}`,
           label: after.title,
-          at: new Date(),
+          at: slurpWorldNow(),
         });
       const ending = finished ? after.storyline?.endings.find((entry) => entry.key === after.ending)?.label : null;
       if (ending && settings?.shareWithMemory)

@@ -11,6 +11,7 @@ import {
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slurpCollabPostIdsForCreator } from "../projects/slp-projects-contract.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const slpCreatorViewerFeedQuerySchema = slpCreatorViewerPersonaSchema
   .extend({
     tab: z.enum(["following", "all"]).default("all"),
@@ -95,7 +96,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await noodle.patchViewerSettings(parsed.data.personaId, {
       subtree: "social",
-      patch: { noodlerFeedSeenAt: new Date().toISOString() },
+      patch: { noodlerFeedSeenAt: slurpWorldNow().toISOString() },
     });
     if (!viewer) return reply.code(404).send({ error: "Slurp viewer persona not found" });
     return viewer;
@@ -151,7 +152,9 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
           accountIds: accounts.map((account) => account.id),
           creatorSearchAccountIds,
           search: parsed.data.search,
-          since: new Date(Date.now() - (await noodle.getSettings()).storyLifetimeHours * 60 * 60 * 1000).toISOString(),
+          since: new Date(
+            slurpWorldNowMs() - (await noodle.getSettings()).storyLifetimeHours * 60 * 60 * 1000,
+          ).toISOString(),
         });
     const feedItems = [
       ...page.items,

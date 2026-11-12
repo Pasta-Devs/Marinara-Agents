@@ -6,6 +6,7 @@ import type { DB } from "../../../db/connection.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import type { SlpStirPlay } from "../../../../../shared/src/slp/slp-stir.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLURP_STIR_PLAYS_KEY = "slurp2.stir-plays";
 const KEEP = 40;
 
@@ -58,13 +59,13 @@ async function readDismissed(db: DB): Promise<Record<string, string>> {
 }
 
 /** The suggestion ids still put away now. */
-export async function readSlurpStirDismissed(db: DB, at = new Date()): Promise<Set<string>> {
+export async function readSlurpStirDismissed(db: DB, at = slurpWorldNow()): Promise<Set<string>> {
   const now = at.toISOString();
   return new Set(Object.entries(await readDismissed(db)).flatMap(([id, until]) => (until > now ? [id] : [])));
 }
 
 /** Put one suggestion away for a few days; expired entries are dropped on the way. */
-export async function dismissSlurpStirSuggestion(db: DB, id: string, at = new Date()): Promise<void> {
+export async function dismissSlurpStirSuggestion(db: DB, id: string, at = slurpWorldNow()): Promise<void> {
   const now = at.toISOString();
   const kept = Object.entries(await readDismissed(db)).filter(([, until]) => until > now);
   const until = new Date(at.getTime() + DISMISS_DAYS * 86_400_000).toISOString();

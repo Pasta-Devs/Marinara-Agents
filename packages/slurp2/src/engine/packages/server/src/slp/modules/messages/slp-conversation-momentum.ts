@@ -1,3 +1,4 @@
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Conversation momentum: tracks whether a thread is in active flow or has gone cold.
  *
@@ -39,7 +40,7 @@ export type MomentumAnalysis = {
 export function calculateConversationMomentum(
   lastMessageAt: string,
   messageHistory?: Array<{ role: "viewer" | "creator"; createdAt: string }>,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
 ): MomentumAnalysis {
   const lastActivityAge = Math.max(0, (now.getTime() - Date.parse(lastMessageAt)) / 60_000);
 

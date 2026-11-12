@@ -33,6 +33,7 @@ import { tryCreatorAccountOperation } from "../../base/locking/slp-account-opera
 import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../../../services/agents/agent-concurrency.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type GenerateAndApplyCreatorPostResult =
   | {
       status: "generated";

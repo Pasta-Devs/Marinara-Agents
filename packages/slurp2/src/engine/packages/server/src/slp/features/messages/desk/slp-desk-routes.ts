@@ -16,6 +16,7 @@ import { slpDeskAdjust } from "../../../../../../shared/src/slp/slp-support-desk
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../../shared/src/slp/slp-support.js";
 import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export const SLP_DESK_OFF = "The Support desk is switched off in Backstage.";
 
 const personaBody = z.object({ personaId: z.string().trim().min(1), creatorAccountId: z.string().trim().min(1) });
@@ -102,7 +103,7 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
     const current = await readSlurpSupportDesk(app.db, parsed.data.creatorAccountId);
     if (!current.ticket || current.ticket.status === "resolved")
       return reply.code(409).send({ error: "There is no open ticket." });
-    const at = new Date();
+    const at = slurpWorldNow();
     const settings = (await slurp.getSettings()).supportDesk;
     await updateSlurpSupportDesk(app.db, parsed.data.creatorAccountId, (desk) =>
       desk.ticket && desk.ticket.status !== "resolved"

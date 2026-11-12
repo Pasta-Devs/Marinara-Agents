@@ -77,6 +77,7 @@ import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 import { countSlurpUnreadThreads } from "../../modules/messages/slp-unread-count.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createMessagesStorageBase(context: SlurpMessagesContext) {
   const {
     db,
@@ -527,7 +528,7 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
       const subscriptions = await slurp.listSubscriptionsForViewer(viewerAccountId);
       const active = subscriptions.find((entry) => entry.creatorAccountId === creatorAccountId);
       facts.subscribed = Boolean(active);
-      facts.subscribedDays = active ? Math.max(0, (Date.now() - Date.parse(active.createdAt)) / DAY) : 0;
+      facts.subscribedDays = active ? Math.max(0, (slurpWorldNowMs() - Date.parse(active.createdAt)) / DAY) : 0;
 
       const tie = (await createSlurpPopulationStorage(db).listTiesForCreator(creatorAccountId)).find(
         (entry) => entry.memberId === viewerAccountId,
@@ -560,7 +561,9 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
             ? 0
             : fromViewer.reduce((sum, message) => sum + message.content.length, 0) / fromViewer.length;
         const last = fromViewer[fromViewer.length - 1];
-        facts.daysSinceViewerMessage = last ? Math.max(0, (Date.now() - Date.parse(last.createdAt)) / DAY) : null;
+        facts.daysSinceViewerMessage = last
+          ? Math.max(0, (slurpWorldNowMs() - Date.parse(last.createdAt)) / DAY)
+          : null;
         facts.commissionsDelivered = messages.filter((message) => message.kind === "commission_delivery").length;
       }
       // Paid through a period that has ended, with no live subscription row, is a lapse.

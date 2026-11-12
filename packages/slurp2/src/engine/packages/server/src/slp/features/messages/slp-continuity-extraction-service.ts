@@ -39,6 +39,11 @@ import {
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
+import {
+  SlurpWorldEpochChangedError,
+  slurpWorldEpoch,
+  slurpWorldNow,
+} from "../../../../../shared/src/slp/slp-world-clock.js";
 const CHECKPOINT_KEY = "slurp2.continuity-checkpoints";
 /** Threads one drain reads. The rest wait for the next open; nothing here is urgent. */
 const SLURP_EXTRACTION_IDLE_MS = 30 * 60_000;
@@ -74,15 +79,16 @@ const extractionInFlight = new Set<string>();
 export async function drainSlurpContinuityExtraction(
   db: DB,
   context: SlurpModelWorkerContext = "present",
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<number> {
   const slurp = createSlurpStorage(db);
   const settings = await slurp.getSettings();
   if (!slurpModelWorkerAllows(settings.modelBudget, context)) return 0;
+  const startEpoch = slurpWorldEpoch();
   const checkpoints = await readCheckpoints(db);
   const threads = (await db.select().from(slurpThreads))
     .filter((thread) => String(thread.lastMessageAt) > (checkpoints[String(thread.id)] ?? ""))
-    .filter((thread) => (failedUntil.get(String(thread.id)) ?? 0) <= at.getTime())
+    .filter((thread) => (failedUntil.get(String(thread.id)) ?? 0) <= Date.now())
     // Wait for a quiet thread: one call per message spent half the day's budget on "<3" and payment
     // markers. Read once the exchange has settled, as one batch.
     .filter((thread) => Date.parse(String(thread.lastMessageAt)) <= at.getTime() - SLURP_EXTRACTION_IDLE_MS)
@@ -258,13 +264,18 @@ export async function drainSlurpContinuityExtraction(
       checkpoints[threadId] = nextCheckpoint;
       failedUntil.delete(threadId);
     } catch (error) {
-      failedUntil.set(threadId, at.getTime() + FAILED_THREAD_WAIT_MS);
+      // A restore during the model call is not this thread's failure: no wait, and the drain stops, because the
+      // threads it has left were read before the restore. The next batch reads the restored state.
+      if (error instanceof SlurpWorldEpochChangedError || slurpWorldEpoch() !== startEpoch) return recorded;
+      failedUntil.set(threadId, Date.now() + FAILED_THREAD_WAIT_MS);
       // The checkpoint stays put, so the same batch is read again next time.
       logger.warn(error, "[slurp-continuity] Extraction failed for one thread; it is retried later");
     } finally {
       extractionInFlight.delete(threadId);
     }
   }
+  // A restore while the model calls ran replaced the checkpoint map with the restored one: do not write the old one back.
+  if (slurpWorldEpoch() !== startEpoch) return recorded;
   await createAppSettingsStorage(db).set(CHECKPOINT_KEY, JSON.stringify(checkpoints));
   return recorded;
 }

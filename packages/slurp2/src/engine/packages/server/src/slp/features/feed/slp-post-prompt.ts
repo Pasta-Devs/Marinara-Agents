@@ -47,6 +47,7 @@ import {
   slpCreatorIdentityInstruction,
 } from "./slp-public-identity.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type FormattedCreatorGenerationRequest = SlpCreatorGenerationRequest & {
   /** The composer asked for an image on this post, whatever the scheduler's image setting is. */
   generateImage?: boolean;
@@ -366,7 +367,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
     protect(input.scheduleContext ?? "") || "No active Conversation Schedule is available for this Creator today.",
     "",
     "# Publication timing",
-    buildSlurpPostTimingContext(input.generatedAt ?? new Date(), input.publicationTime),
+    buildSlurpPostTimingContext(input.generatedAt ?? slurpWorldNow(), input.publicationTime),
     "",
     "# Recent Slurp posts",
     formatSlurpPostHistory(input.recentPosts, protect, input.otherCreatorSubjects, !input.beat),
@@ -377,7 +378,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
           "",
           slurpPostBriefSection(
             input.beat,
-            input.publicationTime ?? input.generatedAt ?? new Date(),
+            input.publicationTime ?? input.generatedAt ?? slurpWorldNow(),
             protect,
             input.beatCompany,
             input.beatDay,

@@ -30,6 +30,7 @@ import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { CREATOR_PRICES_KEY } from "../host/slp-storage-constants.js";
 import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createEconomyStorage2(context: SlurpStorageContext) {
   const {
     db,
@@ -142,8 +143,8 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
             // show the outcome ("Gamble unlock · Free" / "−75") after the toast is gone.
             const note = freeOnUnaffordable ? `gamble: ${postId}` : postId;
             const charged =
-              spend(wallet, "unlock", price, new Date(), note) ??
-              (freeOnUnaffordable ? spend(wallet, "unlock", 0, new Date(), note) : null);
+              spend(wallet, "unlock", price, slurpWorldNow(), note) ??
+              (freeOnUnaffordable ? spend(wallet, "unlock", 0, slurpWorldNow(), note) : null);
             if (!charged) return null;
             // The spend carries no receipt id, so `receipts[postId]` was always empty and every unlock
             // reported 0: no Creator share, no income note, and a paid gamble told the fan "free".
@@ -223,7 +224,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
         if (!settings.walletEnabled || this.isSyntheticWalletHolder(viewerAccountId)) return stored;
         const previousWalletValue = await settingsStore.get(slurpWalletKey(viewerAccountId));
         const previousViewerSettingsValue = await settingsStore.get(slurpViewerSettingsKey(viewerAccountId));
-        const at = new Date();
+        const at = slurpWorldNow();
         const gone = new Set<string>();
         for (const creatorAccountId of Object.keys(stored.subscriptions))
           if (!(await this.getNoodlerAccountById(creatorAccountId, { includeHidden: true })))
@@ -297,7 +298,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
      * What a new subscription costs right now: the weekly price moved by any running platform event,
      * exactly as `subscribe` charges it. Buttons, the 402 check and the price filter read this (R1-066).
      */
-    async getCreatorSubscriptionCharge(creatorAccountId: string, at: Date = new Date()): Promise<number> {
+    async getCreatorSubscriptionCharge(creatorAccountId: string, at: Date = slurpWorldNow()): Promise<number> {
       const [base, settings] = await Promise.all([
         this.getCreatorSubscriptionPrice(creatorAccountId),
         this.getSettings(),
@@ -322,7 +323,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
      */
     async getCreatorSubscriptionCharges(
       creators: readonly { id: string; settings: { profile: { tags?: string[] } } }[],
-      at: Date = new Date(),
+      at: Date = slurpWorldNow(),
     ): Promise<Record<string, number>> {
       const [prices, settings, occurrences] = await Promise.all([
         readCreatorPrices(),
@@ -361,7 +362,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
       return enqueueFinancial(async () => {
         const wallet = await getWalletNow(viewerAccountId);
         if (!settings.walletEnabled) return wallet;
-        const next = earn(wallet, kind, new Date(), note, economyFrom(settings));
+        const next = earn(wallet, kind, slurpWorldNow(), note, economyFrom(settings));
         return next === wallet ? wallet : writeWallet(viewerAccountId, next);
       });
     },
@@ -371,7 +372,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
       return enqueueFinancial(async () => {
         const wallet = await getWalletNow(viewerAccountId);
         if (!settings.walletEnabled) return wallet;
-        const next = applyStipend(wallet, new Date(), economyFrom(settings));
+        const next = applyStipend(wallet, slurpWorldNow(), economyFrom(settings));
         return next === wallet ? wallet : writeWallet(viewerAccountId, next);
       });
     },
@@ -399,7 +400,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
         if (!creator || (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId)) return null;
         const sender = await getWalletNow(viewerAccountId);
         const binding: SlurpWalletSpendBinding = { viewerAccountId, creatorAccountId: creator.id };
-        const charged = spend(sender, "tip", amount, new Date(), creator.handle, operationId, binding);
+        const charged = spend(sender, "tip", amount, slurpWorldNow(), creator.handle, operationId, binding);
         if (!charged) return null;
         if (charged === sender) return sender;
         await writeWallet(viewerAccountId, charged);
@@ -430,7 +431,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
       if (!settings.walletEnabled || amount <= 0) return this.getWallet(viewerAccountId);
       const run = enqueueFinancial(async () => {
         const wallet = await getWalletNow(viewerAccountId);
-        const charged = spend(wallet, kind, amount, new Date(), note, operationId);
+        const charged = spend(wallet, kind, amount, slurpWorldNow(), note, operationId);
         return charged ? writeWallet(viewerAccountId, charged) : null;
       });
       return run;
@@ -442,7 +443,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
     async refundCoins(viewerAccountId: string, amount: number, note: string, id?: string): Promise<SlurpWallet> {
       const run = enqueueFinancial(async () => {
         const wallet = await getWalletNow(viewerAccountId);
-        return writeWallet(viewerAccountId, credit(wallet, "income", amount, new Date(), `refund: ${note}`, id));
+        return writeWallet(viewerAccountId, credit(wallet, "income", amount, slurpWorldNow(), `refund: ${note}`, id));
       });
       return run;
     },
@@ -453,7 +454,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
         const wallet = await getWalletNow(viewerAccountId);
         // SlurpCoins off: everything is on the house, so no balance moves.
         if (!settings.walletEnabled) return wallet;
-        return writeWallet(viewerAccountId, credit(wallet, "income", amount, new Date(), note, id));
+        return writeWallet(viewerAccountId, credit(wallet, "income", amount, slurpWorldNow(), note, id));
       });
     },
     async reverseCreatorIncome(creatorAccountId: string, amount: number, note: string, id?: string): Promise<boolean> {
@@ -461,7 +462,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
       if (!creator) return false;
       const run = enqueueFinancial(async () => {
         const current = await this.getEarnings(creator.id);
-        const next = reverseEarnings(current, amount, new Date(), `reversal: ${note}`, id);
+        const next = reverseEarnings(current, amount, slurpWorldNow(), `reversal: ${note}`, id);
         if (next === current) return Boolean(id && current.receipts[id]?.kind === "reversal");
         await writeEarnings(creator.id, next);
         return true;

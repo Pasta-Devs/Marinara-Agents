@@ -1,3 +1,8 @@
+import {
+  SlurpWorldEpochChangedError,
+  assertSlurpWorldEpoch,
+  slurpWorldEpoch,
+} from "../../../../../shared/src/slp/slp-world-clock.js";
 import { assertSlurpNotPaused } from "../model/slp-pause.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 
@@ -46,10 +51,16 @@ export async function generateSlpImageWithRetry<T>(
   assertSlurpNotPaused();
   let lastError: unknown;
 
+  // Read once for the whole run: a retry after a restore must not pass a fresh epoch check.
+  const epoch = slurpWorldEpoch();
   for (let attempt = 1; attempt <= SLP_IMAGE_GENERATION_MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await generate(attempt);
+      const image = await generate(attempt);
+      assertSlurpWorldEpoch(epoch);
+      return image;
     } catch (error) {
+      if (error instanceof SlurpWorldEpochChangedError) throw error;
+      assertSlurpWorldEpoch(epoch);
       // A busy connection is not a transient provider fault: retrying cannot admit us any
       // sooner, and the caller needs the rejection now so the run defers instead of degrading.
       if (slpIsAdmissionFailure(error)) throw error;

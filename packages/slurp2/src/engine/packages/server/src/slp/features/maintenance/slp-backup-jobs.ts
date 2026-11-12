@@ -7,6 +7,8 @@ import { claimSlurpBackup } from "../../base/locking/slp-operation-lock.js";
 import { pauseNoodleAutoPost } from "../feed/slp-feed-contract.js";
 import { pauseSlpRefreshScheduler } from "../feed/slp-feed-contract.js";
 import { listCreatorMediaFiles, removeAllCreatorMedia, restoreCreatorMediaFile } from "../../base/media/slp-media.js";
+import { loadSlurpWorldClock } from "../../data/settings/slp-world-clock-storage.js";
+import { slurpWorldNowMs, slurpWorldOffsetMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { type StoredZipEntry, jsonEntry, writeStoredZip, readStoredZip } from "../../modules/maintenance/slp-backup.js";
 import { createWriteStream } from "fs";
 import { finished } from "node:stream/promises";
@@ -151,58 +153,68 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
     }
   };
 
+  /** Write the whole archive for `job` to `filePath`. Callers own exclusivity (`runExclusive`). */
+  const writeBackupArchive = async (job: BackupJob, filePath: string) => {
+    job.state = "preparing";
+    job.stage = "reading-data";
+    job.detail = "Reading Slurp database records.";
+    const backup = await noodle.exportSlurpBackup();
+    job.creators = backup.tables.accounts.filter(slurpAccountRowIsCreator).length;
+    job.posts = backup.tables.posts.length;
+    job.interactions = backup.tables.interactions.length;
+    const mediaFiles = await listCreatorMediaFiles();
+    job.mediaFiles = mediaFiles.length;
+    job.stage = "writing-archive";
+    job.state = "writing";
+    job.detail = `Writing archive. ${mediaFiles.length} media file${mediaFiles.length === 1 ? "" : "s"} found.`;
+    const entries: StoredZipEntry[] = [
+      {
+        name: "manifest.json",
+        read: async () =>
+          jsonEntry("manifest.json", {
+            format: "marinara-slurp-backup",
+            formatVersion: 1,
+            sourcePackage: "slurp2",
+            exportedAt: new Date().toISOString(),
+            dataFiles: Object.keys(backup.tables),
+            mediaIncluded: true,
+            // A checkpoint restore checks both against what the archive holds.
+            mediaCount: mediaFiles.length,
+            world: { nowMs: slurpWorldNowMs(), offsetMs: slurpWorldOffsetMs() },
+          }).data,
+      },
+      {
+        name: "data/app-settings.json",
+        read: async () => jsonEntry("data/app-settings.json", backup.settings).data,
+      },
+      ...Object.entries(backup.tables).map(([name, rows]) => ({
+        name: `data/${name}.json`,
+        read: async () => jsonEntry(`data/${name}.json`, rows).data,
+      })),
+      ...mediaFiles.map((media) => ({
+        name: media.relativePath,
+        read: () => readFile(media.absolutePath),
+      })),
+    ];
+    const output = createWriteStream(filePath, { mode: 0o600 });
+    const outputFinished = finished(output);
+    await Promise.all([
+      writeStoredZip(output, entries, ({ index, total, bytes, name }) => {
+        job.mediaCompleted = Math.max(0, index - (entries.length - mediaFiles.length));
+        if (name.startsWith("media/")) job.mediaBytes += bytes;
+        job.detail = `Writing ${index} of ${total} archive entries. Last: ${name}`;
+      }),
+      outputFinished,
+    ]);
+    job.filePath = filePath;
+    job.archiveBytes = (await stat(filePath)).size;
+  };
+
   const createBackupJob = async () => {
     const job = newBackupJob("export", "Waiting for the backup worker.");
     backupJobs.set(job.id, job);
     void runExclusive(job, async () => {
-      job.state = "preparing";
-      job.stage = "reading-data";
-      job.detail = "Reading Slurp database records.";
-      const backup = await noodle.exportSlurpBackup();
-      job.creators = backup.tables.accounts.filter(slurpAccountRowIsCreator).length;
-      job.posts = backup.tables.posts.length;
-      job.interactions = backup.tables.interactions.length;
-      const mediaFiles = await listCreatorMediaFiles();
-      job.mediaFiles = mediaFiles.length;
-      job.stage = "writing-archive";
-      job.state = "writing";
-      job.detail = `Writing archive. ${mediaFiles.length} media file${mediaFiles.length === 1 ? "" : "s"} found.`;
-      const entries: StoredZipEntry[] = [
-        {
-          name: "manifest.json",
-          read: async () =>
-            jsonEntry("manifest.json", {
-              format: "marinara-slurp-backup",
-              formatVersion: 1,
-              sourcePackage: "slurp2",
-              exportedAt: new Date().toISOString(),
-              dataFiles: Object.keys(backup.tables),
-              mediaIncluded: true,
-            }).data,
-        },
-        {
-          name: "data/app-settings.json",
-          read: async () => jsonEntry("app-settings.json", backup.settings).data,
-        },
-        ...Object.entries(backup.tables).map(([name, rows]) => ({
-          name: `data/${name}.json`,
-          read: async () => jsonEntry(`${name}.json`, rows).data,
-        })),
-        ...mediaFiles.map((media) => ({ name: media.relativePath, read: () => readFile(media.absolutePath) })),
-      ];
-      const filePath = join(DATA_DIR, `${BACKUP_FILE_PREFIX}${job.id}.zip`);
-      const output = createWriteStream(filePath);
-      const outputFinished = finished(output);
-      await Promise.all([
-        writeStoredZip(output, entries, ({ index, total, name, bytes }) => {
-          job.mediaCompleted = Math.max(0, index - (entries.length - mediaFiles.length));
-          if (name.startsWith("media/")) job.mediaBytes += bytes;
-          job.detail = `Writing ${index} of ${total} archive entries. Last: ${name}.`;
-        }),
-        outputFinished,
-      ]);
-      job.filePath = filePath;
-      job.archiveBytes = (await stat(filePath)).size;
+      await writeBackupArchive(job, join(DATA_DIR, `${BACKUP_FILE_PREFIX}${job.id}.zip`));
       job.stage = "completed";
       job.state = "completed";
       job.terminalAt = Date.now();
@@ -221,6 +233,8 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
       formatVersion?: number;
       sourcePackage?: string;
       exportedAt?: string;
+      mediaCount?: number;
+      world?: { nowMs?: number; offsetMs?: number };
     };
     if (manifest.format !== "marinara-slurp-backup") throw new Error("This file is not a Slurp backup.");
     if (manifest.formatVersion !== 1) {
@@ -270,42 +284,51 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
     };
   }
 
+  /** Replace all Slurp data with `archive`. Callers own exclusivity (`runExclusive`). */
+  const applyRestoreArchive = async (job: BackupJob, archive: Buffer, importSettings: boolean, keepPaused = false) => {
+    job.state = "preparing";
+    job.stage = "reading-archive";
+    job.detail = "Reading the backup archive.";
+    const inspection = inspectRestoreArchive(archive);
+    const { tables, settings, mediaEntries } = inspection;
+    job.creators = (tables.accounts ?? []).filter(slurpAccountRowIsCreator).length;
+    job.posts = tables.posts?.length ?? 0;
+    job.interactions = tables.interactions?.length ?? 0;
+    job.stage = "writing-data";
+    job.state = "writing";
+    job.detail = `Restoring ${job.creators} creator${job.creators === 1 ? "" : "s"} and ${job.posts} post${job.posts === 1 ? "" : "s"}.`;
+    const result = await noodle.importSlurpBackup({ settings, tables, importSettings });
+    job.skipped = result.skipped;
+    // The archive's world offset is in the database now: load it before anything else reads the clock.
+    await loadSlurpWorldClock(app.db);
+    // The archive's settings carry their own paused flag; the timeline jobs keep Slurp stopped until they finish.
+    if (keepPaused) await noodle.updateSlurpSettings({ paused: true });
+    // An older backup keeps Slurp Support's lines inside persona chats; give them Support's own threads.
+    await migrateSlurpSupportThreads(app.db);
+    job.stage = "writing-media";
+    job.detail = "Restoring media files.";
+    job.mediaFiles = mediaEntries.length;
+    // Media is replaced wholesale alongside the rows it belongs to, so a restore cannot leave
+    // images from the previous data set attached to posts that no longer exist.
+    removeAllCreatorMedia();
+    for (const [name, data] of mediaEntries) {
+      if (restoreCreatorMediaFile(name, data)) {
+        job.mediaCompleted += 1;
+        job.mediaBytes += data.length;
+      } else {
+        job.skipped.push(name);
+      }
+    }
+    // The archive carries its own world offset; bring the process in line with the restored data.
+    await loadSlurpWorldClock(app.db);
+    return inspection;
+  };
+
   const createRestoreJob = (archive: Buffer, importSettings: boolean) => {
     const job = newBackupJob("restore", "Waiting for the restore worker.");
     backupJobs.set(job.id, job);
     void runExclusive(job, async () => {
-      job.state = "preparing";
-      job.stage = "reading-archive";
-      job.detail = "Reading the backup archive.";
-      const inspection = inspectRestoreArchive(archive);
-      const { tables, settings, mediaEntries } = inspection;
-
-      job.creators = (tables.accounts ?? []).filter(slurpAccountRowIsCreator).length;
-      job.posts = tables.posts?.length ?? 0;
-      job.interactions = tables.interactions?.length ?? 0;
-      job.stage = "writing-data";
-      job.state = "writing";
-      job.detail = `Restoring ${job.creators} creator${job.creators === 1 ? "" : "s"} and ${job.posts} post${job.posts === 1 ? "" : "s"}.`;
-      const result = await noodle.importSlurpBackup({ settings, tables, importSettings });
-      job.skipped = result.skipped;
-      // An older backup keeps Slurp Support's lines inside persona chats; give them Support's own threads.
-      await migrateSlurpSupportThreads(app.db);
-
-      job.stage = "writing-media";
-      job.detail = "Restoring media files.";
-      job.mediaFiles = mediaEntries.length;
-      // Media is replaced wholesale alongside the rows it belongs to, so a restore cannot leave
-      // images from the previous data set attached to posts that no longer exist.
-      removeAllCreatorMedia();
-      for (const [name, data] of mediaEntries) {
-        if (restoreCreatorMediaFile(name, data)) {
-          job.mediaCompleted += 1;
-          job.mediaBytes += data.length;
-        } else {
-          job.skipped.push(name);
-        }
-      }
-
+      await applyRestoreArchive(job, archive, importSettings);
       job.stage = "completed";
       job.state = "completed";
       job.terminalAt = Date.now();
@@ -322,6 +345,12 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
     createBackupJob,
     inspectRestoreArchive,
     createRestoreJob,
+    // The timeline jobs (slp-timeline-jobs.ts) compose these inside their own exclusive run.
+    newBackupJob,
+    failJob,
+    runExclusive,
+    writeBackupArchive,
+    applyRestoreArchive,
   };
 }
 

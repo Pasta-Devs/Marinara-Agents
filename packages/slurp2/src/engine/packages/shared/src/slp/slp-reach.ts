@@ -27,6 +27,7 @@
  * list. See `slurp-wallet.ts` for the numbers that must stay exact.
  */
 
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slp-tuning.js";
 
 /*
@@ -169,7 +170,7 @@ export function slurpCreatorReach(
      */
     scale?: number;
   },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
   tuning: SlurpSimulationTuning["reach"] = SLURP_REALISTIC_TUNING.reach,
 ): number {
   const spread = unitFor(input.accountId, "reach");
@@ -191,7 +192,7 @@ export function slurpCreatorReach(
 export function slurpPostImpressions(
   /** `accountId` lets the algorithm week apply. Without it the post gets its plain share. */
   input: { postId: string; createdAt: string; creatorReach: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   // Between 18% and 70% of the audience: the spread is what stops every post looking identical.
   const share = 0.18 + unitFor(input.postId, "impressions") * 0.52;
@@ -208,7 +209,7 @@ export function slurpPostImpressions(
  */
 export function slurpPostLikeCount(
   input: { postId: string; createdAt: string; creatorReach: number; realLikes: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   // 4%–14% of impressions like a post. Anything higher reads as fake.
   const rate = 0.04 + unitFor(input.postId, "likes") * 0.1;
@@ -221,7 +222,7 @@ export function slurpPostLikeCount(
  */
 export function slurpPostReplyCount(
   input: { postId: string; createdAt: string; creatorReach: number; realReplies: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   const rate = 0.002 + unitFor(input.postId, "replies") * 0.006;
   return Math.max(0, input.realReplies) + Math.round(slurpPostImpressions(input, at) * rate);
@@ -235,7 +236,7 @@ export function slurpPostReplyCount(
  */
 export function slurpPostUnlockCount(
   input: { postId: string; createdAt: string; creatorReach: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   const rate = 0.004 + unitFor(input.postId, "unlocks") * 0.012;
   return Math.round(slurpPostImpressions(input, at) * rate);

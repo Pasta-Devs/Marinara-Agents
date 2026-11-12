@@ -17,6 +17,10 @@ import { slurpCoupleOf } from "../packages/slurp2/src/engine/packages/server/src
 import { slurpChatBridgeRapportLine } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport.ts";
 import { SLURP_CONTINUITY_FACT_LABELS } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/continuity/slp-continuity-prompt.ts";
 
+const worldClockStubs = { slurpWorldNow: () => new Date(), slurpWorldNowMs: () => Date.now() };
+const runInNewContextWithClock = (code: string, context: Record<string, unknown>, ...rest: unknown[]) =>
+  (runInNewContext as (...args: unknown[]) => unknown)(code, { ...worldClockStubs, ...context }, ...rest);
+
 const source = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-chat-context.ts", import.meta.url),
 );
@@ -72,7 +76,7 @@ const arc = {
 };
 const ledgerReads: Array<{ creator: string; threadId: string | null }> = [];
 
-const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContext(
+const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContextWithClock(
   `${stripTypeScriptTypes(source.replace(/^import[\s\S]*?;\n/gm, "").replace(/^\s*export /gm, ""))}
   ({ buildSlurpChatContext, slurpCarryoverReach });`,
   {

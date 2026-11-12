@@ -5,12 +5,13 @@ import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js"
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { loadSlurpStoryState } from "./slp-story-state-service.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The Life panel (docs/STORYLINES.md, "State"): a Creator's conditions and what reaches the prompts. */
 export async function slpStoryStateRoutes(app: FastifyInstance, { noodle }: SlpRouteDeps) {
   app.get("/story/state/:accountId", async (req, reply) => {
     const { accountId } = req.params as { accountId: string };
     if (!(await noodle.getNoodlerAccountById(accountId))) return reply.code(404).send({ error: "Creator not found." });
-    const now = Date.now();
+    const now = slurpWorldNowMs();
     const facts = (await noodle.listStoryFacts()).filter(
       (fact) =>
         fact.scope === "creator" &&
@@ -27,7 +28,7 @@ export async function slpStoryStateRoutes(app: FastifyInstance, { noodle }: SlpR
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     if (!(await noodle.getNoodlerAccountById(accountId))) return reply.code(404).send({ error: "Creator not found." });
     const { days, tag, ...condition } = body.data;
-    const at = new Date();
+    const at = slurpWorldNow();
     // Checked as stored: the store drops a fact it cannot read, and the put has already freed the track.
     const fact = slpStoryFactSchema.safeParse({
       ...condition,

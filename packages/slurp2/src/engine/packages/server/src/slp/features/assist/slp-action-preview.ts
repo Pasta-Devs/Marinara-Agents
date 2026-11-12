@@ -36,6 +36,7 @@ import {
   slurpTrendStage,
 } from "../discovery/slp-discovery-contract.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Account = {
   id: string;
   displayName: string;
@@ -49,7 +50,7 @@ export async function previewSlpAction(
   db: DB,
   name: string,
   raw: unknown,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlpAssistOutcome<SlpActionPreview>> {
   if (!isSlpActionName(name)) return { ok: false, status: 404, error: `Slurp has no action called "${name}".` };
   if (!slpActionAllowed(await createSlurpStorage(db).getSettings(), name))

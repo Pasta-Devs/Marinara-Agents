@@ -15,6 +15,10 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
 import { slurp2Source } from "./slurp2-source";
 
+const worldClockStubs = { slurpWorldNow: () => new Date(), slurpWorldNowMs: () => Date.now() };
+const runInNewContextWithClock = (code: string, context: Record<string, unknown>, ...rest: unknown[]) =>
+  (runInNewContext as (...args: unknown[]) => unknown)(code, { ...worldClockStubs, ...context }, ...rest);
+
 const root = "../packages/slurp2/src/engine/packages/server/src/services/slurp/";
 const read = (file: string) => slurp2Source(new URL(`${root}${file}`, import.meta.url));
 const part = (source: string, start: string, end: string) => {
@@ -22,7 +26,7 @@ const part = (source: string, start: string, end: string) => {
   return source.slice(source.indexOf(start), source.indexOf(end));
 };
 const compile = (source: string, context: Record<string, unknown>) =>
-  runInNewContext(
+  runInNewContextWithClock(
     stripTypeScriptTypes(source.replace(/^import[\s\S]*?;\n/gm, "").replace(/^\s*export /gm, "")),
     context,
   );

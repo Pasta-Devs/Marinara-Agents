@@ -774,3 +774,8 @@ modules, rejected alternative, and migration consequence.
 - **Rejected alternatives:** a new run store with a new board (the editor, Director mode and crossovers would be
   gone until the editor PR); letting running arcs finish on the old chapter code (two runtimes at once).
 - **Consequence:** `modules/projects` stays; STORYLINES.md's "projects goes in PR 3" no longer holds.
+
+## The world clock lives in shared (2026-11-11)
+
+- **Decision:** `shared/src/slp/slp-world-clock.ts` holds the world clock (offset, epoch, `slurpWorldNow`). Shared holds it, not server `base/`, because the client and the shared rule modules read "now" too. Simulation code reads it; locks, leases, retries and poll spacing keep `Date.now()`. Purges also keep `Date.now()` so a date skip never ages data out. See `docs/WORLD-CLOCK.md`.
+- **Rejected alternatives:** a server-only clock (the client would show the real date and shared defaults would read the wrong time); rewriting every stored timestamp on a skip (history would change).

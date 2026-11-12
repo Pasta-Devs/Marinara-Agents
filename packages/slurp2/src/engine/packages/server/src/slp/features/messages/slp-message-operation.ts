@@ -69,6 +69,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
+import { slurpWorldNowMs, slurpWorldNow, slurpWorldOffsetMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpReplyOutcome =
   | { status: "replied"; message: SlurpMessage; pacing: SlurpReplyPacing }
   | { status: "queued"; pacing: SlurpReplyPacing }
@@ -143,7 +144,7 @@ export async function replyToSlurpMessage(
 
   // Nothing outranks a boundary. A creator who has walked away from this conversation has walked
   // away from it, whatever the rapport, the schedule or the tone dial say.
-  if (thread.coolUntil && thread.coolUntil > new Date().toISOString()) {
+  if (thread.coolUntil && thread.coolUntil > slurpWorldNow().toISOString()) {
     return { status: "cooling", until: thread.coolUntil };
   }
   // Busy in a scene, with this fan or another: nothing is answered until it ends.
@@ -188,7 +189,7 @@ export async function replyToSlurpMessage(
   // subscription shape pacing and tone but cannot strand an already-started conversation.
   const isRequest = thread.state === "request";
   if (isRequest && history.some((message) => message.role === "creator")) return { status: "ineligible" };
-  const triggerObligationCreatedAt = trigger?.createdAt ?? new Date().toISOString();
+  const triggerObligationCreatedAt = trigger?.createdAt ?? slurpWorldNow().toISOString();
   const subscriptions = await slurp.listSubscriptionsForViewer(thread.viewerAccountId);
   const subscribed = subscriptions.some((entry) => entry.creatorAccountId === thread.creatorAccountId);
   // A paid sexting session (docs/SPICY.md, item 2): fast replies, her full level, the phase in the prompt.
@@ -202,7 +203,7 @@ export async function replyToSlurpMessage(
 
   // Calculate mood with recovery (but pause recovery if hot conversation + negative mood)
   const minutesSinceMoodUpdate = thread.moodUpdatedAt
-    ? Math.max(0, (Date.now() - Date.parse(thread.moodUpdatedAt)) / 60_000)
+    ? Math.max(0, (slurpWorldNowMs() - Date.parse(thread.moodUpdatedAt)) / 60_000)
     : 0;
 
   let currentMood = thread.mood;
@@ -232,9 +233,10 @@ export async function replyToSlurpMessage(
   if ((pacing.mode === "queued" || pacing.mode === "delayed") && input.force !== true) {
     // A wait already running is kept. Each new fan message used to restart it, so a fan who kept
     // writing never got an answer until they stopped.
-    const running = thread.needsReply && thread.replyNotBeforeAt && thread.replyNotBeforeAt > new Date().toISOString();
+    const running =
+      thread.needsReply && thread.replyNotBeforeAt && thread.replyNotBeforeAt > slurpWorldNow().toISOString();
     if (!running) {
-      await messagesStore.setReplyNotBefore(thread.id, new Date(Date.now() + pacing.notBeforeMs).toISOString());
+      await messagesStore.setReplyNotBefore(thread.id, new Date(slurpWorldNowMs() + pacing.notBeforeMs).toISOString());
     }
     // She has seen it and is not answering yet. That is the whole meaning of a queued reply, and
     // it was indistinguishable from the app being broken because nothing recorded the noticing.
@@ -372,7 +374,7 @@ export async function replyToSlurpMessage(
           threadId: thread.id,
           senderAccountId: thread.creatorAccountId,
           content: bubble,
-          deliverAt: new Date(Date.now() + typingLeadMs + delayMs).toISOString(),
+          deliverAt: new Date(slurpWorldNowMs() + typingLeadMs + delayMs).toISOString(),
           generationEpoch: thread.generationEpoch,
           createdAt: triggerObligationCreatedAt,
         });
@@ -517,7 +519,7 @@ export async function replyToSlurpMessage(
             kind: price > 0 ? "ppv" : "text",
             content: image.caption ?? "",
             price,
-            unlockedAt: price > 0 ? null : new Date().toISOString(),
+            unlockedAt: price > 0 ? null : slurpWorldNow().toISOString(),
             metadata: {
               noodlerMediaPath: drawn.mediaPath,
               generatedContext: reply.imageMode,
@@ -630,7 +632,7 @@ export async function replyToSlurpMessage(
                 reason: reply.followUp.reason,
                 context: reply.followUp.context,
               },
-              new Date(),
+              slurpWorldNow(),
               relatedNoteId,
             );
 
@@ -660,7 +662,7 @@ export async function replyToSlurpMessage(
                   reason: detected.reason,
                   context: "Auto-detected from message content",
                 },
-                new Date(),
+                slurpWorldNow(),
                 undefined,
               );
               await messagesStore.addScheduledFollowUps(thread.id, followUps);
@@ -709,7 +711,12 @@ export async function replyToSlurpMessage(
     if (error instanceof SlurpMessageBudgetUnavailableError) {
       // Only the scheduler backs itself off. A player pressing the button must never push their own
       // reply an hour further away by pressing it again.
-      const retryAt = error.retryAt ?? (input.background ? new Date(Date.now() + 60 * 60_000).toISOString() : null);
+      // The budget's retry time is real-clock; reply-not-before is compared with world time, so move it by the offset.
+      const retryAt = error.retryAt
+        ? new Date(Date.parse(error.retryAt) + slurpWorldOffsetMs()).toISOString()
+        : input.background
+          ? new Date(slurpWorldNowMs() + 60 * 60_000).toISOString()
+          : null;
       if (retryAt) {
         await messagesStore.setReplyNotBefore(thread.id, retryAt);
         // Said plainly to the player: "away" hid that the AI budget, not the Creator, was the reason.

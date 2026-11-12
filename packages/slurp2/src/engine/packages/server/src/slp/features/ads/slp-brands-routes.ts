@@ -17,6 +17,7 @@ import { SLURP_GARNISH_PLATFORM } from "./slp-garnish-context.js";
 import { unlinkGarnishAdImage } from "./slp-garnish-image.js";
 import { storeGarnishPicture } from "./slp-garnish-image-service.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const picture = z
   .string()
   .max(16_000_000)
@@ -69,7 +70,7 @@ export async function slpBrandsRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       id,
       platform: SLURP_GARNISH_PLATFORM,
       origin: "user",
-      createdAt: new Date().toISOString(),
+      createdAt: slurpWorldNow().toISOString(),
       logoUrl: logo ? storeGarnishPicture(id, logo) : null,
     };
     return pool.saveBrand(brand);
@@ -87,7 +88,9 @@ export async function slpBrandsRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     const next: GarnishBrand = {
       ...brand,
       ...patch,
-      ...(enabled === undefined ? {} : { disabledAt: enabled ? null : (brand.disabledAt ?? new Date().toISOString()) }),
+      ...(enabled === undefined
+        ? {}
+        : { disabledAt: enabled ? null : (brand.disabledAt ?? slurpWorldNow().toISOString()) }),
       ...(logo === undefined ? {} : { logoUrl: logo ? storeGarnishPicture(brand.id, logo) : null }),
     };
     const saved = await pool.saveBrand(next);
@@ -126,7 +129,7 @@ export async function slpBrandsRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       contextTags: [],
       ...(look ? { look } : {}),
       origin: "user",
-      createdAt: new Date().toISOString(),
+      createdAt: slurpWorldNow().toISOString(),
       imageUrl: image ? storeGarnishPicture(id, image) : null,
     };
     return pool.add(ad);

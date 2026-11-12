@@ -30,6 +30,7 @@ import { slpCreatorPageCursorSchema, SLP_CREATOR_FEED_PAGE_SIZE } from "../../mo
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { markSlurpExtrasReached } from "../../data/settings/slp-extras-offer-storage.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * A subscriber row, widened for the generated audience.
  *
@@ -64,7 +65,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     const [wallet, settings] = await Promise.all([noodle.getWallet(viewer.id), noodle.getSettings()]);
     // The same day boundary the refill itself uses. This duplicated the UTC date and would have
     // drifted from the configured start hour.
-    const now = new Date();
+    const now = slurpWorldNow();
     const today = slurpDayKey(now, settings.walletDayStartHour);
     const nextRefillAt = new Date(now);
     nextRefillAt.setHours(settings.walletDayStartHour, 0, 0, 0);

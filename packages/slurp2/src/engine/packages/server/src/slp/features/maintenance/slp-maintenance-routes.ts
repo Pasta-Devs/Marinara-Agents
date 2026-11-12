@@ -42,6 +42,7 @@ import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;
   const autopurgePreviewSchema = z.object({
@@ -109,7 +110,7 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
         }[]
       >,
     ]);
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const cutoff = slurpWorldNowMs() - 24 * 60 * 60 * 1000;
     const recent = (value: string) => Date.parse(value) >= cutoff;
     const firstPostJobsShown = await Promise.all(
       firstPostJobs
@@ -188,17 +189,19 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
           }),
         ),
       ...preparedPosts
-        .filter((row) => Date.parse(row.publishAt) > Date.now() || !terminal.has(row.state) || recent(row.updatedAt))
+        .filter(
+          (row) => Date.parse(row.publishAt) > slurpWorldNowMs() || !terminal.has(row.state) || recent(row.updatedAt),
+        )
         .map((row) =>
           task({
             id: `prepared:${row.id}`,
-            kind: Date.parse(row.publishAt) > Date.now() ? "scheduled-post" : "generate-post",
-            status: Date.parse(row.publishAt) > Date.now() ? "scheduled" : row.state,
+            kind: Date.parse(row.publishAt) > slurpWorldNowMs() ? "scheduled-post" : "generate-post",
+            status: Date.parse(row.publishAt) > slurpWorldNowMs() ? "scheduled" : row.state,
             createdAt: row.generatedAt,
             updatedAt: row.updatedAt,
             publishAt: row.publishAt,
             accountId: row.creatorAccountId,
-            detail: Date.parse(row.publishAt) > Date.now() ? "Waiting for scheduled publish" : null,
+            detail: Date.parse(row.publishAt) > slurpWorldNowMs() ? "Waiting for scheduled publish" : null,
           }),
         ),
       // A first post that made it or failed stays for a day, so Pulse can open it or say why.
@@ -252,7 +255,7 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
           }),
         ),
       // Try again = play the steps that failed, nothing that already ran.
-      ...slurpPulsePlayTasks(plays, new Date()).map((play) => {
+      ...slurpPulsePlayTasks(plays, slurpWorldNow()).map((play) => {
         const entry = plays.find((candidate) => `play:${candidate.id}` === play.id);
         const failedSteps = entry?.steps
           .filter((step) => !step.ok)
@@ -284,7 +287,7 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
           Date.parse(right.updatedAt ?? right.createdAt ?? "") - Date.parse(left.updatedAt ?? left.createdAt ?? ""),
       )
       .slice(0, 80);
-    const at = new Date();
+    const at = slurpWorldNow();
     const personaIds = new Set(accounts.filter((account) => account.kind === "persona").map((account) => account.id));
     const next = slurpPulseNext({
       now: at,

@@ -275,7 +275,7 @@ assert.match(
 const payouts = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/data/economy/slp-economy-storage-3.ts",
 );
-assert.match(payouts, /credit\(wallet, "topUp", slurpPayoutCoins\(amount, crowdWeight\)/u);
+assert.match(payouts, /credit\(\s*wallet,\s*"topUp",\s*slurpPayoutCoins\(amount, crowdWeight\)/u);
 assert.match(payouts, /sibling\.sourceEntityId === creator\.sourceEntityId/u);
 
 console.log("slurp earnings regression passed");

@@ -6,6 +6,7 @@
 import type { DB } from "../../../db/connection.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const KEY = "slurp2.fan-notes";
 const KEEP = 300;
 
@@ -42,12 +43,12 @@ export function answerSlurpFanNote(
 ): Promise<SlurpFanNoteAnswer | "replied"> {
   const run = queue.then(async () => {
     const all = await readAll(db);
-    const current = all[eventId] ?? { hearted: false, reply: null, at: new Date().toISOString() };
+    const current = all[eventId] ?? { hearted: false, reply: null, at: slurpWorldNow().toISOString() };
     if (answer.reply && current.reply) return "replied" as const;
     const next: SlurpFanNoteAnswer = {
       hearted: current.hearted || answer.heart === true,
       reply: current.reply ?? answer.reply ?? null,
-      at: new Date().toISOString(),
+      at: slurpWorldNow().toISOString(),
     };
     const kept = Object.entries({ ...all, [eventId]: next })
       .sort(([, left], [, right]) => right.at.localeCompare(left.at))

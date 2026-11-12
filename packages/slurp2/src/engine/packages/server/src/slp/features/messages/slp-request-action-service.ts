@@ -9,6 +9,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 import { slurpRequestActionEffect, type SlurpRequestAction } from "../../modules/messages/slp-request-actions.js";
 import { normalizeSlurpDemandTopic } from "../../modules/feed/slp-demand.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpThreadRequest = {
   id: string;
   text: string;
@@ -57,7 +58,7 @@ const requestsInFlight = new Set<string>();
 export async function applySlurpRequestAction(
   db: DB,
   input: SlurpRequestActionInput,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpRequestActionResult> {
   if (requestsInFlight.has(input.requestId)) return "in_progress";
   requestsInFlight.add(input.requestId);

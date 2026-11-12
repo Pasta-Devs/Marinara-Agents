@@ -6,6 +6,7 @@ import { SlpButton } from "../../modules/chrome/SlpButton";
 import { useStartSlurpSexting } from "./slp-message-action-hooks";
 import { newRequestId, type SlurpThreadViewModel } from "./slp-thread-actions";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** After a session, how long the thread still asks for a tip. */
 const TIP_PROMPT_MINUTES = 30;
 
@@ -20,7 +21,8 @@ export function SlpSextingBar({ model }: { model: SlurpThreadViewModel }) {
   const start = useStartSlurpSexting();
   const requestRef = useRef<string | null>(null);
   // The clock re-renders each minute; Date.now() keeps a fresh buy from reading "21 min left".
-  const now = Math.max(useSlpMinuteClock(), Date.now());
+  useSlpMinuteClock(); // re-render each minute
+  const now = slurpWorldNowMs(); // read live: a restore can move the world clock back
   const price = threadQuery.data?.sextingPrice;
   if (!thread || !personaId || thread.state !== "active" || price == null) return null;
   const endsAt = thread.sexting ? Date.parse(thread.sexting.endsAt) : 0;

@@ -29,6 +29,7 @@ import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-sto
 import { SLURP_CONTINUITY_FACT_LABELS } from "../../modules/continuity/slp-continuity-prompt.js";
 import { slpArcsLive } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type WrapFormat = "xml" | "markdown" | "none";
 
 /** The part of the Engine's prompt-context request this reads. Older Engines send no wrapFormat. */
@@ -198,7 +199,7 @@ export async function buildSlurpChatContext(db: DB, request: SlurpChatContextReq
         her: creator.displayName,
         herGender: creator.settings.profile.gender,
         you: persona.displayName,
-        at: new Date(),
+        at: slurpWorldNow(),
       });
       if (line) entries.push({ at: SLURP_STANDING.couple, line });
     }
@@ -268,7 +269,7 @@ async function pushLedgerFacts(
   you: string | null,
 ): Promise<void> {
   const { facts } = await listSlurpContinuityFor(db, creator.id, "fan_thread", {
-    at: new Date(),
+    at: slurpWorldNow(),
     threadId,
     limit: SLURP_CHAT_CONTEXT_FACTS,
   }).catch(() => ({ facts: [] }));

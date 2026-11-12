@@ -22,6 +22,7 @@ import {
 } from "../../modules/continuity/slp-signals.js";
 import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const SIGNAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const SIGNAL_LIMIT = 100;
 
@@ -29,7 +30,7 @@ const SIGNAL_LIMIT = 100;
  * Everything around one Creator in the last two weeks, as signals, newest first. Read-only and
  * best effort per source: a source that fails to read is left out, never the whole list.
  */
-export async function listSlurpSignals(db: DB, creatorId: string, at = new Date()): Promise<SlurpSignal[] | null> {
+export async function listSlurpSignals(db: DB, creatorId: string, at = slurpWorldNow()): Promise<SlurpSignal[] | null> {
   const storage = createSlurpStorage(db);
   const account = await storage.getNoodlerAccountById(creatorId);
   if (!account) return null;

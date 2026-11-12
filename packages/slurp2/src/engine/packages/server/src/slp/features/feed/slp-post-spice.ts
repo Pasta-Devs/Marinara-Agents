@@ -23,6 +23,7 @@ import { readSlurpCouplePartner } from "../projects/slp-projects-contract.js";
 import type { SlurpTieStamp } from "../../modules/projects/slp-tie-stamp.js";
 import { SLP_EXPLICIT_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * How far this post may go: the Creator's level, and for a collab the lower of the two pages', since
  * the joint post shows on both and the partner's subscribers read it there too.
@@ -142,7 +143,7 @@ export async function planSlurpPostSpice(
           feed:
             // A trend adoption skips the damping: being alike is its point (docs/TRENDS.md).
             postLevel !== "none" && (locked || input.teaser) && input.beat?.anchorKind !== "trend"
-              ? await listSlurpFeedSpice(db, input.account.id, input.at ?? new Date())
+              ? await listSlurpFeedSpice(db, input.account.id, input.at ?? slurpWorldNow())
               : [],
           sequence: input.sequence,
           teasedKind: input.teasedKind,

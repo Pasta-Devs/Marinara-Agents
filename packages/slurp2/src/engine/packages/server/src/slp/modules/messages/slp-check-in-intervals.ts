@@ -10,6 +10,7 @@
  */
 import type { SlurpRapport } from "./slp-rapport.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Calculate next check-in interval in minutes.
  *
@@ -26,7 +27,7 @@ export function nextCheckInMinutes(
   creatorId: string,
   rapport: SlurpRapport,
   subscribed: boolean,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
 ): number {
   // Base interval: check every 60-120 minutes
   // Use hour of day as seed so check-ins are consistent within an hour

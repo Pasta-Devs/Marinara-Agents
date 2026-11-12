@@ -121,7 +121,7 @@ const operation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
 );
 assert.match(operation, /status: "cooling"/u);
-assert.match(operation, /thread\.coolUntil && thread\.coolUntil > new Date\(\)\.toISOString\(\)/u);
+assert.match(operation, /thread\.coolUntil && thread\.coolUntil > (?:new Date|slurpWorldNow)\(\)\.toISOString\(\)/u);
 // The words the creator left them with are written before the door closes.
 const recorded = operation.indexOf(".recordReplyOutcome(thread.id,");
 // Step 6.5: the boundary also takes the player's cool-off minutes.

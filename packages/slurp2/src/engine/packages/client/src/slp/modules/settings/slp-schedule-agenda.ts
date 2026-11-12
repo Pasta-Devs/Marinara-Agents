@@ -1,3 +1,4 @@
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The posting schedule as a day list: slots grouped by the viewer's local day, and edits that
  * change only the time (or only the day) of a slot. Pure, so the time-zone rules are testable.
@@ -41,13 +42,13 @@ export function slpLocalInstant(day: string, time: string): string | null {
 }
 
 /** A new time for a slot: same local day, or null when invalid or not in the future. */
-export function slpSlotAtTime(publishAt: string, time: string, now = Date.now()): string | null {
+export function slpSlotAtTime(publishAt: string, time: string, now = slurpWorldNowMs()): string | null {
   const next = slpLocalInstant(slpLocalDay(publishAt), time);
   return next && Date.parse(next) > now ? next : null;
 }
 
 /** A new day for a slot: same local time, or null when invalid or not in the future. */
-export function slpSlotOnDay(publishAt: string, day: string, now = Date.now()): string | null {
+export function slpSlotOnDay(publishAt: string, day: string, now = slurpWorldNowMs()): string | null {
   const next = slpLocalInstant(day, slpLocalTime(publishAt));
   return next && Date.parse(next) > now ? next : null;
 }

@@ -9,12 +9,13 @@ import {
 } from "../../modules/storylines/slp-story-state.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The image instructions plus a standing condition's look ("Right now: …"), so every picture of a
  * pregnant Creator shows it. Best effort: a failed read returns the instructions unchanged.
  */
 export async function withSlurpConditionLook(db: DB, creatorId: string, instructions: string): Promise<string> {
-  const { state } = await loadSlurpStoryState(db, creatorId, new Date());
+  const { state } = await loadSlurpStoryState(db, creatorId, slurpWorldNow());
   return state.look ? [instructions, `Right now: ${state.look}.`].filter(Boolean).join("\n") : instructions;
 }
 

@@ -59,14 +59,14 @@ function writeShared(db: DB, change: (cache: SharedCache) => void): Promise<unkn
 
 /** Start one background refresh under `key`, at most once at a time and not right after a failure. */
 function refresh(key: string, at: Date, run: () => Promise<void>): void {
-  if (inFlight.has(key) || (failedUntil.get(key) ?? 0) > at.getTime()) return;
+  if (inFlight.has(key) || (failedUntil.get(key) ?? 0) > Date.now()) return;
   inFlight.add(key);
   void run()
     .then(() => failedUntil.delete(key))
     .catch((error: unknown) => {
       // A busy connection sent nothing: the next post tries again.
       if (slpIsAdmissionFailure(error)) return;
-      failedUntil.set(key, at.getTime() + FAILED_WAIT_MS);
+      failedUntil.set(key, Date.now() + FAILED_WAIT_MS);
       logger.warn(error, "[slurp] Shared idea refresh failed (%s); beats use the Creator's own decks", key);
     })
     .finally(() => inFlight.delete(key));

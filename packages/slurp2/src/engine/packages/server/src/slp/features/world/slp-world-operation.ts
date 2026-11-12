@@ -79,6 +79,7 @@ import {
   claimWorldTick,
 } from "./slp-world-tick-state.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A stable number in [0, 1) for one string. Same shape as the other Slurp rule modules use. */
 function slurpDeterministicUnit(value: string): number {
   let out = 0x811c9dc5;
@@ -117,7 +118,7 @@ export type SlurpWorldResult = {
  * The first call only records the mark and does nothing else: there is no stretch of time to
  * simulate yet, and inventing one would open a brand-new install onto a backlog it never earned.
  */
-export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<SlurpWorldResult> {
+export async function advanceSlurpWorld(db: DB, until = slurpWorldNow()): Promise<SlurpWorldResult> {
   // The in-process guard handles local overlap. The database lease below handles separate workers.
   const lease = await claimWorldTick(db, new Date());
   if (!lease) return { status: "busy", actions: 0 };

@@ -4,6 +4,7 @@ import { slurpContinuityInstruction } from "../../modules/continuity/slp-continu
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpMessagePromptInput } from "./slp-message-prompt-input.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * What a DM reply already knows: the Creator's approved notes plus this thread's private ones
  * (`slurpContinuityReadable` fences other threads), and what Long-Term Memory remembers that fits the
@@ -27,7 +28,7 @@ export async function slurpReplyContinuity(
   });
   const ledger = input.threadId
     ? await listSlurpContinuityFor(input.db, input.creator.id, "fan_thread", {
-        at: new Date(),
+        at: slurpWorldNow(),
         threadId: input.threadId,
         limit: 20,
       }).catch(() => ({ facts: [], events: [] }))

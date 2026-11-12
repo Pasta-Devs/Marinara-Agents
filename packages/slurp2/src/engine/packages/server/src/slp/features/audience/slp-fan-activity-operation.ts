@@ -63,6 +63,7 @@ import {
 } from "../../base/model/slp-model-worker.js";
 import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
 
 /** People who have acted before and may act again, so a Creator gets recognisable regulars. */
@@ -76,7 +77,7 @@ const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
 export function slpCreatorFanActivityRunLimit(
   settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget"> &
     Partial<Pick<SlurpSettings, "platformEvents" | "extWorld">>,
-  at = new Date(),
+  at = slurpWorldNow(),
   /** Occurrences, so a started manual event counts and a dismissed one does not (R1-112). */
   story: SlurpInfluenceStory = {},
 ) {
@@ -188,7 +189,7 @@ async function drawAudienceCharacterCast(
   });
 }
 
-async function readPlans(db: DB, at = new Date(), prune = true) {
+async function readPlans(db: DB, at = slurpWorldNow(), prune = true) {
   const rows = await db.select().from(slpCreatorFanActivityState);
   const plans = rows.flatMap((row) => {
     try {
@@ -199,7 +200,14 @@ async function readPlans(db: DB, at = new Date(), prune = true) {
     }
   });
   if (!prune) return plans;
-  const cutoff = new Date(at.getFullYear(), at.getMonth(), at.getDate() - FAN_PLAN_RETENTION_DAYS).getTime();
+  // Retention reads the real clock (and never later than `at`): a skip must not age plans out, and a restore that
+  // leaves the world behind real time must not delete the current plan.
+  const realNow = new Date(Math.min(Date.now(), at.getTime()));
+  const cutoff = new Date(
+    realNow.getFullYear(),
+    realNow.getMonth(),
+    realNow.getDate() - FAN_PLAN_RETENTION_DAYS,
+  ).getTime();
   const retained = [];
   for (const plan of plans) {
     const [year, month, day] = plan.localDate.split("-").map(Number);
@@ -243,7 +251,7 @@ async function writePlan(db: DB, plan: PersistedSlpFanActivityDayPlan) {
 }
 
 async function findRecoverablePlan(db: DB) {
-  for (const plan of await readPlans(db, new Date(), false)) {
+  for (const plan of await readPlans(db, slurpWorldNow(), false)) {
     const applying = plan.runs.find((run) => run.status === "applying");
     if (applying) return { plan, run: applying, interrupted: false };
     const generating = plan.runs.find((run) => run.status === "generating");
@@ -345,7 +353,7 @@ export async function runCreatorFanActivity(input: {
   debugMode?: boolean;
 }): Promise<SlpCreatorFanRunResult> {
   const operation = await trySlpOperation<SlpCreatorFanRunResult>("noodler-fan-activity", async () => {
-    const at = input.at ?? new Date();
+    const at = input.at ?? slurpWorldNow();
     const noodle = createSlurpStorage(input.db);
     const settings = fanActivitySettingsFor(await noodle.getSettings(), input.mode === "manual");
     // "Pause all": no audience, whoever asks (the scheduler, "Fans now", a Stir play).
@@ -510,7 +518,7 @@ export async function runCreatorFanActivity(input: {
   return operation.acquired ? operation.value : { status: "busy", created: 0 };
 }
 
-export async function getCreatorFanActivityStatus(db: DB, at = new Date()) {
+export async function getCreatorFanActivityStatus(db: DB, at = slurpWorldNow()) {
   const plan = await readCurrentPlan(db, at);
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();

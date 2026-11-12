@@ -111,6 +111,7 @@ import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
 import { slpSceneInviteAllowed } from "../../modules/messages/slp-roleplay-scene-rules.js";
 import { buildSlurpMessageDeepDetailsRecord } from "./slp-message-deep-details-record.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A DM has more room than a comment reply. The reply is split into bubbles, so this is only a
  *  ceiling against a runaway answer; 900 cut ordinary long replies short (#101). */
 export const SLURP_MESSAGE_CONTENT_MAX_LENGTH = 2400;
@@ -491,7 +492,9 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const source = await slurp.resolveAccountSource(input.creator);
   const characters = createCharactersStorage(input.db);
   const [scheduleContext, recentPostRows] = await Promise.all([
-    source ? resolveSlurpCreatorScheduleContext(characters, source, undefined, new Date()) : Promise.resolve(undefined),
+    source
+      ? resolveSlurpCreatorScheduleContext(characters, source, undefined, slurpWorldNow())
+      : Promise.resolve(undefined),
     slurp
       .listNoodlerPostsByAccounts([input.creator.id], RECENT_POSTS)
       .then((byAccount) => byAccount.get(input.creator.id) ?? [])
@@ -504,7 +507,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
           characters,
           source,
           undefined,
-          new Date(),
+          slurpWorldNow(),
           recentPostRows[0]?.createdAt ?? null,
           settings,
         )
@@ -596,7 +599,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     source?.kind === "character" &&
     thread?.state === "active" &&
     !thread.sceneChatId &&
-    slpSceneInviteAllowed(input.history, new Date());
+    slpSceneInviteAllowed(input.history, slurpWorldNow());
   const messages = buildSlurpMessageChat({
     ...input,
     sceneInvite,
@@ -610,8 +613,8 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
           .commissionPricingFor({ viewerAccountId: input.viewer.id, creatorAccountId: input.creator.id })
           .then((pricing) => slurpCommissionPriceRange(pricing))
           .catch(() => undefined),
-    platformEvents: await resolveSlurpEventInstruction(input.db, input.creator.id, new Date()),
-    rightNow: (await loadSlurpStoryState(input.db, input.creator.id, new Date())).state.lines,
+    platformEvents: await resolveSlurpEventInstruction(input.db, input.creator.id, slurpWorldNow()),
+    rightNow: (await loadSlurpStoryState(input.db, input.creator.id, slurpWorldNow())).state.lines,
     imageContexts,
     openedBy: thread?.openedBy ?? null,
     requestFee: thread?.requestFeePaid ?? 0,

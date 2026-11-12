@@ -24,6 +24,7 @@ import { SlpButton, SlpChip } from "./SlpButton";
 import { SlpUsesAiMark, noteSlpAiUseOnce } from "./SlpAiMark";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Pulse's rows (task C): today's AI use, one "Coming up" line, one long action from this tab (task B). */
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -167,7 +168,7 @@ export function PulseNextRow({
       : next.kind === "event" && next.accountIds.length > 1
         ? t("ui.slurp.pulse.creatorCount", { count: next.accountIds.length })
         : null;
-  const due = Date.parse(next.at) <= Date.now() + 60_000;
+  const due = Date.parse(next.at) <= slurpWorldNowMs() + 60_000;
   const body = (
     <>
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)]">
@@ -301,7 +302,7 @@ export function PulseClientTaskRow({
 
 /** "in 5m", "in 2h", "in 3d", in the UI language. */
 export function formatPulseUntil(value: string) {
-  const minutes = Math.max(0, Math.round((Date.parse(value) - Date.now()) / 60_000));
+  const minutes = Math.max(0, Math.round((Date.parse(value) - slurpWorldNowMs()) / 60_000));
   const format = new Intl.RelativeTimeFormat(i18next.language, { style: "narrow" });
   if (minutes < 60) return format.format(minutes, "minute");
   const hours = Math.floor(minutes / 60);

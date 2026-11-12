@@ -13,13 +13,14 @@ import { readSlurpSpice, updateSlurpSpice } from "../../data/creators/slp-spice-
 import { slurpAnswerNoticed, slurpNoticedTastes } from "../../modules/creators/slp-spice.js";
 import { newId } from "../../../utils/id-generator.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const chip = z.string().trim().min(1).max(SLP_TASTE_TEXT_MAX);
 
 /** What the Spice page shows. What Slurp learned stays on the server; the page gets the noticed chips. */
 function view(state: SlpSpiceState) {
   return {
     spice: { max: state.max, tastes: state.tastes, never: state.never, language: state.language ?? "dirty" },
-    noticed: slurpNoticedTastes(state, new Date()),
+    noticed: slurpNoticedTastes(state, slurpWorldNow()),
   };
 }
 

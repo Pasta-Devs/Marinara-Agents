@@ -16,6 +16,7 @@ import { gameStateSnapshots } from "../../../db/schema/game-state.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpLatelyLine } from "../../modules/creators/slp-creator-flavour.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A tracker row older than this is not "lately" any more. */
 const FRESH_DAYS = 30;
 const LINE_MAX = 160;
@@ -34,14 +35,15 @@ const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 /** The newest chat this character or persona is in, if it was active lately. */
-async function latestChat(db: DB, source: Pick<SlpAccount, "kind" | "entityId">, at: Date) {
+async function latestChat(db: DB, source: Pick<SlpAccount, "kind" | "entityId">) {
   const chats = await createChatsStorage(db).list();
   const chat = chats.find((row) =>
     source.kind === "persona"
       ? row.personaId === source.entityId
       : list(row.characterIds).some((id) => id === source.entityId),
   );
-  if (!chat || at.getTime() - Date.parse(String(chat.updatedAt)) > FRESH_DAYS * 24 * 60 * 60 * 1000) return null;
+  // `chat.updatedAt` is the host's real time, so freshness is measured on the real clock.
+  if (!chat || Date.now() - Date.parse(String(chat.updatedAt)) > FRESH_DAYS * 24 * 60 * 60 * 1000) return null;
   return chat;
 }
 
@@ -51,7 +53,7 @@ async function trackerLines(
   source: Pick<SlpAccount, "kind" | "entityId">,
   at: Date,
 ): Promise<SlurpLatelyLine[]> {
-  const chat = await latestChat(db, source, at);
+  const chat = await latestChat(db, source);
   if (!chat) return [];
   // The accepted state of the chat, as the Engine's own game-state storage reads it.
   const [latest] = await db
@@ -90,7 +92,7 @@ async function trackerLines(
 export async function readSlurpAgentMemoryLines(
   db: DB,
   source: Pick<SlpAccount, "kind" | "entityId"> | null,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpLatelyLine[]> {
   if (!source) return [];
   try {

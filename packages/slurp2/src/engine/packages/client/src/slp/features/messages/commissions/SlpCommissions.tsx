@@ -22,6 +22,7 @@ import {
 import { getApiErrorMessage } from "../../../../lib/api-client";
 import type { SlurpCommission, SlurpMessage } from "../slp-messages-contract";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 const AMOUNT_FIELD =
   "flex h-11 items-center gap-1.5 rounded-xl bg-[var(--slurp-surface)] px-3 ring-1 ring-inset ring-[var(--noodle-divider)] focus-within:ring-2 focus-within:ring-[var(--slurp-focus)]";
 
@@ -139,7 +140,7 @@ export function CommissionRow({
     commission.state === "quoted" ||
     (!ownsCreator &&
       commission.state === "accepted" &&
-      (!commission.deliverAt || commission.deliverAt <= new Date().toISOString())) ||
+      (!commission.deliverAt || commission.deliverAt <= slurpWorldNow().toISOString())) ||
     // A cancellation whose refund failed part-way; the server lets the fan retry it.
     (!ownsCreator && commission.state === "cancellation_pending");
   const [generateImage, setGenerateImage] = useState(false);
