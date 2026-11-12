@@ -7,6 +7,7 @@ import test from "node:test";
 import type { Bible } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   BOND_RANKS,
+  bondStepOf,
   bondStoriesPlayed,
   bondStoryKey,
   bondStoryLevel,
@@ -131,6 +132,35 @@ test("the run view projects the bond rank, the stories played and the prestige a
   assert.equal(last.level, 20);
   assert.deepEqual(last.bond, { level: 20, name: "always", played: 10, next: null });
   assert.deepEqual(last.prestige, { unlocked: 0, points: 0, current: 0, required: 300 });
+});
+
+test("past the finale his route shows the next bond rank, the one whose story waits, and is complete only at 20", () => {
+  // 0.24.5: Story → Routes said the route was complete from the finale on, with ten ranks still ahead. Each case reads
+  // the run view the client gets (toRunView), as the card does.
+  const unit = normalizeUnit({ id: KAI, name: "Kai", source: "archetype" })!;
+  const bondOf = (points: number, played: number) =>
+    JSON.parse(
+      JSON.stringify(
+        toRunView(
+          "r-bond-abcdef",
+          normalizeWorld({}),
+          normalizePlayer({}),
+          [unit],
+          normalizeState({ lis: { [KAI]: { points, stage: 6 } }, chapters: playedChapters(played) as never }),
+        ),
+      ),
+    ).lis[0].bond;
+  const name = (step: ReturnType<typeof bondStepOf>) =>
+    step && ("waiting" in step ? `waiting ${step.waiting.name}` : `next ${step.next.level} ${step.next.name}`);
+  // Level 10, just past the finale: no rank yet, and rank 11 is next.
+  assert.equal(name(bondStepOf(bondOf(economy.levelFloor(10), 0), false)), "next 11 named");
+  // Rank 11 reached, its story waiting.
+  assert.equal(name(bondStepOf(bondOf(economy.levelFloor(11), 0), true)), "waiting named");
+  // Rank 11's story played, rank 12 not reached yet.
+  assert.equal(name(bondStepOf(bondOf(economy.levelFloor(11), 1), false)), "next 12 kept");
+  // Rank 20's story waiting, then played: only then is the route complete.
+  assert.equal(name(bondStepOf(bondOf(12_350, 9), true)), "waiting always");
+  assert.equal(bondStepOf(bondOf(12_350, 10), false), null);
 });
 
 test("bond stories are counted only once read to their end, and only for their own love interest", () => {
