@@ -438,14 +438,23 @@ test("Ask before painting holds every scene paint until its tap, and a tap never
   assert.deepEqual(second.body.art, first.body.art);
   assert.equal(t.paid.length, 1);
   assert.equal(t.paid[0]!.method, "generateBannerArt");
-  // Tapping a ready CG again changes nothing.
-  assert.deepEqual((await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 })).body.art, first.body.art);
-  assert.equal(t.paid.length, 1);
+  // 0.24.0: tapping a ready CG again repaints it (one more image), and the picture it painted over is deleted.
+  const repainted = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(repainted.body.art.state, "ready");
+  assert.notEqual(repainted.body.art.ref, first.body.art.ref);
+  assert.equal(t.paid.length, 2);
+  assert.deepEqual(t.deleted, ["img1"]);
 
   const placed = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
   assert.equal(placed.body.place.art.state, "ready");
   assert.equal(placed.body.world.places[placeKey("The Lamp Room")].art.state, "ready");
-  assert.equal(t.paid.length, 2);
+  assert.equal(t.paid.length, 3);
+
+  // A painted place is repainted by its tap too; the picture it painted over leaves the gallery.
+  const placeAgain = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
+  assert.notEqual(placeAgain.body.place.art.ref, placed.body.place.art.ref);
+  assert.equal(t.paid.length, 4);
+  assert.deepEqual(t.deleted, ["img1", "img3"]);
 
   // The review dialog gets the prompt; an edited one keeps its rating and adult tags.
   const prompt = await t.call("POST", "/runs/:run/art/cg/prompt", { key: KEY, i: 1 });
@@ -506,6 +515,89 @@ test("a CG unlocks only once it is ready and shown, exactly once", async () => {
   assert.equal((await u.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 409);
   assert.equal(waiting.cg?.art, undefined);
   assert.equal((await u.state()).album.cgs.length, 0);
+});
+
+test("a picture kept through a failed repaint is the one unlocked: the Album takes what was on screen", async () => {
+  // 0.24.0 (Dottore, #2255): a repaint keeps the old picture on screen while it paints, and keeps it if it fails, so the
+  // picture the reader saw is the one that enters the Album — not a 409 because the record's state moved on.
+  const t = await sceneWorld("r-m2bart09-iiiiii");
+  await t.write(1, { cg: CG });
+  const stored = (await readStoredBeat(t.store, t.runId, 1))!;
+  const kept = stored.cg!.art!;
+  await saveBeat(t.store, t.runId, {
+    ...stored,
+    readThrough: CG.at,
+    cg: { ...stored.cg!, art: { ...kept, state: "failed", error: "provider down" } },
+  });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  const seen = await t.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 });
+  assert.equal(seen.status, 200, "the picture was seen, whatever its repaint did");
+  assert.equal(seen.body.unlocked, true);
+  assert.equal(seen.body.album[0].ref, kept.ref, "the Album takes the picture that stayed on screen");
+
+  // A record with no picture at all still refuses: nothing was shown, so nothing is unlocked.
+  const bare = await sceneWorld("r-m2bart10-jjjjjj");
+  await setImages(bare.store, bare.runId, { ask: true });
+  await bare.write(1, { cg: CG });
+  await saveBeat(bare.store, bare.runId, { ...(await readStoredBeat(bare.store, bare.runId, 1))!, readThrough: 2 });
+  await bare.store.updateDoc(runDocTarget("state", stateId(bare.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  assert.equal((await bare.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 409);
+});
+
+test("a repaint that saves while its key image unlocks leaves the Album on the picture the record shows", async () => {
+  // 0.24.0 (Dottore, #2255): the unlock reads the beat, then writes the Album some awaits later. A repaint saving in
+  // that gap moves an entry that does not exist yet and releases the picture the unlock is about to file, so the entry
+  // is read back and followed to the record's picture.
+  const t = await sceneWorld("r-m2bart11-kkkkkk");
+  await t.write(1, { cg: CG });
+  const stored = (await readStoredBeat(t.store, t.runId, 1))!;
+  const kept = stored.cg!.art!;
+  await saveBeat(t.store, t.runId, { ...stored, readThrough: CG.at });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  const repainted = {
+    state: "ready" as const,
+    at: "2026-10-28T12:00:00.000Z",
+    url: "/api/global-gallery/file/img9.png",
+    ref: "global-gallery:img9",
+  };
+  let saved = false;
+  const store = {
+    ...t.store,
+    async updateDoc(...args: Parameters<typeof t.store.updateDoc>) {
+      // The repaint's save lands just before the unlock's own Album write.
+      if (!saved && args[0].id === stateId(t.runId)) {
+        saved = true;
+        await saveBeat(t.store, t.runId, {
+          ...(await readStoredBeat(t.store, t.runId, 1))!,
+          cg: { ...stored.cg!, art: repainted },
+        });
+      }
+      return t.store.updateDoc(...args);
+    },
+  } as typeof t.store;
+  const call = routesOf(
+    registerArtRoutes,
+    { ...t.deps, store, art: createOtomeArt({ ...t.deps, store }) },
+    "r-m2bart11-kkkkkk",
+  );
+  const seen = await call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 });
+  assert.equal(seen.status, 200);
+  assert.equal(seen.body.unlocked, true);
+  assert.equal(saved, true, "the repaint saved in the gap");
+  const entry = (await t.state()).album.cgs.find((cg) => cg.key === `${KEY}/1`)!;
+  assert.equal(entry.ref, repainted.ref, "the Album ends on the picture the record shows");
+  assert.equal(entry.url, repainted.url);
+  assert.equal(seen.body.album.find((cg: { key: string }) => cg.key === `${KEY}/1`).ref, repainted.ref);
+  assert.notEqual(entry.ref, kept.ref, "never the picture the repaint replaced");
 });
 
 test("a failed paint waits for a tap; a rewrite while a CG paints gets nothing, and its image is deleted", async () => {
@@ -894,4 +986,63 @@ test("a paid image that never answers ends at its deadline, frees its connection
     ),
     "ok",
   );
+});
+
+test("a repaint keeps the picture it paints over on screen, keeps it again if it fails, and moves the Album with it", async () => {
+  let fail = false;
+  let held: Promise<void> = Promise.resolve();
+  const t = await sceneWorld("r-m2bart10-jjjjjj", {
+    runKey: "r-m2bart10-jjjjjj",
+    before: async (call) => {
+      if (fail && call.method === "generateBannerArt") throw new Error("provider down");
+      if (call.method === "generateBannerArt") await held;
+    },
+    // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+    engineDeletes: true,
+  });
+  await t.write(1, { cg: CG });
+  const painted = (await readStoredBeat(t.store, t.runId, 1))!;
+  const first = painted.cg!.art!;
+  assert.equal(first.state, "ready");
+  // Shown and read through, so the Album keeps it: a repaint must move the entry, not orphan it.
+  await saveBeat(t.store, t.runId, { ...painted, readThrough: CG.at });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  assert.equal((await t.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 200);
+  assert.deepEqual(
+    (await t.state()).album.cgs.map(({ url, ref }) => ({ url, ref })),
+    [{ url: first.url, ref: first.ref }],
+  );
+
+  // While the repaint runs, the record still shows the picture it painted over, so nothing goes blank.
+  let release: () => void = () => undefined;
+  held = new Promise<void>((resolve) => (release = resolve));
+  const repaint = t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  await until(
+    async () => (await readStoredBeat(t.store, t.runId, 1))?.cg?.art?.state === "pending",
+    "the repaint marks its record pending",
+  );
+  const during = (await readStoredBeat(t.store, t.runId, 1))!.cg!.art!;
+  assert.deepEqual([during.state, during.url, during.ref], ["pending", first.url, first.ref], "the old picture stays");
+  release();
+  const done = await repaint;
+  held = Promise.resolve();
+  assert.equal(done.body.art.state, "ready");
+  assert.notEqual(done.body.art.ref, first.ref);
+  assert.deepEqual(t.deleted, [first.ref!.slice("global-gallery:".length)], "the replaced image leaves the gallery");
+  // The Album follows the beat to the new picture rather than holding the one it replaced.
+  assert.deepEqual(
+    (await t.state()).album.cgs.map(({ url, ref }) => ({ url, ref })),
+    [{ url: done.body.art.url, ref: done.body.art.ref }],
+  );
+
+  // A repaint that fails keeps the picture it painted over, beside its error; the record reads failed, never blank.
+  fail = true;
+  const failed = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(failed.body.art.state, "failed");
+  assert.match(failed.body.art.error ?? "", /provider down/);
+  assert.deepEqual([failed.body.art.url, failed.body.art.ref], [done.body.art.url, done.body.art.ref]);
+  assert.equal(t.paid.length, 4, "the failed repaint was paid for once and is not retried by itself");
 });

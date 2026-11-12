@@ -17,9 +17,9 @@
 //   to each new line, then to the result. The finish is posted as the closing line shows.
 // - The deck: each card shows its painting once it is ready (crossfading in), our SVG card until then with a small
 //   "Painting…" badge while it paints (this screen reads the deck again every few seconds meanwhile, the Done screen
-//   too); turned cards held for consent offer one Paint these cards bar, a failed or stopped one Try painting it again
-//   (a face-down card is never named, by its prompt review either). Without an image connection the cards are ours,
-//   with no paint controls.
+//   too); turned cards held for consent offer one Paint these cards bar, a failed or stopped one Try painting it again,
+//   and (0.24.0) a painted one Repaint this card (a face-down card is never named, by its prompt review either). Without
+//   an image connection the cards are ours, with no paint controls.
 import {
   useEffect,
   useId,
@@ -468,8 +468,8 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
   );
 }
 
-const readyArt = (entry: TarotDeckCard | undefined) =>
-  entry?.art.state === "ready" && entry.art.url ? entry.art.url : null;
+/** The picture a card shows: its own once ready, and (0.24.0) the one a repaint kept on screen while it paints. */
+const readyArt = (entry: TarotDeckCard | undefined) => entry?.art.url || null;
 
 /** "Past: The Tower, reversed". */
 function useCardLabel() {
@@ -587,7 +587,8 @@ function Intro({ view, li, mode, chip, own, onMode, onChip, onOwn, onBegin }: In
         </p>
         <p className="of-hint">{t("ui.otomeForge.tarot.modelNote")}</p>
         {imagesOn(view) ? (
-          // At most, as the Dates hub says: a card painted before is never painted again.
+          // To begin with, at most, as the Dates hub says: a card is painted when it is first drawn, and can be painted
+          // again by its own tap once it is painted.
           <p className="of-cost">
             <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
             <span>{t("ui.otomeForge.tarot.paintCost", { images: TAROT_CARDS })}</span>
@@ -757,6 +758,8 @@ function Spread({ runKey, view, li, reading, deck, turned, next, actions, onTurn
           const art = entry?.art;
           const painting = actions.busy.has(target.id) || art?.state === "pending";
           const retry = images && up && !painting && (art?.state === "failed" || art?.state === "stopped");
+          // 0.24.0: a painted card can be painted again, its picture staying until the new one is saved.
+          const repaint = images && up && !painting && art?.state === "ready";
           const error = actions.errors[target.id];
           return (
             <li key={index} className="of-tarot-slot" data-position={TAROT_POSITIONS[index]}>
@@ -784,17 +787,26 @@ function Spread({ runKey, view, li, reading, deck, turned, next, actions, onTurn
                   badge={up && painting ? t("ui.otomeForge.wish.painting") : undefined}
                 />
               </button>
-              {retry ? (
+              {retry || repaint ? (
                 <button
                   type="button"
                   className="of-button of-button--quiet of-glass of-button--small of-tarot-retry"
-                  aria-label={t("ui.otomeForge.tarot.paintRetryLabel", { name: target.subject })}
+                  aria-label={t(
+                    repaint ? "ui.otomeForge.tarot.repaintCardLabel" : "ui.otomeForge.tarot.paintRetryLabel",
+                    { name: target.subject },
+                  )}
                   onClick={() => void actions.paint(target)}
                 >
-                  <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
-                  {t("ui.otomeForge.wish.paintRetry")}
+                  {repaint ? (
+                    <Paintbrush size={13} strokeWidth={2} aria-hidden="true" />
+                  ) : (
+                    <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
+                  )}
+                  {repaint ? t("ui.otomeForge.tarot.repaintCard") : t("ui.otomeForge.wish.paintRetry")}
                 </button>
               ) : null}
+              {/* 0.24.0: a retry and a repaint both spend one image, so the price stands beside whichever button does. */}
+              {retry || repaint ? <CostHint images={1} /> : null}
               {error ? (
                 <p className="of-notice of-notice--error" role="alert">
                   {error}

@@ -85,7 +85,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { fakeImages, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
+import { engineDeletes, fakeImages, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
 import type { FakeReply } from "./fixtures/otome-forge-fakes.ts";
 import {
   KAI,
@@ -912,7 +912,7 @@ test("the deck waits under Ask or prompt review, and claims nothing without an i
   assert.equal(await none.deck(), null, "no image connection: no claim");
 });
 
-test("a card's tap pays once, a failure waits for Retry, a ready card stays, a card never drawn is locked", async () => {
+test("a card's tap pays once, a failure waits for Retry, a painted card repaints, a card never drawn is locked", async () => {
   let fail = true;
   const t = await tarotWorld("r-tarotd-aaaaaa", model(reply()), {
     images: { ask: true },
@@ -937,8 +937,15 @@ test("a card's tap pays once, a failure waits for Retry, a ready card stays, a c
   assert.equal(t.paid.length, 2, "a double tap pays once");
   assert.equal(one.body.art.state, "ready");
   assert.deepEqual(two.body.art, one.body.art);
-  assert.deepEqual((await t.call("POST", ART, { li: KAI, card: "hermit" })).body.art, one.body.art, "kept");
-  assert.equal(t.paid.length, 2);
+  // 0.24.0: a tap on a painted card repaints it, one more image, and the picture it painted over leaves the gallery.
+  // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+  t.deps.images = { ...t.deps.images!, deleteGalleryImage: engineDeletes(t.fake.rows, t.deleted) };
+  const repainted = await t.call("POST", ART, { li: KAI, card: "hermit" });
+  assert.equal(t.paid.length, 3, "a repaint costs one image");
+  assert.equal(repainted.body.art.state, "ready");
+  assert.notEqual(repainted.body.art.ref, one.body.art.ref);
+  assert.deepEqual(t.deleted, [one.body.art.ref.slice("global-gallery:".length)]);
+  assert.deepEqual((await (await t.deck())!.cards[deckKey("hermit", KAI)]).art, repainted.body.art);
   for (const [li, card] of [
     [SOL, "hermit"],
     [KAI, "magician"],

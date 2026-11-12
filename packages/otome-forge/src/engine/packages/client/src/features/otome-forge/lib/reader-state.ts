@@ -210,8 +210,11 @@ export function placeEntry(places: Iterable<PlaceArt> | null | undefined, name: 
 export const worldPlaces = (world: WorldView): PlaceArt[] => Object.values(world.places ?? {});
 
 /** A paint's image URL once it is ready. */
-export const readyUrl = (paint: Paint | undefined | null): string | null =>
-  paint?.state === "ready" && typeof paint.url === "string" && paint.url ? paint.url : null;
+/**
+ * The picture a record shows: its own once ready, and (0.24.0) the one a repaint kept on screen while the new one
+ * paints and after it failed (the place, CG or side chip beside it offers Retry then).
+ */
+export const readyUrl = (paint: Paint | undefined | null): string | null => paint?.url || null;
 
 /** True when an earlier read already passed the line (the beat's `readThrough` is the furthest mainline read). */
 export function lineRead(line: ReaderLine, readThrough: number): boolean {

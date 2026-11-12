@@ -240,20 +240,28 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const canPaint = !!view.world.images.connectionId;
   const paintsByItself = usePaintsByItself(view.world.images);
   const placeState = placeInfo?.art?.state;
+  // From its line until the scene moves to another place (0.21.1: it stayed to the end of the scene).
+  const cg = reader.cg && current && cgOnLine(reader.timeline, reader.cg, reader.lineIndex) ? reader.cg : null;
+  const cgUrl = readyUrl(cg?.art);
+  // 0.24.0: a painted place offers a repaint while it is the picture on screen (not under a key image); the picture
+  // it shows stays until a new one is saved.
+  const placeRepaint = placeState === "ready" && !!placeUrl && !cgUrl;
   const placePaint =
     canPaint &&
     placeInfo?.tags.trim() &&
     place &&
-    (!placeState || placeState === "waiting-consent" || placeState === "failed" || placeState === "stopped")
+    (!placeState ||
+      placeState === "waiting-consent" ||
+      placeState === "failed" ||
+      placeState === "stopped" ||
+      placeRepaint)
       ? {
+          repaint: placeRepaint,
           retry: placeState === "failed" || placeState === "stopped",
           busy: reader.painting,
           onPaint: () => void reader.paintPlace(place),
         }
       : undefined;
-  // From its line until the scene moves to another place (0.21.1: it stayed to the end of the scene).
-  const cg = reader.cg && current && cgOnLine(reader.timeline, reader.cg, reader.lineIndex) ? reader.cg : null;
-  const cgUrl = readyUrl(cg?.art);
   const cgId = `${chapterKey}/${reader.node ?? 0}r${beat?.rewrites ?? 0}`;
   // The pan plays once per version of a beat in this visit, the first time its line comes.
   const cgIntro = !!cgUrl && reading && !cgShown.has(cgId);
@@ -433,6 +441,16 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
               : undefined
           }
           placePaint={placePaint}
+          cgPaint={
+            // 0.24.0: a key image on screen can be painted again; one whose repaint failed keeps its picture and a Retry.
+            reading && cg && cgUrl && canPaint
+              ? {
+                  retry: cg.art?.state === "failed" || cg.art?.state === "stopped",
+                  busy: reader.painting || cg.art?.state === "pending",
+                  onPaint: () => void reader.paintCg(),
+                }
+              : undefined
+          }
           sidePaint={reading ? sidePaint : undefined}
           onPlaceBackground={() => openDialog("background")}
           tags={reader.tags}

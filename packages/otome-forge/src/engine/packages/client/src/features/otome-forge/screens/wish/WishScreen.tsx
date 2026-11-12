@@ -494,6 +494,8 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
   const viewerBlocked = actions.busy.size > 0 || !!actions.review;
   useEffect(() => setExpanded(false), [art, viewerBlocked]);
   const held = paintWaits(banner.art) ? banner.art : null;
+  // 0.24.0: a painted banner can be painted again; its picture stays on the hero until the new one is saved.
+  const repaint = !held && banner.art?.state === "ready" && imagesOn(view);
   const heldId = `banner:${banner.key}`;
   const pity = wish.pity[banner.kind];
   const busy = pulling?.banner === banner.key;
@@ -602,27 +604,30 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
           {t("ui.otomeForge.wish.paintingBanner")}
         </p>
       ) : null}
-      {held ? (
+      {held || repaint ? (
         <div className="of-inline-actions">
           <button
             type="button"
             className="of-button of-button--quiet of-glass of-button--small"
+            aria-label={repaint ? t("ui.otomeForge.wish.repaintBanner") : undefined}
             aria-disabled={actions.busy.has(heldId)}
             onClick={() => {
               if (!actions.busy.has(heldId)) void actions.paintBanner(banner);
             }}
           >
-            {held.state === "waiting-consent" ? (
-              <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
-            ) : (
+            {held && held.state !== "waiting-consent" ? (
               <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
+            ) : (
+              <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
             )}
-            {held.state === "waiting-consent"
-              ? t("ui.otomeForge.wish.paintBanner")
-              : t("ui.otomeForge.wish.paintRetry")}
+            {!held
+              ? t("ui.otomeForge.wish.repaintBanner")
+              : held.state === "waiting-consent"
+                ? t("ui.otomeForge.wish.paintBanner")
+                : t("ui.otomeForge.wish.paintRetry")}
           </button>
           <CostHint images={1} />
-          {held.state === "failed" ? <span className="of-hint">{t("ui.otomeForge.wish.paintFailed")}</span> : null}
+          {held?.state === "failed" ? <span className="of-hint">{t("ui.otomeForge.wish.paintFailed")}</span> : null}
         </div>
       ) : null}
       {actions.errors[heldId] ? (

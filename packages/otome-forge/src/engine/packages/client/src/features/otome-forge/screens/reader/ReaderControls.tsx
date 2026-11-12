@@ -19,6 +19,7 @@ import {
   Play,
   RefreshCw,
   Repeat,
+  RotateCcw,
   ScrollText,
   Volume2,
   VolumeX,
@@ -128,10 +129,12 @@ interface ReaderControlsProps {
   place?: string;
   /** Text for a picture that isn't painted (the place's, or a key image's); absent once it is. */
   imageDescription?: string;
-  /** The place's picture waits for a tap (consent, or a retry after a failure). */
-  placePaint?: { retry: boolean; busy: boolean; onPaint: () => void };
+  /** The place's picture waits for a tap (consent, a retry after a failure), or a painted one can be repainted. */
+  placePaint?: { retry: boolean; repaint: boolean; busy: boolean; onPaint: () => void };
   /** 0.20.0: the speaking side character's sprite waits for a tap (Ask before painting) or a Retry. */
   sidePaint?: { name: string; retry: boolean; busy: boolean; onPaint: () => void };
+  /** 0.24.0: the key image on screen is painted, so it can be painted again (or, if that failed, tried again). */
+  cgPaint?: { retry: boolean; busy: boolean; onPaint: () => void };
   /** #2147: opens the Engine's backgrounds for the place, with or without an image connection. */
   onPlaceBackground?: () => void;
   tags: string[];
@@ -335,9 +338,11 @@ export function ReaderControls(props: ReaderControlsProps) {
                 className="of-reader-chip of-reader-chip--paint"
                 aria-disabled={props.placePaint.busy}
                 aria-label={t(
-                  props.placePaint.retry
-                    ? "ui.otomeForge.reader.placeRetryLabel"
-                    : "ui.otomeForge.reader.placePaintLabel",
+                  props.placePaint.repaint
+                    ? "ui.otomeForge.reader.placeRepaintLabel"
+                    : props.placePaint.retry
+                      ? "ui.otomeForge.reader.placeRetryLabel"
+                      : "ui.otomeForge.reader.placePaintLabel",
                   { place },
                 )}
                 onClick={(event) => {
@@ -346,7 +351,42 @@ export function ReaderControls(props: ReaderControlsProps) {
                 }}
               >
                 <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
-                {t(props.placePaint.retry ? "ui.otomeForge.reader.placeRetry" : "ui.otomeForge.reader.placePaint")}
+                {t(
+                  props.placePaint.repaint
+                    ? "ui.otomeForge.reader.placeRepaint"
+                    : props.placePaint.retry
+                      ? "ui.otomeForge.reader.placeRetry"
+                      : "ui.otomeForge.reader.placePaint",
+                )}
+              </button>
+            </li>
+          ) : null}
+          {props.cgPaint ? (
+            <li className="of-reader-chip-slot">
+              <button
+                type="button"
+                className="of-reader-chip of-reader-chip--paint"
+                aria-disabled={props.cgPaint.busy}
+                aria-label={t(
+                  props.cgPaint.retry ? "ui.otomeForge.reader.cgRetryLabel" : "ui.otomeForge.reader.cgRepaintLabel",
+                )}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!props.cgPaint?.busy) props.cgPaint?.onPaint();
+                }}
+              >
+                {props.cgPaint.retry ? (
+                  <RotateCcw size={12} strokeWidth={2.2} aria-hidden="true" />
+                ) : (
+                  <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
+                )}
+                {t(
+                  props.cgPaint.busy
+                    ? "ui.otomeForge.wish.painting"
+                    : props.cgPaint.retry
+                      ? "ui.otomeForge.reader.cgRetryChip"
+                      : "ui.otomeForge.reader.cgRepaint",
+                )}
               </button>
             </li>
           ) : null}
