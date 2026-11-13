@@ -381,8 +381,8 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // 0.23.0: betweenYou's affection line reads "of 20" (the bond ranks), so every prompt with a love interest's card moved
 // again; the bible has no card and kept its bytes.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "90209444e8df06df",
-  callScene: "41527238ea374c14",
+  scene: "0142059f05a85a7b",
+  callScene: "a2b54e42e2a1d520",
   confrontation: "b5d6e457da21e92d",
   closer: "0a89e78e7963f9dd",
   bible: "498d581e9e8d8a64",

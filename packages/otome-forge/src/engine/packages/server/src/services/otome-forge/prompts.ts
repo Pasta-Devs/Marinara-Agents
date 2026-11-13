@@ -2370,12 +2370,16 @@ export function beatMessages({
   // The narrator's instructions are the same for every node: what a node changes (who may think aloud, whether it is
   // the chapter's last and may end on a big choice, its key-image rules, a date's or side-with's choice) is told with
   // the task, so a chapter's scenes share one cached prompt (#2066, #2091).
+  // 0.28.0: the shape is repeated at the very end of the task turn (BEAT_SHAPE_TRAILER). Everything between the shape
+  // above and that line is instruction, so a model reading only the tail of a long prompt had nothing to copy; the two
+  // say the same thing from one constant, so they cannot drift.
+  const beatShape = `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]}`;
   const instructions = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
     NO_CHOICES_SENTENCE,
     `Write about ${BEAT_WORDS} words in total across the segments, and NEVER more than ${BEAT_WORDS_MAX}; use at most ${BEAT_SEGMENTS_MAX} segments.${world.content.heat === "explicit" ? ` A node that reaches sex is the exception: give it the room it needs, up to ${INTIMATE_BEAT_WORDS_MAX} words and ${INTIMATE_BEAT_SEGMENTS_MAX} segments, so it is never rushed.` : ""}`,
     "Respond with ONLY a JSON object, no markdown, in this exact shape:",
-    `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]}`,
+    beatShape,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
     pov
@@ -2473,6 +2477,11 @@ export function beatMessages({
       : []),
     date && partner ? dateChoiceInstruction(partner, date.goesWrong).trim() : "",
     side ? sideWithInstruction(side, player.name || "the protagonist").trim() : "",
+    // 0.28.0: the shape once more, at the end of the task turn, so the last thing the model reads before it writes is
+    // the shape it must reply in. It sits before the content-contract reminder, which stays the final line; this
+    // message is never cached, so saying it here costs nothing. "PLUS the extra keys this node asks for" keeps the
+    // choice-effects, cg and voices blocks above from reading as optional extras a strict "ONLY" would drop.
+    `Reply with ONLY the JSON object, no markdown and no code fence, in the shape above (plus the extra keys this node asks for, such as "choices", "effects", "cg" or "voices"): ${beatShape}`,
     otomeContractReminder("scene"),
   ];
   return storyMessages(
