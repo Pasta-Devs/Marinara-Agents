@@ -155,6 +155,7 @@ assert.equal(
 // 8. The image service wires it: the viewpoint is kept, swapped per family, and the prompt model is
 // the player's choice with the text connection as the default.
 const images = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts");
+assert.match(images, /viewpoint && !slurpViewpointIn\(withoutDevice\)/u, "a rewrite that kept any viewpoint phrase is not given a second one");
 assert.match(images, /slurpWithoutCameraDevice\(finalPromptBase, keep\)/u);
 assert.match(images, /slurpViewpointForFamily\(finalPromptScene, promptFamily\)/u);
 assert.match(images, /promptMode: compiledPrompt\.profile\.promptMode/u);

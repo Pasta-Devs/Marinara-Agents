@@ -597,10 +597,10 @@ async function generateCreatorPostImageRun(
   // say "I held my phone up" (R1-050). A prompt a human approved is sent as written.
   const keep = viewpoint ? [viewpoint.phrase] : [];
   const withoutDevice = slurpWithoutCameraDevice(finalPromptBase, keep) || finalPromptBase;
-  // A rewrite that dropped the viewpoint gets it back, so a selfie still reads as one.
+  // A rewrite that dropped every viewpoint gets it back, so a selfie still reads as one.
   const finalPromptScene = skipInterpretation
     ? finalPromptBase
-    : viewpoint && !withoutDevice.includes(viewpoint.phrase)
+    : viewpoint && !slurpViewpointIn(withoutDevice)
       ? `${withoutDevice}\n${viewpoint.phrase}`
       : withoutDevice;
   // A drawn Creator or a painted style profile drops the photo words; in the story it is still a photo.
