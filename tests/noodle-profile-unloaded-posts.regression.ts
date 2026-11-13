@@ -43,4 +43,10 @@ assert.match(home, /viewedProfileAccountId \?\? personaAccount\?\.id/u);
 assert.match(hooks, /maxPages = 20/);
 assert.match(home, /profileVisiblePosts\.length > 0 \|\| profileListQuery\.hasNextPage/);
 
+// Likes order and cursor follow the like itself, and the profile queries' interactions refresh with their data.
+assert.match(storage, /orderBy\(desc\(noodleInteractions\.createdAt\), desc\(noodleInteractions\.id\)\)/u);
+assert.match(storage, /lt\(noodleInteractions\.createdAt, options\.cursorAt\)/u);
+assert.match(storage, /createdAt: lastLike\.likedAt, id: lastLike\.likeId/u);
+assert.match(home, /profileFeedQuery\.data,\s*profileLikesQuery\.data,\s*\]\);/u);
+
 console.log("Noodle profile and notification unloaded-post regressions passed.");

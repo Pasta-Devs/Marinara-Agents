@@ -986,7 +986,14 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       if (!unique.has(item.id)) unique.set(item.id, item);
     }
     return Array.from(unique.values());
-  }, [data?.interactions, feedInteractions, focusedPostResult, notificationDataQuery.data?.interactions]);
+  }, [
+    data?.interactions,
+    feedInteractions,
+    focusedPostResult,
+    notificationDataQuery.data?.interactions,
+    profileFeedQuery.data,
+    profileLikesQuery.data,
+  ]);
   const interactionsByPostId = useMemo(() => {
     const grouped = new Map<string, NoodleInteraction[]>();
     for (const interaction of interactions) {

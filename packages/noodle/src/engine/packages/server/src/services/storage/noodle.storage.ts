@@ -656,31 +656,44 @@ export function createNoodleStorage(db: DB) {
               and(eq(noodlePosts.createdAt, options.cursorAt), lt(noodlePosts.id, options.cursorId)),
             )
           : null;
-      // Posts the account liked (top-level likes only); the public-author filter below still applies.
-      const likedIds = options.likedByAccountId
-        ? (
-            await db
-              .select({ postId: noodleInteractions.postId })
-              .from(noodleInteractions)
-              .where(
-                and(
-                  eq(noodleInteractions.actorAccountId, options.likedByAccountId),
-                  eq(noodleInteractions.type, "like"),
-                  isNull(noodleInteractions.parentInteractionId),
-                ),
+      // Likes page by the like itself, newest like first (top-level likes only); the public-author filter applies before the limit.
+      if (options.likedByAccountId) {
+        const likeCursor =
+          options.cursorAt && options.cursorId
+            ? or(
+                lt(noodleInteractions.createdAt, options.cursorAt),
+                and(eq(noodleInteractions.createdAt, options.cursorAt), lt(noodleInteractions.id, options.cursorId)),
               )
-          ).map((row) => row.postId)
-        : null;
+            : undefined;
+        const likeRows = await db
+          .select({ post: noodlePosts, likedAt: noodleInteractions.createdAt, likeId: noodleInteractions.id })
+          .from(noodleInteractions)
+          .innerJoin(noodlePosts, eq(noodlePosts.id, noodleInteractions.postId))
+          .where(
+            and(
+              eq(noodleInteractions.actorAccountId, options.likedByAccountId),
+              eq(noodleInteractions.type, "like"),
+              isNull(noodleInteractions.parentInteractionId),
+              inArray(noodlePosts.authorId, ids),
+              likeCursor,
+            ),
+          )
+          .orderBy(desc(noodleInteractions.createdAt), desc(noodleInteractions.id))
+          .limit(limit + 1);
+        const likePage = likeRows.slice(0, limit);
+        const likedPosts = likePage.map((row) => mapPost(row.post));
+        const lastLike = likePage.at(-1);
+        return {
+          items: likedPosts,
+          interactions: await this.listInteractions(likedPosts.map((post) => post.id)),
+          nextCursor: likeRows.length > limit && lastLike ? { createdAt: lastLike.likedAt, id: lastLike.likeId } : null,
+        };
+      }
+
       const rows = await db
         .select()
         .from(noodlePosts)
-        .where(
-          and(
-            inArray(noodlePosts.authorAccountId, ids),
-            cursor,
-            likedIds ? inArray(noodlePosts.id, likedIds) : undefined,
-          ),
-        )
+        .where(and(inArray(noodlePosts.authorAccountId, ids), cursor))
         .orderBy(desc(noodlePosts.createdAt), desc(noodlePosts.id))
         .limit(limit + 1);
       const items = rows.slice(0, limit).map(mapPost);
