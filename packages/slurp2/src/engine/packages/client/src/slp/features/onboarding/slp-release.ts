@@ -18,7 +18,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.4.22",
     date: "2026-11-13",
     notes: [
-      "Pictures of a collab or couple post now show every partner. Nude pictures no longer put on clothes from the Creator's card or a saved look, and \"completely naked\" counts as no clothes.",
+      'Pictures of a collab or couple post now show every partner. Nude pictures no longer put on clothes from the Creator\'s card or a saved look, and "completely naked" counts as no clothes.',
     ],
   },
   {
