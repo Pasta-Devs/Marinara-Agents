@@ -18,7 +18,10 @@ import {
   IMAGE_RATINGS,
   LIMIT_DEFAULTS,
   defaultContent,
+  consentOpen,
+  contentWithHeat,
   enforceContent,
+  playerLimits,
   type ContentSettings,
   type Darkness,
   type Heat,
@@ -208,10 +211,67 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
+test("#2279: the prompts' refusal and the Dark notice follow one rule; the Allow block names only what is allowed", () => {
+  const honours = /the story honours/;
+  const openRefusal = /the other character need not stop at it/;
+  const allowBlock = "part of what this story may be about";
+  const gendered = /\b(?:she|her|hers)\b/i;
+  const cases = [
+    // [content, consent open (notice and prompt), names in the Allow block]
+    [stored("explicit", "dark", { "dubious-consent": "line", "non-consent": "line" }), false, []],
+    [stored("sfw", "dark"), false, []],
+    // Dark's default: dubious consent a Veil, non-consent a Line. Open, but nothing is Allow.
+    [stored("explicit", "dark"), true, []],
+    [stored("fade", "dark", { "dubious-consent": "allow", "non-consent": "line" }), true, ["dubious consent"]],
+    [stored("explicit", "dark", { "dubious-consent": "line", "non-consent": "allow" }), true, ["non-consent"]],
+    [
+      stored("explicit", "dark", { "dubious-consent": "allow", "non-consent": "allow" }),
+      true,
+      ["dubious consent", "non-consent"],
+    ],
+  ] as const;
+  for (const [content, open, named] of cases) {
+    const at = `${content.heat} ${content.limits["dubious-consent"]}/${content.limits["non-consent"]}`;
+    assert.equal(consentOpen(content), open, `${at}: the notice`);
+    for (const kind of TEXT_KINDS) {
+      const text = contract(content, kind);
+      assert.equal(honours.test(text), !open, `${at} ${kind}: honours a refusal`);
+      assert.equal(openRefusal.test(text), open, `${at} ${kind}: an open refusal`);
+      const block = text.split("\n").find((line) => line.includes(allowBlock)) ?? "";
+      assert.equal(!!block, named.length > 0, `${at} ${kind}: the Allow block`);
+      assert.equal(
+        /Dubious consent is /.test(block),
+        named.includes("dubious consent"),
+        `${at} ${kind}: dub-con defined`,
+      );
+      assert.equal(/Non-consent is /.test(block), named.includes("non-consent"), `${at} ${kind}: non-con defined`);
+      if (named.length) assert.match(block, named.length > 1 ? /Either may come/ : /It may come/, at);
+      // The protagonist's pronouns are the player's: nothing added here assumes them.
+      for (const line of text.split("\n").filter((line) => /protagonist/.test(line) && /refus|declin/.test(line))) {
+        assert.doesNotMatch(line, gendered, `${at} ${kind}: ${line.slice(0, 60)}`);
+      }
+    }
+  }
+});
+
+test("#2279: an SFW round trip of the Heat control brings an Allow consent limit back", () => {
+  const start = stored("explicit", "dark", { "dubious-consent": "allow", "non-consent": "allow" });
+  const picks = playerLimits(start, true);
+  // The control holds what the new Heat fixes (enforceContent lowers exactly those, the gate confirmed).
+  const sfw = enforceContent(contentWithHeat(start, "sfw", picks), true);
+  assert.deepEqual([sfw.limits["dubious-consent"], sfw.limits["non-consent"]], ["line", "line"]);
+  const back = enforceContent(contentWithHeat(sfw, "explicit", picks), true);
+  assert.deepEqual([back.limits["dubious-consent"], back.limits["non-consent"]], ["allow", "allow"]);
+  assert.equal(consentOpen(back), true);
+});
+
 test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throughout, a longer node", () => {
   const explicit = beatPrompt(stored("explicit", "angst"), "sfw");
   assert.match(explicit, /never summarized, sanitized or rushed\. Give it room, from the build-up through the act/);
   assert.match(explicit, /may talk throughout, ask for a change of position, say what they feel, or simply give in/);
+  // The maintainer's, 2026-11-13: the act itself is written out like explicit erotic fanfiction, never a few lines.
+  assert.match(explicit, /Write the act itself as explicit erotic fanfiction would: linger on it moment by moment/);
+  assert.match(explicit, /it never jumps from the first touch or thrust to the finish in a few lines\./);
   assert.match(explicit, /A node that reaches sex is the exception: [^\n]*up to 1500 words and 60 segments/);
   // The planners read the same Heat line, so they plan the room too.
   const plan = systemOf(
@@ -220,7 +280,7 @@ test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throug
   assert.match(plan, /never summarized, sanitized or rushed/);
   for (const content of [stored("fade", "angst"), defaultContent()]) {
     const prompt = beatPrompt(content, "sfw");
-    assert.doesNotMatch(prompt, /A node that reaches sex is the exception|or rushed/, content.heat);
+    assert.doesNotMatch(prompt, /A node that reaches sex is the exception|or rushed|erotic fanfiction/, content.heat);
   }
   // A Closer's opened ending gets the room too, under Explicit Heat only (Dottore on #1959).
   const closer = (content: ContentSettings) => {

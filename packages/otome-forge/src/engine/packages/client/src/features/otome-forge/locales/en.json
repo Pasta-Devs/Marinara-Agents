@@ -1324,6 +1324,7 @@
   "ui.otomeForge.setup.customRemove": "Remove your limit {{number}}",
   "ui.otomeForge.setup.customText": "Your limit {{number}}",
   "ui.otomeForge.setup.darkPromise": "In Dark romance, every darkness has a reason, a hidden cost and lines they won’t cross. Your choices always include refusing, and the story honours what you pick.",
+  "ui.otomeForge.setup.darkPromiseConsentOpen": "In Dark romance, every darkness has a reason, a hidden cost and lines they won’t cross. Your choices always include refusing, but while dubious consent or non-consent isn’t a Line, a love interest may not take no for an answer: on the page when you allow it, off the page as a Veil. Ease off stops any scene.",
   "ui.otomeForge.setup.darknessAngst": "Angst",
   "ui.otomeForge.setup.darknessAngstText": "Danger aimed at the world, their pasts and their enemies, never at you.",
   "ui.otomeForge.setup.darknessDark": "Dark romance",

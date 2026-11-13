@@ -214,6 +214,38 @@ export function limitIsFixed(id: LimitId, content: Pick<ContentSettings, "heat" 
   return false;
 }
 
+/** The two consent limits, in the order the contract names them (#2279). */
+const CONSENT_LIMITS: readonly LimitId[] = ["dubious-consent", "non-consent"];
+
+/**
+ * #2279: true while dubious consent or non-consent may still happen, at Allow or as a Veil (off the page): neither is
+ * held at Line. limitIsFixed takes the gate as confirmed, as the prompts do. The prompts' open refusal and the Dark
+ * notice in Settings → Content both follow this.
+ */
+export function consentOpen(content: ContentSettings) {
+  return CONSENT_LIMITS.some((id) => !limitIsFixed(id, content, true) && content.limits[id] !== "line");
+}
+
+/** #2279: the consent limits the player set to Allow (never merely a Veil), in that order. */
+export function consentAllowedIds(content: ContentSettings): LimitId[] {
+  return CONSENT_LIMITS.filter((id) => !limitIsFixed(id, content, true) && content.limits[id] === "allow");
+}
+
+/**
+ * The content once the Heat control picks `heat`: SFW drops the protagonist's role; any other Heat takes the limits
+ * again from the levels the player kept (`picks`, playerLimits), as a Darkness change does, so a consent limit an SFW
+ * round trip held at Line comes back to Allow (#2279). The caller still holds what the new Heat fixes at Line.
+ */
+export function contentWithHeat(
+  content: ContentSettings,
+  heat: Heat,
+  picks: Partial<Record<LimitId, LimitLevel>>,
+): ContentSettings {
+  if (heat !== "sfw") return { ...content, heat, limits: limitsForDarkness(content.darkness, picks) };
+  const { mcRole: _role, ...rest } = content;
+  return { ...rest, heat };
+}
+
 /**
  * The content as it may be used: without the gate, Heat drops to SFW and Dark to Angst; fixed limits become Lines;
  * custom limits are trimmed, emptied ones dropped, and capped. Only ever lowers a setting.

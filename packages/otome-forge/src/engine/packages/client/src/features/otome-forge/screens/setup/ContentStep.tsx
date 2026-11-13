@@ -8,7 +8,9 @@ import { useTranslation } from "react-i18next";
 import { CloudMoon, Eclipse, Flame, HeartCrack, Lock, Moon, Plus, Sun, Trash } from "lucide-react";
 import { useAgeGate } from "../../components/AgeGateDialog";
 import {
+  consentOpen,
   contentNeedsAgeGate,
+  contentWithHeat,
   CUSTOM_LIMIT_TEXT_MAX,
   CUSTOM_LIMITS_MAX,
   imageRatingNeedsAgeGate,
@@ -149,7 +151,7 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
         legend={t("ui.otomeForge.setup.heatLegend")}
         value={content.heat}
         choices={heats}
-        onChange={(heat) => void change(heat === "sfw" ? { ...withoutRole(content), heat } : { ...content, heat })}
+        onChange={(heat) => void change(contentWithHeat(content, heat, picks))}
       />
       <ChoiceCards
         legend={t("ui.otomeForge.setup.darknessLegend")}
@@ -157,7 +159,11 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
         choices={darknesses}
         onChange={(darkness) => void change({ ...content, darkness, limits: limitsForDarkness(darkness, picks) })}
       />
-      {content.darkness === "dark" ? <p className="of-notice">{t("ui.otomeForge.setup.darkPromise")}</p> : null}
+      {content.darkness === "dark" ? (
+        <p className="of-notice">
+          {t(consentOpen(content) ? "ui.otomeForge.setup.darkPromiseConsentOpen" : "ui.otomeForge.setup.darkPromise")}
+        </p>
+      ) : null}
       {intimacyOpen(content) ? (
         <>
           <Pills<McRole | "none">

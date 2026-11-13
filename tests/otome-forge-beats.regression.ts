@@ -792,14 +792,15 @@ test("reading the last node completes the chapter once: Starlight, Lead and Foil
   assert.deepEqual(reads.at(-1)!.body.grants, [
     { source: "beat", starlight: 30 },
     { source: "chapter", starlight: 160 },
-    { source: "lead", li: KAI, affection: 150 },
-    { source: "foil", li: MIR, affection: 60 },
+    // Its Confrontation, held all three rounds, ended in a standoff: the Lead earns the tie.
+    { source: "lead", li: KAI, affection: 100 },
+    { source: "foil", li: MIR, affection: 50 },
   ]);
   assert.equal(reads.at(-1)!.body.chapterDone, true);
   const state = await t.state();
   assert.equal(state.wallet.starlight, 2000 + 7 * 30 + 160);
-  assert.equal(state.lis[KAI]!.points, 150);
-  assert.equal(state.lis[MIR]!.points, 60);
+  assert.equal(state.lis[KAI]!.points, 100);
+  assert.equal(state.lis[MIR]!.points, 50);
   assert.equal(state.lis[KAI]!.lastLead, 1);
   assert.deepEqual(state.lis[KAI]!.angst, ["secret"]);
   assert.deepEqual(state.ledgers.relationship, [{ key: "main-1", li: KAI, line: "Kai let her see the lamp room." }]);

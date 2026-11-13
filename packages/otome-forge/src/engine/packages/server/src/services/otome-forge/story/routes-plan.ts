@@ -12,7 +12,8 @@
 // or moments, him in every one, its last node resolving the rupture's grievance.
 // Both are idempotent: the chapter a key already has is returned as it is, and planning runs in the run's foreground
 // queue, which reads again first, so two taps plan once. Both are private to him (memory audience [li]), pay as their
-// kind (route 300 Starlight and 150 affection; repair as a main chapter) and have no Foil.
+// kind (route 300 Starlight; repair as a main chapter; the Lead's affection by the chapter's climax, as in a main
+// chapter: S/state/rewards.ts) and have no Foil.
 import type {
   ArcStageKey,
   Chapter,

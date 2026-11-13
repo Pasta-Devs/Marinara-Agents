@@ -67,10 +67,8 @@ export function levelFloor(level: number): number {
 
 /** Affection points per earning. Story earnings are never capped; the rest share OUTSIDE_AFFECTION_DAILY_CAP. */
 export const AFFECTION_EARNINGS = {
-  /** The chapter's Lead, when its last node is read. */
-  lead: 150,
-  /** The chapter's Foil, when its last node is read. */
-  foil: 60,
+  /** The chapter's Foil, when its last node is read (the maintainer's, 2026-11-13: 50, was 60). The Lead's: LEAD_AFFECTION. */
+  foil: 50,
   date: 100,
   readHim: 40,
   /** A finished Read Me set (#1945, proposal), plus readMeRight per guess they got right and readMeClose per close one. */
@@ -86,6 +84,14 @@ export const AFFECTION_EARNINGS = {
   /** The first Show him for a look (the maintainer's, 2026-11-03: 5, was 20). */
   showHim: 5,
 } as const;
+/**
+ * The Lead of a main, route or repair chapter, when its last node is read, by how the chapter's climax ended (the
+ * maintainer's, 2026-11-13; it was 150 whatever happened): a win (the truth, or Opened up), a tie (a standoff, or
+ * Almost), or a loss (a walkout, or Shut out). A chapter with no Confrontation or Closer, or whose climax was eased off
+ * before its ending, pays the tie.
+ */
+export const LEAD_AFFECTION = { won: 150, tie: 100, lost: 50 } as const;
+
 /**
  * Affection from outside the story, per love interest per local day (the maintainer's, 2026-11-06, #2133: 150, was
  * 300): one Date Night's 100 and a little more.

@@ -18,7 +18,10 @@ import {
   composureAfter,
   endingFor,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
-import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import {
+  LIMIT_DEFAULTS,
+  defaultContent,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
   beatId,
   runDocTarget,
@@ -400,6 +403,31 @@ test("a walkout opens a major grievance, or a rupture at low trust; a standoff c
   assert.equal((await top.state()).lis[KAI]!.trust, 3);
 });
 
+test("the chapter's Lead earns by its confrontation: 150 for the truth, 100 for a standoff or an Ease off, 50 for a walkout", async () => {
+  const cases = [
+    ["r-ldtr-aaaaaa", ["reveal", "yield", "yield"], 150],
+    ["r-ldst-aaaaaa", ["hold", "hold", "hold"], 100],
+    ["r-ldwk-aaaaaa", ["press", "press", "hold"], 50],
+    ["r-ldez-aaaaaa", ["hold"], 100],
+  ] as const;
+  for (const [runKey, stances, affection] of cases) {
+    const t = await fightWorld(runKey);
+    await play(t, [...stances]);
+    // The Confrontation (node 6 of 7) is read to its end, or eased off before it reaches one.
+    const ended = stances.length === 3;
+    const done = ended
+      ? await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(5))
+      : await t.call("POST", `${beatPath}/ease-off`, { segment: 3 }, node(5));
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    await t.settle();
+    assert.equal((await t.call("POST", beatPath, {}, node(6))).status, 200, runKey);
+    const last = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(6));
+    assert.equal(last.body.chapterDone, true, runKey);
+    const lead = last.body.grants.find((entry: { source: string }) => entry.source === "lead");
+    assert.deepEqual(lead, { source: "lead", li: KAI, affection }, runKey);
+  }
+});
+
 test("stances whose effects never landed land when the beat is read; an Ease off keeps what was played", async () => {
   const t = await fightWorld("r-lost-aaaaaa");
   await play(t, ["reveal", "yield"]);
@@ -439,6 +467,18 @@ test("in Dark romance her stances include refusing him", async () => {
   const t = await fightWorld("r-dark-aaaaaa", { content });
   const [fight] = t.calls.filter((call) => isConfrontationPrompt(call.messages));
   assert.match(system(fight!.messages), /at least one stance lets the protagonist refuse Kai outright/);
+  // SFW Heat holds both consent limits at Line: the refusal is honoured.
+  assert.match(system(fight!.messages), /refuse Kai outright, and the story honours it\./);
+  // #2279: with a consent limit open (Dark's default dubious-consent Veil under NSFW Heat), it binds only her choice.
+  const open = await fightWorld("r-dkop-aaaaaa", {
+    content: { ...defaultContent(), heat: "explicit", darkness: "dark", limits: { ...LIMIT_DEFAULTS.dark } },
+  });
+  const [openFight] = open.calls.filter((call) => isConfrontationPrompt(call.messages));
+  const line = system(openFight!.messages)
+    .split("\n")
+    .find((entry) => entry.includes("refuse Kai outright"))!;
+  assert.match(line, /the refusal is the protagonist's own, and whether Kai backs down follows who Kai is\./);
+  assert.doesNotMatch(line, /honours|\b(?:she|her|hers)\b/);
 });
 
 test("a love interest thinks at most once on any path through a Confrontation", async () => {
