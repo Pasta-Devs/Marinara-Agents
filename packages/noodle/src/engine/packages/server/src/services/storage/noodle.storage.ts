@@ -674,7 +674,7 @@ export function createNoodleStorage(db: DB) {
               eq(noodleInteractions.actorAccountId, options.likedByAccountId),
               eq(noodleInteractions.type, "like"),
               isNull(noodleInteractions.parentInteractionId),
-              inArray(noodlePosts.authorId, ids),
+              inArray(noodlePosts.authorAccountId, ids),
               likeCursor,
             ),
           )

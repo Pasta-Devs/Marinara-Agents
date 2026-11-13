@@ -49,4 +49,6 @@ assert.match(storage, /lt\(noodleInteractions\.createdAt, options\.cursorAt\)/u)
 assert.match(storage, /createdAt: lastLike\.likedAt, id: lastLike\.likeId/u);
 assert.match(home, /profileFeedQuery\.data,\s*profileLikesQuery\.data,\s*\]\);/u);
 
+assert.doesNotMatch(storage, /noodlePosts\.authorId\b/u);
+
 console.log("Noodle profile and notification unloaded-post regressions passed.");
