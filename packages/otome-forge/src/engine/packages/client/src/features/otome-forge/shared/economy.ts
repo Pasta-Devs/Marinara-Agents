@@ -111,6 +111,18 @@ export const GRIEVANCE_CLEARED_AFFECTION = 300;
  */
 export const SIDE_WITH_AFFECTION = { backed: 30, passedOver: 10 } as const;
 
+/**
+ * `total` split into `parts` whole shares as evenly as it goes: each share is the floor, and the first `total % parts`
+ * shares carry one more, so a split never invents or loses a point. A double date's affection is shared this way.
+ */
+export function splitEvenly(total: number, parts: number): number[] {
+  const count = Math.max(1, Math.trunc(parts) || 1);
+  const whole = Math.max(0, Math.trunc(total) || 0);
+  const base = Math.floor(whole / count);
+  const extra = whole % count;
+  return Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0));
+}
+
 /** Affection level 1–10 from points. Choice losses stop at the current level's floor. */
 export function levelOf(points: number): number {
   const safe = Number.isFinite(points) ? Math.max(0, points) : 0;

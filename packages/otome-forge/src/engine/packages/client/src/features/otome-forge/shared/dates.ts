@@ -8,8 +8,28 @@
 // (SH/shop.ts), given in the date's first scene (GIFT_BEAT); it earns its own affection when the date is counted.
 // Pure TypeScript: types, constants and pure functions.
 import type { ActivityGrant, Grievance, LiId, LiState, Paint } from "./api-types";
+import { MAX_LEVEL, levelOf } from "./economy";
 import type { MusicMood } from "./faces";
 import type { GiftId } from "./shop";
+
+/**
+ * Double dates: once both love interests have reached affection level MAX_LEVEL (10), a date with one may invite the
+ * other. The date is written for the three of them, and its affection is split evenly between the two love interests.
+ */
+export const DOUBLE_DATE_LEVEL = MAX_LEVEL;
+
+/** Whether `liState` may take part in a double date: level 10 reached, and no grievance of his with her standing. */
+export function doubleDateReady(liState: Pick<LiState, "points" | "rupture" | "grievances"> | undefined): boolean {
+  return !!liState && levelOf(liState.points) >= DOUBLE_DATE_LEVEL && !heldAgainst(liState);
+}
+
+/** The love interests a date with `lead` may invite, in cast order: every other one at level 10 with no grievance. */
+export function doubleDateCandidates(
+  lis: Readonly<Record<LiId, Pick<LiState, "points" | "rupture" | "grievances">>>,
+  lead: LiId,
+): LiId[] {
+  return Object.keys(lis).filter((li) => li !== lead && doubleDateReady(lis[li]));
+}
 
 /** A date is three beats, each with one scored choice. */
 export const DATE_BEATS = 3;
@@ -119,12 +139,16 @@ export interface DatePlan {
   gift?: GiftId;
   /** #2156: the evening he asked her out on to clear the air, after she told him she was upset with him. */
   clearAir?: true;
+  /** A double date: the second love interest invited along. The evening is written for the three of them. */
+  second?: LiId;
 }
 
 /** One date as the client sees it. */
 export interface DateEntry {
   key: string;
   li: LiId;
+  /** The second love interest a double date invited, or undefined for a date for two. */
+  second?: LiId;
   title: string;
   place: DatePlace;
   placeName: string;
@@ -170,6 +194,8 @@ export interface DateStartInput {
   hisLook: string;
   /** #2128: one gift she owns (and the story's Heat offers) to give on the date; spent once the date is planned. */
   gift?: GiftId;
+  /** A double date: a second love interest at level 10 (DOUBLE_DATE_LEVEL) to invite; affection is split between them. */
+  second?: LiId;
 }
 
 /** A first-play pick of the date and how it landed, shown once the date is over. */

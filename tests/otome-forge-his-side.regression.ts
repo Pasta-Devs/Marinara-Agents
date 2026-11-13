@@ -823,10 +823,11 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 2026-11-10: betweenYou's slow burn and affection level lines changed on purpose.
   // Retaken 2026-11-11: the last scene's open-decision rule and the no-assumed-choice rule.
   // Retaken 0.23.0: the affection line reads "of 20" (the bond ranks).
-  assert.equal(sha(mainMessages), "efd76e01e7f26f16144a65197ed9f9b7dface032840b3d4e4867c2f77c840965", "a main chapter");
+  // Retaken 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register.
+  assert.equal(sha(mainMessages), "dee64e60738cfc2610b5ebc309fef376ac7c8d1bf114e271a5f85dd3b3fd463e", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "8d416d40caed3217b30744738dbf6ec2c548bf6d416d5dfa116d696018d34c17",
+    "66b271a3dea153e14d58066a393c9bde1f06ce4e5d33793ce960ad1f2d49ad27",
     "a Character Story, even with a scene handed to it",
   );
 });

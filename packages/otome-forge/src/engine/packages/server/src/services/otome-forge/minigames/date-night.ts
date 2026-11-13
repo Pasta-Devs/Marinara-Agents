@@ -75,9 +75,11 @@ import {
   type LimitId,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
+  BASE_LOOK,
   DATE_BEATS,
   STORY_PLACE,
   dateOutcome,
+  doubleDateReady,
   heldAgainst,
   standingRupture,
   stillToMend,
@@ -92,6 +94,7 @@ import {
 import {
   AFFECTION_EARNINGS,
   STARLIGHT_EARNINGS,
+  splitEvenly,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
@@ -139,6 +142,8 @@ const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "
 const dateNotFound = () => new OtomeForgeError(404, "No such date.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");
+const locked = (message: string) => new OtomeForgeError(409, message, "locked");
+const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
 
 const clean = (value: unknown, max = TEXT_MAX) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
@@ -268,6 +273,20 @@ function partnerOf(run: RunDocuments, li: LiId): Unit {
 const castOf = (run: RunDocuments) =>
   Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
 
+/**
+ * #2283: the second love interest a double date invites, as the run has him. A love interest the story does not have is
+ * a 404; one below affection level 10 (DOUBLE_DATE_LEVEL), or holding a grievance of his own with her, is refused
+ * before anything is planned. The date's own love interest must be ready too: it takes two at level 10.
+ */
+function secondOf(run: RunDocuments, input: Pick<DateStartInput, "li" | "second">): Unit | null {
+  if (!input.second) return null;
+  const unit = partnerOf(run, input.second);
+  if (!doubleDateReady(run.state.lis[input.li]) || !doubleDateReady(run.state.lis[input.second])) {
+    throw locked("A double date needs both of you at affection level 10, with no grievance between you.");
+  }
+  return unit;
+}
+
 /** Every date of the run (a chapter of kind "date" with its plan), newest first. */
 async function dateChapters(store: Pick<OtomeStore, "listRun">, runId: string): Promise<Chapter[]> {
   const number = (chapter: Chapter) => Number(DATE_KEY.exec(chapter.key)?.[1] ?? 0);
@@ -333,6 +352,7 @@ function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: Date
   return {
     key: chapter.key,
     li: date.li,
+    ...(date.second ? { second: date.second } : {}),
     title: chapter.title,
     place: date.place,
     placeName: date.placeName,
@@ -433,6 +453,29 @@ export async function checkGift(
   if (!(await openDateWith(deps.store, runId, li))) giveGift(run.state, run.world.content, gift);
 }
 
+/**
+ * #2283: POST /dates' invite check, refused before the route wears anything (the invitee's base look is worn as part of
+ * starting it). A love interest the story does not have is a 404, the date's own love interest is a 400, and either of
+ * them below affection level 10, holding a grievance, or already waiting on an evening of their own is refused as
+ * startDate refuses them. A date with them still open is resumed instead, and invites no one, so it is never refused
+ * here.
+ */
+export async function checkDoubleDate(
+  deps: Pick<DateDeps, "store">,
+  runId: string,
+  { li, second }: Pick<DateStartInput, "li" | "second">,
+): Promise<void> {
+  if (!second) return;
+  const run = await readRun(deps.store, runId);
+  if (!run) throw runNotFound();
+  if (second === li) throw badRequest("Invite someone other than the date's love interest.");
+  if (await openDateWith(deps.store, runId, li)) return;
+  secondOf(run, { li, second });
+  if (await openDateWith(deps.store, runId, second)) {
+    throw conflict("They already have an evening waiting with you. Finish that date first.");
+  }
+}
+
 /** #2156: `state` with his invitation to clear the air let go, now that its evening is planned (`li`: whose, or none). */
 function withAskedSpent(state: RunState, li: LiId | null): RunState {
   const current = li ? state.lis[li] : undefined;
@@ -466,6 +509,9 @@ export async function startDate(
   });
   const open = await openDateWith(deps.store, runId, input.li);
   if (open) return resume(open);
+  // #2283: checked before anything is worn, given or planned, and again inside the queue.
+  if (input.second === input.li) throw badRequest("Invite someone other than the date's love interest.");
+  secondOf(first, input);
   return runForeground(runId, async () => {
     signal?.throwIfAborted();
     // Read again inside the queue: a request queued behind the one that planned it returns that date.
@@ -473,7 +519,16 @@ export async function startDate(
     if (again) return resume(again);
     const run = await readRun(deps.store, runId);
     if (!run) throw runNotFound();
+    if (input.second) {
+      secondOf(run, input);
+      if (await openDateWith(deps.store, runId, input.second)) {
+        throw conflict("They already have an evening waiting with you. Finish that date first.");
+      }
+    }
     const unit = partnerOf(run, input.li);
+    // #2283: the invited love interest, checked again against the run read inside the queue.
+    const second = secondOf(run, input);
+    const secondName = second?.name ?? "";
     const storyPlace = storyPlaceOf(run.world, input);
     // Checked again here (another request may have given it while this one waited), before the model is asked.
     const gift = input.gift;
@@ -486,11 +541,11 @@ export async function startDate(
     const job: ForgeMemoryJob = "narration";
     const memory = await recallText(deps, runId, {
       job,
-      cast: [input.li],
+      cast: second ? [input.li, second.id] : [input.li],
       query: {
-        cues: [makeItRight?.text ?? "", unit.bible?.want ?? ""].filter(Boolean),
-        plan: unit.bible?.want ?? "",
-        speakers: [run.player.name, unit.name].filter(Boolean),
+        cues: [makeItRight?.text ?? "", unit.bible?.want ?? "", second?.bible?.want ?? ""].filter(Boolean),
+        plan: [unit.bible?.want ?? "", secondName].filter(Boolean).join(" "),
+        speakers: [run.player.name, unit.name, secondName].filter(Boolean),
       },
       signal,
       debugMode,
@@ -511,6 +566,7 @@ export async function startDate(
         memory: memory.text,
         gift: gift ?? null,
         clearAir: !!clearAir,
+        ...(second ? { second } : {}),
       }),
       memory,
       schema: DatePlanReplySchema,
@@ -536,6 +592,7 @@ export async function startDate(
       keepsake: { brief: plan.brief },
       ...(gift ? { gift } : {}),
       ...(clearAir ? { clearAir } : {}),
+      ...(second ? { second: second.id } : {}),
     };
     const chapter: Chapter = {
       key,
@@ -549,7 +606,8 @@ export async function startDate(
         i,
         kind: "beat",
         guide,
-        cast: [input.li],
+        // #2283: a double date's every scene holds the three of them.
+        cast: second ? [input.li, second.id] : [input.li],
         ...(i === 0 && plan.placeName ? { place: plan.placeName } : {}),
       })),
       // A stumble's seed is planted for him when the date's last scene is read (S/state/rewards.ts saveLedger).
@@ -633,11 +691,18 @@ function withFirstDate(state: RunState, li: LiId, chapter: Chapter, at: string):
  * so the day's activity cap never eats it, as a story's earnings are never capped), and pushed onto `grants`.
  */
 function withGiftAffection(state: RunState, plan: DatePlan, grants: ActivityGrant[]): RunState {
-  const current = state.lis[plan.li];
-  if (!plan.gift || !current) return state;
-  const affection = GIFT_AFFECTION[plan.gift];
-  grants.push({ source: "gift", li: plan.li, affection });
-  return { ...state, lis: { ...state.lis, [plan.li]: { ...current, points: current.points + affection } } };
+  if (!plan.gift) return state;
+  // #2283: a double date's gift is part of the evening's affection, so it is shared with the invited love interest.
+  const payees = (plan.second ? [plan.li, plan.second] : [plan.li]).filter((li) => state.lis[li]);
+  if (!payees.length) return state;
+  const shares = splitEvenly(GIFT_AFFECTION[plan.gift], payees.length);
+  const lis = { ...state.lis };
+  payees.forEach((li, index) => {
+    const affection = shares[index] ?? 0;
+    lis[li] = { ...lis[li]!, points: lis[li]!.points + affection };
+    if (affection) grants.push({ source: "gift", li, affection });
+  });
+  return { ...state, lis };
 }
 
 /** POST /runs/:run/dates/:key/finish: the outcome, counted exactly once (see the header). */
@@ -682,16 +747,27 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
     const next = standing
       ? withMark(applied.state, key, mendMark(chapter, repaired ? "mended" : "standing"))
       : applied.state;
-    const paid = grant(next, {
-      source: "date",
-      starlight: STARLIGHT_EARNINGS.date,
-      li: plan.li,
-      affection: AFFECTION_EARNINGS.date,
+    // #2283: a double date's affection is split evenly between the two love interests, each paid on its own so the
+    // day's cap applies to each; Starlight is the evening's, paid once.
+    const payees = plan.second ? [plan.li, plan.second] : [plan.li];
+    const shares = splitEvenly(AFFECTION_EARNINGS.date, payees.length);
+    let paying: RunState = next;
+    let starlightPaid = 0;
+    payees.forEach((li, index) => {
+      const paid = grant(paying, {
+        source: "date",
+        starlight: index === 0 ? STARLIGHT_EARNINGS.date : 0,
+        li,
+        affection: shares[index] ?? 0,
+      });
+      paying = paid.state;
+      if (paid.granted.starlight) starlightPaid += paid.granted.starlight;
+      if (paid.granted.affection) grants.push({ source: "date", li, affection: paid.granted.affection });
     });
-    if (paid.granted.starlight) grants.push({ source: "date", starlight: paid.granted.starlight });
-    if (paid.granted.affection) grants.push({ source: "date", li: plan.li, affection: paid.granted.affection });
+    if (starlightPaid) grants.unshift({ source: "date", starlight: starlightPaid });
     counted = true;
-    return withFirstDate(withGiftAffection(paid.state, plan, grants), plan.li, chapter, at);
+    const withFirsts = payees.reduce((state, li) => withFirstDate(state, li, chapter, at), paying);
+    return withGiftAffection(withFirsts, plan, grants);
   });
   if (!state) throw runNotFound();
   return {

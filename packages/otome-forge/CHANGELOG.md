@@ -1,10 +1,11 @@
 # Otome Hearth release notes
 
-## 0.25.1 — 2026-11-13
+## 0.26.0 — 2026-11-13
 
-- **A keepsake reads the evening again.** Once a date is finished, its keepsake offers **Read the evening again**, which opens the date's chapter in the reader, from its first scene.
-- **Keepsakes in the Album.** A finished date's painted keepsake now appears in **Album → Photos**, beside your Photo Shoot photos, with its date. Open one to see it full size, save it, or read the evening again.
-- **Full-size keepsakes on the date's end screen.** Tapping the keepsake's picture shows it full size, with its place, instead of a small polaroid.
+- **Double dates.** Once a love interest has reached affection level 10, a date with him can invite a second love interest who has also reached level 10. The evening is written for the three of them: both are in every scene, and what passes between the two of them is part of it. Under Explicit Heat it can turn intimate between the three of them; below that it stays a warm evening for three.
+- **Shared affection.** A double date's affection is split evenly between the two love interests, the gift included, and each share counts against that love interest's own daily cap.
+- **Who can be invited.** Someone at level 10 with no grievance between you. A love interest whose own evening with you is still waiting cannot join until it is finished.
+- **Plainer prose, truer voices.** Everyday words, not ornate metaphors and stacked adjectives; dialogue in the register a character's own life taught them, so a common man sounds like one; and choices written plainly.
 
 ## 0.25.0 — 2026-11-13
 

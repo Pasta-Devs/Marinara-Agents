@@ -48,8 +48,6 @@
   "ui.otomeForge.album.soundtrackHint": "A mood plays while the Album is open. Tracks written for this world replace the Engine’s own once they’re generated.",
   "ui.otomeForge.album.soundtrackMuted": "Music is off in Settings → Audio, so nothing plays.",
   "ui.otomeForge.album.sourceCard": "A Tarot card",
-  "ui.otomeForge.album.sourceKeepsake": "From a date",
-  "ui.otomeForge.album.keepsakesHint": "Keepsakes from your finished dates are kept here, next to your photos. Open one to see it full size, save it, or read the evening again.",
   "ui.otomeForge.album.sourceMemory": "From a Memory",
   "ui.otomeForge.album.sourcePair": "A pair portrait",
   "ui.otomeForge.album.sourcePhoto": "From a Photo Shoot",
@@ -399,9 +397,11 @@
   "ui.otomeForge.dateNight.keepsakeStopped": "The keepsake stopped before it was finished.",
   "ui.otomeForge.dateNight.keepsakeSubject": "a keepsake with {{name}}",
   "ui.otomeForge.dateNight.keepsakeText": "Keep one picture of the evening, of you and {{name}}.",
+  "ui.otomeForge.dateNight.doubleTitle": "Someone else along?",
+  "ui.otomeForge.dateNight.doubleHint": "Invite a second love interest who has reached affection level 10, and the evening is written for the three of you. Its affection is split evenly between you both.",
+  "ui.otomeForge.dateNight.doubleJustUs": "Just the two of us",
+  "ui.otomeForge.dateNight.doubleSplit": "Tonight's affection is split with {{name}}.",
   "ui.otomeForge.dateNight.keepsakeTitle": "A keepsake of tonight",
-  "ui.otomeForge.dateNight.keepsakeReread": "Read the evening again",
-  "ui.otomeForge.dateNight.keepsakeViewFull": "View the keepsake full size: {{title}}",
   "ui.otomeForge.dateNight.lastWords": "{{name}}, at the end of the evening",
   "ui.otomeForge.dateNight.loading": "Opening Date Night…",
   "ui.otomeForge.dateNight.lookBase": "Everyday look",
@@ -1972,5 +1972,9 @@
   "ui.otomeForge.story.bondHint": "Past level 10, after their story's finale, affection opens ten more ranks, one at a time: each rank's story is played before the next opens. At the last, every 300 affection earns a prestige point.",
   "ui.otomeForge.story.bondNew": "A new bond story with {{name}}",
   "ui.otomeForge.arcs.planningBond": "Writing the bond story…",
-  "ui.otomeForge.arcs.bondLocked": "Open this bond rank after the one before it."
+  "ui.otomeForge.arcs.bondLocked": "Open this bond rank after the one before it.",
+  "ui.otomeForge.album.sourceKeepsake": "From a date",
+  "ui.otomeForge.album.keepsakesHint": "Keepsakes from your finished dates are kept here, next to your photos. Open one to see it full size, save it, or read the evening again.",
+  "ui.otomeForge.dateNight.keepsakeReread": "Read the evening again",
+  "ui.otomeForge.dateNight.keepsakeViewFull": "View the keepsake full size: {{title}}"
 }
