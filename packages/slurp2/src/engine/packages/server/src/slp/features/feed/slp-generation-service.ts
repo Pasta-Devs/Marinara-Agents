@@ -76,6 +76,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import {
   slurpCameraSourceInstruction,
   slurpPostCameraSource,
+  slurpSceneCamera,
   slurpScreenFreeCamera,
 } from "../../modules/feed/slp-camera-source.js";
 import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
@@ -186,8 +187,7 @@ export async function generateCreatorPost(
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
-  // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
-  // so it biases every post they ever make rather than this one.
+  // How this Creator makes things, not who they are. Stable for the account's life; it biases every post.
   const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
   const production = strategy.production;
   const effort = slurpPostEffort(production, sequence, account.id);
@@ -269,8 +269,7 @@ export async function generateCreatorPost(
   const textOnly = axes?.delivery === "text_only";
   // A reused picture is the picture: nothing is briefed or generated for this post.
   const postImages = imagesEnabled && !textOnly && !reusedMedia;
-  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot
-  // keeps its own camera. See `slp-camera-source.ts`.
+  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot keeps its own camera. See `slp-camera-source.ts`.
   const screens = !(await readSlurpWorldLens(db, account.id));
   const cameraSource = variation
     ? slurpPostCameraSource(account.id, sequence, {
@@ -281,10 +280,10 @@ export async function generateCreatorPost(
         effort,
       })
     : null;
-  const camera = slurpScreenFreeCamera(shoot?.cameraSource, screens) ?? cameraSource;
+  const shootCamera = slurpScreenFreeCamera(shoot?.cameraSource, screens);
+  const camera = shootCamera ?? cameraSource;
   const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
-  // The shoot rides in the content-type block rather than a block of its own: it is part of what
-  // this post is for, and a second block would be dead for every post that is not a callback.
+  // The shoot rides in the content-type block: a block of its own would be dead for non-callback posts.
   const contentTypeInstruction = axes
     ? [
         slurpContentAxesInstruction(axes),
@@ -497,6 +496,8 @@ export async function generateCreatorPost(
     content: protectedContent,
   };
 
+  const pictureCamera =
+    shootCamera ?? (camera && slurpSceneCamera(camera, askModelForScene && generated.scene, variation, screens));
   const wardrobeSelection = resolveSlurpWardrobeSelection({
     looks: wardrobeLooks,
     access: input.request.access,
@@ -511,7 +512,7 @@ export async function generateCreatorPost(
   const { draftImagePrompt, visualBrief, negativePrompt, shotBriefs, pictureCast } = slurpPostPictureBriefs({
     project,
     variation,
-    camera,
+    camera: pictureCamera,
     effort,
     productionStyle: production.style,
     shoot,
@@ -522,6 +523,7 @@ export async function generateCreatorPost(
     explicitLevel,
     partner: spiceAngle?.partner?.company ?? null,
     cast: [...new Set([...(beat?.cast ?? []), ...mentioned.names, ...tagged.names])],
+    beat,
     modelImagePrompt: generated.imagePrompt,
     stageFacts: account.settings.stage,
     scene: generated.scene,
@@ -537,12 +539,12 @@ export async function generateCreatorPost(
   // by a run that throws later is pruned with the rest.
   let openedShootId: string | null = null;
   if (!input.previewOnly) {
-    if (axes?.intent === "set" && camera && variation) {
+    if (axes?.intent === "set" && pictureCamera && variation) {
       const opened = await openSlurpShoot(db, {
         creatorAccountId: account.id,
         place: generated.scene?.setting?.trim() || variation.place, // concrete, so callbacks name it
         company: variation.company,
-        cameraSource: camera,
+        cameraSource: pictureCamera,
         brief: slurpShootContinuity({ scene: generated.scene, selected: wardrobeSelection.look?.description, bare }),
         effort,
         theme: axes.intent,
@@ -592,7 +594,7 @@ export async function generateCreatorPost(
           demandTopic,
           project,
           projectChapter,
-          camera,
+          camera: pictureCamera,
           effort,
           visualBrief,
           strategy,
@@ -614,8 +616,7 @@ export async function generateCreatorPost(
     source: "generated" as const,
     access: input.request.access,
     projectId: project?.id ?? null,
-    // Stamped now rather than resolved later, so editing the project cannot rewrite what a
-    // published post was about.
+    // Stamped now rather than resolved later, so editing the project cannot rewrite what a published post was about.
     projectChapter,
     metadata: {
       noodlerContentFormat: format,
