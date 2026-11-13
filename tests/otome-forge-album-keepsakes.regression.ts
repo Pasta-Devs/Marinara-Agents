@@ -9,7 +9,7 @@ import type { Paint } from "../packages/otome-forge/src/engine/packages/client/s
 
 const KAI = "li-kai-ab12";
 const MIR = "li-mireille-cd34";
-const ready = (url: string): Paint => ({ state: "ready", url } as Paint);
+const ready = (url: string): Paint => ({ state: "ready", url }) as Paint;
 
 const entry = (key: string, li: string, keepsake: Paint | null, changes: Partial<DateEntry> = {}): DateEntry =>
   ({
