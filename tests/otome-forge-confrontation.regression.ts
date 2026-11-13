@@ -18,7 +18,10 @@ import {
   composureAfter,
   endingFor,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
-import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import {
+  LIMIT_DEFAULTS,
+  defaultContent,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
   beatId,
   runDocTarget,
@@ -464,6 +467,18 @@ test("in Dark romance her stances include refusing him", async () => {
   const t = await fightWorld("r-dark-aaaaaa", { content });
   const [fight] = t.calls.filter((call) => isConfrontationPrompt(call.messages));
   assert.match(system(fight!.messages), /at least one stance lets the protagonist refuse Kai outright/);
+  // SFW Heat holds both consent limits at Line: the refusal is honoured.
+  assert.match(system(fight!.messages), /refuse Kai outright, and the story honours it\./);
+  // #2279: with a consent limit open (Dark's default dubious-consent Veil under NSFW Heat), it binds only her choice.
+  const open = await fightWorld("r-dkop-aaaaaa", {
+    content: { ...defaultContent(), heat: "explicit", darkness: "dark", limits: { ...LIMIT_DEFAULTS.dark } },
+  });
+  const [openFight] = open.calls.filter((call) => isConfrontationPrompt(call.messages));
+  const line = system(openFight!.messages)
+    .split("\n")
+    .find((entry) => entry.includes("refuse Kai outright"))!;
+  assert.match(line, /the refusal is the protagonist's own, and whether Kai backs down follows who Kai is\./);
+  assert.doesNotMatch(line, /honours|\b(?:she|her|hers)\b/);
 });
 
 test("a love interest thinks at most once on any path through a Confrontation", async () => {

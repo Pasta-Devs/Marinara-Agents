@@ -18,7 +18,10 @@ import {
   IMAGE_RATINGS,
   LIMIT_DEFAULTS,
   defaultContent,
+  consentOpen,
+  contentWithHeat,
   enforceContent,
+  playerLimits,
   type ContentSettings,
   type Darkness,
   type Heat,
@@ -208,37 +211,58 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
-test("#2284: while a consent limit is Allow, the refusal does not bind the other character; without it, it does", () => {
-  const consentOpen = (content: ContentSettings) => contract(content);
-  const hasHonours = (text: string) => /the story honours/.test(text);
-  const hasOpenRefusal = (text: string) => /the other character need not stop at it|may still press on/.test(text);
-  const hasPlannerLine = (text: string) => text.includes("part of what this story may be about");
+test("#2279: the prompts' refusal and the Dark notice follow one rule; the Allow block names only what is allowed", () => {
+  const honours = /the story honours/;
+  const openRefusal = /the other character need not stop at it/;
+  const allowBlock = "part of what this story may be about";
+  const gendered = /\b(?:she|her|hers)\b/i;
+  const cases = [
+    // [content, consent open (notice and prompt), names in the Allow block]
+    [stored("explicit", "dark", { "dubious-consent": "line", "non-consent": "line" }), false, []],
+    [stored("sfw", "dark"), false, []],
+    // Dark's default: dubious consent a Veil, non-consent a Line. Open, but nothing is Allow.
+    [stored("explicit", "dark"), true, []],
+    [stored("fade", "dark", { "dubious-consent": "allow", "non-consent": "line" }), true, ["dubious consent"]],
+    [stored("explicit", "dark", { "dubious-consent": "line", "non-consent": "allow" }), true, ["non-consent"]],
+    [
+      stored("explicit", "dark", { "dubious-consent": "allow", "non-consent": "allow" }),
+      true,
+      ["dubious consent", "non-consent"],
+    ],
+  ] as const;
+  for (const [content, open, named] of cases) {
+    const at = `${content.heat} ${content.limits["dubious-consent"]}/${content.limits["non-consent"]}`;
+    assert.equal(consentOpen(content), open, `${at}: the notice`);
+    for (const kind of TEXT_KINDS) {
+      const text = contract(content, kind);
+      assert.equal(honours.test(text), !open, `${at} ${kind}: honours a refusal`);
+      assert.equal(openRefusal.test(text), open, `${at} ${kind}: an open refusal`);
+      const block = text.split("\n").find((line) => line.includes(allowBlock)) ?? "";
+      assert.equal(!!block, named.length > 0, `${at} ${kind}: the Allow block`);
+      assert.equal(
+        /Dubious consent is /.test(block),
+        named.includes("dubious consent"),
+        `${at} ${kind}: dub-con defined`,
+      );
+      assert.equal(/Non-consent is /.test(block), named.includes("non-consent"), `${at} ${kind}: non-con defined`);
+      if (named.length) assert.match(block, named.length > 1 ? /Either may come/ : /It may come/, at);
+      // The protagonist's pronouns are the player's: nothing added here assumes them.
+      for (const line of text.split("\n").filter((line) => /protagonist/.test(line) && /refus|declin/.test(line))) {
+        assert.doesNotMatch(line, gendered, `${at} ${kind}: ${line.slice(0, 60)}`);
+      }
+    }
+  }
+});
 
-  // No consent limit open: "honours the pick" stays in both ROMANCE and DARK_ADDITION, and the planner line is absent.
-  const closed = stored("explicit", "dark", { "dubious-consent": "line", "non-consent": "line" });
-  const closedText = contract(closed);
-  assert.ok(hasHonours(closedText), "honours the pick when no consent limit is open");
-  assert.ok(!hasOpenRefusal(closedText), "no open-refusal framing when closed");
-  assert.ok(!hasPlannerLine(closedText), "no planner line when closed");
-
-  // dubious-consent at Allow: honours clauses go, the refusal binding only the protagonist, planners may plan it.
-  const dubOpen = stored("explicit", "dark", { "dubious-consent": "allow", "non-consent": "line" });
-  const dubText = contract(dubOpen);
-  assert.ok(!hasHonours(dubText), "no honours clause with dub-con open");
-  assert.ok(hasOpenRefusal(dubText), "open-refusal framing with dub-con open");
-  assert.ok(hasPlannerLine(dubText), "planner line with dub-con open");
-
-  // non-consent at Allow (requires Dark + NSFW Heat + gate): same, plus the non-consent gloss.
-  const ncOpen = stored("explicit", "dark", { "non-consent": "allow" });
-  const ncText = contract(ncOpen);
-  assert.ok(!hasHonours(ncText), "no honours clause with non-con open");
-  assert.ok(hasOpenRefusal(ncText), "open-refusal framing with non-con open");
-  assert.match(ncText, /non-consent is sex forced on the protagonist past her refusal/, "non-con gloss");
-  assert.match(ncText, /not to the limit on a love interest's violence/, "violence Veil clarified");
-
-  // P12: the conditional is in prompts.ts at the confrontationMessages call site (tested below in the confrontation
-  // regression). The three contract-level checks above are sufficient: when consentOpen is true the ROMANCE_OPEN and
-  // DARK_ADDITION_OPEN variants go in; when it is false the original "honours the pick" / "honours it" variants go in.
+test("#2279: an SFW round trip of the Heat control brings an Allow consent limit back", () => {
+  const start = stored("explicit", "dark", { "dubious-consent": "allow", "non-consent": "allow" });
+  const picks = playerLimits(start, true);
+  // The control holds what the new Heat fixes (enforceContent lowers exactly those, the gate confirmed).
+  const sfw = enforceContent(contentWithHeat(start, "sfw", picks), true);
+  assert.deepEqual([sfw.limits["dubious-consent"], sfw.limits["non-consent"]], ["line", "line"]);
+  const back = enforceContent(contentWithHeat(sfw, "explicit", picks), true);
+  assert.deepEqual([back.limits["dubious-consent"], back.limits["non-consent"]], ["allow", "allow"]);
+  assert.equal(consentOpen(back), true);
 });
 
 test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throughout, a longer node", () => {

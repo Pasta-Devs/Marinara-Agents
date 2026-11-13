@@ -8,8 +8,9 @@ import { useTranslation } from "react-i18next";
 import { CloudMoon, Eclipse, Flame, HeartCrack, Lock, Moon, Plus, Sun, Trash } from "lucide-react";
 import { useAgeGate } from "../../components/AgeGateDialog";
 import {
-  consentAllowedIds,
+  consentOpen,
   contentNeedsAgeGate,
+  contentWithHeat,
   CUSTOM_LIMIT_TEXT_MAX,
   CUSTOM_LIMITS_MAX,
   imageRatingNeedsAgeGate,
@@ -150,15 +151,7 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
         legend={t("ui.otomeForge.setup.heatLegend")}
         value={content.heat}
         choices={heats}
-        // #2284: raising Heat re-derives the limits, as the Darkness control does, so a consent limit a brush with SFW
-        // held at Line comes back to the pick the player kept in `picks` (holdFixed still holds what the Heat fixes).
-        onChange={(heat) =>
-          void change(
-            heat === "sfw"
-              ? { ...withoutRole(content), heat }
-              : { ...content, heat, limits: limitsForDarkness(content.darkness, picks) },
-          )
-        }
+        onChange={(heat) => void change(contentWithHeat(content, heat, picks))}
       />
       <ChoiceCards
         legend={t("ui.otomeForge.setup.darknessLegend")}
@@ -168,11 +161,7 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
       />
       {content.darkness === "dark" ? (
         <p className="of-notice">
-          {t(
-            consentAllowedIds(content).length
-              ? "ui.otomeForge.setup.darkPromiseConsentOpen"
-              : "ui.otomeForge.setup.darkPromise",
-          )}
+          {t(consentOpen(content) ? "ui.otomeForge.setup.darkPromiseConsentOpen" : "ui.otomeForge.setup.darkPromise")}
         </p>
       ) : null}
       {intimacyOpen(content) ? (

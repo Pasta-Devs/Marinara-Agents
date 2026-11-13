@@ -199,6 +199,7 @@ import {
   type LimitId,
   type McRole,
   contentNeedsAgeGate,
+  consentAllowedIds,
   consentOpen,
   intimacyOpen,
   limitIsFixed,
@@ -489,9 +490,9 @@ const ANGST_NSFW =
 
 const DARK_ADDITION =
   "Dark romance: each love interest's darkness has a reason they believe, a hidden cost they pay, and whatever red lines they keep. The protagonist's options always include refusing, and the story honours what the player picks.";
-/** #2284: the same, while dubious consent or non-consent is allowed: a refusal is real, and it binds only her. */
+/** #2279: the same while dubious consent or non-consent is not a Line: a refusal is real, and binds only the protagonist. */
 const DARK_ADDITION_OPEN =
-  "Dark romance: each love interest's darkness has a reason they believe, a hidden cost they pay, and whatever red lines they keep. The protagonist's options always include refusing, written as the refusal she makes; within the Lines and Veils, a love interest or a villain may still press on past it, or take what they want.";
+  "Dark romance: each love interest's darkness has a reason they believe, a hidden cost they pay, and whatever red lines they keep. The protagonist's options always include refusing, written as the protagonist's own refusal; within the Lines and Veils, a love interest or a villain may still press on past it, or take what they want.";
 
 // NSFW mode only (planner, scene and chat), from the maintainer's NSFW prompt, mapped onto Otome's settings: rape is
 // the non-consent Line; torture, gore and mutilation, self-harm and a love interest's violence toward the protagonist
@@ -500,9 +501,8 @@ const DARK_ADDITION_OPEN =
 const NO_MINORS = "Nothing sexual or romantic ever involves anyone under 18, in the story or in anyone's past.";
 const ROMANCE =
   'Flirtation, desire, jealousy, possessiveness, seduction and messy attachment belong in this story and escalate naturally; a love interest may make the first move instead of waiting for the protagonist. Nothing intimate, from hand-holding, pinning and kisses to sex itself, causes an out-of-character pause, a disclaimer or a consent check in the writing: the player opted in through their content settings and has Ease off to stop a scene. A love interest never asks permission, checks in or offers to stop ("tell me to stop", "are you sure?", "we can stop whenever you want"). When a choice is about intimacy, one option lets the protagonist decline, and the story honours the pick.';
-/** #2284: ROMANCE's decline, while dubious consent or non-consent is allowed: hers to make, not his to obey. */
-const ROMANCE_OPEN =
-  'Flirtation, desire, jealousy, possessiveness, seduction and messy attachment belong in this story and escalate naturally; a love interest may make the first move instead of waiting for the protagonist. Nothing intimate, from hand-holding, pinning and kisses to sex itself, causes an out-of-character pause, a disclaimer or a consent check in the writing: the player opted in through their content settings and has Ease off to stop a scene. A love interest never asks permission, checks in or offers to stop ("tell me to stop", "are you sure?", "we can stop whenever you want"). When a choice is about intimacy, one option lets the protagonist decline; the decline is written as her own, and within the Lines and Veils the other character need not stop at it.';
+/** #2279: ROMANCE's decline while dubious consent or non-consent is not a Line: the protagonist's to make, not the other's to obey. */
+const ROMANCE_OPEN = `Flirtation, desire, jealousy, possessiveness, seduction and messy attachment belong in this story and escalate naturally; a love interest may make the first move instead of waiting for the protagonist. Nothing intimate, from hand-holding, pinning and kisses to sex itself, causes an out-of-character pause, a disclaimer or a consent check in the writing: the player opted in through their content settings and has Ease off to stop a scene. A love interest never asks permission, checks in or offers to stop ("tell me to stop", "are you sure?", "we can stop whenever you want"). When a choice is about intimacy, one option lets the protagonist decline; the decline is written as the protagonist's own, and within the Lines and Veils the other character need not stop at it.`;
 const LANGUAGE =
   "Language is not sanitized: crude and vulgar words are fine in dialogue and narration alike (fuck, shit, cock, pussy and the like) whenever they fit the character's voice and the moment.";
 /** An SFW contract's language (the maintainer's call): swearing where it fits, the sexual words stay NSFW mode's. */
@@ -511,15 +511,25 @@ const SFW_LANGUAGE =
 /** Only while dubious consent or non-consent is not a Line (SH/content.ts limitIsFixed: Dark, NSFW Heat, the gate). */
 const CONSENT =
   "The player agreed to this scenario outside the story. Within the Lines and Veils, a character may hesitate, struggle, resist or fight back as their personality would; that is part of the story, never an out-of-character stop. The only real stops are the player's own: Ease off, and their Lines. The protagonist's refusal is the protagonist's own: written as a refusal, never as secret wanting, and it has consequences between them. That refusal binds only the protagonist: whether the other character stops, presses on or takes what they want is theirs, within the Lines and Veils.";
+/** #2279: what each consent limit means here, said only for one the player set to Allow. */
+const CONSENT_DEFINITION: Partial<Record<LimitId, string>> = {
+  "dubious-consent":
+    "Dubious consent is sex or intimacy the protagonist is pressured, manipulated, bargained or worn down into.",
+  "non-consent":
+    "Non-consent is sex forced on the protagonist past their refusal; the force it takes belongs to non-consent, not to the limit on a love interest's violence toward the protagonist.",
+};
 /**
- * #2284: while dub-con or non-con is allowed, what those words mean here and that a planner may build a chapter on
- * them. The bare list in "Allowed on the page" is a permission the model otherwise reads past. It goes only where
- * the limit is Allow (not merely a Veil), and its non-consent gloss takes the act away from the violence limit.
+ * #2279: while dub-con or non-con is Allow (not merely a Veil), that a planner may build a chapter on it, and what it
+ * means here: the bare "Allowed on the page" list is a permission the model otherwise reads past. Only the limits at
+ * Allow are named and defined, so one held at a Line or a Veil is never opened by it.
  */
-const CONSENT_ALLOWED = (names: string[]) =>
-  `${names.join(" and ")} ${names.length > 1 ? "are" : "is"} part of what this story may be about, not only something it tolerates: when it fits who a character is and where things stand, a planner may plan it into an arc's purpose or a node's guide, and a scene that holds it carries it through at this Heat and within the Lines and Veils, never turning it into a rescue, an interruption or consent after all. Dubious consent is sex or intimacy the protagonist is pressured, manipulated, bargained or worn down into; non-consent is sex forced on the protagonist past her refusal, and the force it takes belongs to non-consent, not to the limit on a love interest's violence toward the protagonist. Either may come from a love interest as readily as from an antagonist.`;
+const consentAllowedText = (ids: readonly LimitId[]) =>
+  [
+    `${ids.map((id) => LIMIT_PROMPT_TEXT[id]).join(" and ")} ${ids.length > 1 ? "are" : "is"} part of what this story may be about, not only something it tolerates: when it fits who a character is and where things stand, a planner may plan it into an arc's purpose or a node's guide, and a scene that holds it carries it through at this Heat and within the Lines and Veils, never turning it into a rescue, an interruption or consent after all.`,
+    ...ids.map((id) => CONSENT_DEFINITION[id]),
+    `${ids.length > 1 ? "Either" : "It"} may come from a love interest as readily as from an antagonist.`,
+  ].join(" ");
 const LIMITS_WIN = "The Lines and Veils win over everything above in this contract.";
-const CONSENT_LIMITS: readonly LimitId[] = ["dubious-consent", "non-consent"];
 
 function names(lis: readonly ContractPerson[]): string {
   return lis
@@ -535,13 +545,7 @@ function limitLines(content: ContentSettings) {
   const lines = at("line");
   const veils = at("veil");
   for (const custom of content.custom) (custom.level === "line" ? lines : veils).push(custom.text);
-  return {
-    lines,
-    veils,
-    allowed: at("allow"),
-    consentOpen: CONSENT_LIMITS.some((id) => level(id) !== "line"),
-    consentAllowed: CONSENT_LIMITS.filter((id) => level(id) === "allow").map((id) => LIMIT_PROMPT_TEXT[id]),
-  };
+  return { lines, veils, allowed: at("allow") };
 }
 
 function fixedRules(lis: readonly ContractPerson[]): string[] {
@@ -572,7 +576,10 @@ const MC_ROLE_TEXT: Record<McRole, string> = {
 export function otomeContentContract({ world, lis, kind }: ContentContractInput): string {
   if (kind === "image") return otomeImageTags({ world, people: lis, use: "clothed" });
   const { content } = world;
-  const { lines, veils, allowed, consentOpen, consentAllowed } = limitLines(content);
+  const { lines, veils, allowed } = limitLines(content);
+  // #2279: the Settings notice reads the same consentOpen, so the two always agree on whether a refusal stops a scene.
+  const open = consentOpen(content);
+  const consentAllowed = consentAllowedIds(content);
   const rules = fixedRules(lis);
   if (kind === "planner" || kind === "scene" || kind === "chat") {
     const nsfw = contentNeedsAgeGate(content);
@@ -581,12 +588,12 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
     rules.push(HEAT_TEXT[content.heat], nsfw && content.darkness === "angst" ? `${darkness} ${ANGST_NSFW}` : darkness);
     if (!nsfw) rules.push(SFW_LANGUAGE);
     if (nsfw) {
-      rules.push(consentOpen ? ROMANCE_OPEN : ROMANCE, LANGUAGE);
+      rules.push(open ? ROMANCE_OPEN : ROMANCE, LANGUAGE);
       if (intimacyOpen(content) && content.mcRole) rules.push(MC_ROLE_TEXT[content.mcRole]);
-      if (content.darkness === "dark") rules.push(consentOpen ? DARK_ADDITION_OPEN : DARK_ADDITION);
-      if (consentOpen) rules.push(CONSENT);
+      if (content.darkness === "dark") rules.push(open ? DARK_ADDITION_OPEN : DARK_ADDITION);
+      if (open) rules.push(CONSENT);
       if (allowed.length) rules.push(`Allowed on the page (the player opted in): ${allowed.join("; ")}.`);
-      if (consentAllowed.length) rules.push(CONSENT_ALLOWED(consentAllowed));
+      if (consentAllowed.length) rules.push(consentAllowedText(consentAllowed));
     }
     if (lines.length) rules.push(`Lines (never written, not even implied): ${lines.join("; ")}.`);
     if (veils.length)
@@ -3019,7 +3026,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- ${name}'s red lines hold whatever the protagonist does; every cruelty has a reason ${name} believes. Nobody apologizes on the spot.`,
     world.content.darkness === "dark"
       ? consentOpen(world.content)
-        ? `- Dark romance: in every round at least one stance lets the protagonist refuse ${name} outright; the refusal is hers, and whether ${name} backs down follows who ${name} is.`
+        ? `- Dark romance: in every round at least one stance lets the protagonist refuse ${name} outright; the refusal is the protagonist's own, and whether ${name} backs down follows who ${name} is.`
         : `- Dark romance: in every round at least one stance lets the protagonist refuse ${name} outright, and the story honours it.`
       : "",
     "- Honour the story so far; never contradict it or undo a choice already made. Stay within this node's guide.",
