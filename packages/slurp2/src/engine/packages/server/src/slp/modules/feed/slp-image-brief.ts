@@ -111,8 +111,9 @@ export function slurpPostIsBare(input: {
   return slurpLevelIsBare(slurpPostSexualLevel(input));
 }
 
+/** An outfit that is no clothes, also with an intensifier in front ("completely naked", "fully nude"). */
 const NO_CLOTHES =
-  /^(?:nothing|nude|naked|unclothed|no clothes|completely bare)(?:[,.;!\s]+(?:bare skin|at all|completely|nude|naked))*[.!\s]*$/iu;
+  /^(?:(?:completely|fully|totally|entirely|stark|all|just|simply)\s+)?(?:nothing|nude|naked|unclothed|undressed|no clothes|bare)(?:[,.;!\s]+(?:bare skin|at all|completely|fully|nude|naked))*[.!\s]*$/iu;
 
 /**
  * The clothes a picture names. At a body-showing level the Creator's usual wardrobe (everyday
