@@ -46,6 +46,8 @@ import { runPath } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
 import { albumMemories, isUnplayedMemory, type MemoryRarityFilter } from "../../lib/album-memories";
 import type { RunView } from "../../shared/api-types";
+import { useDates } from "../dates/DateNight";
+import { albumKeepsakes } from "../../lib/album-keepsakes";
 import { PLAYER_STICKER_OWNER } from "../../shared/stickers";
 import type { AlbumImage, AlbumMemory, AlbumSticker, AlbumView } from "../../shared/wardrobe";
 import { useStickers } from "../phone/StickerPicker";
@@ -131,6 +133,8 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   const id = useId();
   const queryClient = useQueryClient();
   const album = useAlbum(runKey);
+  // #2276: keepsakes are Album pictures too: each finished date's painted keepsake, next to the Photo Shoot's photos.
+  const dates = useDates(runKey);
   const actions = useItemActions(runKey);
   const markSeen = useMarkSeen(runKey);
   const [tab, setTab] = useState<AlbumTab>("cgs");
@@ -199,8 +203,10 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
 
   const data = album.data;
   // Stubs and servers older than #2087 send no photos.
-  const photos = data.photos ?? [];
+  const keepsakes = albumKeepsakes(dates.data?.dates ?? []);
+  const photos = [...keepsakes, ...(data.photos ?? [])];
   const photoIndex = viewingPhoto === null ? -1 : photos.findIndex((image) => image.key === viewingPhoto);
+  const rereadDate = photos[photoIndex]?.source === "keepsake" ? photos[photoIndex]?.ref : undefined;
   const cardIndex = viewingCard === null ? -1 : cards.images.findIndex((image) => image.key === viewingCard);
   const shownMemory = data.memories.find((item) => item.id === memory) ?? null;
   /** Opens a Memory's page; a new one is new no more. */
@@ -228,14 +234,17 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
     ) : tab === "stickers" ? (
       <StickerGrid runKey={runKey} view={view} stickers={stickers} actions={actions} onView={setViewingSticker} />
     ) : tab === "photos" ? (
-      <CgGrid
-        view={view}
-        images={photos}
-        emptyKey="ui.otomeForge.album.photosEmpty"
-        noImagesKey="ui.otomeForge.album.photosNoImages"
-        square
-        onView={(index) => setViewingPhoto(photos[index]?.key ?? null)}
-      />
+      <>
+        {keepsakes.length ? <p className="of-hint">{t("ui.otomeForge.album.keepsakesHint")}</p> : null}
+        <CgGrid
+          view={view}
+          images={photos}
+          emptyKey="ui.otomeForge.album.photosEmpty"
+          noImagesKey="ui.otomeForge.album.photosNoImages"
+          square
+          onView={(index) => setViewingPhoto(photos[index]?.key ?? null)}
+        />
+      </>
     ) : tab === "cards" ? (
       <CardGrid runKey={runKey} view={view} cards={cards} actions={actions} onView={setViewingCard} />
     ) : tab === "memories" ? (
@@ -295,7 +304,8 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
           index={photoIndex}
           onIndex={(index) => setViewingPhoto(photos[index]?.key ?? null)}
           onClose={() => setViewingPhoto(null)}
-          onDelete={deletePhoto}
+          onDelete={photos[photoIndex]?.source === "photo" ? deletePhoto : undefined}
+          onReread={rereadDate ? () => onOpenStory(rereadDate) : undefined}
         />
       ) : null}
       {cardIndex >= 0 ? (

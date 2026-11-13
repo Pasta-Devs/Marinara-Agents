@@ -140,7 +140,7 @@ export interface AlbumImage {
   ref?: string;
   at: string;
   li?: LiId;
-  source: "story" | "memory" | "pair" | "sticker" | "photo" | "card";
+  source: "story" | "memory" | "pair" | "sticker" | "photo" | "card" | "keepsake";
   /** A Memory's title, the couple set's look names, or a photo's place. */
   title?: string;
   /** A sticker's prompt name (mari_laugh), which its saved file is named after. */

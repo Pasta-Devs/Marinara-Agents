@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.25.1 — 2026-11-13
+
+- **A keepsake reads the evening again.** Once a date is finished, its keepsake offers **Read the evening again**, which opens the date's chapter in the reader, from its first scene.
+- **Keepsakes in the Album.** A finished date's painted keepsake now appears in **Album → Photos**, beside your Photo Shoot photos, with its date. Open one to see it full size, save it, or read the evening again.
+- **Full-size keepsakes on the date's end screen.** Tapping the keepsake's picture shows it full size, with its place, instead of a small polaroid.
+
 ## 0.25.0 — 2026-11-13
 
 - **Sex scenes go further.** Under Explicit Heat, the act is written like explicit erotic fanfiction: moment by moment, in graphic detail, on what each body does and feels, with the pleasure building before anyone climaxes. It no longer jumps from the first touch to the finish in a few lines.
