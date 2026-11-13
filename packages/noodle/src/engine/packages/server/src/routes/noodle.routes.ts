@@ -130,14 +130,24 @@ export async function noodleRoutes(app: FastifyInstance) {
   });
   app.get("/posts", async (request) => noodle.listPosts(request.query as { limit?: number; since?: string }));
   app.get("/feed", async (request) =>
-    noodle.listPostPage(request.query as { limit?: number; cursorAt?: string; cursorId?: string }),
+    noodle.listPostPage(
+      request.query as {
+        limit?: number;
+        cursorAt?: string;
+        cursorId?: string;
+        authorAccountId?: string;
+        likedByAccountId?: string;
+      },
+    ),
   );
   app.get("/posts/:id", async (request, reply) => {
     const post = await noodle.getPostById((request.params as { id: string }).id);
     if (!post) return reply.code(404).send({ error: "Noodle post not found" });
     return { post, interactions: await noodle.listInteractions([post.id]) };
   });
-  app.get("/notifications", async () => noodle.listNotificationData());
+  app.get("/notifications", async (request) =>
+    noodle.listNotificationData((request.query as { handle?: string }).handle),
+  );
   app.post("/posts", async (req, reply) => {
     if (req.body && typeof req.body === "object" && "title" in req.body) {
       return reply.code(400).send({ error: "Public Noodle posts do not support titles." });

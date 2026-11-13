@@ -424,7 +424,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.15",
+    version: "1.5.16",
     minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
     capabilityApi: HOST_CHARACTERS_CAPABILITY_API,
     builtAgainst: HOST_CHARACTERS_BUILT_AGAINST,
