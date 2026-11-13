@@ -3,6 +3,7 @@
 ## 0.4.22 — 2026-11-13
 
 - Fixed: A collab or couple post now shows every partner in its picture. A nude picture no longer gets clothes from the Creator's card, the Stage appearance or a saved look. "Completely naked" counts as no clothes. (#2274)
+- Changed: A joint post draws its partners in only at a clothed level; a nude or explicit picture still needs the spice consent check. A viewpoint the written scene names now wins over the weighted camera pick. A rewritten prompt that kept a viewpoint phrase is not given a second one. The image connection's own instructions now win on style and format; Slurp keeps who is in the picture, nude or clothed, and the outfit.
 
 ## 0.4.21 — 2026-11-12
 
