@@ -187,8 +187,7 @@ export async function generateCreatorPost(
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
-  // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
-  // so it biases every post they ever make rather than this one.
+  // How this Creator makes things, not who they are. Stable for the account's life; it biases every post.
   const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
   const production = strategy.production;
   const effort = slurpPostEffort(production, sequence, account.id);
@@ -281,10 +280,10 @@ export async function generateCreatorPost(
         effort,
       })
     : null;
-  const camera = slurpScreenFreeCamera(shoot?.cameraSource, screens) ?? cameraSource;
+  const shootCamera = slurpScreenFreeCamera(shoot?.cameraSource, screens);
+  const camera = shootCamera ?? cameraSource;
   const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
-  // The shoot rides in the content-type block rather than a block of its own: it is part of what
-  // this post is for, and a second block would be dead for every post that is not a callback.
+  // The shoot rides in the content-type block: a block of its own would be dead for non-callback posts.
   const contentTypeInstruction = axes
     ? [
         slurpContentAxesInstruction(axes),
@@ -497,7 +496,8 @@ export async function generateCreatorPost(
     content: protectedContent,
   };
 
-  const pictureCamera = camera && slurpSceneCamera(camera, askModelForScene && generated.scene, variation, screens);
+  const pictureCamera =
+    shootCamera ?? (camera && slurpSceneCamera(camera, askModelForScene && generated.scene, variation, screens));
   const wardrobeSelection = resolveSlurpWardrobeSelection({
     looks: wardrobeLooks,
     access: input.request.access,

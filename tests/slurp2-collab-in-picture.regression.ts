@@ -3,6 +3,7 @@ import { slurpPostPictureBriefs } from "../packages/slurp2/src/engine/packages/s
 import { slurpTiePutsCastInPicture } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-tie-beats.ts";
 import { slurpPostVariation } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation.ts";
 import type { SlurpExplicitLevel } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-guidance.ts";
+import { slurpImageNegativePrompt } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-image-brief.ts";
 import { slurp2Source } from "./slurp2-source";
 
 // Which tie beats put their cast in the picture.
@@ -89,4 +90,9 @@ assert.match(
   /slurpPostPictureBriefs\(\{[^}]*\n\s+beat,\n/u,
 );
 
+assert.doesNotMatch(
+  slurpImageNegativePrompt("none", true, "mirror"),
+  /two people|multiple girls|multiple boys|second person|extra people/u,
+);
+assert.match(slurpImageNegativePrompt("none", false, "mirror"), /two people/u);
 console.log("slurp2 collab in picture regression checks passed");

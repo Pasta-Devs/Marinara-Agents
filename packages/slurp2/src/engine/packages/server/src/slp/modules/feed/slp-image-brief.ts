@@ -53,10 +53,13 @@ const TEXT_NEGATIVE = "text, watermark";
 
 /** A partner scene has two people on purpose; only the stray and doubled bodies stay out. */
 const SECOND_PERSON_NEGATIVE = "second person, extra people, ";
+/** The mirror's own people-count terms; a partner scene keeps none of them. */
+const MIRROR_COUNT_NEGATIVE = /multiple girls, multiple boys, two people,? ?/g;
 const PARTNER_NEGATIVE = SHARED_NEGATIVE.replace(SECOND_PERSON_NEGATIVE, "");
 
 /** A negative prompt that lets a second person in: for a picture whose final prompt names one (0.3.7). */
-export const slurpImageNegativeWithCompany = (negative: string): string => negative.replace(SECOND_PERSON_NEGATIVE, "");
+export const slurpImageNegativeWithCompany = (negative: string): string =>
+  negative.replace(SECOND_PERSON_NEGATIVE, "").replace(MIRROR_COUNT_NEGATIVE, "");
 
 /**
  * Without a level (a redraw or a scheduled picture that kept none), only the shared terms apply.
@@ -70,7 +73,11 @@ export function slurpImageNegativePrompt(
   return [
     level ? LEVEL_NEGATIVE[level] : "",
     partnered ? PARTNER_NEGATIVE : SHARED_NEGATIVE,
-    camera ? slurpCameraSourceNegative(camera) : DEVICE_NEGATIVE,
+    camera
+      ? partnered
+        ? slurpImageNegativeWithCompany(slurpCameraSourceNegative(camera))
+        : slurpCameraSourceNegative(camera)
+      : DEVICE_NEGATIVE,
     TEXT_NEGATIVE,
   ]
     .filter(Boolean)
