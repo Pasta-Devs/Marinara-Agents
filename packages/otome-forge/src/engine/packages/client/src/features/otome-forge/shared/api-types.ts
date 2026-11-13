@@ -285,7 +285,7 @@ export interface Player {
    */
   about?: string;
   /** English, visual-only tags. */
-  look: { identityLine: string; outfitLine: string };
+  look: { identityLine: string; outfitLine: string; presentation: Presentation };
   portrait?: string;
   portraitRef?: string;
   art?: Paint;

@@ -385,7 +385,6 @@ function castSubjects(
           name,
           ...player.look,
           ...(worn?.outfitLine ? { outfitLine: worn.outfitLine } : {}),
-          presentation: "person",
         },
         image: {
           kind: "character",
