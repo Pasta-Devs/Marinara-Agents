@@ -46,9 +46,15 @@ export function validateSpatialMapDefinition(definition: SpatialContextDefinitio
   return { valid: issues.length === 0, issues };
 }
 
-export const spatialMapDefinitionSchema = spatialContextDefinitionSchema
-  .innerType()
-  .extend({ locations: z.array(spatialLocationSchema).max(SPATIAL_MAP_LOCATION_LIMIT) })
+// The vendored schema caps locations at 500; this one replaces that cap with the package ceiling, as `.innerType()`
+// did under zod 3 (zod 4 keeps a refined object's checks through both `.extend` and `.safeExtend`, and refuses the
+// former outright). Every other base check is re-applied by the superRefine below, through validateSpatialMapDefinition.
+export const spatialMapDefinitionSchema = z
+  .object({
+    ...spatialContextDefinitionSchema.shape,
+    locations: z.array(spatialLocationSchema).max(SPATIAL_MAP_LOCATION_LIMIT),
+  })
+  .strict()
   .superRefine((definition, ctx) => {
     for (const issue of validateSpatialMapDefinition(definition).issues) {
       ctx.addIssue({
