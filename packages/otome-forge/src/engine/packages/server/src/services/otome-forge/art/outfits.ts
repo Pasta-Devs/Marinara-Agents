@@ -534,7 +534,7 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
       name: run.player.name || "Protagonist",
       identityLine: run.player.look.identityLine,
       outfitLine: herOutfit.outfitLine,
-      presentation: "person",
+      presentation: run.player.look.presentation,
     },
   ];
   const him = first(unit.name, "them");

@@ -5057,7 +5057,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
   const lis = units.map((unit) => ({ name: unit.name, presentation: unit.bible?.look.presentation }));
   const imageTags = otomeContentContract({
     world,
-    lis: [...lis, { name: player.name, presentation: "person" as const }],
+    lis: [...lis, { name: player.name, presentation: player.look.presentation }],
     kind: "image",
   });
   const explicitArt = explicitMemoryArt(kind, world);

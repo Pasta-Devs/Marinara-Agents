@@ -407,7 +407,6 @@ export async function readSubject(
     return {
       name: player.name || "Protagonist",
       ...look,
-      presentation: "person",
       image: {
         kind: "character",
         personaId: player.personaId,

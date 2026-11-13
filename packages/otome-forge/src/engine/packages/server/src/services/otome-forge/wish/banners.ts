@@ -637,7 +637,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
     : {
         name: run.player.name || "Protagonist",
         identityLine: run.player.look.identityLine,
-        presentation: "person" as const,
+        presentation: run.player.look.presentation,
       };
   const subject: ImageSubject = unit
     ? {

@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.27.0 — 2026-11-13
+
+- **The protagonist is drawn as herself.** Image prompts now use the protagonist's presentation — man, woman, or person — derived from the pronouns chosen at run creation. Stories started with she/her pronouns painted the protagonist as a generic person before this fix.
+
 ## 0.26.0 — 2026-11-13
 
 - **Double dates.** Once a love interest has reached affection level 10, a date with him can invite a second love interest who has also reached level 10. The evening is written for the three of them: both are in every scene, and what passes between the two of them is part of it. Under Explicit Heat it can turn intimate between the three of them; below that it stays a warm evening for three.

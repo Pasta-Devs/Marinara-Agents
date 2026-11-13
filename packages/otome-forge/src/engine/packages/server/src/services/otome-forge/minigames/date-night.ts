@@ -805,7 +805,7 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
       name: run.player.name || "Protagonist",
       identityLine: run.player.look.identityLine,
       outfitLine: wornOutfitLine(run.player) || run.player.look.outfitLine,
-      presentation: "person",
+      presentation: run.player.look.presentation,
     },
   ];
   // Both of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model

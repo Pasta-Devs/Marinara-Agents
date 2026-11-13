@@ -289,7 +289,7 @@ async function buildPhoto(
     name: player.name || "Protagonist",
     identityLine: player.look.identityLine,
     outfitLine: herLook.outfitLine,
-    presentation: "person",
+    presentation: player.look.presentation,
   };
   const style = await worldStyle(images, run.world.images);
   const prompt = photoPrompt(

@@ -30,7 +30,7 @@ const defaultPlayer = (): Player => ({
   pronouns: defaultPronouns(),
   traits: [],
   goal: "",
-  look: { identityLine: "", outfitLine: "" },
+  look: { identityLine: "", outfitLine: "", presentation: "person" as const },
   outfits: [],
   cutouts: {},
   noticed: null,
@@ -56,8 +56,16 @@ export function normalizePlayer(data: unknown): Player {
           .slice(0, PLAYER_TRAITS_MAX),
       goal: z.string(),
       about: z.string().optional(),
-      // A persona's own appearance is kept whole as the identity line (the player wrote it).
-      look: z.object({ identityLine: z.string(), outfitLine: text() }),
+      // A persona's own appearance is kept whole as the identity line (the player wrote it). Read field by field so a
+      // document written before `presentation` existed keeps its lines instead of falling back to a blank look.
+      look: (value) => {
+        const look = isRecord(value) ? value : {};
+        return {
+          identityLine: z.string().safeParse(look.identityLine).data ?? "",
+          outfitLine: z.string().safeParse(look.outfitLine).data ?? "",
+          presentation: look.presentation === "man" || look.presentation === "woman" ? look.presentation : "person",
+        };
+      },
       portrait: z.string().optional(),
       portraitRef: z.string().optional(),
       art: PaintSchema.optional(),
