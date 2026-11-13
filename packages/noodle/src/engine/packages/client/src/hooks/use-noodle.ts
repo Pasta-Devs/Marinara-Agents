@@ -85,7 +85,12 @@ export function useNoodle(enabled = true) {
   });
 }
 
-export function useNoodleFeed(enabled = true, authorAccountId?: string | null, likedByAccountId?: string | null, maxPages = 20) {
+export function useNoodleFeed(
+  enabled = true,
+  authorAccountId?: string | null,
+  likedByAccountId?: string | null,
+  maxPages = 20,
+) {
   return useInfiniteQuery({
     queryKey: [
       ...noodleKeys.feed(),
