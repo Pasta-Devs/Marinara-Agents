@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.28.0 — 2026-11-13
+
+- **Scenes keep their shape.** The reply format a scene is written in is now stated again at the end of the request, so a model no longer drifts into prose, a code fence or stray commentary when the instructions sit far back in a long prompt. Nothing about the story changes; a malformed reply was already retried once, and this is what makes that retry unnecessary.
+
 ## 0.27.0 — 2026-11-13
 
 - **The protagonist is drawn as herself.** Image prompts now use the protagonist's presentation — man, woman, or person — derived from the pronouns chosen at run creation. Stories started with she/her pronouns painted the protagonist as a generic person before this fix.

@@ -1318,9 +1318,9 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved.
 const BEFORE_GIFTS: Record<string, string> = {
   plan: "c02a6f0f50ad3958",
-  scene1: "37d09b873382cc97",
-  scene2: "cad0a6c0de5fbbb7",
-  scene3: "3bbfac3515a1c83e",
+  scene1: "a8a5b77002572ee6",
+  scene2: "a6bc1996ec0154f3",
+  scene3: "c10d89ad4607db8b",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */
