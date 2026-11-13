@@ -175,7 +175,7 @@ export async function rewriteSlpImagePrompt(input: {
                 styleGuidance
                   ? "Apply the supplied art-style guidance when the original prompt does not specify a style. Preserve an explicitly requested style in the original prompt or user instructions."
                   : "",
-                "Treat the user's instructions as guidance, not text to copy into the image prompt.",
+                "The image prompting instructions win over the style and format rules above (tag order, wording, length). They never change who is in the picture, whether the picture is nude or clothed, or the outfit; those facts stay as the original prompt gives them. Do not copy the instructions into the image prompt.",
                 "The post context describes the same moment. Preserve its action and setting when they are present in the draft. A caption can be a hook, so do not copy its wording or force every caption detail into the image.",
                 "Do not increase the sexual intensity. Keep an ordinary or non-sexual post ordinary and non-sexual. Add nudity, explicit anatomy, or sexual activity only when the original prompt or an explicit trusted instruction already requires it.",
                 visualPolicy,

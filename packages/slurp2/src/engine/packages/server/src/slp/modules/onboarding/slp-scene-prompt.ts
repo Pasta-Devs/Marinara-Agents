@@ -146,7 +146,8 @@ const FIELD_BRIEF: Record<SlpSceneField, string> = {
   handle: "handle without @, no spaces",
   bio: "page bio, first person, at most 500 characters",
   stagePersonality: "how they post and talk to fans, 3 to 6 sentences",
-  appearance: "their look: body, face, hair, style details that stay the same in every picture",
+  appearance:
+    "their look: body, face, hair and marks that stay the same in every picture, no clothes (those go in wardrobe)",
   wardrobe: "outfits they wear on the page",
   locations: "places they shoot",
   turnOns: "what they like showing or doing on the page, short",

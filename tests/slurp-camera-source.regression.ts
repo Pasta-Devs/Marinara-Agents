@@ -6,6 +6,7 @@ import {
   slurpCameraSourcePhoto,
   slurpCameraSourceShot,
   slurpPermittedCameraSources,
+  slurpSceneCamera,
   slurpPostCameraSource,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
 import {
@@ -147,5 +148,17 @@ assert.ok(
 for (const source of ["tripod", "screenshot", "archive", "partner"] as const) {
   assert.ok(share(source) > 0.05, `${source} must be visible in the mix, got ${share(source).toFixed(3)}`);
 }
+
+// A viewpoint the written scene already names wins over the weighted pick, if this post may use it.
+const solo = { companyCanHoldCamera: false };
+const mirrorScene = { visualDirection: `Alone at home, ${slurpCameraSourceShot("mirror", "x", "natural")}.` };
+assert.equal(slurpSceneCamera("tripod", mirrorScene, solo, true), "mirror");
+assert.equal(slurpSceneCamera("tripod", { visualDirection: "nothing named" }, solo, true), "tripod");
+assert.equal(slurpSceneCamera("tripod", null, solo, true), "tripod");
+assert.equal(
+  slurpSceneCamera("tripod", mirrorScene, solo, false),
+  "tripod",
+  "a source the world does not permit is not forced",
+);
 
 console.log("slurp camera source regression checks passed");
