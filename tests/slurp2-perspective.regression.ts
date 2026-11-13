@@ -168,6 +168,7 @@ const rewrite = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt-rewrite.ts",
 );
 assert.match(rewrite, /Keep this viewpoint phrase word for word, once/u);
+assert.match(rewrite, /instructions win over the style and format rules above[^"]*never change who is in the picture/u, "the connection wins on style, Slurp keeps the facts");
 assert.match(rewrite, /"Never"\} name a camera, phone, lens, tripod, timer, or photographer/u);
 assert.match(rewrite, /claimSlurpModelBudget\(input\.db, input\.budget, "image_prompt"\)/u);
 
