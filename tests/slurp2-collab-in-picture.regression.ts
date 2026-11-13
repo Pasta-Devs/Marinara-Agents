@@ -50,9 +50,9 @@ const briefs = (level: SlurpExplicitLevel, castInPicture?: readonly string[], pa
     publicIdentity: null,
   });
 
-// A collab's joint post draws the partner at every level, the negative prompt lets a second person in,
-// and the cast's looks and references reach the image service.
-for (const level of ["none", "suggestive", "nudity", "explicit"] as const) {
+// A collab's joint post draws the partner into a clothed picture; the negative prompt lets a second
+// person in, and the cast's looks and references reach the image service.
+for (const level of ["none", "suggestive"] as const) {
   const result = briefs(level, ["Kai"]);
   assert.match(result.draftImagePrompt ?? "", /Two people: the Creator and Kai\./u, level);
   assert.doesNotMatch(result.draftImagePrompt ?? "", /The only person|may be in the photo too/u, level);
@@ -60,8 +60,16 @@ for (const level of ["none", "suggestive", "nudity", "explicit"] as const) {
   assert.match(result.negativePrompt ?? "", /duplicate person/u, "a doubled Creator stays out");
   assert.equal(result.pictureCast, true, level);
 }
-assert.match(briefs("explicit", ["Kai"]).draftImagePrompt ?? "", /explicit adult content with their partner/u);
-assert.match(briefs("nudity", ["Kai", "Noor"]).draftImagePrompt ?? "", /Three people: the Creator and Kai and Noor\./u);
+assert.match(briefs("none", ["Kai", "Noor"]).draftImagePrompt ?? "", /Three people: the Creator and Kai and Noor\./u);
+
+// A nude or explicit picture holds only the spice partner the consent gate chose: with no `partner`
+// (a "partner" hard no, or a partner not at their own level), the joint post draws the Creator alone.
+for (const level of ["nudity", "explicit"] as const) {
+  const result = briefs(level, ["Kai"]);
+  assert.match(result.draftImagePrompt ?? "", /The only person in the photo\./u, level);
+  assert.equal(result.pictureCast, false, level);
+}
+assert.match(briefs("explicit", ["Kai"], "Kai, their partner").draftImagePrompt ?? "", /Two people: the Creator and Kai, their partner\./u);
 
 // A post whose beat does not put the cast in the picture is unchanged.
 const alone = briefs("explicit");

@@ -80,13 +80,12 @@ export function slurpPostPictureBriefs(input: {
     intent: input.axes?.intent,
   });
   // Somebody else may join a clothed or suggestive picture. A nude or explicit one holds the partner
-  // the spice consent gate chose (`partner`), when the beat names that one person, or the cast of a
-  // beat that puts them in the picture (a collab's joint post, a couple's date).
+  // the spice consent gate chose (`partner`), when the beat names that one person.
   const clothed = sexualLevel === "none" || sexualLevel === "suggestive";
-  const together = slurpTiePutsCastInPicture(input.beat?.tie) && input.beat?.cast.length ? input.beat.cast : null;
+  const together = clothed && slurpTiePutsCastInPicture(input.beat?.tie) && input.beat?.cast.length ? input.beat.cast : null;
   // Collab and couple posts drew the Creator alone: the cast reached the brief only as "may be in the
-  // photo", and not at all at a nude or explicit level, under a "second person" negative. A beat that
-  // puts them in the picture now writes them in as partners at every level.
+  // photo". A beat that puts them in the picture now writes them in as partners, but only in a clothed
+  // picture: a nude or explicit one keeps the spice consent gate as its only way in.
   const partner = input.partner || (together ? slurpNameList(together) : null);
   const partnerCount = input.partner ? 1 : (together?.length ?? 0);
   const company = !partner && clothed && input.cast?.length ? slurpNameList(input.cast) : null;
