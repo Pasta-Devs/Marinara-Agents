@@ -18,6 +18,7 @@ import {
   Check,
   ChevronLeft,
   Feather,
+  BookOpen,
   Gift,
   Heart,
   HeartCrack,
@@ -449,6 +450,7 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
             onHome();
           }}
           onCounted={refresh}
+          onReread={() => go({ kind: "reading", key: step.key })}
         />
       ) : null}
     </div>
@@ -625,10 +627,12 @@ interface DateEndingProps {
   onHome: () => void;
   /** The server counted the date (the dates list changed). */
   onCounted: () => void;
+  /** #2276: read the evening again from its keepsake. */
+  onReread: () => void;
 }
 
 /** How the evening went. Counting it is the server's (once); this asks once per date and shows what came back. */
-function DateEnding({ runKey, view, partner, dateKey, onDone, onHome, onCounted }: DateEndingProps) {
+function DateEnding({ runKey, view, partner, dateKey, onDone, onHome, onCounted, onReread }: DateEndingProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -827,7 +831,14 @@ function DateEnding({ runKey, view, partner, dateKey, onDone, onHome, onCounted 
       </section>
 
       {result.keepsake.offer || date.keepsake ? (
-        <Keepsake runKey={runKey} view={view} partner={partner} entry={date} onPainted={onCounted} />
+        <Keepsake
+          runKey={runKey}
+          view={view}
+          partner={partner}
+          entry={date}
+          onPainted={onCounted}
+          onReread={onReread}
+        />
       ) : null}
 
       <div className="of-dates-actions">
@@ -850,6 +861,8 @@ interface KeepsakeProps {
   partner: RunLiView;
   entry: DateEntry;
   onPainted: () => void;
+  /** #2276: read the evening again, once it is finished. */
+  onReread?: () => void;
 }
 
 /**
@@ -857,7 +870,7 @@ interface KeepsakeProps {
  * through the prompt review when the Engine asks for it), then kept in a polaroid frame. A failure says so and
  * waits for Try again; it is never repainted by itself.
  */
-function Keepsake({ runKey, view, partner, entry, onPainted }: KeepsakeProps) {
+function Keepsake({ runKey, view, partner, entry, onPainted, onReread }: KeepsakeProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const { reviewImagePromptsBeforeSend } = useOtomeProps();
@@ -866,6 +879,8 @@ function Keepsake({ runKey, view, partner, entry, onPainted }: KeepsakeProps) {
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [review, setReview] = useState<ImagePrompt | null>(null);
+  // #2276: the painted keepsake, full size, on a tap.
+  const [viewing, setViewing] = useState(false);
   const subject = t("ui.otomeForge.dateNight.keepsakeSubject", { name: partner.name });
 
   const paint = async (prompt?: ImagePrompt) => {
@@ -918,13 +933,55 @@ function Keepsake({ runKey, view, partner, entry, onPainted }: KeepsakeProps) {
         {t("ui.otomeForge.dateNight.keepsakeTitle")}
       </h2>
       {ready ? (
-        <figure className="of-keepsake-photo">
-          <img
-            src={ready.url}
-            alt={t("ui.otomeForge.dateNight.keepsakeAlt", { name: partner.name, title: entry.title })}
-          />
-          <figcaption className="of-keepsake-caption">{entry.title}</figcaption>
-        </figure>
+        <>
+          <figure className="of-keepsake-photo">
+            <button
+              type="button"
+              className="of-keepsake-open"
+              aria-label={t("ui.otomeForge.dateNight.keepsakeViewFull", { title: entry.title })}
+              onClick={() => setViewing(true)}
+            >
+              <img
+                src={ready.url}
+                alt={t("ui.otomeForge.dateNight.keepsakeAlt", { name: partner.name, title: entry.title })}
+              />
+            </button>
+            <figcaption className="of-keepsake-caption">{entry.title}</figcaption>
+          </figure>
+          {onReread ? (
+            <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onReread}>
+              <BookOpen size={15} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.dateNight.keepsakeReread")}
+            </button>
+          ) : null}
+          {viewing ? (
+            <Dialog
+              title={entry.title}
+              wide
+              onClose={() => setViewing(false)}
+              actions={
+                <button type="button" className="of-button of-button--quiet of-glass" onClick={() => setViewing(false)}>
+                  <X size={16} strokeWidth={2} aria-hidden="true" />
+                  {t("ui.otomeForge.wardrobe.close")}
+                </button>
+              }
+            >
+              <div className="of-viewer">
+                <figure className="of-viewer-figure">
+                  <img
+                    className="of-viewer-img"
+                    src={ready.url}
+                    alt={t("ui.otomeForge.dateNight.keepsakeAlt", { name: partner.name, title: entry.title })}
+                  />
+                  <figcaption className="of-viewer-caption">
+                    <span>{t("ui.otomeForge.dateNight.keepsakeTitle")}</span>
+                    {entry.placeName ? <span> · {entry.placeName}</span> : null}
+                  </figcaption>
+                </figure>
+              </div>
+            </Dialog>
+          ) : null}
+        </>
       ) : (
         <>
           <p className="of-body">{t("ui.otomeForge.dateNight.keepsakeText", { name: partner.name })}</p>

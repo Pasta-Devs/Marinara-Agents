@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.25.1",
+          "date": "2026-11-13",
+          "notes": "- **A keepsake reads the evening again.** Once a date is finished, its keepsake offers **Read the evening again**, which opens the date's chapter in the reader, from its first scene.\n- **Keepsakes in the Album.** A finished date's painted keepsake now appears in **Album → Photos**, beside your Photo Shoot photos, with its date. Open one to see it full size, save it, or read the evening again.\n- **Full-size keepsakes on the date's end screen.** Tapping the keepsake's picture shows it full size, with its place, instead of a small polaroid.",
+          "highlight": false
+        },
+        {
           "version": "0.25.0",
           "date": "2026-11-13",
           "notes": "- **Sex scenes go further.** Under Explicit Heat, the act is written like explicit erotic fanfiction: moment by moment, in graphic detail, on what each body does and feels, with the pleasure building before anyone climaxes. It no longer jumps from the first touch to the finish in a few lines.\n- **Affection by how it went.** The lead earns 150 for the truth or Opened up, 100 for a standoff, Almost or no climax, and 50 for a walkout or Shut out. Route chapters follow the same rule. The second love interest earns 50 (was 60).\n- **Dubious consent and non-consent actually happen.** When either is set to Allow, the story treats them as something that may happen, not just a warning label. Within the Lines and Veils, a love interest or villain may press on past a refusal. A notice in Settings → Content explains this while either limit is open. Raising Heat no longer silently resets a consent limit you set to Allow.",
@@ -799,12 +805,6 @@
           "version": "0.21.6",
           "date": "2026-11-10",
           "notes": "- **Figurine and birthday scenes no longer count as your last Character Story.** One you read after a Character Story no longer takes its place: the next main chapter picks up from that Character Story, and main, route and repair chapters keep it as the last one you played. Their love interest still remembers the scene.",
-          "highlight": false
-        },
-        {
-          "version": "0.21.5",
-          "date": "2026-11-10",
-          "notes": "- **Choosing a card for someone new works again.** When you bring someone new into the story from your cards at the end of an arc, your cards show as a grid of tiles, and the one you tap gets a check, as in setup.",
           "highlight": false
         }
       ]

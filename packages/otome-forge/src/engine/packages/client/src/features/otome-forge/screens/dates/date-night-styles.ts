@@ -220,6 +220,12 @@ ${R} .of-keepsake-photo {
   animation: of-rise 520ms var(--of-ease) both;
 }
 ${R} .of-keepsake-photo img { display: block; width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 2px; }
+/* #2276: the kept picture itself opens full size: the frame stays, the button brings no look of its own. */
+${R} .of-keepsake-open {
+  display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in;
+  border-radius: 2px; -webkit-tap-highlight-color: transparent;
+}
+${R} .of-keepsake-open:focus-visible { outline: 2px solid var(--of-accent, ${PALETTE.rose}); outline-offset: 3px; }
 ${R} .of-keepsake-caption {
   margin-top: 8px; text-align: center; font-family: var(--of-font-hand); font-size: 1.35rem; line-height: 1.1;
 }
