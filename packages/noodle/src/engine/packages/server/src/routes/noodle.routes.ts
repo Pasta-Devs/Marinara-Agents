@@ -130,7 +130,7 @@ export async function noodleRoutes(app: FastifyInstance) {
   });
   app.get("/posts", async (request) => noodle.listPosts(request.query as { limit?: number; since?: string }));
   app.get("/feed", async (request) =>
-    noodle.listPostPage(request.query as { limit?: number; cursorAt?: string; cursorId?: string }),
+    noodle.listPostPage(request.query as { limit?: number; cursorAt?: string; cursorId?: string; authorAccountId?: string }),
   );
   app.get("/posts/:id", async (request, reply) => {
     const post = await noodle.getPostById((request.params as { id: string }).id);

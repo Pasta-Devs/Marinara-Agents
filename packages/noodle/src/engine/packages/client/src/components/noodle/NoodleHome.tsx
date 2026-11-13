@@ -782,6 +782,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     interactions: NoodleInteraction[];
   } | null>(null);
   const requestedPostIdRef = useRef<string | null>(null);
+  const notificationFetchRef = useRef<string | null>(null);
   const onFocusPostHandledRef = useRef(onFocusPostHandled);
   onFocusPostHandledRef.current = onFocusPostHandled;
   useEffect(() => {
@@ -955,11 +956,13 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       ? [focusedPostResult.post, ...available]
       : available;
   }, [feedPosts, focusedPostResult, notificationDataQuery.data?.posts, notificationViewActive]);
+  const profileFeedQuery = useNoodleFeed(Boolean(viewedProfileAccountId), viewedProfileAccountId);
   const interactions = useMemo(() => {
     const unique = new Map<string, NoodleInteraction>();
     for (const item of [
       ...(data?.interactions ?? []),
       ...feedInteractions,
+      ...(profileFeedQuery.data?.pages.flatMap((page) => page.interactions) ?? []),
       ...(focusedPostResult?.interactions ?? []),
       ...(notificationDataQuery.data?.interactions ?? []),
     ]) {
@@ -2072,8 +2075,8 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       .slice(0, 50);
   }, [accountSearchTerm, accounts, folderInvitedCharacterIds, isAccountSearch, settings?.allowRandomUsers]);
   const profilePosts = useMemo(
-    () => (viewedProfileAccount ? posts.filter((post) => post.authorAccountId === viewedProfileAccount.id) : []),
-    [posts, viewedProfileAccount],
+    () => (viewedProfileAccount ? (profileFeedQuery.data?.pages.flatMap((page) => page.items) ?? []) : []),
+    [profileFeedQuery.data, viewedProfileAccount],
   );
   const profileLikedPosts = useMemo(() => {
     if (!viewedProfileAccount) return [];
@@ -2247,10 +2250,27 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         : null;
       const targetElement = interactionElement ?? postElement;
       if (!targetElement) {
-        setNotificationFocusTarget(null);
+        // Target not rendered: fetch it once and show it like the focusPostId path; on the second miss, give up.
+        const { postId } = notificationFocusTarget;
+        if (notificationFetchRef.current === postId) {
+          notificationFetchRef.current = null;
+          setNotificationFocusTarget(null);
+          toast.error(localizeUi("ui.noodle.noodlehome.postUnavailable"));
+        } else {
+          notificationFetchRef.current = postId;
+          void api
+            .get<{ post: NoodlePost; interactions: NoodleInteraction[] }>(`/noodle/posts/${encodeURIComponent(postId)}`)
+            .then(setFocusedPostResult)
+            .catch(() => {
+              notificationFetchRef.current = null;
+              setNotificationFocusTarget(null);
+              toast.error(localizeUi("ui.noodle.noodlehome.postUnavailable"));
+            });
+        }
         return;
       }
-      targetElement.scrollIntoView({
+      notificationFetchRef.current = null;
+        targetElement.scrollIntoView({
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
@@ -2259,7 +2279,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       setNotificationFocusTarget(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeNoodleView, isLoading, notificationFocusTarget, prefersReducedMotion]);
+  }, [activeNoodleView, focusedPostResult, isLoading, notificationFocusTarget, prefersReducedMotion]);
 
   useEffect(() => {
     if (!highlightedInteractionId) return;
@@ -5503,7 +5523,21 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               onTabChange={setProfileTab}
               postList={
                 profileVisiblePosts.length > 0 ? (
-                  profileVisiblePosts.map(renderPostArticle)
+                  (
+              <>
+                {profileVisiblePosts.map(renderPostArticle)}
+                {profileTab !== "likes" && profileFeedQuery.hasNextPage && (
+                  <button
+                    type="button"
+                    onClick={() => void profileFeedQuery.fetchNextPage()}
+                    disabled={profileFeedQuery.isFetchingNextPage}
+                    className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)]"
+                  >
+                    {localizeUi("ui.noodle.noodlehome.loadMorePosts")}
+                  </button>
+                )}
+              </>
+            )
                 ) : (
                   <div className="px-8 py-14 text-center">
                     <p className="text-sm font-semibold text-[var(--muted-foreground)]">

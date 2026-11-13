@@ -637,8 +637,8 @@ export function createNoodleStorage(db: DB) {
         .limit(Math.max(1, Math.min(300, Math.floor(options.limit ?? 120))));
       return rows.map(mapPost);
     },
-    async listPostPage(options: { limit?: number; cursorAt?: string; cursorId?: string } = {}) {
-      const ids = await publicIds();
+    async listPostPage(options: { limit?: number; cursorAt?: string; cursorId?: string; authorAccountId?: string } = {}) {
+      const ids = (await publicIds()).filter((id) => !options.authorAccountId || id === options.authorAccountId);
       if (!ids.length) return { items: [], interactions: [], nextCursor: null };
       const limit = Math.max(1, Math.min(100, Math.floor(options.limit ?? 20)));
       const cursor =
@@ -666,6 +666,15 @@ export function createNoodleStorage(db: DB) {
     },
     async listNotificationData() {
       const posts = await this.listPosts({ limit: 300 });
+      // Also include older posts that got the latest 300 interactions, so activity on them is not lost.
+      const seen = new Set(posts.map((post: any) => post.id));
+      const ids = await publicIds();
+      const recent = await db.select({ postId: noodleInteractions.postId }).from(noodleInteractions).orderBy(desc(noodleInteractions.createdAt)).limit(300);
+      const extraIds = [...new Set(recent.map((row) => row.postId))].filter((id) => !seen.has(id));
+      if (extraIds.length && ids.length) {
+        const extra = await db.select().from(noodlePosts).where(and(inArray(noodlePosts.authorAccountId, ids), inArray(noodlePosts.id, extraIds))).orderBy(desc(noodlePosts.createdAt));
+        posts.push(...extra.map(mapPost));
+      }
       return { posts, interactions: await this.listInteractions(posts.map((post: any) => post.id)) };
     },
     async listPostsBefore(before: string) {

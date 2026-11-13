@@ -85,14 +85,14 @@ export function useNoodle(enabled = true) {
   });
 }
 
-export function useNoodleFeed(enabled = true) {
+export function useNoodleFeed(enabled = true, authorAccountId?: string | null) {
   return useInfiniteQuery({
-    queryKey: noodleKeys.feed(),
+    queryKey: authorAccountId ? [...noodleKeys.feed(), authorAccountId] : noodleKeys.feed(),
     queryFn: ({ pageParam }) => {
       const cursor = pageParam
         ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}`
         : "";
-      return api.get<NoodlePostPage>(`/noodle/feed?limit=20${cursor}`);
+      return api.get<NoodlePostPage>(`/noodle/feed?limit=20${authorAccountId ? `&authorAccountId=${encodeURIComponent(authorAccountId)}` : ""}${cursor}`);
     },
     initialPageParam: null as NoodlePostPage["nextCursor"],
     getNextPageParam: (page) => page.nextCursor ?? undefined,
