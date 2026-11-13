@@ -65,7 +65,7 @@ function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBoo
 }
 
 function updateFeedInteractions(qc: QueryClient, updater: (interactions: NoodleInteraction[]) => NoodleInteraction[]) {
-  qc.setQueryData<InfiniteData<NoodlePostPage>>(noodleKeys.feed(), (current) =>
+  qc.setQueriesData<InfiniteData<NoodlePostPage>>({ queryKey: noodleKeys.feed() }, (current) =>
     current
       ? { ...current, pages: current.pages.map((page) => ({ ...page, interactions: updater(page.interactions) })) }
       : current,
@@ -85,18 +85,29 @@ export function useNoodle(enabled = true) {
   });
 }
 
-export function useNoodleFeed(enabled = true) {
+export function useNoodleFeed(
+  enabled = true,
+  authorAccountId?: string | null,
+  likedByAccountId?: string | null,
+  maxPages = 20,
+) {
   return useInfiniteQuery({
-    queryKey: noodleKeys.feed(),
+    queryKey: [
+      ...noodleKeys.feed(),
+      ...(authorAccountId ? [authorAccountId] : []),
+      ...(likedByAccountId ? ["liked", likedByAccountId] : []),
+    ],
     queryFn: ({ pageParam }) => {
       const cursor = pageParam
         ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}`
         : "";
-      return api.get<NoodlePostPage>(`/noodle/feed?limit=20${cursor}`);
+      return api.get<NoodlePostPage>(
+        `/noodle/feed?limit=20${authorAccountId ? `&authorAccountId=${encodeURIComponent(authorAccountId)}` : ""}${likedByAccountId ? `&likedByAccountId=${encodeURIComponent(likedByAccountId)}` : ""}${cursor}`,
+      );
     },
     initialPageParam: null as NoodlePostPage["nextCursor"],
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    maxPages: 20,
+    maxPages,
     enabled,
     staleTime: 10_000,
     refetchOnMount: "always",
@@ -105,10 +116,13 @@ export function useNoodleFeed(enabled = true) {
   });
 }
 
-export function useNoodleNotificationData(enabled = true) {
+export function useNoodleNotificationData(enabled = true, handle?: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.all, "notifications"],
-    queryFn: () => api.get<NoodleNotificationData>("/noodle/notifications"),
+    queryKey: [...noodleKeys.all, "notifications", handle ?? null],
+    queryFn: () =>
+      api.get<NoodleNotificationData>(
+        handle ? `/noodle/notifications?handle=${encodeURIComponent(handle)}` : "/noodle/notifications",
+      ),
     enabled,
     staleTime: 10_000,
   });

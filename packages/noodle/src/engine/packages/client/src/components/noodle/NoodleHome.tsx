@@ -636,7 +636,6 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     refetch: refetchBootstrap,
   } = useNoodle();
   const feedQuery = useNoodleFeed();
-  const notificationDataQuery = useNoodleNotificationData(notificationViewActive);
   const isLoading = isBootstrapLoading || feedQuery.isLoading;
   const isError = isBootstrapError || feedQuery.isError;
   // From another device, every Noodle route fails until the Admin Secret is set (#1136).
@@ -782,6 +781,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     interactions: NoodleInteraction[];
   } | null>(null);
   const requestedPostIdRef = useRef<string | null>(null);
+  const notificationFetchRef = useRef<string | null>(null);
   const onFocusPostHandledRef = useRef(onFocusPostHandled);
   onFocusPostHandledRef.current = onFocusPostHandled;
   useEffect(() => {
@@ -949,24 +949,51 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     () => sortedPersonaAccounts.slice(0, personaAccountLimit),
     [personaAccountLimit, sortedPersonaAccounts],
   );
+  const personaAccount = useMemo(
+    () => personaAccounts.find((account) => account.entityId === selectedPersonaId) ?? sortedPersonaAccounts[0] ?? null,
+    [personaAccounts, selectedPersonaId, sortedPersonaAccounts],
+  );
+  const notificationDataQuery = useNoodleNotificationData(notificationViewActive, personaAccount?.handle);
   const posts = useMemo(() => {
     const available = notificationViewActive ? (notificationDataQuery.data?.posts ?? feedPosts) : feedPosts;
     return focusedPostResult && !available.some((post) => post.id === focusedPostResult.post.id)
       ? [focusedPostResult.post, ...available]
       : available;
   }, [feedPosts, focusedPostResult, notificationDataQuery.data?.posts, notificationViewActive]);
+  // The own profile has no accountId in navigation, so fall back to the persona account.
+  const profileQueryAccountId =
+    navigation.mode === "public" && navigation.view === "profile"
+      ? (viewedProfileAccountId ?? personaAccount?.id ?? null)
+      : null;
+  const profileFeedQuery = useNoodleFeed(Boolean(profileQueryAccountId), profileQueryAccountId, null, Infinity);
+  const profileLikesQuery = useNoodleFeed(
+    profileTab === "likes" && Boolean(profileQueryAccountId),
+    null,
+    profileQueryAccountId,
+    Infinity,
+  );
+  const profileListQuery = profileTab === "likes" ? profileLikesQuery : profileFeedQuery;
   const interactions = useMemo(() => {
     const unique = new Map<string, NoodleInteraction>();
     for (const item of [
       ...(data?.interactions ?? []),
       ...feedInteractions,
+      ...(profileFeedQuery.data?.pages.flatMap((page) => page.interactions) ?? []),
+      ...(profileLikesQuery.data?.pages.flatMap((page) => page.interactions) ?? []),
       ...(focusedPostResult?.interactions ?? []),
       ...(notificationDataQuery.data?.interactions ?? []),
     ]) {
       if (!unique.has(item.id)) unique.set(item.id, item);
     }
     return Array.from(unique.values());
-  }, [data?.interactions, feedInteractions, focusedPostResult, notificationDataQuery.data?.interactions]);
+  }, [
+    data?.interactions,
+    feedInteractions,
+    focusedPostResult,
+    notificationDataQuery.data?.interactions,
+    profileFeedQuery.data,
+    profileLikesQuery.data,
+  ]);
   const interactionsByPostId = useMemo(() => {
     const grouped = new Map<string, NoodleInteraction[]>();
     for (const interaction of interactions) {
@@ -998,10 +1025,6 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         .filter((account) => account.kind === "character" && account.invited)
         .map((account) => account.entityId),
     [data?.accounts],
-  );
-  const personaAccount = useMemo(
-    () => personaAccounts.find((account) => account.entityId === selectedPersonaId) ?? sortedPersonaAccounts[0] ?? null,
-    [personaAccounts, selectedPersonaId, sortedPersonaAccounts],
   );
   const viewedProfileAccount = useMemo(
     () => (viewedProfileAccountId ? (accountById.get(viewedProfileAccountId) ?? null) : personaAccount),
@@ -2072,29 +2095,13 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       .slice(0, 50);
   }, [accountSearchTerm, accounts, folderInvitedCharacterIds, isAccountSearch, settings?.allowRandomUsers]);
   const profilePosts = useMemo(
-    () => (viewedProfileAccount ? posts.filter((post) => post.authorAccountId === viewedProfileAccount.id) : []),
-    [posts, viewedProfileAccount],
+    () => (viewedProfileAccount ? (profileFeedQuery.data?.pages.flatMap((page) => page.items) ?? []) : []),
+    [profileFeedQuery.data, viewedProfileAccount],
   );
-  const profileLikedPosts = useMemo(() => {
-    if (!viewedProfileAccount) return [];
-    const likedAtByPostId = new Map<string, string>();
-    for (const interaction of interactions) {
-      if (
-        interaction.actorAccountId === viewedProfileAccount.id &&
-        interaction.type === "like" &&
-        !interaction.parentInteractionId
-      ) {
-        likedAtByPostId.set(interaction.postId, interaction.createdAt);
-      }
-    }
-    return posts
-      .filter((post) => likedAtByPostId.has(post.id))
-      .sort((a, b) => {
-        const aTime = new Date(likedAtByPostId.get(a.id) ?? a.createdAt).getTime();
-        const bTime = new Date(likedAtByPostId.get(b.id) ?? b.createdAt).getTime();
-        return bTime - aTime;
-      });
-  }, [interactions, posts, viewedProfileAccount]);
+  const profileLikedPosts = useMemo(
+    () => profileLikesQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [profileLikesQuery.data],
+  );
   const profileMediaPosts = useMemo(() => profilePosts.filter((post) => Boolean(post.imageUrl)), [profilePosts]);
   const profileVisiblePosts =
     profileTab === "likes" ? profileLikedPosts : profileTab === "media" ? profileMediaPosts : profilePosts;
@@ -2247,9 +2254,26 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         : null;
       const targetElement = interactionElement ?? postElement;
       if (!targetElement) {
-        setNotificationFocusTarget(null);
+        // Target not rendered: fetch it once and show it like the focusPostId path; on the second miss, give up.
+        const { postId } = notificationFocusTarget;
+        if (notificationFetchRef.current === postId) {
+          notificationFetchRef.current = null;
+          setNotificationFocusTarget(null);
+          toast.error(localizeUi("ui.noodle.noodlehome.postUnavailable"));
+        } else {
+          notificationFetchRef.current = postId;
+          void api
+            .get<{ post: NoodlePost; interactions: NoodleInteraction[] }>(`/noodle/posts/${encodeURIComponent(postId)}`)
+            .then(setFocusedPostResult)
+            .catch(() => {
+              notificationFetchRef.current = null;
+              setNotificationFocusTarget(null);
+              toast.error(localizeUi("ui.noodle.noodlehome.postUnavailable"));
+            });
+        }
         return;
       }
+      notificationFetchRef.current = null;
       targetElement.scrollIntoView({
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
@@ -2259,7 +2283,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       setNotificationFocusTarget(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeNoodleView, isLoading, notificationFocusTarget, prefersReducedMotion]);
+  }, [activeNoodleView, focusedPostResult, isLoading, notificationFocusTarget, prefersReducedMotion]);
 
   useEffect(() => {
     if (!highlightedInteractionId) return;
@@ -5502,8 +5526,20 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               activeTab={profileTab}
               onTabChange={setProfileTab}
               postList={
-                profileVisiblePosts.length > 0 ? (
-                  profileVisiblePosts.map(renderPostArticle)
+                profileVisiblePosts.length > 0 || profileListQuery.hasNextPage ? (
+                  <>
+                    {profileVisiblePosts.map(renderPostArticle)}
+                    {profileListQuery.hasNextPage && (
+                      <button
+                        type="button"
+                        onClick={() => void profileListQuery.fetchNextPage()}
+                        disabled={profileListQuery.isFetchingNextPage}
+                        className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)]"
+                      >
+                        {localizeUi("ui.noodle.noodlehome.loadMorePosts")}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className="px-8 py-14 text-center">
                     <p className="text-sm font-semibold text-[var(--muted-foreground)]">
