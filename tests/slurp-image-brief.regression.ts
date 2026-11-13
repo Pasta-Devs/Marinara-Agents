@@ -261,15 +261,16 @@ assert.match(
   /companionNamed && input\.negativePromptAdditions\s*\? slurpImageNegativeWithCompany\(input\.negativePromptAdditions\)/u,
 );
 assert.match(images, /look: includeAppearance/u, "descriptions off keeps the companions' looks out too");
-// Nobody else joins a nude or explicit picture unless the spice consent gate chose them as the partner.
+// Nobody else joins a nude or explicit picture unless the spice consent gate chose them as the partner,
+// or the beat puts its cast in the picture (fork patch: tests/slurp2-collab-in-picture.regression.ts).
 const pictureBriefs = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-post-picture-briefs.ts",
 );
 assert.match(pictureBriefs, /const clothed = sexualLevel === "none" \|\| sexualLevel === "suggestive";/u);
-assert.match(pictureBriefs, /const company = !input\.partner && clothed && input\.cast\?\.length/u);
+assert.match(pictureBriefs, /const company = !partner && clothed && input\.cast\?\.length/u);
 assert.match(
   pictureBriefs,
-  /const pictureCast = clothed \|\| \(Boolean\(input\.partner\) && input\.cast\?\.length === 1\);/u,
+  /const pictureCast = clothed \|\| Boolean\(together\) \|\| \(Boolean\(input\.partner\) && input\.cast\?\.length === 1\);/u,
 );
 // The cast reaches the picture on the first draw and on every later one (reserve, review, retry).
 const generation = slurp2Source(

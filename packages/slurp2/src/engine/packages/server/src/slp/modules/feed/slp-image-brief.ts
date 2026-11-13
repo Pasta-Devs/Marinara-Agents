@@ -155,6 +155,8 @@ export function slurpShootContinuity(input: {
   return text || null;
 }
 
+const PEOPLE_COUNT: Record<number, string> = { 2: "Two", 3: "Three", 4: "Four", 5: "Five" };
+
 export function slurpImageBrief(input: {
   /** From `slurpCameraSourceShot`: framing and how the photo was taken, as a visual phrase. */
   cameraPhoto: string;
@@ -176,6 +178,8 @@ export function slurpImageBrief(input: {
   selectedWardrobe?: { name: string; description: string } | null;
   /** Who is in a partner scene with them ("Jonas, their boyfriend"). Absent: they are alone. */
   partner?: string | null;
+  /** How many people `partner` names ("Kai and Noor" is 2). Default 1. */
+  partnerCount?: number;
   /** Who else the post is about ("Kai"): in the picture only if the moment calls for them. */
   company?: string | null;
 }): string {
@@ -216,7 +220,7 @@ export function slurpImageBrief(input: {
         : LEVEL_PHOTO[input.sexualLevel],
     ),
     input.partner
-      ? `Two people: the Creator and ${input.partner}.`
+      ? `${PEOPLE_COUNT[(input.partnerCount ?? 1) + 1] ?? "Several"} people: the Creator and ${input.partner}.`
       : input.company
         ? `${input.company} may be in the photo too, if the moment calls for it.`
         : "The only person in the photo.",

@@ -42,6 +42,22 @@ function rivalLine(rivalry: SlurpRivalry, selfId: string, rival: string): string
   return `Things with ${rival} have cooled down. Let it go your way: a gracious word, a shrug, or just moving on.`;
 }
 
+/** Couple moments the two of them are pictured in: a launch, a date, a page they share. */
+const COUPLE_PICTURED = new Set(["launch", "anniversary", "reunion", "joined", "date", "pageOpen"]);
+
+/**
+ * Whether a tie beat puts its cast in the picture: a collab's joint post, or a couple moment the two of
+ * them are pictured in. Not an announcement ("without showing it yet"), a partner's own side, a secret
+ * couple (no face in public), a cameo, a fight or a breakup.
+ */
+export function slurpTiePutsCastInPicture(tie: SlurpTieStamp | null | undefined): boolean {
+  if (!tie) return false;
+  if (tie.kind === "collab") return !tie.announce && !tie.echo;
+  if (tie.kind !== "couple" || tie.secret) return false;
+  // A post on the couple's shared page is the two of them unless its moment says otherwise.
+  return tie.moment ? COUPLE_PICTURED.has(tie.moment) : Boolean(tie.pageId);
+}
+
 /**
  * The tie beat for this Creator's ordinary slot, or null. Order: a collab they host (its announcement,
  * then the joint post on its drop day), a sponsored post they said yes to, a couple moment, then now

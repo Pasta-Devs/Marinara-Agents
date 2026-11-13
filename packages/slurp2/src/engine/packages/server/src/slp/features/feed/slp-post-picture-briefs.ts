@@ -16,6 +16,8 @@ import {
   type SlurpProductionStyle,
 } from "../../modules/creators/slp-production-profile.js";
 import { slurpArcImageLine } from "../../modules/projects/slp-arc-progress.js";
+import { slurpTiePutsCastInPicture } from "../../modules/feed/slp-tie-beats.js";
+import type { SlurpTieStamp } from "../../modules/projects/slp-tie-stamp.js";
 import { protectCreatorGeneratedIdentity } from "../../base/identity/slp-identity-protection.js";
 import type { SlpSceneShot, SlpWardrobeLook, SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
 
@@ -43,6 +45,11 @@ export function slurpPostPictureBriefs(input: {
   partner?: string | null;
   /** Who else the post is about (its beat's cast): they may be in the picture when it calls for them. */
   cast?: readonly string[];
+  /**
+   * The post's beat. When its tie puts the cast in the picture (`slurpTiePutsCastInPicture`: a collab's
+   * joint post, a couple's date), they are drawn as partners at every level.
+   */
+  beat?: { cast: readonly string[]; tie?: SlurpTieStamp } | null;
   /** The model's own idea, used only when there is no situation to brief from. */
   modelImagePrompt: string | null | undefined;
   /** This Creator's own look and life. See `SlpCreatorStageFacts`. */
@@ -72,13 +79,18 @@ export function slurpPostPictureBriefs(input: {
     access: input.access,
     intent: input.axes?.intent,
   });
-  // Somebody else may join a clothed or suggestive picture. A nude or explicit one holds only the
-  // partner the spice consent gate chose (`partner`), and only when the beat names that one person.
+  // Somebody else may join a clothed or suggestive picture. A nude or explicit one holds the partner
+  // the spice consent gate chose (`partner`), when the beat names that one person, or the cast of a
+  // beat that puts them in the picture (a collab's joint post, a couple's date).
   const clothed = sexualLevel === "none" || sexualLevel === "suggestive";
-  const company = !input.partner && clothed && input.cast?.length ? slurpNameList(input.cast) : null;
-  // A collab partner reaches a nude or explicit picture only through the spice check (`partner`):
-  // their own level and hard noes decide, as for any partner.
-  const pictureCast = clothed || (Boolean(input.partner) && input.cast?.length === 1);
+  const together = slurpTiePutsCastInPicture(input.beat?.tie) && input.beat?.cast.length ? input.beat.cast : null;
+  // Collab and couple posts drew the Creator alone: the cast reached the brief only as "may be in the
+  // photo", and not at all at a nude or explicit level, under a "second person" negative. A beat that
+  // puts them in the picture now writes them in as partners at every level.
+  const partner = input.partner || (together ? slurpNameList(together) : null);
+  const partnerCount = input.partner ? 1 : (together?.length ?? 0);
+  const company = !partner && clothed && input.cast?.length ? slurpNameList(input.cast) : null;
+  const pictureCast = clothed || Boolean(together) || (Boolean(input.partner) && input.cast?.length === 1);
   // Produce mode briefs the picture from the situation, never from the caption the model just
   // wrote. Identity protection still applies: the brief carries the Creator's own place and
   // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
@@ -101,7 +113,8 @@ export function slurpPostPictureBriefs(input: {
           stageFacts: input.stageFacts,
           scene: input.scene,
           selectedWardrobe: input.selectedWardrobe,
-          partner: input.partner,
+          partner,
+          partnerCount,
           company,
         })
       : null);
@@ -141,7 +154,7 @@ export function slurpPostPictureBriefs(input: {
         : undefined,
     negativePrompt:
       input.postImages && camera && variation
-        ? slurpImageNegativePrompt(sexualLevel, Boolean(input.partner), camera)
+        ? slurpImageNegativePrompt(sexualLevel, Boolean(partner), camera)
         : undefined,
     // Each extra picture is briefed exactly like the first, so it reaches the image model as a
     // complete picture. A shot that names its own outfit wears it; otherwise it keeps the chosen look.

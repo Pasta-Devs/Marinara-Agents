@@ -522,6 +522,7 @@ export async function generateCreatorPost(
     explicitLevel,
     partner: spiceAngle?.partner?.company ?? null,
     cast: [...new Set([...(beat?.cast ?? []), ...mentioned.names, ...tagged.names])],
+    beat,
     modelImagePrompt: generated.imagePrompt,
     stageFacts: account.settings.stage,
     scene: generated.scene,
