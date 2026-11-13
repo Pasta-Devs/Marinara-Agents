@@ -6,7 +6,7 @@ import {
   slurpCameraSourcePhoto,
   slurpCameraSourceShot,
   slurpPermittedCameraSources,
-  slurpCameraSourceFromScene,
+  slurpSceneCamera,
   slurpPostCameraSource,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
 import {
@@ -150,11 +150,13 @@ for (const source of ["tripod", "screenshot", "archive", "partner"] as const) {
 }
 
 // A viewpoint the written scene already names wins over the weighted pick, if this post may use it.
-const mirrorText = `Alone at home, ${slurpCameraSourceShot("mirror", "x", "natural")}.`;
-assert.equal(slurpCameraSourceFromScene("tripod", mirrorText, { companyCanHoldCamera: false }), "mirror");
-assert.equal(slurpCameraSourceFromScene("tripod", "nothing named here", { companyCanHoldCamera: false }), "tripod");
+const solo = { companyCanHoldCamera: false };
+const mirrorScene = { visualDirection: `Alone at home, ${slurpCameraSourceShot("mirror", "x", "natural")}.` };
+assert.equal(slurpSceneCamera("tripod", mirrorScene, solo, true), "mirror");
+assert.equal(slurpSceneCamera("tripod", { visualDirection: "nothing named" }, solo, true), "tripod");
+assert.equal(slurpSceneCamera("tripod", null, solo, true), "tripod");
 assert.equal(
-  slurpCameraSourceFromScene("tripod", mirrorText, { companyCanHoldCamera: false, screens: false }),
+  slurpSceneCamera("tripod", mirrorScene, solo, false),
   "tripod",
   "a source the world does not permit is not forced",
 );

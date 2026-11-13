@@ -76,7 +76,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import {
   slurpCameraSourceInstruction,
   slurpPostCameraSource,
-  slurpCameraSourceFromScene,
+  slurpSceneCamera,
   slurpScreenFreeCamera,
 } from "../../modules/feed/slp-camera-source.js";
 import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
@@ -270,8 +270,7 @@ export async function generateCreatorPost(
   const textOnly = axes?.delivery === "text_only";
   // A reused picture is the picture: nothing is briefed or generated for this post.
   const postImages = imagesEnabled && !textOnly && !reusedMedia;
-  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot
-  // keeps its own camera. See `slp-camera-source.ts`.
+  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot keeps its own camera. See `slp-camera-source.ts`.
   const screens = !(await readSlurpWorldLens(db, account.id));
   const cameraSource = variation
     ? slurpPostCameraSource(account.id, sequence, {
@@ -498,14 +497,7 @@ export async function generateCreatorPost(
     content: protectedContent,
   };
 
-  // The scene the model wrote may already name its own viewpoint; that one wins over the weighted pick.
-  const pictureCamera =
-    camera && askModelForScene && generated.scene
-      ? slurpCameraSourceFromScene(camera, Object.values(generated.scene).join(" "), {
-          companyCanHoldCamera: variation?.companyCanHoldCamera ?? false,
-          screens,
-        })
-      : camera;
+  const pictureCamera = camera && slurpSceneCamera(camera, askModelForScene && generated.scene, variation, screens);
   const wardrobeSelection = resolveSlurpWardrobeSelection({
     looks: wardrobeLooks,
     access: input.request.access,
@@ -624,8 +616,7 @@ export async function generateCreatorPost(
     source: "generated" as const,
     access: input.request.access,
     projectId: project?.id ?? null,
-    // Stamped now rather than resolved later, so editing the project cannot rewrite what a
-    // published post was about.
+    // Stamped now rather than resolved later, so editing the project cannot rewrite what a published post was about.
     projectChapter,
     metadata: {
       noodlerContentFormat: format,

@@ -69,7 +69,10 @@ for (const level of ["nudity", "explicit"] as const) {
   assert.match(result.draftImagePrompt ?? "", /The only person in the photo\./u, level);
   assert.equal(result.pictureCast, false, level);
 }
-assert.match(briefs("explicit", ["Kai"], "Kai, their partner").draftImagePrompt ?? "", /Two people: the Creator and Kai, their partner\./u);
+assert.match(
+  briefs("explicit", ["Kai"], "Kai, their partner").draftImagePrompt ?? "",
+  /Two people: the Creator and Kai, their partner\./u,
+);
 
 // A post whose beat does not put the cast in the picture is unchanged.
 const alone = briefs("explicit");

@@ -421,12 +421,14 @@ export function slurpPostCameraSource(
 }
 
 /** A viewpoint the written scene already names wins over the weighted pick, if this post may use it. */
-export function slurpCameraSourceFromScene(
+export function slurpSceneCamera(
   picked: SlurpCameraSource,
-  sceneText: string,
-  options: Parameters<typeof slurpPermittedCameraSources>[0],
+  scene: object | false | null | undefined,
+  variation: { companyCanHoldCamera: boolean } | null,
+  screens: boolean,
 ): SlurpCameraSource {
-  const named = slurpViewpointIn(sceneText)?.source;
+  const named = scene ? slurpViewpointIn(Object.values(scene).join(" "))?.source : undefined;
+  const options = { companyCanHoldCamera: variation?.companyCanHoldCamera ?? false, screens };
   return named && slurpPermittedCameraSources(options).includes(named) ? named : picked;
 }
 
