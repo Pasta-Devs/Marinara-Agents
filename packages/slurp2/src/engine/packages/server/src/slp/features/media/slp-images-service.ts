@@ -369,8 +369,8 @@ async function generateCreatorPostImageRun(
     }
   }
 
-  // Card appearance carries clothes and costumes; the scene decides what is worn in this picture.
-  if (!stageAppearance) characterDescription = slurpImageLook(characterDescription);
+  // Every appearance source carries clothes (Stage too); the wardrobe and the scene dress this picture.
+  characterDescription = slurpImageLook(characterDescription);
   // A character the image model knows is drawn from their name (0.3.5, player report). The card's
   // own name, on by default per Creator, only for an open identity; an OC's switch can be turned off.
   const sourceName = sourceCharacter ? characterNameFromRow(sourceCharacter) : sourcePersona?.name?.trim() || "";
@@ -406,9 +406,7 @@ async function generateCreatorPostImageRun(
             ? (character ? characterNameFromRow(character) : persona?.name?.trim()) || ""
             : "",
         // Descriptions off keeps every look out of the prompt, the companions' too; references stay.
-        look: includeAppearance
-          ? account.settings.stage?.appearance?.trim() || (appearance ? slurpImageLook(appearance) : "")
-          : "",
+        look: includeAppearance ? slurpImageLook(account.settings.stage?.appearance?.trim() || appearance) : "",
         card: row ? { id: row.id, avatarPath: row.avatarPath ?? null, appearance } : null,
       };
     }),
@@ -606,7 +604,7 @@ async function generateCreatorPostImageRun(
       ? `${withoutDevice}\n${viewpoint.phrase}`
       : withoutDevice;
   // A drawn Creator or a painted style profile drops the photo words; in the story it is still a photo.
-  const styleSource = `${characterDescription}\n${characterImageInstructions}`;
+  const styleSource = `${stageAppearance || characterDescription}\n${characterImageInstructions}`;
   const medium = `${characterImageInstructions}\n${styleGuidance}`;
   const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource, medium);
   // The viewpoint in the image model's words: tags for a tag model, e621 tags for a drawn furry.
@@ -631,7 +629,7 @@ async function generateCreatorPostImageRun(
   // One copy of the look: the writer's words, Slurp's insert, or the writer's plus the missing traits.
   const finalPromptLook = slurpApplyImageLook(
     finalPromptBody,
-    redactIdentity(stageAppearance || stripAppearanceLabel(characterDescription)),
+    redactIdentity(stripAppearanceLabel(characterDescription)),
     lookMode,
     usedRewrite,
   );
