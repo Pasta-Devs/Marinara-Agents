@@ -965,11 +965,12 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     navigation.mode === "public" && navigation.view === "profile"
       ? (viewedProfileAccountId ?? personaAccount?.id ?? null)
       : null;
-  const profileFeedQuery = useNoodleFeed(Boolean(profileQueryAccountId), profileQueryAccountId);
+  const profileFeedQuery = useNoodleFeed(Boolean(profileQueryAccountId), profileQueryAccountId, null, Infinity);
   const profileLikesQuery = useNoodleFeed(
     profileTab === "likes" && Boolean(profileQueryAccountId),
     null,
     profileQueryAccountId,
+    Infinity,
   );
   const profileListQuery = profileTab === "likes" ? profileLikesQuery : profileFeedQuery;
   const interactions = useMemo(() => {
@@ -2090,24 +2091,10 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     () => (viewedProfileAccount ? (profileFeedQuery.data?.pages.flatMap((page) => page.items) ?? []) : []),
     [profileFeedQuery.data, viewedProfileAccount],
   );
-  const profileLikedPosts = useMemo(() => {
-    if (!viewedProfileAccount) return [];
-    const likedAtByPostId = new Map<string, string>();
-    for (const interaction of interactions) {
-      if (
-        interaction.actorAccountId === viewedProfileAccount.id &&
-        interaction.type === "like" &&
-        !interaction.parentInteractionId
-      ) {
-        likedAtByPostId.set(interaction.postId, interaction.createdAt);
-      }
-    }
-    return (profileLikesQuery.data?.pages.flatMap((page) => page.items) ?? []).sort((a, b) => {
-      const aTime = new Date(likedAtByPostId.get(a.id) ?? a.createdAt).getTime();
-      const bTime = new Date(likedAtByPostId.get(b.id) ?? b.createdAt).getTime();
-      return bTime - aTime;
-    });
-  }, [interactions, profileLikesQuery.data, viewedProfileAccount]);
+  const profileLikedPosts = useMemo(
+    () => profileLikesQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [profileLikesQuery.data],
+  );
   const profileMediaPosts = useMemo(() => profilePosts.filter((post) => Boolean(post.imageUrl)), [profilePosts]);
   const profileVisiblePosts =
     profileTab === "likes" ? profileLikedPosts : profileTab === "media" ? profileMediaPosts : profilePosts;
@@ -5532,7 +5519,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               activeTab={profileTab}
               onTabChange={setProfileTab}
               postList={
-                profileVisiblePosts.length > 0 ? (
+                profileVisiblePosts.length > 0 || profileListQuery.hasNextPage ? (
                   <>
                     {profileVisiblePosts.map(renderPostArticle)}
                     {profileListQuery.hasNextPage && (

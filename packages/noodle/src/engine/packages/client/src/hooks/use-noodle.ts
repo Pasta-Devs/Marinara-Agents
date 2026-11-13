@@ -85,7 +85,7 @@ export function useNoodle(enabled = true) {
   });
 }
 
-export function useNoodleFeed(enabled = true, authorAccountId?: string | null, likedByAccountId?: string | null) {
+export function useNoodleFeed(enabled = true, authorAccountId?: string | null, likedByAccountId?: string | null, maxPages = 20) {
   return useInfiniteQuery({
     queryKey: [
       ...noodleKeys.feed(),
@@ -102,7 +102,7 @@ export function useNoodleFeed(enabled = true, authorAccountId?: string | null, l
     },
     initialPageParam: null as NoodlePostPage["nextCursor"],
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    maxPages: 20,
+    maxPages,
     enabled,
     staleTime: 10_000,
     refetchOnMount: "always",

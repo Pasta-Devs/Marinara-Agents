@@ -13,7 +13,7 @@ assert.match(hooks, /authorAccountId=\$\{encodeURIComponent\(authorAccountId\)\}
 assert.match(hooks, /setQueriesData<InfiniteData<NoodlePostPage>>\(\{ queryKey: noodleKeys\.feed\(\) \}/u);
 assert.match(routes, /authorAccountId\?: string/u);
 assert.match(storage, /filter\(\(id\) => !options\.authorAccountId \|\| id === options\.authorAccountId\)/u);
-assert.match(home, /useNoodleFeed\(Boolean\(profileQueryAccountId\), profileQueryAccountId\)/u);
+assert.match(home, /useNoodleFeed\(Boolean\(profileQueryAccountId\), profileQueryAccountId, null, Infinity\)/u);
 assert.doesNotMatch(home, /posts\.filter\(\(post\) => post\.authorAccountId === viewedProfileAccount\.id\)/u);
 
 // Notification targets that are not rendered get fetched; a miss shows an error.
@@ -38,5 +38,9 @@ assert.match(hooks, /\/noodle\/notifications\?handle=/u);
 
 // Own profile has no navigation accountId: queries fall back to the persona account.
 assert.match(home, /viewedProfileAccountId \?\? personaAccount\?\.id/u);
+
+// Profile lists keep every page, and an empty Media tab still offers Load more.
+assert.match(hooks, /maxPages = 20/);
+assert.match(home, /profileVisiblePosts\.length > 0 \|\| profileListQuery\.hasNextPage/);
 
 console.log("Noodle profile and notification unloaded-post regressions passed.");

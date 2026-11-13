@@ -3018,8 +3018,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "ffbe5ee651b7a8d644ed52cd47a77546adeb034e88b644c9e6c2fef860cf6e6f",
-            "bytes": 734384
+            "sha256": "045b30017326cf00ab00dacb36ea593c35d00ac247075939b3700cfe718687ae",
+            "bytes": 734142
           },
           {
             "path": "noodle-klusek.png",
@@ -3041,8 +3041,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.16.zip",
-        "sha256": "33c4aa85f63b38ebebe3cb881d8607328dafdb237e1b8df18f0dbbe2a0b19a91",
-        "bytes": 1300000
+        "sha256": "1235b150dc305f69709b4274eb3f3a8e23d6602be8a76c51c51ab8826f918542",
+        "bytes": 1299758
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
