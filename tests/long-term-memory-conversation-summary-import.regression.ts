@@ -218,7 +218,8 @@ async function main() {
       );
       assert.throws(
         () => ltmInteropPreviewRequestSchema.parse({ source: "chats", query: "x".repeat(201) }),
-        /String must contain at most 200 character/u,
+        // zod 4 (root dependency 4.6.7) words a string's max as "Too big: expected string to have <=200 characters".
+        /(?:String must contain at most 200 character|Too big: expected string to have <=200 characters)/u,
       );
       assert.deepEqual(
         ltmSourceDetailsRequestSchema.parse({
