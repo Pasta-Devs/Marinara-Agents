@@ -112,6 +112,10 @@ test("the last node, which adds the big-choice rules, still states the shape las
   );
   const shape = tail.content.lastIndexOf(SHAPE);
   const reminder = tail.content.indexOf("Keep to the CONTENT CONTRACT above");
-  assert.ok(shape > tail.content.indexOf("this is the chapter's last"), "the shape follows the last-node rules");
+  // The prompt capitalises this line ("- This is the chapter's last node: …"); a lowercase search finds nothing and
+  // made the comparison below pass against -1, so it is matched as written.
+  const lastNodeRule = tail.content.indexOf("This is the chapter's last node");
+  assert.ok(lastNodeRule >= 0, "the last-node rules are in the task turn");
+  assert.ok(shape > lastNodeRule, "the shape follows the last-node rules");
   assert.ok(shape < reminder, "and sits immediately before the reminder");
 });
