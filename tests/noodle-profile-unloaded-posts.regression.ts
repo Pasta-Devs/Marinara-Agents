@@ -23,4 +23,17 @@ assert.match(home, /\/noodle\/posts\/\$\{encodeURIComponent\(postId\)\}/u);
 // Notifications also cover older posts that received recent interactions.
 assert.match(storage, /orderBy\(desc\(noodleInteractions\.createdAt\)\)\s*\.limit\(300\)/u);
 
+// Likes tab: server-side liked-by filter, own query, Load more on every profile tab.
+assert.match(hooks, /likedByAccountId=\$\{encodeURIComponent\(likedByAccountId\)\}/u);
+assert.match(storage, /options\.likedByAccountId/u);
+assert.match(routes, /likedByAccountId\?: string/u);
+assert.match(home, /useNoodleFeed\(\s*profileTab === "likes"/u);
+assert.match(home, /profileLikesQuery\.data\?\.pages\.flatMap\(\(page\) => page\.interactions\)/u);
+assert.doesNotMatch(home, /profileTab !== "likes" && profileListQuery/u);
+
+// Mentions of the viewer's handle in older posts come from a bounded text query.
+assert.match(storage, /like\(noodlePosts\.content, `%@\$\{handle/u);
+assert.match(storage, /\.limit\(100\)/u);
+assert.match(hooks, /\/noodle\/notifications\?handle=/u);
+
 console.log("Noodle profile and notification unloaded-post regressions passed.");

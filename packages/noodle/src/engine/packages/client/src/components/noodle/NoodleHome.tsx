@@ -636,7 +636,6 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     refetch: refetchBootstrap,
   } = useNoodle();
   const feedQuery = useNoodleFeed();
-  const notificationDataQuery = useNoodleNotificationData(notificationViewActive);
   const isLoading = isBootstrapLoading || feedQuery.isLoading;
   const isError = isBootstrapError || feedQuery.isError;
   // From another device, every Noodle route fails until the Admin Secret is set (#1136).
@@ -950,6 +949,11 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     () => sortedPersonaAccounts.slice(0, personaAccountLimit),
     [personaAccountLimit, sortedPersonaAccounts],
   );
+  const personaAccount = useMemo(
+    () => personaAccounts.find((account) => account.entityId === selectedPersonaId) ?? sortedPersonaAccounts[0] ?? null,
+    [personaAccounts, selectedPersonaId, sortedPersonaAccounts],
+  );
+  const notificationDataQuery = useNoodleNotificationData(notificationViewActive, personaAccount?.handle);
   const posts = useMemo(() => {
     const available = notificationViewActive ? (notificationDataQuery.data?.posts ?? feedPosts) : feedPosts;
     return focusedPostResult && !available.some((post) => post.id === focusedPostResult.post.id)
@@ -957,12 +961,19 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       : available;
   }, [feedPosts, focusedPostResult, notificationDataQuery.data?.posts, notificationViewActive]);
   const profileFeedQuery = useNoodleFeed(Boolean(viewedProfileAccountId), viewedProfileAccountId);
+  const profileLikesQuery = useNoodleFeed(
+    profileTab === "likes" && Boolean(viewedProfileAccountId),
+    null,
+    viewedProfileAccountId,
+  );
+  const profileListQuery = profileTab === "likes" ? profileLikesQuery : profileFeedQuery;
   const interactions = useMemo(() => {
     const unique = new Map<string, NoodleInteraction>();
     for (const item of [
       ...(data?.interactions ?? []),
       ...feedInteractions,
       ...(profileFeedQuery.data?.pages.flatMap((page) => page.interactions) ?? []),
+      ...(profileLikesQuery.data?.pages.flatMap((page) => page.interactions) ?? []),
       ...(focusedPostResult?.interactions ?? []),
       ...(notificationDataQuery.data?.interactions ?? []),
     ]) {
@@ -1001,10 +1012,6 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         .filter((account) => account.kind === "character" && account.invited)
         .map((account) => account.entityId),
     [data?.accounts],
-  );
-  const personaAccount = useMemo(
-    () => personaAccounts.find((account) => account.entityId === selectedPersonaId) ?? sortedPersonaAccounts[0] ?? null,
-    [personaAccounts, selectedPersonaId, sortedPersonaAccounts],
   );
   const viewedProfileAccount = useMemo(
     () => (viewedProfileAccountId ? (accountById.get(viewedProfileAccountId) ?? null) : personaAccount),
@@ -2090,14 +2097,12 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         likedAtByPostId.set(interaction.postId, interaction.createdAt);
       }
     }
-    return posts
-      .filter((post) => likedAtByPostId.has(post.id))
-      .sort((a, b) => {
-        const aTime = new Date(likedAtByPostId.get(a.id) ?? a.createdAt).getTime();
-        const bTime = new Date(likedAtByPostId.get(b.id) ?? b.createdAt).getTime();
-        return bTime - aTime;
-      });
-  }, [interactions, posts, viewedProfileAccount]);
+    return (profileLikesQuery.data?.pages.flatMap((page) => page.items) ?? []).sort((a, b) => {
+      const aTime = new Date(likedAtByPostId.get(a.id) ?? a.createdAt).getTime();
+      const bTime = new Date(likedAtByPostId.get(b.id) ?? b.createdAt).getTime();
+      return bTime - aTime;
+    });
+  }, [interactions, profileLikesQuery.data, viewedProfileAccount]);
   const profileMediaPosts = useMemo(() => profilePosts.filter((post) => Boolean(post.imageUrl)), [profilePosts]);
   const profileVisiblePosts =
     profileTab === "likes" ? profileLikedPosts : profileTab === "media" ? profileMediaPosts : profilePosts;
@@ -5525,11 +5530,11 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                 profileVisiblePosts.length > 0 ? (
                   <>
                     {profileVisiblePosts.map(renderPostArticle)}
-                    {profileTab !== "likes" && profileFeedQuery.hasNextPage && (
+                    {profileListQuery.hasNextPage && (
                       <button
                         type="button"
-                        onClick={() => void profileFeedQuery.fetchNextPage()}
-                        disabled={profileFeedQuery.isFetchingNextPage}
+                        onClick={() => void profileListQuery.fetchNextPage()}
+                        disabled={profileListQuery.isFetchingNextPage}
                         className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)]"
                       >
                         {localizeUi("ui.noodle.noodlehome.loadMorePosts")}

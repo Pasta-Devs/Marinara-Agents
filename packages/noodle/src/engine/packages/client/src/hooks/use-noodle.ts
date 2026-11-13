@@ -85,15 +85,19 @@ export function useNoodle(enabled = true) {
   });
 }
 
-export function useNoodleFeed(enabled = true, authorAccountId?: string | null) {
+export function useNoodleFeed(enabled = true, authorAccountId?: string | null, likedByAccountId?: string | null) {
   return useInfiniteQuery({
-    queryKey: authorAccountId ? [...noodleKeys.feed(), authorAccountId] : noodleKeys.feed(),
+    queryKey: [
+      ...noodleKeys.feed(),
+      ...(authorAccountId ? [authorAccountId] : []),
+      ...(likedByAccountId ? ["liked", likedByAccountId] : []),
+    ],
     queryFn: ({ pageParam }) => {
       const cursor = pageParam
         ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}`
         : "";
       return api.get<NoodlePostPage>(
-        `/noodle/feed?limit=20${authorAccountId ? `&authorAccountId=${encodeURIComponent(authorAccountId)}` : ""}${cursor}`,
+        `/noodle/feed?limit=20${authorAccountId ? `&authorAccountId=${encodeURIComponent(authorAccountId)}` : ""}${likedByAccountId ? `&likedByAccountId=${encodeURIComponent(likedByAccountId)}` : ""}${cursor}`,
       );
     },
     initialPageParam: null as NoodlePostPage["nextCursor"],
@@ -107,10 +111,13 @@ export function useNoodleFeed(enabled = true, authorAccountId?: string | null) {
   });
 }
 
-export function useNoodleNotificationData(enabled = true) {
+export function useNoodleNotificationData(enabled = true, handle?: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.all, "notifications"],
-    queryFn: () => api.get<NoodleNotificationData>("/noodle/notifications"),
+    queryKey: [...noodleKeys.all, "notifications", handle ?? null],
+    queryFn: () =>
+      api.get<NoodleNotificationData>(
+        handle ? `/noodle/notifications?handle=${encodeURIComponent(handle)}` : "/noodle/notifications",
+      ),
     enabled,
     staleTime: 10_000,
   });
