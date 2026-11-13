@@ -49,6 +49,7 @@
   "ui.otomeForge.album.soundtrackMuted": "Music is off in Settings → Audio, so nothing plays.",
   "ui.otomeForge.album.sourceCard": "A Tarot card",
   "ui.otomeForge.album.sourceKeepsake": "From a date",
+  "ui.otomeForge.album.keepsakesHint": "Keepsakes from your finished dates are kept here, next to your photos. Open one to see it full size, save it, or read the evening again.",
   "ui.otomeForge.album.sourceMemory": "From a Memory",
   "ui.otomeForge.album.sourcePair": "A pair portrait",
   "ui.otomeForge.album.sourcePhoto": "From a Photo Shoot",
