@@ -72,7 +72,8 @@ export function stripAppearanceLabel(value: string): string {
  */
 const CLOTHING_SENTENCE =
   /\b(?:wear|wears|wearing|worn|dress|dresses|dressed|outfits?|cloth(?:es|ing)|fashion|favou?rs|cosplay|costumes?|accessor(?:y|ies)|carries|carrying|shoes|boots|jewel(?:ry|lery)|hoodies?|shirts?|skirts?|jeans|jackets?|gowns?|couture|heels|lingerie|bikinis?|sweaters?|uniforms?)\b/iu;
-const MAX_LOOK_LENGTH = 600;
+// A long Stage look is written on purpose; 600 cut its last traits (scars, tattoos) off.
+const MAX_LOOK_LENGTH = 2_000;
 /** Two or more commas and no sentence end: a tag list, not prose. */
 const TAG_LIST = /^[^.!?]*,[^.!?]*,[^.!?]*$/u;
 /** Where a sentence splits into clauses; the separator stays with the clause after it. */

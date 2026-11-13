@@ -11,6 +11,9 @@ const look = slurpImageLook(stage);
 assert.match(look, /silver hair/u);
 assert.match(look, /scar runs along her left jaw/u);
 assert.doesNotMatch(look, /sweater|fishing vest/u);
+// A long look keeps its last trait; the old 600-character cap cut it off.
+const long = `${"Freckles across the nose and cheeks. ".repeat(30)}A tattoo of a koi on the left forearm.`;
+assert.match(slurpImageLook(long), /koi on the left forearm/u);
 
 const images = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts");
 // The filter runs for every source, not only when there is no Stage appearance.
