@@ -2270,7 +2270,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         return;
       }
       notificationFetchRef.current = null;
-        targetElement.scrollIntoView({
+      targetElement.scrollIntoView({
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
@@ -5523,21 +5523,19 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               onTabChange={setProfileTab}
               postList={
                 profileVisiblePosts.length > 0 ? (
-                  (
-              <>
-                {profileVisiblePosts.map(renderPostArticle)}
-                {profileTab !== "likes" && profileFeedQuery.hasNextPage && (
-                  <button
-                    type="button"
-                    onClick={() => void profileFeedQuery.fetchNextPage()}
-                    disabled={profileFeedQuery.isFetchingNextPage}
-                    className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)]"
-                  >
-                    {localizeUi("ui.noodle.noodlehome.loadMorePosts")}
-                  </button>
-                )}
-              </>
-            )
+                  <>
+                    {profileVisiblePosts.map(renderPostArticle)}
+                    {profileTab !== "likes" && profileFeedQuery.hasNextPage && (
+                      <button
+                        type="button"
+                        onClick={() => void profileFeedQuery.fetchNextPage()}
+                        disabled={profileFeedQuery.isFetchingNextPage}
+                        className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)]"
+                      >
+                        {localizeUi("ui.noodle.noodlehome.loadMorePosts")}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className="px-8 py-14 text-center">
                     <p className="text-sm font-semibold text-[var(--muted-foreground)]">

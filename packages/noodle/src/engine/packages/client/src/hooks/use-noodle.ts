@@ -65,7 +65,7 @@ function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBoo
 }
 
 function updateFeedInteractions(qc: QueryClient, updater: (interactions: NoodleInteraction[]) => NoodleInteraction[]) {
-  qc.setQueryData<InfiniteData<NoodlePostPage>>(noodleKeys.feed(), (current) =>
+  qc.setQueriesData<InfiniteData<NoodlePostPage>>({ queryKey: noodleKeys.feed() }, (current) =>
     current
       ? { ...current, pages: current.pages.map((page) => ({ ...page, interactions: updater(page.interactions) })) }
       : current,
@@ -92,7 +92,9 @@ export function useNoodleFeed(enabled = true, authorAccountId?: string | null) {
       const cursor = pageParam
         ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}`
         : "";
-      return api.get<NoodlePostPage>(`/noodle/feed?limit=20${authorAccountId ? `&authorAccountId=${encodeURIComponent(authorAccountId)}` : ""}${cursor}`);
+      return api.get<NoodlePostPage>(
+        `/noodle/feed?limit=20${authorAccountId ? `&authorAccountId=${encodeURIComponent(authorAccountId)}` : ""}${cursor}`,
+      );
     },
     initialPageParam: null as NoodlePostPage["nextCursor"],
     getNextPageParam: (page) => page.nextCursor ?? undefined,
