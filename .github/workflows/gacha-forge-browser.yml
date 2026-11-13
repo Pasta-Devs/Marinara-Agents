@@ -73,6 +73,10 @@ jobs:
         run: npm ci
 
       - name: Install Engine dependencies
+        env:
+          # onnxruntime-node's postinstall downloads a CUDA add-on from api.nuget.org, and a NuGet timeout fails the
+          # install; the browser suites need only the bundled CPU binding, as the Engine's own CI has decided.
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: pnpm --dir engine install --frozen-lockfile
 
       - name: Install Playwright Chromium
