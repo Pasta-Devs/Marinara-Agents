@@ -960,11 +960,16 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       ? [focusedPostResult.post, ...available]
       : available;
   }, [feedPosts, focusedPostResult, notificationDataQuery.data?.posts, notificationViewActive]);
-  const profileFeedQuery = useNoodleFeed(Boolean(viewedProfileAccountId), viewedProfileAccountId);
+  // The own profile has no accountId in navigation, so fall back to the persona account.
+  const profileQueryAccountId =
+    navigation.mode === "public" && navigation.view === "profile"
+      ? (viewedProfileAccountId ?? personaAccount?.id ?? null)
+      : null;
+  const profileFeedQuery = useNoodleFeed(Boolean(profileQueryAccountId), profileQueryAccountId);
   const profileLikesQuery = useNoodleFeed(
-    profileTab === "likes" && Boolean(viewedProfileAccountId),
+    profileTab === "likes" && Boolean(profileQueryAccountId),
     null,
-    viewedProfileAccountId,
+    profileQueryAccountId,
   );
   const profileListQuery = profileTab === "likes" ? profileLikesQuery : profileFeedQuery;
   const interactions = useMemo(() => {
