@@ -211,8 +211,7 @@ test("the consent framing appears only while dubious consent or non-consent is n
 test("#2284: while a consent limit is Allow, the refusal does not bind the other character; without it, it does", () => {
   const consentOpen = (content: ContentSettings) => contract(content);
   const hasHonours = (text: string) => /the story honours/.test(text);
-  const hasOpenRefusal = (text: string) =>
-    /the other character need not stop at it|may still press on/.test(text);
+  const hasOpenRefusal = (text: string) => /the other character need not stop at it|may still press on/.test(text);
   const hasPlannerLine = (text: string) => text.includes("part of what this story may be about");
 
   // No consent limit open: "honours the pick" stays in both ROMANCE and DARK_ADDITION, and the planner line is absent.
