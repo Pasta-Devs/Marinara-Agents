@@ -27,13 +27,18 @@
 // #2156: while his grievance with her stands, starting or finishing a date with him and the Photo Shoot are a 409
 // `locked`, before anything is worn, given, planned or painted (S/minigames/date-night.ts assertFreeToDate).
 import { z } from "zod";
-import { DATE_PLACE_KINDS, type DatePlace } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import {
+  BASE_LOOK,
+  DATE_PLACE_KINDS,
+  type DatePlace,
+} from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
 import { wearLook } from "./wardrobe.js";
 import {
   assertFreeToDate,
+  checkDoubleDate,
   checkGift,
   datesView,
   finishDate,
@@ -55,6 +60,8 @@ const StartBody = z.object({
   herLook: LOOK_ID,
   hisLook: LOOK_ID,
   gift: z.enum(GIFT_IDS).optional(),
+  // A double date (#2283): the second love interest invited along. His look is his base look.
+  second: z.string().min(1).max(80).optional(),
 });
 const NoFields = z.object({});
 const KeyBody = z.object({ key: z.string().min(1).max(40) });
@@ -105,11 +112,14 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
       await assertFreeToDate(deps.store, runId, input.li);
       // A gift she cannot give (#2128) is refused before anything is worn or planned.
       await checkGift(deps, runId, input);
+      // #2283: a second love interest the invite cannot have is refused before anything is worn.
+      await checkDoubleDate(deps, runId, input);
       // The looks picked for the date are worn, as Wear at home wears them (owned and painted, or a 4xx), so the
       // date's plan, scenes, faces, key images and keepsake all dress them in it. A resumed date keeps what it was
       // planned with; the looks stay worn afterwards.
       await wearLook(deps, runId, { owner: "me", look: input.herLook }, { debugMode });
       await wearLook(deps, runId, { owner: input.li, look: input.hisLook }, { debugMode });
+      if (input.second) await wearLook(deps, runId, { owner: input.second, look: BASE_LOOK }, { debugMode });
       const { chapter, date, resumed } = await cancellable(deps, runId, (signal) =>
         startDate(deps, runId, input, { debugMode, signal }),
       );

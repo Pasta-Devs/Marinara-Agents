@@ -158,10 +158,11 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 /** Taken from the 0.6.3 builder, before seasons; 0.18.1's canon writing rule ("characters") moved them. */
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
 // 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
+// 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved again.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "8d34fcae5360c0ed",
-  "his-wardrobe": "11d2f8f9a00a2545",
-  "my-wardrobe": "17890fa679e20621",
+  memories: "819504f34beb3118",
+  "his-wardrobe": "82b6d0a72a456dd0",
+  "my-wardrobe": "017e38e786816e3d",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

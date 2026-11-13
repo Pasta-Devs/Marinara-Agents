@@ -103,7 +103,8 @@ const system = (messages: CapabilityLanguageModelMessage[]) =>
     .filter((message) => message.role === "system")
     .map((message) => message.content)
     .join("\n\n");
-const isDatePlanner = (messages: CapabilityLanguageModelMessage[]) => system(messages).includes("You plan one DATE");
+const isDatePlanner = (messages: CapabilityLanguageModelMessage[]) =>
+  /You plan one (?:DOUBLE )?DATE/.test(system(messages));
 const nodeOf = (messages: CapabilityLanguageModelMessage[]) =>
   Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
 
@@ -519,6 +520,68 @@ test("a date is 4 model calls, pays once whatever the outcome, and keeps its ans
   // An awkward evening still pays (failure pays; caps limit rewards, never play).
   assert.equal(awkward.body.grants.length, 2);
   assert.equal((await t.state()).timeline.filter((entry) => entry.kind === "first-date").length, 1);
+});
+
+test("#2283: a double date invites a second love interest at level 10 and splits its affection evenly", async () => {
+  // Below affection level 10 the invitation is refused before anything is planned.
+  const low = await dateWorld("r-dublol-aaaaaa");
+  const refused = await low.call("POST", "/runs/:run/dates", { ...START, second: MIR });
+  assert.equal(refused.status, 409, JSON.stringify(refused.body));
+  assert.equal(refused.body.code, "locked");
+  assert.equal(low.calls.length, 0, "nothing is asked of the model");
+  assert.equal((await low.call("POST", "/runs/:run/dates", { ...START, second: KAI })).status, 400, "not the lead");
+
+  // At level 10 (3600 points) each of them the invited love interest joins: the plan is written for the three of them.
+  const t = await dateWorld("r-double-aaaaaa", {
+    lis: { [KAI]: { points: 3600, stage: 6 }, [MIR]: { points: 3600, stage: 6 } },
+  });
+  const started = await startDate(t, { ...START, second: MIR });
+  assert.equal(started.date.second, MIR);
+  const stored = await t.store.readDoc(`${t.runId}:chapter:${started.date.key}`, normalizeChapter);
+  assert.deepEqual(
+    stored!.nodes.map((node: ChapterNode) => node.cast),
+    [
+      [KAI, MIR],
+      [KAI, MIR],
+      [KAI, MIR],
+    ],
+  );
+  const plan = t.calls[0]!.messages;
+  assert.ok(system(plan).includes("DOUBLE DATE"), "the plan knows it is a double date");
+  assert.ok(plan.at(-1)!.content.includes("Mireille"), "the invited love interest is named in the plan");
+
+  await playDate(t, started.date.key, [1, 1, 2]);
+  const done = await finish(t, started.date.key);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  // 100 affection split evenly, each paid on its own; the Starlight is the evening's, paid once.
+  const affection = done.body.grants.filter((grant: { affection?: number }) => grant.affection);
+  assert.deepEqual(
+    affection.map((grant: { li: string; affection: number }) => ({ li: grant.li, affection: grant.affection })),
+    [
+      { li: KAI, affection: 50 },
+      { li: MIR, affection: 50 },
+    ],
+  );
+  const starlight = done.body.grants.filter((grant: { starlight?: number }) => grant.starlight);
+  assert.deepEqual(starlight, [{ source: "date", starlight: 120 }]);
+  const state = await t.state();
+  // Both stand at 3,600 (level 10): each gains the same 50.
+  assert.deepEqual([state.lis[KAI]!.points, state.lis[MIR]!.points], [3650, 3650]);
+  // Both have had their first date with her.
+  assert.ok(state.lis[KAI]!.firsts.date);
+  assert.ok(state.lis[MIR]!.firsts.date);
+  // The entry names the second, and the dates list carries it.
+  assert.equal(done.body.date.second, MIR);
+  const list = await t.call("GET", "/runs/:run/dates");
+  assert.equal(list.body.dates.find((entry: { key: string }) => entry.key === started.date.key).second, MIR);
+
+  // The invited love interest's own evening that waits keeps him from joining.
+  const busy = await dateWorld("r-dublbz-aaaaaa", {
+    lis: { [KAI]: { points: 3600, stage: 6 }, [MIR]: { points: 3600, stage: 6 } },
+  });
+  await busy.call("POST", "/runs/:run/dates", { ...START, li: MIR });
+  const clash = await busy.call("POST", "/runs/:run/dates", { ...START, second: MIR });
+  assert.equal(clash.status, 409, JSON.stringify(clash.body));
 });
 
 test("the day's caps limit what a date pays, never whether it is played and counted", async () => {
@@ -1252,11 +1315,12 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
 // 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
 // 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
+// 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "b3c579261e58824b",
-  scene1: "0d699d12b155b71a",
-  scene2: "a38949ed1a5b1df7",
-  scene3: "897c14e6df7c4225",
+  plan: "c02a6f0f50ad3958",
+  scene1: "37d09b873382cc97",
+  scene2: "cad0a6c0de5fbbb7",
+  scene3: "3bbfac3515a1c83e",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

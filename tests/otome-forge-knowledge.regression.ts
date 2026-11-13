@@ -381,19 +381,19 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // 0.23.0: betweenYou's affection line reads "of 20" (the bond ranks), so every prompt with a love interest's card moved
 // again; the bible has no card and kept its bytes.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "6c4c3fec9db333f2",
-  callScene: "00b8f3b3f1daaf76",
-  confrontation: "67c0e088474fd1e0",
-  closer: "171fe84cd667011e",
-  bible: "a500b0070a43282e",
+  scene: "90209444e8df06df",
+  callScene: "41527238ea374c14",
+  confrontation: "b5d6e457da21e92d",
+  closer: "0a89e78e7963f9dd",
+  bible: "498d581e9e8d8a64",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
-  chat: "971f3eadcc3905fb",
-  daily: "d83f721e7241106a",
-  note: "b7d83e6b9c40c1c5",
+  chat: "ef6a1b786728ed75",
+  daily: "e97d313db25baf93",
+  note: "56c10ff49f107f16",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "606ea8c4c67ac545",
+  datePlan: "21b59dab2b52419e",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {

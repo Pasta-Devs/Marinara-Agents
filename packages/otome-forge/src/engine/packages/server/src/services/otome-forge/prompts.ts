@@ -391,6 +391,8 @@ export const WRITING_RULES = [
   "Every cruelty has a reason the love interest believes, and the love interest keeps whatever red lines they have.",
   "A love interest may be genuinely evil, a monster or a villain, as dark as this story's Darkness allows: taming them is the point, so never soften them before the story earns it.",
   "A face may contradict the words it speaks.",
+  "Write in plain, everyday words: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
+  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them. The choices the protagonist is offered are plain too, not riddles.",
   "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   "Write what the protagonist feels in their body when something happens to them, not only the action.",
   "All characters, player included, can change; for better, or worse.",
@@ -4531,6 +4533,8 @@ export interface DatePlanInput {
   memory: string;
   /** #2128: the gift the protagonist brings, given in scene GIFT_BEAT; absent or null leaves the prompt as before. */
   gift?: GiftId | null;
+  /** A double date: the second love interest invited along, with his bible; absent or null leaves the prompt as before. */
+  second?: Unit | null;
   /** #2156: he asked her out on this evening to clear the air (DatePlan.clearAir); absent leaves the prompt as before. */
   clearAir?: boolean;
 }
@@ -4547,8 +4551,10 @@ export function datePlanMessages({
   memory,
   gift = null,
   clearAir = false,
+  second = null,
 }: DatePlanInput): OtomeMessage[] {
   const name = unit.name;
+  const secondName = second?.name ?? "";
   const { liState } = ownView(state, unit.id);
   const recent = liState.angst.slice(-2);
   const known = knowsAboutYou(unit, liState);
@@ -4556,7 +4562,9 @@ export function datePlanMessages({
   // they may know.
   const mendText = makeItRight ? liState.grievances.find((item) => item.id === makeItRight.id)?.text : undefined;
   const system = [
-    `You plan one DATE in an otome visual novel, a character-driven romance: an evening the protagonist and ${name} spend together. A narrator writes it later as ${DATE_BEATS} scenes the player reads, each with one choice the player makes.`,
+    second
+      ? `You plan one DOUBLE DATE in an otome visual novel, a character-driven romance: an evening the protagonist spends with ${name} and ${secondName}, both of them love interests, together. A narrator writes it later as ${DATE_BEATS} scenes the player reads, each with one choice the player makes.`
+      : `You plan one DATE in an otome visual novel, a character-driven romance: an evening the protagonist and ${name} spend together. A narrator writes it later as ${DATE_BEATS} scenes the player reads, each with one choice the player makes.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"title": "...", "place": "...", "tags": ["..."], "goesWrong": false, "seed": {"type": "...", "text": "..."}, "beats": [{"guide": "..."}, {"guide": "..."}, {"guide": "..."}], "keepsake": {"brief": "..."}}',
     "FIELDS",
@@ -4570,7 +4578,9 @@ export function datePlanMessages({
     `- keepsake.brief: one to four plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what the two of them are doing), never anyone's looks. ${BRIEF_STAGING}`,
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. [] when none apply.`,
     "RULES",
-    `- The date is the protagonist and ${name}; anyone else stays at the edges of it.`,
+    second
+      ? `- The date is the protagonist, ${name} and ${secondName}; anyone else stays at the edges of it. Both love interests are present from the first scene to the last, each with something of their own in every scene, and what passes between ${name} and ${secondName} (rivalry, ease, jealousy, old friendship, being on their best behaviour) is part of the evening and moves through it.`
+      : `- The date is the protagonist and ${name}; anyone else stays at the edges of it.`,
     `- It does not move ${name}'s stage, never reveals a secret before its stage, and never solves the story's mystery.`,
     "- A stumble is small: at most a minor hurt, never a break-up and never a rupture.",
     ...(makeItRight
@@ -4591,7 +4601,11 @@ export function datePlanMessages({
     STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
-    otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
+    otomeContentContract({
+      world,
+      lis: second ? [{ name }, { name: secondName }] : [{ name }],
+      kind: "planner",
+    }),
   ].join("\n");
   // What each of them wears (a date's picked looks are worn before it is planned) is in protagonistBlock and in the
   // bible's appearanceLine.
@@ -4606,6 +4620,15 @@ export function datePlanMessages({
     `THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)`,
     bibleBlock(unit, state, [unit.id], world),
     ...(known ? [known] : []),
+    ...(second
+      ? [
+          "",
+          "THE INVITED LOVE INTEREST (full bible; the date moves neither stage)",
+          bibleBlock(second, state, [second.id], world),
+          "",
+          "A DOUBLE DATE is not a threesome by default: the evening reads as the three of them together, and what passes between the two love interests is part of it. Under Explicit Heat it may turn intimate between the three of them when the evening and where they all stand call for it, as the content contract sets the Heat; below Explicit Heat it stays warm and non-sexual.",
+        ]
+      : []),
     "",
     "THE PLACE",
     place === PARTNER_CHOICE
@@ -4625,7 +4648,9 @@ export function datePlanMessages({
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
-    `Plan the date with ${name} (id ${unit.id}) now.`,
+    second
+      ? `Plan the double date with ${name} (id ${unit.id}) and ${secondName} (id ${second.id}) now.`
+      : `Plan the date with ${name} (id ${unit.id}) now.`,
     otomeContractReminder("planner"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
