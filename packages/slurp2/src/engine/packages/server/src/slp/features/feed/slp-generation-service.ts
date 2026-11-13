@@ -76,6 +76,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import {
   slurpCameraSourceInstruction,
   slurpPostCameraSource,
+  slurpCameraSourceFromScene,
   slurpScreenFreeCamera,
 } from "../../modules/feed/slp-camera-source.js";
 import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
@@ -497,6 +498,14 @@ export async function generateCreatorPost(
     content: protectedContent,
   };
 
+  // The scene the model wrote may already name its own viewpoint; that one wins over the weighted pick.
+  const pictureCamera =
+    camera && askModelForScene && generated.scene
+      ? slurpCameraSourceFromScene(camera, Object.values(generated.scene).join(" "), {
+          companyCanHoldCamera: variation?.companyCanHoldCamera ?? false,
+          screens,
+        })
+      : camera;
   const wardrobeSelection = resolveSlurpWardrobeSelection({
     looks: wardrobeLooks,
     access: input.request.access,
@@ -511,7 +520,7 @@ export async function generateCreatorPost(
   const { draftImagePrompt, visualBrief, negativePrompt, shotBriefs, pictureCast } = slurpPostPictureBriefs({
     project,
     variation,
-    camera,
+    camera: pictureCamera,
     effort,
     productionStyle: production.style,
     shoot,
@@ -538,12 +547,12 @@ export async function generateCreatorPost(
   // by a run that throws later is pruned with the rest.
   let openedShootId: string | null = null;
   if (!input.previewOnly) {
-    if (axes?.intent === "set" && camera && variation) {
+    if (axes?.intent === "set" && pictureCamera && variation) {
       const opened = await openSlurpShoot(db, {
         creatorAccountId: account.id,
         place: generated.scene?.setting?.trim() || variation.place, // concrete, so callbacks name it
         company: variation.company,
-        cameraSource: camera,
+        cameraSource: pictureCamera,
         brief: slurpShootContinuity({ scene: generated.scene, selected: wardrobeSelection.look?.description, bare }),
         effort,
         theme: axes.intent,
@@ -593,7 +602,7 @@ export async function generateCreatorPost(
           demandTopic,
           project,
           projectChapter,
-          camera,
+          camera: pictureCamera,
           effort,
           visualBrief,
           strategy,
