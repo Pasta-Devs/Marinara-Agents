@@ -208,10 +208,47 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
+test("#2284: while a consent limit is Allow, the refusal does not bind the other character; without it, it does", () => {
+  const consentOpen = (content: ContentSettings) => contract(content);
+  const hasHonours = (text: string) => /the story honours/.test(text);
+  const hasOpenRefusal = (text: string) =>
+    /the other character need not stop at it|may still press on/.test(text);
+  const hasPlannerLine = (text: string) => text.includes("part of what this story may be about");
+
+  // No consent limit open: "honours the pick" stays in both ROMANCE and DARK_ADDITION, and the planner line is absent.
+  const closed = stored("explicit", "dark", { "dubious-consent": "line", "non-consent": "line" });
+  const closedText = contract(closed);
+  assert.ok(hasHonours(closedText), "honours the pick when no consent limit is open");
+  assert.ok(!hasOpenRefusal(closedText), "no open-refusal framing when closed");
+  assert.ok(!hasPlannerLine(closedText), "no planner line when closed");
+
+  // dubious-consent at Allow: honours clauses go, the refusal binding only the protagonist, planners may plan it.
+  const dubOpen = stored("explicit", "dark", { "dubious-consent": "allow", "non-consent": "line" });
+  const dubText = contract(dubOpen);
+  assert.ok(!hasHonours(dubText), "no honours clause with dub-con open");
+  assert.ok(hasOpenRefusal(dubText), "open-refusal framing with dub-con open");
+  assert.ok(hasPlannerLine(dubText), "planner line with dub-con open");
+
+  // non-consent at Allow (requires Dark + NSFW Heat + gate): same, plus the non-consent gloss.
+  const ncOpen = stored("explicit", "dark", { "non-consent": "allow" });
+  const ncText = contract(ncOpen);
+  assert.ok(!hasHonours(ncText), "no honours clause with non-con open");
+  assert.ok(hasOpenRefusal(ncText), "open-refusal framing with non-con open");
+  assert.match(ncText, /non-consent is sex forced on the protagonist past her refusal/, "non-con gloss");
+  assert.match(ncText, /not to the limit on a love interest's violence/, "violence Veil clarified");
+
+  // P12: the conditional is in prompts.ts at the confrontationMessages call site (tested below in the confrontation
+  // regression). The three contract-level checks above are sufficient: when consentOpen is true the ROMANCE_OPEN and
+  // DARK_ADDITION_OPEN variants go in; when it is false the original "honours the pick" / "honours it" variants go in.
+});
+
 test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throughout, a longer node", () => {
   const explicit = beatPrompt(stored("explicit", "angst"), "sfw");
   assert.match(explicit, /never summarized, sanitized or rushed\. Give it room, from the build-up through the act/);
   assert.match(explicit, /may talk throughout, ask for a change of position, say what they feel, or simply give in/);
+  // The maintainer's, 2026-11-13: the act itself is written out like explicit erotic fanfiction, never a few lines.
+  assert.match(explicit, /Write the act itself as explicit erotic fanfiction would: linger on it moment by moment/);
+  assert.match(explicit, /it never jumps from the first touch or thrust to the finish in a few lines\./);
   assert.match(explicit, /A node that reaches sex is the exception: [^\n]*up to 1500 words and 60 segments/);
   // The planners read the same Heat line, so they plan the room too.
   const plan = systemOf(
@@ -220,7 +257,7 @@ test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throug
   assert.match(plan, /never summarized, sanitized or rushed/);
   for (const content of [stored("fade", "angst"), defaultContent()]) {
     const prompt = beatPrompt(content, "sfw");
-    assert.doesNotMatch(prompt, /A node that reaches sex is the exception|or rushed/, content.heat);
+    assert.doesNotMatch(prompt, /A node that reaches sex is the exception|or rushed|erotic fanfiction/, content.heat);
   }
   // A Closer's opened ending gets the room too, under Explicit Heat only (Dottore on #1959).
   const closer = (content: ContentSettings) => {

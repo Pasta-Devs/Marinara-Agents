@@ -27,7 +27,7 @@ import {
   WALKOUT_RUPTURE_TRUST,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
 import {
-  AFFECTION_EARNINGS,
+  LEAD_AFFECTION,
   GRIEVANCE_CLEARED_AFFECTION,
   STARLIGHT_EARNINGS,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
@@ -339,11 +339,12 @@ test("his repair waits for two main chapters read to the end, not the one it ope
     { source: "lead", li: KAI, affection: GRIEVANCE_CLEARED_AFFECTION },
   ]);
 
-  // The repair of a rupture she holds (from before #2156) pays its Lead's 150 as before, and no clearing.
+  // The repair of a rupture she holds (from before #2156) pays its Lead, and no clearing: the tie, as a repair has no
+  // climax.
   const mended = readBeatToEnd(hers, repair, 0, { at, dayKey: DAY });
   assert.deepEqual(
     mended.grants.filter((entry) => entry.affection),
-    [{ source: "lead", li: KAI, affection: AFFECTION_EARNINGS.lead }],
+    [{ source: "lead", li: KAI, affection: LEAD_AFFECTION.tie }],
   );
   const closed: RunState = {
     ...mended.state,

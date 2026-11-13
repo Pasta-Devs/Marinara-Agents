@@ -11,7 +11,8 @@
 //
 // readBeatToEnd() is the whole state change of reading a beat to its end: +30 the first time, and when that beat is the
 // chapter's last node, the chapter's Starlight, the Lead's and Foil's affection, the planner's ledger and the Lead's
-// `lastLead`. A birthday scene's gift (#2153) pays its affection then too, never capped, as a date's gift does.
+// `lastLead`. The Lead earns by how the chapter's climax ended (LEAD_AFFECTION: 150 won, 100 tied or none, 50 lost; the
+// caller reads the climax beat's ending). A birthday scene's gift (#2153) pays its affection then too, never capped, as a date's gift does.
 // `chapters[key]` records the beat and the completion in the same write, so each lands once. Everything here is pure;
 // the read route applies it inside one revision-checked write of `${R}:state`.
 // #2156: a main chapter read to its end counts toward the space each grievance he holds waits for, and the repair of a
@@ -25,12 +26,16 @@ import type {
   LiId,
   RunState,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { GRIEVANCE_SPACE_CHAPTERS } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import {
+  GRIEVANCE_SPACE_CHAPTERS,
+  type ClimaxEnding,
+} from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   ACTIVITY_STARLIGHT_DAILY_CAP,
   AFFECTION_EARNINGS,
   GRIEVANCE_CLEARED_AFFECTION,
+  LEAD_AFFECTION,
   OUTSIDE_AFFECTION_DAILY_CAP,
   STARLIGHT_EARNINGS,
   isStoryReward,
@@ -125,6 +130,16 @@ const COMPLETION: Partial<Record<ChapterKind, { source: RewardSource; starlight:
   repair: { source: "chapter", starlight: STARLIGHT_EARNINGS.chapter },
   route: { source: "route-chapter", starlight: STARLIGHT_EARNINGS.routeChapter },
 };
+/** The Lead's affection by the chapter's climax ending: a win, a tie or a loss (LEAD_AFFECTION); none pays the tie. */
+const LEAD_BY_ENDING: Readonly<Record<ClimaxEnding, number>> = {
+  truth: LEAD_AFFECTION.won,
+  opened: LEAD_AFFECTION.won,
+  standoff: LEAD_AFFECTION.tie,
+  almost: LEAD_AFFECTION.tie,
+  walkout: LEAD_AFFECTION.lost,
+  shut: LEAD_AFFECTION.lost,
+};
+
 /** A date's beats are part of the date, which is paid as a capped activity. The prologue pays its beat, and no affection. */
 const PAYS_BEATS: ReadonlySet<ChapterKind> = new Set<ChapterKind>(["prologue", "main", "route", "repair", "story"]);
 
@@ -218,13 +233,17 @@ export function payClearing(
 /**
  * The state after beat `i` of `chapter` is read to its end. Only the next unread beat counts (`i ===
  * chapters[key].beatsRead`); any other read changes nothing. `at` stamps the completion; `dayKey` defaults to today in
- * the request's time zone.
+ * the request's time zone; `climax` is how the chapter's climax node ended, if it has one and it reached an ending.
  */
 export function readBeatToEnd(
   state: RunState,
   chapter: ReadChapter,
   i: number,
-  { at = new Date().toISOString(), dayKey = forgeDayKey(Date.now()) }: { at?: string; dayKey?: string } = {},
+  {
+    at = new Date().toISOString(),
+    dayKey = forgeDayKey(Date.now()),
+    climax,
+  }: { at?: string; dayKey?: string; climax?: ClimaxEnding } = {},
 ): ReadOutcome {
   const progress = state.chapters[chapter.key] ?? { beatsRead: 0, completed: null, applied: [] };
   if (i !== progress.beatsRead || i >= chapter.nodes.length) {
@@ -257,7 +276,11 @@ export function readBeatToEnd(
     pay("chapter", { source: completion.source, starlight: completion.starlight });
     // #2156: the repair of his grievance pays its clearing instead (payClearing), after it has closed the grievance.
     if (!hisToClear(next, chapter)) {
-      pay("lead", { source: completion.source, li: chapter.lead, affection: AFFECTION_EARNINGS.lead });
+      pay("lead", {
+        source: completion.source,
+        li: chapter.lead,
+        affection: climax ? LEAD_BY_ENDING[climax] : LEAD_AFFECTION.tie,
+      });
     }
     if (chapter.foil && chapter.foil !== chapter.lead) {
       pay("foil", { source: completion.source, li: chapter.foil, affection: AFFECTION_EARNINGS.foil });

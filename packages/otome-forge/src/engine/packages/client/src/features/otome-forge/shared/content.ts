@@ -215,6 +215,23 @@ export function limitIsFixed(id: LimitId, content: Pick<ContentSettings, "heat" 
 }
 
 /**
+ * #2284: true while dubious consent or non-consent may still happen: neither is held at Line (SH/content.ts
+ * limitIsFixed takes the gate as confirmed here, as the prompts do).
+ */
+export function consentOpen(content: ContentSettings) {
+  const level = (id: LimitId) => (limitIsFixed(id, content, true) ? "line" : content.limits[id]);
+  return CONTENT_LIMITS_CONSENT.some((id) => level(id) !== "line");
+}
+
+/** #2284: the same, but only where the player allowed it (Allow, never merely a Veil). */
+export function consentAllowedIds(content: ContentSettings): LimitId[] {
+  return CONTENT_LIMITS_CONSENT.filter((id) => !limitIsFixed(id, content, true) && content.limits[id] === "allow");
+}
+
+/** The two consent limits, in the order the contract names them (#2284). */
+const CONTENT_LIMITS_CONSENT: readonly LimitId[] = ["dubious-consent", "non-consent"];
+
+/**
  * The content as it may be used: without the gate, Heat drops to SFW and Dark to Angst; fixed limits become Lines;
  * custom limits are trimmed, emptied ones dropped, and capped. Only ever lowers a setting.
  */

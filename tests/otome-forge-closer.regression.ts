@@ -437,6 +437,25 @@ test("Shut out costs trust and leaves a minor grievance they hold; Almost change
   );
 });
 
+test("the chapter's Lead earns by its Closer: 150 opened up, 100 almost, 50 shut out", async () => {
+  const cases = [
+    ["r-ldopen-aaaaaa", ["mirror", "reassure", "reassure"], 150],
+    ["r-ldalmost-aaaaaa", ["tease", "tease", "tease"], 100],
+    ["r-ldshut-aaaaaa", ["ask", "ask", "ask"], 50],
+  ] as const;
+  for (const [runKey, answers, affection] of cases) {
+    const t = await closerWorld(runKey);
+    await play(t, [...answers]);
+    assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(5))).status, 200, runKey);
+    await t.settle();
+    assert.equal((await t.call("POST", beatPath, {}, node(6))).status, 200, runKey);
+    const last = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(6));
+    assert.equal(last.body.chapterDone, true, runKey);
+    const lead = last.body.grants.find((entry: { source: string }) => entry.source === "lead");
+    assert.deepEqual(lead, { source: "lead", li: KAI, affection }, runKey);
+  }
+});
+
 test("a Closer's answer sent to a Confrontation is a 400 that saves nothing", async () => {
   const replies = Array.from({ length: 60 }, () => (messages: Messages) => {
     if (system(messages).includes("chapter planner")) return json(planReply());

@@ -13,6 +13,7 @@ import type {
   Effect,
   RunState,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type { ClimaxEnding } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
 import * as economy from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 import { THOUGHTS_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import {
@@ -60,6 +61,7 @@ test("the economy's numbers are pinned", () => {
       perLevel: economy.POINTS_PER_LEVEL,
       levels: [economy.MIN_LEVEL, economy.MAX_LEVEL],
       affection: economy.AFFECTION_EARNINGS,
+      lead: economy.LEAD_AFFECTION,
       outsideCap: economy.OUTSIDE_AFFECTION_DAILY_CAP,
       sideWith: economy.SIDE_WITH_AFFECTION,
       trust: [economy.TRUST_MIN, economy.TRUST_MAX],
@@ -87,8 +89,8 @@ test("the economy's numbers are pinned", () => {
       perLevel: 300,
       levels: [1, 10],
       affection: {
-        lead: 150,
-        foil: 60,
+        // The maintainer's, 2026-11-13: 50, was 60.
+        foil: 50,
         date: 100,
         readHim: 40,
         readMe: 20,
@@ -99,6 +101,8 @@ test("the economy's numbers are pinned", () => {
         closeAndRemember: 5,
         showHim: 5,
       },
+      // The maintainer's, 2026-11-13: the Lead earns by the chapter's climax, none paying the tie (was 150 flat).
+      lead: { won: 150, tie: 100, lost: 50 },
       // #2133: the maintainer lowered it from 300 (2026-11-06).
       outsideCap: 150,
       sideWith: { backed: 30, passedOver: 10 },
@@ -374,12 +378,13 @@ test("reading pays each beat once and the chapter once, saves its ledger and rec
   assert.deepEqual(outcome.grants, [
     { source: "beat", starlight: 30 },
     { source: "chapter", starlight: 160 },
-    { source: "lead", li: KAI, affection: 150 },
-    { source: "foil", li: MIR, affection: 60 },
+    // A chapter without a climax pays its Lead the tie.
+    { source: "lead", li: KAI, affection: 100 },
+    { source: "foil", li: MIR, affection: 50 },
   ]);
   const done = outcome.state;
   assert.equal(done.wallet.starlight, 2000 + 3 * 30 + 160);
-  assert.deepEqual([done.lis[KAI]!.points, done.lis[MIR]!.points], [150, 60]);
+  assert.deepEqual([done.lis[KAI]!.points, done.lis[MIR]!.points], [100, 50]);
   assert.deepEqual(done.chapters["main-1"], { beatsRead: 3, completed: AT, applied: [] });
   assert.equal(done.lis[KAI]!.lastLead, 1);
   assert.deepEqual(done.lis[KAI]!.angst, ["pride"]);
@@ -402,10 +407,36 @@ test("reading pays each beat once and the chapter once, saves its ledger and rec
   const after = read(done, 0, route);
   assert.deepEqual(
     after.grants.map((entry) => entry.starlight ?? entry.affection),
-    [30, 300, 150, 60],
+    [30, 300, 100, 50],
   );
   assert.equal(after.state.ledgers.conflicts[0]!.status, "resolved");
   assert.equal(after.state.lis[KAI]!.lastLead, 1);
+});
+
+test("the Lead earns by the chapter's climax: 150 won, 100 tied or none, 50 lost, in main, route and repair chapters", () => {
+  const lead = (of: ReadChapter, climax?: ClimaxEnding) =>
+    readBeatToEnd(fresh(), of, 0, { at: AT, dayKey: DAY, climax }).grants.find((entry) => entry.source === "lead");
+  const nodes = [{ i: 0, kind: "confrontation", guide: "", cast: [KAI] }] as Chapter["nodes"];
+  const chapters = [
+    chapter({ nodes }),
+    ...(["route", "repair"] as const).map((kind) =>
+      chapter({ key: `${kind}-${KAI}-2`, kind, number: undefined, nodes }),
+    ),
+  ];
+  const cases = [
+    ["truth", 150],
+    ["opened", 150],
+    ["standoff", 100],
+    ["almost", 100],
+    ["walkout", 50],
+    ["shut", 50],
+    [undefined, 100],
+  ] as const;
+  for (const of of chapters) {
+    for (const [climax, affection] of cases) {
+      assert.deepEqual(lead(of, climax), { source: "lead", li: KAI, affection }, `${of.kind} ${String(climax)}`);
+    }
+  }
 });
 
 test("Tarot night (#2151) is an activity: its pay shares the day's caps with every other activity", () => {
@@ -534,8 +565,9 @@ test("affection loss preserves daily earning caps and unlocked progress, and com
     affection: 0,
   });
   const done = readBeatToEnd(after, chapter({ nodes: chapter().nodes.slice(0, 1) }), 0, { at: AT, dayKey: DAY });
-  assert.equal(done.state.lis[KAI]!.points, 1080);
-  assert.equal(done.state.lis[MIR]!.points, 60);
+  // The Lead's tie (no climax), uncapped though the day's affection is spent.
+  assert.equal(done.state.lis[KAI]!.points, 1030);
+  assert.equal(done.state.lis[MIR]!.points, 50);
   assert.equal(done.state.wallet.starlight, before.wallet.starlight + 190);
   assert.equal(done.state.daily, before.daily);
   assert.equal(done.state.chapters["main-1"]!.completed, AT);

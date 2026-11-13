@@ -298,7 +298,8 @@ test("a route chapter opens at its level, plans once, and only its gate moves th
     [{ li: KAI, kind: "stage-2", ref: key }],
   );
   assert.equal(state.wallet.starlight, 2000 + 4 * 30 + 300, "four beats and the route chapter's 300");
-  assert.equal(state.lis[KAI]!.points, POINTS_FOR_LEVEL(3) + 150, "the route chapter's 150 affection");
+  // No confrontation in this route chapter: its Lead earns the tie (the maintainer's, 2026-11-13; it was 150).
+  assert.equal(state.lis[KAI]!.points, POINTS_FOR_LEVEL(3) + 100, "the route chapter's 100 affection");
   assert.equal(state.lis[MIR]!.points, 0, "no Foil is paid");
   const after = await t.call("GET", "/runs/:run/story");
   assert.deepEqual(after.body.routes[0].stage, 2);
