@@ -30,6 +30,13 @@
       "bannerPath": "../../store/banners/beholder.webp",
       "bannerSmallPath": "../../store/banners/beholder-1200.webp"
     },
+    "blackjack": {
+      "section": "games",
+      "tagline": "Play blackjack against the house.",
+      "iconPath": "../../store/icons/blackjack.webp",
+      "bannerPath": "../../store/banners/blackjack.webp",
+      "bannerSmallPath": "../../store/banners/blackjack-1200.webp"
+    },
     "card-evolution-auditor": {
       "section": "writing",
       "tagline": "Suggests card updates as characters change.",
@@ -320,6 +327,13 @@
       "bannerPath": "../../store/banners/uno.webp",
       "bannerSmallPath": "../../store/banners/uno-1200.webp"
     },
+    "wordle": {
+      "section": "games",
+      "tagline": "One word a day, raced with your characters.",
+      "iconPath": "../../store/icons/wordle.webp",
+      "bannerPath": "../../store/banners/wordle.webp",
+      "bannerSmallPath": "../../store/banners/wordle-1200.webp"
+    },
     "world-state": {
       "section": "trackers",
       "tagline": "Date, time, weather and place.",
@@ -359,7 +373,9 @@
       "packages": [
         "chess",
         "poker",
-        "uno"
+        "blackjack",
+        "uno",
+        "wordle"
       ]
     }
   ]

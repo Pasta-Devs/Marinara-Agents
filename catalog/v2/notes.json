@@ -73,6 +73,16 @@
         }
       ]
     },
+    "blackjack": {
+      "versions": [
+        {
+          "version": "1.0.0",
+          "date": "2026-10-22",
+          "notes": "- New Conversation game: play Blackjack against the house with up to six characters, from /blackjack or the games picker.\n- Pick a character to deal and call each round in their own voice, or let the house deal silently.\n- Hit, stand, double down, and split a pair once. Blackjack pays 3 to 2, and the dealer can hit or stand on soft 17.\n- Set the starting chips, minimum bet, decks in the shoe, and an optional round limit.",
+          "highlight": false
+        }
+      ]
+    },
     "character-tracker": {
       "versions": [
         {
@@ -1221,6 +1231,16 @@
           "version": "0.1.0",
           "date": "2026-10-25",
           "notes": "- New Home tab: Story Writer, a co-writing book where the model writes your story chapter by chapter.\n- Pick a connection, characters, personas and lorebooks, describe the story, and press Write. The chapter streams onto the page.\n- Read it as an open book or an e-book, light or dark, with your own font, color and size. A portrait phone shows one page.\n- Click anywhere to edit, or start a chapter yourself and let the model continue it.\n- A sticky author's note tells the model what you want next, placed at a depth like Roleplay's Author's Notes.\n- Author tools: chapter summaries for long stories, a timeline the model follows (it can fill it in for you), and a target story length.\n- Every story saves itself: start new ones, come back to old ones any time, and download them as Markdown or plain text.\n- Change the prompt, banned phrases and continue message.",
+          "highlight": false
+        }
+      ]
+    },
+    "wordle": {
+      "versions": [
+        {
+          "version": "1.0.0",
+          "date": "2026-11-14",
+          "notes": "- New Conversation game: a daily Wordle for you and up to seven characters, from /wordle or the games picker.\n- Each chat has its own word of the day, and the day rolls over at your local midnight.\n- Everyone guesses the same word on their own board, one guess per turn. The table sees each player's colors, never their letters, and the fewest guesses wins.\n- Each seat gets one go a day. Today's results and daily streaks are kept per chat, and characters can talk about how their own game went.",
           "highlight": false
         }
       ]

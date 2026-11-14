@@ -395,6 +395,19 @@ async function validateTurnGameRuntime(manifest, packageRoot) {
     return () => registry.delete(key);
   };
   const api = {
+    // A turn game may keep its own records (Wordle's daily results): an empty store and a route sink stand in for
+    // the host's api.runtime.persistence and registerPrivilegedRoutes, which every Engine it installs on provides.
+    runtime: {
+      persistence: {
+        documents: {
+          getById: async () => null,
+          create: async (document) => ({ ...document, revision: 1 }),
+          update: async () => null,
+        },
+      },
+      logger: { error() {} },
+    },
+    registerPrivilegedRoutes: async () => () => {},
     registerTurnGameEngine(engine) {
       if (!engine?.gameType) throw new Error(`${manifest.id} registered an invalid turn-game engine`);
       const cleanup = unregister(gameEngines, engine.gameType);
@@ -1044,8 +1057,8 @@ const agentOnly = publishedCatalog.packages.filter(
   (entry) => !isRulesetPackage(entry.manifest) && !entry.manifest.entrypoints.server,
 ).length;
 const features = publishedCatalog.packages.length - agentOnly - rulesets;
-if (publishedCatalog.packages.length !== 44 || agentOnly !== 26 || features !== 18 || rulesets !== 0) {
-  throw new Error(`Expected 26 agents, 18 features, and 0 rulesets, found ${agentOnly}, ${features}, and ${rulesets}`);
+if (publishedCatalog.packages.length !== 46 || agentOnly !== 26 || features !== 20 || rulesets !== 0) {
+  throw new Error(`Expected 26 agents, 20 features, and 0 rulesets, found ${agentOnly}, ${features}, and ${rulesets}`);
 }
 console.log(
   `Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features, ${rulesets} rulesets).`,
