@@ -21,6 +21,13 @@
       "iconPath": "../../../store/icons/ruleset-5e-2014.webp",
       "bannerPath": "../../../store/banners/ruleset-5e-2014.webp",
       "bannerSmallPath": "../../../store/banners/ruleset-5e-2014-1200.webp"
+    },
+    "web-researcher": {
+      "section": "writing",
+      "tagline": "Checks real-world facts before the reply.",
+      "iconPath": "../../../store/icons/web-researcher.webp",
+      "bannerPath": "../../../store/banners/web-researcher.webp",
+      "bannerSmallPath": "../../../store/banners/web-researcher-1200.webp"
     }
   }
 }

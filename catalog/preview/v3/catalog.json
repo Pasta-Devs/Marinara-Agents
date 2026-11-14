@@ -356,6 +356,48 @@
         "bytes": 2255359
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/modern-life-sim/README.md"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "web-researcher",
+        "name": "Web Researcher",
+        "version": "1.0.0",
+        "description": "Looks up real-world facts on the web before the reply, so characters get games, films, music, history and other real details right. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.5.2",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "0cb5c0c512e1301ede6c4c352cae7e4c0047d36662d5c4e986611b7c4ed15501",
+            "bytes": 2267
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "writer",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/web-researcher.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/web-researcher-1.0.0.zip",
+        "sha256": "857ed7c4b2df002fb734aee63c7548797a673ac36db69481e519a1ea44e00a85",
+        "bytes": 1789
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#web-researcher"
     }
   ]
 }
