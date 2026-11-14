@@ -47,7 +47,9 @@
 //   ("# Canon to date, continued"), up to three earlier chapters by their original summaries ("# Chapter 3 in detail"),
 //   in story order: only chapters the head condensed, so none the prompt has otherwise (an entry, the previous chapter
 //   or his side of it, the last Character Story), and with `cached` only those every call of its chapter may know,
-//   otherwise those this one may (mayKnow). A main chapter's plan chooses them by meaning (`chooseBy`: its arc's purpose,
+//   otherwise those this one may (mayKnow); #2304: a main chapter's Lead's own route and repair chapters too, titled
+//   private (`recallLed`), and its plan chooses only among its Lead's chapters. A main chapter's plan chooses them by
+//   meaning (`chooseBy`: its arc's purpose,
 //   lead and cast, the player's thoughts, and here how the previous chapter ended) and saves them on the chapter, and
 //   each of its scenes sends exactly those, in that order (`recalled`), so the cached story context stays the same. No
 //   index, no embedding model or none similar enough: none, and the context is as it was without them;
@@ -573,6 +575,12 @@ export type RecallTextOptions = Omit<ForgeRecallOptions, "runId"> & {
    */
   chooseBy?: readonly string[];
   /**
+   * A main chapter's Lead (#2304, the maintainer's): its plan's long-term recall chooses only among the chapters they
+   * led (main chapters with them as Lead, and their own route and repair chapters), and the chapter's plan and scenes
+   * may recall their route and repair chapters, titled private, though those are not every call's to know.
+   */
+  recallLed?: LiId;
+  /**
    * A chapter's small memories (see the header): the recall pool for everyone in the chapter, or exactly its saved
    * `ids`. With `cached` they are the context's `pool`, and the ones sent come back as its `memories`.
    */
@@ -708,7 +716,7 @@ export async function recallText(
   runId: string,
   options: RecallTextOptions,
 ): Promise<StoryContext> {
-  const { debugMode, continues, cached, lastStory: withLastStory, recalled, chooseBy, ...recall } = options;
+  const { debugMode, continues, cached, lastStory: withLastStory, recalled, chooseBy, recallLed, ...recall } = options;
   const chapterPool = !!cached && !!recall.pool;
   const warn = (what: string, error: unknown) =>
     deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
@@ -894,7 +902,13 @@ export async function recallText(
     lastStoryKey,
     ...sideKeys.map((key) => JSON.stringify(["chapter", key])),
   ];
-  // Long-term recall (see the header): what the condensed head holds and nothing else in the prompt does.
+  // Long-term recall (see the header): what the condensed head holds and nothing else in the prompt does. #2304: a main
+  // chapter's plan chooses only among its Lead's chapters, and their own route and repair chapters may be recalled,
+  // titled private (titleOf), in every call of it.
+  const ledOwn = ({ chapter }: Completed) =>
+    !!recallLed && (chapter.kind === "route" || chapter.kind === "repair") && chapter.li === recallLed;
+  const led = (completed: Completed) =>
+    !recallLed || (completed.chapter.kind === "main" && completed.chapter.lead === recallLed) || ledOwn(completed);
   const sourceKey = ({ chapter }: Completed) => JSON.stringify([kindOf(chapter), chapter.key]);
   const entries = new Set(timeline.entries.map((entry) => entry.key));
   const recallable = (completed: Completed) =>
@@ -905,12 +919,12 @@ export async function recallText(
     completed.chapter.key !== previousKey &&
     !sideKeys.includes(completed.chapter.key) &&
     completed !== lastStory &&
-    (cached ? !own(completed.chapter) : mayKnow(recall, completed.audience));
+    (ledOwn(completed) || (cached ? !own(completed.chapter) : mayKnow(recall, completed.audience)));
   const candidates = chapters.filter(recallable);
   let earlier: Completed[] = [];
   if (recalled) {
     earlier = recalled.flatMap((key) => candidates.filter(({ chapter }) => chapter.key === key));
-  } else if (chooseBy && deps.recall && candidates.length) {
+  } else if (chooseBy && deps.recall && candidates.some(led)) {
     // How the previous chapter ended, its last scene's last words, with what the chapter is about.
     const ending = lastWords(scenes.at(-1) ?? "", ENDING_WORDS);
     const chosen = await deps.recall.choose(runId, {
@@ -918,7 +932,7 @@ export async function recallText(
         .map((part) => part.trim())
         .filter(Boolean)
         .join("\n"),
-      candidates: candidates.map((completed) => ({
+      candidates: candidates.filter(led).map((completed) => ({
         completed,
         key: sourceKey(completed),
         title: titleOf(completed),
