@@ -243,6 +243,18 @@ const blackjackOwnedSourcePaths = [
   "packages/client/src/hooks/use-blackjack.ts",
   "packages/client/src/stores/blackjack-game.store.ts",
 ];
+// Wordle is written here in Blackjack's layout. Its server entry also keeps each chat's daily results through
+// api.runtime.persistence, so it needs no host runtime overlay. Offered to staging testers only until the maintainer
+// promotes it (STAGING_ONLY_PACKAGE_IDS in scripts/catalog-incomplete.mjs).
+const wordleSourceRoot = join(packagesDir, "wordle/src/engine");
+const wordleOwnedSourcePaths = [
+  "packages/shared/src/features/turn-games/wordle",
+  "packages/server/src/services/wordle",
+  "packages/client/src/components/chat/WordleBoard.tsx",
+  "packages/client/src/components/chat/WordleSetup.tsx",
+  "packages/client/src/hooks/use-wordle.ts",
+  "packages/client/src/stores/wordle-game.store.ts",
+];
 // Story Writer is written here too. Its server keeps stories through api.runtime.persistence, so it needs no host
 // runtime overlay. A directory entry owns everything under it (ownedCapturePaths matches by prefix).
 const storyWriterSourceRoot = join(packagesDir, "story-writer/src/engine");
@@ -863,6 +875,34 @@ const features = [
     commandType: "blackjack",
     packageSourceRoot: blackjackSourceRoot,
     ownedSourcePaths: blackjackOwnedSourcePaths,
+  },
+  {
+    id: "wordle",
+    name: "Wordle",
+    version: "1.0.0",
+    // Package storage and routes (api.runtime.persistence, registerPrivilegedRoutes) arrived in capability API 1.386.
+    minEngineVersion: "2.5.1",
+    capabilityApi: Object.freeze({ major: 1, minor: 386 }),
+    builtAgainst: { engineVersion: "2.5.1", engineCommit: "54e6848c818ae4150f108ab9614986bb7610891d" },
+    maxEngineExclusive: "4.0.0",
+    description: "A daily Wordle race with Conversation characters.",
+    agent: {
+      description: withPackageActivationGuidance("wordle", "A daily Wordle race with Conversation characters."),
+    },
+    kind: ["agent", "turn-game"],
+    modes: ["conversation"],
+    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/wordle/server-entry.ts",
+    serverEntry: true,
+    engineImport: "packages/shared/src/features/turn-games/wordle/engine.ts",
+    engineExport: "wordleEngine",
+    clientName: "Wordle",
+    command: "/wordle",
+    aliases: ["wordle", "word of the day", "daily word"],
+    playerLabel: "Daily word game",
+    commandType: "wordle",
+    packageSourceRoot: wordleSourceRoot,
+    ownedSourcePaths: wordleOwnedSourcePaths,
   },
   {
     id: "story-writer",
