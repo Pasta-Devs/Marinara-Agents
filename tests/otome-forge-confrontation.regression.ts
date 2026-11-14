@@ -222,7 +222,8 @@ test("P12's reply is normalized list by list with P6's rules", () => {
     String(
       normalize(
         withRound(2, (round) => {
-          round.options.press.segments = Array.from({ length: 4 }, () => ({ speaker: "Kai", text: "No." }));
+          // Four different lines: one repeated four times would be one line (#2306).
+          round.options.press.segments = Array.from({ length: 4 }, (_, n) => ({ speaker: "Kai", text: `No ${n}.` }));
           return round;
         }),
       ),
