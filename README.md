@@ -67,7 +67,7 @@ Across its Engine compatibility lanes, the stable catalog currently contains **4
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Turns Game and Roleplay scenes into storyboards of still images or short animations. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
-| Wordle | [`wordle`](packages/wordle/manifest.json) | Adds a daily Conversation-mode Wordle and the `/wordle` command: each chat has one word a day, and you and up to seven characters race for it on your own boards, seeing each other's colors but never the letters. Results and daily streaks are kept per chat, and each seat gets one go a day. Characters cannot start a game on their own until the Engine adds its command toggle. Needs Capability API 1.386. |
+| Wordle | [`wordle`](packages/wordle/manifest.json) | Adds a daily Conversation-mode Wordle and the `/wordle` command: each chat has one word a day, and you and up to seven characters race for it on your own boards, seeing each other's colors but not the letters until the game is over. Results and daily streaks are kept per chat, and each seat gets one go a day. Characters cannot start a game on their own until the Engine adds its command toggle. Needs Capability API 1.386. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
 

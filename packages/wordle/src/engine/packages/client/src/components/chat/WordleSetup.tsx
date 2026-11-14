@@ -63,6 +63,10 @@ export function WordleSetup({ chatId, open, onClose }: Props) {
     return map;
   }, [characters]);
 
+  // Reopening the modal refetches the record while the one from before the last game is still cached. Nothing that
+  // depends on it (who has played, the players list, Play) shows until the fresh copy arrives.
+  const checking = daily.isPending || daily.isFetching;
+  const ready = daily.isSuccess && !daily.isFetching;
   const results = daily.data?.results ?? {};
   const standings = daily.data?.standings ?? {};
   const youPlayed = !!results[humanSeatId];
@@ -81,7 +85,7 @@ export function WordleSetup({ chatId, open, onClose }: Props) {
     });
 
   const botCharacterIds = available.filter((id) => selectedIds.has(id)).slice(0, maxCharacters);
-  const canStart = daily.isSuccess && !youPlayed && !start.isPending;
+  const canStart = ready && !youPlayed && !start.isPending;
 
   const startGame = () => {
     if (!canStart) return;
@@ -109,15 +113,15 @@ export function WordleSetup({ chatId, open, onClose }: Props) {
       <div className="space-y-4 p-1">
         <p className="text-sm text-[var(--muted-foreground)]">
           One word a day for this chat ({day}). Everyone guesses the same word on their own board, one guess per turn.
-          The table sees your colors, never your letters. Fewest guesses wins.
+          The table sees your colors, not your letters, until the game is over. Fewest guesses wins.
         </p>
 
-        {daily.isPending && <p className="text-sm text-[var(--muted-foreground)]">Checking today's results…</p>}
+        {checking && <p className="text-sm text-[var(--muted-foreground)]">Checking today's results…</p>}
         {daily.isError && (
           <p className="text-sm text-red-600">Could not load today's results. Close this and try again.</p>
         )}
 
-        {todayRows.length > 0 && (
+        {ready && todayRows.length > 0 && (
           <section>
             <h3 className="mb-2 text-sm font-semibold text-[var(--foreground)]">Today so far</h3>
             <ul className="space-y-0.5 text-sm text-[var(--foreground)]">
@@ -131,12 +135,12 @@ export function WordleSetup({ chatId, open, onClose }: Props) {
           </section>
         )}
 
-        {daily.isSuccess && youPlayed ? (
+        {ready && youPlayed ? (
           <p className="rounded-lg bg-[var(--primary)]/10 px-3 py-2 text-center text-sm font-semibold text-[var(--primary)]">
             You've had your go at today's word. The next one unlocks in {untilMidnight(new Date())}.
           </p>
         ) : (
-          daily.isSuccess && (
+          ready && (
             <section>
               <h3 className="mb-2 text-sm font-semibold text-[var(--foreground)]">Players</h3>
               {available.length === 0 ? (
@@ -185,9 +189,9 @@ export function WordleSetup({ chatId, open, onClose }: Props) {
             onClick={onClose}
             className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
           >
-            {youPlayed ? "Close" : "Cancel"}
+            {ready && youPlayed ? "Close" : "Cancel"}
           </button>
-          {!youPlayed && (
+          {!(ready && youPlayed) && (
             <button
               type="button"
               disabled={!canStart}

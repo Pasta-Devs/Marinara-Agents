@@ -374,8 +374,8 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
     return { day: wordleUtcDay(Date.now()), chatId: "", streaks: {}, players: null };
   },
 
-  // ponytail: the only impure method, reading the clock once at game start so a client cannot ask for tomorrow's
-  // word. Setup, moves and views never touch the clock, so a replayed game is unchanged.
+  // ponytail: this and defaultConfig are the only methods that read the clock, once at game start, so a client cannot
+  // ask for tomorrow's word. Setup, moves and views never touch the clock, so a replayed game is unchanged.
   normalizeConfig(config) {
     const input = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
     const day = clampWordleDay(input.day, Date.now());

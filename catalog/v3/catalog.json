@@ -4855,8 +4855,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "51dd6f293a9db327b9c17248f7025d87037624a6ed845c0a34bd561d4558949c",
-            "bytes": 159809
+            "sha256": "edb57658553e846dbd492785cbd734db38903e467c5abe58e669aeefe66d02c0",
+            "bytes": 159977
           }
         ],
         "permissions": [
@@ -4873,8 +4873,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/wordle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/wordle-1.0.0.zip",
-        "sha256": "a3ec7859987c890369a9a3720ea57b93385836078bdead1f0243bc30db62213a",
-        "bytes": 227057
+        "sha256": "9fe6b017af44d0a3c08ca4814b772b32a0749d28c498504330737f10718204fd",
+        "bytes": 227225
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#wordle"
     },
