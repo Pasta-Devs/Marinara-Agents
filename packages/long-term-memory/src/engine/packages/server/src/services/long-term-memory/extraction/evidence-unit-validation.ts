@@ -90,7 +90,7 @@ function isSourceNote(note: LtmNote) {
 }
 
 export function riskForEvidenceUnit(unit: LtmEvidenceUnit): "low" | "medium" | "high" {
-  if (unit.bucket === "relationship_state") return "medium";
+  // A relationship's new state keeps the old one as an earlier contribution, so "Save them for me" saves it.
   // An event-shaped character fact holds only its own mutation for review; the rest of the draft still applies.
   if (isEventShapedCharacterFact(unit)) return "medium";
   return "low";
@@ -156,13 +156,18 @@ export function validateLtmEvidenceUnits({
   }
 
   const sourceTokens = sourceTokenSet(sourceText);
-  for (const [candidateIndex, unit] of units.entries()) {
-    const noteId = noteIdForEvidenceUnit(unit);
-    const unitDiagnostics: LtmExtractionDiagnostic[] = [];
+  for (const [candidateIndex, providedUnit] of units.entries()) {
+    const noteId = noteIdForEvidenceUnit(providedUnit);
+    // A copied placeholder link target still drops the unit, so it is checked before unusable links are removed.
+    const unitDiagnostics: LtmExtractionDiagnostic[] = placeholderDiagnostics(providedUnit, noteId, candidateIndex);
+    const repaired = withoutUnusableLinks(providedUnit, candidateIndex, noteId, validLinkTargets);
+    const unit = repaired.unit;
+    unitDiagnostics.push(...repaired.diagnostics);
     const drop = (input: DroppedCandidateInput) => {
+      // Review keeps the unit exactly as the provider returned it, before any link or cause repair.
       const dropped = droppedCandidate({
         ...input,
-        unit,
+        unit: providedUnit,
       });
       droppedCandidates.push(dropped);
       diagnostics.push({
@@ -175,8 +180,6 @@ export function validateLtmEvidenceUnits({
         ...(input.code ? { details: { validatorCode: input.code, validationStage: "initial", ...input.details } } : {}),
       });
     };
-
-    unitDiagnostics.push(...placeholderDiagnostics(unit, noteId, candidateIndex));
 
     if (allowedBucketSet && !allowedBucketSet.has(unit.bucket)) {
       unitDiagnostics.push({
@@ -326,8 +329,6 @@ export function validateLtmEvidenceUnits({
         message: "Relationship dimension changes must be classified as change claims.",
       });
     }
-    unitDiagnostics.push(...relationshipCausedByDiagnostics(unit, candidateIndex, noteId, validLinkTargets));
-    unitDiagnostics.push(...linkTargetDiagnostics(unit, candidateIndex, noteId, validLinkTargets));
     unitDiagnostics.push(...relationshipDeltaMagnitudeDiagnostics(unit, candidateIndex, noteId, units, existingNotes));
 
     for (const quote of DIALOGUE_BUCKETS.has(unit.bucket) ? quotedStrings(unit.text) : []) {
@@ -383,7 +384,6 @@ export function validateLtmEvidenceUnits({
     candidateIndexes: keptCandidateIndexes,
   });
   diagnostics.push(...closure.diagnostics);
-  droppedCandidates.push(...closure.droppedCandidates);
   const finalKeptUnits = closure.keptUnits;
 
   for (const unit of finalKeptUnits) {
@@ -406,127 +406,125 @@ export function validateLtmEvidenceUnits({
     }
   }
 
-  return { keptUnits: finalKeptUnits, diagnostics, droppedCandidates, candidateIndexes: keptCandidateIndexes };
+  return { keptUnits: finalKeptUnits, diagnostics, droppedCandidates, candidateIndexes: closure.candidateIndexes };
 }
 
 /**
- * Drops units that lost relationship support or link to a note that is neither kept, existing nor the source,
- * repeating until nothing else drops. With `stripDanglingLinks`, a dangling link is removed with a warning instead,
- * so only a relationship change whose cause was dropped loses its unit.
+ * Keeps every unit and removes only the part that lost its target: a relationship change whose caused_by event was
+ * not kept becomes a static relationship claim, and a link to a note that is neither kept, existing nor the source is
+ * removed. Each removal is a warning with the validator code that used to drop the unit.
  */
 export function closeLtmEvidenceUnitLinks({
   units,
   sourceNote,
   existingNotes,
   candidateIndexes,
-  stripDanglingLinks = false,
 }: {
   units: LtmEvidenceUnit[];
   sourceNote?: LtmNote;
   existingNotes: LtmNote[];
   candidateIndexes?: ReadonlyMap<LtmEvidenceUnit, number>;
-  stripDanglingLinks?: boolean;
-}): LtmEvidenceUnitValidationResult {
+}): LtmEvidenceUnitValidationResult & { candidateIndexes: ReadonlyMap<LtmEvidenceUnit, number> } {
   const diagnostics: LtmExtractionDiagnostic[] = [];
-  const droppedCandidates: LtmExtractionDroppedCandidate[] = [];
-  const candidateIndexFor = (unit: LtmEvidenceUnit) => candidateIndexes?.get(unit) ?? units.indexOf(unit);
-  const dropKeptUnit = (
-    unit: LtmEvidenceUnit,
-    code: string,
-    message: string,
-    details: Record<string, unknown> = {},
-  ) => {
-    const candidateIndex = candidateIndexFor(unit);
+  const indexes = new Map(units.map((unit, index) => [unit, candidateIndexes?.get(unit) ?? index]));
+  const closedTargets = new Set<string>([
+    ...(sourceNote ? [sourceNote.id] : []),
+    ...existingNotes.map((note) => note.id),
+    ...units.map((unit) => noteIdForEvidenceUnit(unit)),
+  ]);
+  const keptUnits = units.map((unit) => {
+    const candidateIndex = indexes.get(unit)!;
     const noteId = noteIdForEvidenceUnit(unit);
-    const dropped = droppedCandidate({
-      candidateIndex,
-      reason: "unsupported_bucket",
-      code,
-      message,
-      unit,
-    });
-    droppedCandidates.push(dropped);
+    let closed = unit;
+    if (!hasRelationshipSupport(unit, units, existingNotes)) {
+      const causedByTargets = unit.links.filter((link) => link.relation === "caused_by").map((link) => link.target);
+      diagnostics.push({
+        severity: "warning",
+        code: "relationship_state_missing_caused_by",
+        candidateIndex,
+        mutationId: unit.id,
+        noteId,
+        message: "Kept the relationship without its change because the event that caused it was not kept.",
+        details: { causedByTargets, validationStage: "closure" },
+      });
+      closed = withoutRelationshipChange(closed);
+    }
+    const danglingLinks = closed.links.filter((link) => !closedTargets.has(link.target));
+    for (const link of danglingLinks)
+      diagnostics.push({
+        severity: "warning",
+        code: "unknown_link_target",
+        candidateIndex,
+        mutationId: unit.id,
+        noteId,
+        message: `Removed the link to '${link.target}' because that memory was not kept.`,
+        details: { linkTarget: link.target, linkRelation: link.relation, validationStage: "closure" },
+      });
+    if (danglingLinks.length)
+      closed = { ...closed, links: closed.links.filter((link) => closedTargets.has(link.target)) };
+    indexes.set(closed, candidateIndex);
+    return closed;
+  });
+  return { keptUnits, diagnostics, droppedCandidates: [], candidateIndexes: indexes };
+}
+
+/** A relationship change without a usable cause keeps its fact as a static claim with no dimension changes. */
+function withoutRelationshipChange(unit: LtmEvidenceUnit): LtmEvidenceUnit {
+  const { dimensionChanges: _dimensionChanges, ...rest } = unit;
+  return { ...rest, claimKind: "static" };
+}
+
+/**
+ * Removes a provider unit's links to notes that are neither in this batch nor stored, and keeps a relationship change
+ * with no usable caused_by link as a static claim, so the rest of the memory is kept. Each removal is a warning.
+ */
+function withoutUnusableLinks(
+  unit: LtmEvidenceUnit,
+  candidateIndex: number,
+  noteId: string,
+  validLinkTargets: Set<string>,
+): { unit: LtmEvidenceUnit; diagnostics: LtmExtractionDiagnostic[] } {
+  const diagnostics: LtmExtractionDiagnostic[] = unit.links.flatMap((link) =>
+    validLinkTargets.has(link.target)
+      ? []
+      : [
+          {
+            severity: "warning" as const,
+            code: "unknown_link_target",
+            candidateIndex,
+            mutationId: unit.id,
+            noteId,
+            message: `Removed the link to '${link.target}' because that memory does not exist in this extraction or the stored memories.`,
+            details: { linkTarget: link.target, linkRelation: link.relation, validationStage: "initial" },
+          },
+        ],
+  );
+  let repaired = diagnostics.length
+    ? { ...unit, links: unit.links.filter((link) => validLinkTargets.has(link.target)) }
+    : unit;
+  // Only a declared change is repaired; a static claim with deltas is still rejected as static_relationship_dimension_change.
+  if (
+    unit.bucket === "relationship_state" &&
+    unit.claimKind === "change" &&
+    !repaired.links.some((link) => link.relation === "caused_by")
+  ) {
+    const causedByTargets = unit.links.filter((link) => link.relation === "caused_by").map((link) => link.target);
     diagnostics.push({
-      severity: "error",
-      code: dropReasonDiagnosticCode(dropped.reason),
+      severity: "warning",
+      code: "relationship_state_missing_caused_by",
       candidateIndex,
       mutationId: unit.id,
       noteId,
-      message: dropped.message,
-      details: { validatorCode: code, validationStage: "closure", ...details },
+      message: "Kept the relationship without its change because no event that caused it was linked.",
+      details: {
+        causedByTargets,
+        invalidCausedByTargets: causedByTargets.filter((target) => !validLinkTargets.has(target)),
+        validationStage: "initial",
+      },
     });
-  };
-
-  let keptUnits = [...units];
-  let closedTargets = new Set<string>();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const relationshipSupported = keptUnits.filter((unit) => {
-      if (hasRelationshipSupport(unit, keptUnits, existingNotes)) return true;
-      const causedByTargets = unit.links.filter((link) => link.relation === "caused_by").map((link) => link.target);
-      dropKeptUnit(
-        unit,
-        "relationship_state_missing_caused_by",
-        causedByTargets.length > 0
-          ? userFacingDropMessageForDiagnostic(
-              {
-                code: "relationship_state_missing_caused_by",
-                message: `Dropped a relationship_state change whose caused_by target '${causedByTargets.join("', '")}' was removed during validation.`,
-              },
-              "unsupported_bucket",
-            )
-          : userFacingDropMessageForCode("relationship_state_missing_caused_by", "unsupported_bucket"),
-        {
-          causedByTargets,
-          invalidCausedByTargets: causedByTargets,
-        },
-      );
-      changed = true;
-      return false;
-    });
-    closedTargets = new Set<string>([
-      ...(sourceNote ? [sourceNote.id] : []),
-      ...existingNotes.map((note) => note.id),
-      ...relationshipSupported.map((unit) => noteIdForEvidenceUnit(unit)),
-    ]);
-    keptUnits = relationshipSupported.filter((unit) => {
-      const missingLink = unit.links.find((link) => !closedTargets.has(link.target));
-      // Stripping never removes a target, so it is left until no other unit drops.
-      if (!missingLink || stripDanglingLinks) return true;
-      dropKeptUnit(
-        unit,
-        "unknown_link_target",
-        userFacingDropMessageForDiagnostic(
-          {
-            code: "unknown_link_target",
-            message: `Dropped a candidate whose link target '${missingLink.target}' was removed during validation.`,
-          },
-          "unsupported_bucket",
-        ),
-        { linkTarget: missingLink.target, linkRelation: missingLink.relation },
-      );
-      changed = true;
-      return false;
-    });
+    repaired = withoutRelationshipChange(repaired);
   }
-  if (stripDanglingLinks)
-    keptUnits = keptUnits.map((unit) => {
-      const danglingLinks = unit.links.filter((link) => !closedTargets.has(link.target));
-      if (!danglingLinks.length) return unit;
-      for (const link of danglingLinks)
-        diagnostics.push({
-          severity: "warning",
-          code: "unknown_link_target",
-          candidateIndex: candidateIndexFor(unit),
-          mutationId: unit.id,
-          noteId: noteIdForEvidenceUnit(unit),
-          message: `Removed the link to '${link.target}' because that memory was not kept.`,
-          details: { linkTarget: link.target, linkRelation: link.relation, validationStage: "closure" },
-        });
-      return { ...unit, links: unit.links.filter((link) => closedTargets.has(link.target)) };
-    });
-  return { keptUnits, diagnostics, droppedCandidates };
+  return { unit: repaired, diagnostics };
 }
 
 function normalizeEventSubjectIdentifier(value: string) {
@@ -537,6 +535,33 @@ function normalizeEventSubjectIdentifier(value: string) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .replace(/_+/g, "_");
+}
+
+// Whole-text placeholders a model writes when it has nothing to add ("- ignore", "None.", "n/a").
+const PLACEHOLDER_UNIT_TEXTS = new Set([
+  "ignore",
+  "none",
+  "n a",
+  "na",
+  "skip",
+  "nothing",
+  "no new",
+  "nothing new",
+  "no change",
+  "no changes",
+  "same as above",
+  "tbd",
+]);
+
+function isPlaceholderUnitText(text: string) {
+  // Bullets, dashes, quotes and punctuation do not count: "- ignore" and "None." are the placeholders "ignore", "none".
+  const words = text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  const normalized = words.join(" ");
+  // Only the whole text counts: a real sentence that merely contains "ignore", or a short real fact, is kept.
+  return !normalized || PLACEHOLDER_UNIT_TEXTS.has(normalized);
 }
 
 function placeholderDiagnostics(
@@ -555,6 +580,17 @@ function placeholderDiagnostics(
       mutationId: unit.id,
       noteId,
       message: "Evidence unit uses a copied placeholder UUID.",
+    });
+  }
+
+  if (isPlaceholderUnitText(unit.text)) {
+    diagnostics.push({
+      severity: "error",
+      code: "placeholder_text",
+      candidateIndex,
+      mutationId: unit.id,
+      noteId,
+      message: "Evidence unit text is empty or a placeholder instead of a memory.",
     });
   }
 
@@ -644,58 +680,6 @@ function relationshipDimensionDiagnostics(
     }
   }
   return diagnostics;
-}
-
-function relationshipCausedByDiagnostics(
-  unit: LtmEvidenceUnit,
-  candidateIndex: number,
-  noteId: string,
-  validLinkTargets: Set<string>,
-): LtmExtractionDiagnostic[] {
-  if (unit.bucket !== "relationship_state") return [];
-  const describesChange = relationshipDescribesChange(unit);
-  if (!describesChange) return [];
-  const causedByTargets = unit.links.filter((link) => link.relation === "caused_by").map((link) => link.target);
-  const invalidCausedByTargets = causedByTargets.filter((target) => !validLinkTargets.has(target));
-  const hasCausedBy = causedByTargets.some((target) => validLinkTargets.has(target));
-  if (hasCausedBy) return [];
-  const invalidTargetMessage = invalidCausedByTargets.length
-    ? `Dropped a relationship_state change whose caused_by target '${invalidCausedByTargets.join("', '")}' does not exist in the extraction batch or existing notes.`
-    : "Dropped a relationship_state change missing a caused_by link to a timeline event or existing note.";
-  return [
-    {
-      severity: "error",
-      code: "relationship_state_missing_caused_by",
-      candidateIndex,
-      mutationId: unit.id,
-      noteId,
-      message: invalidTargetMessage,
-      details: { causedByTargets, invalidCausedByTargets },
-    },
-  ];
-}
-
-function linkTargetDiagnostics(
-  unit: LtmEvidenceUnit,
-  candidateIndex: number,
-  noteId: string,
-  validLinkTargets: Set<string>,
-): LtmExtractionDiagnostic[] {
-  return unit.links.flatMap((link) =>
-    validLinkTargets.has(link.target)
-      ? []
-      : [
-          {
-            severity: "error" as const,
-            code: "unknown_link_target",
-            candidateIndex,
-            mutationId: unit.id,
-            noteId,
-            message: `Link target '${link.target}' does not exist in the extraction batch or existing notes.`,
-            details: { linkTarget: link.target, linkRelation: link.relation },
-          },
-        ],
-  );
 }
 
 function relationshipDeltaMagnitudeDiagnostics(
@@ -852,7 +836,8 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     code === "placeholder_evidence_unit_id" ||
     code === "placeholder_subject_id" ||
     code === "placeholder_section_key" ||
-    code === "placeholder_link_target"
+    code === "placeholder_link_target" ||
+    code === "placeholder_text"
   ) {
     return "placeholder_output";
   }
@@ -867,11 +852,9 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     code === "invalid_timeline_section" ||
     code === "event_subject_matches_character_alias" ||
     code === "relationship_state_without_history" ||
-    code === "relationship_state_missing_caused_by" ||
     code === "invalid_relationship_dimension" ||
     code === "invalid_relationship_dimension_change" ||
     code === "static_relationship_dimension_change" ||
-    code === "unknown_link_target" ||
     code === "scene_only_tone_or_anchor"
   ) {
     return "unsupported_bucket";
@@ -909,27 +892,11 @@ function dropReasonDiagnosticCode(reason: LtmExtractionDropReason) {
   }
 }
 
-function userFacingDropMessageForCode(code: string, reason: LtmExtractionDropReason): string {
-  if (code === "relationship_state_missing_caused_by") {
-    return "Dropped a relationship_state change missing a caused_by link to a timeline event or existing note.";
-  }
-  if (code === "unknown_link_target") {
-    return "Dropped a candidate that linked to a memory this extraction could not find or did not keep.";
-  }
-  return userFacingDropMessage(reason);
-}
-
 function userFacingDropMessageForDiagnostic(
   diagnostic: Pick<LtmExtractionDiagnostic, "code" | "message">,
   reason: LtmExtractionDropReason,
 ) {
-  if (
-    diagnostic.code === "unknown_link_target" ||
-    diagnostic.code === "relationship_state_missing_caused_by" ||
-    diagnostic.code === "overlong_target_note_id"
-  ) {
-    return userFacingDropMessageForCode(diagnostic.code, reason);
-  }
+  if (diagnostic.code === "overlong_target_note_id") return userFacingDropMessage(reason);
   return diagnostic.message.trim().slice(0, 240) || "The candidate did not pass validation.";
 }
 

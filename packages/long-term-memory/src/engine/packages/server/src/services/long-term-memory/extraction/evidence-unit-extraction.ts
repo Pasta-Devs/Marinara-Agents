@@ -45,6 +45,7 @@ import {
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
 import { isLocalCharacterSubject } from "../identity/chat-scope.js";
 import { trustedLtmSubjectPromptCatalog } from "../identity/subject-catalog.js";
+import { minimalCharacterUnit } from "../identity/subject-identity.js";
 import type { TrustedLtmSubjectCatalog } from "../identity/subject-matching.js";
 
 const LTM_EXTRACTION_IMPORTANCE_VALUES = ["critical", "major", "moderate", "minor"] as const;
@@ -81,6 +82,12 @@ export interface LtmPreviousPieceContext {
   tail: string;
   events: LtmNote[];
   threads: LtmNote[];
+}
+
+/** The chat's active world and tone memories, listed so the model grows one instead of saving a lookalike. */
+export interface LtmExistingWorldToneContext {
+  world: LtmNote[];
+  tone: LtmNote[];
 }
 
 function serverEnforcedLinkRules(allowedBuckets: readonly LtmEvidenceUnit["bucket"][], hasPreviousPiece = false) {
@@ -129,6 +136,7 @@ export interface RunLongTermMemoryEvidenceUnitExtractionOptions {
   resolveSubjectNames?: boolean;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
   previousPiece?: LtmPreviousPieceContext;
+  existingWorldTone?: LtmExistingWorldToneContext;
 }
 
 export interface CompileEvidenceUnitExtractionResult {
@@ -619,6 +627,50 @@ function deterministicEvidenceUnitId(record: Record<string, unknown>, expectedSo
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
+const LTM_COSMETIC_LABEL_MAX = 80;
+const LTM_PROVIDER_KEYWORD_MAX = 20;
+const TRAILING_PUNCTUATION = /[\s,;:.!?&/([{"'\-\u2013\u2014\u2018\u201c\u2026]+$/u;
+const TRAILING_JOINER =
+  /(?:^|\s)(?:and|or|but|nor|of|to|the|a|an|in|on|at|for|with|by|from|as|while|until|that|who|which)$/u;
+
+// A label the model writes past the 80-character limit is cosmetic, not a reason to lose the memory: shorten it at the
+// last whole word, drop dangling punctuation and lowercase joiners, and return undefined when nothing sensible is left.
+// ponytail: a label with no spaces (CJK text, one long token) is removed rather than cut; Intl.Segmenter word
+// boundaries are the upgrade if such labels matter.
+function shortenCosmeticLabel(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length <= LTM_COSMETIC_LABEL_MAX) return trimmed;
+  let label = trimmed.slice(0, LTM_COSMETIC_LABEL_MAX + 1).replace(/\s+\S*$/u, "");
+  for (let previous = ""; previous !== label;) {
+    previous = label;
+    label = label.replace(TRAILING_PUNCTUATION, "").replace(TRAILING_JOINER, "");
+  }
+  return label && label.length <= LTM_COSMETIC_LABEL_MAX ? label : undefined;
+}
+
+function normalizedCosmeticFields(record: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  if (typeof record.title === "string") {
+    const title = shortenCosmeticLabel(record.title);
+    if (!title) fields.title = undefined;
+    else if (title !== record.title.trim()) fields.title = title;
+  }
+  const rawKeywords: unknown[] | undefined = Array.isArray(record.keywords) ? record.keywords : undefined;
+  if (rawKeywords) {
+    const keywords = rawKeywords
+      .map((keyword) =>
+        typeof keyword === "string" && keyword.trim().length > LTM_COSMETIC_LABEL_MAX
+          ? shortenCosmeticLabel(keyword)
+          : keyword,
+      )
+      .filter((keyword) => keyword !== undefined)
+      .slice(0, LTM_PROVIDER_KEYWORD_MAX);
+    if (keywords.length !== rawKeywords.length || keywords.some((keyword, index) => keyword !== rawKeywords[index]))
+      fields.keywords = keywords;
+  }
+  return fields;
+}
+
 function normalizedEvidenceUnitRecord(
   unit: unknown,
   expectedSourceHash: string,
@@ -675,7 +727,7 @@ function normalizedEvidenceUnitRecord(
     ...(boundedSubject !== record.subjectId ? { subjectId: boundedSubject } : {}),
     id: deterministicEvidenceUnitId(normalizedRecord, expectedSourceHash),
     sourceHash: expectedSourceHash,
-    ...(typeof record.title === "string" && !record.title.trim() ? { title: undefined } : {}),
+    ...normalizedCosmeticFields(record),
     ...(trustedEvidence.length ? { evidence: trustedEvidence } : {}),
   };
 }
@@ -1182,14 +1234,16 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
   const allBucketDescriptions: Record<string, string> = {
     timeline_event:
       modeDescs?.timeline_event ??
-      "source-summary scene/plot pivot, decision, action, discovery, fight outcome, promise, arrival, or departure; not the live current scene",
+      "source-summary beat or story-changing chat scene/plot pivot, decision, action, discovery, fight outcome, promise, arrival, or departure; not the live current scene",
     character_fact:
       modeDescs?.character_fact ??
       "durable character identity/trait/role/affiliation/backstory/belief/permanent status/development/ability/item/exact voice quote; not ordinary scene action or transient condition",
     relationship_state:
       modeDescs?.relationship_state ??
       "relationship state or dimension change backed by a caused_by event link or existing relationship note",
-    world_fact: modeDescs?.world_fact ?? "stable world/lore fact",
+    world_fact:
+      modeDescs?.world_fact ??
+      "stable world/lore fact; a single object (keepsake, letter, key, watch, weapon, garment) is never world: put it in the event or the holder's character memory",
     thread: modeDescs?.thread ?? "unresolved situation, question, tension, or goal with a clear future resolver",
     tone: modeDescs?.tone ?? "durable world/session atmospheric register or recurring style only",
     anchor: modeDescs?.anchor ?? "recurring motif, planted callback, or continuity anchor",
@@ -1232,6 +1286,16 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
         }
       : options.trustedSubjectCatalog;
 
+  // A subjectId must start with a letter, so an id like world_9th_legion is listed whole; the compiler keeps a
+  // subjectId that already carries its prefix, so it still lands in the same note.
+  const listedMemory = (prefix: "world" | "tone", notes: LtmNote[] = []) =>
+    notes.map((note) => {
+      const subjectId = unprefixedSubjectId(prefix, note.id);
+      return { subjectId: /^[a-z]/.test(subjectId) ? subjectId : note.id, title: note.title };
+    });
+  const existingWorld = listedMemory("world", options.existingWorldTone?.world);
+  const existingTone = listedMemory("tone", options.existingWorldTone?.tone);
+
   return [
     {
       role: "system",
@@ -1256,7 +1320,7 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
               }
             : {}),
           sectionKey: "real lowercase_snake_case section",
-          title: "optional short memory label, maximum 80 characters; do not copy a sentence from text",
+          title: "required short memory label: a 3-8 word noun phrase, not a sentence (maximum 80 characters)",
           text: "compact memory text, not transcript summary",
           claimKind: '"static" for an enduring fact/state; "change" for an event or event-caused outcome',
           importance: "one of critical, major, moderate, minor",
@@ -1278,6 +1342,8 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
         sourceNote: {
           id: options.sourceNote.id,
           title: options.sourceNote.title,
+          // The model would otherwise guess that a chat transcript is a prose summary.
+          ...(options.sourceNote.provenance?.kind === "chat_transcript" ? { kind: "chat_transcript" } : {}),
         },
         targetNoteRules: [
           resolveSubjectNames
@@ -1288,6 +1354,11 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
           options.previousPiece
             ? "Use a source-specific subjectId derived from the source text; never target or invent an existing note id. Two exceptions, both from previousPiece: its event ids may be caused_by or triggered_by targets, and a thread unit may reuse a listed thread subjectId to update that thread. The server resolves subject and link hints against the vault after extraction."
             : "Use a source-specific subjectId derived from the source text; never target or invent an existing note id. The server resolves subject and link hints against the vault after extraction.",
+          ...(existingWorld.length || existingTone.length
+            ? [
+                "To add to an existing world or tone memory, reuse its subjectId from existingWorld or existingTone (a further exception to the rule above); create a new one only for a different rule, place or register.",
+              ]
+            : []),
           "relationship_state dimension keys must come only from allowedRelationshipDimensions. Put professional curiosity, reputation, gossip, or attention as text/thread/world/timeline facts, not dimensions.",
           ...(resolveSubjectNames
             ? [
@@ -1297,6 +1368,8 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
             : []),
         ],
         trustedSubjects: trustedLtmSubjectPromptCatalog(promptCatalog ?? { entries: [], notes: [] }),
+        ...(existingWorld.length ? { existingWorld } : {}),
+        ...(existingTone.length ? { existingTone } : {}),
         userInstruction: options.instruction?.trim() || undefined,
         ...(options.previousPiece
           ? {
@@ -1700,6 +1773,8 @@ export function compileEvidenceUnitExtraction(options: {
   eventSubjectIdentityKeys?: ReadonlySet<string>;
   skipStructuredBackfill?: boolean;
   finishCutOffAnswers?: boolean;
+  /** Provisional local characters the identity pass gave a relationship; each kept one gets a minimal character note. */
+  minimalCharacters?: Parameters<typeof minimalCharacterUnit>[1][];
 }): CompileEvidenceUnitExtractionResult {
   const normalized = normalizeStructuredSummaryEvidenceUnits({
     units: options.unitResponse.units,
@@ -1732,21 +1807,29 @@ export function compileEvidenceUnitExtraction(options: {
     options.existingNotes,
   );
   const closed = closeSourceEventGraph(roleplayOnly.units, options.sourceNote, options.existingNotes);
-  // The late drops above can leave links to notes this draft no longer creates. Stripping them and dropping a
-  // relationship change whose cause was dropped never removes a timeline event, so the event graph stays closed.
+  // The late drops above can leave links to notes this draft no longer creates. Stripping them, and keeping a
+  // relationship change whose cause was dropped as a static claim, never removes a unit, so the event graph stays closed.
   const linked = closeLtmEvidenceUnitLinks({
     units: closed.units,
     sourceNote: options.sourceNote,
     existingNotes: options.existingNotes,
     candidateIndexes: validated.candidateIndexes,
-    stripDanglingLinks: true,
   });
   const parserDroppedCandidates = options.parserDroppedCandidates ?? [];
   const parserRejectionCount = options.parserRejectionCount ?? parserDroppedCandidates.length;
   const preValidationDroppedCandidates = options.preValidationDroppedCandidates ?? [];
-  const compiled = linked.keptUnits.length
+  // A kept relationship may only point at a character the Memory Vault can show, so a provisional local character
+  // that no kept character unit covers gets a minimal "appears in this chat" note in this same compile.
+  const minimalUnits = (options.minimalCharacters ?? []).flatMap((character) => {
+    const names = (unit: LtmEvidenceUnit) => unit.subjects?.some((subject) => subject.key === character.subject.key);
+    const relationship = linked.keptUnits.find((unit) => unit.bucket === "relationship_state" && names(unit));
+    const covered = linked.keptUnits.some((unit) => unit.bucket === "character_fact" && names(unit));
+    return relationship && !covered ? [minimalCharacterUnit(relationship, character)] : [];
+  });
+  const finalUnits = [...linked.keptUnits, ...minimalUnits];
+  const compiled = finalUnits.length
     ? compileLtmEvidenceUnits({
-        units: linked.keptUnits,
+        units: finalUnits,
         existingNotes: options.existingNotes,
         aliasChoices: options.aliasChoices,
         scope: options.scope,
@@ -1774,7 +1857,6 @@ export function compileEvidenceUnitExtraction(options: {
     ...validated.droppedCandidates,
     ...roleplayOnly.droppedCandidates,
     ...closed.droppedCandidates,
-    ...linked.droppedCandidates,
     ...duplicateAliasClosure.droppedCandidates,
   ];
   const droppedCandidates = allDroppedCandidates.slice(0, LTM_EXTRACTION_MAX_REJECTION_DETAILS);
@@ -1784,7 +1866,6 @@ export function compileEvidenceUnitExtraction(options: {
     validated.droppedCandidates.length +
     roleplayOnly.droppedCandidates.length +
     closed.droppedCandidates.length +
-    linked.droppedCandidates.length +
     duplicateAliasClosure.droppedCandidates.length;
   const duplicateTitles = duplicateAliasClosure.units.length
     ? compileLtmEvidenceUnits({
@@ -1844,24 +1925,23 @@ export function compileEvidenceUnitExtraction(options: {
         parserDroppedCandidates.length +
         preValidationDroppedCandidates.length +
         (options.userSkippedUnits ?? 0),
-    normalizedAdditions: (options.normalizedAdditions ?? 0) + normalized.addedUnits,
+    normalizedAdditions: (options.normalizedAdditions ?? 0) + normalized.addedUnits + minimalUnits.length,
     parserRejections: parserRejectionCount,
     validationRejections:
       preValidationDroppedCandidates.length +
       validated.droppedCandidates.length +
       roleplayOnly.droppedCandidates.length +
       closed.droppedCandidates.length +
-      linked.droppedCandidates.length +
       duplicateAliasClosure.droppedCandidates.length,
     deduplications:
       validated.keptUnits.length - dedupResult.deduplicated.length - duplicateAliasClosure.droppedCandidates.length,
-    keptUnits: linked.keptUnits.length,
+    keptUnits: finalUnits.length,
     ...(options.userSkippedUnits ? { userSkips: options.userSkippedUnits } : {}),
   });
   const totalCandidates = accounting.providerCandidates + accounting.normalizedAdditions;
   const outcome = summarizeExtractionOutcome({
     totalCandidates,
-    keptUnits: linked.keptUnits.length,
+    keptUnits: finalUnits.length,
     mutations: compiledResponse.mutations.length,
     droppedCandidates,
     droppedCandidateCount,

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { inputClass } from "./shared-controls";
+import { PickerRowBody, pickerRowClass } from "./picker";
 import { scopeKindCategories } from "./display-labels";
 import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 import { placeListLimit } from "./scope-targets";
@@ -28,6 +29,7 @@ export function SourceScopeCombobox({
   invalid = false,
   disabled = false,
   describedBy,
+  hintId,
   memoryGroups,
 }: {
   targets: ScopeTarget[];
@@ -40,6 +42,8 @@ export function SourceScopeCombobox({
   invalid?: boolean;
   disabled?: boolean;
   describedBy?: string;
+  /** A hint line under the picker, always read with it (`describedBy` is read only while the picker is locked). */
+  hintId?: string;
   memoryGroups?: { has: (target: ScopeTarget) => boolean; withLabel: string; withoutLabel: string };
 }) {
   const { locale, t: localizeUi } = useLtmTranslation();
@@ -200,22 +204,17 @@ export function SourceScopeCombobox({
       aria-selected={target.id === value}
       data-highlighted={target.id === highlightedId}
       data-ltm-scope-option={target.id}
-      className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-xs last:border-b-0 ${target.id === highlightedId ? "bg-[var(--secondary)]" : target.id === value ? "bg-[var(--primary)]/10" : ""}`}
+      className={pickerRowClass({ selected: target.id === value, highlighted: target.id === highlightedId })}
       onMouseDown={(event) => event.preventDefault()}
-      onMouseEnter={() => setHighlightedId(target.id)}
+      onMouseMove={() => setHighlightedId(target.id)}
       onClick={() => choose(target.id)}
     >
-      <Check
-        aria-hidden="true"
-        size="0.875rem"
-        className={target.id === value ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
+      <PickerRowBody
+        kind={target.kind}
+        label={targetDisplayLabel(target, destination)}
+        comment={target.comment}
+        selected={target.id === value}
       />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{targetDisplayLabel(target, destination)}</span>
-        {target.comment ? (
-          <span className="block truncate text-xs text-[var(--muted-foreground)]">{target.comment}</span>
-        ) : null}
-      </span>
     </button>
   );
   const groupOptions = (index: number) => {
@@ -231,9 +230,9 @@ export function SourceScopeCombobox({
             aria-selected={false}
             data-highlighted={highlightedId === showMoreId}
             data-ltm-scope-show-more={index}
-            className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center rounded-none border-t-0 px-3 py-2 text-left text-xs font-semibold text-[var(--muted-foreground)] last:border-b-0 ${highlightedId === showMoreId ? "bg-[var(--secondary)]" : ""}`}
+            className={`${pickerRowClass({ highlighted: highlightedId === showMoreId })} text-xs font-semibold text-[var(--muted-foreground)]`}
             onMouseDown={(event) => event.preventDefault()}
-            onMouseEnter={() => setHighlightedId(showMoreId)}
+            onMouseMove={() => setHighlightedId(showMoreId)}
             onClick={() => choose(showMoreId)}
           >
             {localizeUi("ui.longTermMemory.memoryvault.showMoreMemories", {
@@ -257,7 +256,7 @@ export function SourceScopeCombobox({
         aria-required={required}
         aria-invalid={invalid}
         aria-disabled={disabled || undefined}
-        aria-describedby={disabled ? describedBy : undefined}
+        aria-describedby={[hintId, disabled ? describedBy : undefined].filter(Boolean).join(" ") || undefined}
         data-ltm-scope-picker-trigger={testId}
         className={`${inputClass} flex items-center gap-2 text-left${disabled ? " opacity-50" : ""}`}
         onClick={() => {
@@ -412,7 +411,7 @@ export function SourceScopeCombobox({
                       data-ltm-scope-show-no-memories
                       className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center rounded-none border-t-0 px-3 py-2 text-left text-xs font-semibold text-[var(--muted-foreground)] last:border-b-0 ${highlightedId === showNoMemoriesId ? "bg-[var(--secondary)]" : ""}`}
                       onMouseDown={(event) => event.preventDefault()}
-                      onMouseEnter={() => setHighlightedId(showNoMemoriesId)}
+                      onMouseMove={() => setHighlightedId(showNoMemoriesId)}
                       onClick={() => choose(showNoMemoriesId)}
                     >
                       {localizeUi(

@@ -58,6 +58,7 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "Classify each claim independently; one source may mix classes:",
   "- structured_summary: headings or fields identify memory streams or metadata.",
   "- prose_summary: prose describes a conversation, scene, or session.",
+  "- chat_transcript: raw chat messages between the user and characters.",
   "- character_reference: character card, profile, description, example dialogue, or scenario.",
   "- world_reference: lorebook, setting entry, location, faction, rule, history, or glossary entry.",
   "",
@@ -88,13 +89,18 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "- Keep an exact quoted line as part of its event when the summary presents it as memorable, a promise, or a recurring phrase.",
   "- Omit only beats the summary itself treats as incidental: ordinary turns, passing moods, and temporary scene state that caused nothing.",
   "- Extract preferences, commitments, traits, relationships, open loops, world facts, recurring motifs (anchor), and the durable register (tone) the prose states or clearly shows.",
-  "- Do not infer numeric relationship fields from non-numeric prose.",
+  "- Do not infer numeric relationship fields from non-numeric prose or chat messages.",
+  "For chat_transcript:",
+  "- Raw messages hold many small actions. Emit a timeline_event only for a beat that changes the story or a relationship, or that a character would bring up later: a decision, promise, reveal, death, injury, an arrival or departure that matters, a first meeting.",
+  "- Merge the steps that lead to one outcome into one event. Skip routine actions, travel, small talk, recaps, and narration of what an earlier message already said.",
+  "- As a rough budget, about 1-3 events per 10 messages, fewer when little happens. Use one subjectId per event even if later messages retell it, and prefer importance major or critical for events.",
+  "- If these messages add nothing beyond the existing notes, return an empty units list; never write a placeholder.",
   "For character_reference:",
   "- Treat identity, personality, backstory, role, affiliation, ability, possession, appearance, voice, and stable behavior as static character_fact.",
   "- Example dialogue may support durable voice but is not an event. Greetings, sample messages, and scenarios are illustrative unless explicitly canonical.",
   "- Do not turn an opening scenario into timeline history. Ignore creator notes, system prompts, post-history instructions, templates, and formatting directives unless they explicitly state canonical in-world facts.",
   "For world_reference:",
-  "- Treat rules, locations, factions, species, objects, customs, and setting facts as static world_fact.",
+  "- Treat rules, locations, factions, species, recurring objects, customs, and setting facts as static world_fact.",
   "- Emit timeline_event only for a specific historical event explicitly asserted by the source. Do not convert descriptive lore into recent scene history.",
   "- Extract durable facts about named characters in character_fact. Treat keys, triggers, insertion settings, priorities, and activation instructions as metadata.",
   "",
@@ -102,14 +108,14 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "- timeline_event: specific past beat, decision, promise, discovery, arrival, departure, action, or outcome. subjectId names the event.",
   "- character_fact: durable identity, trait, role, affiliation, backstory, ability, item, voice, or lasting development; not an ordinary action.",
   "- relationship_state: durable observed state or change between exactly two named characters.",
-  "- world_fact: stable setting or lore.",
+  "- world_fact: stable setting rule, place, faction, or lore that matters beyond one scene. Never a single object, prop, wound, or outfit unless the story keeps returning to it (that is an anchor). A single object (a keepsake, letter, key, watch, weapon, garment) is never a world memory: put it in the event where it matters or in the holder's character memory. A world_reference entry that defines an object of the setting is the exception: keep it as static world_fact.",
   "- thread: unresolved situation plus an explicitly supported condition that would resolve it. No supported resolver means no thread.",
   "- anchor: recurring in-world symbol, planted element, callback, or payoff continuity.",
-  "- tone: durable narrative, conversational, or world-level register; not a scene mood.",
+  "- tone: one durable narrative, conversational, or world-level register per chat; not a scene mood. Update the existing tone instead of adding another.",
   "",
   "RELATIONSHIPS AND CONTINUITY",
   "- Copy explicit dimensions and dimensionChanges exactly. A static relationship may have dimensions but not dimensionChanges.",
-  "- For prose or reference sources, omit numeric fields unless explicit numbers are supplied. Describe observed state literally.",
+  "- For prose, chat transcript, or reference sources, omit numeric fields unless explicit numbers are supplied. Describe observed state literally.",
   "- Use conservative deltas; routine warmth, jokes, or small kindnesses do not justify large changes unless explicitly framed as major.",
   "- Thread text must state both the open loop and what would resolve it. Never invent a resolver. Only thread units may use resolved status.",
   "- Use anchor for recurring or planted in-world elements; use tone for presentation style or atmosphere. Emit tone only for a durable register.",
@@ -118,8 +124,9 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "OUTPUT DISCIPLINE",
   "- For structured summaries, prioritize valid-bullet coverage and preserve concise claims instead of rewriting them vaguely.",
   "- For prose summaries, prioritize beat coverage as for structured bullets; shorten unit text rather than merging beats.",
+  "- For chat transcripts, prefer fewer, outcome-level events over beat coverage.",
   "- For reference sources, prefer fewer substantial units over fragmentary observations.",
-  "- If space is limited, shorten unit text rather than dropping valid structured claims.",
+  "- For summaries, if space is limited, shorten unit text rather than dropping valid structured claims.",
   "- summary briefly describes the extraction result; it must not retell the source.",
 ].join("\n");
 
@@ -234,14 +241,15 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
 > = {
   roleplay: {
     timeline_event:
-      "source-summary scene/plot pivot, decision, action, discovery, fight outcome, promise, arrival, or departure; not the live current scene",
+      "source-summary beat or story-changing chat scene/plot pivot, decision, action, discovery, fight outcome, promise, arrival, or departure; not the live current scene",
     character_fact:
       "durable character identity/trait/role/affiliation/backstory/belief/permanent status/development/ability/item/exact voice quote; not ordinary scene action or transient condition",
     relationship_state:
       "relationship state or dimension change backed by a caused_by event link or existing relationship note",
-    world_fact: "stable world/lore fact",
+    world_fact:
+      "stable setting rule, place, faction, or lore that matters beyond one scene; not a single object, prop, wound, or outfit unless the story keeps returning to it (that is an anchor); a single object (keepsake, letter, key, watch, weapon, garment) is never world: put it in the event or the holder's character memory",
     thread: "unresolved situation, question, tension, or goal with a clear future resolver",
-    tone: "durable world/session atmospheric register or recurring style only",
+    tone: "one durable world/session atmospheric register per chat, or recurring style; update the existing tone instead of adding another",
     anchor: "recurring motif, planted callback, or continuity anchor",
   },
   conversation: {
@@ -279,6 +287,18 @@ export const DEFAULT_LTM_RECALL_PREAMBLE = "Relevant long-term memories for this
  * threshold or the graph weight after measuring other presets.
  */
 export const LTM_LINKED_RECALL_MIN_RELEVANCE = 0.2;
+
+/**
+ * A recall whose best memory is still this far from the latest messages in meaning adds nothing:
+ * the lexical lanes normalise by their own best hit, so a message about something else would
+ * otherwise still fill the budget. Only the local MiniLM space carries an absolute score of this
+ * kind. Measured on one vault with the newest-messages query: unrelated turns peaked at 0.360,
+ * related turns bottomed at 0.386.
+ * ponytail: one calibrated cut for one embedding space; other spaces keep today's behaviour.
+ * Upgrade is a per-space cut measured the same way.
+ */
+export const LTM_UNRELATED_RECALL_MIN_COSINE = 0.37;
+export const LTM_UNRELATED_RECALL_SPACE_PREFIX = "local:Xenova/all-MiniLM-L6-v2";
 
 /**
  * Per-style lane weights. A candidate's relevance is its strongest weighted lane

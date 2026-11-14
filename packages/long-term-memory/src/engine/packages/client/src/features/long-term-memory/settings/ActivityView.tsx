@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Check,
@@ -21,7 +22,6 @@ import type {
   LtmDraftReviewResponse,
   LtmExtractionDropReason,
   LtmNote,
-  LtmStatusResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   errorMessage,
@@ -32,11 +32,26 @@ import {
   requestNotesByIds,
   requestRaw,
   scopeTargetsQueryOptions,
+  statusQueryOptions,
 } from "../api";
-import { Button, InfoPopover, LiveResult, StatusSurface, inputClass } from "../shared-controls";
-import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "../display-labels";
+import {
+  Button,
+  InfoPopover,
+  RemovableChip,
+  ShowMore,
+  Spinner,
+  StatusSurface,
+  confirm,
+  inputClass,
+} from "../shared-controls";
+import {
+  humanizeLabel,
+  labelKeys,
+  localizedLabel,
+  recallReasonLabelKeys,
+  rejectionReasonLabels,
+} from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
-import { confirm } from "./settings-shared";
 import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "../localization";
 import { LtmWorkspace, type LtmWorkspacePane } from "../LtmWorkspace";
 import {
@@ -103,10 +118,10 @@ const actionLabelKeys: Record<string, string> = {
 // D20: known runtime count/weight names render as readable labels instead of humanized
 // camelCase. Unknown keys keep the humanized fallback, so new server counters stay legible.
 const weightLabelKeys: Record<string, string> = {
-  semanticWeight: "ui.longTermMemory.activityview.weightSemantic",
-  lexicalWeight: "ui.longTermMemory.activityview.weightLexical",
-  graphWeight: "ui.longTermMemory.activityview.weightGraph",
-  keywordWeight: "ui.longTermMemory.activityview.weightKeyword",
+  semanticWeight: "ui.longTermMemory.memorysettings.meaningMatch",
+  lexicalWeight: "ui.longTermMemory.memorysettings.exactWordsMatch",
+  graphWeight: "ui.longTermMemory.memorysettings.linkedMemoriesMatch",
+  keywordWeight: "ui.longTermMemory.memorysettings.storedKeywordsMatch",
 };
 
 const countLabelKeys: Record<string, string> = {
@@ -117,15 +132,6 @@ const countLabelKeys: Record<string, string> = {
   targetNotes: "ui.longTermMemory.activityview.countTargetMemories",
   units: "ui.longTermMemory.activityview.countUnits",
   mutations: "ui.longTermMemory.activityview.countMutations",
-};
-
-const recallReasonLabelKeys: Record<string, string> = {
-  budget: "ui.longTermMemory.activityview.recallReasonBudget",
-  lower_rank: "ui.longTermMemory.activityview.lowerFusedRank",
-  duplicate_text: "ui.longTermMemory.activityview.recallReasonDuplicate",
-  score_threshold: "ui.longTermMemory.activityview.recallReasonThreshold",
-  missing_chunk: "ui.longTermMemory.activityview.recallReasonMissingChunk",
-  prompt_budget: "ui.longTermMemory.activityview.recallReasonPromptBudget",
 };
 
 const debugStatusIcons: Record<DebugOperationStatus, LucideIcon> = {
@@ -606,8 +612,11 @@ export default function ActivityView({
   props,
   onOpenMemory,
   onOpenReview,
+  onOpenRecallSettings,
   openActivityMemoryId,
   onOpenActivityMemoryIdHandled,
+  openActivityOperationId,
+  onOpenActivityOperationIdHandled,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const recordedNumber = (value: unknown) =>
@@ -620,10 +629,6 @@ export default function ActivityView({
       : localizeUi("ui.longTermMemory.activityview.notRecorded");
   const queryClient = useQueryClient();
   const [pending, setPending] = useState<"clear" | "export" | null>(null);
-  const [actionState, setActionState] = useState<{ text: string; tone: "success" | "danger" }>({
-    text: "",
-    tone: "success",
-  });
   const [copiedOperationId, setCopiedOperationId] = useState<string | null>(null);
   const refreshRef = useRef<HTMLButtonElement>(null);
   const exportRef = useRef<HTMLButtonElement>(null);
@@ -664,6 +669,14 @@ export default function ActivityView({
     // user cleared when it is reopened.
     onOpenActivityMemoryIdHandled?.();
   }, [openActivityMemoryId, onOpenActivityMemoryIdHandled]);
+  // The chat drawer's "Open in Activity" selects that recall; it is consumed once like the memory handoff.
+  useEffect(() => {
+    if (!openActivityOperationId) return;
+    setMemoryFilterId(null);
+    setSelectedOperationId(openActivityOperationId);
+    setActivePane("workbench");
+    onOpenActivityOperationIdHandled?.();
+  }, [openActivityOperationId, onOpenActivityOperationIdHandled]);
   const activity = useQuery({
     queryKey: [...queryKeys.activity, limit],
     queryFn: () => request<DebugLogResponse>(`/debug-log?limit=${limit}`),
@@ -681,10 +694,7 @@ export default function ActivityView({
   }, [activity.isFetching]);
   // Shares the shell's cached /status query rather than adding an endpoint; pending or
   // errored status is never flattened into "healthy".
-  const health = useQuery({
-    queryKey: queryKeys.status,
-    queryFn: () => request<LtmStatusResponse>("/status"),
-  });
+  const health = useQuery(statusQueryOptions);
   const noteIds = useMemo(() => collectDebugNoteIds(activity.data?.events ?? []), [activity.data]);
   const notes = useQuery({
     queryKey: [...queryKeys.notes, "activity-context", noteIds],
@@ -782,15 +792,11 @@ export default function ActivityView({
         ))
       )
         return;
-      setActionState({ text: "", tone: "success" });
       await request<unknown>("/debug-log", "DELETE");
       await invalidateLtmQueries(queryClient, [queryKeys.activity, queryKeys.packageReaders]);
-      setActionState({ text: localizeUi("ui.longTermMemory.activityview.clearedLog"), tone: "success" });
+      toast.success(localizeUi("ui.longTermMemory.activityview.clearedLog"));
     } catch (error) {
-      setActionState({
-        text: errorMessage(error, localizeUi("ui.longTermMemory.activityview.couldNotClearActivity")),
-        tone: "danger",
-      });
+      toast.error(errorMessage(error, localizeUi("ui.longTermMemory.activityview.couldNotClearActivity")));
     } finally {
       endPending();
       restoreFocus(clearRef);
@@ -799,7 +805,6 @@ export default function ActivityView({
 
   const exportLog = async () => {
     if (!beginPending("export")) return;
-    setActionState({ text: "", tone: "success" });
     try {
       const response = await requestRaw("/debug-log/export");
       if (!response.ok) throw await failedResponseError(response);
@@ -812,12 +817,9 @@ export default function ActivityView({
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
-      setActionState({ text: localizeUi("ui.longTermMemory.activityview.exportedFullLog"), tone: "success" });
+      toast.success(localizeUi("ui.longTermMemory.activityview.exportedFullLog"));
     } catch (error) {
-      setActionState({
-        text: errorMessage(error, localizeUi("ui.longTermMemory.activityview.couldNotExportActivity")),
-        tone: "danger",
-      });
+      toast.error(errorMessage(error, localizeUi("ui.longTermMemory.activityview.couldNotExportActivity")));
     } finally {
       endPending();
       restoreFocus(exportRef);
@@ -827,7 +829,6 @@ export default function ActivityView({
   // Copy JSON is the only path to raw records: it writes the selected operation's
   // events verbatim, identifiers and response snippet included.
   const copyOperationJson = async (operation: DebugOperation) => {
-    setActionState({ text: "", tone: "success" });
     const text = JSON.stringify(operation.events, null, 2);
     let copied = false;
     try {
@@ -858,10 +859,7 @@ export default function ActivityView({
       }
     }
     if (!copied) {
-      setActionState({
-        text: localizeUi("ui.longTermMemory.activityview.couldNotCopyTechnicalDetails"),
-        tone: "danger",
-      });
+      toast.error(localizeUi("ui.longTermMemory.activityview.couldNotCopyTechnicalDetails"));
       return;
     }
     setCopiedOperationId(operation.operationId);
@@ -1288,6 +1286,11 @@ export default function ActivityView({
                 <strong>{localizeUi("ui.longTermMemory.activityview.whatToTry")}: </strong>
                 {localizeUi("ui.longTermMemory.activityview.tryRecallNothingAdded")}
               </p>
+              {onOpenRecallSettings ? (
+                <Button className="mt-2" onClick={onOpenRecallSettings}>
+                  {localizeUi("ui.longTermMemory.activityview.openRecallSettings")}
+                </Button>
+              ) : null}
             </div>
           </StatusSurface>
         ) : null}
@@ -1588,7 +1591,7 @@ export default function ActivityView({
     ? healthUnavailable
     : healthPending
       ? healthChecking
-      : localizedLabel(healthIndex ?? "not_built", localizeUi, labelKeys.indexHealth);
+      : localizedLabel(healthIndex ?? "not_built", localizeUi, labelKeys.health);
   const healthSemanticText = healthMissing
     ? healthUnavailable
     : healthPending
@@ -1658,39 +1661,25 @@ export default function ActivityView({
               // `isFetching` is a rendered value, so a second activation in the same turn
               // still sees `false`. Disable refetch cancellation so it coalesces onto the
               // in-flight request instead of restarting it.
-              void activity.refetch({ cancelRefetch: false }).then((result) => {
-                if (!result.isError) setActionState({ text: "", tone: "success" });
+              void activity.refetch({ cancelRefetch: false }).then(() => {
                 restoreFocus(refreshRef);
               });
             }}
           >
-            {activity.isFetching ? (
-              <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <RotateCw aria-hidden="true" size="0.875rem" />
-            )}{" "}
+            {activity.isFetching ? <Spinner /> : <RotateCw aria-hidden="true" size="0.875rem" />}{" "}
             {localizeUi("ui.longTermMemory.activityview.refresh")}
           </Button>
           <Button ref={exportRef} aria-disabled={pending !== null} onClick={() => void exportLog()}>
-            {pending === "export" ? (
-              <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Download aria-hidden="true" size="0.875rem" />
-            )}{" "}
+            {pending === "export" ? <Spinner /> : <Download aria-hidden="true" size="0.875rem" />}{" "}
             {localizeUi("ui.longTermMemory.activityview.exportFullLog")}
           </Button>
           <Button ref={clearRef} destructive aria-disabled={pending !== null} onClick={() => void clear()}>
-            {pending === "clear" ? (
-              <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Trash2 aria-hidden="true" size="0.875rem" />
-            )}{" "}
+            {pending === "clear" ? <Spinner /> : <Trash2 aria-hidden="true" size="0.875rem" />}{" "}
             {localizeUi("ui.longTermMemory.activityview.clear")}
           </Button>
         </div>
       </div>
 
-      <LiveResult text={actionState.text} tone={actionState.tone} />
       {activity.isLoading ? (
         <StatusSurface busy>{localizeUi("ui.longTermMemory.activityview.loadingActivity")}</StatusSurface>
       ) : null}
@@ -1738,27 +1727,16 @@ export default function ActivityView({
               <div className="mari-editor-panel mari-editor-panel--soft space-y-2 p-3" data-ltm-debug-controls>
                 {memoryFilterId ? (
                   <div className="space-y-1">
-                    <span
+                    <RemovableChip
                       data-ltm-debug-memory-filter={memoryFilterId}
-                      className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--secondary)]/35 pl-3 pr-1 text-xs"
+                      removeLabel={localizeUi("ui.longTermMemory.activityview.clearMemoryFilter")}
+                      onRemove={() => setMemoryFilterId(null)}
                     >
-                      <span className="min-w-0 truncate">
-                        {localizeUi("ui.longTermMemory.activityview.memoryFilter", {
-                          memory:
-                            noteTitles.get(memoryFilterId) ??
-                            localizeUi("ui.longTermMemory.activityview.unknownMemory"),
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={localizeUi("ui.longTermMemory.activityview.clearMemoryFilter")}
-                        title={localizeUi("ui.longTermMemory.activityview.clearMemoryFilter")}
-                        onClick={() => setMemoryFilterId(null)}
-                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
-                      >
-                        <X aria-hidden="true" size="0.875rem" />
-                      </button>
-                    </span>
+                      {localizeUi("ui.longTermMemory.activityview.memoryFilter", {
+                        memory:
+                          noteTitles.get(memoryFilterId) ?? localizeUi("ui.longTermMemory.activityview.unknownMemory"),
+                      })}
+                    </RemovableChip>
                     <p className="text-[0.6875rem] text-[var(--muted-foreground)]">
                       {localizeUi("ui.longTermMemory.activityview.memoryFilterCoverage")}
                     </p>
@@ -1951,7 +1929,8 @@ export default function ActivityView({
                     })}
                   </span>
                   {limit < 1_000 || activity.isPlaceholderData ? (
-                    <Button
+                    <ShowMore
+                      busy={activity.isFetching}
                       aria-disabled={activity.isFetching || undefined}
                       data-ltm-activity-show-more
                       onClick={() => {
@@ -1960,15 +1939,8 @@ export default function ActivityView({
                         setLimit(1_000);
                       }}
                     >
-                      {activity.isFetching ? (
-                        <Loader2
-                          aria-hidden="true"
-                          size="0.875rem"
-                          className="animate-spin motion-reduce:animate-none"
-                        />
-                      ) : null}
                       {localizeUi("ui.longTermMemory.activityview.showUpTo1_000Events")}
-                    </Button>
+                    </ShowMore>
                   ) : null}
                 </div>
               ) : null}

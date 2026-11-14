@@ -77,6 +77,8 @@ export const ltmLastInjectionResponseSchema = z.object({
   state: z.enum(["injected", "no_matches", "not_recorded"]).default("not_recorded"),
   dispatchedAt: ltmIsoTimestampSchema.nullable().default(null),
   attempt: ltmLastInjectionAttemptSchema.nullable().default(null),
+  /** Memories a reply in this chat can draw on (recall's scope rule); absent on an older server. */
+  availableCount: z.number().int().min(0).optional(),
 });
 
 /**

@@ -1,12 +1,12 @@
 import { z } from "zod";
-import type { LtmNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  LTM_PACKAGE_AGENT_ID_PATTERN,
+  type LtmNote,
+} from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readLtmDebugLog, recordLtmDebugEvent } from "../maintenance/debug-log.js";
 
 /** The name a package gives itself when it reads memories; Memory Settings lists it. A malformed name is dropped. */
-export const ltmPackageCallerIdSchema = z
-  .string()
-  .trim()
-  .regex(/^[a-z0-9][a-z0-9._:-]{0,63}$/iu);
+export const ltmPackageCallerIdSchema = z.string().trim().regex(LTM_PACKAGE_AGENT_ID_PATTERN);
 export const ltmPackageCallerSchema = ltmPackageCallerIdSchema.optional().catch(undefined);
 
 const PACKAGE_READ_ACTIONS = ["package_list", "package_recall"] as const;

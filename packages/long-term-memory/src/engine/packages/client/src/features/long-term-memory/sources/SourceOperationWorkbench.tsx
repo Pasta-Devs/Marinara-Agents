@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Loader2, Send } from "lucide-react";
+import { toast } from "sonner";
+import { Check, Send } from "lucide-react";
 import type {
   LtmBulkNoteResult,
   LtmNoteTransferApplyResponse,
   LtmNoteTransferPreviewResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { derivedNotesQueryOptions, errorMessage, request } from "../api";
-import { Button, InfoPopover, LiveResult, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
+import {
+  Button,
+  InfoPopover,
+  Spinner,
+  StatusSurface,
+  confirm,
+  inputClass,
+  lockedActionProps,
+} from "../shared-controls";
 import { labelKeys, localizedLabel, noteTypeLabel } from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { useLtmTranslation } from "../localization";
@@ -20,9 +29,11 @@ export function SourceOperationWorkbench({
   sourceTitle,
   initialOperation,
   destinations,
+  sharedWithBranches,
   disabled,
   lockReasonId,
   confirmAction,
+  localization,
   onComplete,
   onClose,
 }: {
@@ -30,9 +41,12 @@ export function SourceOperationWorkbench({
   sourceTitle: string;
   initialOperation?: SourceOperation;
   destinations: ScopeTargetChat[];
+  /** The source is a chat's, and that chat has other branches that recall its memories. */
+  sharedWithBranches?: boolean;
   disabled: boolean;
   lockReasonId?: string;
   confirmAction?: LongTermMemoryDestinationProps["props"]["confirmAction"];
+  localization?: LongTermMemoryDestinationProps["props"]["localization"];
   onComplete: () => Promise<void>;
   /** Leaves the operation panel; the caller returns focus to the control that opened it. */
   onClose: () => void;
@@ -113,30 +127,42 @@ export function SourceOperationWorkbench({
       setBusy(null);
     }
   };
+  const publish = (applied: NonNullable<typeof result>) => {
+    setResult(applied);
+    const summary = localizeUi("ui.longTermMemory.sourceoperation.resultSummary", {
+      updated: applied.updated.length,
+      deleted: applied.deleted.length,
+      detached: applied.detached.length,
+      excluded: applied.excluded.length,
+      skipped: applied.skipped.length,
+      failed: applied.failed.length,
+    });
+    if (applied.failed.length) toast.warning(summary, { duration: 12_000 });
+    else toast.success(summary);
+    // Apply is spent once there is a result, so focus moves to the region's heading.
+    window.requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (!active || active === document.body || active.matches(":disabled")) headingRef.current?.focus();
+    });
+  };
   const apply = async () => {
     if (disabled || !linked.data || linked.isError || !previewed || busy || result) return;
     if (operation === "archive" || operation === "delete") {
-      const options = {
-        title: localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`),
-        message: localizeUi(
+      const applyLabel = localizeUi(
+        `ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`,
+      );
+      const confirmed = await confirm(
+        { confirmAction, localization },
+        applyLabel,
+        localizeUi(
           operation === "delete"
             ? "ui.longTermMemory.sourceoperation.confirmDelete"
             : "ui.longTermMemory.sourceoperation.confirmArchive",
           { count: selectedIds.length },
         ),
-        confirmLabel: localizeUi(
-          `ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`,
-        ),
-        tone: operation === "delete" ? ("destructive" as const) : ("default" as const),
-      };
-      const confirmed = confirmAction
-        ? await confirmAction(options)
-        : window.confirm(
-            localizeUi("ui.longTermMemory.longtermmemorydetail.confirmationWithMessage", {
-              title: options.title,
-              message: options.message,
-            }),
-          );
+        applyLabel,
+        operation === "delete",
+      );
       if (!confirmed) return;
     }
     setBusy("apply");
@@ -151,7 +177,7 @@ export function SourceOperationWorkbench({
           mode: operation,
           destinationChatId,
         });
-        setResult({
+        publish({
           updated: applied.updatedNoteIds,
           skipped: [...applied.skippedNoteIds, ...preview.buckets.noOp, ...preview.buckets.conflict],
           deleted: [],
@@ -164,7 +190,7 @@ export function SourceOperationWorkbench({
           noteIds: selectedIds,
           archive: "notes_only",
         });
-        setResult({
+        publish({
           updated: applied.updatedNoteIds,
           skipped: applied.skippedNoteIds,
           deleted: [],
@@ -184,7 +210,7 @@ export function SourceOperationWorkbench({
           lineageSourceNoteId: sourceNoteId,
           expectedLineageNoteIds: previewLineageNoteIds ?? [sourceNoteId, ...memories.map((memory) => memory.id)],
         });
-        setResult({
+        publish({
           updated: [],
           skipped: [],
           deleted: applied.deletedIds,
@@ -193,9 +219,10 @@ export function SourceOperationWorkbench({
           failed: applied.failedIds,
         });
       }
-      await onComplete();
+      // The change is applied and reported; a failed reload must not add a failure toast.
+      await onComplete().catch(() => undefined);
     } catch (error) {
-      setError(errorMessage(error, localizeUi("ui.longTermMemory.sourceoperation.couldNotApply")));
+      toast.error(errorMessage(error, localizeUi("ui.longTermMemory.sourceoperation.couldNotApply")));
     } finally {
       setBusy(null);
     }
@@ -349,11 +376,7 @@ export function SourceOperationWorkbench({
         onClick={() => void previewOperation()}
         data-ltm-source-operation-action="preview"
       >
-        {busy === "preview" ? (
-          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin motion-reduce:animate-none" />
-        ) : (
-          <Send aria-hidden="true" size="0.75rem" />
-        )}
+        {busy === "preview" ? <Spinner size="0.75rem" /> : <Send aria-hidden="true" size="0.75rem" />}
         {localizeUi("ui.longTermMemory.sourceoperation.preview")}
       </Button>
       {/* Always mounted, so a finished preview is read out instead of mounting with its text. */}
@@ -378,6 +401,12 @@ export function SourceOperationWorkbench({
                 incoming: linked.data?.sourceIncomingLinkCount ?? 0,
                 outgoing: linked.data?.sourceOutgoingLinkCount ?? 0,
               })}
+            </p>
+          ) : null}
+          {/* A kept memory loses its source link, and without it a branch no longer recalls it. */}
+          {operation === "delete" && sharedWithBranches && excludedMemories.length ? (
+            <p className="text-[var(--muted-foreground)]" data-ltm-source-operation-branch-sharing>
+              {localizeUi("ui.longTermMemory.sourceoperation.deleteBranchSharing")}
             </p>
           ) : null}
           {operation === "archive" || operation === "delete" ? (
@@ -429,67 +458,45 @@ export function SourceOperationWorkbench({
             onClick={() => void apply()}
             data-ltm-source-operation-action="apply"
           >
-            {busy === "apply" ? (
-              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Check aria-hidden="true" size="0.75rem" />
-            )}
+            {busy === "apply" ? <Spinner size="0.75rem" /> : <Check aria-hidden="true" size="0.75rem" />}
             {localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`)}
           </Button>
         </div>
       ) : null}
-      {/* The wrapper and the hidden status copy stay mounted, so a finished run is read out instead of mounting with its text. */}
-      <div
-        data-ltm-source-operation-result={result ? operation : undefined}
-        className={result ? "flex flex-col gap-2" : "contents"}
-      >
-        <LiveResult
-          tone={result?.failed.length ? "warning" : "success"}
-          text={
-            result
-              ? localizeUi("ui.longTermMemory.sourceoperation.resultSummary", {
-                  updated: result.updated.length,
-                  deleted: result.deleted.length,
-                  detached: result.detached.length,
-                  excluded: result.excluded.length,
-                  skipped: result.skipped.length,
-                  failed: result.failed.length,
-                })
-              : ""
-          }
-        />
-        {result
-          ? [
-              ...new Set([
-                ...result.updated,
-                ...result.deleted,
-                ...result.detached,
-                ...result.excluded,
-                ...result.skipped,
-                ...result.failed,
-              ]),
-            ].map((id) => (
-              <p
-                key={id}
-                className="rounded bg-[var(--secondary)]/45 p-2 text-xs"
-                data-ltm-source-operation-result-memory={id}
-              >
-                {titleFor(id)}:{" "}
-                {result.deleted.includes(id)
-                  ? localizeUi("ui.longTermMemory.sourceoperation.deleted")
-                  : result.detached.includes(id)
-                    ? localizeUi("ui.longTermMemory.sourceoperation.detached")
-                    : result.updated.includes(id)
-                      ? localizeUi("ui.longTermMemory.sourceoperation.updated")
-                      : result.excluded.includes(id)
-                        ? localizeUi("ui.longTermMemory.sourceoperation.excluded")
-                        : result.failed.includes(id)
-                          ? localizeUi("ui.longTermMemory.sourceoperation.failed")
-                          : localizeUi("ui.longTermMemory.sourceoperation.skipped")}
-              </p>
-            ))
-          : null}
-      </div>
+      {/* The summary is a toast; what happened to each memory stays here to read. */}
+      {result ? (
+        <div data-ltm-source-operation-result={operation} className="flex flex-col gap-2">
+          {[
+            ...new Set([
+              ...result.updated,
+              ...result.deleted,
+              ...result.detached,
+              ...result.excluded,
+              ...result.skipped,
+              ...result.failed,
+            ]),
+          ].map((id) => (
+            <p
+              key={id}
+              className="rounded bg-[var(--secondary)]/45 p-2 text-xs"
+              data-ltm-source-operation-result-memory={id}
+            >
+              {titleFor(id)}:{" "}
+              {result.deleted.includes(id)
+                ? localizeUi("ui.longTermMemory.sourceoperation.deleted")
+                : result.detached.includes(id)
+                  ? localizeUi("ui.longTermMemory.sourceoperation.detached")
+                  : result.updated.includes(id)
+                    ? localizeUi("ui.longTermMemory.sourceoperation.updated")
+                    : result.excluded.includes(id)
+                      ? localizeUi("ui.longTermMemory.sourceoperation.excluded")
+                      : result.failed.includes(id)
+                        ? localizeUi("ui.longTermMemory.sourceoperation.failed")
+                        : localizeUi("ui.longTermMemory.sourceoperation.skipped")}
+            </p>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

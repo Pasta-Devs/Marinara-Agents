@@ -7,13 +7,11 @@ import {
   getLtmScopePersonaIds,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { uniqueStrings } from "../../../../../shared/src/features/agents/long-term-memory/utils.js";
-import { Button, inputClass, StatusSurface } from "../shared-controls";
+import { Button, inputClass, ModeCheckboxes, RemovableChip, StatusSurface } from "../shared-controls";
 import { selectLtmPluralForm, type LtmTranslationFunction } from "../localization";
 import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
-import type { PickerTarget } from "./TargetPicker";
 import { availabilityEntries, modes, splitBulkAvailabilityTarget, withWholeChatBranches } from "./vault-shared";
-import type { AvailabilityTargets } from "./vault-shared";
-import { Pill } from "./Pill";
+import type { AvailabilityTargets, PickerTarget } from "./vault-shared";
 
 function bulkAvailabilityTargetMatchesEntry(target: string, entry: Pick<PickerTarget, "kind" | "id">) {
   const [kind, id] = splitBulkAvailabilityTarget(target);
@@ -288,31 +286,15 @@ export function BulkAvailabilityWorkbench({
           </Button>
         </div>
       </fieldset>
-      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
-        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {modes.map((mode) => (
-            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={selectedModes.includes(mode)}
-                onChange={() =>
-                  onModesChange(
-                    selectedModes.includes(mode)
-                      ? selectedModes.filter((value) => value !== mode)
-                      : [...selectedModes, mode],
-                  )
-                }
-              />
-              {modeLabel(mode)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <ModeCheckboxes
+        modes={modes}
+        selected={selectedModes}
+        onChange={onModesChange}
+        labelFor={modeLabel}
+        legend={localizeUi("ui.longTermMemory.memoryvault.chatModes")}
+        help={localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
+        minSelected={0}
+      />
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availableIn")}</h3>
@@ -323,13 +305,13 @@ export function BulkAvailabilityWorkbench({
         {selectedPlaceLabels.length ? (
           <div className="flex flex-wrap gap-1.5" data-ltm-availability-pills>
             {selectedPlaceLabels.map(({ target, label }) => (
-              <Pill
+              <RemovableChip
                 key={target}
                 label={label}
                 onRemove={() => onTargetsChange(selectedTargets.filter((item) => item !== target))}
               >
                 {label}
-              </Pill>
+              </RemovableChip>
             ))}
           </div>
         ) : (

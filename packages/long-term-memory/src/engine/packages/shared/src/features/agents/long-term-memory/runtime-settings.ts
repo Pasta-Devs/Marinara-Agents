@@ -9,7 +9,6 @@ import type { LtmResolvedGlobalSettings } from "./schema.js";
 
 export interface ResolvedLongTermMemoryRecallSettings {
   budgetTokens?: number;
-  maxChunks?: number;
   scoreThreshold?: number;
   recallStyle: LongTermMemoryRecallStyle;
   weights: LtmRecallWeights;
@@ -32,6 +31,34 @@ function parseBudgetTokens(value: unknown) {
 
 function parseMaxChunks(value: unknown) {
   return parseSparseNumber(value, 1, 100, true);
+}
+
+/**
+ * Recall is limited by its token budget alone. A memory averages about 75 tokens in the prompt (measured on a
+ * 700-memory vault; sources are far larger), so the hints and the legacy conversion below count 80 with its title.
+ */
+export const LTM_RECALL_MEMORY_TOKENS = 80;
+/** The recall prompt's own text (framing, preamble) before any memory. */
+export const LTM_RECALL_OVERHEAD_TOKENS = 64;
+
+/** About how many memories a recall budget holds; `memoryTokens` is the vault's measured average when known. */
+export function ltmRecallBudgetMemories(budgetTokens: number, memoryTokens?: number | null) {
+  return Math.max(
+    0,
+    Math.floor((budgetTokens - LTM_RECALL_OVERHEAD_TOKENS) / (memoryTokens || LTM_RECALL_MEMORY_TOKENS)),
+  );
+}
+
+/**
+ * Recall used to stop at a memory count as well (12 by default), which the budget rarely reached. A stored count
+ * (settings file or chat) from those versions caps the budget at what that many memories cost, so an update recalls
+ * as much as before. Saving a budget removes the count.
+ */
+export function ltmRecallBudgetWithLegacyCount(budgetTokens: number, legacyCount: unknown) {
+  const count = parseMaxChunks(legacyCount);
+  if (count === undefined) return budgetTokens;
+  const forCount = Math.ceil((count * LTM_RECALL_MEMORY_TOKENS + LTM_RECALL_OVERHEAD_TOKENS) / 128) * 128;
+  return Math.min(budgetTokens, forCount);
 }
 
 /** Issue #1264: the rescaled weights cap realistic matches near 0.5, so a saved
@@ -114,12 +141,14 @@ export function resolveLongTermMemoryRecallSettings(input: {
     globalRecallStyle === "custom"
       ? resolveGlobalWeights(globalSettings, LTM_RECALL_STYLE_WEIGHTS.balanced)
       : LTM_RECALL_STYLE_WEIGHTS[globalRecallStyle];
+  const budgetTokens =
+    parseBudgetTokens(chatMetadata.longTermMemoryBudgetTokens) ??
+    parseBudgetTokens(globalSettings?.longTermMemoryBudgetTokens);
   return {
     budgetTokens:
-      parseBudgetTokens(chatMetadata.longTermMemoryBudgetTokens) ??
-      parseBudgetTokens(globalSettings?.longTermMemoryBudgetTokens),
-    maxChunks:
-      parseMaxChunks(chatMetadata.longTermMemoryMaxChunks) ?? parseMaxChunks(globalSettings?.longTermMemoryMaxChunks),
+      budgetTokens === undefined
+        ? undefined
+        : ltmRecallBudgetWithLegacyCount(budgetTokens, chatMetadata.longTermMemoryMaxChunks),
     scoreThreshold:
       parseScoreThreshold(chatMetadata.longTermMemoryScoreThreshold) ??
       parseScoreThreshold(globalSettings?.longTermMemoryScoreThreshold),

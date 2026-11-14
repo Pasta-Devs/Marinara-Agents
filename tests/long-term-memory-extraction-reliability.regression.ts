@@ -594,8 +594,15 @@ async function main() {
       subjectId: "harbor_bell_rang",
       text: "The harbor bell rang twice.",
     };
+    const staleUnit = {
+      ...validUnit,
+      id: randomUUID(),
+      subjectId: "tide_turned",
+      text: "The tide turned at dusk.",
+      sourceHash: "stale-source-hash",
+    };
     const lexical = validateLtmEvidenceUnits({
-      units: [keptUnit, unknownLinkUnit, unrelatedUnit],
+      units: [keptUnit, unknownLinkUnit, unrelatedUnit, staleUnit],
       sourceText: longSourceText,
       sourceNote,
       existingNotes: [],
@@ -604,16 +611,28 @@ async function main() {
     });
     assert.deepEqual(
       lexical.keptUnits.map((unit: any) => unit.subjectId),
-      ["observatory_gate_sealed", "harbor_bell_rang"],
+      ["observatory_gate_sealed", "brass_lamp_lit", "harbor_bell_rang"],
+      "a link to an unknown memory removes only that link",
     );
-    assert.equal(lexical.droppedCandidates.length, 1);
-    assert.match(lexical.droppedCandidates[0]!.message, /linked to a memory this extraction could not find/u);
-    assert.doesNotMatch(lexical.droppedCandidates[0]!.message, /wrong memory stream|char_missing_ally/u);
+    assert.deepEqual(
+      lexical.keptUnits[1].links.map((link: any) => link.target),
+      validUnit.links.map((link: any) => link.target),
+    );
+    assert.deepEqual(
+      lexical.diagnostics
+        .filter((diagnostic: any) => diagnostic.code === "unknown_link_target")
+        .map((diagnostic: any) => [diagnostic.severity, diagnostic.candidateIndex]),
+      [["warning", 1]],
+    );
+    assert.deepEqual(
+      lexical.droppedCandidates.map((candidate: any) => candidate.validatorCode),
+      ["source_hash_mismatch"],
+    );
     assert.deepEqual(
       lexical.diagnostics
         .filter((diagnostic: any) => diagnostic.code === "low_lexical_evidence")
         .map((diagnostic: any) => diagnostic.candidateIndex),
-      [2],
+      [1, 2],
       "past the 500th source token still overlaps, and a dropped unit carries no warning",
     );
     const { processLongTermMemorySource, processLongTermMemorySourceBatch } = await import(
@@ -1614,6 +1633,7 @@ async function main() {
       }
 
       // A failed preparation must leave the source note untouched even when a different context is requested.
+      const beforeFailedPreparation = await storage.getNote(committedSource.id);
       options.languageModel.chatComplete = async () => {
         throw new Error("provider down");
       };
@@ -1632,7 +1652,11 @@ async function main() {
       const untouched = await storage.getNote(committedSource.id);
       assert.deepEqual(untouched?.scope, committedSource.scope, "failed preparation must not rebind source scope");
       assert.equal(Object.hasOwn(untouched ?? {}, "destinationScope"), false);
-      assert.equal(untouched?.version, committedSource.version, "failed preparation must not write the source note");
+      assert.equal(
+        untouched?.version,
+        beforeFailedPreparation?.version,
+        "failed preparation must not write the source note",
+      );
 
       // A clean batch whose only non-kept unit was deduplicated must still be marked current.
       options.languageModel.chatComplete = async () => ({

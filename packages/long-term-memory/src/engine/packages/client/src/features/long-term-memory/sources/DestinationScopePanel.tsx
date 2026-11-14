@@ -1,14 +1,13 @@
-import { useId, useMemo } from "react";
-import { ChevronRight, X } from "lucide-react";
+import { useId, useMemo, useRef, type ReactNode, type SyntheticEvent } from "react";
+import { ChevronRight } from "lucide-react";
 import type { LtmMode } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
-import { InfoPopover } from "../shared-controls";
+import { InfoPopover, ModeCheckboxes, RemovableChip } from "../shared-controls";
 import { labelKeys, localizedLabel } from "../display-labels";
 import { useLtmTranslation } from "../localization";
 import {
   ALL_LTM_MODES,
   mergedDestinationScope,
-  sourceCheckboxClass,
   sourceModeLabel,
   targetDisplayLabel,
   targetFitsDestinationScope,
@@ -28,6 +27,10 @@ export function DestinationScopePanel({
   modesError = "",
   availabilityDisabled = false,
   disabled = false,
+  currentChatId,
+  reasonId,
+  action,
+  hint,
 }: {
   targets: ScopeTarget[];
   selectedIds: string[];
@@ -39,9 +42,18 @@ export function DestinationScopePanel({
   modesError?: string;
   availabilityDisabled?: boolean;
   disabled?: boolean;
+  /** The open chat: a destination that is only this chat reads "This chat". */
+  currentChatId?: string;
+  /** Id of the screen-reader-only status that says why Import waits; the waiting buttons point at it. */
+  reasonId: string;
+  /** The primary Import button, rendered first in the bar. */
+  action?: ReactNode;
+  /** The one hint line under the bar's controls. */
+  hint?: ReactNode;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   const labelId = useId();
+  const listScroll = useRef<{ scroller: Element; top: number } | null>(null);
   const sortedTargets = useMemo(
     () =>
       [...targets].sort(
@@ -52,8 +64,10 @@ export function DestinationScopePanel({
   );
   const selectedTargets = sortedTargets.filter((target) => selectedIds.includes(target.id));
   const destinationSummary = selectedTargets.length
-    ? selectedTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
-    : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
+    ? currentChatId && selectedTargets.length === 1 && selectedTargets[0]?.id === `chat:${currentChatId}`
+      ? localizeUi("ui.longTermMemory.sourcesworkspace.thisChat")
+      : selectedTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
+    : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationShort");
   const currentDestinationScope = mergedDestinationScope(selectedTargets);
   const targetExceedsLimit = (target: ScopeTarget) =>
     !selectedIds.includes(target.id) && !targetFitsDestinationScope(currentDestinationScope, target);
@@ -102,20 +116,53 @@ export function DestinationScopePanel({
     const target = sortedTargets.find((item) => item.kind === kind && placeId(item) === id);
     if (target) toggle(target.id);
   };
+  const modeSummary =
+    availabilityModes.length > 1
+      ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes
+          .map((m) => localizedLabel(m, localizeUi, labelKeys.mode))
+          .join(", ")}`
+      : mode === "all"
+        ? source === "chats" || source === "messages"
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
+          : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
+        : sourceModeLabel(mode, localizeUi);
+  // At phone width the open picker leaves the pin and sits after the list: opening scrolls to it, closing returns the
+  // list to where it was.
+  const followUnpinnedPicker = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    const details = event.currentTarget;
+    const bar = details.closest<HTMLElement>("[data-ltm-import-bar]");
+    if (!details.open) {
+      const saved = listScroll.current;
+      listScroll.current = null;
+      if (saved) saved.scroller.scrollTop = saved.top;
+      return;
+    }
+    if (!bar || getComputedStyle(bar).position !== "static") return;
+    // The first ancestor that really scrolls: the editor content in the app, the page where it is not height-bound.
+    let scroller: Element | null = bar.parentElement;
+    while (
+      scroller &&
+      !(
+        /(auto|scroll|hidden)/u.test(getComputedStyle(scroller).overflowY) &&
+        scroller.scrollHeight > scroller.clientHeight
+      )
+    )
+      scroller = scroller.parentElement;
+    scroller ??= document.scrollingElement;
+    if (scroller) listScroll.current = { scroller, top: scroller.scrollTop };
+    details.querySelector("summary")?.scrollIntoView({ block: "start" });
+  };
+  // One bar under the list: Import, where the memories will be available, one hint. It pins to the bottom of the
+  // card while the list scrolls and grows (scrolling inside itself) while the picker is open; at phone width the open
+  // picker unpins instead (see followUnpinnedPicker).
   return (
     <div
       id="ltm-destination-scope-control"
       role="group"
       aria-labelledby={labelId}
-      className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"
+      data-ltm-import-bar
+      className="z-10 flex min-h-0 flex-col gap-2 border-t border-[var(--border)] bg-[var(--card)] p-3"
     >
-      <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
-        <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
-        <InfoPopover
-          label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-          content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
-        />
-      </div>
       {disabled ? (
         <p
           id={`${labelId}-lock`}
@@ -125,93 +172,27 @@ export function DestinationScopePanel({
           {localizeUi("ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns")}
         </p>
       ) : null}
-      <fieldset
-        className="shrink-0 space-y-1.5 border-b border-[var(--border)] pb-2.5"
-        data-ltm-availability-modes-fieldset
-      >
-        <legend className="text-xs font-semibold text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.memoryvault.chatModes")}
-        </legend>
-        <div className="flex flex-wrap gap-3" data-ltm-availability-modes>
-          {ALL_LTM_MODES.map((chatMode) => {
-            const checked = availabilityModes.includes(chatMode);
-            const isLastSelected = checked && availabilityModes.length === 1;
-            return (
-              <label
-                key={chatMode}
-                className="flex min-h-11 items-center gap-2 text-xs font-medium"
-                data-ltm-availability-mode-label={chatMode}
-              >
-                <input
-                  type="checkbox"
-                  className={`${sourceCheckboxClass}${availabilityDisabled || disabled ? " opacity-50" : ""}`}
-                  data-ltm-availability-mode-checkbox={chatMode}
-                  checked={checked}
-                  disabled={isLastSelected}
-                  aria-disabled={availabilityDisabled || disabled || undefined}
-                  aria-describedby={disabled ? `${labelId}-lock` : undefined}
-                  onChange={() => {
-                    if (availabilityDisabled || disabled) return;
-                    const next = checked
-                      ? availabilityModes.filter((m) => m !== chatMode)
-                      : [...availabilityModes, chatMode];
-                    if (next.length > 0) {
-                      onAvailabilityModesChange(next);
-                    }
-                  }}
-                />
-                <span>{localizedLabel(chatMode, localizeUi, labelKeys.mode)}</span>
-              </label>
-            );
-          })}
-        </div>
-        {modesError ? (
-          <p role="alert" className="text-xs text-[var(--destructive)]">
-            {modesError}
-          </p>
-        ) : null}
-      </fieldset>
-      {selectedTargets.length ? (
-        <div className="shrink-0 space-y-2">
-          <p className="text-xs font-semibold">{localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {selectedTargets.map((target) => (
-              <span
-                key={target.id}
-                className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate">{targetDisplayLabel(target, true)}</span>
-                  {target.comment ? (
-                    <span className="block truncate text-xs text-[var(--muted-foreground)]">{target.comment}</span>
-                  ) : null}
-                </span>
-                <button
-                  type="button"
-                  aria-disabled={disabled || undefined}
-                  aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
-                    value1: targetDisplayLabel(target, true),
-                  })}
-                  className={`grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]${disabled ? " opacity-50" : ""}`}
-                  onClick={() => {
-                    if (!disabled) onChange(selectedIds.filter((id) => id !== target.id));
-                  }}
-                >
-                  <X aria-hidden="true" size="0.75rem" />
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
       <style>{`
+        [data-ltm-import-bar] {
+          position: sticky;
+          bottom: 0;
+        }
+        [data-ltm-source-column] :is(button, a, input, summary, select, [tabindex]):focus {
+          scroll-margin-bottom: 10rem;
+        }
+        [data-ltm-import-bar]:has([data-ltm-destination-scope][open]) {
+          max-height: min(36rem, 60dvh);
+          overflow-y: auto;
+        }
         [data-ltm-destination-scope] {
           display: flex;
+          flex: 1 1 12rem;
           flex-direction: column;
           min-height: 0;
+          min-width: 0;
         }
         [data-ltm-destination-scope][open] {
-          flex: 1 1 auto;
+          flex: 1 1 100%;
         }
         [data-ltm-destination-scope]::details-content {
           display: flex;
@@ -226,56 +207,122 @@ export function DestinationScopePanel({
         [data-ltm-destination-scope][open] > summary [data-ltm-destination-scope-chevron] {
           transform: rotate(90deg);
         }
+        /* A phone screen has no room for a scroll box inside the page: the open picker leaves the pin and reads in
+           the page's own scroll, its "Available in" line held at the top so one tap closes it. A narrow docked
+           column on a desktop window keeps the box. */
+        @media (max-width: 47.99rem) {
+          [data-ltm-import-bar]:has([data-ltm-destination-scope][open]) {
+            position: static;
+            max-height: none;
+            overflow: visible;
+          }
+          [data-ltm-destination-scope][open] > summary {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            /* Theme card colours are see-through; the opaque page colour under them keeps the list from showing through. */
+            background: linear-gradient(var(--card), var(--card)), var(--background);
+          }
+        }
       `}</style>
-      <details data-ltm-destination-scope className="group flex min-h-0 flex-col gap-3">
-        <summary
-          data-ltm-tab-focus
-          className="mari-editor-action flex min-h-11 shrink-0 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left [&::-webkit-details-marker]:hidden"
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-              {localizeUi("ui.longTermMemory.memoryvault.availableIn")}
+      <div className="flex flex-wrap items-center gap-2">
+        {action}
+        <details data-ltm-destination-scope className="group min-h-0 gap-3" onToggle={followUnpinnedPicker}>
+          <summary
+            data-ltm-tab-focus
+            className="mari-editor-action flex min-h-11 shrink-0 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left [&::-webkit-details-marker]:hidden"
+          >
+            <span className="shrink-0 text-xs font-medium text-[var(--marinara-editor-muted)]">
+              {localizeUi("ui.longTermMemory.memoryvault.availableIn")}:
             </span>
             <span
-              className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]"
+              className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--marinara-editor-text)]"
               data-ltm-destination-scope-summary
             >
               {destinationSummary}
             </span>
-          </span>
-          <ChevronRight aria-hidden="true" size="0.875rem" data-ltm-destination-scope-chevron className="shrink-0" />
-        </summary>
-        {sortedTargets.some(targetExceedsLimit) ? (
-          <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
+            {selectedTargets.length ? (
+              <>
+                <span aria-hidden="true" className="shrink-0 text-xs">
+                  ·
+                </span>
+                <span className="shrink-0 text-xs font-semibold" data-ltm-destination-change>
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.changeDestination")}
+                </span>
+              </>
+            ) : null}
+            <ChevronRight aria-hidden="true" size="0.875rem" data-ltm-destination-scope-chevron className="shrink-0" />
+          </summary>
+          <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
+            {modeSummary}
           </p>
-        ) : null}
-        <AvailabilityTabRail
-          chats={placeRows("chat")}
-          characters={placeRows("character")}
-          personas={placeRows("persona")}
-          selectedIds={railSelectedIds}
-          tablistLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
-          disabled={disabled}
-          onToggle={toggleRail}
-        />
-      </details>
-      {/* Always mounted, so emptying the selection is read as a change. Screen-reader only: the import bar shows
-          the same reason, and the summary above already reads "Choose a destination". */}
-      <span role="status" className="sr-only" data-ltm-destination-hint>
+          <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
+            <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
+            <InfoPopover
+              label={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+              content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
+            />
+          </div>
+          <ModeCheckboxes
+            modes={ALL_LTM_MODES}
+            selected={availabilityModes}
+            onChange={onAvailabilityModesChange}
+            labelFor={(chatMode) => localizedLabel(chatMode, localizeUi, labelKeys.mode)}
+            legend={localizeUi("ui.longTermMemory.memoryvault.chatModes")}
+            error={modesError}
+            disabled={availabilityDisabled || disabled}
+            describedBy={disabled ? `${labelId}-lock` : undefined}
+            dataPrefix="ltm-availability"
+            className="shrink-0 space-y-1.5 border-b border-[var(--border)] pb-2.5"
+            legendClassName="text-xs font-semibold text-[var(--muted-foreground)]"
+            textClassName="text-xs"
+          />
+          {selectedTargets.length ? (
+            <div className="shrink-0 space-y-2">
+              <p className="text-xs font-semibold">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.selectedLocations")}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedTargets.map((target) => (
+                  <RemovableChip
+                    key={target.id}
+                    disabled={disabled}
+                    removeLabel={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
+                      value1: targetDisplayLabel(target, true),
+                    })}
+                    onRemove={() => onChange(selectedIds.filter((id) => id !== target.id))}
+                  >
+                    <span className="block truncate">{targetDisplayLabel(target, true)}</span>
+                    {target.comment ? (
+                      <span className="block truncate text-xs text-[var(--muted-foreground)]">{target.comment}</span>
+                    ) : null}
+                  </RemovableChip>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {sortedTargets.some(targetExceedsLimit) ? (
+            <p role="note" className="shrink-0 text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.sourcesworkspace.destinationScopeLimitReached")}
+            </p>
+          ) : null}
+          <AvailabilityTabRail
+            chats={placeRows("chat")}
+            characters={placeRows("character")}
+            personas={placeRows("persona")}
+            selectedIds={railSelectedIds}
+            tablistLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+            disabled={disabled}
+            onToggle={toggleRail}
+          />
+        </details>
+      </div>
+      {hint}
+      {/* Always mounted, so emptying the selection is read as a change. Screen-reader only, and the id the waiting
+          Import buttons point at: no warning sentence and no second link beside the chip. */}
+      <span id={reasonId} role="status" className="sr-only" data-ltm-destination-hint>
         {selectedTargets.length ? null : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
       </span>
-      <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
-        {availabilityModes.length > 1
-          ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes
-              .map((m) => localizedLabel(m, localizeUi, labelKeys.mode))
-              .join(", ")}`
-          : mode === "all"
-            ? source === "chats" || source === "messages"
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
-              : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
-            : sourceModeLabel(mode, localizeUi)}
-      </p>
     </div>
   );
 }

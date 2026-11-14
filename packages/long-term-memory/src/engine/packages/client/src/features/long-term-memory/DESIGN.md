@@ -47,11 +47,6 @@ typography:
     fontFamily: "inherit"
     fontSize: "0.5625rem"
     fontWeight: 400
-  host-compact-note:
-    fontFamily: "inherit"
-    fontSize: "0.59375rem"
-    fontWeight: 400
-    lineHeight: 1.375
 rounded:
   sm: "0.375rem"
   md: "0.5rem"
@@ -97,7 +92,7 @@ components:
 
 Long-Term Memory is an Operate-mode capability inside Marinara Engine. Its visual language is inherited editor chrome: neutral, compact, state-aware, and designed to help a contributor move from source material to a trustworthy saved memory without losing context. The interface favors clear labels, small status signals, grouped records, and explicit confirmation over decorative treatment.
 
-The workspace is a responsive three-pane workstation rather than a single settings form. Memory Vault, Review Queue, and Lorebook browsing place selection and navigation in a navigator, the active record or proposed change in a workbench, and metadata, diagnostics, or extraction detail in an inspector. On narrow containers, the panes become keyboard-accessible tabs; the task stays the same while the spatial model collapses.
+The workspace is a responsive three-pane workstation rather than a single settings form. Memories, Review, and Lorebook browsing place selection and navigation in a navigator, the active record or proposed change in a workbench, and metadata, diagnostics, or extraction detail in an inspector. On narrow containers, the panes become keyboard-accessible tabs; the task stays the same while the spatial model collapses.
 
 **Key Characteristics:**
 - Evidence-led and operational, not promotional or gamified.
@@ -145,7 +140,7 @@ The palette is inherited from Marinara editor variables and neutral Engine surfa
 - **Body** (400, `0.875rem`, `1.5`): Editable memory content, descriptions, and explanatory copy.
 - **Label** (600, `0.75rem`, `1.25`): Form labels, tabs, actions, statuses, and operational metadata.
 - **Micro-label** (`micro-label`, 400-600, `0.6875rem`; `micro-label-compact`, 500-600, `0.625rem`; line height inherited): Badges, inherited-setting markers, timestamps, confidence, and compact status counts.
-- **Host-compact** (`host-compact`, 400-500, `0.5625rem`; `host-compact-note`, 400, `0.59375rem`, `1.375`): Chat Settings hints, badges, and notes, beside `micro-label-compact`. They follow the Engine's chat settings drawer, which uses `0.5625rem` for hints and badges; raising them is a design call for the critique, not a defect.
+- **Host-compact** (`host-compact`, 400-500, `0.5625rem`): Chat Settings badges, beside `micro-label-compact`. They follow the Engine's chat settings drawer, which uses `0.5625rem` for badges. Drawer hints and notes use `micro-label` (`0.6875rem`), a deliberate step above the `0.625rem` drawer labels so that muted hint text stays legible.
 
 Onboarding uses definition lists for vocabulary, unordered lists for parallel options or consequences, ordered lists for required procedures, and separate paragraphs for caveats or recommendations. This formatting reflows inside the existing `65ch` measure without changing the text box, grid, panel width, or the dense workspace type roles.
 
@@ -157,7 +152,7 @@ The top-level detail surface uses a full-height editor shell with a header, wide
 
 `LtmWorkspace` is the canonical spatial primitive. At less than `48rem` container width, panes are presented one at a time with a tab rail. From `48rem` to just below `72rem`, the navigator remains visible while workbench and inspector share the second column and switch through a top tab rail. At `72rem` and wider, the layout is three columns: navigator `17rem` to `20rem`, flexible workbench, and inspector `16rem` to `22rem`.
 
-Memory Vault and Review Queue use navigator/workbench/inspector slots. Lorebook browsing uses the same pattern with a book navigator and entry workbench. Sources and settings use tab rails for source types, availability states, or settings groups. The source scope row stacks its label above the place picker below `40rem` of the destination container and sits in one row, with the picker capped at `36rem`, from `40rem`.
+Memories and Review use navigator/workbench/inspector slots. Lorebook browsing uses the same pattern with a book navigator and entry workbench. Sources and settings use tab rails for source types, availability states, or settings groups. The source scope row stacks its label above the place picker below `40rem` of the destination container and sits in one row, with the picker capped at `36rem`, from `40rem`.
 
 On mobile, controls retain a minimum touch target of `2.75rem` (`min-h-11`); the four-item destination navigation becomes a full-width four-column rail with `min-h-14` items. Desktop-only inline row actions become explicit overflow actions on mobile. Respect `prefers-reduced-motion` by disabling smooth scrolling, transitions, and animations.
 
@@ -180,7 +175,7 @@ Use borders to define interactive or nested regions without boxing every text bl
 - **Primary:** `mari-editor-action mari-editor-action--primary`; minimum height `2.75rem`, horizontal padding around `0.75rem`, and editor accent treatment. Use for the next constructive action: save, import, accept, apply, or preview.
 - **Default:** `mari-editor-action`; use for navigation, refresh, secondary edits, and dismissal.
 - **Destructive:** `mari-editor-action mari-editor-action--danger`; use for permanent deletion, skip, clear, abort, and a reset that discards memories. Keep the label explicit.
-- **Reset to defaults (warning):** `mari-editor-action` with the strong editor border set inline and a warning icon; use for a reversible-by-hand reset that discards custom values but no memories, such as Reset settings. It sits beside, never inside, the destructive group.
+- **Reset to defaults (link):** an underlined text button (`min-h-11`) after a "·" in the Memory Settings reassurance line, with the host's destructive confirm before it runs; use for a reset that discards custom values but no memories. It is not in Troubleshooting, so Delete all data stays the one destructive control there. Focus returns to it once the reloaded forms are back.
 - **Icon buttons:** `mari-editor-action` with a fixed `2.75rem` square, a visible accessible label, and a tooltip/title where appropriate.
 - **Hover / Focus:** Use the inherited tab/action state, `var(--ring)` or `var(--marinara-editor-focus-ring)` for visible keyboard focus, and no custom motion beyond the existing transition vocabulary.
 
@@ -203,7 +198,7 @@ Use borders to define interactive or nested regions without boxing every text bl
 - **Token pills:** Memory tags and keywords use compact secondary-filled rounded rectangles with a small remove control.
 
 ### Navigation
-- **Destination rail:** Four destinations in order: Memory Vault, Review Queue, Sources, Memory Settings. Use Lucide icons and optional numeric badges for memory and pending-review counts.
+- **Destination rail:** Four destinations in order: Memories, Review, Sources, Memory Settings. Use Lucide icons and optional numeric badges for memory and pending-review counts.
 - **Desktop:** Horizontal `mari-editor-tab-rail` with scrollable tab items and `min-h-11` controls (a package rule beats the Engine's `2.25rem` tab height).
 - **Mobile:** Full-width four-column rail, sticky to the bottom with safe-area padding. Keep labels short and icons prominent.
 - **Workspace tabs:** Reuse the same tab rail for navigator/workbench/inspector changes. Implement roving tab focus with Arrow keys, Home, and End.
@@ -229,9 +224,9 @@ These patterns are implementation conventions for Long-Term Memory, not a public
 | --- | --- | --- |
 | Responsive workspace | `LtmWorkspace.tsx` | Controlled navigator/workbench/inspector slots. Container width, not viewport width, selects one-pane tabs, two-column navigation, or the full three-pane layout. Keep pane state in the caller. |
 | Actions | `shared-controls.tsx` (`Button`, `IconButton`) | Engine action styling, `2.75rem` touch targets, explicit primary/destructive tones, and an accessible label for every icon-only action. |
-| Fields | `shared-controls.tsx` (`inputClass`, `compactInputClass`, `NumberField`) | Engine field styling. Numeric values commit on blur or Enter, clamp to their declared range, and recover from invalid input. |
+| Fields | `shared-controls.tsx` (`inputClass`, `compactInputClass`, `NumberField`) | Engine field styling. Numeric values commit on blur or Enter (Memory Settings also reports a valid in-range draft while typing, `liveCommit`), clamp to their declared range, and recover from invalid input. |
 | Feedback | `shared-controls.tsx` (`StatusSurface`) | Neutral, success, warning, and danger states with polite live announcements; a warning shows an icon and the strong border; danger uses an alert. |
-| Context help | `shared-controls.tsx` (`InfoPopover`) | Hover/focus preview, click-to-pin behavior, Escape/outside-click dismissal, focus restoration, viewport-aware portal placement, and one open popover at a time. |
+| Context help | `shared-controls.tsx` (`InfoPopover`) | Only where the help holds an example or a list; one or two sentences of guidance are a muted `0.6875rem` hint under the control (`hint` on `Toggle`, `NumberField`, `SliderField`, or a `<p>` read with `aria-describedby`), never behind an (i). Hover/focus preview, click-to-pin behavior, Escape/outside-click dismissal, focus restoration, viewport-aware portal placement, and one open popover at a time. |
 | Composite focus | `shared-controls.tsx` (`ClickSurface`) | Gives a compound row one visible `focus-within` treatment without making its wrapper an extra control. |
 
 `MemoryVault.tsx`, `ReviewQueue.tsx`, and `SourcesWorkspace.tsx` are the reference consumers for `LtmWorkspace`. Prefer extending these shared package-local primitives over adding a second button, field, status, popover, or responsive-pane implementation.
@@ -239,7 +234,7 @@ These patterns are implementation conventions for Long-Term Memory, not a public
 ### Feature-coupled patterns
 
 - `SourceScopeCombobox.tsx` and `AvailabilityTabRail.tsx` are reusable for Long-Term Memory scope selection. Both render 100 places per list or memory group with a "Show N more" row. Their target kinds, selection keys, copy shape, and availability semantics are domain contracts, not generic picker APIs.
-- `LongTermMemoryNavigation.tsx` owns the fixed Vault, Review Queue, Sources, and Settings destinations and their localized labels. It is navigation for this capability, not a general tab component.
+- `LongTermMemoryNavigation.tsx` owns the fixed Memories, Review, Sources, and Settings destinations and their localized labels. It is navigation for this capability, not a general tab component.
 - `InfoPopover` consumes `useLtmTranslation` for its accessible trigger name. Keep it package-local unless another real consumer first supplies an injected localization contract.
 - `LtmWorkspace` uses browser `ResizeObserver`, `MutationObserver`, container queries, and `data-ltm-*` hooks. It is suitable for client-rendered capability surfaces, not server rendering without an explicit browser boundary.
 
@@ -259,7 +254,7 @@ Until that second consumer exists, this file and the source components above are
 
 ### Do:
 - **Do** reuse `mari-editor-shell`, `mari-editor-header`, `mari-editor-panel`, `mari-editor-field`, `mari-editor-action`, `mari-editor-tab`, and their Engine theme variables.
-- **Do** keep the three-pane model consistent across Vault, Review Queue, and Lorebook browsing, collapsing it through `LtmWorkspace` rather than inventing page-specific breakpoints.
+- **Do** keep the three-pane model consistent across Memories, Review, and Lorebook browsing, collapsing it through `LtmWorkspace` rather than inventing page-specific breakpoints.
 - **Do** make source scope, freshness, evidence, confidence, dependencies, and index health visible before destructive or irreversible actions.
 - **Do** preserve keyboard navigation, focus restoration, accessible names, live status announcements, native dialogs, and reduced-motion behavior.
 - **Do** use localization keys for all user-facing copy and allow labels to wrap or truncate safely at narrow widths.

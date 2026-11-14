@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { configurePackageRuntime, type CapabilityRuntimeHost } from "./package-runtime.js";
+import { configurePackageRuntime, logger, type CapabilityRuntimeHost } from "./package-runtime.js";
 import { activateLongTermMemoryStorage, withLongTermMemoryVaultMutation } from "./runtime.js";
 import { refreshLongTermMemoryIndexes } from "./recall/rebuild.js";
 import { resumeLtmIndexRebuild, stopLtmIndexRebuild } from "./recall/rebuild-job.js";
@@ -8,10 +8,12 @@ import {
   prepareGenerationLongTermMemory,
   recordGenerationLongTermMemoryDispatch,
 } from "./recall/generation-injection.js";
+import { hideBranchCopiesWhenBranched } from "./sources/interop.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
 import { createLtmIntakeService } from "./services/intake.js";
 import { createLtmRecallService } from "./services/recall.js";
 import { adoptLegacyLongTermMemoryAgentConfig } from "./maintenance/legacy-adoption.js";
+import { migrateLtmPackageAccess } from "./settings.js";
 import type { FastifyPluginAsync } from "fastify";
 
 let active: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
@@ -35,6 +37,9 @@ export async function activate({ api, dataDir }: ActivationContext) {
     resumeLtmIndexRebuild(activationRoot);
     resumeLtmAutoImport(activationRoot);
     await adoptLegacyLongTermMemoryAgentConfig(active.root);
+    await migrateLtmPackageAccess(active.root).catch((error: unknown) =>
+      logger.warn("[ltm] Could not move sharing to per-Agent settings: %s", String(error)),
+    );
     const releaseRoutes = await api.registerPrivilegedRoutes(createLongTermMemoryRoutes(active), {
       prefix: "/api/long-term-memory",
     });
@@ -58,6 +63,9 @@ export async function activate({ api, dataDir }: ActivationContext) {
         }) => prepareGenerationLongTermMemory({ ...input, root: active!.root }),
         recordPromptAccepted: (input: { chatId: string; receipt: unknown; messages: Array<{ content: string }> }) =>
           recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
+        // Optional for the Engine: it awaits this once a branch is fully copied, before it returns the new chat.
+        chatBranched: (input: { chatId: string; parentChatId: string }) =>
+          hideBranchCopiesWhenBranched(activationRoot, input.chatId),
         withVaultMutation: <T>(operation: () => Promise<T>) =>
           withLongTermMemoryVaultMutation(activationRoot, operation),
       },

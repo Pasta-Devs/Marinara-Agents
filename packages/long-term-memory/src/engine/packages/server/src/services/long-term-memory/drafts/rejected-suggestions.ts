@@ -201,13 +201,30 @@ export async function resolveRejectedSuggestionIdentity(
   });
 }
 
-export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = getLongTermMemoryRoot()) {
+// A read's rejections replace the unresolved ones an earlier read of the same text left, and those of the
+// drafts it superseded, so Review lists each once. A repeat keeps its record (id, recovery details).
+export async function addRejectedSuggestions(
+  draft: LtmExtractionDraft,
+  root = getLongTermMemoryRoot(),
+  supersededDrafts: LtmExtractionDraft[] = [],
+) {
   const candidates = draft.extractionOutcome?.droppedCandidates ?? [];
-  if (!candidates.length) return [];
+  const replacedHashes = new Set(
+    [draft, ...supersededDrafts].flatMap((item) =>
+      item.source.sourceNoteId === draft.source.sourceNoteId && item.source.sourceHash ? [item.source.sourceHash] : [],
+    ),
+  );
+  if (!candidates.length && !replacedHashes.size) return [];
   return withLtmVaultLock(root, async () => {
     const path = ltmRejectedSuggestionsPath(root);
     const existing = await readSuggestionsUnlocked(root);
-    const byFingerprint = new Map(existing.map((item) => [item.fingerprint, item]));
+    const replaced = (item: LtmRejectedSuggestion) =>
+      !item.identityResolution &&
+      item.source.sourceNoteId === draft.source.sourceNoteId &&
+      replacedHashes.has(item.source.sourceHash ?? "");
+    const earlier = new Map(existing.filter(replaced).map((item) => [item.fingerprint, item]));
+    if (!candidates.length && !earlier.size) return [];
+    const byFingerprint = new Map(existing.filter((item) => !replaced(item)).map((item) => [item.fingerprint, item]));
     const timestamp = nowIso();
     for (const rawCandidate of candidates) {
       const candidate = ltmExtractionDroppedCandidateSchema.parse(rawCandidate);
@@ -215,8 +232,12 @@ export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = g
       const legacyValue = fingerprint(draft.source, candidate, false);
       const current =
         byFingerprint.get(value) ??
-        [...byFingerprint.values()].find((item) => fingerprint(item.source, item.candidate, false) === legacyValue);
+        earlier.get(value) ??
+        [...byFingerprint.values(), ...earlier.values()].find(
+          (item) => fingerprint(item.source, item.candidate, false) === legacyValue,
+        );
       if (current) {
+        earlier.delete(current.fingerprint);
         const mergedCandidate =
           current.candidate.recoveryCandidate && !candidate.recoveryCandidate
             ? { ...candidate, recoveryCandidate: current.candidate.recoveryCandidate }
@@ -233,7 +254,11 @@ export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = g
         byFingerprint.set(updated.fingerprint, updated);
         continue;
       }
-      if (byFingerprint.size >= LTM_REJECTED_SUGGESTIONS_LIMIT) {
+      // A replaced rejection a later candidate may still repeat counts toward the cap; it gives up its room first.
+      const [replacedKey] = earlier.keys();
+      if (byFingerprint.size + earlier.size >= LTM_REJECTED_SUGGESTIONS_LIMIT && replacedKey !== undefined) {
+        earlier.delete(replacedKey);
+      } else if (byFingerprint.size >= LTM_REJECTED_SUGGESTIONS_LIMIT) {
         // At the cap the least recently seen suggestion makes room. A saved identity decision
         // owns remembered state and entries touched by this call are the newest, so neither is
         // evicted; the cap throws only when nothing else is left to drop.

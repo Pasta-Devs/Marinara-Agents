@@ -79,14 +79,18 @@ export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRunti
   app.get<{ Querystring: unknown }>("/drafts", async (request) =>
     draftStore.listDrafts(draftQuery.parse(request.query)),
   );
-  app.get<{ Querystring: unknown }>("/drafts/pending-count", async (request) => ({
-    count: (
-      await draftStore.listDrafts({
-        ...draftQuery.parse(request.query),
-        status: "pending",
-      })
-    ).length,
-  }));
+  app.get<{ Querystring: unknown }>("/drafts/pending-count", async (request) => {
+    const drafts = await draftStore.listDrafts({
+      ...draftQuery.parse(request.query),
+      status: "pending",
+    });
+    // `count` is the number of suggestion sources; `mutations` is the number of memories still waiting in them.
+    const mutations = drafts.reduce((total, draft) => {
+      const applied = new Set(draft.appliedMutationIds ?? []);
+      return total + draft.mutations.filter((mutation) => !applied.has(mutation.id)).length;
+    }, 0);
+    return { count: drafts.length, mutations };
+  });
   app.get<{ Querystring: unknown }>("/drafts/review", async (request) => {
     const query = draftReviewQuery.parse(request.query);
     return ltmDraftReviewResponseSchema.parse(

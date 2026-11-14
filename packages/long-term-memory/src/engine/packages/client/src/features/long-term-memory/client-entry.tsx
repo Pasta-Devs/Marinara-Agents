@@ -2,6 +2,8 @@ import React, { useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "marinara:host";
+import { ActivityCard } from "./ActivityCard";
+import { BranchHiddenTailPopup } from "./BranchHiddenTail";
 import { ChatSettings } from "./ChatSettings";
 import { LongTermMemoryDetail } from "./LongTermMemoryDetail";
 import { LtmLocalizationProvider, translateLtm, useLtmTranslation } from "./localization";
@@ -81,6 +83,10 @@ function LocalizedCapabilityRoot({ element }: { element: CapabilityElement }) {
 function CapabilityRoot({ element }: { element: CapabilityElement }) {
   const props = element.capabilityProps ?? {};
   if (element.getAttribute("view") === "settings") return <ChatSettings props={props} />;
+  // The conversation surface: nothing on screen except the pop-up a branch with hand-hidden latest messages opens.
+  if (element.getAttribute("view") === "surface") return <BranchHiddenTailPopup props={props} />;
+  // The Agent activity panel (Capability API 1.820): the same card the chat drawer shows.
+  if (element.getAttribute("view") === "activity") return <ActivityCard props={props} />;
   if (element.getAttribute("view") !== "detail") return null;
   return <LongTermMemoryDetail props={props} />;
 }

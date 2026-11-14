@@ -2,12 +2,24 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type {
   LtmGlobalSettings,
   LtmInteropPreviewResponse,
+  LtmLastInjectionResponse,
   LtmLorebookPreviewResponse,
   LtmSourceDerivedMemoriesResponse,
   LtmSourceDetailsRequest,
   LtmSourceDetailsResponse,
+  LtmStatusResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import type { ScopeTargets } from "./scope-targets";
+import type { LtmChatMemoriesMode } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+
+/** GET /chat-memories/:chatId. `reading` and `hidden` are absent on a server older than the activity card. */
+export type LtmChatMemoriesResponse = {
+  chatMemories: LtmChatMemoriesMode | null;
+  /** A background read of this chat's messages is running. */
+  reading?: boolean;
+  /** The latest messages an import hid in this chat: 1-based first and last position, and when. */
+  hidden?: { from: number; to: number; at: string } | null;
+};
 
 export function mergeSourcePreviewPages(pages: LtmInteropPreviewResponse[] | undefined) {
   const last = pages?.at(-1);
@@ -92,6 +104,7 @@ export const queryKeys = {
   rejectedSuggestions: ["long-term-memory", "rejected-suggestions"] as const,
   savedIdentityChoices: ["long-term-memory", "saved-identity-choices"] as const,
   integrity: ["long-term-memory", "integrity"] as const,
+  identityRepair: ["long-term-memory", "identity-repair"] as const,
   preview: ["long-term-memory", "import-preview"] as const,
   lorebookPreview: ["long-term-memory", "lorebook-import-preview"] as const,
   activity: ["long-term-memory", "activity"] as const,
@@ -99,11 +112,24 @@ export const queryKeys = {
   localCharactersRoot: ["long-term-memory", "local-characters"] as const,
   lastInjectionRoot: ["long-term-memory", "last-injection"] as const,
   packageReaders: ["long-term-memory", "package-readers"] as const,
+  installedPackages: ["long-term-memory", "installed-packages"] as const,
   scopeTargets: (chatId: string | null | undefined) => ["long-term-memory", "scope-targets", chatId] as const,
   localCharacters: (chatId: string | null | undefined) => ["long-term-memory", "local-characters", chatId] as const,
   lastInjection: (chatId: string | null | undefined) => ["long-term-memory", "last-injection", chatId] as const,
   chatMemories: (chatId: string | null | undefined) => ["long-term-memory", "chat-memories", chatId] as const,
+  // Under `notes`, so every memory change refreshes the count Chat Settings shows.
+  branchMemories: (chatId: string | null | undefined) =>
+    ["long-term-memory", "notes", "branch-memories", chatId] as const,
+  branchHiddenTail: (chatId: string | null | undefined) => ["long-term-memory", "branch-hidden-tail", chatId] as const,
 } as const;
+
+/** The memories a chat recalls from the other branches of its conversation, grouped by the branch they are saved to. */
+export type LtmBranchMemories = { branches: Array<{ chatId: string; name: string; noteIds: string[] }> };
+
+export const branchMemoriesPath = (chatId: string) => `/branch-memories/${encodeURIComponent(chatId)}`;
+
+/** The latest messages a branch copied hidden by hand from its parent. */
+export const branchHiddenTailPath = (chatId: string) => `/branch-hidden-tail/${encodeURIComponent(chatId)}`;
 
 export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
   [...queryKeys.scopeTargets(chatId), "all-chats"] as const;
@@ -123,6 +149,44 @@ export const scopeTargetsQueryOptions = (chatId: string | null | undefined) => (
       `/scope-targets?includeAllChats=true${chatId ? `&chatId=${encodeURIComponent(chatId)}` : ""}`,
     ),
 });
+
+/** What the last reply in a chat used; the chat's memory panel and the Vault's Graph read the same cached answer. */
+export const lastInjectionQueryOptions = (chatId: string | null | undefined) => ({
+  enabled: Boolean(chatId),
+  queryKey: queryKeys.lastInjection(chatId),
+  queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(chatId!)}`),
+});
+
+/** This chat's memories mode, a read in progress and the latest hide; shared by Chat Settings and the chat surface. */
+export const chatMemoriesQueryOptions = (chatId: string | null | undefined) => ({
+  enabled: Boolean(chatId),
+  queryKey: queryKeys.chatMemories(chatId),
+  queryFn: () => request<LtmChatMemoriesResponse>(`/chat-memories/${encodeURIComponent(chatId!)}`),
+});
+
+let indexWaitingSince: number | null = null;
+
+/**
+ * The shell's /status query. An add or an apply schedules the index rebuild 1 to 10 s later, so while the index is
+ * dirty or building the status is polled and the "Recall may miss memories" banner clears by itself, with no Reindex.
+ * Quick for a minute, then slow: an index left dirty after a restart rebuilds on the next recall, so the banner may stay.
+ */
+export const statusQueryOptions = {
+  queryKey: queryKeys.status,
+  queryFn: () => request<LtmStatusResponse>("/status"),
+  refetchInterval: (query: { state: { data?: LtmStatusResponse | undefined } }) => {
+    const indexes = query.state.data?.indexes;
+    const waiting =
+      indexes !== undefined &&
+      (indexes.rebuildState === "building" || (indexes.dirty && indexes.rebuildState !== "failed"));
+    if (!waiting) {
+      indexWaitingSince = null;
+      return false;
+    }
+    indexWaitingSince ??= Date.now();
+    return Date.now() - indexWaitingSince < 60_000 ? 1_500 : 15_000;
+  },
+};
 
 export const derivedNotesQueryOptions = (sourceNoteId: string) => ({
   queryKey: [...queryKeys.notes, "source-derived", sourceNoteId] as const,
@@ -197,6 +261,19 @@ export async function request<TResponse, TBody = unknown>(
   });
   if (!response.ok) throw await failedResponseError(response);
   return response.json() as Promise<TResponse>;
+}
+
+/** Saves the whole memory vault and settings as long-term-memory-backup.json. Throws when the export fails. */
+export async function downloadBackup(): Promise<void> {
+  const response = await requestRaw("/backup/export");
+  if (!response.ok) throw await failedResponseError(response);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "long-term-memory-backup.json";
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export async function requestHost<TResponse>(path: string, method = "GET", body?: unknown): Promise<TResponse> {

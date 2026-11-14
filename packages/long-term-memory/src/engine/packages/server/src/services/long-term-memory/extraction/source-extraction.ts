@@ -12,7 +12,11 @@ import {
   type LtmNote,
   type LtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/index.js";
-import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
+import {
+  DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_CHUNKS,
+  DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_TOKENS,
+  DEFAULT_LTM_IMPORTED_SOURCE_MODE,
+} from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { logger, type PackageLanguageModel } from "../package-runtime.js";
 import {
   boundLtmExtractionDiagnostics,
@@ -22,6 +26,7 @@ import {
   sourceHashForEvidenceUnitExtraction,
   summarizeCompiledEvidenceUnitExtraction,
   sourceMetadataForEvidenceUnitDraft,
+  type LtmExistingWorldToneContext,
   type LtmPreviousPieceContext,
 } from "./evidence-unit-extraction.js";
 import { getLtmExtractionConfig } from "./extraction-config.js";
@@ -210,7 +215,8 @@ export async function finalizeLongTermMemoryExtractionDraft(
     accounting?: LtmExtractionAccounting;
     chatId?: string;
     reviewRequired?: boolean;
-    afterWrite?: (draft: LtmExtractionDraft) => Promise<unknown>;
+    keepPendingDraftId?: string;
+    afterWrite?: (draft: LtmExtractionDraft, superseded: LtmExtractionDraft[]) => Promise<unknown>;
   },
   options: { root?: string; overlay?: Map<string, LtmNote> } = {},
 ) {
@@ -286,6 +292,7 @@ export async function finalizeLongTermMemoryExtractionDraft(
     outcome: input.outcome,
     accounting: input.accounting,
     reviewRequired: input.reviewRequired,
+    keepPendingDraftId: input.keepPendingDraftId,
     afterWrite: input.afterWrite,
   });
   if (options.overlay && projected) {
@@ -313,6 +320,7 @@ async function getExistingTypedNotes(options: {
     scope: options.scope,
     mode: options.mode,
     characterIds: options.scope.characterIds,
+    statusCompanions: false,
     maxChunks: options.maxChunks,
     maxTokens: options.maxTokens,
     index: options.index,
@@ -355,6 +363,38 @@ async function getExistingTypedNotes(options: {
     (left, right) =>
       Number(identityIds.has(right.id)) - Number(identityIds.has(left.id)) || left.id.localeCompare(right.id),
   );
+}
+
+const EXISTING_WORLD_LIMIT = 40;
+const EXISTING_TONE_LIMIT = 5;
+
+/**
+ * The scope's active world and tone memories, most recently updated first, for the model to reuse instead of
+ * restating. Only notes whose id a reused subjectId derives back to are listed (a legacy `faction_` or `rule_`
+ * world id would compile to a new note), and only ones this scope may update, so a listed id never forks.
+ */
+async function existingWorldToneContext(
+  storage: LongTermMemoryStorage,
+  scope: LtmScope,
+  mode: LtmMode,
+  allowedBuckets: readonly string[],
+): Promise<LtmExistingWorldToneContext> {
+  const pick = async (type: "world" | "tone", enabled: boolean, limit: number) =>
+    enabled
+      ? (await storage.listNotes({ type, status: "active", skipInvalid: true }))
+          .filter(
+            (note) =>
+              note.id.startsWith(`${type}_`) &&
+              note.modes.includes(mode) &&
+              canUpdateLtmScopedTarget(note.scope, scope),
+          )
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id))
+          .slice(0, limit)
+      : [];
+  return {
+    world: await pick("world", allowedBuckets.includes("world_fact"), EXISTING_WORLD_LIMIT),
+    tone: await pick("tone", allowedBuckets.includes("tone"), EXISTING_TONE_LIMIT),
+  };
 }
 
 export async function extractLongTermMemoryFromSourceNote(
@@ -470,8 +510,8 @@ async function extractLongTermMemoryFromSourceNoteInner(
         temperature: extractionConfig.temperature,
         sourceTextPolicy: "full",
         maxSourceTokens: extractionConfig.maxSourceTokens,
-        existingNoteCandidateChunks: extractionConfig.existingNoteMaxChunks,
-        existingNoteMaxTokens: extractionConfig.existingNoteMaxTokens,
+        existingNoteCandidateChunks: DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_CHUNKS,
+        existingNoteMaxTokens: DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_TOKENS,
         activePromptTemplateId: extractionConfig.activePromptTemplateId,
         usesPromptTemplate: Boolean(extractionConfig.activePromptTemplateId),
         hasPromptOverride: extractionConfig.systemPrompt !== DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[resolvedMode],
@@ -488,22 +528,22 @@ async function extractLongTermMemoryFromSourceNoteInner(
     sourceTitle: sourceNote.title,
     scope,
     mode: resolvedMode,
-    maxChunks: extractionConfig.existingNoteMaxChunks,
-    maxTokens: extractionConfig.existingNoteMaxTokens,
+    // Fixed in code: these memories only back link and relationship checks, so a stored setting is ignored.
+    maxChunks: DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_CHUNKS,
+    maxTokens: DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_TOKENS,
     trustedSubjectCatalog: options.trustedSubjectCatalog,
     index: recallIndex,
     signal: options.signal,
   });
-  // The listed events and threads must resolve as existing targets even where retrieval did not surface them.
-  const existingNotes = options.previousPiece
-    ? [
-        ...new Map(
-          [...retrievedNotes, ...options.previousPiece.events, ...options.previousPiece.threads].map((note) => [
-            note.id,
-            note,
-          ]),
-        ).values(),
-      ]
+  const existingWorldTone = await existingWorldToneContext(storage, scope, resolvedMode, allowedBuckets);
+  // The listed events, threads, world and tone memories must resolve as existing targets even where retrieval did not surface them.
+  const listedNotes = [
+    ...(options.previousPiece ? [...options.previousPiece.events, ...options.previousPiece.threads] : []),
+    ...existingWorldTone.world,
+    ...existingWorldTone.tone,
+  ];
+  const existingNotes = listedNotes.length
+    ? [...new Map([...retrievedNotes, ...listedNotes].map((note) => [note.id, note])).values()]
     : retrievedNotes;
   await recordLtmDebugEvent({
     operationId: options.operationId,
@@ -553,6 +593,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     resolveSubjectNames: true,
     trustedSubjectCatalog: options.trustedSubjectCatalog,
     previousPiece: options.previousPiece,
+    existingWorldTone,
   };
 
   const extractionPayload = await runLongTermMemoryEvidenceUnitExtraction(baseExtractionOptions);
@@ -620,6 +661,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
       parserDroppedCandidates: extractionPayload.droppedCandidates,
       preValidationDroppedCandidates: identityResolution.droppedCandidates,
       aliasChoices: identityResolution.aliasChoices,
+      minimalCharacters: identityResolution.minimalCharacters,
       sourceText,
       sourceNote,
       existingNotes: targetResolution.existingNotes,

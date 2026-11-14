@@ -1,7 +1,5 @@
 // Fixes from the review of the host de-duplication (Pasta-Devs/Marinara-Agents#1487, follow-up to #1494).
 // Run: node tests/dedup-review-fixes.regression.mjs
-// With MARINARA_ENGINE_ROOT set to an Engine checkout, it also checks that every Professor Mari picture Long-Term
-// Memory's setup guide asks for exists in that Engine.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -146,24 +144,25 @@ has(popover, /const portalContainer = useContext\(ModalPortalContext\);/u);
 has(popover, /portalContainer \?\? document\.body,\s*\);/u);
 has(popover, /"pointer-events-auto fixed /u, "the dialog layer has pointer-events: none");
 
-// --- Long-Term Memory: the setup guide asks only for pictures the Engine ships ---------------------------------
-const onboarding = read(
-  "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/Onboarding.tsx",
-);
-const sprites = new Set([
-  ...[...onboarding.matchAll(/"\/sprites\/mari\/([^"]+)"/gu)].map((match) => match[1]),
-  ...[...onboarding.matchAll(/(?:mobileSprite|desktopSprite): "([^"]+)"/gu)].map((match) => match[1]),
-]);
-assert.ok(sprites.size >= 7, "the guide's pictures were found");
-for (const sprite of sprites) lacks(sprite, /^Mari_|\.png$/u, `${sprite} is a removed painted Mari`);
-const engineRoot = process.env.MARINARA_ENGINE_ROOT;
-if (engineRoot) {
-  const spriteDir = join(resolve(engineRoot), "packages/client/public/sprites/mari");
-  assert.ok(existsSync(spriteDir), `MARINARA_ENGINE_ROOT has no ${spriteDir}`);
-  for (const sprite of sprites)
-    assert.ok(existsSync(join(spriteDir, sprite)), `the Engine has no sprites/mari/${sprite}`);
-} else {
-  console.log("Skipped the Engine sprite check: set MARINARA_ENGINE_ROOT to an Engine checkout.");
+// --- Long-Term Memory: setup draws only the archivist pictures the package ships --------------------------------
+const ltmClient = "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory";
+for (const file of ["Onboarding.tsx", "onboarding/Sprite.tsx"]) {
+  const source = read(`${ltmClient}/${file}`);
+  lacks(
+    source,
+    /\/sprites\/mari\/|basic\/pose-|Mari_[^"]*\.png/u,
+    `${file} asks the Engine for a removed Mari picture`,
+  );
 }
+has(read(`${ltmClient}/onboarding/Sprite.tsx`), /ltmOnboardingSpriteUrl\(sprite, packageVersion\)/u);
+const shippedSprites = [...read(`${ltmClient}/onboarding/assets.ts`).matchAll(/^ {2}"([a-z-]+)",$/gmu)].map(
+  (match) => match[1],
+);
+assert.ok(shippedSprites.length >= 7, "the archivist picture list was found");
+for (const sprite of shippedSprites)
+  assert.ok(
+    existsSync(join(root, "packages/long-term-memory/assets/onboarding", `${sprite}.webp`)),
+    `the package has no assets/onboarding/${sprite}.webp`,
+  );
 
 console.log("De-duplication review fixes regression passed.");

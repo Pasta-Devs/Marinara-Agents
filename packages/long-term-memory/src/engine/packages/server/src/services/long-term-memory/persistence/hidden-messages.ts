@@ -4,7 +4,8 @@ import { withLtmVaultLock } from "./vault-lock.js";
 import { getPackageRuntime, logger } from "../package-runtime.js";
 
 // The chat messages "Hide imported messages from the AI" hid, per chat and source note: only the ids the host
-// reported as changed, so turning the setting off or deleting the note shows exactly those again. It lives in config/
+// reported as changed, so turning the setting off or deleting the note shows exactly those again. A branch's copies of
+// its parent's hidden messages are listed under the parent's source note. It lives in config/
 // beside the settings; a backup restore or Delete all replaces every note, so it shows them all first.
 export type LtmHiddenMessages = Record<string, Record<string, string[]>>;
 

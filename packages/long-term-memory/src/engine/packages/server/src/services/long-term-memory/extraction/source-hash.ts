@@ -50,6 +50,11 @@ export function sourceHashForLtmSourceMaterial(input: {
   });
 }
 
+/** The text alone, without the note id, title or evidence labels a re-cut changes. */
+export function textHashForLtmSourceMaterial(input: { sourceText: string }) {
+  return stableJsonHash({ sourceText: input.sourceText.trim() });
+}
+
 export function sourceHashForLtmSourceNote(note: LtmNote) {
   const section = sourceSection(note);
   return sourceHashForLtmSourceMaterial({
@@ -75,6 +80,8 @@ export function extractionFingerprintForLtmSourceMaterial(input: {
   return ltmExtractionFingerprintSchema.parse({
     version: 3,
     sourceHash: sourceHashForLtmSourceMaterial(input),
+    // Only a chat piece's title is a label; elsewhere the title is part of what the model reads.
+    ...(input.provenance?.kind === "chat_transcript" ? { textHash: textHashForLtmSourceMaterial(input) } : {}),
     provenance: input.provenance ?? null,
     scope: normalizedScope(input.scope),
     modes,
@@ -108,7 +115,28 @@ export function extractionFingerprintsEqual(
   left: LtmExtractionFingerprint | null | undefined,
   right: LtmExtractionFingerprint | null | undefined,
 ) {
-  return Boolean(left && right && stableJsonHash(left) === stableJsonHash(right));
+  return Boolean(left && right && stableJsonHash(withoutTextHash(left)) === stableJsonHash(withoutTextHash(right)));
+}
+
+// The text hash only adds to the source hash, so fingerprints saved before it existed still compare equal.
+function withoutTextHash(fingerprint: LtmExtractionFingerprint) {
+  const { textHash: _textHash, ...rest } = fingerprint;
+  return rest;
+}
+
+/**
+ * True when the source text and extraction context are unchanged and only the labels behind the source hash moved
+ * (title, message range). A fingerprint saved without a text hash never matches, so it keeps today's behaviour.
+ */
+export function extractionFingerprintsMatchSourceText(
+  existing: LtmExtractionFingerprint | null | undefined,
+  candidate: LtmExtractionFingerprint,
+) {
+  return Boolean(
+    existing?.textHash &&
+    existing.textHash === candidate.textHash &&
+    extractionFingerprintsEqual({ ...existing, sourceHash: candidate.sourceHash }, candidate),
+  );
 }
 
 export function isLtmSourceExtractionFingerprintCurrent(note: LtmNote, fingerprint: LtmExtractionFingerprint) {

@@ -271,7 +271,7 @@ const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: longTermMemorySourceRoot,
   boundaryPath: join(repoRoot, "packages/long-term-memory/engine-boundary.json"),
   displayName: "Long-Term Memory",
-  capabilityApi: { major: 1, minor: 390 },
+  capabilityApi: { major: 1, minor: 820 },
 });
 for (const relativePath of [
   "packages/shared/src/features/agents/long-term-memory",
@@ -485,6 +485,10 @@ for (const entry of catalog.packages) {
     }
     if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(longTermMemoryBoundary.builtAgainst)) {
       throw new Error("Long-Term Memory build provenance does not match engine-boundary.json");
+    }
+    // The Agent activity card is a Capability API 1.820 slot; a manifest that lost it would drop the card silently.
+    if (!manifest.contributions?.slots?.includes("chat-activity")) {
+      throw new Error("Long-Term Memory must declare the chat-activity slot");
     }
   }
   if (manifest.id === "pixelforge") {

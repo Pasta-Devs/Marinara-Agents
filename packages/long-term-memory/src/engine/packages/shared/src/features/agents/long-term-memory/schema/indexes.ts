@@ -284,6 +284,8 @@ export const ltmStatusResponseSchema = z
           .nullable(),
         noteCount: z.number().int().min(0).nullable(),
         chunkCount: z.number().int().min(0).nullable(),
+        /** Average prompt tokens of one indexed memory; null without an index or memories. */
+        averageMemoryTokens: z.number().int().min(1).nullable().optional(),
         chunkFormatVersion: z.number().int().min(1).nullable(),
         embeddingsAvailable: z.boolean(),
         embeddedChunkCount: z.number().int().min(0),
