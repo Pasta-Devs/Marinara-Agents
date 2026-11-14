@@ -351,11 +351,15 @@ export function withoutMaskedThoughts(
 ): { segments: unknown; at(index: unknown): unknown } {
   const dropped: number[] = [];
   if (Array.isArray(raw)) {
+    // The masked thoughts go first, so a repeat is dropped only while another line that stays is left (Dottore, #2307).
+    const masked = new Set(raw.flatMap((segment, index) => (maskedThought(context, segment) ? [index] : [])));
+    let staying = raw.length - masked.size;
     let previous: unknown = after?.trim() ? after : undefined;
     raw.forEach((segment, index) => {
-      if (maskedThought(context, segment)) dropped.push(index);
-      else if (previous !== undefined && raw.length - dropped.length > 1 && repeatsPrevious(previous, segment)) {
+      if (masked.has(index)) dropped.push(index);
+      else if (previous !== undefined && staying > 1 && repeatsPrevious(previous, segment)) {
         dropped.push(index);
+        staying -= 1;
       } else previous = segment;
     });
   }

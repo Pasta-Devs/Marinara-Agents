@@ -587,6 +587,40 @@ test("#2306: a line written twice in a row stays once, and each choice's and the
     beat.choices[0]!.options.map((option) => option.segments.map((segment) => segment.text)),
     [["Hm."], ["You wait."]],
   );
+  // A branch whose repeat of its selection is followed only by a masked thought keeps that repeat: it is the line left
+  // (Dottore, #2307).
+  const masked = normalizeBeatReply(
+    {
+      segments: [{ speaker: "", text: "Rain on the glass." }],
+      choices: [
+        {
+          kind: "small",
+          at: 0,
+          options: [
+            {
+              text: "Let it go",
+              selection: { kind: "action", text: lantern },
+              segments: [
+                { speaker: "", text: `${lantern.slice(0, -1)} there.` },
+                { speaker: "Kai", text: "Don't go.", thought: true },
+              ],
+            },
+            {
+              text: "Wait",
+              selection: { kind: "action", text: "You wait." },
+              segments: [{ speaker: "", text: "Rain." }],
+            },
+          ],
+        },
+      ],
+    },
+    { ...context, state: normalizeState({ lis: { [KAI]: {} } }) },
+  );
+  assert.ok(typeof masked === "object", String(masked));
+  assert.deepEqual(
+    masked.choices[0]!.options[0]!.segments.map((segment) => segment.text),
+    [`${lantern.slice(0, -1)} there.`],
+  );
   // Another speaker, or a thought beside a spoken line, is no repeat.
   const kept = normalizeBeatReply(
     {
