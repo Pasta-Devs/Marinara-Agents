@@ -22,8 +22,8 @@ import {
   peekLtmOpenNoteId,
   peekLtmOpenOperationId,
   peekLtmOpenRequest,
-  useReadingNow,
 } from "./auto-import-status";
+import { useReadingNow } from "./auto-import-hooks";
 import { labelKeys, localizedLabel } from "./display-labels";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
 import {

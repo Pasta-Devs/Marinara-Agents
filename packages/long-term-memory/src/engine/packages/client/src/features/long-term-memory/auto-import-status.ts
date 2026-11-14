@@ -1,6 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
 import type { LtmDebugEvent } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { queryKeys, request } from "./api";
 
 /**
  * Chat Settings is its own host view and cannot navigate inside the detail view, so it leaves a short-lived request
@@ -34,15 +32,6 @@ export function clearLtmOpenRequest() {
 }
 
 type AutoImportEvents = Pick<LtmDebugEvent, "ts" | "action" | "status" | "chatId" | "source" | "counts" | "error">;
-
-/** The newest import events (the route's largest page, since manual imports share the phase); reading them needs no new server route. */
-export function useAutoImportEvents(enabled: boolean) {
-  return useQuery({
-    enabled,
-    queryKey: [...queryKeys.activity, "auto-import"],
-    queryFn: () => request<{ events: LtmDebugEvent[] }>("/debug-log?phase=import&limit=1000"),
-  });
-}
 
 /** Memories background import saved for this chat after `sinceMs` (the last recall; 0 counts them all). */
 export function autoImportSavedSince(events: AutoImportEvents[], chatId: string, sinceMs: number) {
@@ -160,14 +149,4 @@ export function isReadingNow(
   return [...latest.values()].some(
     (event) => event.status === "started" && now - Date.parse(event.ts) < READING_MAX_AGE_MS,
   );
-}
-
-/** Whether memory is reading a reply right now, from the extraction events the debug log already keeps. */
-export function useReadingNow() {
-  const events = useQuery({
-    queryKey: [...queryKeys.activity, "reading-now"],
-    queryFn: () => request<{ events: LtmDebugEvent[] }>("/debug-log?phase=extraction&limit=200"),
-    refetchInterval: 4000,
-  });
-  return events.data ? isReadingNow(events.data.events) : false;
 }

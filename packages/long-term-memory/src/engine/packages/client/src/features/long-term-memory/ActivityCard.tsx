@@ -22,8 +22,8 @@ import {
   lastRecallAt,
   markLtmCardOpen,
   requestLtmOpen,
-  useAutoImportEvents,
 } from "./auto-import-status";
+import { useAutoImportEvents } from "./auto-import-hooks";
 import type { LeftOutLimit } from "./card-problem";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation } from "./localization";

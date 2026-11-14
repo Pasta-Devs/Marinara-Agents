@@ -1,9 +1,33 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Check, Search, X } from "lucide-react";
-import { kindIcons, type IconKind } from "./display-labels";
+import {
+  BookOpen,
+  Brain,
+  Check,
+  Globe,
+  MessageSquare,
+  MessagesSquare,
+  Search,
+  User,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useLtmTranslation } from "./localization";
 import { placeListLimit } from "./scope-targets";
 import { IconButton, inputClass } from "./shared-controls";
+
+/** The one picture per kind of thing a picker row or source row can name. The host passes no avatars to packages. */
+export const kindIcons = {
+  all: Globe,
+  chat: MessageSquare,
+  group: MessagesSquare,
+  character: User,
+  local_character: User,
+  persona: UserRound,
+  lorebook: BookOpen,
+  memory: Brain,
+} as const satisfies Record<string, LucideIcon>;
+export type IconKind = keyof typeof kindIcons;
 
 /** The one row look of every picker: a check, the kind's icon, the name and an optional one-line comment. */
 export function pickerRowClass(state: { selected?: boolean; highlighted?: boolean } = {}) {

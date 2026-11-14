@@ -1,4 +1,3 @@
-import { BookOpen, Brain, Globe, MessageSquare, MessagesSquare, User, UserRound, type LucideIcon } from "lucide-react";
 import type {
   LtmExtractionDropReason,
   LtmNote,
@@ -202,19 +201,6 @@ export type ScopeKind = keyof typeof labelKeys.scopeKind;
 export function scopeKindCategories(localizeUi: LabelLocalizer): Array<[ScopeKind, string]> {
   return (Object.keys(labelKeys.scopeKind) as ScopeKind[]).map((kind) => [kind, localizeUi(labelKeys.scopeKind[kind])]);
 }
-
-/** The one picture per kind of thing a picker row or source row can name. The host passes no avatars to packages. */
-export const kindIcons = {
-  all: Globe,
-  chat: MessageSquare,
-  group: MessagesSquare,
-  character: User,
-  local_character: User,
-  persona: UserRound,
-  lorebook: BookOpen,
-  memory: Brain,
-} as const satisfies Record<string, LucideIcon>;
-export type IconKind = keyof typeof kindIcons;
 
 export function memoryLabel(note: Pick<LtmNote, "title"> | null | undefined, untitledMemory: string) {
   return note?.title?.trim() || untitledMemory;

@@ -26,7 +26,8 @@ import {
   settingsQueryOptions,
   statusQueryOptions,
 } from "../api";
-import { autoImportNeedsConnection, useAutoImportEvents } from "../auto-import-status";
+import { autoImportNeedsConnection } from "../auto-import-status";
+import { useAutoImportEvents } from "../auto-import-hooks";
 import {
   ChatMemoriesSample,
   chatMemoriesDescriptionKey,

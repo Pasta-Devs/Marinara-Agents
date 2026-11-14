@@ -64,7 +64,8 @@ import {
   lockedActionProps,
   revealFocusUnderStickyBar,
 } from "../shared-controls";
-import { humanizeLabel, kindIcons, labelKeys, localizedLabel } from "../display-labels";
+import { humanizeLabel, labelKeys, localizedLabel } from "../display-labels";
+import { kindIcons } from "../picker";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "../localization";
 import {
