@@ -80,7 +80,7 @@ export function useActivityCore(
   const retriedAt = useSyncExternalStore(subscribeRetried, () => retriedAtOf(props.chatId));
   const failure = props.chatId ? autoImportFailure(autoImportEvents.data?.events ?? [], props.chatId) : null;
   const saveFailed =
-    autoImportOn && props.chatId && failure && failure.at > retriedAt ? { cause: failure.cause } : null;
+    autoImportOn && props.chatId && failure && failure.at > retriedAt ? { cause: failure.cause, at: failure.at } : null;
   return {
     extraction,
     chatMemories,
@@ -151,7 +151,8 @@ export function useActivityCardState(props: CapabilityProps) {
     setRetrying(true);
     try {
       await request(`/chat-memories/${encodeURIComponent(props.chatId)}/retry`, "POST");
-      markRetried(props.chatId);
+      // The marker is the failed read's own server time, so the browser's clock never enters the comparison.
+      markRetried(props.chatId, saveFailed?.at);
     } catch (error) {
       toast.error(errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")));
     } finally {

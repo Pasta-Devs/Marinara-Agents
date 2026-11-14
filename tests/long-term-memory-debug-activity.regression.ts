@@ -397,6 +397,15 @@ void (async () => {
   stop();
   markRetried("chat-a", 456);
   assert.equal(heard, 1, "a stopped listener hears nothing");
+  // Try again marks the failed read's own time: that failure is hidden, a later one shows again.
+  const failedAt = Date.parse("2026-11-14T10:00:00.000Z");
+  markRetried("chat-c", failedAt);
+  assert.equal(
+    failedAt > retriedAtOf("chat-c"),
+    false,
+    "the retried failure is hidden whatever the browser clock says",
+  );
+  assert.equal(failedAt + 1 > retriedAtOf("chat-c"), true, "a later failure shows again");
   // The entry is cleared only when the last mount for the chat leaves, once.
   const surface = claimActivityOwner("chat-a");
   const panel = claimActivityOwner("chat-a");

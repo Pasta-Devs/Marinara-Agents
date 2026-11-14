@@ -245,6 +245,7 @@ export function TidyWithAi({ kind = "tidy", onBack }: { kind?: LtmAiCheckKind; o
     controller.current?.abort();
     const current = new AbortController();
     controller.current = current;
+    setMessage("");
     setPhase("checking");
     try {
       const response = await request<never>(check.previewPath, "POST", undefined, current.signal);

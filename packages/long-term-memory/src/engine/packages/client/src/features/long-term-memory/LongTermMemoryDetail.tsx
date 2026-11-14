@@ -304,7 +304,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const startTour = async () => {
     setHelpOpen(false);
     setAddOpen(false);
-    if (destinationDirty && !(await selectDestination("vault"))) return;
+    if (destinationDirty) {
+      // selectDestination does not ask when the Vault is already open, so ask here.
+      if (destination !== "vault") {
+        if (!(await selectDestination("vault"))) return;
+      } else {
+        if (!(await confirmDestinationChange(destinationLabel("vault")))) return;
+        setDestinationDirty(false);
+      }
+    }
     setTourOpen(true);
   };
   const openMemory = async (noteId: string) => {

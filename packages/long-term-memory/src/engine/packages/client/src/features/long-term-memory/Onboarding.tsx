@@ -96,7 +96,9 @@ function usePacedLines(count: number, key: string) {
     let timer: ReturnType<typeof setTimeout>;
     const step = () => {
       next += 1;
-      setPaced({ id, shown: next });
+      // Show all may already have shown every line; a late tick never takes lines back.
+      const reached = next;
+      setPaced((current) => (current.id === id ? { id, shown: Math.max(current.shown, reached) } : current));
       if (next < count) timer = setTimeout(step, 650);
     };
     timer = setTimeout(step, 350);

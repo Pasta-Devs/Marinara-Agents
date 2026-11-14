@@ -2,15 +2,15 @@
 
 ## 1.6.0 — 2026-11-14
 
-- The Memory Vault has a Graph view of your memories and their links; it works on phones and stays smooth with hundreds of memories.
+- The Memory Vault has a Graph view of your memories and their links.
 - Each reply has a Long-Term Memory card in the chat's Agent activity panel and drawer, and Activity has its own page.
 - Branched chats remember what their other branches saved and keep their latest messages visible.
 - Recall is set by one token budget, uses whole memories only and matches the meaning of the latest messages.
-- Extraction saves fewer, story-level memories, and "Newest messages to leave for later" keeps it off a scene that is still going.
+- Extraction saves fewer, story-level memories, and "Newest messages to leave for later" keeps it off a scene that is still going. Background import now reads messages only; import chat summaries by hand from Sources.
 - Sharing is set per Agent, with "Can read" and "Can add" switches.
 - New: setup and a tour with Mari, a one-time "What's new", and three AI checks for older memories ("Tidy with AI", "Link older relationships", "Find duplicate people") that change only what you tick.
 - Memory Settings, Sources, Review and the Vault are simpler to read.
-- Needs an Engine with the chat activity slot (Capability API 1.820).
+- Needs an Engine with Capability API 1.820.
 
 ## 1.5.29 — 2026-11-01
 
