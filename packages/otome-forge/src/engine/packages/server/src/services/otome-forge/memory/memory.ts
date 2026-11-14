@@ -108,7 +108,7 @@ import {
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
-import { mayKnow } from "../story/canon.js";
+import { mayKnow, storyTags, tagged, type StoryTag } from "../story/canon.js";
 import { readMemorySources } from "./sources.js";
 import {
   HEADROOM_TOKENS,
@@ -308,6 +308,8 @@ export interface RecallItem {
   title: string;
   content: string;
   order: number;
+  /** A chapter's tag on its own ("[After chapter 3]", S/story/canon.ts storyTags), for a reader that drops the title. */
+  tag?: string;
 }
 
 /**
@@ -688,10 +690,25 @@ export function createOtomeMemory({
       const saved = sideStories.length
         ? savedStory((await documents.getById(OTOME_FORGE_PACKAGE_ID, memoryId(options.runId)))?.data)
         : null;
+      // Each under its chapter's tag (S/story/canon.ts storyTags), worked out from every chapter in story order.
+      const tags = sideStories.length
+        ? storyTags(sources.filter((source) => source.kind !== "chat").map(({ id, order }) => ({ key: id, order })))
+        : new Map<string, StoryTag>();
       const told = sideStories.flatMap((source): RecallItem[] => {
         const key = JSON.stringify([source.kind, source.id]);
         const summary = saved?.covered.has(key) ? saved.summaries.get(key) : undefined;
-        return summary ? [{ id: source.id, title: source.title, content: summary, order: source.order ?? 0 }] : [];
+        const tag = tags.get(source.id);
+        return summary
+          ? [
+              {
+                id: source.id,
+                title: tagged(tag, source.title),
+                content: summary,
+                order: source.order ?? 0,
+                ...(tag ? { tag: tagged(tag, "") } : {}),
+              },
+            ]
+          : [];
       });
       // A recall pool that fails only loses its memories; the prompt still goes out with everything else.
       const recalls = await recallPool(options, sources, pooled, told).catch((error): null => {

@@ -44,7 +44,7 @@
 //   a condensed head and the newest after it, in story order), without the previous chapter's own entry, which goes in
 //   full;
 // - long-term recall (0.19.0, S/memory/recall-index.ts): between the timeline's condensed head and its newest entries
-//   ("# Canon to date, continued"), up to three earlier chapters by their original summaries ("# Earlier, in detail"),
+//   ("# Canon to date, continued"), up to three earlier chapters by their original summaries ("# Chapter 3 in detail"),
 //   in story order: only chapters the head condensed, so none the prompt has otherwise (an entry, the previous chapter
 //   or his side of it, the last Character Story), and with `cached` only those every call of its chapter may know,
 //   otherwise those this one may (mayKnow). A main chapter's plan chooses them by meaning (`chooseBy`: its arc's purpose,
@@ -100,9 +100,14 @@
 // The rules that decide what gives way are worked out within each part, so neither follows the other: each part keeps
 // its own newest summary. The fitter is given the recalls' part first (S/generation.ts), so its optional blocks give
 // way before the cached part's.
-// ponytail: the canon only some may know is told after the cached part, so it no longer sits in story order among the
-// rest; its titles say whose it is, and its blocks keep their own order. The upgrade path is naming each block's place
-// in the story (after which chapter it happened).
+// The canon only some may know is told after the cached part, so it no longer sits in story order among the rest; its
+// titles say whose it is and its tags where it falls (below), and its blocks keep their own order.
+// Every chapter goes in under its tag (storyTags, the maintainer's, 2026-11-10 and 2026-11-14: so the model knows what
+// happened when): "[Chapter 3] The Ashen Gate", "[After chapter 3] Kai's own route chapter …", "[Character Story 2,
+// after chapter 3] …", in the timeline's entries and every block above; the condensed head opens with the main
+// chapters it holds ("[Chapters 1–4]"), and an earlier chapter recalled by meaning goes as "# Chapter 3 in detail". The
+// tags are worked out each time from the keys and story order, never saved, so a story already in progress has them
+// on its next prompt, its summaries untouched; a chapter that saved its story context (0.24.2) keeps it as it was.
 // 0.20.4, a chapter's small memories (`pool`, the maintainer's: cached, and never switching between scenes): with
 // `cached`, the recall pool is everyone's in the chapter, chosen once (`memories`, which S/story/beats.ts saves on the
 // chapter) and a context of its own (`pool`), which the prompt sends as its own cached part after the story context.
@@ -123,7 +128,7 @@ import type {
 import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { birthdayOfKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
 import { figurineLiOf } from "../../../../../client/src/features/otome-forge/shared/shop.js";
-import { beatId, chapterId, isItemStoryKey, memoryId, playerId, stateId, unitId } from "../ids.js";
+import { beatId, chapterId, isItemStoryKey, mainChapterNumber, memoryId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory, RecallPoolOptions } from "../memory/memory.js";
 import { lastWords, type RecallIndex } from "../memory/recall-index.js";
 import { parseTimeline, renderTimeline, savedStory } from "../memory/timeline.js";
@@ -399,6 +404,64 @@ function lastStoryTitle({ chapter, owner, guests }: Completed, protagonist: stri
 }
 
 /**
+ * Where each completed chapter falls in the story, as the prompts tag it before its title (the maintainer's, 2026-11-10
+ * and 2026-11-14: every summary says which chapter it is, so the model knows what happened when):
+ * - a main chapter is "[Chapter 3]";
+ * - a Character Story (a Memory's, a Moment or a first-wear scene) is "[Character Story 2, after chapter 3]", numbered in
+ *   the order they were finished; a bond story, a figurine scene and a birthday scene are none (isFigurineOrBirthday);
+ * - every other chapter (route, repair, date, his side, bond, figurine, birthday) is "[After chapter 3]", or "[Before
+ *   chapter 1 ended]" while no main chapter was done when it was.
+ * `chapters` are every completed chapter's key and story order (completedChapters, or the memory's sources), oldest
+ * first. Only the prompts read the tags: titleOf and the titles saved with the memory stay as they are (they feed the
+ * summary prompt, the kit's fingerprints and the timeline's entries), so every chapter already saved is tagged too.
+ */
+export function storyTags(chapters: Iterable<{ key: string; order: number }>): Map<string, StoryTag> {
+  const tags = new Map<string, StoryTag>();
+  let stories = 0;
+  for (const { key, order } of chapters) {
+    const main = mainChapterNumber(key);
+    if (main !== null) {
+      tags.set(key, { name: `Chapter ${main}` });
+      continue;
+    }
+    // A chapter that is not a main one sorts after the main chapters done before it (completedChapters).
+    const done = Math.floor(order / 10000);
+    const where = done > 0 ? `after chapter ${done}` : "before chapter 1 ended";
+    const story = isItemStoryKey(key) && !key.startsWith("story-bond-") && !isFigurineOrBirthday(key);
+    tags.set(key, story ? { name: `Character Story ${++stories}`, where } : { where });
+  }
+  return tags;
+}
+
+/** A chapter's place in the story (storyTags): its number when it has one, and where it falls when it is no main one. */
+export interface StoryTag {
+  /** "Chapter 3", "Character Story 2". */
+  name?: string;
+  /** "after chapter 3", "before chapter 1 ended". */
+  where?: string;
+}
+
+/** `title` with its chapter's tag before it ("[Character Story 2, after chapter 3] …"), or as it is without one. */
+export function tagged(tag: StoryTag | undefined, title: string): string {
+  const text = [tag?.name, tag?.where].filter(Boolean).join(", ");
+  return text ? `[${text[0]!.toUpperCase()}${text.slice(1)}] ${title}`.trim() : title;
+}
+
+/**
+ * The main chapters a condensed head holds (the timeline's `covered` minus its entries), as its tag: "[Chapters 1–4]"
+ * (the maintainer's: the constant summary just says it covers chapters 1 to x). None while it holds no main chapter.
+ */
+function headTag(covered: Iterable<string>, entries: ReadonlySet<string>): string | undefined {
+  let upTo = 0;
+  for (const key of covered) {
+    if (entries.has(key)) continue;
+    const id = (JSON.parse(key) as [string, string])[1];
+    upTo = Math.max(upTo, mainChapterNumber(id) ?? 0);
+  }
+  return upTo > 1 ? `[Chapters 1–${upTo}]` : upTo === 1 ? "[Chapter 1]" : undefined;
+}
+
+/**
  * The chapters as memory sources (their whole canon), in the order given; one not settled yet is left out. A love
  * interest's own chapter carries its audience (see the header).
  */
@@ -639,6 +702,10 @@ export async function recallText(
     }),
   ]);
   const { chapters, protagonist } = story;
+  // Each chapter's tag (storyTags): from every completed chapter, whoever the prompt is for, so a cached story context
+  // stays the same whatever the call's cast.
+  const tags = storyTags(chapters.map(({ chapter, order }) => ({ key: chapter.key, order })));
+  const heading = (completed: Completed) => tagged(tags.get(completed.chapter.key), titleOf(completed));
   // The last Character Story goes in whoever the prompt is for (#2126, see the header).
   const lastStory = withLastStory ? lastStoryOf(chapters) : undefined;
   const known = chapters.filter((entry) => entry === lastStory || mayKnow(recall, entry.audience));
@@ -703,7 +770,7 @@ export async function recallText(
   const previous: Block[] =
     last && scenes.length
       ? [
-          { order: last.order, text: `# Previous chapter in full: ${titleOf(last)}` },
+          { order: last.order, text: `# Previous chapter in full: ${heading(last)}` },
           ...scenes.map((text) => ({ order: last.order, text })),
         ]
       : [];
@@ -729,7 +796,7 @@ export async function recallText(
     sideKeys.push(side.chapter.key);
     sideBlocks.push({
       order: last!.order,
-      text: block("The previous chapter's other side, in full", titleOf(side), text),
+      text: block("The previous chapter's other side, in full", heading(side), text),
     });
   }
 
@@ -777,10 +844,10 @@ export async function recallText(
       text: isLastStory
         ? block(
             summary ? "Last Character Story, by its summary" : "Last Character Story in full",
-            lastStoryTitle(completed, protagonist),
+            tagged(tags.get(chapter.key), lastStoryTitle(completed, protagonist)),
             content,
           )
-        : block(summary ? "Recent canon summary" : "Canon in full", titleOf(completed), content),
+        : block(summary ? "Recent canon summary" : "Canon in full", heading(completed), content),
       ...(own(chapter) ? { own: true } : {}),
     };
     if (isLastStory) lastStoryKey = key;
@@ -832,19 +899,30 @@ export async function recallText(
     });
     earlier = candidates.filter((completed) => chosen.some((entry) => entry.completed === completed));
   }
-  const head = renderTimeline({ head: timeline.head, entries: [] });
-  const rest = renderTimeline({ head: "", entries: timeline.entries }, ...without);
+  // The timeline as the prompts tell it (storyTags): the condensed head under the main chapters it holds, each entry
+  // under its chapter's tag. The saved timeline, the condensing call and What happened so far… keep it as saved.
+  const bySource = new Map(chapters.map((completed) => [sourceKey(completed), completed]));
+  const condensedTag = timeline.head.trim() ? headTag(saved?.covered ?? [], entries) : undefined;
+  const told = {
+    head: condensedTag ? `${condensedTag}\n${timeline.head.trim()}` : timeline.head,
+    entries: timeline.entries.map((entry) => {
+      const completed = bySource.get(entry.key);
+      return completed ? { ...entry, title: tagged(tags.get(completed.chapter.key), entry.title) } : entry;
+    }),
+  };
+  const head = renderTimeline({ head: told.head, entries: [] });
+  const rest = renderTimeline({ head: "", entries: told.entries }, ...without);
+  // An earlier chapter recalled by meaning, by its number when it has one: "# Chapter 3 in detail: The Ashen Gate".
+  const inDetail = (completed: Completed) => {
+    const tag = tags.get(completed.chapter.key);
+    const summary = saved!.summaries.get(sourceKey(completed))!;
+    return tag?.name
+      ? block(`${tag.name} in detail${tag.where ? `, ${tag.where}` : ""}`, titleOf(completed), summary)
+      : block("Earlier, in detail", heading(completed), summary);
+  };
   const overview = earlier.length
-    ? [
-        head,
-        ...earlier.map((completed) =>
-          block("Earlier, in detail", titleOf(completed), saved!.summaries.get(sourceKey(completed))!),
-        ),
-        rest ? `# Canon to date, continued\n${rest}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n")
-    : renderTimeline(timeline, ...without);
+    ? [head, ...earlier.map(inDetail), rest ? `# Canon to date, continued\n${rest}` : ""].filter(Boolean).join("\n\n")
+    : renderTimeline(told, ...without);
   const recalls = (result?.recalls ?? [])
     .map(({ id, title, content }) => ({ id, kind: "recall", title, content }))
     .reverse();
