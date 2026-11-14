@@ -356,6 +356,84 @@
         "bytes": 2255359
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/staging/packages/modern-life-sim/README.md"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 386
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.1",
+          "engineCommit": "54e6848c818ae4150f108ab9614986bb7610891d"
+        },
+        "id": "wordle",
+        "name": "Wordle",
+        "version": "1.0.0",
+        "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Characters cannot start a game on their own yet.",
+        "engine": {
+          "min": "2.5.1",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/wordle",
+            "aliases": [
+              "wordle",
+              "word of the day",
+              "daily word"
+            ],
+            "playerLabel": "Daily word game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "d9395b58809fdd7c120198aae10a8af411a57a3700307876a21c294930dac67c",
+            "bytes": 605
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "320104a7638bcf63aba3488b762a6babba350471947626b5fae4eabbebc88091",
+            "bytes": 63967
+          },
+          {
+            "path": "client.js",
+            "sha256": "fb5e730548faade51a25fb0c104760fab78987ca4851abc1882d3e2db9ef68c1",
+            "bytes": 159580
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/wordle.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/wordle-1.0.0.zip",
+        "sha256": "d837972fcbb96afa4664ede932eecaabde6015731c2a7a820537f536d06a94ad",
+        "bytes": 226159
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#wordle"
     }
   ]
 }

@@ -21,6 +21,13 @@
       "iconPath": "../../../store/icons/ruleset-5e-2014.webp",
       "bannerPath": "../../../store/banners/ruleset-5e-2014.webp",
       "bannerSmallPath": "../../../store/banners/ruleset-5e-2014-1200.webp"
+    },
+    "wordle": {
+      "section": "games",
+      "tagline": "One word a day, raced with your characters.",
+      "iconPath": "../../../store/icons/wordle.webp",
+      "bannerPath": "../../../store/banners/wordle.webp",
+      "bannerSmallPath": "../../../store/banners/wordle-1200.webp"
     }
   }
 }

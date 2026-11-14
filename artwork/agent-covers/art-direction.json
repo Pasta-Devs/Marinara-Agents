@@ -232,6 +232,12 @@
       "palette": "primary red, yellow, blue, green with navy"
     },
     {
+      "id": "wordle",
+      "name": "Wordle",
+      "concept": "Mari holds up a small board of blank green, yellow, and grey tiles with the last row all green, beaming at a solved puzzle beside a desk calendar curling to a new page.",
+      "palette": "tile green, tile yellow, slate grey, navy, cream"
+    },
+    {
       "id": "world-state",
       "name": "World State",
       "concept": "Mari carefully holds a glowing miniature world showing tiny mountains and ocean, with day and night, sun, moon, rain cloud, snowflake, and temperature symbols orbiting it.",

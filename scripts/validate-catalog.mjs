@@ -395,6 +395,19 @@ async function validateTurnGameRuntime(manifest, packageRoot) {
     return () => registry.delete(key);
   };
   const api = {
+    // A turn game may keep its own records (Wordle's daily results): an empty store and a route sink stand in for
+    // the host's api.runtime.persistence and registerPrivilegedRoutes, which every Engine it installs on provides.
+    runtime: {
+      persistence: {
+        documents: {
+          getById: async () => null,
+          create: async (document) => ({ ...document, revision: 1 }),
+          update: async () => null,
+        },
+      },
+      logger: { error() {} },
+    },
+    registerPrivilegedRoutes: async () => () => {},
     registerTurnGameEngine(engine) {
       if (!engine?.gameType) throw new Error(`${manifest.id} registered an invalid turn-game engine`);
       const cleanup = unregister(gameEngines, engine.gameType);

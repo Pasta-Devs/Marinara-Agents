@@ -190,6 +190,12 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     activation:
       'Install to use /blackjack manually in any Conversation chat, or type a message like "let\'s play blackjack" to open the table setup. Characters cannot start a game on their own yet.',
   },
+  // Same as Blackjack: no Chat Settings command toggle yet, but "let's play wordle" opens the setup.
+  wordle: {
+    modes: ["conversation"],
+    activation:
+      "Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Characters cannot start a game on their own yet.",
+  },
   poker: {
     modes: ["conversation"],
     activation:
