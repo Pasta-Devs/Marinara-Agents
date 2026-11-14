@@ -103,6 +103,7 @@ import {
   leaders,
   planNodes,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/chapters.ts";
+import { ensureClearAirScenes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/upset.ts";
 import { applyConfrontation } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/confrontation.ts";
 import { CAST, KAI, MIR, SOL, at, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
@@ -666,7 +667,8 @@ test("every date with him waits while it stands: 409 `locked` before anything is
   const pose = { expression: "smile", pose: "pose" };
   const photo = { li: KAI, place: "harbour", herLook: "base", hisLook: "base", his: pose, her: pose };
   for (const [path, body, params] of [
-    ["/runs/:run/dates", { li: KAI, place: "aquarium", herLook: "base", hisLook: "base", gift: "flowers" }, {}],
+    ["/runs/:run/dates/pulled", { item: "dates-0-a1", cast: [KAI], herLook: "base", gift: "flowers" }, {}],
+    ["/runs/:run/dates/pulled", { item: "dates-0-a1", cast: [MIR, KAI], herLook: "base" }, {}],
     ["/runs/:run/dates/:key/finish", {}, { key: "date-1" }],
     ["/runs/:run/read-him", { li: KAI }, {}],
     ["/runs/:run/read-him/:set/answer", { round: 0, pick: 1 }, { set: RH }],
@@ -769,7 +771,7 @@ function upsetModel(invite: () => boolean | undefined) {
   });
 }
 
-test("telling him she is upset: one message from him, who knows it, and his invitation once; Accept is the next Date Night", async () => {
+test("telling him she is upset: one message from him, who knows it, and his invitation once; Accept opens a scene to clear the air", async () => {
   const t = await world(
     "r-griev-upset1",
     {},
@@ -811,42 +813,59 @@ test("telling him she is upset: one message from him, who knows it, and his invi
   assert.ok(!user(second.messages).includes(INVITE_OFFER), "once an upset");
   assert.match(user(second.messages), UPSET);
 
-  // Accept: the upset goes, and the next Date Night with him is that evening, his place picked by the client.
+  // Accept: the upset goes, and (#2303) a scene to clear the air with him waits to be read, with no model call.
   const invited = messages[1]!.id;
+  const calls = t.calls.length;
   const accepted = await t.call("POST", "/runs/:run/phone/:li/invite", { message: invited, accept: true }, { li: KAI });
-  assert.deepEqual(accepted.body, { status: "accepted" });
+  const key = `story-clear-air-${KAI}-1`;
+  assert.deepEqual(accepted.body, { status: "accepted", scene: key });
+  assert.equal(t.calls.length, calls, "no model call");
   const kai = (await t.state()).lis[KAI]!;
   assert.deepEqual([kai.upset, typeof kai.asked], [null, "string"]);
-  assert.equal((await t.thread()).messages[1]!.invite?.status, "accepted");
-  assert.equal(
-    (await t.call("POST", "/runs/:run/phone/:li/invite", { message: invited, accept: true }, { li: KAI })).body.status,
-    "accepted",
-    "an Accept sent again answers the same",
+  assert.deepEqual((await t.thread()).messages[1]!.invite, { status: "accepted", scene: key });
+  assert.deepEqual(
+    (await t.call("POST", "/runs/:run/phone/:li/invite", { message: invited, accept: true }, { li: KAI })).body,
+    { status: "accepted", scene: key },
+    "an Accept sent again answers the same, with no second scene",
   );
-  assert.equal(
-    (await t.call("GET", "/runs/:run/dates")).body.lis.find((entry: { li: string }) => entry.li === KAI).asked,
-    true,
+  const state = await t.state();
+  assert.deepEqual(
+    Object.keys(state.chapters).filter((chapter) => chapter.startsWith("story-clear-air-")),
+    [key],
   );
-  assert.equal((await t.call("GET", "/runs/:run/play")).body.lis[KAI].asked, true);
-  const date = await t.call("POST", "/runs/:run/dates", {
-    li: KAI,
-    place: "partner-choice",
-    herLook: "base",
-    hisLook: "base",
-  });
-  assert.equal(date.status, 200, JSON.stringify(date.body));
-  const plan = t.calls.find((call) => isDatePlan(call.messages))!;
-  assert.ok(user(plan.messages).includes("CLEARING THE AIR\nKai asked the protagonist out tonight to clear the air"));
-  assert.doesNotMatch(system(plan.messages), /clear the air/);
-  const chapter = (await t.store.readDoc(chapterId(t.runId, date.body.chapter.key), normalizeChapter))!;
-  assert.equal(chapter.date?.clearAir, true);
-  // Its scenes know it, in their own last turn.
-  const scene = await t.call("POST", "/runs/:run/chapters/:key/beats/:i", {}, { key: chapter.key, i: "0" });
+  const chapter = (await t.store.readDoc(chapterId(t.runId, key), normalizeChapter))!;
+  assert.deepEqual([chapter.kind, chapter.li, chapter.nodes.length], ["story", KAI, 1]);
+  assert.match(chapter.nodes[0]!.guide, /Kai asked the protagonist out tonight to clear the air/);
+  // He asks no second time while the scene waits; reading it lets the invitation go and pays as a scene.
+  const before = state.wallet.starlight;
+  const scene = await t.call("POST", "/runs/:run/chapters/:key/beats/:i", {}, { key, i: "0" });
   assert.equal(scene.status, 200, JSON.stringify(scene.body));
   const narrator = t.calls.find((call) => /Narrate node 1 of/.test(user(call.messages)))!.messages;
   assert.ok(user(narrator).includes("Kai asked the protagonist out tonight to clear the air"));
-  assert.equal((await t.state()).lis[KAI]!.asked, null, "the evening is planned: the invitation is spent");
-  assert.equal((await t.state()).daily.affection[KAI] ?? 0, 0, "it pays as any date, when it is finished");
+  await t.call(
+    "POST",
+    "/runs/:run/chapters/:key/beats/:i/choose",
+    { choice: "choice-1", option: "option-1" },
+    { key, i: "0" },
+  );
+  const read = await t.call("POST", "/runs/:run/chapters/:key/beats/:i/read", { segment: 99 }, { key, i: "0" });
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  const after = await t.state();
+  assert.equal(after.lis[KAI]!.asked, null, "read to its end: the invitation is spent");
+  assert.equal(after.wallet.starlight, before + 30, "it pays 30 Starlight, as any scene read to its end");
+  assert.ok(after.chapters[key]!.completed);
+
+  // A story that accepted before #2303 (its evening never planned) gets the scene once, when it is next opened.
+  const old = await world("r-griev-asked2", { [KAI]: { asked: at } });
+  await ensureClearAirScenes(old.store, old.runId, await old.state());
+  await ensureClearAirScenes(old.store, old.runId, await old.state());
+  const caught = await old.state();
+  assert.deepEqual(
+    Object.keys(caught.chapters).filter((chapter) => chapter.startsWith("story-clear-air-")),
+    [key],
+  );
+  assert.equal(caught.lis[KAI]!.asked, at);
+  assert.ok(await old.store.readDoc(chapterId(old.runId, key), normalizeChapter));
 });
 
 test("Decline ends his asking; taking it back lapses a waiting invitation; his own grievance keeps him from asking", async () => {

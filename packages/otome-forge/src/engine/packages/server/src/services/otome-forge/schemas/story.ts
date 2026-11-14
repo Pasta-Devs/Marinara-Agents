@@ -204,7 +204,8 @@ export const ConfrontationSchema: ZodType<Confrontation> = z.union([
 
 /**
  * A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. #2128's `gift`,
- * #2156's `clearAir` and #2283's `second` are optional, as every date planned before them has none.
+ * #2156's `clearAir`, #2283's `second` and #2303's pulled date (`item`, `cast`, `newcomers`, `grand`) are optional, as
+ * every date planned before them has none.
  */
 const DatePlanSchema: ZodType<DatePlan> = z.object({
   li: z.string(),
@@ -217,9 +218,15 @@ const DatePlanSchema: ZodType<DatePlan> = z.object({
   keepsake: z.object({ brief: short(1200), art: PaintSchema.optional() }),
   gift: z.enum(GIFT_IDS).optional(),
   clearAir: z.literal(true).optional(),
-  // A double date's invited love interest (#2283), as planned; inviting the date's own love interest is refused when
-  // the date starts (S/minigames/date-night.ts checkDoubleDate), not read back here.
+  // A double date's invited love interest (#2283), as planned; inviting the date's own love interest was refused when
+  // the date started, not read back here.
   second: short(80).optional(),
+  // #2303: a date won from Wish: its item, everyone taken on it (`li` first), those on it for the first time, and a
+  // 5★ date's key image.
+  item: short(80).optional(),
+  cast: z.array(short(80)).min(1).max(20).optional(),
+  newcomers: z.array(short(80)).max(20).optional(),
+  grand: z.literal(true).optional(),
 });
 
 const SCORE_VALUES: ReadonlySet<unknown> = new Set([-1, 0, 1]);

@@ -638,7 +638,8 @@ export interface PhoneMessage {
    * #2156: his invitation to clear the air, on his last message of a reply while she is upset with him: waiting for her
    * Accept or Decline, or what became of it (lapsed when she took it back first).
    */
-  invite?: { status: PhoneInviteStatus };
+  /** #2303: an accepted invitation names the scene it opened. */
+  invite?: { status: PhoneInviteStatus; scene?: string };
 }
 
 export type PhoneInviteStatus = "pending" | "accepted" | "declined" | "lapsed";
@@ -809,7 +810,10 @@ export interface LiState {
    * his messages and in the story's scenes; it clears when she takes it back or accepts his invitation to clear the air.
    */
   upset: { since: string } | null;
-  /** #2156: when she accepted his invitation to clear the air: the next Date Night with him is that evening (null after). */
+  /**
+   * #2156: when she accepted his invitation to clear the air; null again once its scene is read to its end (#2303:
+   * the scene is its own, SH/dates.ts clearAirSceneKey; it was a Date Night evening before).
+   */
   asked: string | null;
   /** What the protagonist has told him (he may know it; scene cards carry it). `ref` is `${key}/${i}`. */
   disclosures: Array<{ text: string; at: string; ref: string }>;

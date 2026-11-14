@@ -90,7 +90,10 @@ const MESSAGE_DISPLAY = {
   sticker: z.union([z.enum(FACES), z.string().regex(STICKER_ID)]),
   quote: z.string().max(STORED_QUOTE_MAX),
   li: LI,
-  invite: z.object({ status: z.enum(["pending", "accepted", "declined", "lapsed"]) }),
+  invite: z.object({
+    status: z.enum(["pending", "accepted", "declined", "lapsed"]),
+    scene: z.string().max(120).optional(),
+  }),
 };
 const SESSION_DISPLAY = { name: z.string().max(SESSION_NAME_MAX), members: z.array(LI).max(LIS_MAX) };
 

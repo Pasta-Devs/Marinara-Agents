@@ -27,6 +27,7 @@ import type {
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { birthdaySceneKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
+import { clearAirSceneKey } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   GIFT_PROMPT_NAMES,
   figurineSceneKey,
@@ -43,7 +44,7 @@ import { normalizeChapter } from "../schemas/story.js";
 import { normalizeItem } from "../schemas/wish.js";
 import { recallText } from "../story/canon.js";
 import { clean, planLedger, planNodes, planTags, type ChapterDeps, type PlannedChapter } from "../story/chapters.js";
-import { storyPlanMessages } from "../prompts.js";
+import { clearAirText, storyPlanMessages } from "../prompts.js";
 import {
   STORY_NODES_MAX,
   STORY_NODES_MIN,
@@ -246,6 +247,29 @@ export function birthdayStoryChapter(
     plannedAt: at,
     connectionId: "",
     ...(gift ? { gift } : {}),
+  };
+}
+
+/**
+ * #2303: the one-node scene accepting his invitation to clear the air opens (S/phone/upset.ts), built with no model
+ * call: they meet somewhere he chooses, as the evening he asked her out on. Its title is English, as its guide is, and
+ * the player reads it in their language (C/screens/reader/ReaderControls.tsx chapterTitle).
+ */
+export function clearAirStoryChapter(unit: Pick<Unit, "id" | "name">, n: number, at: string): Chapter {
+  const { name } = unit;
+  const guide = `CLEARING THE AIR between ${name} and the protagonist: ${clearAirText(name)} They meet somewhere ${name} chooses, somewhere that says something true about ${name}. What hurt is said plainly, and what ${name} does about it is ${name}'s own; how it lands is up to the protagonist. One complete scene, with its own small turn.`;
+  return {
+    key: clearAirSceneKey(unit.id, n),
+    kind: "story",
+    li: unit.id,
+    lead: unit.id,
+    title: `Clearing the Air with ${name}`,
+    tags: [],
+    summary: "",
+    nodes: singleNode(unit.id, guide),
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "",
   };
 }
 

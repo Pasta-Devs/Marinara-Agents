@@ -11,7 +11,8 @@
 // each bubble in its speaker's accent with their name when the speaker changes and their portrait on the last of a run,
 // the protagonist's five stickers, no quote, and Close and remember for everyone in it (no affection).
 // #2156: his invitation to clear the air (PhoneMessage.invite) shows under his message with Accept and Decline while it
-// waits (POST .../invite), then what became of it; Accept opens Date Night with him (onDate).
+// waits (POST .../invite), then what became of it; Accept opens the scene that clears it in the reader (#2303,
+// onOpenScene), and the accepted card keeps a way back to it.
 // A picked sticker is attached to the message box (shown above it, with Remove), not sent: Send sends it with the words
 // in the box, or alone, as one message; picking another replaces it. A failed send that was never saved gives it back.
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
@@ -92,7 +93,8 @@ interface ThreadProps {
   /** The quote still waiting for her next message, or null once it went with one or she removed it. */
   onQuoteChange: (quote: string | null) => void;
   /** #2156: she accepted his invitation to clear the air: Date Night with him opens. */
-  onDate?: (li: string) => void;
+  /** #2303: opens the scene her acceptance of his invitation to clear the air registered. */
+  onOpenScene?: (key: string) => void;
 }
 
 export function Thread({
@@ -103,7 +105,7 @@ export function Thread({
   focusHeading,
   onBack,
   onQuoteChange,
-  onDate,
+  onOpenScene,
 }: ThreadProps) {
   const { t } = useTranslation();
   const stickers = useStickers(view, li);
@@ -533,7 +535,7 @@ export function Thread({
                 group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
               />
               {li && row.invite && row.who === "li" ? (
-                <InviteCard runKey={runKey} li={li} row={row} onDate={onDate} />
+                <InviteCard runKey={runKey} li={li} row={row} onOpenScene={onOpenScene} />
               ) : null}
               {session ? (
                 <li className="of-thread-divider">
@@ -692,12 +694,12 @@ function InviteCard({
   runKey,
   li,
   row,
-  onDate,
+  onOpenScene,
 }: {
   runKey: string;
   li: RunLiView;
   row: Row;
-  onDate?: (li: string) => void;
+  onOpenScene?: (key: string) => void;
 }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
@@ -718,11 +720,14 @@ function InviteCard({
     setBusy(true);
     setError(null);
     try {
-      await otome.post(`${phonePath(runKey, li.id)}/invite`, { message: row.id, accept });
+      const { scene } = await otome.post<{ status: string; scene?: string }>(`${phonePath(runKey, li.id)}/invite`, {
+        message: row.id,
+        accept,
+      });
       answered.current = true;
       void queryClient.invalidateQueries({ queryKey: playQueryKey(runKey) });
       void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
-      if (accept) onDate?.(li.id);
+      if (accept && scene) onOpenScene?.(scene);
     } catch (failure) {
       setError(failure);
     } finally {
@@ -760,6 +765,16 @@ function InviteCard({
               onClick={() => void answer(false)}
             >
               {t("ui.otomeForge.phone.inviteDecline")}
+            </button>
+          </div>
+        ) : status === "accepted" && row.invite!.scene && onOpenScene ? (
+          <div className="of-invite-actions">
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              onClick={() => onOpenScene(row.invite!.scene!)}
+            >
+              {t("ui.otomeForge.phone.invitePlay", { name: li.name })}
             </button>
           </div>
         ) : null}

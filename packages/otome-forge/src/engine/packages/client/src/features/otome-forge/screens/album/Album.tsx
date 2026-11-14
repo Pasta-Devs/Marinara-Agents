@@ -27,6 +27,7 @@ import {
   Quote,
   RotateCcw,
   Sticker as StickerIcon,
+  Wine,
   type LucideIcon,
 } from "lucide-react";
 import { useOtomeApi } from "../../api";
@@ -46,7 +47,8 @@ import { runPath } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
 import { albumMemories, isUnplayedMemory, type MemoryRarityFilter } from "../../lib/album-memories";
 import type { RunView } from "../../shared/api-types";
-import { useDates } from "../dates/DateNight";
+import { useDates, type DateOpen } from "../dates/DateNight";
+import { Dates } from "./Dates";
 import { albumKeepsakes } from "../../lib/album-keepsakes";
 import { PLAYER_STICKER_OWNER } from "../../shared/stickers";
 import type { AlbumImage, AlbumMemory, AlbumSticker, AlbumView } from "../../shared/wardrobe";
@@ -68,19 +70,22 @@ const ALBUM_TABS = [
   "stickers",
   "photos",
   "cards",
+  // #2303: the dates won from Wish, and Date Night's earlier evenings.
+  "dates",
   "memories",
   "timeline",
   "favorites",
   "soundtrack",
   "tells",
 ] as const;
-type AlbumTab = (typeof ALBUM_TABS)[number];
+export type AlbumTab = (typeof ALBUM_TABS)[number];
 
 const TAB_META: Record<AlbumTab, { labelKey: string; Icon: LucideIcon }> = {
   cgs: { labelKey: "ui.otomeForge.album.tabCgs", Icon: Images },
   stickers: { labelKey: "ui.otomeForge.album.tabStickers", Icon: StickerIcon },
   photos: { labelKey: "ui.otomeForge.album.tabPhotos", Icon: Camera },
   cards: { labelKey: "ui.otomeForge.album.tabCards", Icon: MoonStar },
+  dates: { labelKey: "ui.otomeForge.album.tabDates", Icon: Wine },
   memories: { labelKey: "ui.otomeForge.album.tabMemories", Icon: BookHeart },
   timeline: { labelKey: "ui.otomeForge.album.tabTimeline", Icon: CalendarHeart },
   favorites: { labelKey: "ui.otomeForge.album.tabFavorites", Icon: Quote },
@@ -122,12 +127,14 @@ interface AlbumProps {
   view: RunView;
   /** Opens a Memory's Character Story or a Moment in the reader. */
   onOpenStory: (key: string) => void;
+  /** #2303: opens a won date to plan, or an earlier evening, in the date screen. */
+  onOpenDate: (open: DateOpen) => void;
+  /** The tab it opens on (#2303: Dates, from the Dates hub, or the one left for a date); CGs by default. */
+  initialTab?: AlbumTab;
+  onTabChange?: (tab: AlbumTab) => void;
 }
 
-/** The Album tab that holds a new Memory, Moment or Snapshot (0.21.0). */
-const MEMORIES_FRESH: ReadonlySet<AlbumTab> = new Set<AlbumTab>(["memories"]);
-
-export function Album({ runKey, view, onOpenStory }: AlbumProps) {
+export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs", onTabChange }: AlbumProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const id = useId();
@@ -137,7 +144,7 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   const dates = useDates(runKey);
   const actions = useItemActions(runKey);
   const markSeen = useMarkSeen(runKey);
-  const [tab, setTab] = useState<AlbumTab>("cgs");
+  const [tab, setTab] = useState<AlbumTab>(initialTab);
   const [viewing, setViewing] = useState<number | null>(null);
   const [viewingSticker, setViewingSticker] = useState<number | null>(null);
   // A photo is held by its key: the list can change under the viewer (a photo taken elsewhere lands first), and Delete
@@ -245,6 +252,8 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
           onView={(index) => setViewingPhoto(photos[index]?.key ?? null)}
         />
       </>
+    ) : tab === "dates" ? (
+      <Dates runKey={runKey} view={view} onOpenDate={onOpenDate} />
     ) : tab === "cards" ? (
       <CardGrid runKey={runKey} view={view} cards={cards} actions={actions} onView={setViewingCard} />
     ) : tab === "memories" ? (
@@ -266,11 +275,20 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
         id={id}
         tabs={ALBUM_TABS}
         tab={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          setTab(next);
+          onTabChange?.(next);
+        }}
         label={t("ui.otomeForge.album.tabsLabel")}
         labelOf={(name) => t(TAB_META[name].labelKey)}
         iconOf={(name) => TAB_META[name].Icon}
-        fresh={data.memories.some((item) => item.new) ? MEMORIES_FRESH : undefined}
+        // A new Memory, Moment or Snapshot (0.21.0), and (#2303) a new date.
+        fresh={
+          new Set<AlbumTab>([
+            ...(data.memories.some((item) => item.new) ? (["memories"] as const) : []),
+            ...(dates.data?.pulled.some((entry) => entry.new) ? (["dates"] as const) : []),
+          ])
+        }
         freshLabel={t("ui.otomeForge.common.hasNew")}
         className="of-album-tabs"
       />

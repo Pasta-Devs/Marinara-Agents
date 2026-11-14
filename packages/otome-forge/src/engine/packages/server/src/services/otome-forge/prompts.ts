@@ -210,6 +210,7 @@ import {
   type DatePlace,
   GIFT_BEAT,
   PARTNER_CHOICE,
+  PULLED_PLACE,
   STORY_PLACE,
   stillToMend,
 } from "../../../../client/src/features/otome-forge/shared/dates.js";
@@ -2250,15 +2251,35 @@ CHOICE EFFECTS (extend each option above with an optional "effects" array):
  * P6 on a date's beat (M5): exactly one small choice whose options carry a hidden score against the date's love
  * interest's likes and dislikes (S/story/beats.ts checks it and reads it as `beat.scores`).
  */
-export function dateChoiceInstruction(unit: Pick<Unit, "name" | "bible">, goesWrong: boolean): string {
-  const likes = unit.bible?.likes.filter((like) => like.trim()).slice(0, 6) ?? [];
-  const dislikes = unit.bible?.dislikes.filter((dislike) => dislike.trim()).slice(0, 6) ?? [];
+export function dateChoiceInstruction(
+  unit: Pick<Unit, "name" | "bible">,
+  goesWrong: boolean,
+  others: ReadonlyArray<Pick<Unit, "name" | "bible">> = [],
+): string {
+  const tastes = (member: Pick<Unit, "name" | "bible">) => {
+    const likes = member.bible?.likes.filter((like) => like.trim()).slice(0, 6) ?? [];
+    const dislikes = member.bible?.dislikes.filter((dislike) => dislike.trim()).slice(0, 6) ?? [];
+    return `${likes.length ? ` ${member.name} likes: ${likes.join("; ")}.` : ""}${dislikes.length ? ` ${member.name} dislikes: ${dislikes.join("; ")}.` : ""}`;
+  };
+  // #2303: a date with several is scored for all of them together.
+  if (others.length) {
+    const together = [unit, ...others].map((member) => member.name);
+    const names = `${together.slice(0, -1).join(", ")} and ${together.at(-1)}`;
+    return `
+
+DATE CHOICE (this node is one scene of a date with ${names}):
+- Offer exactly ONE small choice in this node (2 to 4 options), at the moment where what the protagonist does matters to them. Never a big choice.
+- Give every option a "score" field beside its "text" and "selection" ("score": 1): 1 when the group would love it as a whole, 0 when it passes without much or pleases one as much as it grates on another, -1 when it grates against them. At least one option scores 1; let the options differ.
+- Judge by who each of them is, never by what is "nice" in general.${[unit, ...others].map(tastes).join("")}
+- The labels, selections and prose never name or hint at a score; a good pick should feel right, not marked.
+- ${goesWrong ? `This evening is planned to stumble: an option may open a grievance, and on a date it is at most "minor".` : "Nothing on this date opens a grievance: leave grievance out of every option's effects."}`;
+  }
   return `
 
 DATE CHOICE (this node is one scene of a date with ${unit.name}):
 - Offer exactly ONE small choice in this node (2 to 4 options), at the moment where what the protagonist does matters to ${unit.name}. Never a big choice.
 - Give every option a "score" field beside its "text" and "selection" ("score": 1): 1 when ${unit.name} would love it, 0 when it passes without much, -1 when it grates against them. At least one option scores 1; let the options differ.
-- Judge by who ${unit.name} is, never by what is "nice" in general.${likes.length ? ` ${unit.name} likes: ${likes.join("; ")}.` : ""}${dislikes.length ? ` ${unit.name} dislikes: ${dislikes.join("; ")}.` : ""}
+- Judge by who ${unit.name} is, never by what is "nice" in general.${tastes(unit)}
 - The labels, selections and prose never name or hint at a score; a good pick should feel right, not marked.
 - ${goesWrong ? `This evening is planned to stumble: an option may open a grievance, and on a date it is at most "minor".` : "Nothing on this date opens a grievance: leave grievance out of every option's effects."}`;
 }
@@ -2366,6 +2387,10 @@ export function beatMessages({
   // their card holds only what they may know (ownView), as the date's plan did.
   const date = chapter.kind === "date" ? chapter.date : undefined;
   const partner = date ? units.find((unit) => unit.id === date.li) : undefined;
+  // #2303: everyone else on a pulled date (a double date's second keeps its scenes as they were written).
+  const company = date?.cast
+    ? date.cast.slice(1).flatMap((li) => units.filter((unit) => unit.id === li))
+    : ([] as Unit[]);
   // 0.23.0: with the bond stories he has played, so the card names the rank he stands at (Dottore, #2254).
   const cardState = (li: LiId): LiState & { bondPlayed: number } => ({
     ...(date ? ownView(state, li).liState : liStateOf(state, li)),
@@ -2410,7 +2435,7 @@ export function beatMessages({
     chapter.kind === "prologue"
       ? prologueFraming(world.openingSituation, units)
       : arcFraming({ chapter, node, units, state, world });
-  const dateFraming = date && partner ? dateFramingText(date, partner, state, node) : "";
+  const dateFraming = date && partner ? dateFramingText(date, partner, state, node, company) : "";
   const side = sideWithCast(chapter, node, units);
   const opening =
     chapter.number === 1 && world.openingSituation
@@ -2479,7 +2504,7 @@ export function beatMessages({
           ...briefRule(world),
         ]
       : []),
-    date && partner ? dateChoiceInstruction(partner, date.goesWrong).trim() : "",
+    date && partner ? dateChoiceInstruction(partner, date.goesWrong, company).trim() : "",
     side ? sideWithInstruction(side, player.name || "the protagonist").trim() : "",
     // 0.28.0: the shape once more, at the end of the task turn, so the last thing the model reads before it writes is
     // the shape it must reply in. It sits before the content-contract reminder, which stays the final line; this
@@ -2522,29 +2547,39 @@ function dateFramingText(
   date: NonNullable<Chapter["date"]>,
   partner: Unit,
   state: RunState,
-  node: Pick<ChapterNode, "i">,
+  node: Pick<ChapterNode, "i" | "cg">,
+  company: readonly Unit[] = [],
 ): string {
   const mending = stillToMend(date, state.lis);
   const grievance = mending
     ? ownView(state, partner.id).liState.grievances.find((item) => item.id === mending.id)
     : undefined;
   const named = grievance ? ` (${grievance.text})` : "";
+  const names = [partner.name, ...company.map((unit) => unit.name)];
+  const together = `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
   return [
-    `This chapter is a DATE: an evening the protagonist and ${partner.name} spend together${date.placeName ? ` at ${date.placeName}` : ""}. Keep it to the two of them; anyone else passes at the edges.`,
+    company.length
+      ? `This chapter is a DATE: time the protagonist spends with ${together} together${date.placeName ? ` at ${date.placeName}` : ""}. Keep it to them; anyone else passes at the edges. Each of them is present and has something of their own in this scene.`
+      : `This chapter is a DATE: an evening the protagonist and ${partner.name} spend together${date.placeName ? ` at ${date.placeName}` : ""}. Keep it to the two of them; anyone else passes at the edges.`,
+    // #2303: a 5★ date's key image is painted from this scene, so it carries one.
+    date.grand && node.cg ? "This scene holds the date's key image: add the cg to it." : "",
     !mending
       ? ""
       : mending.by === "protagonist"
         ? `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is the one hurt, and ${partner.name} is trying to earn back the protagonist's trust. The protagonist's hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`
         : `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is trying to mend it. ${partner.name}'s hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`,
-    date.gift ? dateGiftText(date.gift, partner.name, node.i) : "",
+    date.gift ? dateGiftText(date.gift, company.length ? together : partner.name, node.i) : "",
     date.clearAir ? clearAirText(partner.name) : "",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-/** #2156: a date he asked her out on to clear the air after she told him she was upset with him (P26, and P6's dates). */
-function clearAirText(name: string): string {
+/**
+ * #2156: a date he asked her out on to clear the air after she told him she was upset with him (P26, and P6's dates);
+ * #2303: the scene that clears it now (S/items/character-story.ts clearAirStoryChapter).
+ */
+export function clearAirText(name: string): string {
   return `${name} asked the protagonist out tonight to clear the air, after the protagonist said they were upset with ${name}, and the protagonist said yes. ${name} tries to make it up in their own way; the protagonist's feelings are honest.`;
 }
 
@@ -4524,7 +4559,10 @@ export const wornOutfitLine = (person: { outfits: readonly Outfit[]; wornOutfit?
   (person.wornOutfit ? person.outfits.find((outfit) => outfit.id === person.wornOutfit)?.outfitLine : "") ?? "";
 
 /** What each place is, for the planner; it adapts the place to the world and names it in the world's language. */
-const PLACE_SPIRIT: Record<Exclude<DatePlace, typeof PARTNER_CHOICE | typeof STORY_PLACE>, string> = {
+const PLACE_SPIRIT: Record<
+  Exclude<DatePlace, typeof PARTNER_CHOICE | typeof STORY_PLACE | typeof PULLED_PLACE>,
+  string
+> = {
   aquarium: "a night aquarium after closing: blue light through the tanks, jellyfish drifting, footsteps echoing",
   rooftop: "a rooftop garden above the lights of the city: strung lanterns, potted lemon trees, the wind",
   bookshop: "an old bookshop after hours: narrow aisles, a hidden reading nook, the smell of paper",
@@ -4538,67 +4576,112 @@ const PLACE_SPIRIT: Record<Exclude<DatePlace, typeof PARTNER_CHOICE | typeof STO
 export interface DatePlanInput {
   world: World;
   player: Player;
+  /** The date's first love interest: its chapter's lead. */
   unit: Unit;
+  /** #2303: everyone else the protagonist took, in the order they were picked; none for a date with one. */
+  others?: readonly Unit[];
   /** The run's state; the planner sees it as the date's love interest may know it (ownView). */
   state: RunState;
   place: DatePlace;
   /** With place "story": the painted place the date goes to. */
   storyPlace?: Pick<PlaceArt, "name" | "tags"> | null;
+  /**
+   * #2303: a date won from Wish: its title and premise, its place (a name and English tags), how many scenes it has,
+   * and for a 5★ the scene (0-based) that holds its key image.
+   */
+  pulled?: {
+    title: string;
+    premise: string;
+    placeName: string;
+    placeTags: string;
+    scenes: number;
+    keyImage?: number;
+  } | null;
   /** The rupture's grievance this date tries to mend, or null. */
   makeItRight: Grievance | null;
   /** Recalled memory (the kit's text), or "". */
   memory: string;
   /** #2128: the gift the protagonist brings, given in scene GIFT_BEAT; absent or null leaves the prompt as before. */
   gift?: GiftId | null;
-  /** A double date: the second love interest invited along, with his bible; absent or null leaves the prompt as before. */
-  second?: Unit | null;
   /** #2156: he asked her out on this evening to clear the air (DatePlan.clearAir); absent leaves the prompt as before. */
   clearAir?: boolean;
 }
 
-/** P26: the date's plan. Messages in the plan's order (§1.7); the planner gets the full bible. */
+/** "Kai", "Kai and Sol", "Kai, Sol and Mira". */
+const andList = (names: readonly string[]) =>
+  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/** P26: the date's plan. Messages in the plan's order (§1.7); the planner gets each love interest's full bible. */
 export function datePlanMessages({
   world,
   player,
   unit,
+  others = [],
   state,
   place,
   storyPlace = null,
+  pulled = null,
   makeItRight,
   memory,
   gift = null,
   clearAir = false,
-  second = null,
 }: DatePlanInput): OtomeMessage[] {
   const name = unit.name;
-  const secondName = second?.name ?? "";
+  const group = others.length > 0;
+  const together = andList([name, ...others.map((other) => other.name)]);
+  const scenes = pulled?.scenes ?? DATE_BEATS;
+  const sceneWord = scenes === 1 ? "scene" : "scenes";
   const { liState } = ownView(state, unit.id);
   const recent = liState.angst.slice(-2);
   const known = knowsAboutYou(unit, liState);
   // The rupture is always named (it is how they are now), with who holds it; its grievance only when it came from what
   // they may know.
   const mendText = makeItRight ? liState.grievances.find((item) => item.id === makeItRight.id)?.text : undefined;
+  const guide = '{"guide": "..."}';
+  const wants = group
+    ? `what each of ${together} wants in that scene besides the protagonist, the moment where what the protagonist does matters to them`
+    : `what ${name} wants in that scene besides the protagonist, the moment where what the protagonist does matters to ${name}`;
+  const arc =
+    scenes >= DATE_BEATS
+      ? "The evening builds: arriving, the heart of it, how it ends."
+      : scenes === 1
+        ? "It is one scene: arriving, the heart of it and how it ends, all in it."
+        : "The evening builds across them: the heart of it, then how it ends.";
   const system = [
-    second
-      ? `You plan one DOUBLE DATE in an otome visual novel, a character-driven romance: an evening the protagonist spends with ${name} and ${secondName}, both of them love interests, together. A narrator writes it later as ${DATE_BEATS} scenes the player reads, each with one choice the player makes.`
-      : `You plan one DATE in an otome visual novel, a character-driven romance: an evening the protagonist and ${name} spend together. A narrator writes it later as ${DATE_BEATS} scenes the player reads, each with one choice the player makes.`,
+    group
+      ? `You plan one DATE in an otome visual novel, a character-driven romance: time the protagonist spends with ${together}, all of them love interests, together. A narrator writes it later as ${scenes} ${sceneWord} the player reads, each with one choice the player makes.`
+      : `You plan one DATE in an otome visual novel, a character-driven romance: an evening the protagonist and ${name} spend together. A narrator writes it later as ${scenes} ${sceneWord} the player reads, each with one choice the player makes.`,
     "Reply with ONLY a JSON object of this shape:",
-    '{"title": "...", "place": "...", "tags": ["..."], "goesWrong": false, "seed": {"type": "...", "text": "..."}, "beats": [{"guide": "..."}, {"guide": "..."}, {"guide": "..."}], "keepsake": {"brief": "..."}}',
+    `{"title": "...", "place": "...", "tags": ["..."], "goesWrong": false, "seed": {"type": "...", "text": "..."}, "beats": [${Array.from({ length: scenes }, () => guide).join(", ")}], "keepsake": {"brief": "..."}}`,
     "FIELDS",
-    `- title: the date's name, 2 to 6 words; it never gives away how the evening turns.`,
-    storyPlace
+    pulled
+      ? "- title: the date's title given below, exactly as written there."
+      : `- title: the date's name, 2 to 6 words; it never gives away how the evening turns.`,
+    storyPlace || pulled
       ? "- place: the name of the place given below, exactly as written there."
       : "- place: where the date happens, named as this world would name it.",
-    `- beats: exactly ${DATE_BEATS} guides in play order, 2 to 4 sentences each, for the narrator: what happens, what ${name} wants in that scene besides the protagonist, the moment where what the protagonist does matters to ${name} (the scene's one choice goes there), and where it leaves things. The evening builds: arriving, the heart of it, how it ends.`,
+    `- beats: exactly ${scenes} ${scenes === 1 ? "guide" : "guides in play order"}, 2 to 4 sentences each, for the narrator: what happens, ${wants} (the scene's one choice goes there), and where it leaves things. ${arc}`,
+    ...(pulled?.keyImage !== undefined
+      ? [
+          `- Scene ${pulled.keyImage + 1}'s guide holds the date's most memorable moment: its key image is painted there.`,
+        ]
+      : []),
     `- goesWrong: true when the evening should stumble somewhere real (an old wound brushed, a jealousy, an interruption, a misread), when the story so far gives it a reason; false for an evening that goes as hoped.`,
     `- seed: only when goesWrong: the conflict the stumble plants. type from: ${ANGST_TYPES.join(", ")}${recent.length ? `, never one of ${name}'s last kinds of angst (${recent.join(", ")})` : ""}; text: one line on it. Omit it otherwise.`,
-    `- keepsake.brief: one to four plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what the two of them are doing), never anyone's looks. ${BRIEF_STAGING}`,
+    `- keepsake.brief: one to four plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what ${group ? "they are" : "the two of them are"} doing), never anyone's looks. ${BRIEF_STAGING}`,
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. [] when none apply.`,
     "RULES",
-    second
-      ? `- The date is the protagonist, ${name} and ${secondName}; anyone else stays at the edges of it. Both love interests are present from the first scene to the last, each with something of their own in every scene, and what passes between ${name} and ${secondName} (rivalry, ease, jealousy, old friendship, being on their best behaviour) is part of the evening and moves through it.`
+    group
+      ? `- The date is the protagonist with ${together}; anyone else stays at the edges of it. Every love interest on it is present from the first scene to the last, each with something of their own in every scene, and what passes between them (rivalry, ease, jealousy, old friendship, being on their best behaviour) is part of the date and moves through it.`
       : `- The date is the protagonist and ${name}; anyone else stays at the edges of it.`,
-    `- It does not move ${name}'s stage, never reveals a secret before its stage, and never solves the story's mystery.`,
+    ...(pulled
+      ? [
+          `- Plan the date given below as it is written: its premise is what it is${pulled.keyImage !== undefined ? ", and the events it names happen on it" : ""}. It was written for whoever came, so it fits ${together} as they are.`,
+        ]
+      : []),
+    group
+      ? "- It moves no one's stage, never reveals a secret before its stage, and never solves the story's mystery."
+      : `- It does not move ${name}'s stage, never reveals a secret before its stage, and never solves the story's mystery.`,
     "- A stumble is small: at most a minor hurt, never a break-up and never a rupture.",
     ...(makeItRight
       ? [
@@ -4609,7 +4692,9 @@ export function datePlanMessages({
       : []),
     ...(gift
       ? [
-          `- THE GIFT: the protagonist brings ${GIFT_PROMPT_NAMES[gift]} and gives it to ${name} during the evening. Scene ${GIFT_BEAT + 1}'s guide holds the giving as the evening's special moment: ${name}'s reaction in their own voice, a real exchange of dialogue between them. The gift may change how the date goes, as ${name} would take it.${gift === "aphrodisiac" ? " It is an aphrodisiac, and it works: desire builds between them through the evening, and where it leads follows the CONTENT CONTRACT below." : ""}`,
+          group
+            ? `- THE GIFT: the protagonist brings ${GIFT_PROMPT_NAMES[gift]} and gives it to ${together} during the evening. Scene ${GIFT_BEAT + 1}'s guide holds the giving as the evening's special moment: each one's reaction in their own voice, a real exchange of dialogue between them. The gift may change how the date goes, as they would take it.${gift === "aphrodisiac" ? " It is an aphrodisiac, and it works: desire builds between them through the evening, and where it leads follows the CONTENT CONTRACT below." : ""}`
+            : `- THE GIFT: the protagonist brings ${GIFT_PROMPT_NAMES[gift]} and gives it to ${name} during the evening. Scene ${GIFT_BEAT + 1}'s guide holds the giving as the evening's special moment: ${name}'s reaction in their own voice, a real exchange of dialogue between them. The gift may change how the date goes, as ${name} would take it.${gift === "aphrodisiac" ? " It is an aphrodisiac, and it works: desire builds between them through the evening, and where it leads follows the CONTENT CONTRACT below." : ""}`,
         ]
       : []),
     `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
@@ -4618,11 +4703,7 @@ export function datePlanMessages({
     STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
-    otomeContentContract({
-      world,
-      lis: second ? [{ name }, { name: secondName }] : [{ name }],
-      kind: "planner",
-    }),
+    otomeContentContract({ world, lis: [unit, ...others].map((member) => ({ name: member.name })), kind: "planner" }),
   ].join("\n");
   // What each of them wears (a date's picked looks are worn before it is planned) is in protagonistBlock and in the
   // bible's appearanceLine.
@@ -4634,29 +4715,34 @@ export function datePlanMessages({
     "PROTAGONIST",
     protagonistBlock(player),
     "",
-    `THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)`,
+    group
+      ? "ON THE DATE (full bibles; this date moves no one's stage)"
+      : "THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)",
     bibleBlock(unit, state, [unit.id], world),
     ...(known ? [known] : []),
-    ...(second
+    ...others.flatMap((other) => ["", bibleBlock(other, state, [other.id], world)]),
+    ...(group
       ? [
           "",
-          "THE INVITED LOVE INTEREST (full bible; the date moves neither stage)",
-          bibleBlock(second, state, [second.id], world),
-          "",
-          "A DOUBLE DATE is not a threesome by default: the evening reads as the three of them together, and what passes between the two love interests is part of it. Under Explicit Heat it may turn intimate between the three of them when the evening and where they all stand call for it, as the content contract sets the Heat; below Explicit Heat it stays warm and non-sexual.",
+          "A DATE FOR SEVERAL is not a group sex scene by default: it reads as all of them together, and what passes between the love interests is part of it. Under Explicit Heat it may turn intimate between them when the date and where they all stand call for it, as the content contract sets the Heat; below Explicit Heat it stays warm and non-sexual.",
         ]
       : []),
     "",
     "THE PLACE",
-    place === PARTNER_CHOICE
-      ? `${name} chooses where to take the protagonist: somewhere that says something true about ${name} (from their likes, their past or their world).`
-      : place === STORY_PLACE
-        ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
-        : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
+    pulled
+      ? `"${pulled.placeName}"${pulled.placeTags.trim() ? ` (${pulled.placeTags.trim()})` : ""}. The date goes there: keep that name for it.`
+      : place === PARTNER_CHOICE
+        ? `${name} chooses where to take the protagonist: somewhere that says something true about ${name} (from their likes, their past or their world).`
+        : place === STORY_PLACE
+          ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
+          : place === PULLED_PLACE
+            ? ""
+            : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
     [
+      pulled ? `\nTHE DATE (won from Wish; plan it as written)\n"${pulled.title}": ${pulled.premise.trim()}` : "",
       makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
       gift
-        ? `\nTHE GIFT\nThe protagonist brings ${name} ${GIFT_PROMPT_NAMES[gift]}, given in scene ${GIFT_BEAT + 1}.`
+        ? `\nTHE GIFT\nThe protagonist brings ${group ? together : name} ${GIFT_PROMPT_NAMES[gift]}, given in scene ${GIFT_BEAT + 1}.`
         : "",
       clearAir ? `\nCLEARING THE AIR\n${clearAirText(name)}` : "",
     ]
@@ -4665,8 +4751,8 @@ export function datePlanMessages({
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
-    second
-      ? `Plan the double date with ${name} (id ${unit.id}) and ${secondName} (id ${second.id}) now.`
+    group
+      ? `Plan the date with ${[unit, ...others].map((member) => `${member.name} (id ${member.id})`).join(", ")} now.`
       : `Plan the date with ${name} (id ${unit.id}) now.`,
     otomeContractReminder("planner"),
   ]

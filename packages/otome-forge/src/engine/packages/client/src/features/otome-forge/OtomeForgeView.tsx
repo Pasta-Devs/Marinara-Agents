@@ -28,7 +28,7 @@ import { localDay } from "./lib/tap-mood";
 import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
 import { ClawMachine } from "./screens/dates/ClawMachine";
-import { DateNight } from "./screens/dates/DateNight";
+import { DateNight, type DateOpen } from "./screens/dates/DateNight";
 import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
 import { PhotoShoot } from "./screens/dates/PhotoShoot";
 import { ReadHim } from "./screens/dates/ReadHim";
@@ -39,7 +39,7 @@ import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
 import { PhoneScreen, useDailyMessages, type PhoneOpen } from "./screens/phone/PhoneScreen";
 import { StickerNotice } from "./screens/phone/StickerPicker";
 import { Placeholder } from "./screens/Placeholder";
-import { Album } from "./screens/album/Album";
+import { Album, type AlbumTab } from "./screens/album/Album";
 import { Reader } from "./screens/reader/Reader";
 import { RemindMe } from "./screens/remind/RemindMe";
 import {
@@ -65,7 +65,6 @@ const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>([
   "read-him",
   "read-me",
   "tarot",
-  "date-night",
   "photo-shoot",
   "claw",
 ]);
@@ -97,8 +96,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const [datesLi, setDatesLi] = useState<string | null>(null);
   // Whose looks the Wardrobe shows, kept while the reader plays a look's first-wear scene (Back returns to them).
   const [wardrobeOwner, setWardrobeOwner] = useState<WardrobeOwner>();
-  // Date Night reads its scenes full-stage, as the reader does: the top bar steps aside while it says so.
+  // A date reads its scenes full-stage, as the reader does: the top bar steps aside while it says so.
   const [immersive, setImmersive] = useState(false);
+  // #2303: the date the date screen shows (a won date to plan, or an earlier one by its key), and where Back leads.
+  const [dateOpen, setDateOpen] = useState<DateOpen | null>(null);
+  const [dateReturn, setDateReturn] = useState<ScreenId>("album");
+  // The Album's tab when it opens: Dates from the Dates hub's card (#2303), else its own first.
+  const [albumTab, setAlbumTab] = useState<AlbumTab | undefined>();
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -123,6 +127,10 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // where the forge screen alone would have left him on the colour his name hashes to.
   useSampledAccents(view ?? undefined);
 
+  // Kept while the Album opens a date or a story and Back returns to it; anywhere else, the Album opens as usual.
+  useEffect(() => {
+    if (screen !== "album" && screen !== "date-night" && screen !== "reader") setAlbumTab(undefined);
+  }, [screen]);
   // Once the active story has loaded, its opening screen stays put: a world that finishes forging while the player
   // watches keeps showing the forge (its cast and paint offer) until they choose to go Home.
   const phase = view?.forge.phase ?? null;
@@ -237,6 +245,12 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setReaderReturn(from);
     setChosen("reader");
   };
+  /** #2303: the date screen, for a won date or an earlier date, from Wish or the Album. */
+  const openDate = (from: ScreenId) => (open: DateOpen) => {
+    setDateOpen(open);
+    setDateReturn(from);
+    go("date-night");
+  };
   // Begin opens the prologue in the reader (its chapter is made at once, its scene written as it opens), then Home;
   // once the prologue is read, Begin goes straight Home. A failure stays on the forge (ForgeProgress shows it).
   const begin = async () => {
@@ -259,7 +273,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     "read-him": "dates",
     "read-me": "dates",
     tarot: "dates",
-    "date-night": "dates",
+    "date-night": dateReturn,
     "photo-shoot": "dates",
     claw: "dates",
     home: activeRun ? undefined : "picker",
@@ -318,6 +332,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         view={view}
         onOpenStory={openReader("wish")}
         onOpenWardrobe={() => go("wardrobe")}
+        onOpenDate={(item) => openDate("wish")({ item })}
       />
     ) : screen === "wardrobe" && activeRun && view ? (
       <Wardrobe
@@ -328,7 +343,14 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOwnerChange={setWardrobeOwner}
       />
     ) : screen === "album" && activeRun && view ? (
-      <Album runKey={activeRun} view={view} onOpenStory={openReader("album")} />
+      <Album
+        runKey={activeRun}
+        view={view}
+        onOpenStory={openReader("album")}
+        onOpenDate={openDate("album")}
+        initialTab={albumTab}
+        onTabChange={setAlbumTab}
+      />
     ) : screen === "home" && activeRun && view ? (
       <HomeScreen
         runKey={activeRun}
@@ -345,10 +367,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         view={view}
         open={phoneOpen}
         onOpenChange={setPhoneOpen}
-        onDate={(li) => {
-          setDatesLi(li);
-          go("date-night");
-        }}
+        onOpenScene={openReader("phone")}
       />
     ) : screen === "remind" && activeRun && view ? (
       <RemindMe
@@ -368,6 +387,10 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
           setDatesLi(li);
           go(activity);
         }}
+        onOpenDates={() => {
+          setAlbumTab("dates");
+          go("album");
+        }}
       />
     ) : screen === "read-him" && activeRun && view && datesOf ? (
       <ReadHim runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
@@ -375,12 +398,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       <ReadMe runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : screen === "tarot" && activeRun && view && datesOf ? (
       <TarotNight runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
-    ) : screen === "date-night" && activeRun && view && datesOf ? (
+    ) : screen === "date-night" && activeRun && view && dateOpen ? (
       <DateNight
         runKey={activeRun}
         view={view}
-        li={datesOf}
-        onExit={() => go("dates")}
+        open={dateOpen}
+        onExit={() => go(dateReturn)}
+        exitLabel={t("ui.otomeForge.reader.backTo", { screen: t(SCREEN_NAME_KEYS[dateReturn]) })}
         onHome={() => go("home")}
         onImmersive={setImmersive}
       />
@@ -430,11 +454,12 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
               : screen === "read-him" ||
                   screen === "read-me" ||
                   screen === "tarot" ||
-                  screen === "date-night" ||
                   screen === "photo-shoot" ||
                   screen === "claw"
                 ? `${screen}-${datesOf?.id ?? ""}`
-                : screen
+                : screen === "date-night"
+                  ? `date-${dateOpen ? JSON.stringify(dateOpen) : ""}`
+                  : screen
         }
         ref={screenRef}
         className="of-screen"

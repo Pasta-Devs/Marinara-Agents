@@ -129,6 +129,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { birthdayOfKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
+import { clearAirOfKey } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { figurineLiOf } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { beatId, chapterId, isItemStoryKey, mainChapterNumber, memoryId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory, RecallPoolOptions } from "../memory/memory.js";
@@ -340,7 +341,10 @@ export async function completedChapters(
     if (!chapter || chapter.kind === "prologue" || chapter.prestige) continue;
     const own = audienceOf(chapter);
     const others = new Map([...cast].filter(([li]) => !own?.includes(li)));
-    const cameos = own ? await cameosOf(store, runId, chapter, others) : [];
+    // #2303: a pulled date taken with several is known to everyone who went on it, as a cameo knows a story.
+    const company =
+      chapter.kind === "date" ? (chapter.date?.cast ?? []).filter((li) => others.has(li)) : ([] as string[]);
+    const cameos = own ? [...company, ...(await cameosOf(store, runId, chapter, others))] : [];
     const audience = own ? [...own, ...cameos] : undefined;
     const guests = cameos.map((li) => cast.get(li)!);
     chapters.push({
@@ -377,7 +381,8 @@ function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }):
  * counts toward the story (the maintainer's, 2026-11-10): it is never the last Character Story, and the hand-off looks
  * past it. It stays its love interest's own chapter, as before.
  */
-const isFigurineOrBirthday = (key: string) => figurineLiOf(key) !== null || birthdayOfKey(key) !== null;
+const isFigurineOrBirthday = (key: string) =>
+  figurineLiOf(key) !== null || birthdayOfKey(key) !== null || clearAirOfKey(key) !== null;
 
 /**
  * The last Character Story (#2126, see the header): the newest completed `story-<itemId>` chapter (a Memory's
