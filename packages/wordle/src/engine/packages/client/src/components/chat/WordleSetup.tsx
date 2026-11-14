@@ -88,7 +88,12 @@ export function WordleSetup({ chatId, open, onClose }: Props) {
     const streaks: Record<string, number> = {};
     for (const seatId of [humanSeatId, ...botCharacterIds]) streaks[seatId] = standings[seatId]?.before ?? 0;
     start.mutate(
-      { gameType: "wordle", config: { day, chatId, streaks }, botCharacterIds, humanFirst: true },
+      {
+        gameType: "wordle",
+        config: { day, chatId, streaks, players: botCharacterIds },
+        botCharacterIds,
+        humanFirst: true,
+      },
       { onSuccess: () => onClose() },
     );
   };

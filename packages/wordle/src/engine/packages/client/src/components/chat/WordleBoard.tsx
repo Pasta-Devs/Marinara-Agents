@@ -5,7 +5,7 @@
 // query, which package server events refetch). Renders the viewer's own board
 // with letters, every other seat's board as colors only, a guess field with an
 // on-screen keyboard, and the result once the day's game is over.
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Delete, X } from "lucide-react";
 import type { WordleMark, WordlePublicRow } from "../../../../shared/src/features/turn-games/wordle/types";
 import { useChatStore } from "../../stores/chat.store";
@@ -16,11 +16,14 @@ interface Props {
   chatId: string;
 }
 
-const MARK_CLASS: Record<WordleMark, string> = {
-  correct: "border-emerald-600 bg-emerald-600 text-white",
-  present: "border-amber-500 bg-amber-500 text-white",
-  absent: "border-zinc-500 bg-zinc-500 text-white",
+// Inline colors: a turn-game package ships no stylesheet, so only classes the Engine's own stylesheet already has
+// would apply, and it has no grey tile (bg-zinc-500 rendered see-through in a live Engine).
+const MARK_STYLE: Record<WordleMark, CSSProperties> = {
+  correct: { backgroundColor: "#059669", borderColor: "#059669", color: "#fff" },
+  present: { backgroundColor: "#f59e0b", borderColor: "#f59e0b", color: "#fff" },
+  absent: { backgroundColor: "#71717a", borderColor: "#71717a", color: "#fff" },
 };
+const TYPED_STYLE: CSSProperties = { borderColor: "color-mix(in srgb, var(--foreground) 50%, transparent)" };
 const MARK_LABEL: Record<WordleMark, string> = {
   correct: "right spot",
   present: "wrong spot",
@@ -29,11 +32,13 @@ const MARK_LABEL: Record<WordleMark, string> = {
 const KEY_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 
 function Tile({ letter, mark, size }: { letter: string | null; mark: WordleMark | null; size: "lg" | "sm" }) {
-  const dims = size === "lg" ? "h-10 w-10 text-lg" : "h-3.5 w-3.5 text-[0.5rem]";
-  const tone = mark ? MARK_CLASS[mark] : letter ? "border-[var(--foreground)]/50" : "border-[var(--border)]";
+  // Explicit radii: the Engine theme makes rounded-sm large enough to turn the small tiles into circles.
+  const dims =
+    size === "lg" ? "h-9 w-9 rounded-[4px] text-base sm:h-10 sm:w-10" : "h-3.5 w-3.5 rounded-[2px] text-[0.5rem]";
   return (
     <div
-      className={`flex ${dims} items-center justify-center rounded-sm border-2 font-bold uppercase ${tone}`}
+      className={`flex ${dims} items-center justify-center border-2 border-[var(--border)] font-bold uppercase`}
+      style={mark ? MARK_STYLE[mark] : letter ? TYPED_STYLE : undefined}
       aria-label={mark ? `${letter ? `${letter.toUpperCase()}, ` : ""}${MARK_LABEL[mark]}` : (letter ?? "empty")}
       role="img"
     >
@@ -116,7 +121,7 @@ export function WordleBoard({ chatId }: Props) {
       ? winners.length
         ? `🏆 ${winners.map((seat) => (seat.seatId === view.yourSeatId ? "You" : seat.displayName)).join(" & ")} ${
             winners.length > 1 || winners[0]?.seatId === view.yourSeatId ? "win" : "wins"
-          } with ${winners[0]?.rows.length} guesses!`
+          } with ${winners[0]?.rows.length} ${winners[0]?.rows.length === 1 ? "guess" : "guesses"}!`
         : "Nobody found it today."
       : you?.status === "solved"
         ? `You got it in ${you.rows.length}! Waiting for the others…`
@@ -179,7 +184,7 @@ export function WordleBoard({ chatId }: Props) {
 
         {/* Everyone else: colors only until the game is over */}
         {others.length > 0 && (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+          <div className="flex max-w-md flex-wrap justify-center gap-x-3 gap-y-2">
             {others.map((seat) => (
               <div
                 key={seat.seatId}
@@ -221,7 +226,7 @@ export function WordleBoard({ chatId }: Props) {
             }}
           >
             <input
-              value={draft}
+              value={draft.toUpperCase()}
               onChange={(event) => type(event.target.value)}
               disabled={disabled}
               maxLength={view.wordLength}
@@ -229,8 +234,8 @@ export function WordleBoard({ chatId }: Props) {
               autoCapitalize="characters"
               spellCheck={false}
               aria-label="Your guess"
-              placeholder="guess"
-              className="w-28 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-center text-sm font-bold uppercase tracking-widest text-[var(--foreground)]"
+              placeholder="type a word"
+              className="w-32 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-center text-sm font-bold text-[var(--foreground)]"
             />
             <button
               type="submit"
@@ -251,9 +256,8 @@ export function WordleBoard({ chatId }: Props) {
                       type="button"
                       onClick={() => type(draft + letter)}
                       disabled={disabled}
-                      className={`h-8 w-6 rounded text-xs font-semibold uppercase disabled:opacity-50 sm:w-7 ${
-                        mark ? MARK_CLASS[mark] : "bg-[var(--muted)] text-[var(--foreground)]"
-                      }`}
+                      className="h-8 w-6 rounded bg-[var(--muted)] text-xs font-semibold text-[var(--foreground)] uppercase disabled:opacity-50 sm:w-7"
+                      style={mark ? MARK_STYLE[mark] : undefined}
                     >
                       {letter}
                     </button>

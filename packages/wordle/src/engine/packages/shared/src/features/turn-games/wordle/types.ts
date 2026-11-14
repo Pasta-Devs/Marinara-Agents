@@ -20,6 +20,8 @@ export interface WordleConfig {
   chatId: string;
   /** Each seat's daily streak going into today, from the package's record. Only flavors what characters know. */
   streaks: Record<string, number>;
+  /** The characters to seat beside the human (null = every seat the Engine offers; empty = a solo game). */
+  players: string[] | null;
 }
 
 /** correct = right letter, right spot; present = in the word elsewhere; absent = not in the word (or no more of it). */
@@ -104,4 +106,5 @@ export const wordleConfigSchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   chatId: z.string().max(200),
   streaks: z.record(z.string(), z.number().int().min(0)),
+  players: z.array(z.string()).nullable(),
 });

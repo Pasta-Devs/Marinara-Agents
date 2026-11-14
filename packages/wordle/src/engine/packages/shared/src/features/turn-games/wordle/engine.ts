@@ -178,6 +178,16 @@ function listNames(names: string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
+/** A name and its verb. The Engine calls a human seat with no persona "You", which takes the plural form. */
+function says(name: string, singular: string, plural: string): string {
+  return `${name} ${name === "You" ? plural : singular}`;
+}
+
+function winLine(winners: string[], best: number | null): string {
+  const who = winners.length > 1 ? `${listNames(winners)} share the win` : says(winners[0]!, "wins", "win");
+  return `${who} with ${best} guess${best === 1 ? "" : "es"}.`;
+}
+
 // ── prompt builders ─────────────────────────────────────────────────────────
 
 /** What a seat's own clues have established, in plain words. */
@@ -271,9 +281,7 @@ function buildSpectatorSummary(state: WordleState): string {
     lines.push(`Today's Wordle (${state.config.day}) is over. The word was ${state.answer.toUpperCase()}.`);
     const winners = state.winnerSeatIds.map((id) => nameOf(state, id));
     if (winners.length) {
-      lines.push(
-        `${listNames(winners)} ${winners.length > 1 ? "share the win" : "wins"} with ${bestGuessCount(state)} guesses.`,
-      );
+      lines.push(winLine(winners, bestGuessCount(state)));
     } else {
       lines.push("Nobody found it.");
     }
@@ -286,7 +294,7 @@ function buildSpectatorSummary(state: WordleState): string {
     lines.push(`- ${nameOf(state, id)}: ${resultText(board)}${rows ? ` ${rows}` : ""}`);
   }
   const current = currentSeatOf(state);
-  if (current) lines.push(`${nameOf(state, current)} is guessing next.`);
+  if (current) lines.push(`${says(nameOf(state, current), "is", "are")} guessing next.`);
   return lines.join("\n");
 }
 
@@ -342,7 +350,7 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
   hiddenInformation: true,
 
   defaultConfig() {
-    return { day: wordleUtcDay(Date.now()), chatId: "", streaks: {} };
+    return { day: wordleUtcDay(Date.now()), chatId: "", streaks: {}, players: null };
   },
 
   // ponytail: the only impure method, reading the clock once at game start so a client cannot ask for tomorrow's
@@ -359,13 +367,25 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
         }
       }
     }
-    const parsed = wordleConfigSchema.safeParse({ day, chatId, streaks });
-    return parsed.success ? parsed.data : { day, chatId: "", streaks: {} };
+    const players = Array.isArray(input.players)
+      ? [...new Set(input.players.filter((id): id is string => typeof id === "string" && id.length <= 200))].slice(
+          0,
+          WORDLE_MAX_PLAYERS - 1,
+        )
+      : null;
+    const parsed = wordleConfigSchema.safeParse({ day, chatId, streaks, players });
+    return parsed.success ? parsed.data : { day, chatId: "", streaks: {}, players: null };
   },
 
   setup(config, seats: Seat[], seed) {
+    // The Engine seats every character in the chat when the start request names none, so the characters actually
+    // chosen ride in the config: an empty list is a solo game, and a character who already played today stays out.
+    const chosen = config.players ? new Set(config.players) : null;
     const human = seats.filter((seat) => seat.kind === "human");
-    const ordered = [...human, ...seats.filter((seat) => seat.kind !== "human")];
+    const ordered = [
+      ...human,
+      ...seats.filter((seat) => seat.kind !== "human" && (!chosen || chosen.has(seat.seatId))),
+    ];
     const seatNames: Record<string, string> = {};
     const boards: Record<string, WordleBoard> = {};
     for (const seat of ordered) {
@@ -440,7 +460,7 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
       {
         type: "guess",
         seatId,
-        message: `${name} guesses ${tiles(marks)} (${count}/${WORDLE_MAX_GUESSES}).`,
+        message: `${says(name, "guesses", "guess")} ${tiles(marks)} (${count}/${WORDLE_MAX_GUESSES}).`,
         data: { marks, guessNumber: count },
       },
     ];
@@ -448,11 +468,11 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
       events.push({
         type: "solved",
         seatId,
-        message: `${name} solves today's Wordle in ${count}!`,
+        message: `${says(name, "solves", "solve")} today's Wordle in ${count}!`,
         data: { guesses: count },
       });
     } else if (board.status === "failed") {
-      events.push({ type: "failed", seatId, message: `${name} runs out of guesses.` });
+      events.push({ type: "failed", seatId, message: `${says(name, "runs", "run")} out of guesses.` });
     }
     setLastAction(s, seatId, `guesses ${tiles(marks)}`);
 
@@ -471,8 +491,7 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
       events.push({
         type: "game_over",
         message: winners.length
-          ? `${listNames(winners)} ${winners.length > 1 ? "share the win" : "wins"} with ${best} guesses. ` +
-            `The word was ${s.answer.toUpperCase()}.`
+          ? `${winLine(winners, best)} The word was ${s.answer.toUpperCase()}.`
           : `Nobody found today's word. It was ${s.answer.toUpperCase()}.`,
       });
     } else {

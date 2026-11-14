@@ -114,6 +114,20 @@ const daily = async (chatId, day) => {
   });
 }
 
+// ── only the chosen characters sit down ──────────────────────────────────────
+{
+  // The Engine seats every character when the start request names none, so the choice rides in the config.
+  const seatsOf = (config) => fresh(config).order;
+  assert.deepEqual(seatsOf({ players: [] }), ["you"], "an empty list is a solo game");
+  assert.deepEqual(seatsOf({ players: ["mari"] }), ["you", "mari"]);
+  assert.deepEqual(seatsOf({}), ["you", "bo", "mari"], "no list seats everyone, as before");
+  assert.deepEqual(engine.normalizeConfig({ day: TODAY, chatId: "c", players: ["bo", "bo", 7, "mari"] }).players, [
+    "bo",
+    "mari",
+  ]);
+  assert.equal(engine.normalizeConfig({ day: TODAY, chatId: "c", players: "bo" }).players, null);
+}
+
 // ── scoring, duplicate letters included ──────────────────────────────────────
 {
   let state = withAnswer(fresh({}, SEATS.slice(0, 1)), "hello");
@@ -163,9 +177,18 @@ const daily = async (chatId, day) => {
 // ── turns skip finished seats, the fewest guesses win, a tie shares it ───────
 {
   let state = withAnswer(fresh({ chatId: "chat-race" }), "crane");
-  state = guess(state, "you", "crane").state; // you solve in 1
+  const yours = guess(state, "you", "crane"); // you solve in 1
+  state = yours.state;
+  // The Engine names a human seat with no persona "You", and the log reads in the plural for it.
+  assert.deepEqual(
+    yours.events.map((event) => event.message),
+    ["You guess 🟩🟩🟩🟩🟩 (1/6).", "You solve today's Wordle in 1!"],
+  );
   assert.equal(engine.currentSeat(state), "bo");
-  state = guess(state, "bo", "crane").state; // Bo ties
+  assert.match(engine.spectatorSummary(state), /Bo is guessing next/);
+  const bos = guess(state, "bo", "crane"); // Bo ties
+  state = bos.state;
+  assert.match(bos.events[0].message, /^Bo guesses /);
   state = guess(state, "mari", "slate").state;
   assert.equal(engine.currentSeat(state), "mari", "only Mari is left");
   const mid = engine.participantSummary(state, "you");
@@ -179,6 +202,13 @@ const daily = async (chatId, day) => {
   const over = engine.publicView(state, "you");
   assert.equal(over.seats.find((s) => s.seatId === "mari").rows[0].word, "slate", "all letters show at the end");
   assert.match(engine.spectatorSummary(state), /The word was CRANE/);
+  assert.match(engine.spectatorSummary(state), /You and Bo share the win with 1 guess\./);
+}
+{
+  let state = withAnswer(fresh({}, SEATS.slice(0, 1)), "crane");
+  state = guess(state, "you", "slate").state;
+  const won = guess(state, "you", "crane");
+  assert.equal(won.events.at(-1).message, "You win with 2 guesses. The word was CRANE.");
 }
 
 // ── a fallback guess always fits the seat's own clues ────────────────────────
