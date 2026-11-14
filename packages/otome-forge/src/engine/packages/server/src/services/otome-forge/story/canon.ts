@@ -712,7 +712,7 @@ export async function recallText(
   const tags = storyTags(
     chapters.map(({ chapter, order }) => {
       const ref = chapter.hisSide?.ref;
-      return { key: chapter.key, order: (ref && orders.get(ref.slice(0, ref.lastIndexOf("/")))) ?? order };
+      return { key: chapter.key, order: (ref ? orders.get(ref.slice(0, ref.lastIndexOf("/"))) : undefined) ?? order };
     }),
   );
   const heading = (completed: Completed) => tagged(tags.get(completed.chapter.key), titleOf(completed));

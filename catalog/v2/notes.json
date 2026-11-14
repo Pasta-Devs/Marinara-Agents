@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.30.0",
+          "date": "2026-11-14",
+          "notes": "- **The story knows what happened when.** Every chapter's summary now reaches the model with its place in the story: \"[Chapter 3]\" for a main chapter, \"[Character Story 2, after chapter 3]\" for a Character Story, and \"[After chapter 3]\" for route, repair, date and his-side chapters. The condensed part of the timeline says which chapters it covers (\"[Chapters 1–4]\"), and a chapter recalled by meaning goes as \"Chapter 3 in detail\".\n- **Stories in progress get it too.** The tags are added when each prompt is built, so a saved story has them on its next scene or message, with nothing summarized again. A chapter you are partway through keeps the story it was planned with, so its tags start with the next chapter.",
+          "highlight": true
+        },
+        {
           "version": "0.29.0",
           "date": "2026-11-14",
           "notes": "- **Messages read like people texting.** Love interests write in plain, everyday words, the way a real person types, with no ornate metaphors or lines that belong in a novel. This holds in private threads and in the group chat.\n- **No more echoing.** A love interest no longer repeats your words back, quotes them or restates what you said; they answer in their own words.",
@@ -799,12 +805,6 @@
           "version": "0.22.3",
           "date": "2026-11-10",
           "notes": "- **Love interests can show they want you.** The slow burn now holds back love, not attraction. Through their first four stages, a love interest may flirt, tease and say outright that they find you attractive, as far as their mask lets them, but still won't confess or become your partner. A kiss given out of feeling waits for their fifth stage, where a confession can come too.\n- **Your affection level shows in the story.** Each love interest's affection level now reaches the scenes, so the higher it is, the more drawn to you they act, within what their stage allows.\n- The README now gives the right affection level costs: level 2 takes 200 points, and each level after it 50 more.",
-          "highlight": false
-        },
-        {
-          "version": "0.22.2",
-          "date": "2026-11-10",
-          "notes": "- **Wardrobe and Wish art shows faster.** Looks, faces and wardrobe banner art now use the cut-outs Otome Hearth already saves on the server. Before, your browser downloaded each full painting, sent it to Marinara Engine to remove its backdrop and waited for the result, for every look and face on screen. Art that isn't cut out yet still shows the old way, and is cut out in the background for your next visit.",
           "highlight": false
         }
       ]
