@@ -16,16 +16,19 @@ import { rebuildAfterMutation } from "../routes/shared.js";
 import { LtmServiceError } from "../service-error.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
 import {
+  byPlan,
   defaultComplete,
+  MAX_CHUNKS,
   oneLine,
   placeKey,
+  planPosition,
   summarizeRebuild,
+  takeBatch,
   type LtmTidyComplete,
   type TidyMessage,
 } from "./tidy.js";
 
 const MAX_CHUNK_PEOPLE = 60;
-const MAX_CHUNKS = 12;
 const MAX_PERSON_CHARS = 200;
 const MAX_CHUNK_CHARS = 24_000;
 
@@ -83,12 +86,16 @@ function parseGroups(content: string, people: LtmNote[]) {
 
 /**
  * The person memories a duplicate check would read, cut into the chunks sent to the model. The preview and the scope
- * both take their numbers from here.
+ * both take their numbers from here. The order is the place, then the memory id, never a place's size, so it holds
+ * when memories are merged between batches. With `after`, only the people after that position are planned; a place
+ * split by a batch boundary continues from its next person, and the people before and after the boundary are not
+ * compared with each other.
  */
-async function planLtmDuplicatePeople(storage: LongTermMemoryStorage) {
+async function planLtmDuplicatePeople(storage: LongTermMemoryStorage, after?: string) {
   const notes = await storage.listNotes({ skipInvalid: true });
   const places = new Map<string, LtmNote[]>();
-  for (const note of [...notes].sort(byAge)) {
+  let total = 0;
+  for (const note of [...notes].sort((a, b) => byPlan(a.id, b.id))) {
     if (note.type !== "character" || note.status === "archived") continue;
     const key = placeOf(note);
     places.set(key, [...(places.get(key) ?? []), note]);
@@ -97,10 +104,10 @@ async function planLtmDuplicatePeople(storage: LongTermMemoryStorage) {
   // ponytail: a place with more people than one chunk holds is split, so a pair split across chunks is missed;
   // overlapping chunks would catch it at the cost of more model calls.
   const queue: Array<{ people: LtmNote[]; key: string }> = [];
-  let total = 0;
-  for (const [key, people] of places) {
-    if (people.length < 2) continue;
-    total += people.length;
+  for (const [key, all] of [...places].sort((a, b) => byPlan(a[0], b[0]))) {
+    if (all.length < 2) continue;
+    total += all.length;
+    const people = after === undefined ? all : all.filter((note) => planPosition(key, note.id) > after);
     let chunk: LtmNote[] = [];
     let chars = 0;
     for (const person of people) {
@@ -115,7 +122,6 @@ async function planLtmDuplicatePeople(storage: LongTermMemoryStorage) {
     }
     if (chunk.length > 1) queue.push({ people: chunk, key });
   }
-  queue.sort((a, b) => b.people.length - a.people.length || a.key.localeCompare(b.key));
   return { queue, total };
 }
 
@@ -131,16 +137,13 @@ export async function previewLtmDuplicatePeople(options: {
   languageModel: PackageLanguageModel;
   signal?: AbortSignal;
   complete?: LtmPeopleComplete;
-  /** Index of the first chunk to read; a check cut short at the call limit returns `next` to carry on from. */
-  start?: number;
+  /** Position to carry on after; a check cut short at the call limit returns it as `next`. */
+  after?: string;
 }): Promise<LtmDuplicatePeoplePreviewResponse> {
   const { root, languageModel, signal } = options;
   const complete = options.complete ?? defaultComplete(languageModel);
-  const { queue, total } = await planLtmDuplicatePeople(options.storage);
-  // ponytail: the cursor is an index into a plan rebuilt on each call, so a vault that changes between batches can skip or repeat a batch (apply re-validates); upgrade path: a key-based cursor.
-  const start = options.start ?? 0;
-  const processed = queue.slice(start, start + MAX_CHUNKS);
-  const next = start + processed.length < queue.length ? start + processed.length : null;
+  const { queue, total } = await planLtmDuplicatePeople(options.storage, options.after);
+  const { processed, next } = takeBatch(queue, (chunk) => planPosition(chunk.key, chunk.people.at(-1)!.id));
   const suggestions: LtmDuplicatePeopleSuggestion[] = [];
   let checked = 0;
   let failedChunks = 0;

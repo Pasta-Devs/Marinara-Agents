@@ -25,8 +25,8 @@ export const ltmDuplicatePeoplePreviewResponseSchema = z
     checked: z.number().int().min(0),
     /** True when some person memories were left unchecked to keep one review bounded. */
     truncated: z.boolean(),
-    /** Index of the next batch to check when this one stopped at the call limit; null when nothing is left. */
-    next: z.number().int().min(0).nullable(),
+    /** Position to carry on after when this batch stopped at the call limit (send it as `after`); null when nothing is left. */
+    next: z.string().nullable(),
     /** Model calls whose reply could not be used. */
     failedChunks: z.number().int().min(0),
     suggestions: z.array(ltmDuplicatePeopleSuggestionSchema),

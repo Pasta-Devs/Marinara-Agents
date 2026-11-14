@@ -77,13 +77,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "645fcf6ae221fee0c756a84cb6a43352bc9ce33b39092b3cdd6f163c4654767d",
-      "bytes": 561135
+      "sha256": "8a04497b47dec5c4451de86d7dd73389255046757f770a1a62c53754fedad498",
+      "bytes": 561170
     },
     {
       "path": "client.js",
-      "sha256": "ca57ffcfcd4436c2a9a64b6a6ae565cc9c52f4ac75c501f6136298209eb31f5b",
-      "bytes": 1068419
+      "sha256": "da5bcd9b216543000e8c564925c19eda08e475c2b03ae754bb44a4a1e540974d",
+      "bytes": 1068400
     },
     {
       "path": "assets/onboarding/activity-log-small.webp",

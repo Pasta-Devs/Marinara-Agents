@@ -296,7 +296,7 @@ async function main() {
       }));
       assert.ok(!ltmDuplicatePeopleApplyRequestSchema.safeParse({ groups: many }).success);
 
-      // More places than one run reads: `start: next` reads the rest, so every person can be reviewed.
+      // More places than one run reads: `after: next` reads the rest, so every person can be reviewed.
       const wide = new LongTermMemoryStorage(join(dataDir, "wide"));
       await wide.initializeLtmStore();
       for (let chat = 0; chat < 14; chat += 1)
@@ -307,13 +307,13 @@ async function main() {
               chatIds: [`wide-${chat}`],
             }),
           );
-      const seen: string[] = [];
-      const readWide = (start?: number) =>
+      let seen: string[] = [];
+      const readWide = (after?: string) =>
         previewLtmDuplicatePeople({
           root,
           storage: wide,
           languageModel: model as never,
-          start,
+          after,
           complete: async (messages) => {
             seen.push(
               ...messages[1]!.content
@@ -325,11 +325,42 @@ async function main() {
           },
         });
       const firstBatch = await readWide();
-      assert.deepEqual([firstBatch.checked, firstBatch.next, firstBatch.truncated], [24, 12, true]);
+      assert.deepEqual([firstBatch.checked, typeof firstBatch.next, firstBatch.truncated], [24, "string", true]);
+      const firstSeen = [...seen];
       const secondBatch = await readWide(firstBatch.next!);
       assert.deepEqual([secondBatch.checked, secondBatch.next, secondBatch.truncated], [4, null, false]);
       assert.equal(new Set(seen).size, 28, "each person is read exactly once across the two batches");
       assert.equal(seen.length, 28);
+      assert.equal((await readWide("not a cursor from this check")).total, 28, "an unknown cursor does not throw");
+
+      // Apply merges people the first batch read: the next call still reads exactly what the first did not.
+      seen = [];
+      const people = await wide.listNotes({ skipInvalid: true });
+      const groups = people
+        .filter((entry) => firstSeen.includes(entry.title ?? "") && entry.title?.endsWith("a"))
+        .map((keep) => ({
+          keepId: keep.id,
+          mergeIds: people
+            .filter((other) => other.title === `Person ${keep.title!.slice(7, -1)}b`)
+            .map((other) => other.id),
+        }));
+      assert.equal(groups.length, 12);
+      const merged = await applyLtmDuplicatePeople({
+        root,
+        storage: wide,
+        groups,
+        rebuild: async () => ({ status: "deferred" as const, error: "test" }) as never,
+      });
+      assert.equal(merged.merged.length, 12);
+      const afterApply = await readWide(firstBatch.next!);
+      assert.equal(afterApply.next, null);
+      const unread = people.map((entry) => entry.title ?? "").filter((title) => !firstSeen.includes(title));
+      assert.deepEqual(
+        [...seen].sort(),
+        unread.sort(),
+        "after an apply, the next batch reads exactly what the first did not",
+      );
+      assert.equal(seen.length, 4);
     },
     [() => releaseHost(), () => rm(dataDir, { recursive: true, force: true })],
   );

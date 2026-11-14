@@ -13444,7 +13444,7 @@ async function main() {
           total: 12,
           checked: 9,
           truncated: true,
-          next: 12,
+          next: "tidy-cursor-12",
           failedChunks: 0,
           suggestions: [
             {
@@ -13523,6 +13523,11 @@ async function main() {
       const doneText = await tidyState("done").innerText();
       assert.ok(doneText.includes("2 memories archived."));
       assert.ok(doneText.includes("set Show to Archived"));
+      assert.equal(
+        await whatsNewPage.locator("[data-ltm-tidy-next]").count(),
+        1,
+        "The done view offers the next batch",
+      );
       assert.equal(await tidyFocused("[data-ltm-tidy-focus]"), true);
       await tidyShot("done");
       await whatsNewPage.locator("[data-ltm-tidy-focus]").click();
@@ -13532,13 +13537,13 @@ async function main() {
       await whatsNewPage.locator("[data-ltm-whats-new-tidy]").click();
       await whatsNewPage.locator("[data-ltm-tidy-start]").click();
       await tidyState("results").waitFor();
-      assert.ok(!(tidyPreviewBodies.at(-1) ?? "").includes("start"), "The first batch sends no cursor");
+      assert.ok(!(tidyPreviewBodies.at(-1) ?? "").includes("after"), "The first batch sends no cursor");
       assert.equal(await whatsNewPage.locator("[data-ltm-tidy-next]").count(), 1);
       const firstBatchReply = tidyPreviewReply;
       tidyPreviewReply = { status: 400, body: { error: "Model unavailable.", code: "ltm_model_configuration" } };
       await whatsNewPage.locator("[data-ltm-tidy-next]").click();
       await tidyState("error").waitFor();
-      assert.deepEqual(JSON.parse(tidyPreviewBodies.at(-1) ?? ""), { start: 12 });
+      assert.deepEqual(JSON.parse(tidyPreviewBodies.at(-1) ?? ""), { after: "tidy-cursor-12" });
       tidyPreviewReply = {
         status: 200,
         body: {
@@ -13554,10 +13559,29 @@ async function main() {
       };
       await whatsNewPage.getByRole("button", { name: "Try again" }).click();
       await tidyState("results").waitFor();
-      assert.deepEqual(JSON.parse(tidyPreviewBodies.at(-1) ?? ""), { start: 12 }, "Try again re-reads the same batch");
+      assert.deepEqual(
+        JSON.parse(tidyPreviewBodies.at(-1) ?? ""),
+        { after: "tidy-cursor-12" },
+        "Try again re-reads the same batch",
+      );
       assert.equal(await whatsNewPage.locator("[data-ltm-tidy-item]").count(), 1, "The next batch replaces the first");
       assert.equal(await whatsNewPage.locator("[data-ltm-tidy-next]").count(), 0, "The last batch has no next button");
       tidyPreviewReply = firstBatchReply;
+      await whatsNewPage.locator("[data-ltm-tidy-back]").click();
+      await whatsNewDialog.locator("[data-ltm-whats-new-tidy]").waitFor();
+      // After Apply the done view carries on from the same cursor, so the batches after it are still reachable.
+      await whatsNewPage.locator("[data-ltm-whats-new-tidy]").click();
+      await whatsNewPage.locator("[data-ltm-tidy-start]").click();
+      await tidyState("results").waitFor();
+      await whatsNewPage.locator("[data-ltm-tidy-apply]").click();
+      await tidyState("done").waitFor();
+      await whatsNewPage.locator("[data-ltm-tidy-next]").click();
+      await tidyState("results").waitFor();
+      assert.deepEqual(
+        JSON.parse(tidyPreviewBodies.at(-1) ?? ""),
+        { after: "tidy-cursor-12" },
+        "The done view's next button asks after the same cursor",
+      );
       await whatsNewPage.locator("[data-ltm-tidy-back]").click();
       await whatsNewDialog.locator("[data-ltm-whats-new-tidy]").waitFor();
       // A failed read shows the server's own message and offers Try again; Back returns to What's new.
