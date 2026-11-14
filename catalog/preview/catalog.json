@@ -377,8 +377,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "0cb5c0c512e1301ede6c4c352cae7e4c0047d36662d5c4e986611b7c4ed15501",
-            "bytes": 2267
+            "sha256": "04a1e8986fa20df25fa7a7f58812a7d430fc24c8b00ecf3aa8854728b45cae9e",
+            "bytes": 2952
           }
         ],
         "permissions": [
@@ -394,8 +394,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/web-researcher.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/web-researcher-1.0.0.zip",
-        "sha256": "857ed7c4b2df002fb734aee63c7548797a673ac36db69481e519a1ea44e00a85",
-        "bytes": 1789
+        "sha256": "02acb73d62a4df1db0a43b902d7d937282a3ba456450d214db1e2974bef7a0c0",
+        "bytes": 2080
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#web-researcher"
     }
