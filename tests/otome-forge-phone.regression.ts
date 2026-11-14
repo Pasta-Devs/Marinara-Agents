@@ -379,6 +379,9 @@ test("P17 is a message from him alone: boundary, chat contract, comfort rule, st
     "Your mask has started to crack",
     "A rupture stands between you",
     "anything about their life outside the story",
+    // 0.29.0: he never echoes her words, and texts like a person, not a novel.
+    "Never parrot or echo what Ines wrote",
+    "Text the way a real person texts: plain, everyday words",
   ]) {
     assert.ok(head.includes(part), `system has: ${part.slice(0, 50)}`);
   }

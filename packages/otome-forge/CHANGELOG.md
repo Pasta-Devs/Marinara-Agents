@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.29.0 — 2026-11-14
+
+- **Messages read like people texting.** Love interests write in plain, everyday words, the way a real person types, with no ornate metaphors or lines that belong in a novel. This holds in private threads and in the group chat.
+- **No more echoing.** A love interest no longer repeats your words back, quotes them or restates what you said; they answer in their own words.
+
 ## 0.28.0 — 2026-11-13
 
 - **Scenes keep their shape.** The reply format a scene is written in is now stated again at the end of the request, so a model no longer drifts into prose, a code fence or stray commentary when the instructions sit far back in a long prompt. Nothing about the story changes; a malformed reply was already retried once, and this is what makes that retry unnecessary.

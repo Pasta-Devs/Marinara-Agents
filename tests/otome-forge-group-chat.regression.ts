@@ -592,6 +592,9 @@ test("P17g: the plural rules, the knowledge line, each member's card, ties witho
     "Nothing happens in the story because of this conversation",
     "Everyone in the group reads everything said here",
     "CONTENT CONTRACT",
+    // 0.29.0: nobody echoes her words, and each texts like a person, not a novel.
+    "Nobody parrots or echoes what Ines wrote",
+    "Each of them texts the way a real person texts: plain, everyday words",
   ]) {
     assert.ok(head.includes(part), `system has: ${part}`);
   }
