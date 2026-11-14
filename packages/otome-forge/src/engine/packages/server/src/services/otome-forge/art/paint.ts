@@ -83,7 +83,8 @@ export type PaintOwner =
   | `tarot:${string}`
   | `side:${string}`;
 
-const live = new Map<string, { settled: Promise<void>; settle: () => void }>();
+/** A live paint; `threw` once a tap's paint ended in a throw (a refusal), for the taps that waited on it. */
+const live = new Map<string, { settled: Promise<void>; settle: () => void; threw?: boolean }>();
 const liveKey = (runId: string, owner: PaintOwner) => `${runId}|${owner}`;
 
 export function paintIsLive(runId: string, owner: PaintOwner): boolean {
@@ -112,12 +113,14 @@ export function paintSettled(runId: string, owner: PaintOwner): Promise<void> {
 /**
  * A tap's paint, as the owner's only live paint in this process. A tap that finds another paint live waits for it:
  * when that one left the record ready or failed, the tap answers with it, so no tap pays twice; when it painted
- * nothing (an automatic pass that only looked, or left it waiting), the tap goes ahead itself.
+ * nothing (an automatic pass that only looked, or left it waiting), the tap goes ahead itself. `after` learns whether
+ * the paint it waited on was a tap's that threw (#2299): a repaint can then tell a record that tap left untouched, which
+ * is no answer to it, from one it painted.
  */
 export async function tapPaint<T>(
   runId: string,
   owner: () => Promise<PaintOwner>,
-  after: () => Promise<{ value: T; art?: Paint }>,
+  after: (waited: { threw: boolean }) => Promise<{ value: T; art?: Paint }>,
   paint: () => Promise<T>,
 ): Promise<T> {
   for (;;) {
@@ -126,12 +129,18 @@ export async function tapPaint<T>(
     if (release) {
       try {
         return await paint();
+      } catch (error) {
+        // Marked before the release below wakes the taps waiting on it.
+        const entry = live.get(liveKey(runId, current));
+        if (entry) entry.threw = true;
+        throw error;
       } finally {
         release();
       }
     }
-    await paintSettled(runId, current);
-    const left = await after();
+    const waited = live.get(liveKey(runId, current));
+    await (waited?.settled ?? Promise.resolve());
+    const left = await after({ threw: !!waited?.threw });
     if (left.art?.state === "ready" || left.art?.state === "failed") return left.value;
   }
 }
@@ -199,6 +208,9 @@ export function paintSlot<T>(connectionId: string, task: () => Promise<T>, lane:
 
 // ── Repainting a picture that is already there ──
 
+/** A paint record's picture, or an Album entry's (a couple set's pair portrait is kept as one). */
+type Picture = Pick<Paint, "url" | "ref">;
+
 /**
  * The record an explicit repaint starts on (0.24.0): pending, keeping the picture it showed, so it is still on screen
  * while the new one paints and still there if it fails, as a base look's portrait stays until its new one is saved.
@@ -216,7 +228,7 @@ export function withKeptPicture(art: Paint, replaced: Paint | null | undefined):
 }
 
 /** True when two records show the same picture (a banner and its featured 5★ share one). */
-export function samePicture(a: Paint | null | undefined, b: Paint | null | undefined): boolean {
+export function samePicture(a: Picture | null | undefined, b: Picture | null | undefined): boolean {
   return !!a && !!b && ((!!a.ref && a.ref === b.ref) || (!!a.url && a.url === b.url));
 }
 
@@ -226,8 +238,8 @@ export function samePicture(a: Paint | null | undefined, b: Paint | null | undef
  */
 export async function releaseReplacedImage(
   deps: ArtDeps,
-  replaced: Paint | null | undefined,
-  saved: Paint | null | undefined,
+  replaced: Picture | null | undefined,
+  saved: Picture | null | undefined,
 ): Promise<void> {
   const ref = replaced?.ref;
   if (!ref?.startsWith(GALLERY_REF_PREFIX) || ref === saved?.ref) return;

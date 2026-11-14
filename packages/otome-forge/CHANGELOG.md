@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.31.0 — 2026-11-14
+
+- **Repaint a couple set's portrait.** In the Wardrobe, a painted pair portrait now offers **Repaint the pair portrait**, for 1 image. The old portrait stays on screen while the new one paints, and stays if the paint fails. The new one replaces it in the Album too.
+- **Repaint a sticker.** In the Album's **Stickers** tab, a painted sticker offers **Repaint**, for 1 image. Chats keep showing the old sticker until the new one is ready. After that, every message that sent it shows the new one.
+
 ## 0.30.0 — 2026-11-14
 
 - **The story knows what happened when.** Every chapter's summary now reaches the model with its place in the story: "[Chapter 3]" for a main chapter, "[Character Story 2, after chapter 3]" for a Character Story, and "[After chapter 3]" for route, repair, date and his-side chapters. The condensed part of the timeline says which chapters it covers ("[Chapters 1–4]"), and a chapter recalled by meaning goes as "Chapter 3 in detail".

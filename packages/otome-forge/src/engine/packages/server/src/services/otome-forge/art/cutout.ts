@@ -15,8 +15,8 @@
 // Cut-outs cost no model or image call. They run one at a time in this process, outside the background lane (which
 // takes a model connection's admission slot). Those a view queues for its lists (the Wardrobe's, Wish's) wait behind
 // the ones Home and the reader stand on stage, and are not what the run view or a scene polls for.
-// ponytail: a cut-out of a look that was repainted stays until the run is deleted; the upgrade path is pruning it with
-// the expressions kit's stale sets.
+// ponytail: a cut-out of a look or (#2299) a sticker that was repainted stays until the run is deleted; the upgrade path
+// is pruning it with the expressions kit's stale sets.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { Cutout, LiId, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { isEngineAvatar } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";

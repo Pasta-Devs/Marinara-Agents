@@ -11,7 +11,9 @@
 // the paid call, in the image connection's `low` lane behind taps and scene art; `waiting-consent` under Ask before
 // painting or prompt review, so only a tap pays; a failed or stopped sticker waits for a tap (the Album's Paint). A
 // restart leaves at most one sticker `stopped`. Every sticker is a chibi bust on the look's chroma matte, cut out by
-// the free cut-out queue (art/cutout.ts) before it is shown.
+// the free cut-out queue (art/cutout.ts) before it is shown. #2299: the Album's Repaint paints a painted one again with
+// a tap; the old sticker stays while it paints and after a failure, and the new one replaces it everywhere once it is
+// cut out, so the old image leaves the gallery.
 //
 // Names: in prompts a sticker is `[name_emotion]`: the protagonist's slug (SH ids nameSlug with "_"), or his, which
 // takes `_<the last 4 characters of his id>` when the protagonist or another love interest has the same slug, so
@@ -44,7 +46,7 @@ import { generateJson, resolveConnectionId, type GenerationDeps } from "../gener
 import { OtomeForgeError } from "../http.js";
 import { nameSlug, playerId, runDocTarget, unitId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
-import { readRun, type RunDocuments } from "../schemas/state.js";
+import { readRun, readyCutout, type RunDocuments } from "../schemas/state.js";
 import { STICKER_LABEL_MAX, STICKER_LOOK_MAX, normalizeUnit } from "../schemas/unit.js";
 import { cutoutView } from "./cutout.js";
 import { worldStyle } from "./image-client.js";
@@ -54,9 +56,13 @@ import {
   paintRecord,
   paintView,
   readSubject,
+  releaseReplacedImage,
+  repainting,
+  samePicture,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -165,21 +171,45 @@ const ownerDoc = (run: Pick<Run, "player" | "units">, owner: Owner) =>
     : run.units.find((unit) => unit.id === owner);
 
 /**
- * A ready sticker as shown: its cut-out (the old one while a refresh is cut, as stage art keeps it), the original when
- * its cleanup failed; null while its first cut-out is cut.
+ * #2299: the pictures each saved repaint replaced, newest first, by run and new picture, so a cut-out of one of them
+ * shows until the new one's is ready (a second repaint before the first new picture is cut out keeps the older one).
+ * ponytail: kept in this process; a restart before the new picture is cut out shows the sticker as painting for that
+ * wait, as a first paint does. Upgrade path: keep the replaced urls on the sticker's record.
  */
-function shownUrl(runId: string, run: Pick<Run, "player" | "units">, sticker: OwedSticker): string | null {
+const replacedPictures = new Map<string, string[]>();
+/** How many replaced pictures a sticker keeps to fall back on. */
+const REPLACED_KEPT = 3;
+const replacedKey = (runId: string, url: string) => `${runId}|${url}`;
+
+/**
+ * A painted sticker as shown: its cut-out (the old one while a refresh is cut, as stage art keeps it), the original
+ * when its cleanup failed. While its first cut-out is cut (`cutting`) it shows nothing, or after a repaint the cut-out
+ * of a picture it replaced, else (the old one was shown uncut) the new picture uncut. A repaint keeps the picture it
+ * paints over on the record (art/paint.ts repainting/withKeptPicture), so that one is shown while it paints and after
+ * it failed.
+ */
+function shownSticker(
+  runId: string,
+  run: Pick<Run, "player" | "units">,
+  sticker: OwedSticker,
+): { url: string | null; cutting: boolean } {
   const doc = ownerDoc(run, sticker.owner);
-  if (!doc || sticker.art?.state !== "ready" || !sticker.art.url) return null;
-  const cut = cutoutView(runId, doc, sticker.art.url);
-  return cut.cutout ?? (cut.state === "pending" ? null : sticker.art.url);
+  const url = sticker.art?.url;
+  if (!doc || !url) return { url: null, cutting: false };
+  const cut = cutoutView(runId, doc, url);
+  const key = replacedKey(runId, url);
+  if (cut.cutout || cut.state !== "pending") {
+    replacedPictures.delete(key);
+    return { url: cut.cutout ?? url, cutting: false };
+  }
+  const replaced = replacedPictures.get(key) ?? [];
+  const kept = replaced.map((old) => readyCutout(doc, old)).find(Boolean);
+  return { url: kept ?? (replaced.length ? url : null), cutting: true };
 }
 
-/** Every painted sticker's image, by owner: what GET /runs/:run has cut out. */
+/** Every painted sticker's image, by owner (a repaint's kept one too): what GET /runs/:run has cut out. */
 export function stickerArtUrls(run: Pick<Run, "player" | "units" | "state">, owner: Owner): string[] {
-  return owedStickers(run).flatMap((sticker) =>
-    sticker.owner === owner && sticker.art?.state === "ready" && sticker.art.url ? [sticker.art.url] : [],
-  );
+  return owedStickers(run).flatMap((sticker) => (sticker.owner === owner && sticker.art?.url ? [sticker.art.url] : []));
 }
 
 /**
@@ -192,7 +222,7 @@ export function stickerBook(runId: string, run: Pick<Run, "player" | "units" | "
   const owed = owedStickers(run);
   const book: StickerView[] = PLAYER_STICKERS.map((emotion) => {
     const sticker = owed.find((entry) => entry.owner === PLAYER_STICKER_OWNER && entry.emotion === emotion);
-    const url = sticker ? shownUrl(runId, run, sticker) : null;
+    const url = sticker ? shownSticker(runId, run, sticker).url : null;
     return {
       id: stickerId(PLAYER_STICKER_OWNER, emotion),
       owner: PLAYER_STICKER_OWNER,
@@ -203,7 +233,7 @@ export function stickerBook(runId: string, run: Pick<Run, "player" | "units" | "
   });
   for (const sticker of owed) {
     if (sticker.owner === PLAYER_STICKER_OWNER) continue;
-    const url = shownUrl(runId, run, sticker);
+    const { url } = shownSticker(runId, run, sticker);
     if (!url) continue;
     book.push({
       id: sticker.id,
@@ -241,7 +271,8 @@ const waitsForTap = (art: Paint | undefined) =>
 /**
  * The Album's stickers: the protagonist's five, then each of his owed ones that is painted, painting or waiting for a
  * tap (the paint as the client should see it). One painted but still being cut out reads as painting, so the Album
- * keeps polling until its cut-out shows. Without images only painted ones show.
+ * keeps polling until its cut-out shows; a repainted one (#2299) does so over its old cut-out. Without images only
+ * painted ones show.
  */
 export function albumStickers(runId: string, run: Run): AlbumSticker[] {
   const names = stickerNames(run);
@@ -260,8 +291,9 @@ export function albumStickers(runId: string, run: Run): AlbumSticker[] {
     const shown = book.get(id);
     const sticker = owed.get(id);
     const painted = sticker?.art ? paintView(runId, `sticker:${id}`, sticker.art) : undefined;
+    const cutting = !!sticker && shownSticker(runId, run, sticker).cutting;
     const art: Paint | undefined =
-      painted?.state === "ready" && !shown?.url ? { state: "pending", at: painted.at } : painted;
+      painted?.state === "ready" && cutting ? { state: "pending", at: painted.at } : painted;
     const open = images && (waitsForTap(art) || art?.state === "pending");
     if (!shown && !open) return [];
     const parsed = parseStickerId(id)!;
@@ -509,7 +541,26 @@ function paintSticker(
         debugMode: options.debugMode,
       });
     },
-    save: (art) => saveArt(deps, runId, sticker, (current) => (ours(current) ? art : undefined)),
+    save: async (art) => {
+      let replaced: Paint | undefined;
+      const saved = await saveArt(deps, runId, sticker, (current) => {
+        if (!ours(current)) return undefined;
+        replaced = current;
+        return withKeptPicture(art, current);
+      });
+      if (saved && art.state === "ready") {
+        // #2299: the new picture is cut out after this; until then shownSticker shows the replaced one's cut-out (which
+        // stays in the gallery), and only the replaced original, a gallery image of ours, is deleted.
+        if (replaced?.url && art.url && replaced.url !== art.url) {
+          const before = replacedKey(runId, replaced.url);
+          const chain = [replaced.url, ...(replacedPictures.get(before) ?? [])].slice(0, REPLACED_KEPT);
+          replacedPictures.delete(before);
+          replacedPictures.set(replacedKey(runId, art.url), chain);
+        }
+        await releaseReplacedImage(deps, replaced, art);
+      }
+      return saved;
+    },
   });
 }
 
@@ -604,8 +655,8 @@ export async function startPlayerStickers(deps: Pick<ArtDeps, "store">, runId: s
 }
 
 /**
- * POST /runs/:run/art/sticker: the tap that paints a sticker now (its consent, or Retry). Resolves its paint as left;
- * a ready sticker is returned as it is, and a tap while it is painting waits for that same paint.
+ * POST /runs/:run/art/sticker: the tap that paints a sticker now (its consent, Retry, or #2299 a repaint of a painted
+ * one). Resolves its paint as left; a tap while it is painting waits for that same paint, so no tap pays twice.
  */
 export async function paintStickerNow(
   deps: ArtDeps,
@@ -620,25 +671,36 @@ export async function paintStickerNow(
     if (!sticker) throw notFound();
     return { run, sticker, art: sticker.art ? paintView(runId, ownerOf(id), sticker.art) : undefined };
   };
+  // Only the picture painted when the tap began is one it repaints: one that lands while it waits is its answer.
+  const first = (await read()).art;
+  const painted = first?.state === "ready";
   return tapPaint(
     runId,
     async () => ownerOf(id),
-    async () => {
+    async ({ threw }) => {
       const { art } = await read();
-      return { value: art ?? null, ...(art ? { art } : {}) };
+      // #2299: a paint that was refused (it threw) left the sticker as this tap found it, which is no answer to it.
+      const untouched = threw && art?.state === first?.state && art?.at === first?.at;
+      return { value: art ?? null, ...(art && !untouched ? { art } : {}) };
     },
     async () => {
       const { run, sticker } = await read();
-      if (sticker.art?.state === "ready") return sticker.art;
+      if (sticker.art?.state === "ready" && !(painted && samePicture(sticker.art, first))) return sticker.art;
       const connectionId = run.world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
       const claimed = await saveArt(deps, runId, sticker, (current) =>
-        current?.state === "ready" ? undefined : { state: "pending", at },
+        current?.state === "ready" && !(painted && samePicture(current, first)) ? undefined : repainting(current, at),
       );
-      if (claimed)
-        await paintSticker(deps, runId, sticker, at, connectionId, { debugMode, consent: true, edited, active });
-      return (await read()).art ?? null;
+      if (!claimed) return (await read()).art ?? null;
+      const left = await paintSticker(deps, runId, sticker, at, connectionId, {
+        debugMode,
+        consent: true,
+        edited,
+        active,
+      });
+      // Once its picture is saved this paint never throws, so a tap waiting on it takes that picture (tapPaint `threw`).
+      return (await read().catch(() => null))?.art ?? left;
     },
   );
 }
