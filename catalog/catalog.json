@@ -2652,18 +2652,18 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 390
+          "minor": 820
         },
         "builtAgainst": {
-          "engineVersion": "2.5.1",
-          "engineCommit": "345cd747cf8e8fd56f3fbdceb625a1edd568b525"
+          "engineVersion": "2.5.2",
+          "engineCommit": "6086825a1e91c5301bb4da80d4f919597186efab"
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.5.29",
+        "version": "1.6.0",
         "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
-          "min": "2.5.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -2682,8 +2682,42 @@
             "header": "engine"
           },
           "slots": [
-            "chat-settings"
-          ]
+            "chat-settings",
+            "conversation-surface",
+            "chat-activity"
+          ],
+          "assets": {
+            "paths": [
+              "assets/onboarding/activity-log-small.webp",
+              "assets/onboarding/activity-log.webp",
+              "assets/onboarding/archive-working-mini.webp",
+              "assets/onboarding/archive-working.webp",
+              "assets/onboarding/archivist-modes.webp",
+              "assets/onboarding/chibi.webp",
+              "assets/onboarding/done-filed.webp",
+              "assets/onboarding/done-fresh.webp",
+              "assets/onboarding/graph-model-small.webp",
+              "assets/onboarding/graph-model.webp",
+              "assets/onboarding/headstart-ladder.webp",
+              "assets/onboarding/hello-drawer.webp",
+              "assets/onboarding/inchat-bubble-small.webp",
+              "assets/onboarding/inchat-bubble.webp",
+              "assets/onboarding/reading-tape-small.webp",
+              "assets/onboarding/reading-tape.webp",
+              "assets/onboarding/review-stamp-small.webp",
+              "assets/onboarding/review-stamp.webp",
+              "assets/onboarding/settings-dials-small.webp",
+              "assets/onboarding/settings-dials.webp",
+              "assets/onboarding/sources-crate-small.webp",
+              "assets/onboarding/sources-crate.webp",
+              "assets/onboarding/vault-browse-small.webp",
+              "assets/onboarding/vault-browse.webp",
+              "assets/onboarding/vault-idle.webp",
+              "assets/onboarding/welcome-bell-small.webp",
+              "assets/onboarding/welcome-bell.webp",
+              "assets/onboarding/whats-new-cabinet.webp"
+            ]
+          }
         },
         "files": [
           {
@@ -2693,13 +2727,153 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "32248683556b2083cd5e86963da7683c3ed84b33c48a7f613ab3e9be0d5ade35",
-            "bytes": 513182
+            "sha256": "71a143d2d45e0e3b1e869c84baa21111c30ed3b6385bddba6f815924387e3e6f",
+            "bytes": 560756
           },
           {
             "path": "client.js",
-            "sha256": "bac132b36fccf7d40b5732fa637caafcf345ad9c6fe0d6e0d7b3cfc236835dec",
-            "bytes": 936831
+            "sha256": "f320e650e48d79a577c6f332a2daa21bb48fa500715572a9b32a1713d0a4e43e",
+            "bytes": 1067631
+          },
+          {
+            "path": "assets/onboarding/activity-log-small.webp",
+            "sha256": "45c67e2d82d394bb85dd9884844fdd71cdb444b71a99ae1943f92cca203e0cc8",
+            "bytes": 21814
+          },
+          {
+            "path": "assets/onboarding/activity-log.webp",
+            "sha256": "4ebead7fd5c7e8c6d6abc8d66ae9da39b203fb0dc19123519c6b4068a19a4a67",
+            "bytes": 74540
+          },
+          {
+            "path": "assets/onboarding/archive-working-mini.webp",
+            "sha256": "b0db55446ffb82b4cb36ceb21afc5728ca1faccd1cffc40f44d7c2bb2e68141a",
+            "bytes": 9144
+          },
+          {
+            "path": "assets/onboarding/archive-working.webp",
+            "sha256": "776f4d520f6c6991645f205f94846b9e5a70dde3b1cfd765016e574f63b634ec",
+            "bytes": 84354
+          },
+          {
+            "path": "assets/onboarding/archivist-modes.webp",
+            "sha256": "86649b8edadabd5679a691848530e5d3dbbf64f5f6076fb6c5dd6a40742bad04",
+            "bytes": 81130
+          },
+          {
+            "path": "assets/onboarding/chibi.webp",
+            "sha256": "bdbf38adb40e9e128754d2103a0b9bc9d887c33273640dc47a8c6f5cffdba0f3",
+            "bytes": 38982
+          },
+          {
+            "path": "assets/onboarding/done-filed.webp",
+            "sha256": "46ba390dc6cf343a760d68a44ca557069b230bb89e3e63cd612e41329e25a141",
+            "bytes": 84324
+          },
+          {
+            "path": "assets/onboarding/done-fresh.webp",
+            "sha256": "1d4f5a978256a1c6da7a85b8b8a27e5442ded6d3bde90c7d6ab4d60cbf460f75",
+            "bytes": 77466
+          },
+          {
+            "path": "assets/onboarding/graph-model-small.webp",
+            "sha256": "7d30af1e673f7d9df4aad4286f44d13eeedc17a3afcf7af15fee04a84a5c418a",
+            "bytes": 22768
+          },
+          {
+            "path": "assets/onboarding/graph-model.webp",
+            "sha256": "7c80a5946ea605759a643a3816fe235f08ad59737f484b7f0ee9f48fe17b384d",
+            "bytes": 77798
+          },
+          {
+            "path": "assets/onboarding/headstart-ladder.webp",
+            "sha256": "c826ce6947abd8a2f13a14c11fd7b7be2d9bdb077e269c86e20e6984cfc7d963",
+            "bytes": 91312
+          },
+          {
+            "path": "assets/onboarding/hello-drawer.webp",
+            "sha256": "61aaf4f59a240891fffc37f82566a2f783b79e0b3063cadad4881a06c09f671f",
+            "bytes": 73212
+          },
+          {
+            "path": "assets/onboarding/inchat-bubble-small.webp",
+            "sha256": "bb391e1ddf9eb64166cdae3690aae748b1287b2b5070ca0a441ae59102052a88",
+            "bytes": 16586
+          },
+          {
+            "path": "assets/onboarding/inchat-bubble.webp",
+            "sha256": "1cffba1c96bb6b2c429142419e00d361a1626fd145bf00ac5d930f6785468807",
+            "bytes": 58738
+          },
+          {
+            "path": "assets/onboarding/reading-tape-small.webp",
+            "sha256": "83374a55a1d14bf27ce5e8cbbe32c159da26775a7aa73e387bd4d5be24d1e4b7",
+            "bytes": 25764
+          },
+          {
+            "path": "assets/onboarding/reading-tape.webp",
+            "sha256": "032d7e473bf0da3ac9ba1b49c3ac3cd100f08ab5809791580404beaf405882cc",
+            "bytes": 89580
+          },
+          {
+            "path": "assets/onboarding/review-stamp-small.webp",
+            "sha256": "66f8751af369e3ea91a6aea8785df60e545bfd47bebe42157cdbcebf7335f78b",
+            "bytes": 24514
+          },
+          {
+            "path": "assets/onboarding/review-stamp.webp",
+            "sha256": "79345a7ad47ea0902fda68f99045b9dcbdcbd4b42d0672c87cc973fda4393bea",
+            "bytes": 83864
+          },
+          {
+            "path": "assets/onboarding/settings-dials-small.webp",
+            "sha256": "24d42f05258a18ad66f8850a5a2491e78083b819aa5d610e450af06ef4991c75",
+            "bytes": 24752
+          },
+          {
+            "path": "assets/onboarding/settings-dials.webp",
+            "sha256": "7f15f97cfb606d04a8395e77f22b4fcee11ca5276578dd68a96979be707bb3dc",
+            "bytes": 88000
+          },
+          {
+            "path": "assets/onboarding/sources-crate-small.webp",
+            "sha256": "11ff298a32197e640136d2ba35c6cc32c2af2ce4e409a8acb6c5ae73829d5ca0",
+            "bytes": 23058
+          },
+          {
+            "path": "assets/onboarding/sources-crate.webp",
+            "sha256": "956bc0744be894a4f0f50a3c9841ec92b3ac16dded5d65bd7ce6ca1e390116b2",
+            "bytes": 79636
+          },
+          {
+            "path": "assets/onboarding/vault-browse-small.webp",
+            "sha256": "01c50983015f6840f9df1d539bb528bd8fad9762394af14b05b7a98781ae2e34",
+            "bytes": 24344
+          },
+          {
+            "path": "assets/onboarding/vault-browse.webp",
+            "sha256": "aed5a1be574e364d339e2a699029b69e350119e1dc2517605ff23b78602cabb1",
+            "bytes": 85758
+          },
+          {
+            "path": "assets/onboarding/vault-idle.webp",
+            "sha256": "20bd31b57d6d2f27880c5358858005e1e8e4d8702e9a942361419f255172cf6b",
+            "bytes": 72036
+          },
+          {
+            "path": "assets/onboarding/welcome-bell-small.webp",
+            "sha256": "15b35ee7ff75775638c4ab839a3005c35bc178d06b69ed6b74e271f5e6aeec3b",
+            "bytes": 21238
+          },
+          {
+            "path": "assets/onboarding/welcome-bell.webp",
+            "sha256": "24cd5a0ffc55ae6fb46e3256d6f8159ab41b1671a2e439b21b44f507ff7f1382",
+            "bytes": 72926
+          },
+          {
+            "path": "assets/onboarding/whats-new-cabinet.webp",
+            "sha256": "225a9c5b7c439e04483842e9e44a6c62b8d4b49b22be5fa5c4e462b269eb6c05",
+            "bytes": 346520
           }
         ],
         "permissions": [
@@ -2715,9 +2889,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.29.zip",
-        "sha256": "a7a59e795c52de0965e237934b8568af87cb53208e03a75445a437b52812df3c",
-        "bytes": 1452522
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.6.0.zip",
+        "sha256": "c5a085078e9aea4520b8fdc464cde07dd395f54bbbf927f7f5f6150cea8172f5",
+        "bytes": 3515626
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },

@@ -1,9 +1,10 @@
 import { memo, type RefObject } from "react";
-import { Archive, ChevronRight, Ellipsis, Trash2 } from "lucide-react";
+import { Archive, ChevronRight, Ellipsis, Globe, Trash2 } from "lucide-react";
 import type { LtmNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { Button, ClickSurface, IconButton } from "../shared-controls";
-import { labelKeys, localizedLabel, noteTypeLabel as formatNoteTypeLabel } from "../display-labels";
+import { Button, Chip, ClickSurface, IconButton } from "../shared-controls";
+import { labelKeys, localizedLabel } from "../display-labels";
 import { useLtmTranslation } from "../localization";
+import { hasExplicitScope } from "./vault-shared";
 
 type NoteActionEvent = { preventDefault: () => void; stopPropagation: () => void };
 
@@ -13,6 +14,38 @@ export type VaultRowActions = {
   toggleChecked: (noteId: string) => void;
   runNoteAction: (event: NoteActionEvent, note: LtmNote, action: "archive" | "delete") => void;
   toggleNoteActions: (event: NoteActionEvent, noteId: string) => void;
+  /** Narrow this chat's list to the memories one of its other branches added. */
+  filterByBranch: (chatId: string) => void;
+};
+
+type VaultRowProps = {
+  note: LtmNote;
+  label: string;
+  previewLabel?: string;
+  previewText?: string;
+  originLabel?: string;
+  /**
+   * "From branch …": this chat recalls the memory from another branch of its conversation. The text is the visible
+   * label, the label the accessible name (it says what the button does), and the button narrows the list to that
+   * branch. Plain strings, so `sameRow` compares them by value. Absent while a branch is already shown.
+   */
+  fromBranchChatId?: string;
+  fromBranchText?: string;
+  fromBranchLabel?: string;
+  /** Where the memory is available; a plain array the row compares by value, so a new array does not re-render it. */
+  places?: readonly string[];
+  /** The short age ("2 hr. ago"), already worded; empty when the note has no usable timestamp. */
+  updatedText?: string;
+  /** The tooltip for the age: "Updated" and the full date and time. */
+  updatedTitle?: string;
+  /** Who the memory is about, already worded ("About Rika"). */
+  subjectText?: string;
+  selected: boolean;
+  actionsOpen: boolean;
+  selectMode: boolean;
+  checked: boolean;
+  busy: boolean;
+  actions: RefObject<VaultRowActions | null>;
 };
 
 /**
@@ -25,26 +58,24 @@ export const VaultRow = memo(function VaultRow({
   previewLabel,
   previewText,
   originLabel,
+  fromBranchChatId,
+  fromBranchText,
+  fromBranchLabel,
+  places,
+  updatedText,
+  updatedTitle,
+  subjectText,
   selected,
   actionsOpen,
   selectMode,
   checked,
   busy,
   actions,
-}: {
-  note: LtmNote;
-  label: string;
-  previewLabel?: string;
-  previewText?: string;
-  originLabel?: string;
-  selected: boolean;
-  actionsOpen: boolean;
-  selectMode: boolean;
-  checked: boolean;
-  busy: boolean;
-  actions: RefObject<VaultRowActions | null>;
-}) {
+}: VaultRowProps) {
   const { t: localizeUi } = useLtmTranslation();
+  // No explicit place: the one place chip says "Available everywhere" and carries a globe.
+  const everywhere = note.type !== "source" && !hasExplicitScope(note.scope);
+  const hasChips = note.status !== "active" || Boolean(originLabel) || Boolean(places?.length);
   return (
     <ClickSurface
       data-ltm-note-id={note.id}
@@ -74,35 +105,81 @@ export const VaultRow = memo(function VaultRow({
             />
           </label>
         ) : null}
-        <button
-          type="button"
-          aria-current={selected ? "true" : undefined}
-          onClick={() => actions.current?.openNote(note)}
-          className="min-h-14 min-w-0 flex-1 overflow-hidden rounded-md px-2 text-left hover:bg-[var(--accent)]"
-        >
-          <span className="flex items-center gap-2">
-            <strong className="truncate text-sm">{label}</strong>
-            <ChevronRight aria-hidden="true" size="0.875rem" className="shrink-0" />
-          </span>
-          <span className="mt-1 flex gap-1 text-xs">
-            <span className="rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-              {formatNoteTypeLabel(note.type, localizeUi)}
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            aria-current={selected ? "true" : undefined}
+            onClick={() => actions.current?.openNote(note)}
+            className="min-h-14 w-full min-w-0 overflow-hidden rounded-md px-2 text-left hover:bg-[var(--accent)]"
+          >
+            <span className="flex items-center gap-2">
+              <strong className="truncate text-sm">{label}</strong>
+              {updatedText ? (
+                <span
+                  data-ltm-row-updated
+                  title={updatedTitle}
+                  className="ml-auto shrink-0 text-xs text-[var(--muted-foreground)]"
+                >
+                  {updatedText}
+                </span>
+              ) : null}
+              <ChevronRight aria-hidden="true" size="0.875rem" className="shrink-0" />
             </span>
-            <span className="rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-              {localizedLabel(note.status, localizeUi, labelKeys.status)}
-            </span>
-            {originLabel ? (
-              <span className="rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                {originLabel}
+            {hasChips ? (
+              <span className="mt-1 flex flex-wrap gap-1 text-xs">
+                {/* The type is the heading the row sits under. An active memory is the normal case, so only the other states earn a chip. */}
+                {note.status !== "active" ? (
+                  <Chip>{localizedLabel(note.status, localizeUi, labelKeys.status)}</Chip>
+                ) : null}
+                {originLabel ? <Chip>{originLabel}</Chip> : null}
+                {places?.slice(0, maxPlacePills).map((place, index) => (
+                  <Chip
+                    key={index}
+                    tone="muted"
+                    data-ltm-row-place
+                    className={everywhere ? "inline-flex items-center gap-1" : ""}
+                  >
+                    {everywhere ? <Globe aria-hidden="true" size="0.75rem" className="shrink-0" /> : null}
+                    {place}
+                  </Chip>
+                ))}
+                {places && places.length > maxPlacePills ? (
+                  <Chip tone="muted" data-ltm-row-place title={places.slice(maxPlacePills).join(", ")}>
+                    +{places.length - maxPlacePills}
+                    <span className="sr-only"> ({places.slice(maxPlacePills).join(", ")})</span>
+                  </Chip>
+                ) : null}
               </span>
             ) : null}
-          </span>
-          {previewText !== undefined ? (
-            <span className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[var(--muted-foreground)]">
-              <span className="font-medium text-[var(--foreground)]">{previewLabel}:</span> {previewText}
-            </span>
+            {subjectText ? (
+              <span data-ltm-row-subject className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
+                {subjectText}
+              </span>
+            ) : null}
+            {previewText !== undefined ? (
+              <span className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[var(--muted-foreground)]">
+                {previewLabel ? (
+                  <>
+                    <span className="font-medium text-[var(--foreground)]">{previewLabel}:</span>{" "}
+                  </>
+                ) : null}
+                {previewText}
+              </span>
+            ) : null}
+          </button>
+          {/* A button of its own: it cannot sit inside the open button above, and it must not open the memory. */}
+          {fromBranchChatId && fromBranchText ? (
+            <Button
+              data-ltm-row-from-branch={fromBranchChatId}
+              aria-label={fromBranchLabel}
+              title={fromBranchLabel}
+              className="mt-1 max-w-full justify-start text-xs"
+              onClick={() => actions.current?.filterByBranch(fromBranchChatId)}
+            >
+              <span className="truncate">{fromBranchText}</span>
+            </Button>
           ) : null}
-        </button>
+        </div>
         {note.type !== "source" ? (
           <div
             data-ltm-note-actions-desktop
@@ -167,4 +244,19 @@ export const VaultRow = memo(function VaultRow({
       ) : null}
     </ClickSurface>
   );
-});
+}, sameRow);
+
+const maxPlacePills = 2;
+
+/** Props compare by value (`updatedText` and `updatedTitle` included), except `places`, which is rebuilt on every render of the list. */
+function sameRow(previous: VaultRowProps, next: VaultRowProps) {
+  const keys = new Set([...Object.keys(previous), ...Object.keys(next)]) as Set<keyof VaultRowProps>;
+  for (const key of keys) {
+    if (key === "places") continue;
+    if (!Object.is(previous[key], next[key])) return false;
+  }
+  return (
+    previous.places?.length === next.places?.length &&
+    (previous.places ?? []).every((place, index) => place === next.places?.[index])
+  );
+}

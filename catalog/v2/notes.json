@@ -400,6 +400,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.0",
+          "date": "2026-11-14",
+          "notes": "- The Memory Vault has a Graph view of your memories and their links; it works on phones and stays smooth with hundreds of memories.\n- Each reply has a Long-Term Memory card in the chat's Agent activity panel and drawer, and Activity has its own page.\n- Branched chats remember what their other branches saved and keep their latest messages visible.\n- Recall is set by one token budget, uses whole memories only and matches the meaning of the latest messages.\n- Extraction saves fewer, story-level memories, and \"Newest messages to leave for later\" keeps it off a scene that is still going.\n- Sharing is set per Agent, with \"Can read\" and \"Can add\" switches.\n- New: setup and a tour with Mari, a one-time \"What's new\", and three AI checks for older memories (\"Tidy with AI\", \"Link older relationships\", \"Find duplicate people\") that change only what you tick.\n- Memory Settings, Sources, Review and the Vault are simpler to read.\n- Needs an Engine with the chat activity slot (Capability API 1.820).",
+          "highlight": true
+        },
+        {
           "version": "1.5.29",
           "date": "2026-11-01",
           "notes": "- Long-Term Memory no longer imports Advanced Memory scene recaps. Chats that use Advanced Memory are extracted from their own summaries and messages, so their memories get keywords, links and threads, and \"Hide remembered messages\" works for them. Memories already imported from recaps stay.",
@@ -511,12 +517,6 @@
           "version": "1.5.11",
           "date": "2026-10-30",
           "notes": "- A memory whose score (salience or confidence) the model writes in quotes (\"0.5\") is kept instead of dropped, and a chat piece whose every memory is malformed fails with Retry instead of reporting success with nothing kept.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.10",
-          "date": "2026-10-29",
-          "notes": "- Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.",
           "highlight": false
         }
       ]

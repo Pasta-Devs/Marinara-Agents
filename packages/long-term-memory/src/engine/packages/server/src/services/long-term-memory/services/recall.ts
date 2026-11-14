@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { LtmNote, LtmNoteType } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  packageAccess,
+  type LtmNote,
+  type LtmNoteType,
+} from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import type { LongTermMemoryStorage } from "../persistence/storage.js";
 import { estimateTokens } from "../recall/budget.js";
 import { chunkNoteSections } from "../recall/chunking.js";
@@ -84,7 +88,7 @@ export function createLtmRecallService(storage: Pick<LongTermMemoryStorage, "lis
       if (!characterIds.length && !personaId) return null;
       try {
         const settings = await getLtmGlobalSettings(storage.root);
-        if (!settings.longTermMemoryShareWithPackages) return null;
+        if (!packageAccess(settings, caller).read) return null;
         // No chat or group in the query, so a memory limited to one never matches.
         const scope = personaId ? { personaId, personaIds: [personaId] } : undefined;
         const accountIds = new Set([...characterIds, ...(personaId ? [personaId] : [])]);

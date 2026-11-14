@@ -1,32 +1,38 @@
-import { Settings2 } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  LtmExtractionSettingsPatch,
-  LtmGlobalSettings,
-  LtmLastInjectionResponse,
-} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { errorMessage, queryKeys, request } from "./api";
+import { toast } from "sonner";
 import {
-  autoImportNeedsConnection,
-  autoImportSavedToday,
-  requestLtmOpen,
-  useAutoImportEvents,
-} from "./auto-import-status";
+  DEFAULT_LTM_GLOBAL_SETTINGS,
+  type LtmGlobalSettings,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  branchMemoriesPath,
+  errorMessage,
+  queryKeys,
+  request,
+  statusQueryOptions,
+  type LtmBranchMemories,
+} from "./api";
+import { requestLtmOpen } from "./auto-import-status";
 import {
   Button,
-  InfoPopover,
+  Chip,
+  DefaultChip,
   NumberField,
   StatusSurface,
   compactInputClass,
   compactInputStyle,
+  lockedActionProps,
 } from "./shared-controls";
 import type { CapabilityProps } from "./types";
-import { LastInjectionSummary } from "./LastInjectionSummary";
-import { useLtmTranslation } from "./localization";
-import { recallStyleDescriptionKey, recallStyles } from "./recall-style";
+import { ActivityCardView, openChatPlaceInVault, useActivityCardState } from "./ActivityCard";
+import { useBranchHiddenTail } from "./BranchHiddenTail";
+import { readSetupProgress } from "./onboarding/progress";
+import { selectLtmPluralForm, useLtmTranslation } from "./localization";
+import { recallStyleDescriptionKey, recallStyleLabelKey, recallStyles } from "./recall-style";
 import {
-  ltmChatMemoriesModeOf,
+  ltmRecallBudgetMemories,
+  ltmRecallBudgetWithLegacyCount,
   type LtmChatMemoriesMode,
 } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import {
@@ -36,62 +42,70 @@ import {
   chatMemoriesModes,
 } from "./chat-memories";
 
+// One compact look for every "Use the default" button here, so it sits level with the fields beside it.
+const compactButtonProps = { className: "mari-editor-action--compact text-[0.625rem]", style: { minHeight: "2rem" } };
+
 export function ChatSettings({ props }: { props: CapabilityProps }) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { t: localizeUi, locale } = useLtmTranslation();
   const recallStyleLabelId = useId();
+  const recallStyleDescriptionId = useId();
+  const chatMemoriesDescriptionId = useId();
   const chatMemoriesLabelId = useId();
   const [pending, setPending] = useState(false);
   // A pending save keeps its controls focusable (aria-disabled, not `disabled`), so this guard ignores input meanwhile.
   const pendingRef = useRef(false);
-  const [message, setMessage] = useState("");
+  // The recall field that just saved shows a muted "Saved" until the next edit or a few seconds pass.
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
   const globalSettings = useQuery({
     queryKey: queryKeys.chatDefaults,
     queryFn: () => request<LtmGlobalSettings>("/settings"),
   });
-  const extraction = useQuery({
-    queryKey: queryKeys.extractionSettings,
-    queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
-  });
-  // The Engine passes only the recall keys in chatSettings, so this chat's own choice is read from the package.
-  const chatMemories = useQuery({
+  // The card's own reads; the status line below shares them.
+  const card = useActivityCardState(props);
+  const { chatMemories, extraction, effectiveChatMemories, chatMemoriesOverride, globalChatMemories } = card;
+  const { autoImportOn, autoImportEvents, waitingDrafts } = card;
+  // On a branch, the memories recall also uses from the conversation's other branches (the same set recall uses).
+  const branchMemories = useQuery({
     enabled: Boolean(props.chatId),
-    queryKey: queryKeys.chatMemories(props.chatId),
-    queryFn: () =>
-      request<{ chatMemories: LtmChatMemoriesMode | null }>(`/chat-memories/${encodeURIComponent(props.chatId!)}`),
+    queryKey: queryKeys.branchMemories(props.chatId),
+    queryFn: () => request<LtmBranchMemories>(branchMemoriesPath(props.chatId!)),
   });
-  const chatMemoriesOverride = chatMemories.data?.chatMemories ?? null;
-  const globalChatMemories = extraction.data ? ltmChatMemoriesModeOf(extraction.data) : null;
-  const effectiveChatMemories = chatMemoriesOverride ?? (chatMemories.data ? globalChatMemories : null);
-  // An override decides import on its own; without one the global switch does.
-  const autoImportOn = chatMemoriesOverride
-    ? chatMemoriesOverride !== "manual"
-    : extraction.data?.autoImportChatSources === true;
-  const autoImportEvents = useAutoImportEvents(autoImportOn);
-  const waitingDrafts = useQuery({
-    enabled: autoImportOn && Boolean(props.chatId),
-    queryKey: [...queryKeys.pendingDrafts, props.chatId],
-    queryFn: () => request<{ count: number }>(`/drafts/pending-count?chatId=${encodeURIComponent(props.chatId!)}`),
-  });
-  const lastInjection = useQuery({
-    enabled: Boolean(props.chatId),
-    queryKey: queryKeys.lastInjection(props.chatId),
-    queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
-  });
+  const handHidden = useBranchHiddenTail(props.chatId);
   const runUpdate = async (operation: () => void | Promise<void>) => {
     if (pendingRef.current) return;
     pendingRef.current = true;
     setPending(true);
-    setMessage("");
     try {
       await operation();
     } catch (error) {
-      setMessage(errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")));
+      toast.error(errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")));
     } finally {
       pendingRef.current = false;
       setPending(false);
     }
   };
-  const update = (patch: Record<string, unknown>) => void runUpdate(() => props.onChatSettingsChange?.(patch));
+  const update = (patch: Record<string, unknown>) => {
+    clearTimeout(savedTimer.current);
+    setSavedKey(null);
+    void runUpdate(async () => {
+      await props.onChatSettingsChange?.(patch);
+      setSavedKey(Object.keys(patch)[0] ?? null);
+      savedTimer.current = setTimeout(() => setSavedKey(null), 4000);
+    });
+  };
+  const savedLine = (key: string) => (
+    // Always mounted so a screen reader announces the text when it appears; empty, it takes no room.
+    <p
+      role="status"
+      data-ltm-chat-saved={key}
+      className="text-[0.6875rem] font-normal leading-snug text-[var(--muted-foreground)]"
+      style={savedKey === key ? undefined : { marginTop: 0 }}
+    >
+      {savedKey === key ? localizeUi("ui.longTermMemory.memorysettings.saveStateSaved") : null}
+    </p>
+  );
   const updateChatMemories = (mode: LtmChatMemoriesMode | null) =>
     void runUpdate(async () => {
       await props.onChatSettingsChange?.({ longTermMemoryChatMemories: mode });
@@ -103,23 +117,86 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
   const defaults = globalSettings.data;
   const effectiveStyle =
     settings.longTermMemoryRecallStyle ?? (defaults ? (defaults.longTermMemoryRecallStyle ?? "balanced") : null);
+  const defaultBudget = defaults?.longTermMemoryBudgetTokens ?? DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryBudgetTokens;
+  // A memory count this chat saved before recall became budget-only still caps its budget, as recall applies it.
+  const legacyCount = settings.longTermMemoryMaxChunks;
   const effectiveBudget =
-    settings.longTermMemoryBudgetTokens ?? (defaults ? (defaults.longTermMemoryBudgetTokens ?? 4096) : null);
-  const effectiveMaxChunks =
-    settings.longTermMemoryMaxChunks ?? (defaults ? (defaults.longTermMemoryMaxChunks ?? 20) : null);
+    settings.longTermMemoryBudgetTokens == null && !defaults
+      ? null
+      : ltmRecallBudgetWithLegacyCount(settings.longTermMemoryBudgetTokens ?? defaultBudget, legacyCount);
+  const status = useQuery(statusQueryOptions);
+  const budgetFit =
+    effectiveBudget === null
+      ? null
+      : ltmRecallBudgetMemories(effectiveBudget, status.data?.indexes.averageMemoryTokens);
+  // Saving or resetting the budget ends that cap.
+  const budgetPatch = (value: number | null) => ({
+    longTermMemoryBudgetTokens: value,
+    ...(legacyCount == null ? {} : { longTermMemoryMaxChunks: null }),
+  });
   const unknownValueLabel = localizeUi(
     globalSettings.isError
       ? "ui.longTermMemory.chatsettings.defaultUnavailable"
       : "ui.longTermMemory.chatsettings.defaultLoading",
   );
-  const saved = props.chatId ? autoImportSavedToday(autoImportEvents.data?.events ?? [], props.chatId) : 0;
-  const waiting = waitingDrafts.data?.count ?? 0;
+  const openChatInVault = () => openChatPlaceInVault(props, localizeUi);
+  // "Raise limit" on the card lands on the budget, the one limit a recall has.
+  const budgetField = useRef<HTMLDivElement>(null);
+  const raiseLimit = () => {
+    const field = budgetField.current;
+    field?.scrollIntoView?.({ block: "center" });
+    field?.querySelector("input")?.focus();
+  };
   const styleInherited = settings.longTermMemoryRecallStyle == null;
-  const budgetInherited = settings.longTermMemoryBudgetTokens == null;
-  const maxChunksInherited = settings.longTermMemoryMaxChunks == null;
+  const budgetInherited = settings.longTermMemoryBudgetTokens == null && legacyCount == null;
+  // Each field says it follows the default for all chats (with its value), or offers one click back to it.
+  const defaultControl = (inherited: boolean, value: string, resetKey: string) =>
+    inherited && globalSettings.data ? (
+      <DefaultChip value={value} />
+    ) : !inherited && !readOnly && globalSettings.data ? (
+      <Button
+        {...compactButtonProps}
+        data-ltm-default-reset={resetKey}
+        onClick={() => update(resetKey === "longTermMemoryBudgetTokens" ? budgetPatch(null) : { [resetKey]: null })}
+        {...lockedActionProps(pending)}
+      >
+        {localizeUi("ui.longTermMemory.chatsettings.useGlobalDefaultValue", { value })}
+      </Button>
+    ) : null;
+  const globalStyle = defaults?.longTermMemoryRecallStyle ?? "balanced";
+  const statusQueries = [chatMemories, extraction, ...(autoImportOn ? [autoImportEvents, waitingDrafts] : [])];
+  const statusError = statusQueries.some((query) => query.isError);
+  const statusLoading = statusQueries.some((query) => query.isFetching && query.data === undefined);
+  // A failed read stays an error while its retry runs, so the Retry locks until that refetch settles.
+  const statusRetrying = statusQueries.some((query) => query.isError && query.isFetching);
 
   return (
     <section data-ltm-surface="chat-settings" data-ltm-density="compact" className="space-y-1.5">
+      {/* D27 (initial load only, so a background refetch keeps the card; error/Retry unchanged) and the
+          memory-on gate live in ActivityCardView, shared with the Agent activity panel. */}
+      <ActivityCardView props={props} card={card} onRaiseLimit={readOnly ? undefined : raiseLimit} />
+      {/* Until setup is done, a chat with memory off offers it here; setup opens in the agent's page. */}
+      {props.chatId && !props.enabledForChat && props.onOpenAgentSettings && readSetupProgress() !== "done" ? (
+        <div data-ltm-chat-setup className="space-y-1 text-[0.625rem]">
+          <div className="flex items-center gap-1.5">
+            <Chip className="inline-flex">{localizeUi("ui.longTermMemory.chatsettings.setupOff")}</Chip>
+            <Button
+              {...compactButtonProps}
+              primary
+              data-ltm-chat-setup-open
+              onClick={() => {
+                requestLtmOpen("setup");
+                props.onOpenAgentSettings?.();
+              }}
+            >
+              {localizeUi("ui.longTermMemory.chatsettings.setUp")}
+            </Button>
+          </div>
+          <p className="text-[0.6875rem] leading-snug text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.chatsettings.setupHint")}
+          </p>
+        </div>
+      ) : null}
       {readOnly ? (
         <StatusSurface compact>
           {localizeUi("ui.longTermMemory.chatsettings.chatSettingsAreManagedByTheHostAndCannot")}
@@ -129,24 +206,10 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         <div data-ltm-chat-memories-field className="space-y-1 text-[0.625rem] font-medium">
           <span id={chatMemoriesLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
             {localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
-              content={
-                <ul className="space-y-1.5">
-                  {chatMemoriesModes.map((mode) => (
-                    <li key={mode} data-ltm-chat-memories-option={mode}>
-                      <span className="font-semibold">{localizeUi(chatMemoriesLabelKey(mode))}</span>
-                      {" · "}
-                      {localizeUi(chatMemoriesDescriptionKey(mode))}
-                    </li>
-                  ))}
-                </ul>
-              }
-              compact
-            />
           </span>
           <select
             aria-labelledby={chatMemoriesLabelId}
+            aria-describedby={effectiveChatMemories ? chatMemoriesDescriptionId : undefined}
             data-ltm-control="select"
             data-ltm-chat-memories="chat"
             className={`${compactInputClass}${pending ? " opacity-50" : ""}`}
@@ -171,14 +234,20 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
               </option>
             ))}
           </select>
+          {effectiveChatMemories ? (
+            <p
+              id={chatMemoriesDescriptionId}
+              data-ltm-chat-memories-description
+              className="text-[0.6875rem] font-normal leading-snug text-[var(--muted-foreground)]"
+            >
+              {localizeUi(chatMemoriesDescriptionKey(effectiveChatMemories))}
+            </p>
+          ) : null}
           {chatMemories.data && !chatMemoriesOverride && globalChatMemories ? (
-            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
-              </span>
-            </span>
+            <DefaultChip />
           ) : chatMemoriesOverride && !readOnly ? (
             <Button
+              {...compactButtonProps}
               data-ltm-chat-memories-reset
               onClick={() => updateChatMemories(null)}
               aria-disabled={pending || undefined}
@@ -188,28 +257,9 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       ) : null}
-      {autoImportOn &&
-      !extraction.data?.connectionId &&
-      autoImportNeedsConnection(autoImportEvents.data?.events ?? [], props.chatId) ? (
-        <StatusSurface tone="warning" compact data-ltm-connection-warning>
-          <span className="min-w-0 flex-1">
-            {localizeUi("ui.longTermMemory.chatsettings.autoImportNeedsConnection")}
-          </span>
-          <Button
-            onClick={() => {
-              requestLtmOpen("extraction");
-              props.onOpenAgentSettings?.();
-            }}
-            disabled={!props.onOpenAgentSettings}
-          >
-            {localizeUi("ui.longTermMemory.chatsettings.autoImportChooseConnection")}
-          </Button>
-        </StatusSurface>
-      ) : props.chatId && effectiveChatMemories === "manual" ? (
+      {props.chatId && effectiveChatMemories === "manual" ? (
         <ChatMemoriesStatusLine
           mode="manual"
-          saved={0}
-          waiting={0}
           compact
           data-ltm-auto-import-status
           onImport={
@@ -221,51 +271,65 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
               : undefined
           }
         />
-      ) : autoImportOn && props.chatId && effectiveChatMemories && autoImportEvents.data && waitingDrafts.data ? (
-        <ChatMemoriesStatusLine
-          mode={effectiveChatMemories}
-          saved={saved}
-          waiting={waiting}
-          compact
-          data-ltm-auto-import-status
-          onReview={
-            props.onOpenAgentSettings
-              ? () => {
-                  requestLtmOpen("review");
-                  props.onOpenAgentSettings?.();
-                }
-              : undefined
-          }
-        />
+      ) : props.chatId && statusError ? (
+        <StatusSurface tone="danger" compact data-ltm-auto-import-status-error>
+          <span className="min-w-0 flex-1">{localizeUi("ui.longTermMemory.chatsettings.statusUnavailable")}</span>
+          <Button
+            {...compactButtonProps}
+            onClick={() => {
+              if (statusRetrying) return;
+              for (const query of statusQueries) if (query.isError) void query.refetch();
+            }}
+            {...lockedActionProps(statusRetrying)}
+          >
+            {localizeUi("ui.longTermMemory.activityview.retry")}
+          </Button>
+        </StatusSurface>
+      ) : props.chatId && statusLoading ? (
+        <StatusSurface busy compact data-ltm-auto-import-status-loading>
+          {localizeUi("ui.longTermMemory.chatsettings.statusLoading")}
+        </StatusSurface>
       ) : null}
-      <div className="grid gap-1.5">
-        <p className="px-0.5 text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
+      {handHidden.ids.length ? (
+        <StatusSurface compact data-ltm-branch-hidden-tail>
+          <span className="min-w-0 flex-1">{handHidden.line}</span>
+          <Button
+            {...compactButtonProps}
+            onClick={() => void handHidden.show()}
+            {...lockedActionProps(handHidden.showing)}
+          >
+            {localizeUi("ui.longTermMemory.chatsettings.branchHiddenTailShow")}
+          </Button>
+        </StatusSurface>
+      ) : null}
+      {props.chatId
+        ? branchMemories.data?.branches.map((branch) => (
+            <StatusSurface key={branch.chatId} compact data-ltm-branch-memories={branch.chatId}>
+              <span className="min-w-0 flex-1">
+                {localizeUi(
+                  selectLtmPluralForm(locale, branch.noteIds.length) === "one"
+                    ? "ui.longTermMemory.chatsettings.branchMemoriesOne"
+                    : "ui.longTermMemory.chatsettings.branchMemoriesOther",
+                  { count: branch.noteIds.length, value1: branch.name },
+                )}
+              </span>
+              <Button {...compactButtonProps} onClick={openChatInVault} disabled={!props.onOpenAgentSettings}>
+                {localizeUi("ui.longTermMemory.chatsettings.branchMemoriesShow")}
+              </Button>
+            </StatusSurface>
+          ))
+        : null}
+      <div className="grid gap-2">
+        <p className="px-0.5 text-[0.6875rem] leading-snug text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.chatsettings.recallExplanation")}
         </p>
         <div className="space-y-1 text-[0.625rem] font-medium">
           <span id={recallStyleLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
             {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
-              content={
-                <ul className="space-y-1.5">
-                  {recallStyles.map((style) => (
-                    <li key={style} data-ltm-recall-style-option={style}>
-                      {style === effectiveStyle ? (
-                        <span className="mr-1 inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5 text-[0.5625rem] font-semibold">
-                          {localizeUi("ui.longTermMemory.chatsettings.currentRecallStyle")}
-                        </span>
-                      ) : null}
-                      {localizeUi(recallStyleDescriptionKey(style))}
-                    </li>
-                  ))}
-                </ul>
-              }
-              compact
-            />
           </span>
           <select
             aria-labelledby={recallStyleLabelId}
+            aria-describedby={effectiveStyle ? recallStyleDescriptionId : undefined}
             data-ltm-control="select"
             className={`${compactInputClass}${pending ? " opacity-50" : ""}`}
             style={compactInputStyle}
@@ -279,24 +343,39 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
                 {unknownValueLabel}
               </option>
             ) : null}
-            <option value="balanced">{localizeUi("ui.longTermMemory.chatsettings.balanced")}</option>
-            <option value="exact">{localizeUi("ui.longTermMemory.chatsettings.exact")}</option>
-            <option value="broad">{localizeUi("ui.longTermMemory.chatsettings.broad")}</option>
-            <option value="story">{localizeUi("ui.longTermMemory.chatsettings.story")}</option>
-            <option value="custom">{localizeUi("ui.longTermMemory.chatsettings.custom")}</option>
+            {recallStyles.map((style) => (
+              <option key={style} value={style}>
+                {localizeUi(recallStyleLabelKey(style))}
+              </option>
+            ))}
           </select>
-          {styleInherited && globalSettings.data ? (
-            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
-              </span>
-            </span>
+          {effectiveStyle ? (
+            <p
+              id={recallStyleDescriptionId}
+              data-ltm-recall-style-description
+              className="text-[0.6875rem] font-normal leading-snug text-[var(--muted-foreground)]"
+            >
+              {localizeUi(recallStyleDescriptionKey(effectiveStyle))}
+            </p>
           ) : null}
+          {savedLine("longTermMemoryRecallStyle")}
+          {defaultControl(styleInherited, localizeUi(recallStyleLabelKey(globalStyle)), "longTermMemoryRecallStyle")}
         </div>
-        <div className="space-y-1">
+        <div ref={budgetField} className="space-y-1" onInput={() => setSavedKey(null)}>
           <NumberField
-            label={localizeUi("ui.longTermMemory.chatsettings.recallContextBudget")}
-            help={localizeUi("ui.longTermMemory.chatsettings.maximumNumberOfTokensThatRecalledMemoriesMayAdd")}
+            label={localizeUi("ui.longTermMemory.memorysettings.recallBudgetTokens")}
+            hint={
+              <>
+                {budgetFit === null ? null : (
+                  <p aria-live="polite" data-ltm-recall-budget-hint>
+                    {budgetFit === 1
+                      ? localizeUi("ui.longTermMemory.memorysettings.recallBudgetFitOne")
+                      : localizeUi("ui.longTermMemory.memorysettings.recallBudgetFit", { count: budgetFit })}
+                  </p>
+                )}
+                <p>{localizeUi("ui.longTermMemory.chatsettings.maximumNumberOfTokensThatRecalledMemoriesMayAdd")}</p>
+              </>
+            }
             value={effectiveBudget}
             integer
             min={128}
@@ -305,65 +384,13 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             placeholder={effectiveBudget === null ? unknownValueLabel : undefined}
             disabled={readOnly}
             busy={pending}
-            onChange={(value) => update({ longTermMemoryBudgetTokens: value })}
+            onChange={(value) => update(budgetPatch(value))}
             compact
           />
-          {budgetInherited && globalSettings.data ? (
-            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
-              </span>
-            </span>
-          ) : null}
-        </div>
-        <div className="space-y-1">
-          <NumberField
-            label={localizeUi("ui.longTermMemory.chatsettings.maximumMemories")}
-            help={localizeUi("ui.longTermMemory.chatsettings.maximumNumberOfSavedMemoriesThatOneRecallMay")}
-            value={effectiveMaxChunks}
-            integer
-            min={1}
-            max={100}
-            placeholder={effectiveMaxChunks === null ? unknownValueLabel : undefined}
-            disabled={readOnly}
-            busy={pending}
-            onChange={(value) => update({ longTermMemoryMaxChunks: value })}
-            compact
-          />
-          {maxChunksInherited && globalSettings.data ? (
-            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
-              </span>
-            </span>
-          ) : null}
+          {savedLine("longTermMemoryBudgetTokens")}
+          {defaultControl(budgetInherited, defaultBudget.toLocaleString(locale), "longTermMemoryBudgetTokens")}
         </div>
       </div>
-      {/* D27: initial load only, so a background refetch keeps the existing data and
-          title instead of flashing the loading title; error/Retry behavior is unchanged. */}
-      <LastInjectionSummary
-        data={lastInjection.data}
-        loading={lastInjection.isLoading}
-        retryPending={lastInjection.isFetching}
-        error={lastInjection.isError}
-        onRetry={() => void lastInjection.refetch()}
-        compact
-      />
-      {props.onOpenAgentSettings ? (
-        <button
-          type="button"
-          onClick={props.onOpenAgentSettings}
-          className="mari-agent-settings-action inline-flex min-h-8 w-full items-center justify-center gap-1.5 px-2.5 text-[0.625rem]"
-        >
-          <Settings2 aria-hidden="true" size="0.75rem" />
-          {localizeUi("ui.longTermMemory.chatsettings.openLongTermMemory")}
-        </button>
-      ) : null}
-      {message ? (
-        <StatusSurface tone="danger" compact>
-          {message}
-        </StatusSurface>
-      ) : null}
     </section>
   );
 }

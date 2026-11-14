@@ -20,6 +20,7 @@ import { noteIdForEvidenceUnit, riskForEvidenceUnit } from "./evidence-unit-vali
 import { uniqueStrings } from "../ltm-utils.js";
 import { subjectsEqual } from "../identity/subject-equality.js";
 import { isLocalCharacterSubject } from "../identity/chat-scope.js";
+import { stripTrailingIdToken } from "../identity/subject-names.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 
 export interface CompileLtmEvidenceUnitsOptions {
@@ -101,8 +102,6 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
           units,
           confidence,
           note,
-          existingNotes: options.existingNotes,
-          creating: true,
         }),
         confidence,
         summary: `Create ${target.noteType} memory ${noteId}`,
@@ -541,11 +540,15 @@ function lifecycleForUnit(unit: LtmEvidenceUnit): LtmCompilerLifecycle {
 }
 
 function titleForUnits(units: LtmEvidenceUnit[], noteType: LtmNoteType, subjectNames?: string[]) {
-  if (noteType === "character" && subjectNames?.[0]) return subjectNames[0].slice(0, 240);
-  if (noteType === "relationship" && subjectNames?.length) return subjectNames.join(" and ").slice(0, 240);
+  if (noteType === "character" && subjectNames?.[0]) return stripTrailingIdToken(subjectNames[0]).slice(0, 240);
+  if (noteType === "relationship" && subjectNames?.length) {
+    return subjectNames
+      .map((name) => stripTrailingIdToken(name.replace(/['\u2019]s$/i, "").trim() || name))
+      .join(" and ")
+      .slice(0, 240);
+  }
   const extractedTitle = units.map((unit) => unit.title?.trim()).find((title) => title?.length);
-  if (extractedTitle) return extractedTitle.slice(0, 240);
-  return fallbackTitleForUnits(units, noteType);
+  return stripTrailingIdToken(extractedTitle ?? fallbackTitleForUnits(units, noteType)).slice(0, 240);
 }
 
 function fallbackTitleForUnits(units: LtmEvidenceUnit[], noteType: LtmNoteType) {
@@ -560,7 +563,7 @@ function fallbackTitleForUnits(units: LtmEvidenceUnit[], noteType: LtmNoteType) 
 }
 
 function humanizeSubjectId(value: string) {
-  return value
+  return stripTrailingIdToken(value)
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
     .slice(0, 240);
@@ -593,31 +596,15 @@ function riskForCompiledMutation({
   units,
   confidence,
   note,
-  existingNotes,
   sourceBacked = true,
-  creating = false,
 }: {
   units: LtmEvidenceUnit[];
   confidence: number;
-  note: Pick<LtmNote, "type" | "tags" | "conflicts" | "subjects">;
-  existingNotes?: LtmNote[];
+  note: Pick<LtmNote, "type" | "tags" | "conflicts">;
   sourceBacked?: boolean;
-  creating?: boolean;
 }): LtmDraftRisk {
   const baseRisk = maxRisk(units.map(riskForEvidenceUnit));
   if (baseRisk !== "low") return baseRisk;
-  if (
-    creating &&
-    note.subjects?.some(
-      (subject) =>
-        isLocalCharacterSubject(subject) &&
-        !(existingNotes ?? []).some((existing) =>
-          existing.subjects?.some((candidate) => candidate.key === subject.key),
-        ),
-    )
-  ) {
-    return "medium";
-  }
   if (confidence < 0.85) return "medium";
   if (!isTypedMemoryNote(note)) return "medium";
   if (note.conflicts?.length) return "medium";

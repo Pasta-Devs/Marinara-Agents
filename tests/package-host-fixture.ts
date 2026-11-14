@@ -10,7 +10,15 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readHostContractSpecifiers, readHostModuleImports } from "../scripts/esbuild-host-plugins.mjs";
 
-export async function buildPackageHostFixture(engineRoot: string): Promise<string> {
+// `toaster: true` also mounts the one sonner Toaster the Engine's App.tsx mounts, in its own root appended to
+// document.body, so a package's `toast()` calls render in the fixture page. It shares the bundled `sonner` module with
+// the host namespace, so a toast raised by the package reaches it. The package itself never mounts a Toaster.
+// `agentStore: true` adds `stores.agent`, whose `getState()` returns whatever the page's `globalThis.__agentState()` gives
+// (an empty state until a test sets it), so a test can stand in for the Engine's agent store; the stores stay frozen.
+export async function buildPackageHostFixture(
+  engineRoot: string,
+  options: { toaster?: boolean; agentStore?: boolean } = {},
+): Promise<string> {
   const clientRoot = join(engineRoot, "packages/client");
   const esbuild = createRequire(pathToFileURL(join(engineRoot, "package.json")))("esbuild") as typeof import("esbuild");
   const specifiers: string[] = readHostContractSpecifiers(engineRoot);
@@ -26,7 +34,7 @@ Object.defineProperty(globalThis, "__MARINARA_HOST__", {
   value: Object.freeze({
     version: 1,
     capabilityApi: supportedCapabilityApi,
-    stores: Object.freeze({}),
+    stores: Object.freeze({ ${options.agentStore ? "agent: { getState: () => globalThis.__agentState?.() ?? {} }" : ""} }),
     services: Object.freeze({}),
     modules: Object.freeze({ ${modules.join(", ")} }),
     queryClient,
@@ -34,7 +42,22 @@ Object.defineProperty(globalThis, "__MARINARA_HOST__", {
     data: Object.freeze({}),
   }),
 });
-`;
+${
+  options.toaster
+    ? `import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { Toaster } from ${JSON.stringify(moduleImports["sonner"] ?? "sonner")};
+const mountToaster = () => {
+  const root = document.createElement("div");
+  root.setAttribute("data-test-toaster-root", "");
+  document.body.appendChild(root);
+  createRoot(root).render(createElement(Toaster, { position: "top-center" }));
+};
+if (document.body) mountToaster();
+else document.addEventListener("DOMContentLoaded", mountToaster, { once: true });
+`
+    : ""
+}`;
   const result = await esbuild.build({
     stdin: { contents, resolveDir: clientRoot, loader: "ts" },
     absWorkingDir: clientRoot,

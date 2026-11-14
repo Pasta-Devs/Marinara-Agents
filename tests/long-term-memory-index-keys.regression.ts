@@ -311,6 +311,46 @@ async function main() {
     "fused candidates expose their one-based rank before budget ordering",
   );
 
+  // A lane's rankWeight lifts only its reciprocal-rank sum; the relevance threshold keeps `weight`.
+  const rankLanes = (vectorRankWeight?: number) => [
+    {
+      name: "vector",
+      weight: 0.7,
+      ...(vectorRankWeight === undefined ? {} : { rankWeight: vectorRankWeight }),
+      items: [
+        { chunkId: "vector-top", rawScore: 0.9, reason: "vector" },
+        { chunkId: "vector-meaning", rawScore: 0.6, reason: "vector" },
+      ],
+    },
+    {
+      name: "bm25",
+      weight: 1,
+      items: ["bm25-1", "bm25-2", "bm25-3"].map((chunkId) => ({ chunkId, rawScore: 1, reason: "bm25" })),
+    },
+  ];
+  const rankOf = (ranked: Array<{ chunkId: string; fusedRank: number }>, id: string) =>
+    ranked.find((candidate) => candidate.chunkId === id)?.fusedRank ?? 0;
+  const plainRank = reciprocalRankFuse(rankLanes());
+  const weightedRank = reciprocalRankFuse(rankLanes(1));
+  assert.ok(
+    rankOf(plainRank, "vector-meaning") > rankOf(plainRank, "bm25-3"),
+    "without a rankWeight a vector-only note at vector rank 2 loses to a low-score lexical note at bm25 rank 3",
+  );
+  assert.ok(
+    rankOf(weightedRank, "vector-meaning") < rankOf(weightedRank, "bm25-3"),
+    "a vector rankWeight of 1.0 lifts that vector-only note above the lexical note",
+  );
+  assert.equal(
+    weightedRank.find(({ chunkId }) => chunkId === "vector-meaning")?.relevanceScore,
+    plainRank.find(({ chunkId }) => chunkId === "vector-meaning")?.relevanceScore,
+    "the rankWeight never changes the relevance score the threshold reads",
+  );
+  assert.equal(
+    reciprocalRankFuse([{ ...rankLanes(1)[0]!, weight: 0 }]).length,
+    0,
+    "a lane whose weight is 0 stays off even with a rankWeight",
+  );
+
   // Issue #1258: every lane must share one absolute 0-1 scale, or the score
   // threshold drops from many memories to almost none instead of removing the
   // progressively weaker matches. A 202-chunk corpus gives the idf magnitude the

@@ -6,6 +6,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
+import {
+  LTM_ONBOARDING_SPRITES,
+  ltmOnboardingSpriteUrl,
+} from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/onboarding/assets.ts";
 
 type App = {
   inject: (options: unknown) => Promise<{ statusCode: number; body: string; rawPayload: Buffer }>;
@@ -125,6 +129,27 @@ async function main() {
       catalogOnline = false;
       app = await buildApp();
       assert.equal((await app.inject({ method: "GET", url: "/api/long-term-memory/status" })).statusCode, 200);
+      // The client names exactly the pictures the package ships, and the Engine serves each one byte for byte.
+      const spriteDir = join(repoRoot, "packages/long-term-memory/assets/onboarding");
+      assert.deepEqual(readdirSync(spriteDir).sort(), LTM_ONBOARDING_SPRITES.map((sprite) => `${sprite}.webp`).sort());
+      for (const sprite of LTM_ONBOARDING_SPRITES) {
+        const served = await app.inject({
+          method: "GET",
+          url: ltmOnboardingSpriteUrl(sprite, packageManifest.version),
+        });
+        assert.equal(served.statusCode, 200, sprite);
+        assert.deepEqual(served.rawPayload, readFileSync(join(spriteDir, `${sprite}.webp`)), sprite);
+      }
+      // agents.json is in the archive but is not a declared asset, so the Engine refuses to serve it.
+      assert.equal(
+        (
+          await app.inject({
+            method: "GET",
+            url: "/api/capability-packages/long-term-memory/assets/agents.json",
+          })
+        ).statusCode,
+        404,
+      );
       const note = {
         id: "world_artifact_lifecycle",
         title: "Artifact lifecycle fixture",
@@ -205,7 +230,7 @@ async function main() {
     ],
   );
   console.log(
-    `Long-Term Memory ${packageManifest.version} installation: install, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok`,
+    `Long-Term Memory ${packageManifest.version} installation: install, served pictures, offline restart, backup inclusion, uninstall, reinstall, and durable-byte preservation ok`,
   );
 }
 

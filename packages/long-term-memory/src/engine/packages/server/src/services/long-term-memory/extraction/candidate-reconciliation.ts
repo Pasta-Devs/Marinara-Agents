@@ -124,6 +124,15 @@ export async function reconcileEvidenceUnitCandidates(options: {
     // per-candidate lane cost shows up in extraction latency.
     let candidates: LtmNote[];
     let complete: boolean;
+    // A unit that names an existing note's own id (the model reusing a listed subjectId) already has its target;
+    // a lookalike must not pull it away or send it to review.
+    const ownNote = compatibleByType
+      ? (compatibleByType.get(noteType) ?? []).find((note) => note.id === derivedNoteId)
+      : (await options.storage.getNotesByIds([derivedNoteId])).get(derivedNoteId);
+    if (ownNote && (compatibleByType || isCompatibleCandidateNote(ownNote, noteType, options.scope, options.mode))) {
+      counts.created += 1;
+      continue;
+    }
     if (compatibleByType) {
       // The caller's set is complete, so a singleton match is always safe to reuse.
       candidates = (compatibleByType.get(noteType) ?? [])
@@ -145,6 +154,7 @@ export async function reconcileEvidenceUnitCandidates(options: {
         maxChunks: maxCandidates * CANDIDATE_CHUNK_HEADROOM,
         maxTokens: maxCandidateTokens,
         semanticWeight: 0,
+        statusCompanions: false,
         // Two same-text notes are a genuine ambiguity, so keep both chunks instead of collapsing them.
         dedupeExactText: false,
       });

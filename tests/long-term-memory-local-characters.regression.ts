@@ -428,6 +428,9 @@ async function main() {
   assert.equal(resolved.units[0]!.subjects?.[0]?.key.startsWith("local_character:"), true);
   assert.equal(resolved.units[1]!.subjects?.length, 2);
   assert.equal(new Set(resolved.units[1]!.subjects?.map((subject) => subject.key)).size, 2);
+  // The pass reports the new characters its relationships use; the compile adds a minimal note only where no kept
+  // character unit covers one, so Rowan gets one and Mara does not (bundle 15 item 5).
+  assert.deepEqual(resolved.minimalCharacters.map((character) => character.name).sort(), ["Mara", "Rowan"]);
   const shortNameContext = prepareLtmSubjectIdentityContext({
     units: [
       unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara arrives." }),
@@ -465,8 +468,27 @@ async function main() {
     createdAt: timestamp,
   });
   assert.ok(compiled.mutations.length > 0);
+  // A character met only in this chat and a new relationship replace nothing, so "Save them for me" saves them.
+  assert.deepEqual(
+    compiled.mutations.map((mutation) => [mutation.kind, mutation.risk]),
+    compiled.mutations.map(() => ["create_note", "low"]),
+  );
+  const relationship = compiled.mutations.find(
+    (mutation) => mutation.kind === "create_note" && mutation.note.type === "relationship",
+  );
+  assert.ok(relationship?.kind === "create_note");
+  // A new state for a relationship LTM already has keeps the old state as an earlier contribution, so it saves too.
+  const changed = compileLtmEvidenceUnits({
+    units: resolved.units.slice(1),
+    existingNotes: [{ ...relationship.note, createdAt: timestamp, updatedAt: timestamp } as never],
+    scope,
+    modes: ["roleplay"],
+    mode: "roleplay",
+    createdAt: timestamp,
+  });
+  assert.ok(changed.mutations.length > 0);
   assert.equal(
-    compiled.mutations.every((mutation) => mutation.risk === "medium"),
+    changed.mutations.every((mutation) => mutation.kind !== "create_note" && mutation.risk === "low"),
     true,
   );
 
@@ -2143,6 +2165,26 @@ async function main() {
     false,
     "#1225: short source names must not seed local identities beside a trusted roster",
   );
+  // The longer form of a short card name in a source goes to review too, so it never seeds a local identity.
+  const longFormCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "character" as const, id: "char_ashleigh", name: "Ashleigh" }],
+    notes: [],
+    localSourceNotes: [
+      {
+        ...sourceNote,
+        id: "long-form-source",
+        title: "The pier",
+        sections: { source: { text: "Ashleigh Farraday waits at the pier.", updatedAt: timestamp } },
+      },
+    ],
+  });
+  assert.equal(
+    longFormCatalog.entries.some(
+      (entry) => entry.sourceScope === "local_source" && entry.canonicalSlug === "ashleigh_farraday",
+    ),
+    false,
+    "a source's long form of a short card name must not seed a local identity",
+  );
 
   const alexUnit = unit({ bucket: "character_fact", subjectId: "alex", subjectNames: ["Alex"], text: "Alex waits." });
   const alexResolution = prepareLtmSubjectIdentityContext({
@@ -2487,6 +2529,216 @@ async function main() {
       .map((diagnostic) => [diagnostic.noteId, diagnostic.candidateIndex]),
     [["char_mara", 1]],
     "issue #1448: the stripped-link warning keeps Mara's candidate index after Jordan is dropped",
+  );
+
+  // Bundle 15 item 5: a relationship never points at a local character the Memory Vault cannot show.
+  const family = ltmScopeFamilyId(scope)!;
+  const localKey = (slug: string) => `local_character:${family}:${slug}`;
+  const localEntry = (name: string, slug: string) => ({
+    subject: { key: localKey(slug), ref: { kind: "local_character" as const, id: `${family}:${slug}` } },
+    name,
+    aliases: [],
+    canonicalSlug: slug,
+    familyId: family,
+  });
+  const relationUnits = (names: [string, string], text: string) => [
+    unit({ bucket: "relationship_state", subjectId: "pair", subjectNames: names, text }),
+  ];
+  const resolveUnits = (entries: any[], units: any[], sourceText: string) =>
+    prepareLtmSubjectIdentityContext({
+      units,
+      catalog: { entries, notes: [] },
+      scope,
+      sourceBackedNpcSourceText: sourceText,
+    }).resolve({ units, existingNotes: [] });
+  const resolveRelation = (entries: any[], names: [string, string], text: string) =>
+    resolveUnits(entries, relationUnits(names, text), text);
+  // Resolves and compiles like a real extraction, so the accounting and the created notes are the real ones.
+  const extract = (entries: any[], units: any[], text: string) => {
+    const note = { ...sourceNote, sections: { source: { text, updatedAt: timestamp } } };
+    const hash = sourceHashForLtmSourceNote(note);
+    const resolution = resolveUnits(
+      entries,
+      units.map((candidate) => ({
+        ...candidate,
+        claimKind: "claimKind" in candidate ? candidate.claimKind : ("static" as const),
+        sourceHash: hash,
+      })),
+      text,
+    );
+    const result = compileEvidenceUnitExtraction({
+      unitResponse: { summary: "Item 5", units: resolution.units },
+      providerCandidates: units.length,
+      sourceText: text,
+      sourceNote: note,
+      existingNotes: [],
+      scope,
+      modes: ["roleplay"],
+      sourceHash: hash,
+      skipStructuredBackfill: true,
+      minimalCharacters: resolution.minimalCharacters,
+    });
+    const created = result.compiledResponse.mutations.filter((mutation: any) => mutation.kind === "create_note");
+    return {
+      resolution,
+      result,
+      characterNotes: created.filter((mutation: any) => mutation.note.type === "character"),
+    };
+  };
+
+  // "Inès" and "Corwin" are new and have no character unit: the compile adds a minimal character note for each.
+  const freshText = "Inès trusts Corwin.";
+  const fresh = resolveRelation([], ["Inès", "Corwin"], freshText);
+  assert.equal(fresh.droppedCandidates.length, 0);
+  assert.equal(
+    fresh.units.every((candidate) => candidate.bucket === "relationship_state"),
+    true,
+    "the identity pass adds no unit of its own",
+  );
+  const freshRelation = fresh.units[0]!;
+  assert.deepEqual(
+    fresh.minimalCharacters.map((character) => character.subject.key).sort(),
+    freshRelation.subjects!.map((subject) => subject.key).sort(),
+  );
+  const freshRun = extract([], relationUnits(["Inès", "Corwin"], freshText), freshText);
+  assert.deepEqual(
+    freshRun.characterNotes.map((mutation: any) => mutation.note.subjects?.[0]?.key).sort(),
+    freshRelation.subjects!.map((subject) => subject.key).sort(),
+    "the compile creates a character note for each relationship participant",
+  );
+  assert.deepEqual(
+    freshRun.characterNotes.map((mutation: any) => mutation.note.sections.facts?.text ?? "").sort(),
+    ["- Corwin appears in this chat.", "- Inès appears in this chat."],
+    "the note carries the name and the chat appearance only",
+  );
+  assert.equal(freshRun.result.accounting.normalizedAdditions, 2);
+  assert.equal(freshRun.result.accounting.keptUnits, 3);
+  const freshAgain = extract([], relationUnits(["Inès", "Corwin"], freshText), freshText);
+  assert.deepEqual(
+    freshAgain.characterNotes.map((mutation: any) => mutation.note.id).sort(),
+    freshRun.characterNotes.map((mutation: any) => mutation.note.id).sort(),
+    "a repeated extraction targets the same notes",
+  );
+
+  // A relationship the compile drops (no claim kind, so a change with no timeline event) creates no character note.
+  const droppedRun = extract(
+    [],
+    relationUnits(["Inès", "Corwin"], freshText).map((candidate) => ({ ...candidate, claimKind: undefined })),
+    freshText,
+  );
+  assert.equal(droppedRun.result.accounting.keptUnits, 0);
+  assert.equal(droppedRun.characterNotes.length, 0, "a dropped relationship leaves no orphan character");
+
+  // A possessive links to the existing bare-named subject and mints no new key.
+  const possessive = resolveRelation([localEntry("Corwin", "corwin")], ["Corwin's", "Inès"], "Corwin's rival is Inès.");
+  const possessiveKeys = possessive.units[0]!.subjects!.map((subject) => subject.key);
+  assert.equal(possessiveKeys.includes(localKey("corwin")), true);
+  assert.equal(
+    possessiveKeys.some((key) => key.includes("corwin_s")),
+    false,
+    "no corwin_s key",
+  );
+  assert.deepEqual(
+    possessive.minimalCharacters.map((character) => character.name),
+    ["Inès"],
+    "the existing Corwin subject gets no second note",
+  );
+
+  // New "Corwin's" in a relationship and "Corwin" as a character in one batch are one character with one note.
+  const sameBatchText = "Corwin guards the gate. Corwin's rival is Inès.";
+  const sameBatchUnits = [
+    unit({ bucket: "character_fact", subjectId: "corwin", subjectNames: ["Corwin"], text: "Corwin guards the gate." }),
+    ...relationUnits(["Corwin's", "Inès"], "Corwin's rival is Inès."),
+  ];
+  const sameBatch = extract([], sameBatchUnits, sameBatchText);
+  const sameBatchCorwins = sameBatch.characterNotes.filter(
+    (mutation: any) => mutation.note.subjects?.[0]?.key === localKey("corwin"),
+  );
+  assert.equal(sameBatchCorwins.length, 1, "Corwin and Corwin's are one note");
+  assert.equal(
+    sameBatch.characterNotes.some((mutation: any) => mutation.note.subjects?.[0]?.key.includes("corwin_s")),
+    false,
+  );
+  assert.deepEqual(
+    sameBatch.characterNotes.map((mutation: any) => mutation.note.sections.facts?.text).sort(),
+    ["- Corwin guards the gate.", "- Inès appears in this chat."],
+    "the batch's own Corwin unit covers him",
+  );
+  assert.equal(localCharacterSubjectForName(scope, "Corwin\u2019s").key.endsWith(":corwin_s") === false, true);
+  assert.match(localCharacterSubjectForName(scope, "'s")!.key, /:s_[0-9a-f]{12}$/);
+
+  // A source that says "Corwin's blade broke. Corwin cursed." still resolves the bare name through the catalog.
+  const sourceCatalogNote = {
+    ...sourceNote,
+    id: "corwin-source",
+    sections: { source: { text: "Corwin's blade broke. Corwin cursed.", updatedAt: timestamp } },
+  };
+  const sourceCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [],
+    notes: [sourceCatalogNote] as any,
+    localSourceNotes: [sourceCatalogNote] as any,
+  });
+  const bareUnits = [
+    unit({ bucket: "character_fact", subjectId: "corwin", subjectNames: ["Corwin"], text: "Corwin cursed." }),
+  ];
+  const bareResolved = prepareLtmSubjectIdentityContext({
+    units: bareUnits,
+    catalog: sourceCatalog,
+    scope,
+    sourceBackedNpcSourceText: "Corwin's blade broke. Corwin cursed.",
+  }).resolve({ units: bareUnits, existingNotes: [] });
+  assert.equal(bareResolved.droppedCandidates.length, 0);
+  assert.equal(bareResolved.units.length, 1);
+
+  // Two catalog Corwins keep today's ambiguous handling, possessive or not: never a silent merge or a new key.
+  const twoCorwins = [localEntry("Corwin", "corwin-one"), localEntry("Corwin", "corwin-two")];
+  const ambiguousCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [],
+    notes: ["one", "two"].map((id) => ({
+      ...conflicted,
+      id: `char_corwin_${id}`,
+      title: "Corwin",
+      subjects: [
+        { key: localKey(`corwin-${id}`), ref: { kind: "local_character" as const, id: `${family}:corwin-${id}` } },
+      ],
+    })) as any,
+  });
+  for (const catalogEntries of [{ entries: twoCorwins, notes: [] }, ambiguousCatalog]) {
+    const ambiguousShape = (name: string) => {
+      const ambiguousUnits = relationUnits([name, "Inès"], `${name} meets Inès.`);
+      const result = prepareLtmSubjectIdentityContext({
+        units: ambiguousUnits,
+        catalog: catalogEntries as any,
+        scope,
+        sourceBackedNpcSourceText: `${name} meets Inès.`,
+      }).resolve({ units: ambiguousUnits, existingNotes: [] });
+      return {
+        units: result.units.length,
+        dropped: result.droppedCandidates.length,
+        diagnostics: result.diagnostics.map((diagnostic) => diagnostic.code),
+        minimal: result.minimalCharacters.length,
+      };
+    };
+    const bareAmbiguous = ambiguousShape("Corwin");
+    assert.equal(bareAmbiguous.units, 0, "two Corwins are not silently merged");
+    assert.equal(bareAmbiguous.minimal, 0);
+    assert.deepEqual(ambiguousShape("Corwin's"), bareAmbiguous, "a possessive is as ambiguous as the bare name");
+  }
+
+  // An existing key with _s_ stays as it is.
+  const legacySKey = "rafael_s_0123456789ab";
+  const legacy = resolveRelation(
+    [localEntry("Rafael's", legacySKey)],
+    ["Rafael's", "Inès"],
+    "Rafael's friend is Inès.",
+  );
+  assert.equal(
+    legacy.units[0]!.subjects!.some((subject) => subject.key === localKey(legacySKey)),
+    true,
+  );
+  assert.deepEqual(
+    legacy.minimalCharacters.map((character) => character.name),
+    ["Inès"],
   );
 
   process.stdout.write(

@@ -17,7 +17,8 @@ const artifactPath = join(repoRoot, `artifacts/long-term-memory-${packageManifes
 const visualOutputDir = process.env.MARINARA_VISUAL_OUTPUT_DIR ? resolve(process.env.MARINARA_VISUAL_OUTPUT_DIR) : null;
 function unzip(args: string[], purpose: string) {
   try {
-    return execFileSync("unzip", args, { encoding: "utf8" });
+    // The bundled client passed the 1 MiB default buffer.
+    return execFileSync("unzip", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
       throw new Error(`Cannot ${purpose}: unzip executable was not found; install unzip and retry.`);
@@ -25,6 +26,49 @@ function unzip(args: string[], purpose: string) {
       cause: error,
     });
   }
+}
+// Recall keeps the fine-tuning controls in a closed "Advanced" section; open it before touching them.
+async function openRecallAdvanced(page: { locator: (selector: string) => any }) {
+  const advanced = page.locator("#settings-panel-recall [data-ltm-recall-advanced]");
+  if (!(await advanced.evaluate((node: HTMLDetailsElement) => node.open))) await advanced.locator("> summary").click();
+}
+// Extraction keeps model tuning, Finish cut-off answers, AI keywords and Game Mode in a closed "Advanced" section.
+async function openExtractionAdvanced(page: { locator: (selector: string) => any }) {
+  const advanced = page.locator("#settings-panel-extraction [data-ltm-extraction-advanced]");
+  if (!(await advanced.evaluate((node: HTMLDetailsElement) => node.open))) await advanced.locator("> summary").click();
+}
+// A finished action is an Engine toast (sonner), not a banner in the package. Older toasts with the same text can
+// still be on screen for a few seconds, so the newest match is the one a step just raised. Sonner lists the newest
+// toast first.
+function toastWith(page: { locator: (selector: string) => any }, text: string | RegExp) {
+  return page.locator("[data-sonner-toast]").filter({ hasText: text }).first();
+}
+// Count-free toast checks: mark the toasts on screen before an action, then wait for one that was not there. A toast
+// that auto-dismisses meanwhile cannot skew the result, and React keeps an attribute it did not set.
+async function markToasts(page: { evaluate: (fn: () => void) => any }) {
+  await page.evaluate(() =>
+    document.querySelectorAll("[data-sonner-toast]").forEach((toast) => toast.setAttribute("data-test-seen", "")),
+  );
+}
+function newToast(page: { locator: (selector: string, options?: { hasText: string | RegExp }) => any }, text: string) {
+  return page.locator("[data-sonner-toast]:not([data-test-seen])", { hasText: text });
+}
+// Troubleshooting is a closed section at the bottom of Memory Settings; open it before touching Reset, Delete all or the log.
+async function openTroubleshooting(page: { locator: (selector: string) => any }) {
+  const section = page.locator("#settings-panel-troubleshooting");
+  if (!(await section.evaluate((node: HTMLDetailsElement) => node.open))) await section.locator("> summary").click();
+}
+// Activity is its own page in the memory workspace (whichever navigation is showing).
+async function openActivityLog(page: { locator: (selector: string) => any }) {
+  const tab = page.locator('[data-ltm-destination="activity"]:visible').first();
+  if ((await tab.getAttribute("aria-current")) !== "page") await tab.click();
+  await page.locator('[data-ltm-surface="activity"]').waitFor();
+}
+// Leaving Activity unmounts its view and coming back mounts a fresh one, which fetches the log again.
+async function reopenActivityLog(page: { locator: (selector: string) => any }) {
+  await page.locator('[data-ltm-destination="settings"]:visible').first().click();
+  await page.locator('[data-ltm-surface="memory-settings"]').waitFor();
+  await openActivityLog(page);
 }
 const artifactManifest = JSON.parse(
   unzip(["-p", artifactPath, "manifest.json"], `read ${artifactPath}/manifest.json`),
@@ -37,7 +81,8 @@ async function main() {
     join(repoRoot, "packages/long-term-memory/src/engine/packages/client/src/**/*.{ts,tsx}"),
   );
   // The client takes React and React Query from the Engine's host namespace, which this bare page must provide first.
-  const hostScript = await buildPackageHostFixture(engineRoot);
+  // The Engine mounts the one sonner Toaster; the fixture page mounts the same so package toasts render.
+  const hostScript = await buildPackageHostFixture(engineRoot, { toaster: true, agentStore: true });
   let browser: { close: () => Promise<void> } | null = null;
   let browserServer: ReturnType<typeof createServer> | null = null;
   let releaseReextraction: (() => void) | null = null;
@@ -254,7 +299,7 @@ async function main() {
         risk: "low",
         confidence: 0.9,
         summary: "Update the existing mobile world memory",
-        evidence: ["source_note:source_mobile_review"],
+        evidence: ["source_note:source_mobile_review", "Rika: I have kept the lighthouse key."],
         noteId: "world_second_mobile",
         sectionKey: "facts",
         section: {
@@ -500,6 +545,25 @@ async function main() {
       ];
       let healthState: "healthy" | "degraded" = "healthy";
       let statusFailure = false;
+      // Tidy with AI: what the preview answers, how many times it was asked, and the bodies of every apply.
+      let tidyPreviewReply: { status: number; body: unknown } = { status: 200, body: {} };
+      let tidyPreviewRequests = 0;
+      // What each check's scope read (how many memories, which connection) answers; it reads, never sends.
+      let tidyScopeReply: { status: number; body: unknown } = { status: 200, body: {} };
+      let linksScopeReply: { status: number; body: unknown } = { status: 200, body: {} };
+      let peopleScopeReply: { status: number; body: unknown } = { status: 200, body: {} };
+      let holdTidyPreview: Promise<void> | null = null;
+      const tidyApplyBodies: Array<{ noteIds: string[] }> = [];
+      // Link older relationships: the same, for its own two routes.
+      let linksPreviewReply: { status: number; body: unknown } = { status: 200, body: {} };
+      let linksPreviewRequests = 0;
+      const linksApplyBodies: Array<{ links: Array<{ relationshipId: string; personId: string }> }> = [];
+      // Find duplicate people: the same again.
+      let peoplePreviewReply: { status: number; body: unknown } = { status: 200, body: {} };
+      let peoplePreviewRequests = 0;
+      const peopleApplyBodies: Array<{ groups: Array<{ keepId: string; mergeIds: string[] }> }> = [];
+      // Status reads left that report a rebuild still scheduled after a write (stale and dirty).
+      let pendingRebuildReads = 0;
       let noteTotal = 5;
       const extractionWrites: Record<string, unknown>[] = [];
       let pendingDraftCount = 2;
@@ -507,8 +571,10 @@ async function main() {
       let holdReviewAccept: Promise<void> | null = null;
       let failReviewContext = false;
       let missingSourceReview = false;
+      let linkCardSourceNote = false;
       const omitReviewContextId: string | null = null;
       let reviewPreflightBlocked = false;
+      let reviewPreflightConflictOnly = false;
       let confirmReviewDiscard = false;
       let lastReviewDiscardMessage = "";
       let confirmDelete = false;
@@ -538,10 +604,21 @@ async function main() {
         if (url.pathname === "/host.js") return send(200, hostScript, "application/javascript");
         if (url.pathname === "/client.js") return send(200, artifactClient, "application/javascript");
         if (request.method === "GET" && url.pathname === "/api/connections") return send(200, []);
+        // Onboarding art, so screenshots show Mari; every other sprite request used to 404 here.
+        const sprite =
+          /^\/api\/capability-packages\/long-term-memory\/assets\/assets\/onboarding\/([a-z0-9-]+\.webp)$/u.exec(
+            url.pathname,
+          );
+        if (request.method === "GET" && sprite) {
+          response.writeHead(200, { "content-type": "image/webp" });
+          return response.end(readFileSync(join(repoRoot, "packages/long-term-memory/assets/onboarding", sprite[1]!)));
+        }
         if (!url.pathname.startsWith("/api/long-term-memory/")) return send(404, {});
         if (request.method === "GET" && url.pathname.endsWith("/status") && statusFailure)
           return send(500, { error: "status fixture down" });
-        if (request.method === "GET" && url.pathname.endsWith("/status"))
+        if (request.method === "GET" && url.pathname.endsWith("/status")) {
+          const rebuildPending = pendingRebuildReads > 0;
+          if (rebuildPending) pendingRebuildReads -= 1;
           return send(200, {
             initialized: true,
             directory: "long-term-memory",
@@ -555,8 +632,8 @@ async function main() {
             },
             events: { logAvailable: false, bytes: null },
             indexes: {
-              health: healthState,
-              dirty: false,
+              health: rebuildPending ? "stale" : healthState,
+              dirty: rebuildPending,
               rebuildState: "idle",
               errors: [],
               warnings: [],
@@ -569,6 +646,7 @@ async function main() {
               embeddedChunkCount: 0,
             },
           });
+        }
         if (request.method === "GET" && url.pathname.endsWith("/settings")) return send(200, {});
         if (request.method === "PUT" && url.pathname.endsWith("/settings")) {
           const chunks: Buffer[] = [];
@@ -627,8 +705,63 @@ async function main() {
         }
         if (request.method === "GET" && url.pathname.endsWith("/integrity"))
           return send(200, { health: "healthy", ok: true, noteCount: 3, issues: [] });
+        if (request.method === "GET" && url.pathname.endsWith("/tidy/scope"))
+          return send(tidyScopeReply.status, tidyScopeReply.body);
+        if (request.method === "GET" && url.pathname.endsWith("/links/scope"))
+          return send(linksScopeReply.status, linksScopeReply.body);
+        if (request.method === "GET" && url.pathname.endsWith("/people/scope"))
+          return send(peopleScopeReply.status, peopleScopeReply.body);
+        if (request.method === "POST" && url.pathname.endsWith("/tidy/preview")) {
+          tidyPreviewRequests += 1;
+          await holdTidyPreview;
+          return send(tidyPreviewReply.status, tidyPreviewReply.body);
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/tidy/apply")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { noteIds: string[] };
+          tidyApplyBodies.push(body);
+          return send(200, { archived: body.noteIds, skipped: [], rebuild: null });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/links/preview")) {
+          linksPreviewRequests += 1;
+          return send(linksPreviewReply.status, linksPreviewReply.body);
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/links/apply")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as (typeof linksApplyBodies)[number];
+          linksApplyBodies.push(body);
+          return send(200, { linked: body.links, skipped: [], rebuild: null });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/people/preview")) {
+          peoplePreviewRequests += 1;
+          return send(peoplePreviewReply.status, peoplePreviewReply.body);
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/people/apply")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as (typeof peopleApplyBodies)[number];
+          peopleApplyBodies.push(body);
+          return send(200, {
+            merged: body.groups,
+            skipped: [],
+            backup: { id: "backup-1", createdAt: "2026-10-20T00:00:00.000Z" },
+            rebuild: null,
+          });
+        }
+        // soup/review-identity: Review checks for duplicate people on mount; the default answer has none.
+        if (request.method === "POST" && url.pathname.endsWith("/identity-repair/preview"))
+          return send(200, {
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            scope: { kind: "global" },
+            counts: { analyzedNotes: 0, candidateCount: 0, bindableNotes: 0, duplicateNotes: 0, unresolvedNotes: 0 },
+            candidates: [],
+            unresolved: [],
+          });
         if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count"))
-          return send(200, { count: pendingDraftCount });
+          // soup/review-one-press: `count` is waiting sources, `mutations` the memories waiting in them (3 each here).
+          return send(200, { count: pendingDraftCount, mutations: pendingDraftCount * 3 });
         if (request.method === "GET" && url.pathname.endsWith("/last-injection/chat-artifact")) {
           lastInjectionRequests += 1;
           if (lastInjectionRequests === 1)
@@ -772,6 +905,8 @@ async function main() {
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes")) {
           noteQueries.push(url.search);
+          // A fresh install (status total 0) has an empty Vault, which is where setup is offered.
+          if (noteTotal === 0) return send(200, []);
           const notes = [
             {
               id: "source_mobile_review",
@@ -898,6 +1033,25 @@ async function main() {
             },
             legacyGlobalNote,
             scopedDesktopNote,
+            ...(linkCardSourceNote
+              ? [
+                  {
+                    id: "source_link_cards",
+                    title: "Link card source",
+                    type: "source",
+                    status: "active",
+                    modes: ["roleplay"],
+                    scope: {},
+                    tags: [],
+                    keywords: [],
+                    links: [],
+                    sections: { source: { text: "Link card source text.", updatedAt: noteTimestamp } },
+                    createdAt: noteTimestamp,
+                    updatedAt: noteTimestamp,
+                    version: 1,
+                  },
+                ]
+              : []),
           ];
           if (url.searchParams.has("ids")) {
             reviewContextQueries.push(url.search);
@@ -1459,7 +1613,8 @@ async function main() {
             [reviewMutationIds.partial]: "world_partial_mobile",
           };
           const blockedMutationIds = reviewPreflightBlocked ? [reviewMutationIds.second] : [];
-          const conflictMutationIds = reviewPreflightBlocked ? [reviewMutationIds.partial] : [];
+          const conflictMutationIds =
+            reviewPreflightBlocked || reviewPreflightConflictOnly ? [reviewMutationIds.partial] : [];
           return send(200, {
             draftId: decodeURIComponent(url.pathname.split("/").at(-2)!),
             selectedMutationIds: mutationIds,
@@ -1700,18 +1855,10 @@ async function main() {
           lorebookPreviewRequests.push(body);
       });
       const desktopActivationChanges: boolean[] = [];
-      const chatSummarySettingsOpens: number[] = [];
-      const promptPresetEditorOpens: number[] = [];
       let activationGate: Promise<void> = Promise.resolve();
       await page.exposeFunction("onDesktopActivationChange", async (enabled: boolean) => {
         desktopActivationChanges.push(enabled);
         await activationGate;
-      });
-      await page.exposeFunction("onOpenChatSummarySettings", () => {
-        chatSummarySettingsOpens.push(Date.now());
-      });
-      await page.exposeFunction("onOpenActivePromptPresetEditor", () => {
-        promptPresetEditorOpens.push(Date.now());
       });
       await page.exposeFunction("declineDestinationChange", () => false);
       await page.exposeFunction("confirmReviewDiscard", (options: { message?: string }) => {
@@ -1772,7 +1919,10 @@ async function main() {
       const secondaryScope = page.locator('[data-ltm-scope-picker="vault-secondary"]');
       const secondaryScopeTrigger = secondaryScope.locator("[data-ltm-scope-picker-trigger]");
       const worldGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
+      // The list unmounts while a place loads and its first group mounts already open, so wait for the heading
+      // before reading its state: a click decided while the list was empty would land on the open group and close it.
       const openWorldGroup = async () => {
+        await worldGroupSummary.waitFor();
         if (!(await page.locator('[data-ltm-memory-group="world"][open]').count())) await worldGroupSummary.click();
       };
       const notesRequest = (predicate: (params: URLSearchParams) => boolean) =>
@@ -1793,6 +1943,9 @@ async function main() {
         await page.keyboard.press("Enter");
         await root.locator("[data-ltm-scope-picker-popup] input:focus").waitFor();
         await page.keyboard.press("Tab");
+        // The first group opens by itself once its list loads, so wait for the list before deciding to click:
+        // a click that lands after the auto-open would close the group.
+        await worldGroupSummary.waitFor();
         await root.locator('[data-ltm-scope-tab="all"]:focus').waitFor();
         for (let step = 0; step < 3 && !(await root.locator(`[data-ltm-scope-tab="${kind}"]:focus`).count()); step += 1)
           await page.keyboard.press("ArrowRight");
@@ -1992,10 +2145,17 @@ async function main() {
       // place does not hold would still reach the list and bulk selection.
       await choosePlaceBySearch("vault", "Character A", "character:character-a");
       const secondaryPlaceRequestPromise = notesRequest((params) => params.get("scopeGroupId") === "conversation-a");
-      // #1636: the second place and the mode filter sit under Refine, which stays closed until one is set.
-      const refine = page.locator("[data-ltm-refine]");
-      assert.equal(await refine.getAttribute("open"), null, "Refine starts closed");
-      await refine.locator("summary").click();
+      // #1636: the second place and the mode filter sit under Filters, which stays closed until one is set.
+      // The disclosure is a button (`aria-expanded`) that controls `[data-ltm-refine-panel]`.
+      const refine = page.locator("button[data-ltm-refine]");
+      const refinePanel = page.locator("[data-ltm-refine-panel]");
+      assert.equal(await refine.getAttribute("aria-expanded"), "false", "Filters starts closed");
+      assert.equal(await refine.getAttribute("aria-controls"), null, "closed Filters points at no missing panel");
+      assert.equal(await refinePanel.count(), 0, "the closed Filters panel is not rendered");
+      await refine.click();
+      await refinePanel.waitFor();
+      assert.equal(await refine.getAttribute("aria-controls"), "ltm-vault-filters");
+      assert.equal(await refine.getAttribute("aria-expanded"), "true", "Filters opens by hand");
       await choosePlaceBySearch("vault-secondary", "Member Final Branch", "group:conversation-a");
       const secondaryPlaceRequest = await secondaryPlaceRequestPromise;
       assert.doesNotMatch(
@@ -2038,20 +2198,30 @@ async function main() {
       await secondaryScope
         .locator('[data-ltm-scope-presence="no-memories"] [data-ltm-scope-option="persona:persona-b"]')
         .click();
-      await page.getByText(/No memories are available in .*AND/u).waitFor();
+      await page.getByText(/^Nothing is available in .+ AND .+, but you have \d+ saved elsewhere\.$/u).waitFor();
       await choosePlaceBySearch("vault-secondary", "does-not-match", "all");
       assert.match(await secondaryScopeTrigger.innerText(), /No second place/u);
-      // A closed Refine names the filter in use, so a hidden mode filter is never a silent one.
+      // A closed Filters names the filter in use, so a hidden mode filter is never a silent one.
       const firstModeFilter = page.locator("[data-ltm-mode-filter] input").first();
       await firstModeFilter.uncheck();
-      await refine.locator("summary").click();
-      assert.equal(await refine.getAttribute("open"), null, "Refine closes by hand");
+      await refine.click();
+      assert.equal(await refine.getAttribute("aria-expanded"), "false", "Filters closes by hand");
+      assert.equal(await refinePanel.count(), 0, "the closed Filters panel is not rendered");
       await refine
         .locator("[data-ltm-refine-active]")
-        .getByText(/^Available modes: /u)
+        .getByText(/^Available chat types: /u)
         .waitFor();
-      await refine.locator("summary").click();
+      await refine.click();
+      await refinePanel.waitFor();
       await firstModeFilter.check();
+      // soup/shared-picker: the last chat type cannot be unchecked, and the group says why in place.
+      const modeBoxes = page.locator("[data-ltm-mode-filter] input[type=checkbox]");
+      const modeBoxCount = await modeBoxes.count();
+      for (let index = 1; index < modeBoxCount; index += 1) await modeBoxes.nth(index).uncheck();
+      await page.locator("[data-ltm-mode-filter] [data-ltm-last-mode-note]").waitFor();
+      assert.equal(await modeBoxes.first().isDisabled(), true, "the last checked chat type is disabled");
+      for (let index = 1; index < modeBoxCount; index += 1) await modeBoxes.nth(index).check();
+      await page.locator("[data-ltm-mode-filter] [data-ltm-last-mode-note]").waitFor({ state: "detached" });
       await openWorldGroup();
       await page.getByText("Memory outside current chat").waitFor();
       // Unsaved edits: Keep editing and Discard both return focus to the place button (#1442).
@@ -2065,12 +2235,12 @@ async function main() {
       // #1617: leaving the dirty Vault editor for another destination says where it leads.
       const reviewDestination = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]');
       await reviewDestination.click();
-      const destinationDescription = page.locator("#ltm-destination-unsaved-description");
+      const destinationDescription = page.locator('[data-ltm-unsaved-dialog] [id$="-description"]');
       await destinationDescription.waitFor();
       const destinationText = (await destinationDescription.innerText()).trim();
       assert.match(destinationText, /^Save your changes before opening .+, or discard them\.$/u);
       assert.doesNotMatch(destinationText, /this memory/u);
-      await page.locator("[data-ltm-destination-stay]").click();
+      await page.locator("[data-ltm-unsaved-stay]").click();
       await destinationDescription.waitFor({ state: "detached" });
       // Stay hands focus back to the Review button on the next frame; moving on earlier lets it steal the picker's.
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]:focus').waitFor();
@@ -2086,6 +2256,112 @@ async function main() {
       await discardPlaceRequest;
       await focusedPlaceButton.waitFor();
       await choosePlaceBySearch("vault", "does-not-match", "all");
+      await openWorldGroup();
+      await page.getByText("Memory outside current chat").waitFor();
+      // soup/vault-first-open: a row says where it applies and carries no "Active" chip, an emptied list says the
+      // place hides memories and offers Show all, and a new memory starts on the chat's character (unless a
+      // persona place is picked) with an empty first line that "Add new memory section" keeps. The first group
+      // opening itself is asserted on the capped-list page below, where nothing opens it by hand.
+      await page.locator("[data-ltm-note-type] [data-ltm-row-place]").first().waitFor();
+      // soup/ltm-frame-vault: the short age ends the title line, its tooltip carries "Updated <date>", the row has
+      // no type chip, and an "Available everywhere" chip carries a globe icon.
+      const rowUpdated = page.locator("[data-ltm-note-type] [data-ltm-row-updated]").first();
+      assert.match((await rowUpdated.innerText()).trim(), /^.+ ago$/u);
+      assert.doesNotMatch((await rowUpdated.innerText()).trim(), /Updated/u);
+      assert.match((await rowUpdated.getAttribute("title")) ?? "", /^Updated .+/u);
+      assert.equal(
+        await rowUpdated.evaluate((element) => element.previousElementSibling?.tagName === "STRONG"),
+        true,
+        "the age sits on the title line, right after the title",
+      );
+      const everywhereChip = page
+        .locator("[data-ltm-note-type] [data-ltm-row-place]")
+        .filter({ hasText: "Available everywhere" })
+        .first();
+      if (await everywhereChip.count()) assert.equal(await everywhereChip.locator("svg").count(), 1);
+      // Guarded: the open group may hold only placed memories. A placed memory's chip has no globe.
+      const placedChip = page
+        .locator("[data-ltm-note-type] [data-ltm-row-place]")
+        .filter({ hasNotText: /Available everywhere|^\+\d+/u })
+        .first();
+      if (await placedChip.count()) assert.equal(await placedChip.locator("svg").count(), 0);
+      assert.equal(
+        await page.locator("[data-ltm-note-type]").getByText("Active", { exact: true }).count(),
+        0,
+        "an active memory carries no status chip",
+      );
+      await memoryScopeTrigger.click();
+      await memoryScopeSearch.fill("Private detective");
+      await memoryScope
+        .locator('[data-ltm-scope-presence="no-memories"] [data-ltm-scope-option="persona:persona-b"]')
+        .click();
+      await page.getByText(/^Nothing is available in .+, but you have \d+ saved elsewhere\.$/u).waitFor();
+      assert.equal(await page.getByText(/No memories/u).count(), 0, "the empty list never says there are none");
+      // A picked persona place keeps its own scope: no character default, so no Character subjects.
+      await page.getByRole("button", { name: "New memory", exact: true }).click();
+      await page.locator('[data-ltm-field="title"]').waitFor();
+      assert.equal(
+        await page.locator('[data-ltm-field="subjects"]').count(),
+        0,
+        "a picked persona place stays a World memory",
+      );
+      const discardNewMemory = async () => {
+        await page.getByRole("button", { name: "Close", exact: true }).click();
+        await page.getByRole("button", { name: "Discard and continue", exact: true }).click();
+        await page.locator('[data-ltm-field="title"]').waitFor({ state: "detached" });
+      };
+      await discardNewMemory();
+      await page.getByRole("button", { name: "Show all", exact: true }).click();
+      await memoryScopeTrigger.getByText("All", { exact: true }).waitFor();
+      await page.locator('[aria-label="Add memories"]').click();
+      await page.getByRole("button", { name: /Create manually/u }).click();
+      await page.locator('[data-ltm-field="title"]').waitFor();
+      assert.equal(
+        await page.locator('[data-ltm-field="subjects"]').count(),
+        1,
+        "a new memory from a chat starts as a Character memory",
+      );
+      assert.match(
+        await page.locator("[data-ltm-availability-summary]").innerText(),
+        /\b1 places\b/u,
+        "a new memory starts on the chat's character",
+      );
+      // soup/shared-picker: the subject picker is the shared picker: typing narrows it, Esc clears the text first, and
+      // an empty result says so in place.
+      // A Character memory holds one person, so the picker only shows once the chat's character chip is removed.
+      assert.equal(await page.locator('[data-ltm-picker-search="subject"]').count(), 0, "a full subject slot hides it");
+      await page.locator('[data-ltm-field="subjects"] [data-ltm-pill] button').click();
+      const subjectSearch = page.locator('[data-ltm-picker-search="subject"]');
+      assert.equal(await subjectSearch.getAttribute("role"), "combobox");
+      await subjectSearch.fill("zz-no-such-person");
+      await page
+        .locator('[data-ltm-picker="subject"]')
+        .getByText(/^No matching characters/u)
+        .waitFor();
+      await subjectSearch.press("Escape");
+      assert.equal(await subjectSearch.inputValue(), "", "Esc clears the search text");
+      assert.equal(
+        await page.locator('[data-ltm-field="title"]').count(),
+        1,
+        "Esc in the picker keeps the editor open",
+      );
+      const firstDetail = page.locator('[data-ltm-field="section"]');
+      assert.equal(
+        await firstDetail.inputValue(),
+        "",
+        "the first line starts empty, so typing never replaces placeholder text",
+      );
+      await firstDetail.fill("Kept text");
+      await page.getByRole("button", { name: "Add new memory section", exact: true }).click();
+      await page.getByPlaceholder("e.g. Current state, Important facts").fill("Current state");
+      await page.getByRole("button", { name: "Add section", exact: true }).click();
+      assert.equal(await page.locator('[data-ltm-field="section"]').count(), 2);
+      assert.equal(
+        await firstDetail.first().inputValue(),
+        "Kept text",
+        "adding a detail keeps the text already written",
+      );
+      await discardNewMemory();
       await openWorldGroup();
       await page.getByText("Memory outside current chat").waitFor();
       await page.evaluate(() => {
@@ -2104,112 +2380,151 @@ async function main() {
       assert.notEqual(memoryGroupFocus.outlineStyle, "none");
       assert.ok(memoryGroupFocus.height >= 44, JSON.stringify(memoryGroupFocus));
       await page.evaluate(() => document.body.removeAttribute("tabindex"));
-      const setupGuide = page.getByRole("button", { name: "Show setup guide" });
-      await setupGuide.click();
-      // #1611: Help from another screen goes to the Vault first, where the full guide shows.
-      await page.locator('[data-ltm-surface="onboarding"]').waitFor();
-      // #1673: the guide's two-column body follows its own container, not the window.
-      const onboardingColumns = () =>
-        page
-          .locator("[data-ltm-onboarding-body]")
-          .evaluate((body) => getComputedStyle(body).gridTemplateColumns.split(/\s+/u).length);
-      assert.equal(await onboardingColumns(), 2);
-      await dockDetailPanel(page, "24rem");
-      assert.equal(await onboardingColumns(), 1);
-      await dockDetailPanel(page, null);
-      const onboardingTitle = page.locator("#ltm-onboarding-title");
-      assert.equal(
-        await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 1 of 7 · Overview").count(),
-        1,
-      );
-      assert.equal(await onboardingTitle.innerText(), "Overview");
-      assert.equal(await page.locator("#ltm-onboarding-description dt").count(), 3);
-      const guideWidth = await page
-        .locator("#ltm-onboarding-description")
-        .evaluate((description) => description.getBoundingClientRect().width);
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      assert.equal(await onboardingTitle.innerText(), "How Recall Works");
-      // #1588: each step moves focus to its title, so the step change is read and Tab starts at the top.
-      await page.waitForFunction(() => document.activeElement?.id === "ltm-onboarding-title");
-      const onboardingNext = page.getByRole("button", {
-        name: "Next: Enabling it for the Current Chat",
+      // soup/tour: Help is a two-item menu; Esc closes it and returns focus to Help.
+      const helpButton = page.getByRole("button", { name: "Help", exact: true });
+      await helpButton.click();
+      await page.locator("[data-ltm-help-menu]").waitFor();
+      assert.equal(await helpButton.getAttribute("aria-expanded"), "true");
+      // The menu is drawn on the page body, so no page field can cover an item; the keyboard starts on its first item.
+      const helpMenuLayer = await page.evaluate(() => {
+        const menu = document.querySelector("[data-ltm-help-menu]")!;
+        const covered = [...menu.querySelectorAll("button")].filter((item) => {
+          const rect = item.getBoundingClientRect();
+          const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return !top || !item.contains(top);
+        }).length;
+        return {
+          onBody: menu.parentElement === document.body,
+          covered,
+          focusInside: menu.contains(document.activeElement),
+          rightEdge: menu.getBoundingClientRect().right <= window.innerWidth,
+        };
       });
-      await onboardingNext.click();
-      assert.match(
-        await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /In Conversation mode, the Engine places recalled memories automatically/u,
+      assert.deepEqual(helpMenuLayer, { onBody: true, covered: 0, focusInside: true, rightEdge: true });
+      await page.keyboard.press("Escape");
+      await page.locator("[data-ltm-help-menu]").waitFor({ state: "detached" });
+      assert.equal(await page.evaluate(() => document.activeElement?.hasAttribute("data-ltm-onboarding-help")), true);
+      await helpButton.click();
+      await page.locator("[data-ltm-help-setup]").click();
+      // soup/setup-beats: Help opens setup as a dialog over the current screen, at its saved beat, and Later closes it.
+      const helpSetup = page.locator('[data-ltm-surface="onboarding"]');
+      await helpSetup.waitFor();
+      assert.equal(await helpSetup.evaluate((dialog) => dialog.tagName), "DIALOG");
+      await helpSetup.locator("[data-ltm-setup-close]").click();
+      await helpSetup.waitFor({ state: "detached" });
+      // soup/tour: Next walks the nine stops; each stop with an anchor rings a visible control, Back steps
+      // back, and Esc ends the tour with focus on Help. Linked memories opens the Graph itself and leaving
+      // it puts the Vault back on List.
+      await helpButton.click();
+      await page.locator("[data-ltm-help-tour]").click();
+      const tour = page.locator('[data-ltm-surface="tour"]');
+      await tour.waitFor();
+      assert.equal(await tour.evaluate((dialog) => dialog.tagName), "DIALOG");
+      // The tour opens on Next, so Enter as the first key moves on instead of ending it.
+      assert.equal(await page.evaluate(() => document.activeElement?.hasAttribute("data-ltm-tour-next")), true);
+      const tourAnchors: Record<string, string | null> = {
+        welcome: null,
+        vault: '[data-ltm-surface="vault"]',
+        sources: '[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]',
+        review: '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
+        linked: "[data-ltm-graph]",
+        reading: "[data-ltm-reading-chip]",
+        inchat: null,
+        activity: '[data-ltm-navigation="desktop"] [data-ltm-destination="activity"]',
+        settings: '[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]',
+      };
+      const tourStops = Object.keys(tourAnchors);
+      for (const [index, stopId] of tourStops.entries()) {
+        await page.locator(`[data-ltm-surface="tour"][data-ltm-tour-stop="${stopId}"]`).waitFor();
+        assert.match(
+          await tour.locator("[data-ltm-tour-bubble]").innerText(),
+          new RegExp(`Stop ${index + 1} of 9`, "u"),
+        );
+        assert.equal(
+          await page.evaluate(() => Boolean(document.activeElement?.closest("[data-ltm-tour-bubble]"))),
+          true,
+          `focus stays in the bubble at ${stopId}`,
+        );
+        const anchor = tourAnchors[stopId];
+        if (anchor) {
+          await tour.locator("[data-ltm-tour-spotlight]").waitFor();
+          assert.equal(await page.locator(anchor).first().isVisible(), true, `${stopId} anchor is visible`);
+          // soup/reading-chip: an idle Mari still gets a chip to ring, shown as a preview.
+          if (stopId === "reading") {
+            assert.equal(await page.locator(anchor).getAttribute("data-ltm-reading"), "preview");
+            assert.equal(
+              await page.locator(`${anchor} [data-ltm-setup-sprite]`).getAttribute("data-ltm-sprite-motion"),
+              null,
+              "the idle preview chip is a still frame",
+            );
+          }
+        } else {
+          assert.equal(await tour.locator("[data-ltm-tour-spotlight]").count(), 0, `${stopId} has no ring`);
+        }
+        if (index === 2) {
+          await tour.locator("[data-ltm-tour-back]").click();
+          await page.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="vault"]').waitFor();
+          await tour.locator("[data-ltm-tour-next]").click();
+          await page.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="sources"]').waitFor();
+        }
+        if (index < tourStops.length - 1) await tour.locator("[data-ltm-tour-next]").click();
+        if (stopId === "linked") {
+          await page.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="reading"]').waitFor();
+          assert.equal(
+            await page.locator("[data-ltm-vault-view-list]").getAttribute("aria-pressed"),
+            "true",
+            "leaving Linked memories puts the Vault back on List",
+          );
+        }
+      }
+      assert.equal(await tour.locator("[data-ltm-tour-next]").innerText(), "Finish");
+      await page.keyboard.press("Escape");
+      await tour.waitFor({ state: "detached" });
+      await page.waitForFunction(() => document.activeElement?.hasAttribute("data-ltm-onboarding-help"));
+      assert.equal(await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-tour-v1")), "tour:done");
+      assert.equal(await page.locator("[data-ltm-reading-chip]").count(), 0, "the preview leaves with the tour");
+      // soup/tour: with no memories to draw, Linked memories shows a made-up example graph and says so.
+      const everyNoteList = (url: URL) => url.pathname.endsWith("/api/long-term-memory/notes");
+      await page.route(everyNoteList, (route) =>
+        route.request().method() === "GET" ? route.fulfill({ json: [] }) : route.fallback(),
       );
-      assert.doesNotMatch(await page.locator('[data-ltm-surface="onboarding"]').innerText(), /Agent Sections/u);
-      assert.equal(
-        await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 3 of 7 · Activate").count(),
-        1,
+      await helpButton.click();
+      await page.locator("[data-ltm-help-tour]").click();
+      for (const stopId of ["vault", "sources", "review", "linked"]) {
+        await tour.locator("[data-ltm-tour-next]").click();
+        await page.locator(`[data-ltm-surface="tour"][data-ltm-tour-stop="${stopId}"]`).waitFor();
+      }
+      const exampleGraph = page.locator("[data-ltm-graph][data-ltm-graph-example]");
+      await exampleGraph.waitFor();
+      assert.equal(await exampleGraph.locator("[data-ltm-graph-example-tag]").innerText(), "Example");
+      assert.match(await exampleGraph.innerText(), /The lighthouse fire/u);
+      await tour.locator("[data-ltm-tour-spotlight]").waitFor();
+      await page.waitForFunction(() =>
+        /This is an example/u.test(document.querySelector("[data-ltm-tour-bubble]")?.textContent ?? ""),
       );
-      await page.getByRole("button", { name: "Back", exact: true }).click();
-      assert.equal(await onboardingTitle.innerText(), "How Recall Works");
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await page.getByRole("button", { name: "Next: Choose a source" }).click();
-      assert.equal(await onboardingTitle.innerText(), "Choose What to Remember");
-      assert.equal(await page.locator("#ltm-onboarding-description ul li").count(), 3);
-      assert.deepEqual(await page.locator("#ltm-onboarding-description ul li strong").allInnerTexts(), [
-        "Chat Summary",
-        "Lorebook",
-        "Character",
-      ]);
-      assert.deepEqual(await page.locator("[data-ltm-source-choice] > button").allInnerTexts(), [
-        "Chat Summary",
-        "Lorebook",
-        "Character",
-      ]);
-      assert.deepEqual(await page.locator("[data-ltm-onboarding-actions] > button").allInnerTexts(), [
-        "Back",
-        "Next: Reviewing and saving memories",
-        "Open chat sources",
-      ]);
-      assert.ok(
-        Math.abs(
-          guideWidth -
-            (await page
-              .locator("#ltm-onboarding-description")
-              .evaluate((description) => description.getBoundingClientRect().width)),
-        ) < 0.01,
-      );
-      assert.equal(await page.getByRole("button", { name: "Open chat sources" }).count(), 1);
-      await page.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
-      assert.equal(await onboardingTitle.innerText(), "Review Before Saving");
-      assert.equal(await page.locator("#ltm-onboarding-description ul li").count(), 3);
-      await page.getByRole("button", { name: "Next: Check it works" }).click();
-      assert.equal(await onboardingTitle.innerText(), "Check What the Chat Used");
-      assert.match(
-        await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /send a message related to a saved fact[\s\S]*zero results/iu,
-      );
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 6 of 7 · Check").count(), 1);
-      assert.equal(await page.locator("#ltm-onboarding-description ol li").count(), 2);
-      assert.equal(
-        await page.locator("#ltm-onboarding-description ol li").nth(1).innerText(),
-        "When you get a response, peek the prompt and make sure the memories are reaching your chat context.",
-      );
-      await page.getByRole("button", { name: "Finish setup" }).click();
-      assert.equal(await onboardingTitle.innerText(), "You're Set Up");
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 7 of 7 · Ready").count(), 1);
-      assert.equal(await page.locator("#ltm-onboarding-description details").count(), 2);
-      assert.deepEqual(await page.locator("#ltm-onboarding-description details summary").allInnerTexts(), [
-        "Writing to memory (Extraction)",
-        "Reading from memory (Recall)",
-      ]);
-      // #1611: the last step ends the guide with Done; Not now and Don't show again belong to the steps before it.
-      assert.equal(await page.getByRole("button", { name: "Done", exact: true }).count(), 1);
-      assert.equal(await page.getByRole("button", { name: "Not now" }).count(), 0);
-      assert.equal(await page.getByRole("button", { name: "Don't show again" }).count(), 0);
-      await page.getByRole("button", { name: "Back", exact: true }).click();
-      await page.getByRole("button", { name: "Go to saved memories" }).click();
-      await page.locator('[data-ltm-destination-content][aria-label="Memory Vault"]').waitFor();
-      // #1611: a step button that leaves for another screen steps the guide aside, even back onto the Vault.
-      const stepAsideBar = page.locator('[data-ltm-surface="onboarding-bar"]');
-      await stepAsideBar.waitFor();
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
-      await stepAsideBar.getByRole("button", { name: "Dismiss" }).click();
-      await stepAsideBar.waitFor({ state: "detached" });
+      await page.unroute(everyNoteList);
+      await tour.locator("[data-ltm-tour-end]").click();
+      await tour.waitFor({ state: "detached" });
+      assert.equal(await page.locator("[data-ltm-graph]").count(), 0, "ending the tour puts the Vault back on List");
+      // soup/reading-chip: the header chip shows while an extraction has started and not ended, and hides after.
+      let extractionRunning = true;
+      const readingRoute = "**/api/long-term-memory/debug-log?phase=extraction*";
+      await page.route(readingRoute, (route) => {
+        const base = { operationId: "11111111-1111-4111-8111-111111111111", action: "extract_source_note" };
+        const ts = new Date().toISOString();
+        return route.fulfill({
+          json: {
+            events: [{ ...base, ts, status: "started" }, ...(extractionRunning ? [] : [{ ...base, ts, status: "ok" }])],
+          },
+        });
+      });
+      const readingChip = page.locator("[data-ltm-reading-chip]");
+      await readingChip.waitFor({ timeout: 10_000 });
+      assert.equal(await readingChip.getAttribute("data-ltm-reading"), "live");
+      assert.match(await readingChip.innerText(), /Reading the last reply/u);
+      extractionRunning = false;
+      await readingChip.waitFor({ state: "detached", timeout: 10_000 });
+      await page.unroute(readingRoute);
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.locator('[data-ltm-surface="vault"]').waitFor();
@@ -2221,7 +2536,7 @@ async function main() {
         .locator("button")
         .first()
         .click();
-      await page.getByRole("button", { name: "Choose where used" }).click();
+      await page.getByRole("button", { name: "Choose where available" }).click();
       await page.locator("[data-ltm-availability-workbench]").waitFor();
       const availability = page.locator("[data-ltm-availability-workbench]");
       await availability.getByRole("checkbox", { name: "Conversation" }).check();
@@ -2273,8 +2588,8 @@ async function main() {
       const scopedCard = page.locator('[data-ltm-note-type="world"]').filter({ hasText: /^Scoped desktop memory/u });
       await scopedCard.waitFor();
       await scopedCard.locator("button").first().click();
-      await page.getByRole("button", { name: "Edit availability" }).waitFor();
-      await page.getByRole("button", { name: "Edit availability" }).click();
+      await page.getByRole("button", { name: "Change where available" }).waitFor();
+      await page.getByRole("button", { name: "Change where available" }).click();
       await page.locator("[data-ltm-availability-workbench]").waitFor();
       const scopedAvailability = page.locator("[data-ltm-availability-workbench]");
       await scopedAvailability.locator("[data-ltm-availability-pills] button").first().click();
@@ -2290,7 +2605,7 @@ async function main() {
         .filter({ hasText: /^Memory outside current chat/u });
       await branchCard.waitFor();
       await branchCard.locator("button").first().click();
-      await page.getByRole("button", { name: "Edit availability" }).click();
+      await page.getByRole("button", { name: "Change where available" }).click();
       const branchAvailability = page.locator("[data-ltm-availability-workbench]");
       await branchAvailability.waitFor();
       const branchPill = branchAvailability.getByRole("button", {
@@ -2368,8 +2683,23 @@ async function main() {
       assert.deepEqual(keptBranchScope.groupIds, ["conversation-a"], JSON.stringify(keptBranchScope));
       assert.deepEqual(keptBranchScope.characterIds, ["character-a"], JSON.stringify(keptBranchScope));
       assert.deepEqual(keptBranchScope.personaIds, ["persona-a"], JSON.stringify(keptBranchScope));
+      // soup/frame-vault: the Vault header carries one New memory, the filter row counts selections only in select
+      // mode, a Source notes chip names its count, and group headings show their count as a chip.
+      assert.equal(await page.locator("[data-ltm-vault-header] [data-ltm-new-memory]").count(), 1);
+      assert.equal(await page.getByRole("button", { name: "New memory", exact: true }).count(), 1);
+      assert.equal(
+        await page.locator("[data-ltm-selection-count]").count(),
+        0,
+        "no selection count outside select mode",
+      );
+      assert.ok((await page.locator("[data-ltm-memory-group] > summary [data-ltm-group-count]").count()) > 0);
+      if (await page.locator("[data-ltm-source-filter]").count()) {
+        assert.match((await page.locator("[data-ltm-source-filter]").innerText()).trim(), /^Source notes · \d+$/u);
+        assert.equal(await page.locator("[data-ltm-source-filter]").getAttribute("aria-pressed"), "false");
+      }
       // Bulk remove lists the branch assignment the selected memory already has.
       await page.locator("[data-ltm-select-mode]").click();
+      await page.locator("[data-ltm-selection-count]").waitFor();
       await branchCard.locator('input[type="checkbox"]').check();
       // #1588: the whole label around a row checkbox is a 44px target, not just the box.
       assert.equal(await touchTargetSize(branchCard.locator('label:has(input[type="checkbox"])')), "fits");
@@ -2406,7 +2736,7 @@ async function main() {
       assert.deepEqual((await bulkBranchRequest).postDataJSON().removeScope, { chatIds: ["memory-chat"] });
       await bulkBranchRemoval.waitFor({ state: "detached" });
       // The open memory was part of the change, so it reloads: its summary now counts the deleted chat.
-      await page.locator("[data-ltm-availability-summary]").getByText("5 places, 1 chat modes").waitFor();
+      await page.locator("[data-ltm-availability-summary]").getByText("5 places, 1 chat types").waitFor();
       if ((await page.locator("[data-ltm-select-mode]").innerText()).trim() === "Done")
         await page.locator("[data-ltm-select-mode]").click();
       // Bulk Remove lists a place that no longer exists, with the single editor's fallback label (#1442).
@@ -2477,7 +2807,7 @@ async function main() {
       assert.ok(noteQueries.length > noteQueriesBeforeBatch, "the memory list reloads after the change");
       assert.equal(await branchTitle.inputValue(), "Memory outside current chat, edited");
       await branchTitle.fill("Memory outside current chat");
-      await page.getByRole("button", { name: "Edit availability" }).click();
+      await page.getByRole("button", { name: "Change where available" }).click();
       await branchAvailability.waitFor();
       assert.equal(await wholeChatPill.count(), 1);
       assert.equal(await branchPills.count(), 0, "the whole chat's chip covers its branches");
@@ -2490,7 +2820,7 @@ async function main() {
       );
       assert.equal(await branchPills.count(), 0, "removing the whole chat removes its branches");
       await branchAvailability.getByRole("button", { name: "Cancel", exact: true }).click();
-      await page.getByRole("button", { name: "Edit availability" }).click();
+      await page.getByRole("button", { name: "Change where available" }).click();
       await branchAvailability.waitFor();
       await branchAvailability.locator("[data-ltm-availability-picker] > summary").click();
       await branchRail.locator('[data-ltm-availability-tab="chat"]').click();
@@ -2564,32 +2894,41 @@ async function main() {
       // A save whose recall rebuild is deferred is a warning with the strong border, not a danger error.
       deferRecallRebuild = true;
       await saveButton.click();
-      const staleWarning = page.locator('[data-ltm-vault-feedback] [data-ltm-status="warning"]');
-      await staleWarning.waitFor();
+      const staleWarning = page.locator('[data-sonner-toast][data-type="warning"]').filter({
+        hasText: "Saved. Recall will catch up once the reindex succeeds: index busy",
+      });
+      await staleWarning.waitFor({ timeout: 5000 });
       assert.equal(
-        (await staleWarning.innerText()).trim(),
-        "Saved. Recall will catch up once the index rebuild succeeds: index busy",
+        (await staleWarning.first().innerText()).trim(),
+        "Saved. Recall will catch up once the reindex succeeds: index busy",
       );
-      assert.equal(await staleWarning.locator("[data-ltm-status-icon]").count(), 1);
-      assert.equal(await page.locator('[data-ltm-vault-feedback] [data-ltm-status="danger"]').count(), 0);
+      assert.equal(await staleWarning.first().locator("[data-icon]").count(), 1);
+      assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0);
       // A deferred rebuild that reports no error leaves no dangling colon.
       deferRecallError = undefined;
       await branchTitle.fill("Memory outside current chat, saved without a rebuild error");
       await saveButton.click();
-      await page.waitForFunction(
-        () =>
-          document.querySelector('[data-ltm-vault-feedback] [data-ltm-status="warning"]')?.textContent?.trim() ===
-          "Saved. Recall will catch up once the index rebuild succeeds.",
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll('[data-sonner-toast][data-type="warning"] [data-title]')].some(
+          (title) => title.textContent?.trim() === "Saved. Recall will catch up once the reindex succeeds.",
+        ),
       );
-      // The next message resets the tone: a plain save shows the success notice again.
+      // The next message resets the tone: a plain save raises the success toast again.
       deferRecallRebuild = false;
       await branchTitle.fill("Memory outside current chat, saved");
+      await markToasts(page);
       await saveButton.click();
       await page.waitForFunction(() => document.querySelector("[data-ltm-save-status]")?.textContent === "Saved");
-      assert.equal(await staleWarning.count(), 0);
+      await newToast(page, "Memory saved.").first().waitFor();
       assert.equal(
-        await page.locator('[data-ltm-vault-feedback] [data-ltm-status="success"]').innerText(),
-        "Memory saved.",
+        await newToast(page, "Memory saved.").first().getAttribute("data-type"),
+        "success",
+        "a plain save after a deferred rebuild raises the success tone again",
+      );
+      assert.equal(
+        await page.locator('[data-sonner-toast][data-type="warning"]:not([data-test-seen])').count(),
+        0,
+        "the later save raises no new warning toast",
       );
       // Opening another memory without editing must not carry the Saved status over to it.
       const otherRow = page
@@ -2633,7 +2972,7 @@ async function main() {
       };
       const saveAndContinue = page.getByRole("button", { name: "Save and continue", exact: true });
       const noSaveError = async () =>
-        assert.equal(await page.locator('[data-ltm-vault-feedback] [data-ltm-status="danger"]').count(), 0);
+        assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0);
       holdNextSave();
       let patchesBefore = outsidePatchRequests;
       await branchTitle.fill("Memory outside current chat, saved in flight");
@@ -2657,35 +2996,15 @@ async function main() {
           document.querySelector<HTMLInputElement>("[data-ltm-field='title']")?.value ===
           "Memory outside current chat, saved in flight",
       );
-      // Two saves in a row: the second "Memory saved." is announced, so the notice leaves and returns.
-      await page.evaluate(() => {
-        const log: string[] = [];
-        (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog = log;
-        const selector = '[data-ltm-vault-feedback] [data-ltm-status="success"]';
-        log.push(document.querySelector(selector)?.textContent?.trim() ?? "");
-        const observer = new MutationObserver(() => {
-          const now = document.querySelector(selector)?.textContent?.trim() ?? "";
-          if (now !== log.at(-1)) log.push(now);
-        });
-        (window as Window & { __ltmSavedObserver?: MutationObserver }).__ltmSavedObserver = observer;
-        observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
-      });
-      const savedLog = () => page.evaluate(() => (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog ?? []);
+      // Two saves in a row: each one raises its own "Memory saved." toast, so the second is announced as well.
+      await markToasts(page);
       await branchTitle.fill("Memory outside current chat, first of two");
       await saveButton.click();
-      await page.waitForFunction(
-        () => (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog?.at(-1) === "Memory saved.",
-      );
+      await newToast(page, "Memory saved.").first().waitFor();
       await branchTitle.fill("Memory outside current chat, second of two");
-      assert.equal((await savedLog()).at(-1), "Memory saved.", "the first notice stays until the next save starts");
+      assert.equal(await newToast(page, "Memory saved.").count(), 1, "the first toast stays until the next save");
       await saveButton.click();
-      await page.waitForFunction(() => {
-        const log = (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog ?? [];
-        return log.at(-1) === "Memory saved." && log.at(-2) === "" && log.at(-3) === "Memory saved.";
-      });
-      await page.evaluate(() =>
-        (window as Window & { __ltmSavedObserver?: MutationObserver }).__ltmSavedObserver?.disconnect(),
-      );
+      await newToast(page, "Memory saved.").nth(1).waitFor();
       // Destination prompt: leaving the Vault for Review while a save is in flight joins that save too.
       holdNextSave();
       patchesBefore = outsidePatchRequests;
@@ -2699,7 +3018,7 @@ async function main() {
       releaseInFlightSave();
       await page.locator('[data-ltm-surface="review-queue"]').waitFor();
       assert.equal(outsidePatchRequests, patchesBefore + 1, "Destination prompt: no second save after the first lands");
-      assert.equal(await page.locator("#ltm-destination-unsaved-description").count(), 0);
+      assert.equal(await page.locator("[data-ltm-unsaved-dialog]").count(), 0);
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await openWorldGroup();
       await page.locator(`[data-ltm-note-id="${outsideChatNote.id}"] button`).first().click();
@@ -2732,16 +3051,17 @@ async function main() {
           },
         });
       });
-      const renameDetailButton = page.getByRole("button", { name: /^Rename detail: /u }).first();
+      const renameDetailButton = page.getByRole("button", { name: /^Rename section: /u }).first();
       if (!(await renameDetailButton.isVisible())) await page.locator("[data-ltm-details-toggle]").click();
-      if (!(await renameDetailButton.isVisible())) await page.locator("summary", { hasText: "Rename details" }).click();
+      if (!(await renameDetailButton.isVisible()))
+        await page.locator("summary", { hasText: "Rename sections" }).click();
       await renameDetailButton.click();
       const renameDialog = page.locator("dialog").filter({ has: page.locator("#ltm-rename-detail-title") });
-      await renameDialog.getByLabel("New detail name").fill("background");
+      await renameDialog.getByLabel("New section name").fill("background");
       const renameRequest = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().endsWith("/sections/rename"),
       );
-      await renameDialog.getByRole("button", { name: "Save detail name" }).click();
+      await renameDialog.getByRole("button", { name: "Save section name" }).click();
       await renameRequest;
       await page.keyboard.press("Escape");
       assert.equal(
@@ -2766,7 +3086,8 @@ async function main() {
       const narrowInspectorTab = page.locator('[data-ltm-workspace-pane-tab="inspector"]');
       if (await narrowInspectorTab.count()) await narrowInspectorTab.click();
       else await page.locator("[data-ltm-details-toggle]").click();
-      if (!(await renameDetailButton.isVisible())) await page.locator("summary", { hasText: "Rename details" }).click();
+      if (!(await renameDetailButton.isVisible()))
+        await page.locator("summary", { hasText: "Rename sections" }).click();
       await renameDetailButton.click();
       assert.equal(await page.locator('[data-ltm-workspace-pane="navigator"]').isVisible(), false);
       const narrowRenameDialog = await renameDialog.evaluate((dialog) => ({
@@ -2905,23 +3226,18 @@ async function main() {
         await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes("review_state"))),
         ["marinara_ltm_review_state:desktop-chat"],
       );
-      await setupGuide.click();
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await page.getByRole("button", { name: "Next: Choose a source" }).click();
-      await page.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
-      await page.getByRole("button", { name: "Open Review Queue" }).click();
-      // #1611: the guide steps aside into a bar on the screen its button opened.
-      const reviewBar = page.locator('[data-ltm-surface="onboarding-bar"]');
-      await reviewBar.waitFor();
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
+      // soup/setup-beats: Done offers "Review them now" while drafts wait; it opens Review and closes setup.
+      await page.evaluate((key) => localStorage.setItem(key, "beat:4"), "marinara-long-term-memory-onboarding-v1");
+      await helpButton.click();
+      await page.locator("[data-ltm-help-setup]").click();
+      const reviewSetup = page.locator('[data-ltm-surface="onboarding"][data-ltm-setup-beat="4"]');
+      await reviewSetup.locator("[data-ltm-setup-review]").click();
+      await reviewSetup.waitFor({ state: "detached" });
       assert.equal(await page.locator('[data-ltm-surface="review-queue"]').count(), 1);
-      assert.equal(await reviewBar.getByText("Setup guide · step 5 of 7").count(), 1);
       assert.equal(
-        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "step:4",
+        await page.evaluate((key) => localStorage.getItem(key), "marinara-long-term-memory-onboarding-v1"),
+        "done",
       );
-      await reviewBar.getByRole("button", { name: "Dismiss" }).click();
       pendingDraftCount = 0;
       reviewFingerprintRevision = 0;
       await page.reload();
@@ -2993,42 +3309,83 @@ async function main() {
         "a status surface keeps its text and actions off its border",
       );
       reviewFingerprintRevision = 0;
-      // #1611: Help leaves the Review Queue for the Vault, so the unsaved-state guard asks first; Stay keeps
-      // the screen and opens neither the guide nor the bar.
-      const helpPrompts: string[] = [];
-      const helpMessages: string[] = [];
-      page.once("dialog", (dialog) => {
-        helpPrompts.push(dialog.type());
-        helpMessages.push(dialog.message());
-        void dialog.dismiss();
-      });
-      await setupGuide.click();
-      await page.waitForFunction(() => document.querySelector('[data-ltm-surface="onboarding"]') === null);
-      assert.deepEqual(helpPrompts, ["confirm"]);
+      // #1611: leaving the Review Queue with unsaved state asks first; Stay keeps the screen.
+      const confirmDialog = page.locator("[data-ltm-confirm-dialog]");
+      const vaultTab = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]');
+      await vaultTab.click();
+      await confirmDialog.waitFor();
       // #1617: the confirm fallback names where the user is going, like the in-page dialog does.
-      assert.match(helpMessages[0], /Your changes are not saved\. Discard them to open .+\./u);
+      assert.match(await confirmDialog.innerText(), /Your changes are not saved\. Discard them to open .+\./u);
+      // soup/confirm: the fallback is the package's own dialog, opens on Cancel, closes with Esc and gives focus back.
+      await page.locator("[data-ltm-confirm-cancel]:focus").waitFor();
+      await page.keyboard.press("Escape");
+      await confirmDialog.waitFor({ state: "detached" });
+      await vaultTab.and(page.locator(":focus")).waitFor();
+      assert.equal(await page.locator("[data-ltm-confirm-dialog]").count(), 0, "No dialog is left to block clicks");
       assert.equal(await page.locator('[data-ltm-surface="review-queue"]').count(), 1);
+      await vaultTab.click();
+      await confirmDialog.waitFor();
+      await page.locator("[data-ltm-confirm-ok]").click();
+      // soup/confirm: the confirmed action's own focus move wins over the opener restore. The Vault takes focus on
+      // arrival (its navigator's first control); the dialog's restore waits two frames and then finds focus placed.
+      await page.locator('[data-ltm-surface="vault"] :focus').waitFor();
+      await page.evaluate(() => new Promise((settled) => requestAnimationFrame(() => requestAnimationFrame(settled))));
+      assert.equal(await page.locator('[data-ltm-surface="vault"] :focus').count(), 1);
+      assert.equal(await vaultTab.and(page.locator(":focus")).count(), 0, "focus is not sent back to the opener");
+      // soup/setup-beats: each beat saves on tap, a reload resumes at the saved beat, and Done shows the Vault.
+      await page.evaluate((key) => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          enabledForChat: false,
+          onEnabledForChatChange: (
+            window as Window & {
+              onDesktopActivationChange: (enabled: boolean) => void;
+            }
+          ).onDesktopActivationChange,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+        localStorage.removeItem(key);
+      }, "marinara-long-term-memory-onboarding-v1");
+      await helpButton.click();
+      await page.locator("[data-ltm-help-setup]").click();
+      const setupBeat = (beat: number) =>
+        page.locator(`[data-ltm-surface="onboarding"][data-ltm-setup-beat="${beat}"]`);
+      await setupBeat(1).waitFor();
+      // A held turn-on keeps the answer focusable and aria-disabled, and Enter or Space on it
+      // sends no second request (Enter and Space still fire onClick on an aria-disabled button).
+      let releaseHeldTurnOn!: () => void;
+      activationGate = new Promise<void>((resolve) => {
+        releaseHeldTurnOn = resolve;
+      });
+      const rememberChoice = page.locator('[data-ltm-setup-choice="remember"]');
+      await rememberChoice.click();
+      await page.locator('[data-ltm-setup-choice="remember"][aria-disabled="true"]').waitFor();
+      await rememberChoice.focus();
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Space");
+      await page.waitForTimeout(150);
+      assert.deepEqual(desktopActivationChanges, [true], "a held turn-on sends exactly one request");
+      releaseHeldTurnOn();
+      await setupBeat(2).waitFor();
+      assert.deepEqual(desktopActivationChanges, [true]);
       assert.equal(
-        await page.locator('[data-ltm-surface="onboarding"], [data-ltm-surface="onboarding-bar"]').count(),
-        0,
+        await page.evaluate((key) => localStorage.getItem(key), "marinara-long-term-memory-onboarding-v1"),
+        "beat:2",
       );
-      page.once("dialog", (dialog) => void dialog.accept());
-      await setupGuide.click();
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await page.getByRole("button", { name: "Next: Choose a source" }).click();
-      // #1611: the later steps open the source type chosen in step 4, not a fixed Characters tab.
-      await page.locator("[data-ltm-source-choice]").getByRole("button", { name: "Lorebook" }).click();
-      await page.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
-      await page.getByRole("button", { name: "Choose a Source" }).click();
-      await page.locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]').waitFor();
-      await page.locator('[data-ltm-surface="onboarding-bar"]').waitFor();
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
+      // How: a tapped answer saves at once and shows pressed; Next keeps it and moves on.
+      const writesBeforeChoice = extractionWrites.length;
+      await page.locator('[data-ltm-setup-choice="review"]').click();
+      await page.locator('[data-ltm-setup-choice="review"][aria-pressed="true"]').waitFor();
+      assert.ok(extractionWrites.length > writesBeforeChoice, "a tapped answer saves right away");
+      await page.locator("[data-ltm-setup-next]").click();
+      await setupBeat(3).waitFor();
       assert.equal(
-        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "step:4",
+        await page.evaluate((key) => localStorage.getItem(key), "marinara-long-term-memory-onboarding-v1"),
+        "beat:3",
       );
-      await page.locator('[data-ltm-surface="onboarding-bar"]').getByRole("button", { name: "Dismiss" }).click();
       pendingDraftCount = 2;
       await page.reload();
       await page.evaluate((version) => {
@@ -3042,158 +3399,46 @@ async function main() {
           chatName: "desktop chat",
           chatMode: "conversation",
           enabledForChat: true,
-          onEnabledForChatChange: (
-            window as Window & {
-              onDesktopActivationChange: (enabled: boolean) => void;
-            }
-          ).onDesktopActivationChange,
           package: { version },
         };
         document.body.append(element);
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
-      await setupGuide.click();
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await page.getByRole("button", { name: "Next: Choose a source" }).click();
-      await page.getByRole("button", { name: "Character" }).click();
-      await page.getByRole("button", { name: "Import a character" }).click();
-      await page.locator('[data-ltm-source-tab="characters"][aria-selected="true"]').waitFor();
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
-      assert.equal(await page.locator('[data-ltm-surface="onboarding-bar"]').count(), 1);
-      await setupGuide.click();
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await page.getByRole("button", { name: "Next: Choose a source" }).click();
-      await page.getByRole("button", { name: "Chat Summary" }).click();
-      const chatSummaryGuide = page.locator('[data-ltm-surface="onboarding"]');
-      assert.match(
-        await chatSummaryGuide.innerText(),
-        /Chat Summary section.*default prompt.*Long-Term Memory Agent/isu,
-      );
-      assert.equal(await page.getByRole("button", { name: "Open chat sources" }).count(), 1);
-      assert.equal(
-        await page.getByRole("button", { name: "Open Chat Summary settings" }).count(),
-        0,
-        "Chat Summary handoff must remain hidden without a compatible Roleplay host callback",
-      );
-      await page.getByRole("button", { name: "Open chat sources" }).click();
-      await page.locator('[data-ltm-source-tab="chats"][aria-selected="true"]').waitFor();
-      assert.equal(
-        await page.locator('[data-ltm-surface="onboarding"]').count(),
-        0,
-        "Source handoff must step the full guide aside",
-      );
-      await page.locator('[data-ltm-surface="onboarding-bar"]').getByRole("button", { name: "Dismiss" }).click();
+      await helpButton.click();
+      await page.locator("[data-ltm-help-setup]").click();
+      await setupBeat(3).waitFor();
+      // Records when beat 4 and its first recap row appear, to catch a one-frame flash of the answers.
       await page.evaluate(() => {
-        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
-          capabilityProps?: Record<string, unknown>;
-        };
-        element.capabilityProps = {
-          ...element.capabilityProps,
-          chatMode: "roleplay",
-          enabledForChat: false,
-        };
-        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+        const timing: { beat4?: number; recap?: number } = {};
+        (window as unknown as { __ltmRecapTiming: typeof timing }).__ltmRecapTiming = timing;
+        new MutationObserver(() => {
+          if (timing.beat4 === undefined && document.querySelector('[data-ltm-setup-beat="4"]'))
+            timing.beat4 = performance.now();
+          if (timing.recap === undefined && document.querySelector("[data-ltm-setup-recap]"))
+            timing.recap = performance.now();
+        }).observe(document.body, { childList: true, subtree: true, attributes: true });
       });
-      await setupGuide.click();
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      assert.match(
-        await page.locator('[data-ltm-surface="onboarding"]').innerText(),
-        /Open Prompt Preset Editor.*Open Sections.*Add an Agent Section for Long-Term Memory/isu,
-      );
+      await page.locator('[data-ltm-setup-choice="start-fresh"]').click();
+      await setupBeat(4).waitFor();
       assert.equal(
-        await page.getByRole("button", { name: "Open Prompt Preset Sections" }).count(),
-        0,
-        "Prompt preset handoff must remain hidden without a host callback",
+        await page.evaluate((key) => localStorage.getItem(key), "marinara-long-term-memory-onboarding-v1"),
+        "done",
       );
-      // A held turn-on keeps the button focusable and aria-disabled, and Enter or Space on it
-      // sends no second request (Enter and Space still fire onClick on an aria-disabled button).
-      let releaseHeldTurnOn!: () => void;
-      activationGate = new Promise<void>((resolve) => {
-        releaseHeldTurnOn = resolve;
-      });
-      const turnOnButton = page.getByRole("button", { name: "Turn on for this chat" });
-      await turnOnButton.click();
-      await page.waitForFunction(() => {
-        const button = [...document.querySelectorAll("button")].find((candidate) =>
-          /turn on for this chat/i.test(candidate.textContent ?? ""),
-        );
-        return (
-          button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true" && !button.disabled
-        );
-      });
-      await turnOnButton.focus();
-      await page.keyboard.press("Enter");
-      await page.keyboard.press("Space");
-      await page.waitForTimeout(150);
-      assert.deepEqual(desktopActivationChanges, [true], "a held turn-on sends exactly one request");
-      // #1980: a "Memories from chats" button pressed during the held turn-on changes nothing and saves nothing.
-      const heldChoiceButtons = page.locator('[data-ltm-surface="onboarding"] [data-ltm-chat-memories-choice] button');
-      const heldPressedBefore = await heldChoiceButtons.evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-pressed")),
+      // The answers appear after Mari finishes her lines (`talking`), so wait for the recap before counting it.
+      await page.locator('[data-ltm-setup-recap="3"]').waitFor();
+      assert.equal(await page.locator("[data-ltm-setup-recap]").count(), 3);
+      const recapTiming = await page.evaluate(
+        () => (window as unknown as { __ltmRecapTiming: { beat4?: number; recap?: number } }).__ltmRecapTiming,
       );
-      const heldWritesBefore = extractionWrites.length;
-      // force: Playwright treats aria-disabled as not enabled, but the real click still reaches the handler.
-      await heldChoiceButtons.nth(heldPressedBefore.indexOf("false")).click({ force: true });
-      await page.waitForTimeout(150);
-      assert.equal(extractionWrites.length, heldWritesBefore, "a choice pressed during a held turn-on saves nothing");
-      assert.deepEqual(
-        await heldChoiceButtons.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-pressed"))),
-        heldPressedBefore,
-        "a choice pressed during a held turn-on leaves the shown choice alone",
+      assert.ok(
+        recapTiming.beat4 !== undefined &&
+          recapTiming.recap !== undefined &&
+          recapTiming.recap - recapTiming.beat4 >= 300,
+        `setup recap waits for Mari's lines instead of flashing with beat 4 (${JSON.stringify(recapTiming)})`,
       );
-      releaseHeldTurnOn();
-      await page.waitForFunction(
-        () => ![...document.querySelectorAll("button")].some((c) => /turn on for this chat/i.test(c.textContent ?? "")),
-      );
-      assert.deepEqual(desktopActivationChanges, [true]);
-      await page.evaluate(() => {
-        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
-          capabilityProps?: Record<string, unknown>;
-        };
-        element.capabilityProps = {
-          ...element.capabilityProps,
-          enabledForChat: true,
-          onOpenChatSummarySettings: (
-            window as Window & {
-              onOpenChatSummarySettings: () => void;
-            }
-          ).onOpenChatSummarySettings,
-          onOpenActivePromptPresetEditor: (
-            window as Window & {
-              onOpenActivePromptPresetEditor: () => void;
-            }
-          ).onOpenActivePromptPresetEditor,
-        };
-        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
-        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
-      });
-      await setupGuide.click();
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await page.getByRole("button", { name: "Open Prompt Preset Sections" }).click();
-      assert.deepEqual(promptPresetEditorOpens.length, 1);
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
-      assert.equal(await page.locator('[data-ltm-surface="onboarding-bar"]').getByText("step 3 of 7").count(), 1);
-      assert.equal(
-        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "step:2",
-      );
-      await page.evaluate(() => localStorage.removeItem("marinara-long-term-memory-onboarding-v1"));
-      await setupGuide.click();
-      await page.getByRole("button", { name: "Next: How recall works" }).click();
-      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await page.getByRole("button", { name: "Next: Choose a source" }).click();
-      await page.getByRole("button", { name: "Chat Summary", exact: true }).click();
-      await page.getByRole("button", { name: "Open Chat Summary settings" }).click();
-      assert.deepEqual(chatSummarySettingsOpens.length, 1);
-      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
-      assert.equal(
-        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "step:3",
-      );
+      await page.locator("[data-ltm-setup-open-vault]").click();
+      await page.locator('[data-ltm-surface="onboarding"]').waitFor({ state: "detached" });
+      await page.locator('[data-ltm-surface="vault"]').waitFor();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]').click();
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
@@ -3206,11 +3451,17 @@ async function main() {
         [],
         "Sources tabs and actions fit 2.75rem",
       );
+      // soup/sources-review: with a chat open the one bar reads "Available in: This chat" and Import is not gated.
+      assert.equal(
+        (await page.locator("#ltm-destination-scope-control [data-ltm-destination-scope-summary]").innerText()).trim(),
+        "This chat",
+        "soup/sources-review: the destination defaults to the open chat",
+      );
       // #1714: the destination tabs sit under the same Engine min-height rule as the Sources and Settings tabs.
       assert.equal(
         await page.locator('[data-ltm-navigation="desktop"] .mari-editor-tab:visible').count(),
-        4,
-        "the four destination tabs are on screen",
+        5,
+        "the five destination tabs are on screen",
       );
       assert.deepEqual(
         await shortTouchTargets('[data-ltm-navigation="desktop"]'),
@@ -3221,27 +3472,106 @@ async function main() {
         scopeTargetQueries.slice(scopeTargetQueryCount).includes("?includeAllChats=true&chatId=desktop-chat"),
         true,
       );
+      // soup/ltm-frame: every desktop tab shows an icon and its full name, and its tab opens with a heading and
+      // one subtitle line.
+      const desktopTabs = await page
+        .locator('[data-ltm-navigation="desktop"] [data-ltm-control="navigation"]')
+        .evaluateAll((tabs) =>
+          tabs.map((tab) => ({
+            destination: tab.getAttribute("data-ltm-destination"),
+            icon: tab.querySelector("svg") !== null,
+            text: tab.textContent ?? "",
+          })),
+        );
+      assert.deepEqual(
+        desktopTabs.map((tab) => [
+          tab.destination,
+          tab.icon,
+          /Memories|Review|Sources|Activity|Memory Settings/u.exec(tab.text)?.[0],
+        ]),
+        [
+          ["vault", true, "Memories"],
+          ["review", true, "Review"],
+          ["sources", true, "Sources"],
+          ["activity", true, "Activity"],
+          ["settings", true, "Memory Settings"],
+        ],
+        "each desktop tab has an icon and its full name",
+      );
+      const tabSubtitles: Array<[string, string, string]> = [
+        ["vault", "Memory vault", "Saved memories"],
+        ["review", "Review queue", "Proposals waiting for your OK"],
+        ["sources", "Sources", "Import from chats, lorebooks, characters"],
+        ["activity", "Activity", "What memory did and why"],
+      ];
+      for (const [destination, heading, subtitle] of tabSubtitles) {
+        await page.locator(`[data-ltm-navigation="desktop"] [data-ltm-destination="${destination}"]`).click();
+        const region = page.locator("[data-ltm-destination-content]");
+        await region.getByRole("heading", { name: heading, exact: true }).first().waitFor();
+        assert.equal(
+          await region.locator("[data-ltm-tab-subtitle]").first().innerText(),
+          subtitle,
+          `${destination} opens with its subtitle`,
+        );
+      }
+      // Memory Settings states its scope in one line under the tabs instead of a subtitle.
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+      const settingsRegion = page.locator("[data-ltm-destination-content]");
+      await settingsRegion.getByRole("heading", { name: "Memory Settings", exact: true }).first().waitFor();
+      assert.equal(await settingsRegion.locator("[data-ltm-tab-subtitle]").count(), 0);
+      await settingsRegion.locator("[data-ltm-settings-reassurance]").waitFor();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
-      const desktopActivation = page.locator('[data-ltm-control="activation"]');
-      await desktopActivation.waitFor();
-      const desktopActivationBox = await desktopActivation.boundingBox();
-      const desktopAddBox = await page.locator('[aria-label="Add memories"]').boundingBox();
-      assert.ok(desktopActivationBox);
-      assert.ok(desktopAddBox);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      // The Engine header's Active switch is the one per-chat on/off; the package draws no second control.
+      assert.equal(
+        await page.locator('[data-ltm-surface="activation-chip"]').count(),
+        0,
+        "no activation chip on a chat",
+      );
+      assert.equal(await page.locator('[data-ltm-control="activation"]').count(), 0, "no Turn on/off button");
+      assert.equal(await page.locator('[aria-label="Add memories"]').isVisible(), true);
       // #1673: a wide detail surface shows the add label.
       assert.equal(await page.locator("[data-ltm-add-label]").isVisible(), true, "a wide surface shows the add label");
-      assert.equal(
-        Math.abs(
-          desktopActivationBox.y + desktopActivationBox.height / 2 - (desktopAddBox.y + desktopAddBox.height / 2),
-        ) <= 2,
-        true,
-      );
+      // The extraction connection picker names each connection's model, and the default option names the host's
+      // default agent connection; image and video connections never appear.
+      // The host sends its flag columns as the text "true" / "false"; only the language default is named.
+      const connectionRows = [
+        { id: "conn-voice", name: "My Voice", provider: "audio", model: "tts-1", defaultForAgents: "true" },
+        { id: "conn-fast", name: "Quick Pen", provider: "openai", model: "gpt-fast", defaultForAgents: "false" },
+        { id: "conn-deep", name: "Deep Ink", provider: "anthropic", model: "claude-deep", defaultForAgents: "true" },
+        { id: "conn-bare", name: "", provider: "custom", model: "", defaultForAgents: "false" },
+        { id: "conn-art", name: "Pixel Art", provider: "image_generation", model: "art-1", defaultForAgents: "false" },
+      ];
+      const connectionsRoute = (route: { fulfill: (response: { status: number; json: unknown }) => Promise<void> }) =>
+        route.fulfill({ status: 200, json: connectionRows });
+      await page.route("**/api/connections", connectionsRoute);
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
       await page.locator("#settings-tab-extraction").click();
       // Extraction settings load after the tab opens, so wait for the choice rather than sampling once.
       await page
         .locator('#settings-panel-extraction [data-ltm-chat-memories="global"]')
         .waitFor({ state: "visible", timeout: 5_000 });
+      const connectionPicker = page.getByLabel("Model for extraction", { exact: true });
+      await page.waitForFunction(
+        () =>
+          [...document.querySelectorAll("#settings-panel-extraction select option")].some((option) =>
+            /Deep Ink/u.test(option.textContent ?? ""),
+          ),
+        undefined,
+        { timeout: 5_000 },
+      );
+      assert.deepEqual(
+        await connectionPicker.locator("option").allTextContents(),
+        [
+          "Default agent connection (Deep Ink · claude-deep)",
+          "My Voice · tts-1",
+          "Quick Pen · gpt-fast",
+          "Deep Ink · claude-deep",
+          "custom",
+        ],
+        "each connection reads name · model, a missing name falls back to the provider, and image connections are left out",
+      );
+      await page.unroute("**/api/connections", connectionsRoute);
       assert.deepEqual(
         await shortTouchTargets('[data-ltm-surface="memory-settings"]'),
         [],
@@ -3250,18 +3580,16 @@ async function main() {
       const desktopExtractionLayout = await page
         .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
         .evaluate((grid) => {
-          // The "Memories from chats" choice takes the first row; connection and model pair below it.
-          const fields = [...grid.children].slice(1, 3) as HTMLElement[];
-          const labels = fields.map((field) => field.firstElementChild as HTMLElement);
-          const selects = fields.map((field) => field.querySelector("select")!);
-          const info = fields[1].querySelector("[data-ltm-info] svg")!;
+          // The model picker sits in the Model section under the first grid; its name is directly above it.
+          const connection = document.querySelector("#settings-panel-extraction [data-ltm-connection-field]")!;
+          const label = connection.firstElementChild as HTMLElement;
+          const select = connection.querySelector("select")!;
+          const infoButtons = grid.querySelectorAll("[data-ltm-info]").length;
           return {
             columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u).length,
-            labelTops: labels.map((label) => label.getBoundingClientRect().top),
-            labelHeights: labels.map((label) => label.getBoundingClientRect().height),
-            selectTops: selects.map((select) => select.getBoundingClientRect().top),
-            selectHeights: selects.map((select) => select.getBoundingClientRect().height),
-            infoSize: info.getBoundingClientRect().width,
+            labelGap: select.getBoundingClientRect().top - label.getBoundingClientRect().bottom,
+            selectHeight: select.getBoundingClientRect().height,
+            infoButtons,
           };
         });
       assert.equal(desktopExtractionLayout.columns, 2);
@@ -3269,8 +3597,8 @@ async function main() {
         await page
           .locator("[data-ltm-settings-tab-rail]")
           .evaluate((rail) => getComputedStyle(rail).gridTemplateColumns.split(/\s+/u).length),
-        4,
-        "a wide Settings container shows four tab columns",
+        2,
+        "a wide Settings container shows both tabs in one row",
       );
       assert.equal(
         await page
@@ -3279,14 +3607,16 @@ async function main() {
         3,
         "a wide Settings container puts the three active-template pickers in one row",
       );
-      assert.deepEqual(desktopExtractionLayout.labelHeights, [44, 44]);
-      assert.equal(Math.abs(desktopExtractionLayout.labelTops[0]! - desktopExtractionLayout.labelTops[1]!) <= 1, true);
-      assert.equal(
-        Math.abs(desktopExtractionLayout.selectTops[0]! - desktopExtractionLayout.selectTops[1]!) <= 1,
-        true,
+      assert.ok(
+        desktopExtractionLayout.labelGap >= 0 && desktopExtractionLayout.labelGap <= 8,
+        `the model picker's name sits directly above it (gap ${desktopExtractionLayout.labelGap}px)`,
       );
-      assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
-      assert.equal(desktopExtractionLayout.infoSize, 14);
+      assert.equal(desktopExtractionLayout.selectHeight, 44);
+      assert.equal(
+        desktopExtractionLayout.infoButtons,
+        0,
+        "Extraction guidance is hints under the controls, not (i) buttons",
+      );
       // #1673: a 420px-high window stands in for the height at 200% zoom (Playwright has no zoom API). Headless
       // Chromium reads vh and dvh alike, so this proves the caps track the window; the dvh unit is pinned statically.
       const fitsWindow = (list: ReturnType<typeof page.locator>) =>
@@ -3299,7 +3629,7 @@ async function main() {
         "the Vault list cap fits a short window",
       );
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
-      await page.locator("#settings-tab-debug").click();
+      await openActivityLog(page);
       assert.equal(
         await fitsWindow(page.locator("[data-ltm-debug-list]")),
         true,
@@ -3504,7 +3834,7 @@ async function main() {
                 fusedRank: 2,
                 rejectionReason: "lower_rank",
               },
-              ...["budget", "duplicate_text", "score_threshold", "missing_chunk", "prompt_budget"].map(
+              ...["budget", "duplicate_text", "score_threshold", "missing_chunk", "prompt_budget", "type_cap"].map(
                 (rejectionReason) => ({ noteId: "world_scoped_desktop", sectionKey: "facts", rejectionReason }),
               ),
             ],
@@ -3612,7 +3942,7 @@ async function main() {
         // D18/D33: the noncompact Activity log Retry keeps a 44px target. Fail the
         // first load, measure the Retry, then recover through it.
         debugLogError = true;
-        await activityPage.locator("#settings-tab-debug").click();
+        await openActivityLog(activityPage);
         const activity = activityPage.locator('[data-ltm-surface="activity"]');
         const details = activity.locator("[data-ltm-debug-details]");
         const activityRetry = activity.locator('[data-ltm-status="danger"]').getByRole("button", { name: "Retry" });
@@ -3692,13 +4022,13 @@ async function main() {
           true,
           "long candidate quotes must wrap on desktop and mobile",
         );
-        await details.getByRole("button", { name: "Open Review Queue" }).click();
+        await details.getByRole("button", { name: "Open Review" }).click();
         await activityPage.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
         debugReviewPending = false;
         await activityPage.locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="settings"]`).click();
-        await activityPage.locator("#settings-tab-debug").click();
+        await openActivityLog(activityPage);
         await operation("breakdown");
-        await details.getByRole("button", { name: "Open Review Queue" }).waitFor({ state: "hidden" });
+        await details.getByRole("button", { name: "Open Review" }).waitFor({ state: "hidden" });
         debugReviewPending = true;
         const applied = await operation("apply");
         assert.match(applied, /Result\s+2\s+changes in the draft\s+→\s+1\s+saved/u);
@@ -3873,7 +4203,7 @@ async function main() {
         assert.equal(await recordedSetting("Token limit"), "2,048");
         assert.equal(await recordedSetting("Tokens used"), "42");
         assert.equal(await recordedSetting("Messages read"), "3");
-        assert.equal(await recordedSetting("Ranking weights"), "Semantic 0.6");
+        assert.equal(await recordedSetting("Ranking weights"), "Meaning match 0.6");
         assert.doesNotMatch(recall, /Limits:|chunks ·|Used:|Weights:|Run parameters|Relevance:/u);
         assert.doesNotMatch(recall, /No memory/u, "a recall that added a memory needs no explanation");
         // Candidates are flat rows: no filled box around each one.
@@ -3887,13 +4217,14 @@ async function main() {
           "Didn't fit the 2,048-token limit",
           "Duplicate text",
           "Below minimum relevance",
-          "Memory chunk unavailable",
+          "Memory text unavailable",
           "Prompt budget reached",
+          "Kept back to leave room for other kinds of memory",
         ])
           assert.match(recall, new RegExp(reason, "u"));
         assert.match(recall, /Legacy global memory/u);
-        assert.match(recall, /35%\s*·\s*Fused rank 1/u);
-        assert.match(recall, /45%\s*·\s*Fused rank 2/u);
+        assert.match(recall, /35%\s*·\s*Rank 1/u);
+        assert.match(recall, /45%\s*·\s*Rank 2/u);
         // The nothing-added explanation names the limit that applied, or the generic fact without one.
         const rejectedRecall = await operation("recall-rejected");
         assert.match(rejectedRecall, /No memory was added to this reply\./u);
@@ -3909,6 +4240,15 @@ async function main() {
             paragraphs.map((p) => p.getBoundingClientRect()).map(({ top, bottom }) => ({ top, bottom })),
           );
         assert.equal(calloutBoxes.length, 2);
+        // soup/: the nothing-added callout offers the Recall settings handoff.
+        assert.equal(
+          await details
+            .locator("[data-ltm-debug-nothing-added]")
+            .first()
+            .getByRole("button", { name: "Open Recall settings" })
+            .count(),
+          1,
+        );
         assert.ok(calloutBoxes[1].top >= calloutBoxes[0].bottom - 1, "callout paragraphs are stacked");
         // Every row names how long ago its operation last logged an event.
         await showEvents();
@@ -3931,6 +4271,21 @@ async function main() {
           1,
           "the log heading reads Activity log",
         );
+        // soup/: a hover tooltip never swallows the next click; only the pinned panel takes pointer events.
+        const activityInfo = activity.locator('[data-ltm-info="Activity log"]');
+        await activityInfo.hover();
+        const activityInfoPanel = activityPage.locator('[data-ltm-info-panel="Activity log"]');
+        await activityInfoPanel.waitFor();
+        assert.equal(await activityInfoPanel.evaluate((panel) => getComputedStyle(panel).pointerEvents), "none");
+        await activityInfo.click();
+        assert.notEqual(
+          await activityPage
+            .locator('[data-ltm-info-panel="Activity log"]')
+            .evaluate((panel) => getComputedStyle(panel).pointerEvents),
+          "none",
+        );
+        await activityPage.keyboard.press("Escape");
+        await activityPage.locator('[data-ltm-info-panel="Activity log"]').waitFor({ state: "detached" });
         assert.equal(
           await activity.locator('[role="group"][aria-label="Log actions"]').count(),
           1,
@@ -3963,7 +4318,7 @@ async function main() {
         assert.doesNotMatch(breakdown, /totalCandidates|deduplications/u);
         assert.match(recall, /Tokens used\s+42/u);
         assert.doesNotMatch(recall, /42 used tokens/u, "the used-token count is not repeated under Details");
-        assert.match(recall, /Ranking weights\s+Semantic 0\.6/u);
+        assert.match(recall, /Ranking weights\s+Meaning match 0\.6/u);
         assert.doesNotMatch(recall, /Semantic weight/u);
         // D23: a completed operation's start step is Started/Succeeded, never Running.
         assert.match(estimated, /Started/u);
@@ -4000,21 +4355,24 @@ async function main() {
         );
         const download = await downloadPromise;
         assert.match(download.suggestedFilename(), /^ltm-debug-log-\d{4}/u);
-        await activity.locator("[data-ltm-status]", { hasText: "Full Activity log exported." }).waitFor();
-        // The same text is also in a region that stays mounted, which is what a screen reader announces.
+        await toastWith(activityPage, "Full Activity log exported.").waitFor({ timeout: 5000 });
+        // The result is the toast alone: nothing stays behind in the Activity view, and no live copy is mounted there.
         assert.equal(
-          await activity.locator('p[role="status"].sr-only', { hasText: "Full Activity log exported." }).count(),
-          1,
-        );
-        assert.equal(
-          await activity.locator('[data-ltm-status][role="status"]').count(),
+          await activity.locator("[data-ltm-status]", { hasText: "Full Activity log exported." }).count(),
           0,
-          "the visible copy is not live",
         );
+        assert.equal(await activity.locator('[data-ltm-status][role="status"]').count(), 0);
         // D07: a failed export surfaces the server's JSON error text.
         debugExportError = true;
         await exportButton.click();
-        await activity.locator("[data-ltm-status]", { hasText: "Export fixture failed." }).waitFor();
+        await toastWith(activityPage, "Export fixture failed.").waitFor({ timeout: 5000 });
+        assert.equal(
+          await activityPage
+            .locator('[data-sonner-toast][data-type="error"]')
+            .filter({ hasText: "Export fixture failed." })
+            .count(),
+          1,
+        );
         debugExportError = false;
         // D32: Clear confirms its all-chat scope and permanent, memory-safe behavior;
         // cancelling makes no DELETE request.
@@ -4056,7 +4414,7 @@ async function main() {
           (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = true;
         });
         await clearButton.click();
-        await activity.locator("[data-ltm-status]", { hasText: "Activity log cleared." }).waitFor();
+        await toastWith(activityPage, "Activity log cleared.").waitFor({ timeout: 5000 });
         assert.equal(debugClearDeletes, clearDeletesBefore + 1);
         // D06: focus returns to the initiating control after the host confirmation.
         await activityPage.waitForFunction(() =>
@@ -4064,40 +4422,10 @@ async function main() {
             (button) => button.textContent?.trim() === "Clear" && button === document.activeElement,
           ),
         );
-        // D05: the Debug toggle shows a local cue and saves through the existing PUT
-        // flow, with its feedback shown exactly once in the Debug panel.
-        const debugToggle = activityPage.locator("#settings-panel-debug input[type=checkbox]").first();
-        const debugChecked = await debugToggle.isChecked();
-        const debugDirty = activityPage.locator("[data-ltm-debug-dirty]");
-        await debugToggle.click();
-        await debugDirty.getByText(/Unsaved change to recall explanations/u).waitFor();
-        await debugDirty.getByRole("button", { name: "Save now" }).click();
-        await activityPage.getByText("Memory settings saved.").waitFor();
-        // #1588: "Save now" leaves with the saved change, so focus moves to its result.
-        await activityPage.waitForFunction(
-          () =>
-            document.activeElement?.matches("[data-ltm-settings-message]") &&
-            document.activeElement.textContent?.includes("Memory settings saved."),
-        );
-        assert.equal(
-          await activityPage
-            .locator('[data-ltm-surface="memory-settings"] [data-ltm-status]')
-            .filter({ hasText: "Memory settings saved." })
-            .count(),
-          1,
-          "save feedback is shown once in the Debug panel",
-        );
-        assert.equal(await debugToggle.isChecked(), !debugChecked, "saving persists the toggled Debug setting");
-        // #1588: Discard also leaves with the change; focus goes to the open tab, not to the earlier save's result.
-        await debugToggle.click();
-        await debugDirty.waitFor();
-        await activityPage
-          .locator('[data-ltm-surface="memory-settings"]')
-          .getByRole("button", { name: "Discard changes" })
-          .click();
-        await debugDirty.waitFor({ state: "detached" });
-        await activityPage.waitForFunction(() => document.activeElement?.id === "settings-tab-debug");
-        assert.equal(await debugToggle.isChecked(), !debugChecked, "Discard keeps the saved Debug setting");
+        // Item 9 replaces the old D05 step: the record switch lives on the Activity page and saves on its own
+        // (the full check is in the "Item 9" block), so Memory Settings has no recall-explanations control left.
+        await activityPage.locator("[data-ltm-activity-record]").waitFor();
+        await openActivityLog(activityPage);
         // D06 repair: a same-turn double Refresh must coalesce into one debug-log
         // request; the button guard reads React Query's rendered `isFetching`, which is
         // still false for a second activation in the same task.
@@ -4132,8 +4460,7 @@ async function main() {
           // #1588: "Show up to 1,000 events" keeps the log and keeps focus while the longer
           // log loads, then hands focus to the log once the control is gone.
           debugLogPadding = 250;
-          await activityPage.locator("#settings-tab-recall").click();
-          await activityPage.locator("#settings-tab-debug").click();
+          await reopenActivityLog(activityPage);
           const showMore = activity.locator("[data-ltm-activity-show-more]");
           await showMore.waitFor();
           let releaseDebugLog = () => {};
@@ -4153,8 +4480,7 @@ async function main() {
             () => document.activeElement?.matches('[data-ltm-surface="activity"] [data-ltm-debug-list]') ?? false,
           );
           debugLogPadding = 0;
-          await activityPage.locator("#settings-tab-recall").click();
-          await activityPage.locator("#settings-tab-debug").click();
+          await reopenActivityLog(activityPage);
           await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
         }
         // M2: a recall whose chat resolves through /scope-targets shows the chat label.
@@ -4225,12 +4551,19 @@ async function main() {
             .evaluate((element) => {
               (element as HTMLDetailsElement).open = true;
             });
-          const openDebugLog = debugPage.getByRole("button", { name: "Open debug log" });
+          const openDebugLog = debugPage.getByRole("button", { name: "View activity" });
           const openDebugLogBox = await openDebugLog.boundingBox();
-          assert.ok(openDebugLogBox && openDebugLogBox.height >= 44, "Open debug log keeps a 44px target");
+          assert.ok(openDebugLogBox && openDebugLogBox.height >= 44, "View activity keeps a 44px target");
           await openDebugLog.click();
           await activity.waitFor();
           await filterChip.waitFor();
+          assert.equal(
+            await debugPage
+              .locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination="activity"]`)
+              .getAttribute("aria-current"),
+            "page",
+            "View activity lands on the Activity page",
+          );
         };
 
         // A previous Debug selection must not survive the memory handoff.
@@ -4287,8 +4620,7 @@ async function main() {
         assert.equal(await activity.locator("[data-ltm-debug-memory-filter]").count(), 0);
 
         // A cleared filter must not come back when the Debug tab is reopened.
-        await debugPage.locator("#settings-tab-recall").click();
-        await debugPage.locator("#settings-tab-debug").click();
+        await reopenActivityLog(debugPage);
         await showEvents();
         assert.equal(await activity.locator("[data-ltm-debug-memory-filter]").count(), 0);
         await activity.locator('[data-ltm-debug-operation="unrelated"]').waitFor();
@@ -4353,8 +4685,7 @@ async function main() {
           .waitFor();
         debugLogEmpty = false;
         // Restore the real log for the remaining Debug flow.
-        await debugPage.locator("#settings-tab-recall").click();
-        await debugPage.locator("#settings-tab-debug").click();
+        await reopenActivityLog(debugPage);
         await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
       };
       const openDebugActivity = async (context: typeof browserContext, navigation: "desktop" | "mobile") => {
@@ -4390,6 +4721,8 @@ async function main() {
           await route.fulfill({ response, json: review });
         });
         await debugPage.route("**/api/long-term-memory/debug-log?*", async (route) => {
+          // The header reading chip polls the extraction phase every 4s; it is not an Activity request.
+          if (new URL(route.request().url()).searchParams.has("phase")) return route.fulfill({ json: { events: [] } });
           debugLogRequests += 1;
           // A delay keeps the first request in flight so a same-turn second activation is observable.
           if (debugLogDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, debugLogDelayMs));
@@ -4534,7 +4867,8 @@ async function main() {
         await capPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
         const capGroupSummary = capPage.locator('[data-ltm-memory-group="world"] > summary');
         const capRows = capPage.locator('[data-ltm-memory-group="world"] [data-ltm-note-type]');
-        await capGroupSummary.click();
+        // soup/vault-first-open: the first group opens itself, so the list is never a column of closed headings.
+        await capPage.locator('[data-ltm-memory-group="world"][open]').waitFor();
         await capRows.first().waitFor();
         await capPage.getByText("250 shown").waitFor();
         assert.match(await capGroupSummary.innerText(), /250/u, "the group counts every memory");
@@ -4564,6 +4898,913 @@ async function main() {
         await capPage.getByLabel("Select visible", { exact: true }).check();
         await capPage.locator("[data-ltm-selection-count]").filter({ hasText: "250 selected" }).waitFor();
         await capPage.close();
+      }
+      // soup/vault-graph: the Vault's List / Graph switch, Focus-first canvas, one filter row and "Link to …".
+      {
+        const graphPage = await browserContext.newPage();
+        const stamp = "2026-07-30T00:00:00.000Z";
+        const graphNote = (
+          id: string,
+          title: string,
+          type: string,
+          extra: Record<string, unknown> = {},
+          importance = "major",
+        ) => ({
+          id,
+          title,
+          type,
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: { facts: { text: `${title} text.`, importance, updatedAt: stamp } },
+          createdAt: stamp,
+          updatedAt: stamp,
+          version: 1,
+          ...extra,
+        });
+        const graphNotes: Array<ReturnType<typeof graphNote>> = [
+          graphNote("graph_mira", "Mira Vale", "character", {
+            subjects: [{ key: "mira", ref: { kind: "local_character", id: "Mira" } }],
+          }),
+          graphNote("graph_kael", "Kael Ross", "character", {
+            subjects: [{ key: "kael", ref: { kind: "local_character", id: "Kael" } }],
+          }),
+          graphNote("graph_pair", "Mira and Kael", "relationship", {
+            subjects: [
+              { key: "mira", ref: { kind: "local_character", id: "Mira" } },
+              { key: "kael", ref: { kind: "local_character", id: "Kael" } },
+            ],
+          }),
+          // The same two people in the other order: the card lists them in subject order.
+          graphNote("graph_pair_again", "Kael and Mira", "relationship", {
+            subjects: [
+              { key: "kael", ref: { kind: "local_character", id: "Kael" } },
+              { key: "mira", ref: { kind: "local_character", id: "Mira" } },
+            ],
+          }),
+          graphNote("graph_thread", "Find the ledger", "thread", {
+            links: [{ target: "graph_mira", relation: "involves" }],
+          }),
+          graphNote(
+            "graph_event",
+            "Ledger stolen",
+            "timeline_event",
+            { links: [{ target: "graph_thread", relation: "caused_by" }] },
+            "minor",
+          ),
+          graphNote("graph_lone", "Lone lighthouse", "world"),
+        ];
+        const linkPatches: Array<{ id: string; links: Array<{ target: string; relation: string }> }> = [];
+        await graphPage.route(
+          (url) => /\/api\/long-term-memory\/notes\/[^/]+$/u.test(url.pathname),
+          (route) => {
+            if (route.request().method() !== "PATCH") return route.continue();
+            const id = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop()!);
+            const body = route.request().postDataJSON() as { links: Array<{ target: string; relation: string }> };
+            const note = graphNotes.find((candidate) => candidate.id === id)!;
+            note.links = body.links as never;
+            note.version += 1;
+            linkPatches.push({ id, links: body.links });
+            return route.fulfill({ json: { note } });
+          },
+        );
+        await graphPage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/notes"),
+          (route) =>
+            route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("ids")
+              ? route.fulfill({ json: graphNotes })
+              : route.continue(),
+        );
+        await graphPage.goto(`http://127.0.0.1:${address.port}/`);
+        await graphPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await graphPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await graphPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        await graphPage.getByText("7 shown").waitFor();
+        const node = (id: string) => graphPage.locator(`[data-ltm-graph-node="${id}"]`);
+        const nodeCount = () => graphPage.locator("[data-ltm-graph-node]").count();
+        // The card floats over the canvas's bottom right: close it before a click that could land under it.
+        const closeCard = async () => {
+          const close = graphPage.locator("[data-ltm-graph-card-close]");
+          if (await close.count()) await close.click();
+        };
+        // By note id: another row can mention the title (a linked memory's row names what it links to).
+        const openRow = async (id: string, title: string) => {
+          const search = graphPage.getByLabel("Search memories", { exact: true });
+          await search.fill(title);
+          await graphPage.locator(`[data-ltm-note-id="${id}"] button`).first().click();
+          // Opening a memory can restore the Vault's saved search a moment later; clear until it stays clear.
+          for (let tries = 0; tries < 10; tries += 1) {
+            await search.fill("");
+            await graphPage.waitForTimeout(200);
+            if ((await search.inputValue()) === "") break;
+          }
+        };
+        // The switch is in the Vault header; the Graph opens on the open memory and its links, not the whole Vault.
+        await openRow("graph_thread", "Find the ledger");
+        await graphPage.locator("[data-ltm-vault-view-graph]").click();
+        await node("graph_thread").waitFor();
+        assert.equal(await graphPage.locator("[data-ltm-vault-view-graph]").getAttribute("aria-pressed"), "true");
+        // One Vault header in Graph view too: the title, the count, the switch and the search share its row.
+        const vaultHeader = graphPage.locator("[data-ltm-vault-header]");
+        const headerHeading = vaultHeader.getByRole("heading", { name: "Memory Vault" });
+        await headerHeading.waitFor();
+        await vaultHeader.getByText("7 shown").waitFor();
+        await vaultHeader.getByLabel("Search memories", { exact: true }).waitFor();
+        // A self-calling string, not a callback: tsx wraps a callback's named helpers in `__name`, which the page lacks.
+        const headerRow = await graphPage.evaluate(`(() => {
+          const header = document.querySelector("[data-ltm-vault-header]");
+          const box = (selector) => header.querySelector(selector).getBoundingClientRect();
+          const heading = box("h2");
+          const switchBox = box("[data-ltm-vault-view-switch]");
+          const search = box("input");
+          const centre = (rect) => rect.top + rect.height / 2;
+          return {
+            switchInRow: centre(switchBox) >= heading.top && centre(switchBox) <= heading.bottom + 16,
+            searchInRow: centre(search) >= heading.top && centre(search) <= heading.bottom + 16,
+            switchLeftOfSearch: switchBox.right <= search.left + 1,
+          };
+        })()`);
+        assert.deepEqual(headerRow, { switchInRow: true, searchInRow: true, switchLeftOfSearch: true }, "header row");
+        assert.match(await graphPage.locator("[data-ltm-graph-banner]").innerText(), /Linked to\s+Find the ledger/u);
+        assert.equal(await nodeCount(), 3, "Focus shows the open memory and what it links to, nothing else");
+        assert.equal(await node("graph_lone").count(), 0);
+        assert.equal(await graphPage.locator('[data-ltm-graph-whole][aria-pressed="false"]').count(), 1);
+        // The focus banner floats on the canvas and carries a "Show everything" chip.
+        assert.equal(
+          await graphPage.evaluate(
+            () =>
+              !!document.querySelector(
+                "[data-ltm-graph-canvas] [data-ltm-graph-banner] [data-ltm-graph-show-everything]",
+              ),
+          ),
+          true,
+          "the focus banner sits on the canvas with Show everything",
+        );
+        // The family chips show their counts: People has Mira Vale, Kael Ross and the two relationships.
+        assert.match(await graphPage.locator('[data-ltm-graph-family="people"]').innerText(), /People\s*4/u);
+        // Back to the List keeps the open memory; the Graph keeps Focus on it.
+        await graphPage.locator("[data-ltm-vault-view-list]").click();
+        assert.equal(await graphPage.locator("[data-ltm-field='title']").inputValue(), "Find the ledger");
+        await graphPage.locator("[data-ltm-vault-view-graph]").click();
+        assert.match(await graphPage.locator("[data-ltm-graph-banner]").innerText(), /Find the ledger/u);
+        // Whole Vault shows every memory; "Show everything" on the banner does the same.
+        await graphPage.locator("[data-ltm-graph-show-everything]").click();
+        await graphPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 7);
+        assert.equal(await graphPage.locator("[data-ltm-graph-banner]").count(), 0, "the banner goes with Focus");
+        assert.equal(await graphPage.locator('[data-ltm-graph-whole][aria-pressed="true"]').count(), 1);
+        // The header search narrows the Graph, not only the List.
+        await vaultHeader.getByLabel("Search memories", { exact: true }).fill("Find the ledger");
+        await graphPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length < 7);
+        await vaultHeader.getByLabel("Search memories", { exact: true }).fill("");
+        await graphPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 7);
+        // A family chip hides its memories and so their links.
+        assert.equal(await graphPage.locator('[data-ltm-graph-edge="caused_by"]').count(), 1);
+        // At rest, before any click: a pressed chip (Story) and an unpressed one (Archived) differ, and both are chip-sized.
+        const chipLook = (selector: string) =>
+          graphPage
+            .locator(selector)
+            .evaluate((chip) => ({ background: getComputedStyle(chip).backgroundColor, height: chip.clientHeight }));
+        const onLook = await chipLook('[data-ltm-graph-family="story"]');
+        const offLook = await chipLook("[data-ltm-graph-archived]");
+        assert.ok(onLook.height < 40, `filter chips are chip-sized, got ${onLook.height}px`);
+        assert.notEqual(onLook.background, offLook.background);
+        await graphPage.locator('[data-ltm-graph-family="story"]').click();
+        assert.equal(await node("graph_event").count(), 0);
+        assert.equal(await graphPage.locator('[data-ltm-graph-edge="caused_by"]').count(), 0);
+        await graphPage.locator('[data-ltm-graph-family="story"]').click();
+        await node("graph_event").waitFor();
+        // Hide minor hides the minor memory.
+        await graphPage.getByRole("button", { name: "Hide minor", exact: true }).click();
+        assert.equal(await node("graph_event").count(), 0);
+        await graphPage.getByRole("button", { name: "All", exact: true }).click();
+        await node("graph_event").waitFor();
+        // With no chat open, Recalled is off and says why.
+        assert.equal(await graphPage.locator("[data-ltm-graph-recalled]").isDisabled(), true);
+        assert.equal(
+          await graphPage.locator("[data-ltm-graph-recalled]").getAttribute("title"),
+          "Open a chat to see what was used",
+        );
+        // An unlinked focused memory says so and offers the editor's Linked memories.
+        await node("graph_lone").locator("circle").first().click();
+        await graphPage.locator("[data-ltm-graph-focus-here]").click();
+        assert.match(await graphPage.locator("[data-ltm-graph-empty]").innerText(), /No links yet/u);
+        await graphPage.locator("[data-ltm-graph-whole]").click();
+        await closeCard();
+        // A relationship is drawn to the people its subjects name with no stored link: no button, nothing saved.
+        await node("graph_pair").locator("circle").first().click();
+        await graphPage.locator("[data-ltm-graph-focus-here]").click();
+        await graphPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 3);
+        await node("graph_mira").waitFor();
+        await node("graph_kael").waitFor();
+        assert.equal(await graphPage.locator("[data-ltm-graph-link-subjects], [data-ltm-link-subjects]").count(), 0);
+        assert.equal(linkPatches.length, 0, "the people's lines are drawn, not saved");
+        // The keyboard reaches nodes and opens their card: Tab stop, arrows, Enter, Esc.
+        await graphPage.locator('[data-ltm-graph-node][tabindex="0"]').focus();
+        const focusedNode = () =>
+          graphPage.evaluate(() => document.activeElement?.getAttribute("data-ltm-graph-node") ?? "");
+        const first = await focusedNode();
+        assert.ok(first, "the canvas has one Tab stop");
+        let moved = "";
+        for (const key of ["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"]) {
+          await graphPage.keyboard.press(key);
+          moved = await focusedNode();
+          if (moved && moved !== first) break;
+        }
+        assert.ok(moved && moved !== first, "an arrow key moves to another memory");
+        await graphPage.keyboard.press("Enter");
+        await graphPage.locator("[data-ltm-graph-card]").waitFor();
+        await graphPage.keyboard.press("Escape");
+        await graphPage.locator("[data-ltm-graph-card]").waitFor({ state: "detached" });
+        await graphPage.waitForFunction(
+          (id) => document.activeElement?.getAttribute("data-ltm-graph-node") === id,
+          moved,
+        );
+        // Open in editor returns to the List with that memory open; the Graph then follows it.
+        await graphPage.keyboard.press("Enter");
+        const openedTitle = await graphPage.locator("[data-ltm-graph-card] h3").innerText();
+        await graphPage.locator("[data-ltm-graph-open-editor]").click();
+        await graphPage.locator("[data-ltm-field='title']").waitFor();
+        assert.equal(await graphPage.locator("[data-ltm-field='title']").inputValue(), openedTitle);
+        await graphPage.locator("[data-ltm-vault-view-graph]").click();
+        await graphPage.locator("[data-ltm-graph-banner]").waitFor();
+        // soup/vault-graph-card: the card lists links the way the editor does; Focus here and a double-click narrow
+        // to two hops; a relationship's card lists its people.
+        const whole = graphPage.locator("[data-ltm-graph-whole]");
+        if ((await whole.getAttribute("aria-pressed")) !== "true") await whole.click();
+        const card = graphPage.locator("[data-ltm-graph-card]");
+        await node("graph_thread").locator("circle").first().click();
+        await card.waitFor();
+        const cardText = await card.innerText();
+        assert.match(cardText, /Linked memories\s+2/u);
+        assert.match(cardText, /Involves\s+Mira Vale/u);
+        assert.match(cardText, /Caused by\s+Ledger stolen/u);
+        // The card lies inside the canvas (it floats over it), and its title takes focus (not the container).
+        assert.equal(
+          await graphPage.evaluate(() => {
+            const pane = document.querySelector("[data-ltm-graph-canvas]")!.getBoundingClientRect();
+            const box = document.querySelector("[data-ltm-graph-card]")!.getBoundingClientRect();
+            return (
+              box.left >= pane.left - 1 &&
+              box.right <= pane.right + 1 &&
+              box.top >= pane.top - 1 &&
+              box.bottom <= pane.bottom + 1
+            );
+          }),
+          true,
+          "the card sits inside the canvas",
+        );
+        assert.equal(await graphPage.evaluate(() => document.activeElement?.tagName), "H3");
+        // A linked memory the canvas shows becomes the card, and the selection ring follows it.
+        await card.getByRole("button", { name: /Ledger stolen/u }).click();
+        await card.getByRole("heading", { name: "Ledger stolen" }).waitFor();
+        assert.equal(await node("graph_event").locator("[data-ltm-graph-selected-ring]").count(), 1);
+        // ...and is centred on the canvas.
+        await graphPage.waitForFunction(() => {
+          const pane = document.querySelector("[data-ltm-graph-canvas]")!.getBoundingClientRect();
+          const box = document.querySelector('[data-ltm-graph-node="graph_event"]')!.getBoundingClientRect();
+          return (
+            Math.abs(box.left + box.width / 2 - (pane.left + pane.width / 2)) < 12 &&
+            Math.abs(box.top + box.height / 2 - (pane.top + pane.height / 2)) < 12
+          );
+        });
+        // Focus here: two hops from that memory (its background link to a character stays out past the first hop).
+        await card.locator("[data-ltm-graph-focus-here]").click();
+        await graphPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 2);
+        assert.equal(await node("graph_mira").count(), 0);
+        // Double-clicking a node does the same.
+        await closeCard();
+        await node("graph_thread").locator("circle").first().dblclick();
+        await graphPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 3);
+        assert.match(await graphPage.locator("[data-ltm-graph-banner]").innerText(), /Find the ledger/u);
+        // The card lists a relationship's people from its subjects, with no button to link them.
+        await whole.click();
+        await closeCard();
+        await node("graph_pair_again").locator("circle").first().click();
+        await card.getByRole("heading", { name: "Kael and Mira" }).waitFor();
+        assert.match(await card.innerText(), /Involves\s+Kael Ross[\s\S]*Involves\s+Mira Vale/u);
+        assert.equal(await card.locator("[data-ltm-link-subjects]").count(), 0);
+        assert.equal(linkPatches.length, 0);
+        await graphPage.close();
+      }
+      // soup/vault-graph-recalled: the Recalled chip rings the memories the last reply in this chat used, from the
+      // same data as the "last injection" panel, and rings nothing when the last attempt failed.
+      {
+        const stamp = "2026-07-30T00:00:00.000Z";
+        const recalledNote = (id: string, title: string, type: string, links: unknown[] = []) => ({
+          id,
+          title,
+          type,
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links,
+          sections: { facts: { text: `${title} text.`, importance: "major", updatedAt: stamp } },
+          createdAt: stamp,
+          updatedAt: stamp,
+          version: 1,
+        });
+        const recalledNotes = [
+          recalledNote("rec_thread", "Find the ledger", "thread", [{ target: "rec_mira", relation: "involves" }]),
+          recalledNote("rec_mira", "Mira Vale", "character"),
+          recalledNote("rec_world", "Lone lighthouse", "world"),
+        ];
+        let recalledAttempt: Record<string, unknown> = {
+          version: 1,
+          chatId: "chat-artifact",
+          attemptId: "00000000-0000-4000-8000-000000000004",
+          at: stamp,
+          outcome: "completed",
+          debugEnabled: false,
+          confirmed: true,
+        };
+        // Both pages read the attempt when the request arrives, so the second one sees the failure.
+        const openRecalledGraph = async () => {
+          const recalledPage = await browserContext.newPage();
+          await recalledPage.route(
+            (url) => url.pathname.endsWith("/api/long-term-memory/notes"),
+            (route) =>
+              route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("ids")
+                ? route.fulfill({ json: recalledNotes })
+                : route.continue(),
+          );
+          await recalledPage.route(
+            (url) => url.pathname.includes("/api/long-term-memory/last-injection/"),
+            (route) =>
+              route.fulfill({
+                json: {
+                  memoryCount: 2,
+                  tokenCount: 40,
+                  memories: [
+                    { noteId: "rec_thread", title: "Find the ledger", tokenCount: 20 },
+                    { noteId: "rec_world", title: "Lone lighthouse", tokenCount: 20 },
+                  ],
+                  state: "injected",
+                  dispatchedAt: stamp,
+                  attempt: recalledAttempt,
+                },
+              }),
+          );
+          await recalledPage.goto(`http://127.0.0.1:${address.port}/`);
+          await recalledPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+          await recalledPage.evaluate(`(() => {
+            const element = document.createElement("marinara-capability-long-term-memory");
+            element.setAttribute("view", "detail");
+            element.capabilityProps = { chatId: "chat-artifact", confirmAction: () => true };
+            document.body.append(element);
+          })()`);
+          await recalledPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+          await recalledPage.getByText("3 shown").waitFor();
+          await recalledPage.locator("[data-ltm-vault-view-graph]").click();
+          await recalledPage.locator("[data-ltm-graph-whole]").click();
+          await recalledPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 3);
+          await recalledPage.waitForFunction(
+            () => document.querySelector("[data-ltm-graph-recalled]")?.getAttribute("aria-disabled") !== "true",
+          );
+          return recalledPage;
+        };
+        const recalledPage = await openRecalledGraph();
+        const recalledChip = recalledPage.locator("[data-ltm-graph-recalled]");
+        const used = recalledPage.locator("[data-ltm-graph-used]");
+        assert.equal(
+          await recalledPage.getByRole("button", { name: "Used in the last reply", exact: true }).count(),
+          1,
+          "the chip is named Used in the last reply",
+        );
+        assert.equal(await recalledChip.getAttribute("aria-pressed"), "false");
+        assert.equal(await used.count(), 0, "nothing is ringed until Recalled is on");
+        await recalledChip.click();
+        assert.equal(await recalledChip.getAttribute("aria-pressed"), "true");
+        assert.deepEqual(
+          await used.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-ltm-graph-node")).sort()),
+          ["rec_thread", "rec_world"],
+        );
+        assert.equal(await recalledPage.locator("[data-ltm-graph-recalled-ring]").count(), 2);
+        await recalledPage.getByText("Used in the last reply: 2 in view").waitFor();
+        await recalledChip.click();
+        assert.equal(await used.count(), 0);
+        await recalledPage.close();
+        // A failed last attempt overrides the receipt: the panel says "used nothing", so nothing is ringed.
+        recalledAttempt = { ...recalledAttempt, outcome: "failed", confirmed: false };
+        const failedPage = await openRecalledGraph();
+        await failedPage.locator("[data-ltm-graph-recalled]").click();
+        assert.equal(await failedPage.locator("[data-ltm-graph-used]").count(), 0);
+        await failedPage.close();
+      }
+      // soup/vault-graph-card (long link lists): the card shows six link rows and then "N more", a row moves the
+      // selection, the card stays inside the canvas at 1440 and 390, and "N more" opens the editor.
+      {
+        const stamp = "2026-07-30T00:00:00.000Z";
+        const moreNote = (id: string, title: string, type: string, links: unknown[] = []) => ({
+          id,
+          title,
+          type,
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links,
+          sections: { facts: { text: `${title} text.`, importance: "major", updatedAt: stamp } },
+          createdAt: stamp,
+          updatedAt: stamp,
+          version: 1,
+        });
+        const people = Array.from({ length: 7 }, (_, index) =>
+          moreNote(`more_c${index}`, `Person ${index}`, "character"),
+        );
+        const moreNotes = [
+          ...people,
+          moreNote(
+            "more_hub",
+            "Harbour hub",
+            "world",
+            people.map((person) => ({ target: person.id, relation: "involves" })),
+          ),
+        ];
+        const morePage = await browserContext.newPage();
+        await morePage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/notes"),
+          (route) =>
+            route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("ids")
+              ? route.fulfill({ json: moreNotes })
+              : route.continue(),
+        );
+        await morePage.goto(`http://127.0.0.1:${address.port}/`);
+        await morePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await morePage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await morePage.setViewportSize({ width: 1440, height: 900 });
+        await morePage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        await morePage.getByText("8 shown").waitFor();
+        await morePage.locator("[data-ltm-vault-view-graph]").click();
+        await morePage.locator("[data-ltm-graph-whole]").click();
+        await morePage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 8);
+        const moreCard = morePage.locator("[data-ltm-graph-card]");
+        const moreInside = () =>
+          morePage.evaluate(() => {
+            const pane = document.querySelector("[data-ltm-graph-canvas]")!.getBoundingClientRect();
+            const box = document.querySelector("[data-ltm-graph-card]")!.getBoundingClientRect();
+            return (
+              box.left >= pane.left - 1 &&
+              box.right <= pane.right + 1 &&
+              box.top >= pane.top - 1 &&
+              box.bottom <= pane.bottom + 1
+            );
+          });
+        await morePage.locator('[data-ltm-graph-node="more_hub"] circle').first().click();
+        await moreCard.waitFor();
+        assert.equal(await moreCard.locator("[data-ltm-graph-link-row]:not([data-ltm-graph-link-more])").count(), 6);
+        assert.equal((await moreCard.locator("[data-ltm-graph-link-more]").innerText()).trim(), "1 more");
+        assert.equal(await moreInside(), true, "the card is inside the canvas at 1440px");
+        // A row selects that memory.
+        await moreCard.locator("[data-ltm-graph-link-row]").first().click();
+        await moreCard.getByRole("heading", { name: /^Person \d$/u }).waitFor();
+        assert.equal(await morePage.locator("[data-ltm-graph-selected-ring]").count(), 1);
+        assert.equal(await moreCard.locator("[data-ltm-graph-link-more]").count(), 0);
+        // Esc closes the card.
+        await morePage.keyboard.press("Escape");
+        await moreCard.waitFor({ state: "detached" });
+        await morePage.locator('[data-ltm-graph-node="more_hub"] circle').first().click();
+        await moreCard.waitFor();
+        await morePage.setViewportSize({ width: 390, height: 844 });
+        assert.equal(await moreInside(), true, "the card is inside the canvas at 390px");
+        // "N more" opens the editor on the memory.
+        await moreCard.locator("[data-ltm-graph-link-more]").click();
+        await morePage.locator("[data-ltm-field='title']").waitFor();
+        assert.equal(await morePage.locator("[data-ltm-field='title']").inputValue(), "Harbour hub");
+        await morePage.close();
+      }
+      // soup/vault-graph-widths: the Graph at phone, tablet and desktop width in both themes. The page never
+      // scrolls sideways, the canvas fills its pane, the filter row is one swipeable line on a phone and wraps wider,
+      // and the zoom buttons sit on the canvas. With MARINARA_VISUAL_OUTPUT_DIR set, each combination is saved as
+      // long-term-memory-graph-<width>-<theme>.png.
+      {
+        const stamp = "2026-07-30T00:00:00.000Z";
+        const widthNote = (id: string, title: string, type: string, links: unknown[] = []) => ({
+          id,
+          title,
+          type,
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links,
+          sections: { facts: { text: `${title} text.`, importance: "major", updatedAt: stamp } },
+          createdAt: stamp,
+          updatedAt: stamp,
+          version: 1,
+        });
+        const widthNotes = [
+          widthNote("wide_mira", "Mira Vale", "character"),
+          widthNote("wide_kael", "Kael Ross", "character"),
+          widthNote("wide_pair", "Mira and Kael", "relationship", [
+            { target: "wide_mira", relation: "involves" },
+            { target: "wide_kael", relation: "involves" },
+          ]),
+          widthNote("wide_thread", "Find the ledger that went missing from the harbour office", "thread", [
+            { target: "wide_mira", relation: "involves" },
+          ]),
+          {
+            ...widthNote("wide_event", "Ledger stolen", "timeline_event", [
+              { target: "wide_thread", relation: "caused_by" },
+            ]),
+            status: "resolved",
+            conflicts: [{ field: "facts", existing: "a", proposed: "b", resolution: "pending", policy: "ask" }],
+          },
+          widthNote("wide_world", "Lone lighthouse", "world"),
+        ];
+        const widthsPage = await browserContext.newPage();
+        await widthsPage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/notes"),
+          (route) =>
+            route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("ids")
+              ? route.fulfill({ json: widthNotes })
+              : route.continue(),
+        );
+        await widthsPage.goto(`http://127.0.0.1:${address.port}/`);
+        await widthsPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await widthsPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await widthsPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        await widthsPage.getByText("6 shown").waitFor();
+        // A row carries no type chip: the group heading it sits under names the type, in the plural.
+        const eventRow = widthsPage.locator("[data-ltm-note-id]", { hasText: "Ledger stolen" }).first();
+        await eventRow.waitFor({ state: "attached" });
+        assert.equal(
+          await eventRow.evaluate((row) =>
+            row.closest("[data-ltm-memory-group]")?.getAttribute("data-ltm-memory-group"),
+          ),
+          "timeline_event",
+          "the row sits in its type's group",
+        );
+        assert.equal(await eventRow.getByText("Timeline event", { exact: true }).count(), 0);
+        assert.equal(await eventRow.getByText("Timeline Events", { exact: true }).count(), 0);
+        // The sort select shows "Recently updated" whole at phone and desktop width. It sits in the Filters panel.
+        for (const width of [390, 1440]) {
+          await widthsPage.setViewportSize({ width, height: 844 });
+          const sort = widthsPage.locator('[data-ltm-browser-controls] select:has(option[value="updated"])');
+          if (!(await sort.count())) await widthsPage.locator("button[data-ltm-refine]").click();
+          await sort.waitFor();
+          assert.equal(
+            // A native select clips its text inside its own box, so measure the chosen text against the box.
+            await sort.evaluate((select) => {
+              const style = getComputedStyle(select);
+              const context = document.createElement("canvas").getContext("2d")!;
+              context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+              const text = select.selectedOptions[0]!.textContent ?? "";
+              const room =
+                select.clientWidth -
+                Number.parseFloat(style.paddingLeft) -
+                Number.parseFloat(style.paddingRight) -
+                Number.parseFloat(style.fontSize) * 1.5;
+              return context.measureText(text).width <= room;
+            }),
+            true,
+            `the sort select is not clipped at ${width}px`,
+          );
+        }
+        await widthsPage.setViewportSize({ width: 1440, height: 844 });
+        await widthsPage.locator("[data-ltm-vault-view-graph]").click();
+        await widthsPage.locator("[data-ltm-graph-whole]").click();
+        await widthsPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 6);
+        const canvasByTheme: Record<string, string> = {};
+        for (const width of [390, 768, 1440]) {
+          await widthsPage.setViewportSize({ width, height: 844 });
+          for (const theme of ["light", "dark"]) {
+            await widthsPage.evaluate((value) => {
+              document.documentElement.dataset.theme = value;
+            }, theme);
+            if (width === 390 && theme === "light") {
+              // Back in Focus the banner docks inside the canvas, left of the zoom buttons; then Whole Vault again.
+              await widthsPage.locator("[data-ltm-graph-whole]").click();
+              await widthsPage.locator("[data-ltm-graph-banner]").waitFor();
+              const docked = await widthsPage.evaluate(() => {
+                const pane = document.querySelector("[data-ltm-graph-canvas]")!.getBoundingClientRect();
+                const banner = document.querySelector("[data-ltm-graph-banner]")!.getBoundingClientRect();
+                const zoom = document.querySelector("[data-ltm-graph-zoom]")!.getBoundingClientRect();
+                return {
+                  inside: banner.left >= pane.left - 1 && banner.right <= pane.right + 1 && banner.top >= pane.top - 1,
+                  clearOfZoom: banner.right <= zoom.left + 1,
+                };
+              });
+              assert.deepEqual(
+                docked,
+                { inside: true, clearOfZoom: true },
+                "the banner docks inside the canvas at 390px",
+              );
+              await widthsPage.locator("[data-ltm-graph-whole]").click();
+            }
+            await widthsPage.locator("[data-ltm-graph-fit]").click();
+            await widthsPage.waitForFunction(() => document.querySelectorAll("[data-ltm-graph-node]").length === 6);
+            const measured = await widthsPage.evaluate(() => {
+              const svg = document.querySelector('svg[role="group"]')!;
+              const pane = svg.parentElement!.getBoundingClientRect();
+              const filtersEl = document.querySelector<HTMLElement>("[data-ltm-graph-filters]")!;
+              const filters = filtersEl.getBoundingClientRect();
+              const canvas = svg.parentElement!;
+              const chipTops = new Set(
+                [...filtersEl.querySelectorAll<HTMLElement>("button")].map((chip) =>
+                  Math.round(chip.getBoundingClientRect().top),
+                ),
+              );
+              return {
+                filterLines: chipTops.size,
+                filtersScroll: filtersEl.scrollWidth - filtersEl.clientWidth,
+                // An anonymous callback: tsx adds `__name` to a named helper, and the page has none.
+                zoomInside: ["[aria-label='Zoom in']", "[aria-label='Zoom out']", "[data-ltm-graph-fit]"].every(
+                  (selector) => {
+                    const box = canvas.querySelector(selector)?.getBoundingClientRect();
+                    return (
+                      !!box &&
+                      box.left >= pane.left - 1 &&
+                      box.right <= pane.right + 1 &&
+                      box.top >= pane.top - 1 &&
+                      box.bottom <= pane.bottom + 1
+                    );
+                  },
+                ),
+                pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                canvasFill: svg.getBoundingClientRect().width / pane.width,
+                paneRight: pane.right,
+                filtersRight: filters.right,
+                viewport: window.innerWidth,
+              };
+            });
+            const label = `${width}px ${theme}`;
+            assert.ok(measured.pageOverflow <= 0, `the page does not scroll sideways at ${label}`);
+            // On a phone the filter row is one line you swipe sideways, so the canvas keeps its height; wider, it
+            // wraps and never scrolls. The zoom buttons are inside the canvas.
+            if (width === 390) assert.equal(measured.filterLines, 1, `the filter row is one line at ${label}`);
+            else assert.ok(measured.filtersScroll <= 0, `the filter row does not scroll sideways at ${label}`);
+            assert.ok(measured.zoomInside, `the zoom buttons are inside the canvas at ${label}`);
+            // About 1: a canvas that was never re-measured keeps its default width and lands far from 1.
+            assert.ok(
+              Math.abs(measured.canvasFill - 1) <= 0.05,
+              `the canvas fills its pane at ${label} (${measured.canvasFill})`,
+            );
+            assert.ok(measured.paneRight <= measured.viewport + 1, `the canvas stays inside the page at ${label}`);
+            assert.ok(
+              measured.filtersRight <= measured.viewport + 1,
+              `the filter row stays inside the page at ${label}`,
+            );
+            // The mock-up's colours: a tinted canvas that differs per theme and is not the card colour, and the
+            // People disc stroke in the mock-up People colour of each theme.
+            const painted = await widthsPage.evaluate(() => {
+              const root = document.querySelector("[data-ltm-graph]")!;
+              const canvas = getComputedStyle(root.querySelector("[data-ltm-graph-canvas]")!);
+              const probe = document.createElement("div");
+              probe.style.background = "var(--card)";
+              root.append(probe);
+              const card = getComputedStyle(probe).backgroundColor;
+              probe.remove();
+              const disc = root.querySelector('[data-ltm-graph-node="wide_mira"] [data-ltm-graph-disc]')!;
+              return {
+                canvas: canvas.backgroundColor,
+                canvasDots: canvas.backgroundImage,
+                card,
+                stroke: getComputedStyle(disc).stroke,
+              };
+            });
+            assert.notEqual(painted.canvas, painted.card, `the canvas is not the card colour at ${label}`);
+            assert.ok(painted.canvasDots.includes("radial-gradient"), `the canvas has its dot grid at ${label}`);
+            assert.equal(
+              painted.stroke,
+              theme === "dark" ? "rgb(175, 77, 128)" : "rgb(149, 44, 70)",
+              `a People node uses the mock-up People colour at ${label}`,
+            );
+            canvasByTheme[theme] = painted.canvas;
+            // The resolved memory carries the check and the one with a pending change the "!" badge; no other does.
+            const event = widthsPage.locator('[data-ltm-graph-node="wide_event"]');
+            assert.equal(await event.locator("[data-ltm-graph-check]").count(), 1, `resolved check at ${label}`);
+            assert.equal(await widthsPage.locator("[data-ltm-graph-check]").count(), 1);
+            assert.equal(await event.locator("[data-ltm-graph-conflict]").count(), 1, `conflict badge at ${label}`);
+            assert.equal(await widthsPage.locator("[data-ltm-graph-conflict]").count(), 1);
+            // After Fit the text holds its size: a node label is about 11 px tall however far Fit zoomed out, and a
+            // cause line (caused_by) carries an arrowhead and the neutral line colour, not a family colour.
+            const lines = await widthsPage.evaluate(() => {
+              // The font size on screen, since a bounding box would include the halo stroke.
+              const labels = [...document.querySelectorAll<SVGTextElement>("[data-ltm-graph-label]")].map(
+                (text) => Number.parseFloat(getComputedStyle(text).fontSize) * text.getScreenCTM()!.a,
+              );
+              const cause = document.querySelector('[data-ltm-graph-edge="caused_by"]')!;
+              return {
+                labels,
+                markerEnd: cause.getAttribute("marker-end") ?? "",
+                stroke: getComputedStyle(cause).stroke,
+              };
+            });
+            assert.ok(lines.labels.length >= 6, `every label shows at ${label}`);
+            for (const height of lines.labels) {
+              assert.ok(height >= 10 && height <= 14, `a node label is 10-14 px at ${label} (${height})`);
+            }
+            assert.match(lines.markerEnd, /^url\(#/u, `the caused_by line has an arrowhead at ${label}`);
+            assert.notEqual(lines.stroke, painted.stroke, `a line is not drawn in a family colour at ${label}`);
+            // The zoom buttons sit over a corner of the canvas, so open the card from the keyboard.
+            await widthsPage.locator('[data-ltm-graph-node="wide_thread"]').focus();
+            await widthsPage.keyboard.press("Enter");
+            await widthsPage.locator("[data-ltm-graph-card]").waitFor();
+            // The card floats over the canvas (a bottom sheet at phone width) and never leaves its box.
+            const cardBox = await widthsPage.evaluate(() => {
+              const pane = document.querySelector("[data-ltm-graph-canvas]")!.getBoundingClientRect();
+              const box = document.querySelector("[data-ltm-graph-card]")!.getBoundingClientRect();
+              return {
+                inside:
+                  box.left >= pane.left - 1 &&
+                  box.right <= pane.right + 1 &&
+                  box.top >= pane.top - 1 &&
+                  box.bottom <= pane.bottom + 1,
+                width: Math.round(box.width),
+                sheet: box.width / pane.width,
+                tall: box.height / pane.height,
+              };
+            });
+            assert.ok(cardBox.inside, `the card lies inside the canvas at ${label}`);
+            if (width < 832) {
+              assert.ok(cardBox.sheet > 0.9, `the card is a bottom sheet at ${label}`);
+              // The sheet covers the lower part only, so most of the graph stays in sight above it.
+              assert.ok(cardBox.tall <= 0.43, `the card sheet is under half the canvas at ${label} (${cardBox.tall})`);
+            } else assert.equal(cardBox.width, 320, `the card is 20rem wide at ${label}`);
+            // The open card's memory is the one selection ring, however many other memories were anchors.
+            assert.equal(
+              await widthsPage.locator("[data-ltm-graph-selected-ring]").count(),
+              1,
+              `one selection ring at ${label}`,
+            );
+            if (visualOutputDir) {
+              // The tabs fade between themes, so wait and capture the page.
+              await widthsPage.evaluate(
+                "Promise.all(document.getAnimations().filter((animation) => animation.effect.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished))",
+              );
+              await widthsPage.screenshot({
+                path: join(visualOutputDir, `long-term-memory-graph-${width}-${theme}.png`),
+                fullPage: true,
+              });
+            }
+            await widthsPage.keyboard.press("Escape");
+            await widthsPage.locator("[data-ltm-graph-card]").waitFor({ state: "detached" });
+            if (theme === "light") {
+              // Full screen: the graph fills the window, the canvas grows and the zoom buttons stay on it; Esc returns
+              // the graph to the page with focus back on its button.
+              const before = await widthsPage.locator("[data-ltm-graph-canvas]").evaluate((el) => el.clientHeight);
+              const pageOverflow = await widthsPage.evaluate(() => document.documentElement.style.overflow);
+              await widthsPage.locator("[data-ltm-graph-expand]").click();
+              await widthsPage.locator("[data-ltm-graph-expanded]").waitFor();
+              await widthsPage.waitForFunction(
+                () => !!document.activeElement?.matches("[data-ltm-graph-expanded] [data-ltm-graph-expand]"),
+              );
+              const full = await widthsPage.evaluate(() => {
+                const root = document.querySelector("[data-ltm-graph-expanded]")!.getBoundingClientRect();
+                const canvas = document.querySelector("[data-ltm-graph-canvas]")!.getBoundingClientRect();
+                const zoom = document.querySelector("[data-ltm-graph-zoom]")!.getBoundingClientRect();
+                return {
+                  covers: root.top <= 0 && root.left <= 0 && root.width >= window.innerWidth - 1,
+                  height: canvas.height,
+                  zoomInside: zoom.bottom <= canvas.bottom + 1 && zoom.right <= canvas.right + 1,
+                  label: document.querySelector("[data-ltm-graph-expand]")!.getAttribute("aria-label"),
+                  pageScroll: document.documentElement.style.overflow,
+                };
+              });
+              assert.ok(full.covers, `full screen covers the window at ${label}`);
+              assert.ok(
+                full.height > before + 40,
+                `full screen grows the canvas at ${label} (${before} -> ${full.height})`,
+              );
+              assert.ok(full.zoomInside, `the zoom buttons stay on the full-screen canvas at ${label}`);
+              assert.equal(full.label, "Exit full screen", `the button names the way out at ${label}`);
+              assert.equal(full.pageScroll, "hidden", `the page behind stops scrolling at ${label}`);
+              await widthsPage.keyboard.press("Escape");
+              await widthsPage.locator("[data-ltm-graph-expanded]").waitFor({ state: "detached" });
+              await widthsPage.waitForFunction(() => !!document.activeElement?.matches("[data-ltm-graph-expand]"));
+              assert.equal(
+                await widthsPage.evaluate(() => document.documentElement.style.overflow),
+                pageOverflow,
+                `the page scrolls as before after full screen at ${label}`,
+              );
+              // Headless Chromium keeps its window in the full-screen state after the page leaves it,
+              // so restore the window before the next width is set.
+              const cdp = await widthsPage.context().newCDPSession(widthsPage);
+              const { windowId } = await cdp.send("Browser.getWindowForTarget");
+              await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
+              await cdp.detach();
+            }
+          }
+          assert.notEqual(canvasByTheme.light, canvasByTheme.dark, `the canvas differs between themes at ${width}px`);
+        }
+        // Phone-sized hands on the canvas: a press that starts on a memory and moves pans the graph and opens nothing,
+        // a tap just beside a small dot opens that memory, the card's memory moves above the sheet, and a tap on empty
+        // canvas closes the card.
+        {
+          await widthsPage.setViewportSize({ width: 390, height: 844 });
+          await widthsPage.locator("[data-ltm-graph-canvas]").scrollIntoViewIfNeeded();
+          await widthsPage.locator("[data-ltm-graph-fit]").click();
+          const worldDisc = widthsPage.locator('[data-ltm-graph-node="wide_world"] [data-ltm-graph-disc]');
+          for (let i = 0; i < 8 && (await worldDisc.boundingBox())!.width > 16; i += 1)
+            await widthsPage.locator("[data-ltm-graph-canvas] [aria-label='Zoom out']").click();
+          const transform = () => widthsPage.locator('svg[role="group"] > g').getAttribute("transform");
+          const before = await transform();
+          // Start on a memory the canvas controls do not cover and move it a little toward the middle of the pane.
+          const grab = (await widthsPage.evaluate(`(() => {
+            const pane = document.querySelector("[data-ltm-graph-canvas]").getBoundingClientRect();
+            const middle = { x: pane.x + pane.width / 2, y: pane.y + Math.min(pane.height, innerHeight - pane.y) / 2 };
+            for (const node of document.querySelectorAll("[data-ltm-graph-node]")) {
+              const box = node.querySelector("[data-ltm-graph-disc]").getBoundingClientRect();
+              const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+              if (document.elementFromPoint(from.x, from.y)?.closest("[data-ltm-graph-node]") !== node) continue;
+              const length = Math.hypot(middle.x - from.x, middle.y - from.y) || 1;
+              const step = Math.min(60, length) / length;
+              return { from, to: { x: from.x + (middle.x - from.x) * step, y: from.y + (middle.y - from.y) * step } };
+            }
+            return null;
+          })()`)) as { from: { x: number; y: number }; to: { x: number; y: number } } | null;
+          assert.ok(grab, "a memory the pointer can reach");
+          await widthsPage.mouse.move(grab.from.x, grab.from.y);
+          await widthsPage.mouse.down();
+          await widthsPage.mouse.move(grab.to.x, grab.to.y, { steps: 8 });
+          await widthsPage.mouse.up();
+          assert.notEqual(await transform(), before, "a drag that starts on a memory pans the graph");
+          assert.equal(await widthsPage.locator("[data-ltm-graph-card]").count(), 0, "a drag opens no card");
+          // A point beside a small disc, clear of its own shape and nearer to it than to any other memory.
+          const beside = await widthsPage.evaluate(() => {
+            const nodes = [...document.querySelectorAll("[data-ltm-graph-node]")].map((node) => {
+              const box = node.querySelector("[data-ltm-graph-disc]")!.getBoundingClientRect();
+              return {
+                id: node.getAttribute("data-ltm-graph-node")!,
+                label: node.getAttribute("aria-label") ?? "",
+                x: box.left + box.width / 2,
+                y: box.top + box.height / 2,
+                r: box.width / 2,
+              };
+            });
+            for (const target of nodes.filter((node) => node.r * 2 <= 16)) {
+              const gap = target.r + 10;
+              for (let turn = 0; turn < 16; turn += 1) {
+                const x = target.x + Math.cos((turn / 8) * Math.PI) * gap;
+                const y = target.y + Math.sin((turn / 8) * Math.PI) * gap;
+                const hit = document.elementFromPoint(x, y);
+                const clear = nodes.every((node) => node === target || Math.hypot(node.x - x, node.y - y) > gap + 4);
+                if (hit?.closest('svg[role="group"]') && !hit.closest("[data-ltm-graph-node]") && clear)
+                  return { x, y, id: target.id, label: target.label };
+              }
+            }
+            return null;
+          });
+          assert.ok(beside, "there is room beside a small disc");
+          await widthsPage.mouse.click(beside.x, beside.y);
+          await widthsPage.locator("[data-ltm-graph-card]").waitFor();
+          const cardTitle = await widthsPage.locator("[data-ltm-graph-card] h3").innerText();
+          assert.ok(
+            beside.label.includes(cardTitle),
+            `a tap beside a small dot opens it (${cardTitle} / ${beside.label})`,
+          );
+          const placed = await widthsPage.evaluate(
+            (id) => ({
+              disc: document
+                .querySelector(`[data-ltm-graph-node="${id}"] [data-ltm-graph-disc]`)!
+                .getBoundingClientRect().bottom,
+              card: document.querySelector("[data-ltm-graph-card]")!.getBoundingClientRect().top,
+            }),
+            beside.id,
+          );
+          assert.ok(placed.disc < placed.card, `the memory moves above the card sheet (${JSON.stringify(placed)})`);
+          const emptySpot = await widthsPage.evaluate(() => {
+            const card = document.querySelector("[data-ltm-graph-card]")!.getBoundingClientRect();
+            const pane = document.querySelector("[data-ltm-graph-canvas]")!.getBoundingClientRect();
+            const centres = [...document.querySelectorAll("[data-ltm-graph-disc]")].map((disc) => {
+              const box = disc.getBoundingClientRect();
+              return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+            });
+            for (let y = pane.top + 8; y < card.top - 8; y += 8)
+              for (let x = pane.left + 8; x < pane.right - 8; x += 8) {
+                const hit = document.elementFromPoint(x, y);
+                const far = centres.every((centre) => Math.hypot(centre.x - x, centre.y - y) >= 50);
+                if (hit?.matches('svg[role="group"]') && far) return { x, y };
+              }
+            return null;
+          });
+          assert.ok(emptySpot, "there is empty canvas above the card");
+          await widthsPage.mouse.click(emptySpot.x, emptySpot.y);
+          await widthsPage.locator("[data-ltm-graph-card]").waitFor({ state: "detached" });
+        }
+        await widthsPage.close();
       }
       // #1588: each memory group in the place picker shows 100 places at a time, so with more than 100 places
       // holding memories, "Show N places with no memories" still opens its group.
@@ -4621,24 +5862,24 @@ async function main() {
         assert.equal(await groupCapWith.locator('[data-ltm-scope-option="chat:cap-chat-100"]').count(), 1);
         await groupCapPage.close();
       }
-      // #1376: Reset settings reloads the forms. The Maintenance panel stays mounted, so its
-      // result survives and its buttons stay disabled until the settings refetch resolves.
+      // #1376: "Reset to defaults" (beside the Memory Settings reassurance) reloads the forms. The Troubleshooting
+      // section stays mounted and its Delete button stays locked until the settings refetch resolves.
       {
         const resetPage = await browserContext.newPage();
         let settingsGate: Promise<void> | null = null;
         let releaseSettings = () => {};
-        let resetMaxChunks: number | null = null;
+        let resetBudget: number | null = null;
         await resetPage.route("**/api/long-term-memory/settings/reset", (route) =>
           route.fulfill({ json: { rebuild: { status: "deferred", error: "Fixture rebuild failed." } } }),
         );
         // Settings read after the reset serve a changed value, which the forms must show instead of the cache.
         await resetPage.route("**/api/long-term-memory/settings", async (route) => {
-          if (resetMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (resetBudget === null || route.request().method() !== "GET") return route.continue();
           if (settingsGate) await settingsGate;
           const response = await route.fetch();
           await route.fulfill({
             response,
-            json: { ...(await response.json()), longTermMemoryMaxChunks: resetMaxChunks },
+            json: { ...(await response.json()), longTermMemoryBudgetTokens: resetBudget },
           });
         });
         await resetPage.goto(`http://127.0.0.1:${address.port}/`);
@@ -4650,16 +5891,25 @@ async function main() {
           document.body.append(element);
         })()`);
         await resetPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
-        const maxChunks = resetPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
-        const cachedMaxChunks = Number(await maxChunks.inputValue());
-        await resetPage.locator("#settings-tab-maintenance").click();
-        const maintenancePanel = resetPage.locator("#settings-panel-maintenance");
+        await openRecallAdvanced(resetPage);
+        const recallBudget = resetPage.getByRole("spinbutton", { name: "Memory budget", exact: true });
+        const cachedBudget = Number(await recallBudget.inputValue());
+        await openTroubleshooting(resetPage);
+        const maintenancePanel = resetPage.locator("#settings-panel-troubleshooting");
         // The panel is hidden while the cleared forms reload, so find its button there too.
-        const resetButton = maintenancePanel.getByRole("button", { name: "Reset settings", includeHidden: true });
+        const deleteButton = maintenancePanel.getByRole("button", { name: "Delete all data", includeHidden: true });
+        // The link unmounts while the cleared forms reload and comes back once the settings are read.
+        const resetLink = resetPage.locator("[data-ltm-reset-settings]");
+        assert.equal(await resetLink.innerText(), "Reset to defaults");
+        assert.equal(
+          await maintenancePanel.getByRole("button", { name: "Reset settings", includeHidden: true }).count(),
+          0,
+          "Troubleshooting no longer holds Reset",
+        );
         settingsGate = new Promise<void>((resolve) => {
           releaseSettings = () => resolve();
         });
-        resetMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
+        resetBudget = cachedBudget === 2048 ? 2176 : 2048;
         const settingsRefetch = resetPage.waitForRequest(
           (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
         );
@@ -4669,129 +5919,147 @@ async function main() {
           if (request.method() === "GET" && new URL(request.url()).pathname.endsWith("/long-term-memory/settings"))
             settingsReads += 1;
         });
-        await resetButton.click();
+        await resetLink.click();
         await settingsRefetch;
         // Let the cleared forms re-render while the refetch is still held.
         await resetPage.waitForTimeout(300);
         // #1452: the cleared forms wait for the refetch instead of refilling from the cached settings.
         await resetPage.getByText("Loading memory settings.").waitFor();
+        assert.equal(await resetLink.count(), 0, "the Reset link is gone while the forms reload");
         assert.equal(
-          await resetButton.getAttribute("aria-disabled"),
+          await deleteButton.getAttribute("aria-disabled"),
           "true",
-          "Reset stays locked until the settings refetch resolves",
+          "Delete all data stays locked until the settings refetch resolves",
         );
-        assert.equal(await resetButton.getAttribute("disabled"), null, "a locked Reset keeps keyboard focus");
+        assert.equal(await deleteButton.getAttribute("disabled"), null, "a locked button keeps keyboard focus");
         settingsGate = null;
         releaseSettings();
-        await maintenancePanel
-          .locator('[data-ltm-status="danger"]')
+        // A reset that landed but could not rebuild the index is a warning toast, not an error.
+        await resetPage
+          .locator('[data-sonner-toast][data-type="warning"]')
           .filter({
-            hasText: "Memory settings reset to defaults, but the recall index rebuild failed: Fixture rebuild failed.",
+            hasText: "Memory settings reset to defaults, but the reindex failed: Fixture rebuild failed.",
           })
           .waitFor({ timeout: 5000 });
+        await resetLink.waitFor({ timeout: 5000 });
         assert.equal(
-          await resetButton.getAttribute("aria-disabled"),
+          await resetLink.getAttribute("aria-disabled"),
           null,
           "Reset is available again once the refetch resolves",
         );
+        assert.equal(await deleteButton.getAttribute("aria-disabled"), null, "Delete is unlocked again");
+        assert.equal(
+          await resetLink.evaluate((element) => element === document.activeElement),
+          true,
+          "focus returns to the Reset link",
+        );
         assert.equal(settingsReads, 1, "Reset reads the settings once");
-        // #1588: each result shows under the controls that produced it, not at the top of the panel.
-        // #1659: Maintenance has Backup, Repair and Delete or reset groups; a result shows in its own group.
-        const maintenanceResultGroup = (text: RegExp) =>
-          maintenancePanel
+        // A finished Troubleshooting action is a toast: the panel keeps no result banner of its own.
+        assert.equal(
+          await maintenancePanel
             .locator("[data-ltm-status]")
-            .filter({ hasText: text })
-            .evaluate((result) =>
-              result.closest("[data-ltm-maintenance-group]")?.getAttribute("data-ltm-maintenance-group"),
-            );
-        assert.equal(await maintenanceResultGroup(/^Memory settings reset to defaults, but/u), "reset");
-        await resetPage.route("**/api/long-term-memory/repair", (route) =>
-          route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 4 }] } }),
-        );
-        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
-        await maintenancePanel.getByRole("button", { name: "Run selected maintenance" }).click();
-        await maintenancePanel
-          .locator("[data-ltm-status]")
-          .filter({ hasText: /\(4\)$/u })
-          .waitFor();
-        assert.equal(await maintenanceResultGroup(/\(4\)$/u), "repair");
-        assert.equal(
-          await maintenancePanel.getByText(/^Memory settings reset to defaults, but/u).count(),
+            .filter({ hasText: /^Memory settings reset to defaults, but/u })
+            .count(),
           0,
-          "a new run replaces the previous result",
         );
-        // A finished run empties the selection, which turns Run selected maintenance natively disabled; focus moves
-        // to the result instead of dropping to the page.
-        await resetPage.route("**/api/long-term-memory/repair", (route) =>
-          route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 6 }] } }),
-        );
-        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
-        await maintenancePanel.getByRole("button", { name: "Run selected maintenance" }).focus();
-        await resetPage.keyboard.press("Enter");
-        await maintenancePanel
-          .locator("[data-ltm-status]")
-          .filter({ hasText: /\(6\)$/u })
-          .waitFor();
-        await resetPage.waitForFunction(
-          () => document.activeElement?.matches('[data-ltm-maintenance-result="repair"]') ?? false,
-        );
-        assert.notEqual(await resetPage.evaluate(() => document.activeElement?.tagName), "BODY");
-        // A running action keeps keyboard focus: while the repair request is held, Run selected maintenance and
-        // Export backup stay focused or focusable, are aria-disabled instead of `disabled`, and a second Enter
-        // sends no second request.
-        let repairRequests = 0;
-        let releaseRepair = () => {};
-        const repairHeld = new Promise<void>((resolve) => {
-          releaseRepair = resolve;
-        });
-        await resetPage.unroute("**/api/long-term-memory/repair");
-        await resetPage.route("**/api/long-term-memory/repair", async (route) => {
-          repairRequests += 1;
-          await repairHeld;
-          await route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 5 }] } });
-        });
-        let exportRequests = 0;
-        await resetPage.route("**/api/long-term-memory/backup/export", (route) => {
-          exportRequests += 1;
-          return route.fulfill({ json: {} });
-        });
-        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
-        const runMaintenance = maintenancePanel.getByRole("button", { name: "Run selected maintenance" });
-        const exportBackupButton = maintenancePanel.getByRole("button", { name: "Export backup" });
-        await runMaintenance.focus();
-        await resetPage.keyboard.press("Enter");
-        await resetPage.waitForFunction(
-          (button) => button?.getAttribute("aria-disabled") === "true",
-          await runMaintenance.elementHandle(),
-        );
-        const isFocused = (button: typeof runMaintenance) => button.evaluate((el) => el === document.activeElement);
-        assert.equal(await isFocused(runMaintenance), true, "Run selected maintenance keeps focus while it runs");
-        assert.equal(await runMaintenance.getAttribute("disabled"), null);
-        assert.equal(await exportBackupButton.getAttribute("aria-disabled"), "true");
-        assert.equal(await exportBackupButton.getAttribute("disabled"), null);
-        await resetPage.keyboard.press("Enter");
-        await exportBackupButton.focus();
-        await resetPage.keyboard.press("Enter");
-        await resetPage.waitForTimeout(150);
-        assert.equal(repairRequests, 1, "a second Enter sends no second request");
-        assert.equal(exportRequests, 0, "a locked Export backup sends no request");
-        assert.equal(await isFocused(exportBackupButton), true, "a locked Export backup is focusable");
-        releaseRepair();
-        await maintenancePanel
-          .locator("[data-ltm-status]")
-          .filter({ hasText: /\(5\)$/u })
-          .waitFor();
-        assert.equal(await exportBackupButton.getAttribute("aria-disabled"), null);
         await resetPage.locator("#settings-tab-recall").click();
+        await openRecallAdvanced(resetPage);
         assert.equal(
-          await maxChunks.inputValue(),
-          String(resetMaxChunks),
+          await recallBudget.inputValue(),
+          String(resetBudget),
           "the forms show the settings read after the reset",
         );
         await resetPage.close();
       }
-      // #1659: Maintenance groups Backup, Repair and Delete or reset. Reset is a warning, Run selected
-      // maintenance is not red, and Delete all data offers "Export a backup first" before the host's confirmation.
+      // soup/settings-troubleshooting: Memory Settings has two tabs, Recall and Extraction. Troubleshooting is a
+      // closed section at the bottom (Delete all data, the activity log; Reset to defaults sits beside the
+      // reassurance above the tabs), and Sources holds "Import detail" at the import button.
+      {
+        const tsPage = await browserContext.newPage();
+        await tsPage.goto(`http://127.0.0.1:${address.port}/`);
+        await tsPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await tsPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => false };
+          document.body.append(element);
+        })()`);
+        await tsPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        assert.deepEqual(
+          await tsPage.locator('[role="tab"][id^="settings-tab-"]').evaluateAll((tabs) => tabs.map((tab) => tab.id)),
+          ["settings-tab-recall", "settings-tab-extraction"],
+          "Memory Settings has only the Recall and Extraction tabs",
+        );
+        const section = tsPage.locator("#settings-panel-troubleshooting");
+        assert.equal(
+          await section.evaluate((node: HTMLDetailsElement) => node.open),
+          false,
+          "Troubleshooting starts closed",
+        );
+        assert.equal(
+          await tsPage.evaluate(() => {
+            const last = document.querySelector("#settings-panel-troubleshooting");
+            const extraction = document.querySelector("#settings-panel-extraction");
+            return Boolean(
+              last && extraction && extraction.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+          }),
+          true,
+          "Troubleshooting sits after the tab panels",
+        );
+        await openTroubleshooting(tsPage);
+        assert.equal(await section.getByRole("button", { name: "Delete all data" }).count(), 1);
+        assert.equal(await section.getByRole("button", { name: "Reset settings" }).count(), 0);
+        assert.equal(await tsPage.locator("[data-ltm-reset-settings]").count(), 1, "Reset is on the page");
+        await section.getByRole("button", { name: "Delete all data" }).click();
+        await section.locator("[data-ltm-delete-prompt]").waitFor();
+        assert.equal(
+          await section.locator("[data-ltm-activity-log]").count(),
+          0,
+          "Troubleshooting has no activity log",
+        );
+        await tsPage.locator("#settings-tab-extraction").click();
+        assert.equal(
+          await section.evaluate((node: HTMLDetailsElement) => node.open),
+          true,
+          "Troubleshooting stays open across tabs",
+        );
+        // Record recall explanations moved to the Activity page; Recall > Advanced no longer has it.
+        await tsPage.locator("#settings-tab-recall").click();
+        await openRecallAdvanced(tsPage);
+        assert.equal(
+          await tsPage.getByText("Record recall explanations", { exact: true }).count(),
+          0,
+          "Recall > Advanced has no record switch",
+        );
+        // Sources: Import detail at the bottom of the card saves on its own through the extraction-settings PUT.
+        const writesBefore = extractionWrites.length;
+        await tsPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]').click();
+        const importDetail = tsPage.locator("[data-ltm-import-detail]");
+        await importDetail.waitFor();
+        // Import detail sits at the bottom of the card, after the source list.
+        assert.equal(
+          await importDetail.evaluate((element) =>
+            Boolean(
+              document.querySelector('[data-ltm-surface="sources"] [role="list"]')!.compareDocumentPosition(element) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+          ),
+          true,
+          "Import detail follows the source list",
+        );
+        const detailed = importDetail.getByRole("button", { name: "Detailed" });
+        assert.equal(await detailed.getAttribute("aria-pressed"), "false");
+        const detailWrite = tsPage.waitForResponse(
+          (response) =>
+            response.request().method() === "PUT" && new URL(response.url()).pathname.endsWith("/extraction-settings"),
+        );
+        await detailed.click();
+        await detailWrite;
+        assert.deepEqual(extractionWrites.slice(writesBefore), [{ chatImportDetail: "detailed" }]);
+        await tsPage.close();
+      }
+      // #1659: Troubleshooting group Delete. Delete all data offers "Export a backup first" before the host's confirmation.
       for (const width of [1280, 390]) {
         const groupPage = await browserContext.newPage();
         await groupPage.setViewportSize({ width, height: 900 });
@@ -4815,19 +6083,17 @@ async function main() {
           document.body.append(element);
         })()`);
         await groupPage.locator('[data-ltm-destination="settings"]:visible').first().click();
-        await groupPage.locator("#settings-tab-maintenance").click();
-        const panel = groupPage.locator("#settings-panel-maintenance");
+        await openTroubleshooting(groupPage);
+        const panel = groupPage.locator("#settings-panel-troubleshooting");
         const groupNames = await panel
-          .locator("[data-ltm-maintenance-group]")
-          .evaluateAll((groups) => groups.map((group) => group.getAttribute("data-ltm-maintenance-group")));
-        assert.deepEqual(groupNames, ["backup", "repair", "reset"], `Maintenance groups at ${width}px`);
-        const groupOf = (name: string) => panel.locator(`[data-ltm-maintenance-group="${name}"]`);
+          .locator("[data-ltm-troubleshooting-group]")
+          .evaluateAll((groups) => groups.map((group) => group.getAttribute("data-ltm-troubleshooting-group")));
+        assert.deepEqual(groupNames, ["help", "delete"], `Troubleshooting groups at ${width}px`);
+        const groupOf = (name: string) => panel.locator(`[data-ltm-troubleshooting-group="${name}"]`);
         for (const [group, button] of [
-          ["backup", "Export backup"],
-          ["backup", "Choose backup"],
-          ["repair", "Run selected maintenance"],
-          ["reset", "Reset settings"],
-          ["reset", "Delete all data"],
+          ["help", "Run setup again"],
+          ["help", "Take the tour"],
+          ["delete", "Delete all data"],
         ] as const) {
           assert.equal(
             await groupOf(group).getByRole("button", { name: button }).count(),
@@ -4837,41 +6103,19 @@ async function main() {
         }
         const tones = await panel.evaluate((root) => {
           const buttons = [...root.querySelectorAll<HTMLElement>("button")];
-          const run = buttons.find((item) => item.textContent?.trim() === "Run selected maintenance")!;
-          const reset = buttons.find((item) => item.textContent?.trim() === "Reset settings")!;
           const remove = buttons.find((item) => item.textContent?.trim() === "Delete all data")!;
-          return {
-            runPrimary: run.classList.contains("mari-editor-action--primary"),
-            runDanger: run.classList.contains("mari-editor-action--danger"),
-            resetWarning: reset.dataset.ltmTone,
-            resetDanger: reset.classList.contains("mari-editor-action--danger"),
-            resetBorderInline: reset.style.borderColor,
-            resetIcon: Boolean(reset.querySelector("svg")),
-            deleteDanger: remove.classList.contains("mari-editor-action--danger"),
-            separated: remove.getBoundingClientRect().top - reset.getBoundingClientRect().bottom >= 16,
-            deleteBorderTop: remove.parentElement ? getComputedStyle(remove.parentElement).borderTopWidth : "",
-          };
+          return { deleteDanger: remove.classList.contains("mari-editor-action--danger") };
         });
-        assert.deepEqual(tones, {
-          runPrimary: true,
-          runDanger: false,
-          resetWarning: "warning",
-          resetDanger: false,
-          resetBorderInline: "var(--marinara-editor-border-strong)",
-          resetIcon: true,
-          deleteDanger: true,
-          separated: true,
-          deleteBorderTop: "1px",
-        });
+        assert.deepEqual(tones, { deleteDanger: true });
         assert.equal(
           await groupPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
           true,
-          `Maintenance does not overflow horizontally at ${width}px`,
+          `Troubleshooting does not overflow horizontally at ${width}px`,
         );
         // Delete all data opens the export offer first; declining the host confirmation deletes nothing.
-        const deleteAll = groupOf("reset").getByRole("button", { name: "Delete all data" });
+        const deleteAll = groupOf("delete").getByRole("button", { name: "Delete all data" });
         await deleteAll.click();
-        const prompt = groupOf("reset").locator("[data-ltm-delete-prompt]");
+        const prompt = groupOf("delete").locator("[data-ltm-delete-prompt]");
         await prompt.waitFor();
         const exportFirst = prompt.getByRole("button", { name: "Export a backup first" });
         await groupPage.waitForFunction(() => document.activeElement?.textContent?.includes("Export a backup first"));
@@ -4887,16 +6131,16 @@ async function main() {
           true,
           `the open export offer does not overflow horizontally at ${width}px`,
         );
-        // "Export a backup first" exports from here, reports in Delete or reset, and deletes nothing.
+        // "Export a backup first" exports from here, reports in Delete, and deletes nothing.
         let exportRequests = 0;
         await groupPage.route("**/api/long-term-memory/backup/export", (route) => {
           exportRequests += 1;
           return route.fulfill({ json: { version: 1, notes: [] } });
         });
         await exportFirst.click();
-        await groupOf("reset").locator("[data-ltm-status]").filter({ hasText: "Memory backup exported." }).waitFor();
+        await toastWith(groupPage, "Memory backup exported.").waitFor({ timeout: 5000 });
         assert.equal(exportRequests, 1, "the export offer exports once");
-        assert.equal(await groupOf("backup").locator("[data-ltm-maintenance-result]").count(), 0);
+        assert.equal(await panel.getByRole("button", { name: "Choose backup" }).count(), 0, "Restore is in the Vault");
         assert.equal(await prompt.count(), 1, "exporting leaves the offer open");
         assert.equal(deleteRequests, 0);
         assert.equal(
@@ -4941,13 +6185,115 @@ async function main() {
           (window as unknown as { __ltmConfirmResult: boolean }).__ltmConfirmResult = true;
         });
         await prompt.getByRole("button", { name: "Continue to delete" }).click();
-        await groupOf("reset").locator("[data-ltm-status]").filter({ hasText: "All memory data deleted." }).waitFor();
+        await toastWith(groupPage, "All memory data deleted.").waitFor({ timeout: 5000 });
         assert.equal(deleteRequests, 1);
         assert.equal(await prompt.count(), 0, "the export offer closes once the delete runs");
+        // soup/tour: Troubleshooting replays the tour even after it was ended; on a phone the bubble docks
+        // to the bottom, and End tour returns focus to Help.
+        await groupOf("help").locator("[data-ltm-troubleshooting-tour]").click();
+        const replay = groupPage.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="welcome"]');
+        await replay.waitFor();
+        if (width === 390) {
+          const docked = await replay
+            .locator("[data-ltm-tour-bubble]")
+            .evaluate((bubble) => Math.round(window.innerHeight - bubble.getBoundingClientRect().bottom));
+          assert.equal(docked, 16, "the phone bubble docks 16px above the bottom");
+          // A ring on a bottom tab moves the docked bubble to the top, so the tab stays visible.
+          // The stop changes under each click, so Next is found on the tour itself, not on the welcome stop.
+          const replayNext = groupPage.locator('[data-ltm-surface="tour"] [data-ltm-tour-next]');
+          await replayNext.click();
+          await groupPage.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="vault"]').waitFor();
+          await replayNext.click();
+          const phoneTour = groupPage.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="sources"]');
+          await phoneTour.locator("[data-ltm-tour-spotlight]").waitFor();
+          const overlap = await phoneTour.evaluate((dialog) => {
+            const ring = dialog.querySelector("[data-ltm-tour-spotlight]")!.getBoundingClientRect();
+            const bubble = dialog.querySelector("[data-ltm-tour-bubble]")!.getBoundingClientRect();
+            return ring.top < bubble.bottom && bubble.top < ring.bottom;
+          });
+          assert.equal(overlap, false, "the phone bubble does not cover the ringed tab");
+        }
+        await groupPage.locator("[data-ltm-tour-end]").click();
+        await groupPage.locator('[data-ltm-surface="tour"]').waitFor({ state: "detached" });
+        await groupPage.waitForFunction(() => document.activeElement?.hasAttribute("data-ltm-onboarding-help"));
         await groupPage.close();
       }
-      // #1659: Recall settings are grouped (Budget, Ranking, Text filters, Sharing), the four weights use
-      // plain names with the old term in their help, and editing a weight shows the Custom note with a
+      // soup/tour-phone: at 390px setup's Done offers "Show me around" and it starts the tour; the bubble docks and
+      // uses the -small strip. Strips play (a play-once one here), and reduced motion holds the rest frame.
+      {
+        const phonePage = await browserContext.newPage();
+        await phonePage.setViewportSize({ width: 390, height: 844 });
+        await phonePage.goto(`http://127.0.0.1:${address.port}/`);
+        await phonePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await phonePage.evaluate(() => {
+          localStorage.setItem("marinara-long-term-memory-onboarding-v1", "beat:4");
+          localStorage.removeItem("marinara-long-term-memory-tour-v1");
+        });
+        await phonePage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => false };
+          document.body.append(element);
+        })()`);
+        await phonePage.getByRole("button", { name: "Help", exact: true }).click();
+        await phonePage.locator("[data-ltm-help-setup]").click();
+        const phoneSetup = phonePage.locator('[data-ltm-surface="onboarding"][data-ltm-setup-beat="4"]');
+        await phoneSetup.waitFor();
+        const doneSprite = phoneSetup.locator("[data-ltm-setup-sprite]");
+        const motion = (locator: typeof doneSprite) =>
+          locator.evaluate((sprite) => {
+            const style = getComputedStyle(sprite);
+            return {
+              name: style.animationName,
+              x: style.backgroundPositionX,
+              motion: sprite.getAttribute("data-ltm-sprite-motion"),
+            };
+          });
+        const doneMotion = await motion(doneSprite);
+        assert.equal(doneMotion.motion, "once", "a single gesture plays once");
+        assert.equal(doneMotion.name, "ltm-sprite-once");
+        await phonePage.emulateMedia({ reducedMotion: "reduce" });
+        assert.deepEqual(
+          await motion(doneSprite),
+          { name: "none", x: "-384px", motion: "once" },
+          "reduced motion holds the last frame of a play-once strip",
+        );
+        await phonePage.emulateMedia({ reducedMotion: "no-preference" });
+        await phoneSetup.getByRole("button", { name: "Show me around" }).click();
+        await phoneSetup.waitFor({ state: "detached" });
+        const phoneWelcome = phonePage.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="welcome"]');
+        await phoneWelcome.waitFor();
+        const welcomeSprite = phoneWelcome.locator("[data-ltm-setup-sprite]");
+        assert.equal(await welcomeSprite.getAttribute("data-ltm-setup-sprite"), "welcome-bell-small");
+        assert.deepEqual(
+          await welcomeSprite.evaluate((sprite) => [sprite.clientWidth, sprite.clientHeight]),
+          [64, 96],
+          "the phone bubble uses the -small strip",
+        );
+        assert.equal(
+          await phoneWelcome
+            .locator("[data-ltm-tour-bubble]")
+            .evaluate((bubble) => Math.round(window.innerHeight - bubble.getBoundingClientRect().bottom)),
+          16,
+          "the phone bubble docks 16px above the bottom",
+        );
+        // Stop 2 loops (vault-browse): it runs, and reduced motion holds frame 1.
+        await phonePage.locator("[data-ltm-tour-next]").click();
+        const phoneVault = phonePage.locator('[data-ltm-surface="tour"][data-ltm-tour-stop="vault"]');
+        await phoneVault.waitFor();
+        const loopSprite = phoneVault.locator("[data-ltm-setup-sprite]");
+        assert.equal((await motion(loopSprite)).name, "ltm-sprite-loop");
+        await phonePage.emulateMedia({ reducedMotion: "reduce" });
+        assert.deepEqual(
+          await motion(loopSprite),
+          { name: "none", x: "0px", motion: "loop" },
+          "reduced motion holds frame 1 of a loop",
+        );
+        await phonePage.locator("[data-ltm-tour-end]").click();
+        await phonePage.close();
+      }
+      // #1659: Recall opens with the budget and style, then Sharing, then a closed fine-tuning section; the four weights use
+      // plain names (the same ones the Activity view uses), and editing a weight shows the Custom note with a
       // button that restores the preset the weights came from.
       for (const width of [1280, 390]) {
         const recallPage = await browserContext.newPage();
@@ -4972,53 +6318,175 @@ async function main() {
         );
         assert.deepEqual(
           groups,
-          [
-            { group: "budget", heading: "Budget", labelled: true },
-            { group: "ranking", heading: "Ranking", labelled: true },
-            { group: "text", heading: "Text filters", labelled: true },
-            { group: "sharing", heading: "Sharing", labelled: true },
-          ],
+          [{ group: "sharing", heading: "Other Agents", labelled: true }],
           `Recall groups at ${width}px`,
         );
         const inGroup = (group: string) => recall.locator(`[data-ltm-recall-group="${group}"]`);
-        for (const [group, label] of [
-          ["budget", "Recall budget tokens"],
-          ["budget", "Maximum recalled memories"],
-          ["budget", "Recent messages for recall"],
-          ["ranking", "Recall style"],
-          ["ranking", "Score threshold"],
-          ["ranking", "Meaning match"],
-          ["ranking", "Exact words match"],
-          ["ranking", "Linked memories match"],
-          ["ranking", "Stored keywords match"],
-          ["text", "Memory context instructions"],
-          ["text", "Memory stop words"],
-          ["sharing", "Other Agents can read memories"],
-        ] as const) {
-          assert.equal(await inGroup(group).getByLabel(label, { exact: true }).count(), 1, `${label} is in ${group}`);
+        const advanced = recall.locator("[data-ltm-recall-advanced]");
+        for (const label of ["Memory budget", "Recall style"]) {
+          assert.equal(await recall.getByLabel(label, { exact: true }).count(), 1, `${label} is on the Recall tab`);
+          assert.equal(await advanced.getByLabel(label, { exact: true }).count(), 0, `${label} is not tucked away`);
         }
+        for (const label of [
+          "Recent messages to search with",
+          "Match strictness",
+          "Intro to memories",
+          "Words to skip when matching",
+        ]) {
+          assert.equal(await advanced.getByLabel(label, { exact: true }).count(), 1, `${label} is fine-tuning`);
+        }
+        // soup/ltm-settings-tidy: the four weights belong to Custom, so a preset style shows none of them.
+        for (const label of ["Meaning match", "Exact words match", "Linked memories match", "Stored keywords match"]) {
+          assert.equal(await recall.getByLabel(label, { exact: true }).count(), 0, `${label} is hidden on a preset`);
+        }
+        assert.equal(
+          await inGroup("sharing").getByRole("button", { name: "Add Agent", exact: true }).count(),
+          1,
+          "Add Agent is in sharing",
+        );
         assert.equal(await recall.getByText("Graph weight", { exact: true }).count(), 0, "the old graph label is gone");
         assert.equal(
           await recall.getByText("Keyword weight", { exact: true }).count(),
           0,
           "the old keyword label is gone",
         );
-        await recall.locator('[data-ltm-info="Linked memories match"]').click();
-        assert.match(
-          await recallPage.locator('[data-ltm-info-panel="Linked memories match"]').innerText(),
-          /Also called graph weight/u,
-          "the help names the old term",
+        // soup/settings-recall: Advanced starts closed and holds the fine-tuning controls; the budget says what
+        // it fits and the style shows its description in place.
+        assert.equal(await advanced.evaluate((node) => (node as HTMLDetailsElement).open), false, "Advanced is closed");
+        assert.match(await advanced.locator("summary").innerText(), /^Matching and wording/u);
+        assert.equal(await recall.getByLabel("Match strictness", { exact: true }).isVisible(), false);
+        assert.equal(await recall.getByLabel("Recall style", { exact: true }).isVisible(), true);
+        assert.equal(
+          await recall.locator("[data-ltm-recall-style-description]").count(),
+          1,
+          "preset styles describe themselves",
         );
-        await recallPage.keyboard.press("Escape");
+        assert.equal(await recall.getByRole("checkbox", { name: "Linked memories", exact: true }).count(), 1);
+        // soup/ltm-frame-vault: on/off settings are switches and the weights and threshold are sliders.
+        assert.equal(
+          await recall
+            .getByRole("checkbox", { name: "Linked memories", exact: true })
+            .evaluate((input) => getComputedStyle(input).appearance),
+          "none",
+          "Settings toggles draw as switches",
+        );
+        assert.equal(
+          await recall.getByLabel("Match strictness", { exact: true }).getAttribute("type"),
+          "range",
+          "Match strictness is a slider",
+        );
+        assert.deepEqual(
+          await recall.locator("[data-ltm-slider-ends] > span").allTextContents(),
+          ["Looser · more memories", "Stricter · fewer, closer memories"],
+          "the threshold says which way is which",
+        );
+        // soup/ltm-frame-vault: hints sit at the control, not behind (i) buttons.
+        const budgetGroup = recall.locator("[data-ltm-recall-grid]").first();
+        assert.equal((await budgetGroup.locator("[data-ltm-unit]").innerText()).trim(), "tokens", "budget unit suffix");
+        assert.equal(await budgetGroup.locator("[data-ltm-info]").count(), 0, "the budget has no (i) button");
+        const linkedHint = recall.locator("[data-ltm-toggle-hint]").filter({ hasText: "linked to the ones found" });
+        assert.equal(
+          (await linkedHint.innerText()).trim(),
+          "Also bring in memories linked to the ones found",
+          "Linked memories shows its hint under the label",
+        );
+        assert.equal(await linkedHint.isVisible(), true);
+        assert.equal(
+          await recall.locator('[data-ltm-info="Linked memories"]').count(),
+          0,
+          "Linked memories has no (i)",
+        );
+        // Settings look. One scope line under the tabs replaces the tab's own title and intro, section headings are
+        // sentence-case and the disclosure rows turn their chevron.
+        assert.equal(
+          (await recallPage.locator("[data-ltm-settings-reassurance]").innerText()).trim(),
+          "Used by every chat unless it sets its own. The defaults suit most chats. Reset to defaults",
+          "Settings states its scope once, with the Reset link",
+        );
+        assert.equal(await recall.locator("h3").count(), 0, "the Recall tab does not repeat its name as a heading");
+        assert.equal(
+          await inGroup("sharing")
+            .locator("[data-ltm-group-heading]")
+            .evaluate((node) => getComputedStyle(node).textTransform),
+          "none",
+          "group headings are sentence-case headings, not uppercase overlines",
+        );
+        assert.equal(
+          await recall.locator("[data-ltm-recall-advanced] > summary [data-ltm-disclosure-chevron]").count(),
+          1,
+          "Advanced has a chevron",
+        );
+        assert.equal(
+          await recallPage.locator("#settings-panel-troubleshooting > summary [data-ltm-disclosure-chevron]").count(),
+          1,
+          "Troubleshooting has a chevron",
+        );
+        const advancedRow = recall.locator("[data-ltm-recall-advanced] > summary");
+        const advancedBox = await advancedRow.boundingBox();
+        assert.ok(advancedBox, "Advanced row has a box");
+        // The far right of the row is empty space; the whole row still toggles.
+        await advancedRow.click({ position: { x: advancedBox.width - 8, y: advancedBox.height / 2 } });
+        await recallPage.waitForTimeout(300);
+        assert.equal(await advanced.evaluate((node) => (node as HTMLDetailsElement).open), true, "row click opens");
+        assert.notEqual(
+          await advancedRow
+            .locator("[data-ltm-disclosure-chevron]")
+            .evaluate((node) => getComputedStyle(node).transform),
+          "none",
+          "the chevron turns when open",
+        );
+        await advancedRow.click({ position: { x: advancedBox.width - 8, y: advancedBox.height / 2 } });
+        await recallPage.waitForTimeout(300);
+        assert.equal(await advanced.evaluate((node) => (node as HTMLDetailsElement).open), false, "row click closes");
+        assert.equal(
+          await advancedRow
+            .locator("[data-ltm-disclosure-chevron]")
+            .evaluate((node) => getComputedStyle(node).transform),
+          "none",
+          "the chevron resets when closed",
+        );
+        const budgetHint = recall.locator("[data-ltm-recall-budget-hint]");
+        await openRecallAdvanced(recallPage);
+        // The strictness slider says what its value means: the share a memory has to match, or that 0 is off.
+        await advanced
+          .getByText(/^(A memory must match the chat at least \d+% to be recalled|Off: any match can be recalled)$/u)
+          .waitFor();
+        const budgetField = recall.getByLabel("Memory budget", { exact: true });
+        const savedBudget = await budgetField.inputValue();
+        const savedHint = (await budgetHint.innerText()).trim();
+        await budgetField.fill("1000");
+        await budgetField.press("Enter");
+        await budgetHint.getByText("About 11 memories per reply", { exact: true }).waitFor();
+        await budgetField.fill(savedBudget);
+        await budgetField.press("Enter");
+        await budgetHint.getByText(savedHint, { exact: true }).waitFor();
 
         const style = recall.getByLabel("Recall style", { exact: true });
         const note = recall.locator("[data-ltm-recall-custom]");
         assert.equal((await note.innerText()).trim(), "", "no Custom note while a preset is in use");
         assert.equal(await recall.getByRole("button", { name: "Reset to preset" }).count(), 0);
         await style.selectOption("exact");
+        // Choosing Custom by hand reveals the four weights, starting from the preset's own values.
+        await style.selectOption("custom");
+        assert.match(
+          await note.innerText(),
+          /Reset to preset returns to Exact\./u,
+          "Custom from Exact resets to Exact",
+        );
         const exactWeight = await recall.getByLabel("Meaning match", { exact: true }).inputValue();
-        await recall.getByLabel("Meaning match", { exact: true }).fill("0.91");
-        await recall.getByLabel("Meaning match", { exact: true }).press("Enter");
+        assert.equal(exactWeight, "0.105", "the weights start from the last preset's values");
+        assert.equal(await recall.locator("[data-ltm-info]").count(), 0, "Recall settings have no (i) buttons");
+        assert.equal(
+          (await recall.getByLabel("Linked memories match", { exact: true }).getAttribute("aria-describedby")) !== null,
+          true,
+          "a weight's hint is read with its slider",
+        );
+        // Weights are sliders, which Playwright cannot fill: set the value the way a drag does.
+        await recall.getByLabel("Meaning match", { exact: true }).evaluate((input, next) => {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, next);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }, "0.91");
         assert.equal(await style.inputValue(), "custom", "editing a weight flips the style to Custom");
         assert.match(await note.innerText(), /^Custom \(edited weights\)\. Reset to preset returns to Exact\./u);
         assert.equal(await note.getAttribute("role"), "status");
@@ -5030,24 +6498,47 @@ async function main() {
         );
         await reset.click();
         assert.equal(await style.inputValue(), "exact", "Reset to preset restores the preset it came from");
-        // NumberField copies the new value into its text in an effect, so give it a frame or two.
-        const meaningMatch = await recall.getByLabel("Meaning match", { exact: true }).elementHandle();
-        await recallPage.waitForFunction(([input, want]) => (input as HTMLInputElement).value === want, [
-          meaningMatch,
-          exactWeight,
-        ] as const);
-        assert.equal(await recall.getByLabel("Meaning match", { exact: true }).inputValue(), exactWeight);
         assert.equal((await note.innerText()).trim(), "", "the note clears once the preset is back");
+        assert.equal(
+          await recall.getByLabel("Meaning match", { exact: true }).count(),
+          0,
+          "the weights hide again once a preset is back",
+        );
+        // The restored weights are the preset's own: Custom shows them unedited.
+        await style.selectOption("custom");
+        assert.equal(await recall.getByLabel("Meaning match", { exact: true }).inputValue(), exactWeight);
+        await recall.getByRole("button", { name: "Reset to preset" }).click();
+        assert.equal(await style.inputValue(), "exact");
+        // soup/settings-recall: the Linked memories switch is the "Linked memories match" weight above 0, and
+        // changing it is a weight edit, so it shows the Custom note like any other. Exact has no link weight.
+        const linkedSwitch = recall.getByRole("checkbox", { name: "Linked memories", exact: true });
+        assert.equal(await linkedSwitch.isChecked(), false, "Exact recall uses no linked memories");
+        await linkedSwitch.check();
+        // The switch is a weight edit, so Custom shows the weights; the slider takes its value on the next render.
+        const linkedWeight = await recall.getByLabel("Linked memories match", { exact: true }).elementHandle();
+        await recallPage.waitForFunction(([input]) => (input as HTMLInputElement).value === "0.105", [
+          linkedWeight,
+        ] as const);
+        assert.equal(await style.inputValue(), "custom", "turning links on is a weight edit");
+        await recall.getByRole("button", { name: "Reset to preset" }).click();
+        assert.equal(await style.inputValue(), "exact");
+        assert.equal(await linkedSwitch.isChecked(), false, "Reset to preset restores the Exact link weight");
+        // Balanced uses links: off then on over the untouched preset returns to Balanced, not Custom.
+        await style.selectOption("balanced");
+        await linkedSwitch.uncheck();
+        assert.equal(await style.inputValue(), "custom");
+        await linkedSwitch.check();
+        assert.equal(await style.inputValue(), "balanced", "links back on over an untouched preset leaves no Custom");
         // Choosing Custom by hand, with no edit, still resets to the last preset. Balanced is the saved style,
-        // so the form is clean again and the Save bar goes away.
+        // so the form is clean again and Save goes quiet.
         await style.selectOption("balanced");
         await style.selectOption("custom");
         await recall.getByRole("button", { name: "Reset to preset" }).click();
         assert.equal(await style.inputValue(), "balanced", "choosing Custom by hand still resets to the last preset");
-        await recallPage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
+        await recallPage.locator('[data-ltm-save-state="clean"]').waitFor({ timeout: 5_000 });
         assert.equal(
-          await recallPage.getByRole("button", { name: "Save settings" }).count(),
-          0,
+          await recallPage.getByRole("button", { name: "Save settings" }).getAttribute("aria-disabled"),
+          "true",
           "Reset to preset back to the saved preset leaves the form clean",
         );
         assert.equal(
@@ -5057,8 +6548,8 @@ async function main() {
         );
         await recallPage.close();
       }
-      // #1659: a form saved as Custom has no preset history. Picking Exact and discarding must not leave
-      // "returns to Exact" behind: the note falls back to Balanced.
+      // #1659: a form saved as Custom takes the preset its weights are closest to (Balanced here). Picking Exact
+      // and discarding must not leave "returns to Exact" behind.
       {
         const customPage = await browserContext.newPage();
         await customPage.setViewportSize({ width: 1280, height: 900 });
@@ -5089,8 +6580,9 @@ async function main() {
         assert.match(await note.innerText(), /returns to Balanced\./u, "the discarded pick is not remembered");
         await customPage.close();
       }
-      // Background import: Chat Settings counts today's saved and waiting memories, and a missing extraction
-      // connection is a warning with a Choose button in Chat Settings and in Extraction.
+      // Background import: the card in Chat Settings lists what was saved since the last reply, what waits for review,
+      // a read in progress and the messages an import hid, and a missing extraction connection is a warning with a
+      // Choose button in Chat Settings and in Extraction.
       for (const scenario of [
         "connection-missing",
         "connection-chosen",
@@ -5099,6 +6591,7 @@ async function main() {
         "empty",
         "empty-save",
         "manual",
+        "read-failed",
       ] as const) {
         const importPage = await browserContext.newPage();
         await importPage.setViewportSize({ width: 1280, height: 900 });
@@ -5115,32 +6608,102 @@ async function main() {
         const events =
           scenario === "empty" || scenario === "empty-save"
             ? []
-            : scenario === "working" || scenario === "review"
-              ? [
-                  event({ status: "ok", counts: { imported: 2, failed: 0, applied: 3, skipped: 1 } }),
-                  event({ status: "ok", counts: { imported: 1, failed: 0, applied: 2, skipped: 0 } }),
-                  event({ status: "ok", chatId: "other-chat", counts: { applied: 9 } }),
-                  event({ status: "ok", ts: "2000-01-01T00:00:00.000Z", counts: { applied: 7 } }),
-                ]
-              : [event({ status: "error", error: { message: "No model", code: "ltm_model_configuration" } })];
+            : scenario === "review"
+              ? // Nothing is saved on its own in review mode, so no event applied anything.
+                [event({ status: "ok", counts: { imported: 2, failed: 0, applied: 0, skipped: 0 } })]
+              : scenario === "working"
+                ? [
+                    event({ status: "ok", counts: { imported: 2, failed: 0, applied: 3, skipped: 1 } }),
+                    event({ status: "ok", counts: { imported: 1, failed: 0, applied: 2, skipped: 0 } }),
+                    event({ status: "ok", chatId: "other-chat", counts: { applied: 9 } }),
+                    event({ status: "ok", ts: "2000-01-01T00:00:00.000Z", counts: { applied: 7 } }),
+                    // Background import no longer reads summaries, so an old failure of that source must not stick.
+                    event({
+                      status: "error",
+                      source: "chats",
+                      ts: "2000-01-01T00:00:00.000Z",
+                      error: { message: "No model", code: "ltm_model_configuration" },
+                    }),
+                  ]
+                : scenario === "read-failed"
+                  ? [
+                      event({ status: "ok", source: "chats", ts: "2000-01-01T00:00:00.000Z" }),
+                      // Saved before the failure; with the last recall unreadable nothing can be called new.
+                      event({
+                        status: "ok",
+                        source: "messages",
+                        ts: new Date(Date.now() - 5_000).toISOString(),
+                        counts: { applied: 2 },
+                      }),
+                      event({
+                        status: "error",
+                        source: "messages",
+                        error: { message: "Failed", code: "extraction_failed" },
+                      }),
+                    ]
+                  : [event({ status: "error", error: { message: "No model", code: "ltm_model_configuration" } })];
         await importPage.route("**/api/long-term-memory/extraction-settings", (route) =>
           route.request().method() === "GET"
             ? route.fulfill({
                 json: {
                   autoImportChatSources: scenario !== "manual",
                   autoAcceptSafeChanges: scenario === "working" || scenario === "empty-save",
-                  connectionId: scenario === "connection-chosen" ? "connection-1" : null,
+                  connectionId: scenario === "connection-chosen" || scenario === "read-failed" ? "connection-1" : null,
                 },
               })
             : route.continue(),
         );
+        // What this chat's activity looks like now; the working scenario changes it later to play the next reply.
+        const activity: {
+          reading: boolean;
+          hidden: { from: number; to: number; at: string } | null;
+          recallAt: string;
+        } = {
+          reading: scenario === "review",
+          hidden:
+            scenario === "working"
+              ? { from: 12, to: 25, at: new Date(Date.now() + 1_000).toISOString() }
+              : scenario === "review"
+                ? { from: 3, to: 3, at: new Date(Date.now() + 1_000).toISOString() }
+                : null,
+          recallAt: "2020-01-01T00:00:00.000Z",
+        };
         await importPage.route("**/api/long-term-memory/chat-memories/*", (route) =>
-          route.fulfill({ json: { chatMemories: null } }),
+          route.fulfill({ json: { chatMemories: null, reading: activity.reading, hidden: activity.hidden } }),
         );
-        await importPage.route("**/api/long-term-memory/debug-log?*", (route) => route.fulfill({ json: { events } }));
+        const retries: string[] = [];
+        await importPage.route("**/api/long-term-memory/chat-memories/*/retry", (route) => {
+          retries.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+          return route.fulfill({ status: 202, json: { scheduled: true } });
+        });
+        let eventReads = 0;
+        await importPage.route("**/api/long-term-memory/debug-log?*", (route) => {
+          eventReads += 1;
+          return route.fulfill({ json: { events } });
+        });
+        // The save and set-up lines come from import events, so a failed receipt read must not hide them.
+        await importPage.route("**/api/long-term-memory/last-injection/**", (route) =>
+          scenario === "read-failed"
+            ? route.fulfill({ status: 500, json: { error: "unavailable" } })
+            : route.fulfill({
+                json: {
+                  memoryCount: 0,
+                  tokenCount: 0,
+                  memories: [],
+                  state: "not_recorded",
+                  dispatchedAt: activity.recallAt,
+                  attempt: null,
+                },
+              }),
+        );
         await importPage.route("**/api/long-term-memory/drafts/pending-count?*", (route) => {
           assert.match(route.request().url(), /chatId=chat-import/u, "the waiting count is for this chat");
-          return route.fulfill({ json: { count: scenario === "empty" || scenario === "empty-save" ? 0 : 4 } });
+          return route.fulfill({
+            json: {
+              count: scenario === "empty" || scenario === "empty-save" ? 0 : 4,
+              mutations: scenario === "empty" || scenario === "empty-save" ? 0 : 4,
+            },
+          });
         });
         await importPage.goto(`http://127.0.0.1:${address.port}/`);
         await importPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
@@ -5161,38 +6724,115 @@ async function main() {
         })()`);
         const importSettings = importPage.locator('[data-ltm-surface="chat-settings"]').last();
         await importSettings.waitFor();
-        if (scenario === "working") {
-          const status = importSettings.locator("[data-ltm-auto-import-status]");
-          await status.waitFor({ timeout: 5_000 });
-          assert.match(
-            await status.innerText(),
-            /5 saved today\s*·\s*4 wait for you/u,
-            "only this chat's rows from today",
+        // The conversation surface keeps the Agent activity icon in step (Capability API 1.820): the Engine's
+        // setPackageActivity is replaced by a recorder, since the host under test is older than the seam.
+        await importPage.evaluate(`(async () => {
+          const mountSurface = (id, chatId) => {
+            const surface = document.createElement("marinara-capability-long-term-memory");
+            surface.id = id;
+            surface.setAttribute("view", "surface");
+            surface.capabilityProps = { chatId };
+            document.body.append(surface);
+            return surface;
+          };
+          // Without the seam (an Engine older than 1.820) the surface mounts and says nothing, and leaving does not throw.
+          const bare = mountSurface("ltm-activity-bare-surface", "chat-bare");
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          bare.remove();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          window.activityCalls = [];
+          window.__agentState = () => ({
+            setPackageActivity: (...call) => window.activityCalls.push(JSON.stringify(call)),
+          });
+          mountSurface("ltm-activity-surface", "chat-import");
+        })()`);
+        const activityLit = (busy: boolean, alert: boolean) =>
+          importPage.waitForFunction(
+            (want) => (window as unknown as { activityCalls: string[] }).activityCalls.includes(want),
+            JSON.stringify(["long-term-memory", "chat-import", { busy, alert }]),
+            { timeout: 5_000 },
           );
-          assert.equal(await status.locator("svg").count(), 2, "a check for saved and a clock for waiting");
+        const activityLast = () =>
+          importPage.evaluate(() => (window as unknown as { activityCalls: string[] }).activityCalls.at(-1) ?? null);
+        const cardLines = importSettings.locator("[data-ltm-last-injection] [data-ltm-card-saved]");
+        const lineText = async (kind: string) =>
+          (await importSettings.locator(`[data-ltm-card-saved="${kind}"]`).innerText()).replace(/\s+/gu, " ").trim();
+        // Every scenario's lines come from the events and the waiting count, so wait for both reads to land.
+        const eventsLoaded = async () => {
+          for (let tries = 0; tries < 100 && eventReads === 0; tries += 1) await importPage.waitForTimeout(50);
+          await importPage.waitForTimeout(300);
+        };
+        const noDrawerLine = async () =>
+          assert.equal(
+            await importSettings.locator("[data-ltm-auto-import-status]").count(),
+            0,
+            "the drawer has no count line",
+          );
+        if (scenario === "working") {
+          await importSettings.locator('[data-ltm-card-saved="review"]').waitFor({ timeout: 5_000 });
+          await noDrawerLine();
+          assert.equal(await lineText("review"), "4 memories to review Review");
+          assert.equal(
+            await lineText("new"),
+            "Saved 5 new memories View",
+            "only this chat's saves since the last reply, not the old or other chats'",
+          );
+          assert.equal(await lineText("hidden"), "Messages 12–25 saved as memories and hidden");
+          assert.equal(
+            await importSettings.locator('[data-ltm-card-saved="hidden"] button').count(),
+            0,
+            "the hidden line has no button",
+          );
+          assert.deepEqual(
+            await cardLines.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-ltm-card-saved"))),
+            ["review", "new", "hidden"],
+          );
           assert.equal(await importSettings.locator("[data-ltm-connection-warning]").count(), 0);
-          await status.getByRole("button", { name: "Review", exact: true }).click();
+          // The next reply: a read starts (the card says so), then a newer recall retires the saved and hidden lines.
+          activity.reading = true;
+          await importSettings.locator('[data-ltm-card-saved="reading"]').waitFor({ timeout: 15_000 });
+          assert.equal(await lineText("reading"), "Reading new messages…");
+          // The icon spins with the card's line and stops with it.
+          await activityLit(true, false);
+          activity.reading = false;
+          activity.recallAt = new Date(Date.now() + 60_000).toISOString();
+          await importSettings
+            .locator('[data-ltm-card-saved="reading"]')
+            .waitFor({ state: "detached", timeout: 15_000 });
+          await importSettings
+            .locator('[data-ltm-card-saved="hidden"]')
+            .waitFor({ state: "detached", timeout: 15_000 });
+          await importSettings.locator('[data-ltm-card-saved="new"]').waitFor({ state: "detached", timeout: 15_000 });
+          await activityLit(false, false);
+          assert.equal(await lineText("review"), "4 memories to review Review", "waiting memories stay");
+          await importSettings
+            .locator('[data-ltm-card-saved="review"]')
+            .getByRole("button", { name: "Review", exact: true })
+            .click();
           await importPage.locator('[data-ltm-destination="review"][aria-current="page"]:visible').first().waitFor({
             timeout: 5_000,
           });
         } else if (scenario === "review") {
-          // Nothing saves on its own in review mode, so only the waiting part shows.
-          const status = importSettings.locator("[data-ltm-auto-import-status]");
-          await status.waitFor({ timeout: 5_000 });
-          assert.equal((await status.innerText()).replace(/\s+/gu, " ").trim(), "4 wait for you Review");
-        } else if (scenario === "empty") {
-          const status = importSettings.locator("[data-ltm-auto-import-status]");
-          await status.waitFor({ timeout: 5_000 });
-          assert.match(await status.innerText(), /Watching this chat · nothing new yet/u);
+          // Nothing saves on its own in review mode, so no saved line; one hidden message and a read in progress show.
+          await importSettings.locator('[data-ltm-card-saved="review"]').waitFor({ timeout: 5_000 });
+          assert.equal(await lineText("review"), "4 memories to review Review");
+          assert.equal(await lineText("hidden"), "Message 3 saved as a memory and hidden");
+          assert.equal(await lineText("reading"), "Reading new messages…");
+          await noDrawerLine();
+          assert.deepEqual(
+            await cardLines.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-ltm-card-saved"))),
+            ["review", "hidden", "reading"],
+          );
+        } else if (scenario === "empty" || scenario === "empty-save") {
+          // Each line only when true: a chat with nothing to say shows no part 3 at all.
+          await eventsLoaded();
+          await noDrawerLine();
+          assert.equal(await cardLines.count(), 0);
           assert.equal(
-            await status.getByRole("button", { name: "Review" }).count(),
+            await importSettings.getByRole("button", { name: "Review" }).count(),
             0,
             "Review only when something waits",
           );
-        } else if (scenario === "empty-save") {
-          const status = importSettings.locator("[data-ltm-auto-import-status]");
-          await status.waitFor({ timeout: 5_000 });
-          assert.equal((await status.innerText()).replace(/\s+/gu, " ").trim(), "0 saved today");
         } else if (scenario === "manual") {
           const status = importSettings.locator("[data-ltm-auto-import-status]");
           await status.waitFor({ timeout: 5_000 });
@@ -5201,18 +6841,41 @@ async function main() {
           await importPage.locator('[data-ltm-destination="sources"][aria-current="page"]:visible').first().waitFor({
             timeout: 5_000,
           });
+        } else if (scenario === "read-failed") {
+          // A provider error stops the background read: say so in this chat and offer one tap to try again.
+          const failed = importSettings.locator("[data-ltm-last-injection] [data-ltm-auto-import-failed]");
+          await failed.waitFor({ timeout: 5_000 });
+          await activityLit(false, true);
+          assert.match(await failed.innerText(), /Couldn't save new memories/u);
+          await noDrawerLine();
+          assert.equal(
+            await importSettings.locator('[data-ltm-card-saved="new"]').count(),
+            0,
+            'no "new" count while the last recall is unreadable',
+          );
+          assert.equal(await importSettings.locator("[data-ltm-card-problem]").count(), 1, "at most one problem line");
+          assert.equal(await importSettings.locator("[data-ltm-connection-warning]").count(), 0);
+          await failed.getByRole("button", { name: "Retry", exact: true }).click();
+          await failed.waitFor({ state: "detached", timeout: 5_000 });
+          assert.deepEqual(retries, ["POST /api/long-term-memory/chat-memories/chat-import/retry"]);
+          // Try again clears the dot the surface owns, the same moment it clears the card's line.
+          await activityLit(false, false);
+          assert.equal(
+            await activityLast(),
+            JSON.stringify(["long-term-memory", "chat-import", { busy: false, alert: false }]),
+          );
         } else if (scenario === "connection-chosen") {
-          await importSettings.locator("[data-ltm-auto-import-status]").waitFor({ timeout: 5_000 });
+          await eventsLoaded();
           assert.equal(
             await importSettings.locator("[data-ltm-connection-warning]").count(),
             0,
             "a chosen connection hides the warning",
           );
         } else {
-          const warning = importSettings.locator("[data-ltm-connection-warning]");
+          const warning = importSettings.locator("[data-ltm-last-injection] [data-ltm-connection-warning]");
           await warning.waitFor({ timeout: 5_000 });
-          assert.match(await warning.innerText(), /Needs an extraction connection/u);
-          await warning.getByRole("button", { name: "Choose", exact: true }).click();
+          assert.match(await warning.innerText(), /Not saving new memories/u);
+          await warning.getByRole("button", { name: "Set up", exact: true }).click();
           await importPage.waitForFunction(
             () =>
               document.activeElement?.getAttribute("aria-labelledby")?.length &&
@@ -5221,13 +6884,40 @@ async function main() {
           assert.equal(
             await importPage.locator("#settings-tab-extraction").getAttribute("aria-selected"),
             "true",
-            "Choose opens Extraction",
+            "Set up opens Extraction",
           );
           assert.equal(await importPage.locator("[data-ltm-connection-warning]").count(), 2);
         }
+        if (scenario === "review") {
+          await activityLit(true, false);
+        } else if (scenario !== "read-failed" && scenario !== "working") {
+          // Set-up, waiting reviews, a hide and a recall problem never light the icon.
+          await importPage.waitForTimeout(300);
+          assert.equal(
+            await importPage.evaluate(
+              () =>
+                (window as unknown as { activityCalls: string[] }).activityCalls.filter((call) => /true/u.test(call))
+                  .length,
+            ),
+            0,
+            `${scenario}: the icon stays quiet`,
+          );
+        }
+        // Leaving the chat clears the entry: the Engine never does.
+        const callsBeforeLeaving = await importPage.evaluate(
+          `(() => { const n = window.activityCalls.length; document.querySelector("#ltm-activity-surface").remove(); return n; })()`,
+        );
+        await importPage.waitForFunction(
+          ([want, before]) => {
+            const calls = (window as unknown as { activityCalls: string[] }).activityCalls;
+            return calls.length > Number(before) && calls.at(-1) === want;
+          },
+          [JSON.stringify(["long-term-memory", "chat-import", { busy: false, alert: false }]), callsBeforeLeaving],
+          { timeout: 5_000 },
+        );
         await importPage.close();
       }
-      // #1980: one "Memories from chats" choice. Chat Settings keeps a per-chat override with "Use global default",
+      // #1980: one "Memories from chats" choice. Chat Settings keeps a per-chat override with "Use the default for all chats",
       // and Extraction writes both stored switches from one select.
       {
         const memoriesPage = await browserContext.newPage();
@@ -5275,19 +6965,21 @@ async function main() {
         assert.equal(
           await memoriesPage.evaluate(() => {
             const panel = document.querySelector('[data-ltm-surface="chat-settings"]')!;
-            return panel.firstElementChild?.hasAttribute("data-ltm-chat-memories-field");
+            // The activity card tops the section; the first control after it is Memories from this chat.
+            const controls = [...panel.children].filter((child) => !child.hasAttribute("data-ltm-activity-card"));
+            return controls[0]?.hasAttribute("data-ltm-chat-memories-field");
           }),
           true,
-          "Memories from this chat comes first",
+          "Memories from this chat comes first among the controls, after the card",
         );
-        assert.equal(await memoriesField.getByText("Global default", { exact: true }).count(), 0);
-        await memoriesField.getByRole("button", { name: "Use global default" }).click();
+        assert.equal(await memoriesField.getByText("Default for all chats", { exact: true }).count(), 0);
+        await memoriesField.getByRole("button", { name: "Use the default for all chats" }).click();
         // With no override the chat shows the global choice: import on, accept off is "Collect them, I'll review".
         await chatChoiceIs("review");
-        await memoriesField.getByText("Global default", { exact: true }).waitFor({ timeout: 5_000 });
+        await memoriesField.getByText("Default for all chats", { exact: true }).waitFor({ timeout: 5_000 });
         assert.deepEqual(chatPatches.at(-1), { longTermMemoryChatMemories: null });
         await chatChoice.selectOption("manual");
-        await memoriesField.getByRole("button", { name: "Use global default" }).waitFor({ timeout: 5_000 });
+        await memoriesField.getByRole("button", { name: "Use the default for all chats" }).waitFor({ timeout: 5_000 });
         assert.deepEqual(chatPatches.at(-1), { longTermMemoryChatMemories: "manual" });
         assert.equal(writes.length, 0, "a chat's choice never writes the global settings");
         await memoriesPage.evaluate(`(() => {
@@ -5308,17 +7000,452 @@ async function main() {
           .getByText("2 saved", { exact: true })
           .waitFor({ timeout: 5_000 });
         await memoriesPage.getByRole("button", { name: "Save settings" }).click();
-        await memoriesPage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
+        await memoriesPage.locator('[data-ltm-save-state="saved"]').waitFor({ timeout: 5_000 });
         assert.equal(writes.at(-1)?.autoImportChatSources, true);
         assert.equal(writes.at(-1)?.autoAcceptSafeChanges, true, "Save them for me turns on both switches");
         await globalChoice.selectOption("manual");
         await memoriesPage.getByRole("button", { name: "Save settings" }).click();
-        await memoriesPage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
+        await memoriesPage.locator('[data-ltm-save-state="saved"]').waitFor({ timeout: 5_000 });
         assert.equal(writes.at(-1)?.autoImportChatSources, false);
         assert.equal(writes.at(-1)?.autoAcceptSafeChanges, false, "I add them myself turns off both switches");
         await memoriesPage.close();
       }
-      // #1659: saving a form as Custom also drops the preset history, so Reset to preset agrees with a reload.
+      // Item 8: a branch chat's "Show" opens this chat's own memories every time (never a remembered place or filter),
+      // and a row's "From branch" chip narrows the list to that branch until "Show all".
+      {
+        const branchPage = await browserContext.newPage();
+        await branchPage.setViewportSize({ width: 1280, height: 900 });
+        const inheritedIds = { "branch-a": "world_second_mobile", "branch-b": "world_merge_target_mobile" };
+        await branchPage.route("**/api/long-term-memory/branch-memories/desktop-chat", (route) =>
+          route.fulfill({
+            json: {
+              branches: [
+                { chatId: "branch-a", name: "Branch A", noteIds: [inheritedIds["branch-a"]] },
+                { chatId: "branch-b", name: "Branch B", noteIds: [inheritedIds["branch-b"]] },
+              ],
+            },
+          }),
+        );
+        // The chat's own scope leaves out what its other branches added, so those arrive as inherited memories.
+        await branchPage.route(
+          (url) =>
+            url.pathname.endsWith("/api/long-term-memory/notes") &&
+            url.searchParams.get("scopeChatIds") === "desktop-chat",
+          async (route) => {
+            const response = await route.fetch();
+            const held = new Set(Object.values(inheritedIds));
+            await route.fulfill({
+              response,
+              json: ((await response.json()) as { id: string }[]).filter((note) => !held.has(note.id)),
+            });
+          },
+        );
+        await branchPage.route("**/api/long-term-memory/chat-memories/*", (route) =>
+          route.fulfill({ json: { chatMemories: null } }),
+        );
+        await branchPage.goto(`http://127.0.0.1:${address.port}/`);
+        await branchPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        const mountBranchPage = (view: "detail" | "settings") =>
+          branchPage.evaluate(
+            `(() => {
+              document.body.replaceChildren();
+              const element = document.createElement("marinara-capability-long-term-memory");
+              element.setAttribute("view", ${JSON.stringify(view)});
+              const chat = { chatId: "desktop-chat", chatName: "desktop chat", chatMode: "conversation", enabledForChat: true };
+              element.capabilityProps = Object.assign({ confirmAction: () => true, onChatSettingsChange: () => {} }, chat, ${JSON.stringify(view)} === "settings" ? {
+                onOpenAgentSettings: () => {
+                  const detail = document.createElement("marinara-capability-long-term-memory");
+                  detail.setAttribute("view", "detail");
+                  detail.capabilityProps = Object.assign({ confirmAction: () => true }, chat);
+                  document.body.replaceChildren(detail);
+                },
+              } : {});
+              document.body.append(element);
+            })()`,
+          );
+        // Open the Vault on "All" first, so a remembered place is waiting when Show is tapped.
+        await mountBranchPage("detail");
+        await branchPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        const branchScope = branchPage.locator('[data-ltm-scope-picker="vault"]');
+        await branchScope.locator("[data-ltm-scope-picker-trigger]").click();
+        await branchScope.locator('[data-ltm-scope-option="all"]').click();
+        await branchPage.locator("[data-ltm-note-id]").first().waitFor({ timeout: 5_000 });
+        assert.equal(await branchPage.locator("[data-ltm-row-from-branch]").count(), 0, "All lists no branch chips");
+        // Chat Settings → Show: this chat's place, inherited rows listed, no filter.
+        await mountBranchPage("settings");
+        await branchPage
+          .locator('[data-ltm-branch-memories="branch-a"]')
+          .getByRole("button", { name: "Show", exact: true })
+          .click();
+        await branchPage.locator('[data-ltm-surface="detail"]').waitFor({ timeout: 5_000 });
+        assert.equal(
+          await branchPage
+            .locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]')
+            .getAttribute("aria-current"),
+          "page",
+          "Show lands on the Vault",
+        );
+        const chipA = branchPage.locator('[data-ltm-row-from-branch="branch-a"]');
+        await chipA.waitFor({ timeout: 5_000 });
+        assert.equal(await branchPage.locator("[data-ltm-branch-filter]").count(), 0, "Show opens with no filter");
+        assert.equal(await branchPage.locator('[data-ltm-row-from-branch="branch-b"]').count(), 1);
+        assert.match(
+          await branchPage.locator("[data-ltm-memory-scope]").innerText(),
+          /^Currently viewing memories in:\s*Current\b/u,
+          "the place is this chat",
+        );
+        // The chip is a real button of its own (not inside the row's open button), 44px tall, named for what it does.
+        assert.equal(
+          await chipA.evaluate((chip) => chip.tagName === "BUTTON" && chip.parentElement?.closest("button") === null),
+          true,
+        );
+        assert.ok((await chipA.boundingBox())!.height >= 44, "a 44px touch target");
+        assert.equal(await chipA.getAttribute("aria-label"), "From branch Branch A: show only its memories");
+        const allRows = await branchPage.locator("[data-ltm-note-id]").count();
+        await chipA.click();
+        const bar = branchPage.locator('[data-ltm-branch-filter="branch-a"]');
+        await bar.waitFor({ timeout: 5_000 });
+        assert.match(await bar.innerText(), /Showing memories from branch Branch A/u);
+        await branchPage.waitForFunction(() => document.activeElement?.closest("[data-ltm-branch-filter]"));
+        assert.deepEqual(
+          await branchPage
+            .locator("[data-ltm-note-id]")
+            .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-ltm-note-id"))),
+          [inheritedIds["branch-a"]],
+          "only that branch's memories",
+        );
+        await bar.getByRole("button", { name: "Show all", exact: true }).click();
+        await bar.waitFor({ state: "detached", timeout: 5_000 });
+        await branchPage.waitForFunction(() =>
+          document.activeElement?.matches('[data-ltm-row-from-branch="branch-a"]'),
+        );
+        assert.equal(await branchPage.locator("[data-ltm-note-id]").count(), allRows, "Show all restores the list");
+        await branchPage.close();
+      }
+      // Item 9: Activity is its own page in the memory workspace, with its "Record recall explanations" switch on it.
+      {
+        const activityPage = await browserContext.newPage();
+        await activityPage.setViewportSize({ width: 1280, height: 900 });
+        const recordWrites: unknown[] = [];
+        const activityAttemptId = "recall";
+        let recordDebug = false;
+        await activityPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (route.request().method() === "PUT") {
+            const body = route.request().postDataJSON() as { longTermMemoryDebug: boolean };
+            recordWrites.push(body);
+            recordDebug = body.longTermMemoryDebug;
+            return route.fulfill({ json: body });
+          }
+          if (route.request().method() !== "GET") return route.continue();
+          const response = await route.fetch();
+          return route.fulfill({ response, json: { ...(await response.json()), longTermMemoryDebug: recordDebug } });
+        });
+        await activityPage.route("**/api/long-term-memory/debug-log?*", (route) => {
+          const query = new URL(route.request().url()).searchParams;
+          if (query.has("phase")) return route.fulfill({ json: { events: [] } });
+          const operationId = query.get("operationId");
+          return route.fulfill({
+            json: {
+              events: debugEvents.filter(
+                (event) => !operationId || (event as { operationId?: string }).operationId === operationId,
+              ),
+            },
+          });
+        });
+        await activityPage.route("**/api/long-term-memory/last-injection/**", (route) =>
+          route.fulfill({
+            json: {
+              memoryCount: 1,
+              tokenCount: 42,
+              memories: [{ noteId: "world_legacy_global", title: "Legacy global memory", tokenCount: 42 }],
+              state: "injected",
+              dispatchedAt: "2026-07-30T00:00:00.000Z",
+              attempt: {
+                version: 1,
+                chatId: "chat-artifact",
+                attemptId: activityAttemptId,
+                at: "2026-07-30T00:00:00.000Z",
+                outcome: "completed",
+                debugEnabled: true,
+                confirmed: true,
+              },
+            },
+          }),
+        );
+        await activityPage.goto(`http://127.0.0.1:${address.port}/`);
+        await activityPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await activityPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        const destinationIds = (navigation: "desktop" | "mobile") =>
+          activityPage
+            .locator(`[data-ltm-navigation="${navigation}"] [data-ltm-destination]`)
+            .evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("data-ltm-destination")));
+        const fiveDestinations = ["vault", "review", "sources", "activity", "settings"];
+        assert.deepEqual(
+          await destinationIds("desktop"),
+          fiveDestinations,
+          "desktop navigation lists five destinations",
+        );
+        assert.deepEqual(await destinationIds("mobile"), fiveDestinations, "mobile navigation lists five destinations");
+        // The five-tab rail fits a 390px phone with no horizontal scroll and 44px tabs.
+        await activityPage.setViewportSize({ width: 390, height: 844 });
+        assert.deepEqual(
+          await activityPage.evaluate(() => {
+            const tabs = [...document.querySelectorAll('[data-ltm-navigation="mobile"] [data-ltm-destination]')];
+            const rail = document.querySelector('[data-ltm-navigation="mobile"]')!;
+            return {
+              pageFits: document.documentElement.scrollWidth <= window.innerWidth,
+              railFits: rail.scrollWidth <= rail.clientWidth + 1,
+              tabs: tabs.length,
+              tallEnough: Math.min(...tabs.map((tab) => tab.getBoundingClientRect().height)) >= 43.5,
+            };
+          }),
+          { pageFits: true, railFits: true, tabs: 5, tallEnough: true },
+          "the five-tab mobile rail fits 390px",
+        );
+        await activityPage.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="activity"]').click();
+        await activityPage.locator('[data-ltm-surface="activity"]').waitFor();
+        assert.equal(
+          await activityPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          true,
+          "Activity has no horizontal scroll at 390px",
+        );
+        await activityPage.setViewportSize({ width: 1280, height: 900 });
+        // Activity shows the log with the record switch above it, and the switch saves on its own.
+        const recordRow = activityPage.locator("[data-ltm-activity-record]");
+        await recordRow.waitFor();
+        await activityPage.locator('[data-ltm-surface="activity"] [data-ltm-debug-operation]').first().waitFor();
+        const recordSwitch = recordRow.getByLabel("Record recall explanations");
+        assert.equal(await recordSwitch.isChecked(), false);
+        assert.equal(
+          await activityPage.getByText("Settings →", { exact: false }).count(),
+          0,
+          "the switch hint carries no path copy",
+        );
+        await recordSwitch.click();
+        // Settled: the save finished (no aria-disabled) and the refetch shows the saved value.
+        await activityPage.waitForFunction(() => {
+          const input = document.querySelector<HTMLInputElement>("[data-ltm-activity-record] input");
+          return input?.checked === true && !input.hasAttribute("aria-disabled");
+        });
+        assert.deepEqual(recordWrites, [{ longTermMemoryDebug: true }], "one PUT, no Save");
+        assert.equal(
+          await activityPage.getByRole("button", { name: "Save settings" }).count(),
+          0,
+          "the switch needs no Save",
+        );
+        // Settings has no record switch under Recall, and Troubleshooting has no activity log.
+        await activityPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        await activityPage.locator('[data-ltm-surface="memory-settings"]').waitFor();
+        await activityPage.locator("#settings-tab-recall").click();
+        await openRecallAdvanced(activityPage);
+        assert.equal(await activityPage.getByText("Record recall explanations", { exact: true }).count(), 0);
+        await openTroubleshooting(activityPage);
+        assert.equal(await activityPage.locator("[data-ltm-activity-log]").count(), 0);
+        // The Activity page's Recall settings link opens Settings on the Recall tab.
+        await openActivityLog(activityPage);
+        await activityPage.locator('[data-ltm-debug-operation="recall-rejected"]').click();
+        await activityPage.getByRole("button", { name: "Open Recall settings" }).click();
+        await activityPage.locator("#settings-panel-recall").waitFor();
+        assert.equal(
+          await activityPage.locator("#settings-tab-recall").getAttribute("aria-selected"),
+          "true",
+          "Recall settings opens the Recall tab",
+        );
+        // Chat drawer: the card's Open lands on the Memory Vault.
+        await activityPage.evaluate(`(() => {
+          document.body.replaceChildren();
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "settings");
+          element.capabilityProps = {
+            chatId: "chat-artifact",
+            onChatSettingsChange: () => {},
+            onOpenAgentSettings: () => {
+              const detail = document.createElement("marinara-capability-long-term-memory");
+              detail.setAttribute("view", "detail");
+              detail.capabilityProps = { chatId: "chat-artifact", confirmAction: () => true };
+              document.body.replaceChildren(detail);
+            },
+          };
+          document.body.append(element);
+        })()`);
+        // The card's Open lands on the Memory Vault.
+        await activityPage.locator("[data-ltm-last-injection] [data-ltm-card-open]").click();
+        await activityPage.locator('[data-ltm-surface="vault"]').first().waitFor({ timeout: 5_000 });
+        await activityPage.close();
+      }
+      // Item 10: "What model to use?" is a stacked list on a phone (labelled stars, no sideways scroll) and the same
+      // table at 640px and up.
+      {
+        const modelPage = await browserContext.newPage();
+        await modelPage.setViewportSize({ width: 390, height: 844 });
+        await modelPage.goto(`http://127.0.0.1:${address.port}/`);
+        await modelPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await modelPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await modelPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        await modelPage.locator("#settings-tab-extraction").click();
+        await modelPage.locator("[data-ltm-what-model-button]").click();
+        const dialog = modelPage.locator("[data-ltm-what-model-dialog]");
+        await dialog.waitFor();
+        const panel = dialog.locator("section").first();
+        const fits = (tab: string) =>
+          modelPage.evaluate((name) => {
+            const panelBox = document.querySelector("[data-ltm-what-model-dialog] section")!.getBoundingClientRect();
+            const scope = document.querySelector(`[data-ltm-what-model-panel="${name}"]`)!;
+            const table = scope.querySelector<HTMLElement>("[data-ltm-what-model-table]")!;
+            const wrapper = table.parentElement!;
+            const section = document.querySelector<HTMLElement>("[data-ltm-what-model-dialog] section")!;
+            const row = scope.querySelector<HTMLElement>("[data-ltm-what-model-row]")!;
+            const why = row.lastElementChild!.getBoundingClientRect();
+            const labels = [...row.querySelectorAll<HTMLElement>("[data-ltm-what-model-score-label]")];
+            const other = scope.querySelector<HTMLElement>("[data-ltm-what-model-other]")!;
+            return {
+              panelFits: section.scrollWidth <= section.clientWidth + 1,
+              wrapperFits: wrapper.scrollWidth <= wrapper.clientWidth + 1,
+              tableFits: table.getBoundingClientRect().right <= panelBox.right + 1,
+              whyInside: why.right <= panelBox.right && why.width > 0,
+              theadShown: getComputedStyle(scope.querySelector("thead")!).display !== "none",
+              labels: labels.map((label) => ({
+                text: label.textContent?.trim(),
+                shown: getComputedStyle(label).display !== "none",
+              })),
+              otherStacked:
+                other.querySelector("th")!.getBoundingClientRect().bottom <=
+                other.querySelector("td:last-child")!.getBoundingClientRect().top + 1,
+              pageFits: document.documentElement.scrollWidth <= window.innerWidth,
+            };
+          }, tab);
+        assert.deepEqual(
+          await fits("hosted"),
+          {
+            panelFits: true,
+            wrapperFits: true,
+            tableFits: true,
+            whyInside: true,
+            theadShown: false,
+            labels: [
+              { text: "Quality", shown: true },
+              { text: "Speed", shown: true },
+              { text: "Low cost", shown: true },
+            ],
+            otherStacked: true,
+            pageFits: true,
+          },
+          "hosted ranking is a stacked list at 390px",
+        );
+        const firstRow = dialog.locator('[data-ltm-what-model-panel="hosted"] [data-ltm-what-model-row]').first();
+        const stackBox = await firstRow.evaluate((row) => {
+          const [rank, name, ...rest] = [...row.children].map((cell) => cell.getBoundingClientRect());
+          const scores = rest.slice(0, -1);
+          const why = rest.at(-1)!;
+          return {
+            nameBesideRank: Math.abs(name!.top - rank!.top) < 8,
+            scoresBelowName: scores.every((score) => score.top >= name!.bottom - 1),
+            // At 390px the three labelled scores share one line, left to right.
+            scoresShareALine: scores.every(
+              (score, index) =>
+                index === 0 || (Math.abs(score.top - scores[0]!.top) < 4 && score.left >= scores[index - 1]!.right - 1),
+            ),
+            whyBelowScores: why.top >= Math.max(...scores.map((score) => score.bottom)) - 1,
+            whyIndented: why.left >= name!.left - 1,
+          };
+        });
+        assert.deepEqual(
+          stackBox,
+          {
+            nameBesideRank: true,
+            scoresBelowName: true,
+            scoresShareALine: true,
+            whyBelowScores: true,
+            whyIndented: true,
+          },
+          "a model reads rank + name, scores on one line, then why",
+        );
+        // The screen reader still hears the score's number after its label.
+        assert.match(
+          (await firstRow.locator("[data-ltm-what-model-score]").first().innerText()) +
+            (await firstRow.locator("[data-ltm-what-model-score] .sr-only").first().textContent()),
+          /Quality[\s\S]*8 out of 10/u,
+        );
+        // The panel is solid: the settings page behind it does not show through.
+        assert.equal(
+          await dialog.evaluate((element) => {
+            const color = getComputedStyle(element.querySelector("section")!).backgroundColor;
+            const alpha = /rgba?\([^)]*?,\s*([\d.]+)\)$/u.exec(color)?.[1];
+            return color.startsWith("rgb(") || (alpha !== undefined && Number(alpha) === 1);
+          }),
+          true,
+          "the dialog panel has an opaque background",
+        );
+        // The first row keeps its tint and the rows keep their borders.
+        assert.notEqual(await firstRow.evaluate((row) => getComputedStyle(row).backgroundColor), "rgba(0, 0, 0, 0)");
+        assert.notEqual(await firstRow.evaluate((row) => getComputedStyle(row).borderBottomWidth), "0px");
+        // The tab rail and Close stay 44px tall inside the panel.
+        assert.equal(
+          await dialog.evaluate((element) =>
+            [...element.querySelectorAll("[data-ltm-what-model-tab], [data-ltm-what-model-close]")].every(
+              (control) =>
+                control.getBoundingClientRect().height >= 43.5 &&
+                control.getBoundingClientRect().right <=
+                  element.querySelector("section")!.getBoundingClientRect().right,
+            ),
+          ),
+          true,
+          "tabs and Close are 44px tall and inside the panel",
+        );
+        if (visualOutputDir)
+          await modelPage.screenshot({ path: join(visualOutputDir, "long-term-memory-what-model-mobile.png") });
+        await dialog.locator('[data-ltm-what-model-tab="selfHost"]').click();
+        const selfHost = await fits("selfHost");
+        assert.deepEqual(
+          selfHost,
+          {
+            panelFits: true,
+            wrapperFits: true,
+            tableFits: true,
+            whyInside: true,
+            theadShown: false,
+            labels: [{ text: "Quality", shown: true }],
+            otherStacked: true,
+            pageFits: true,
+          },
+          "self-host ranking is a stacked list at 390px with Quality only",
+        );
+        assert.ok((await panel.boundingBox())!.width <= 390);
+        // 640px and up: the same table as before, header visible and the score labels hidden.
+        await modelPage.setViewportSize({ width: 1280, height: 900 });
+        const wide = await modelPage.evaluate(() => {
+          const scope = document.querySelector('[data-ltm-what-model-panel="hosted"]')!;
+          const table = scope.querySelector<HTMLElement>("[data-ltm-what-model-table]")!;
+          return {
+            theadShown: getComputedStyle(scope.querySelector("thead")!).display !== "none",
+            labelsHidden: [...scope.querySelectorAll("[data-ltm-what-model-score-label]")].every(
+              (label) => getComputedStyle(label).display === "none",
+            ),
+            tableDisplay: getComputedStyle(table).display,
+            minWidth:
+              getComputedStyle(table).minWidth ===
+              `${parseFloat(getComputedStyle(document.documentElement).fontSize) * 40}px`,
+          };
+        });
+        assert.deepEqual(
+          wide,
+          { theadShown: true, labelsHidden: true, tableDisplay: "table", minWidth: true },
+          "the wide table is unchanged",
+        );
+        await modelPage.close();
+      }
+      // #1659 / S-6: a form saved as Custom names the preset its weights are closest to, so Reset to preset after Save
+      // agrees with a reload and a tweaked Story stays Story.
       {
         const savePage = await browserContext.newPage();
         await savePage.setViewportSize({ width: 1280, height: 900 });
@@ -5338,62 +7465,317 @@ async function main() {
         await savePage.locator('[data-ltm-destination="settings"]:visible').first().click();
         const recall = savePage.locator("#settings-panel-recall");
         const style = recall.getByLabel("Recall style", { exact: true });
-        await style.selectOption("exact");
-        await recall.getByLabel("Meaning match", { exact: true }).fill("0.91");
-        await recall.getByLabel("Meaning match", { exact: true }).press("Enter");
-        await recall.getByText("Reset to preset returns to Exact.", { exact: false }).waitFor();
+        await style.selectOption("story");
+        await style.selectOption("custom");
+        // Weights are sliders, which Playwright cannot fill: set the value the way a drag does.
+        await recall.getByLabel("Meaning match", { exact: true }).evaluate((input, next) => {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, next);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }, "0.91");
+        await recall.getByText("Reset to preset returns to Story.", { exact: false }).waitFor();
         await savePage.getByRole("button", { name: "Save settings" }).click();
-        await savePage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
+        await savePage.locator('[data-ltm-save-state="saved"]').waitFor({ timeout: 5_000 });
         assert.equal(await style.inputValue(), "custom", "the saved form stays Custom");
-        await recall.getByText("Reset to preset returns to Balanced.", { exact: false }).waitFor();
+        // S-6: a saved Custom form names the preset its weights are closest to, so a Story tweak still resets to
+        // Story after Save (and after a reload, which reads the same weights).
+        await recall.getByText("Reset to preset returns to Story.", { exact: false }).waitFor();
+        await savePage.waitForTimeout(250); // the restart effect runs after the save commits
+        // The note was already there before Save, so prove the behaviour: the button restores Story's weights.
+        await recall.getByRole("button", { name: "Reset to preset" }).click();
+        assert.equal(await style.inputValue(), "story", "Reset to preset after Save returns to Story");
+        await savePage.close();
+      }
+      // soup/settings-sharing: one row per Agent. Add Agent adds a row that can read but not add, toggling one
+      // Agent's Can add leaves the others, the save writes only the per-Agent map, and turning on Slurp's add
+      // asks about the matching switch in Slurp right away, applying a yes only once Save succeeds.
+      {
+        const sharingPage = await browserContext.newPage();
+        await sharingPage.setViewportSize({ width: 1280, height: 900 });
+        const settingsWrites: Record<string, unknown>[] = [];
+        const slurpPatches: unknown[] = [];
+        await sharingPage.route("**/api/long-term-memory/settings", (route) => {
+          if (route.request().method() !== "PUT")
+            return route.fulfill({ json: { longTermMemoryPackageAccess: { slurp2: { read: true, add: false } } } });
+          const body = route.request().postDataJSON() as Record<string, unknown>;
+          settingsWrites.push(body);
+          return route.fulfill({ json: body });
+        });
+        await sharingPage.route("**/api/long-term-memory/settings/package-readers", (route) =>
+          route.fulfill({
+            json: { readers: [{ caller: "slurp2", lastReadAt: null, reads: 3, memories: 7, added: 1 }] },
+          }),
+        );
+        await sharingPage.route("**/api/capability-packages/installed", (route) =>
+          route.fulfill({
+            json: [
+              { id: "slurp2", manifest: { name: "Slurp" } },
+              { id: "noodle", manifest: { name: "Noodle" } },
+            ],
+          }),
+        );
+        await sharingPage.route("**/api/slurp2/settings", (route) => {
+          if (route.request().method() === "PATCH") {
+            slurpPatches.push(route.request().postDataJSON());
+            return route.fulfill({ json: {} });
+          }
+          return route.fulfill({ json: { flavourFromAgents: true, shareWithMemory: false } });
+        });
+        await sharingPage.goto(`http://127.0.0.1:${address.port}/`);
+        await sharingPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await sharingPage.evaluate(`(() => {
+          window.__ltmConfirms = [];
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: (options) => { window.__ltmConfirms.push(options); return true; } };
+          document.body.append(element);
+        })()`);
+        await sharingPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        const sharing = sharingPage.locator('#settings-panel-recall [data-ltm-recall-group="sharing"]');
+        const table = sharing.getByRole("table", { name: "Agents that share memories" });
+        await table.waitFor();
+        const slurpRow = table.locator('[data-ltm-sharing-agent="slurp2"]');
+        await slurpRow.getByText("This week: read 3× · 7 returned · 1 added", { exact: true }).waitFor();
+        assert.equal(await sharing.getByText("Other Agents can read memories", { exact: true }).count(), 0);
+        assert.equal(await sharing.getByText("What other Agents read and added", { exact: true }).count(), 0);
+        const slurpAdd = table.getByRole("switch", { name: "Slurp can add memories", exact: true });
+        const confirmsReach = (count: number) =>
+          sharingPage.waitForFunction(
+            (expected) => (window as unknown as { __ltmConfirms: unknown[] }).__ltmConfirms.length === expected,
+            count,
+          );
+        const offersSoFar = () =>
+          sharingPage.evaluate(() => (window as unknown as { __ltmConfirms: Array<{ title: string }> }).__ltmConfirms);
+        // "Can add" says what it does, and the switch points at that line.
+        const hintId = await slurpAdd.getAttribute("aria-describedby");
+        assert.ok(hintId, "Can add is described by its hint");
+        assert.match(
+          await sharingPage.locator(`[id="${hintId}"]`).innerText(),
+          /Can add lets an Agent save its own memories here\.$/u,
+        );
+        // The Slurp question is asked when the switch is flipped, not at Save, and changes nothing yet.
+        await slurpAdd.check();
+        await confirmsReach(1);
+        assert.equal((await offersSoFar()).length, 1, "the Slurp question shows as the switch turns on");
+        assert.deepEqual(slurpPatches, [], "a yes applies nothing before Save");
+        // Discard after a yes applies nothing, and the next switch-on asks again.
+        await sharingPage.getByRole("button", { name: "Discard changes", exact: true }).click();
+        await confirmsReach(2);
+        await slurpAdd.waitFor();
+        assert.equal(await slurpAdd.isChecked(), false, "Discard turns the switch back off");
+        assert.deepEqual(slurpPatches, [], "Discard after a yes applies nothing");
+        assert.equal(settingsWrites.length, 0, "Discard writes no settings");
+        await sharing.getByRole("button", { name: "Add Agent", exact: true }).click();
+        await sharing.getByRole("button", { name: "Noodle", exact: true }).click();
+        const noodleRead = table.getByRole("switch", { name: "Noodle can read memories", exact: true });
+        await noodleRead.waitFor();
+        assert.equal(await noodleRead.isChecked(), true, "a new row can read");
+        assert.equal(
+          await noodleRead.evaluate((input) => getComputedStyle(input).appearance),
+          "none",
+          "sharing cells draw as switches",
+        );
+        assert.equal(
+          await noodleRead.evaluate((input) => (input.parentElement?.getBoundingClientRect().height ?? 0) >= 44),
+          true,
+          "each switch keeps a 2.75rem target",
+        );
+        assert.equal(
+          await noodleRead.evaluate((element) => element === document.activeElement),
+          true,
+          "the new row's first switch takes focus",
+        );
+        const noodleRow = table.locator('[data-ltm-sharing-agent="noodle"]');
+        assert.equal(await noodleRow.getByText("Not offered", { exact: true }).count(), 1, "Noodle cannot add");
+        await sharing.getByRole("button", { name: "Add Agent", exact: true }).click();
+        await sharing.getByText("No other installed Agent can be added.", { exact: true }).waitFor();
+        await slurpAdd.check();
+        await confirmsReach(3);
+        assert.equal((await offersSoFar()).length, 3, "turning it on again asks again (Slurp, Discard, Slurp)");
+        assert.equal(await noodleRead.isChecked(), true, "toggling Slurp's add leaves Noodle's row");
+        assert.equal(
+          await table.getByRole("switch", { name: "Slurp can read memories", exact: true }).isChecked(),
+          true,
+          "toggling Slurp's add leaves its read",
+        );
+        const slurpPatch = sharingPage.waitForRequest(
+          (request) => request.method() === "PATCH" && request.url().endsWith("/api/slurp2/settings"),
+        );
+        await sharingPage.getByRole("button", { name: "Save settings" }).click();
+        await slurpPatch;
+        assert.deepEqual(settingsWrites.at(-1)?.longTermMemoryPackageAccess, {
+          noodle: { read: true, add: false },
+          slurp2: { read: true, add: true },
+        });
+        assert.equal("longTermMemoryShareWithPackages" in (settingsWrites.at(-1) ?? {}), false);
+        assert.equal("longTermMemoryAcceptFromPackages" in (settingsWrites.at(-1) ?? {}), false);
+        // Slurp could already read, so only the add question was ever asked.
+        assert.equal((await offersSoFar()).length, 3, "Save asks nothing more");
+        assert.deepEqual(slurpPatches, [{ shareWithMemory: true }], "Save applies the yes once");
+        await sharingPage.close();
+      }
+      // soup/settings-save: one save model for both tabs. A changed select shows the unsaved cue and enables Save,
+      // "Edit instructions" opens the template its mode uses, and Duplicate selects the copy and says so.
+      {
+        const savePage = await browserContext.newPage();
+        await savePage.setViewportSize({ width: 1280, height: 900 });
+        let stored: Record<string, unknown> = {
+          promptTemplates: [
+            { id: "template_story", name: "Story beats", prompt: "Keep story beats." },
+            { id: "template_game", name: "Quest log", prompt: "Keep quests." },
+          ],
+          activePromptTemplateIdsByMode: { conversation: null, roleplay: "template_story", game: "template_game" },
+        };
+        const writes: Record<string, unknown>[] = [];
+        await savePage.route("**/api/long-term-memory/extraction-settings", (route) => {
+          if (route.request().method() !== "PUT") return route.fulfill({ json: stored });
+          const body = route.request().postDataJSON() as Record<string, unknown>;
+          writes.push(body);
+          stored = { ...stored, ...body };
+          return route.fulfill({ json: stored });
+        });
+        await savePage.goto(`http://127.0.0.1:${address.port}/`);
+        await savePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await savePage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await savePage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await savePage.locator("#settings-tab-extraction").click();
+        const extraction = savePage.locator("#settings-panel-extraction");
+        const saveState = savePage.locator("[data-ltm-save-state]");
+        const saveButton = savePage.getByRole("button", { name: "Save settings" });
+        await saveState.waitFor({ timeout: 5_000 });
+        assert.equal(await saveState.getAttribute("data-ltm-save-state"), "clean");
+        assert.equal(await saveButton.getAttribute("aria-disabled"), "true", "Save is visible but quiet when clean");
+        // The Hide switch sits right under "Memories from chats" and carries a one-line hint.
+        assert.match(
+          await extraction.getByLabel("Hide remembered messages from the AI", { exact: true }).evaluate((input) => {
+            const ids = (input.getAttribute("aria-describedby") ?? "").split(/\s+/u);
+            return ids.map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+          }),
+          /\S/u,
+          "Hide remembered messages has a live hint read with its switch",
+        );
+        // Model tuning, Finish cut-off answers, AI keywords and Game Mode sit in a closed Advanced section.
+        const extractionAdvanced = extraction.locator("[data-ltm-extraction-advanced]");
+        assert.equal(await extractionAdvanced.evaluate((node: HTMLDetailsElement) => node.open), false);
+        await openExtractionAdvanced(savePage);
+        await extractionAdvanced.getByText("Finish cut-off answers", { exact: false }).first().waitFor();
+        // Changing a dropdown marks the form unsaved at once; nothing applies silently.
+        await extraction.getByRole("combobox", { name: /Roleplay active template/u }).selectOption("");
+        await savePage.locator('[data-ltm-save-state="dirty"]').waitFor({ timeout: 5_000 });
+        assert.notEqual(
+          await saveButton.getAttribute("aria-disabled"),
+          "true",
+          "Save is enabled once anything changes",
+        );
+        assert.equal(writes.length, 0, "a dropdown never saves by itself");
+        await extraction.getByRole("combobox", { name: /Roleplay active template/u }).selectOption("template_story");
+        await savePage.locator('[data-ltm-save-state="clean"]').waitFor({ timeout: 5_000 });
+        // Edit instructions opens the template the mode actually uses.
+        const editGame = extraction.getByRole("button", { name: "Edit instructions Game" });
+        await editGame.click();
+        assert.equal(await editGame.getAttribute("aria-expanded"), "true");
+        const templateName = extraction.getByLabel("Name", { exact: true });
+        assert.equal(await templateName.inputValue(), "Quest log", "Game opens the Game template");
+        await extraction.getByRole("button", { name: "Edit instructions Roleplay" }).click();
+        assert.equal(await templateName.inputValue(), "Story beats", "Roleplay opens the Roleplay template");
+        // Duplicate selects the copy and says so.
+        await extraction.getByRole("button", { name: "Duplicate", exact: true }).click();
+        assert.match(await templateName.inputValue(), /Story beats/u, "the copy keeps the original's name");
+        assert.notEqual(await templateName.inputValue(), "Story beats", "the copy is the selected template");
+        await extraction.locator("[data-ltm-template-notice]").getByText("Now used for Roleplay").waitFor();
+        await savePage.locator('[data-ltm-save-state="dirty"]').waitFor({ timeout: 5_000 });
+        // The copy is the Roleplay template straight away; the other modes keep theirs.
+        const roleplayCopy = await templateName.inputValue();
+        const roleplaySelect = extraction.getByRole("combobox", { name: /Roleplay active template/u });
+        assert.equal(
+          await roleplaySelect.locator("option:checked").textContent(),
+          roleplayCopy,
+          "Roleplay now uses the copy",
+        );
+        assert.equal(
+          await extraction.getByRole("combobox", { name: /Game active template/u }).inputValue(),
+          "template_game",
+          "Game keeps its own template",
+        );
+        // Copy to edit on a built-in default (Conversation) is used for Conversation straight away.
+        await extraction.getByRole("button", { name: "Edit instructions Conversation" }).click();
+        await extraction.getByRole("button", { name: "Copy to edit", exact: true }).click();
+        await extraction.locator("[data-ltm-template-notice]").getByText("Now used for Conversation").waitFor();
+        assert.match(
+          (await extraction
+            .getByRole("combobox", { name: /Conversation active template/u })
+            .locator("option:checked")
+            .textContent()) ?? "",
+          /copy/u,
+          "Conversation now uses the copy of its built-in default",
+        );
+        await saveButton.click();
+        await savePage.locator('[data-ltm-save-state="saved"]').waitFor({ timeout: 5_000 });
+        assert.equal(writes.length, 1, "one Save writes every changed tab once");
+        const savedActive = writes[0]?.activePromptTemplateIdsByMode as Record<string, string | null>;
+        assert.ok(
+          savedActive.roleplay?.startsWith("template_") && savedActive.roleplay !== "template_story",
+          "Save persists the Roleplay copy as active",
+        );
+        assert.ok(savedActive.conversation?.startsWith("template_"), "Save persists the Conversation copy as active");
+        assert.equal(savedActive.game, "template_game");
+        // The header Create button has no mode once the editor is closed: the blank template stays unused.
+        await extraction.getByRole("button", { name: "Edit instructions Conversation" }).click();
+        assert.equal(await extraction.locator("[data-ltm-prompt-template-grid]").count(), 0, "the editor is closed");
+        await extraction.getByRole("button", { name: "New prompt template" }).click();
+        await extraction.locator("[data-ltm-template-notice]").getByText("Now editing", { exact: false }).waitFor();
+        // A second Create while the blank template is open still has no mode (the closed Conversation editor is not one).
+        await extraction.getByRole("button", { name: "New prompt template" }).click();
+        assert.equal(
+          await extraction.getByRole("combobox", { name: /Conversation active template/u }).inputValue(),
+          savedActive.conversation,
+          "a template made with no mode context is not made active",
+        );
+        await savePage.getByRole("button", { name: "Discard changes" }).click();
+        await savePage.locator('[data-ltm-save-state="clean"]').waitFor({ timeout: 5_000 });
+        // A typed number counts as an edit before the field blurs, and number fields are sized to their numbers.
+        const typedNumber = extraction.getByRole("spinbutton", { name: "Maximum output tokens" });
+        const saveStateOf = () => savePage.locator("[data-ltm-save-state]").getAttribute("data-ltm-save-state");
+        const startValue = await typedNumber.inputValue();
+        await typedNumber.fill("1234");
+        await savePage.locator('[data-ltm-save-state="dirty"]').waitFor({ timeout: 5_000 });
+        assert.notEqual(await saveButton.getAttribute("aria-disabled"), "true", "Save lights up while typing");
+        const numberBox = await typedNumber.boundingBox();
+        assert.ok(numberBox && numberBox.width < 192, `a number field is narrower than 12rem (${numberBox?.width})`);
+        await savePage.getByRole("button", { name: "Discard changes" }).click();
+        await savePage.locator('[data-ltm-save-state="clean"]').waitFor({ timeout: 5_000 });
+        // An out-of-range draft does not mark the form dirty; blur clamps it and then it does.
+        await typedNumber.fill("100");
+        assert.equal(await saveStateOf(), "clean", "an out-of-range draft is not an edit yet");
+        await typedNumber.blur();
+        assert.equal(await typedNumber.inputValue(), "512", "blur clamps to the minimum");
+        await savePage.locator('[data-ltm-save-state="dirty"]').waitFor({ timeout: 5_000 });
+        await savePage.getByRole("button", { name: "Discard changes" }).click();
+        await savePage.locator('[data-ltm-save-state="clean"]').waitFor({ timeout: 5_000 });
+        // Emptying a field that was live-committed goes back to the value it started from, not a typed prefix.
+        await typedNumber.fill("1000");
+        await savePage.locator('[data-ltm-save-state="dirty"]').waitFor({ timeout: 5_000 });
+        await typedNumber.fill("");
+        await typedNumber.blur();
+        assert.equal(await typedNumber.inputValue(), startValue, "an emptied field returns to its starting value");
+        await savePage.locator('[data-ltm-save-state="clean"]').waitFor({ timeout: 5_000 });
+        const memoriesFromChats = await extraction.locator('[data-ltm-chat-memories="global"]').boundingBox();
+        assert.ok(
+          memoriesFromChats && memoriesFromChats.width <= 384.5,
+          `a Memory Settings dropdown stops at 24rem (${memoriesFromChats?.width})`,
+        );
         await savePage.close();
       }
       // #1659: success text reads at 4.5:1 in both themes and carries a check icon, an unsaved tab shows a dot,
-      // Save stays reachable while the form scrolls, and an identity repair names the backup it made.
+      // and Save stays reachable while the form scrolls.
       {
         const critiquePage = await browserContext.newPage();
         await critiquePage.setViewportSize({ width: 1280, height: 520 });
-        const candidateId = "a".repeat(64);
-        const repairNote = (noteId: string, title: string) => ({
-          noteId,
-          title,
-          basis: "exact_name",
-          alreadyBound: false,
-          exactFullName: true,
-          createdAt: "2026-01-01T00:00:00.000Z",
-        });
-        const repairPreview = {
-          generatedAt: "2026-01-01T00:00:00.000Z",
-          scope: { kind: "global" },
-          counts: { analyzedNotes: 2, candidateCount: 1, bindableNotes: 2, duplicateNotes: 1, unresolvedNotes: 0 },
-          candidates: [
-            {
-              id: candidateId,
-              subjectNames: ["Mira"],
-              noteType: "character",
-              matchBasis: ["exact_name"],
-              blockingReasons: [],
-              notes: [repairNote("note-canonical", "Mira"), repairNote("note-duplicate", "Mira (copy)")],
-              canonicalNoteId: "note-canonical",
-              duplicateNoteIds: ["note-duplicate"],
-              additiveContent: [],
-              supersedingConflicts: [],
-            },
-          ],
-          unresolved: [],
-        };
-        await critiquePage.route("**/api/long-term-memory/identity-repair/preview", (route) =>
-          route.fulfill({ json: repairPreview }),
-        );
-        await critiquePage.route("**/api/long-term-memory/identity-repair/apply", (route) =>
-          route.fulfill({
-            json: {
-              repairedAt: "2026-01-01T00:00:00.000Z",
-              backup: { id: "0123abcd-4567-89ef-0123-456789abcdef", createdAt: "2026-01-01T00:00:00.000Z" },
-              repairs: [{ candidateId }],
-            },
-          }),
-        );
         await critiquePage.goto(`http://127.0.0.1:${address.port}/`);
         await critiquePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
         await critiquePage.evaluate(`(() => {
@@ -5436,13 +7818,7 @@ async function main() {
             const [light, dark] = [luminance(text), luminance(background)].sort((a, b) => b - a);
             return (light + 0.05) / (dark + 0.05);
           })()`) as Promise<number>;
-        const maintenance = critiquePage.locator("#settings-panel-maintenance");
-        await critiquePage.locator("#settings-tab-maintenance").click();
-        const integrityOk = maintenance
-          .locator('[data-ltm-status="success"]')
-          .filter({ hasText: "Integrity check passed" });
-        await integrityOk.waitFor();
-        assert.equal(await integrityOk.locator("[data-ltm-status-icon]").count(), 1, "success carries a check icon");
+        // The integrity result moved to the Vault (soup/vault-fix-bar), so Settings has no success line to sample.
         for (const theme of ["light", "dark"]) {
           await critiquePage.evaluate((value) => {
             document.documentElement.dataset.theme = value;
@@ -5452,9 +7828,8 @@ async function main() {
             "Promise.all(document.getAnimations().filter((animation) => animation.effect.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished))",
           );
           const ratios = {
-            success: await contrastOf('#settings-panel-maintenance [data-ltm-status="success"]'),
-            selectedTab: await contrastOf('#settings-tab-maintenance[data-active="true"]'),
-            inactiveTab: await contrastOf('#settings-tab-recall[data-active="false"]'),
+            selectedTab: await contrastOf('#settings-tab-recall[data-active="true"]'),
+            inactiveTab: await contrastOf('#settings-tab-extraction[data-active="false"]'),
           };
           for (const [name, ratio] of Object.entries(ratios)) {
             assert.equal(
@@ -5464,23 +7839,15 @@ async function main() {
             );
           }
         }
-        // The identity repair says which backup it made.
-        await maintenance.getByRole("button", { name: "Preview identity repairs" }).click();
-        await maintenance.getByRole("button", { name: /Apply selected repairs/u }).click();
-        const repairResult = maintenance.locator('[data-ltm-maintenance-result="identity"]');
-        await repairResult.waitFor();
-        assert.match(
-          await repairResult.innerText(),
-          /Applied 1 identity repair\(s\)\. Backup 0123abcd was saved first/u,
-        );
         // Unsaved edits: a dot on the tab that holds them, Save and Discard sticky while the form scrolls.
         await critiquePage.locator("#settings-tab-recall").click();
         const recallTab = critiquePage.locator("#settings-tab-recall");
         assert.equal(await critiquePage.locator("[data-ltm-tab-dirty]").count(), 0, "a clean form shows no dot");
-        const chunks = critiquePage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
-        const chunksBefore = Number(await chunks.inputValue());
-        await chunks.fill(String(chunksBefore === 37 ? 38 : 37));
-        await chunks.blur();
+        await openRecallAdvanced(critiquePage);
+        const budget = critiquePage.getByRole("spinbutton", { name: "Memory budget", exact: true });
+        const budgetBefore = Number(await budget.inputValue());
+        await budget.fill(String(budgetBefore === 2048 ? 2176 : 2048));
+        await budget.blur();
         await critiquePage.getByRole("button", { name: "Save settings" }).waitFor();
         assert.equal(await recallTab.locator("[data-ltm-tab-dirty]").count(), 1, "the Recall tab shows the dot");
         assert.equal(await critiquePage.locator("#settings-tab-extraction [data-ltm-tab-dirty]").count(), 0);
@@ -5493,7 +7860,7 @@ async function main() {
         await critiquePage.addStyleTag({ content: ".mari-editor-content { max-height: 520px; }" });
         await critiquePage
           .locator("#settings-panel-recall")
-          .getByText("Memory context instructions", { exact: false })
+          .getByText("Intro to memories", { exact: false })
           .first()
           .scrollIntoViewIfNeeded();
         assert.deepEqual(
@@ -5515,10 +7882,46 @@ async function main() {
         assert.equal(await critiquePage.locator("[data-ltm-tab-dirty]").count(), 0, "Discard clears the dot");
         await critiquePage.close();
       }
-      // Maintenance strings that depend on a count or a list: the One and Other plural forms in the apply
-      // confirmation, and the Intl.ListFormat joins for subject names and match bases (render-level proof).
+      // Troubleshooting results are toasts, announced once by the host; the panel has no live regions of its own.
       {
         const pluralPage = await browserContext.newPage();
+        await pluralPage.goto(`http://127.0.0.1:${address.port}/`);
+        await pluralPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await pluralPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = {
+            confirmAction: (options) => {
+              window.__ltmConfirms = [...(window.__ltmConfirms ?? []), options];
+              return false;
+            },
+          };
+          document.body.append(element);
+        })()`);
+        await pluralPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await openTroubleshooting(pluralPage);
+        const maintenance = pluralPage.locator("#settings-panel-troubleshooting");
+        // A finished run is an Engine toast, which the host announces once; the panel mounts no status copy of its
+        // own before, during or after the run.
+        await maintenance.getByRole("button", { name: "Delete all data" }).click();
+        await pluralPage.route("**/api/long-term-memory/backup/export", (route) => route.fulfill({ json: {} }));
+        const maintenanceLiveCopy = () =>
+          maintenance.evaluate((panel) =>
+            [...panel.querySelectorAll('p[role="status"].sr-only, [aria-live]')].map((node) => node.textContent ?? ""),
+          );
+        assert.deepEqual(await maintenanceLiveCopy(), [], "no status copy is mounted before a run");
+        await maintenance.getByRole("button", { name: "Export a backup first" }).click();
+        const exportedToast = toastWith(pluralPage, "Memory backup exported.");
+        await exportedToast.waitFor();
+        assert.equal(await exportedToast.getAttribute("data-type"), "success");
+        assert.deepEqual(await maintenanceLiveCopy(), [], "the panel does not announce the export a second time");
+        await pluralPage.close();
+      }
+      // soup/review-identity: duplicate people show in Review as "same person · Merge / Keep both"; Merge and
+      // "Preview identity repairs" open the real repair preview and the apply confirmation, with the One and Other
+      // plural forms and the Intl.ListFormat joins (render-level proof). Keep both is a per-device choice.
+      {
+        const identityPage = await browserContext.newPage();
         const repairNote = (noteId: string, title: string) => ({
           noteId,
           title,
@@ -5543,7 +7946,8 @@ async function main() {
           supersedingConflicts: [],
         });
         let previewCandidates = [candidate("a", ["Mira"], ["exact_name"], ["a-copy"])];
-        await pluralPage.route("**/api/long-term-memory/identity-repair/preview", (route) =>
+        const applyBodies: Array<{ repairs: Array<{ candidateId: string; canonicalNoteId: string }> }> = [];
+        await identityPage.route("**/api/long-term-memory/identity-repair/preview", (route) =>
           route.fulfill({
             json: {
               generatedAt: "2026-01-01T00:00:00.000Z",
@@ -5560,72 +7964,62 @@ async function main() {
             },
           }),
         );
-        await pluralPage.goto(`http://127.0.0.1:${address.port}/`);
-        await pluralPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
-        await pluralPage.evaluate(`(() => {
-          const element = document.createElement("marinara-capability-long-term-memory");
-          element.setAttribute("view", "detail");
-          element.capabilityProps = {
-            confirmAction: (options) => {
-              window.__ltmConfirms = [...(window.__ltmConfirms ?? []), options];
-              return false;
+        await identityPage.route("**/api/long-term-memory/identity-repair/apply", (route) => {
+          const body = route.request().postDataJSON();
+          applyBodies.push(body);
+          return route.fulfill({
+            json: {
+              repairedAt: "2026-01-01T00:00:00.000Z",
+              backup: { id: "0123abcd-4567-89ef-0123-456789abcdef", createdAt: "2026-01-01T00:00:00.000Z" },
+              repairs: body.repairs.map((repair: { candidateId: string }) => ({ candidateId: repair.candidateId })),
             },
-          };
-          document.body.append(element);
-        })()`);
-        await pluralPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
-        await pluralPage.locator("#settings-tab-maintenance").click();
-        const maintenance = pluralPage.locator("#settings-panel-maintenance");
+          });
+        });
+        const openReview = async () => {
+          await identityPage.goto(`http://127.0.0.1:${address.port}/`);
+          await identityPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+          await identityPage.evaluate(`(() => {
+            const element = document.createElement("marinara-capability-long-term-memory");
+            element.setAttribute("view", "detail");
+            element.capabilityProps = {
+              confirmAction: (options) => {
+                window.__ltmConfirms = [...(window.__ltmConfirms ?? []), options];
+                return window.__ltmConfirmAnswer === true;
+              },
+            };
+            document.body.append(element);
+          })()`);
+          await identityPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+        };
         const confirmCount = () =>
-          pluralPage.evaluate(() => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0);
+          identityPage.evaluate(() => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0);
         const lastConfirm = () =>
-          pluralPage.evaluate(() =>
+          identityPage.evaluate(() =>
             (
               window as unknown as { __ltmConfirms: Array<{ message?: string; confirmLabel?: string }> }
             ).__ltmConfirms.at(-1)!,
           );
-        // The hidden status copy of every result area is mounted and empty before a run, and the backup area's
-        // is the same node afterwards, now carrying the result (one utterance per run).
-        await pluralPage.route("**/api/long-term-memory/backup/export", (route) => route.fulfill({ json: {} }));
-        const maintenanceLiveCopy = () =>
-          maintenance.evaluate((panel) =>
-            [...panel.querySelectorAll('p[role="status"].sr-only')].map((node) => ({
-              marked: node.hasAttribute("data-ltm-test-mounted"),
-              text: node.textContent ?? "",
-            })),
-          );
-        const mountedLiveCopy = await maintenanceLiveCopy();
-        assert.ok(mountedLiveCopy.length >= 4, "every result area mounts its status copy");
-        assert.deepEqual(
-          mountedLiveCopy.filter((node) => node.text !== ""),
-          [],
+        await openReview();
+        await identityPage.evaluate(() => window.localStorage.removeItem("ltm-identity-keep-both"));
+        // The pair is one row with a name, what it is, how many memories, and two choices.
+        const identityRow = identityPage.locator("[data-ltm-identity-row]");
+        await identityRow.waitFor();
+        const rowText = (await identityRow.innerText()).replace(/\s+/gu, " ");
+        assert.match(rowText, /Mira/u);
+        assert.match(rowText, /Character · 2 memories/iu);
+        assert.equal(await identityRow.getByRole("button", { name: "Merge", exact: true }).count(), 1);
+        assert.equal(await identityRow.getByRole("button", { name: "Keep both", exact: true }).count(), 1);
+        assert.match(await identityPage.locator("[data-ltm-identity-item]").innerText(), /Same person\? \(1\)/u);
+        assert.match(
+          await identityPage.locator("[data-ltm-identity-item]").innerText(),
+          /Keep both hides a pair on this device only\./u,
         );
-        await maintenance.evaluate((panel) => {
-          for (const node of panel.querySelectorAll('p[role="status"].sr-only')) {
-            node.setAttribute("data-ltm-test-mounted", "");
-          }
-        });
-        await maintenance.getByRole("button", { name: "Export backup" }).click();
-        await pluralPage.waitForFunction(() =>
-          [...document.querySelectorAll('#settings-panel-maintenance p[role="status"].sr-only')].some(
-            (node) => node.textContent === "Memory backup exported.",
-          ),
-        );
-        const announced = await maintenanceLiveCopy();
-        assert.equal(announced.length, mountedLiveCopy.length, "no status copy was added or removed");
-        assert.deepEqual(
-          announced.filter((node) => node.text !== ""),
-          [{ marked: true, text: "Memory backup exported." }],
-        );
-        assert.equal(
-          announced.every((node) => node.marked),
-          true,
-          "the announcing node is the one mounted before",
-        );
-        // One: a single repair with a single duplicate.
-        await maintenance.getByRole("button", { name: "Preview identity repairs" }).click();
-        await maintenance.getByRole("button", { name: /Apply selected repairs/u }).click();
-        await pluralPage.waitForFunction(
+        // One: Merge opens the real preview for that pair and asks before archiving anything.
+        await identityRow.getByRole("button", { name: "Merge", exact: true }).click();
+        const identityPreview = identityPage.locator("[data-ltm-identity-preview]");
+        await identityPreview.waitFor();
+        await identityPage.getByRole("button", { name: /Apply selected repairs/u }).click();
+        await identityPage.waitForFunction(
           () => ((window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0) === 1,
         );
         assert.deepEqual(await lastConfirm(), {
@@ -5635,23 +8029,50 @@ async function main() {
           confirmLabel: "Apply 1 repair",
           tone: "destructive",
         });
-        // Other: two repairs, three duplicates, and lists of three names and two match bases.
+        assert.equal(applyBodies.length, 0, "declining the confirmation applies nothing");
+        // Confirming merges, says a backup was saved, and never names a folder.
+        await identityPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmAnswer?: boolean }).__ltmConfirmAnswer = true;
+        });
+        previewCandidates = [];
+        await identityPage.getByRole("button", { name: /Apply selected repairs/u }).click();
+        const identityResult = toastWith(identityPage, /Merged 1 duplicate person\. A backup was saved first\./u);
+        await identityResult.waitFor({ timeout: 5000 });
+        assert.doesNotMatch(await identityResult.innerText(), /folder|path|\//iu);
+        assert.equal(await identityPage.locator("[data-ltm-identity-result]").count(), 0, "no inline result remains");
+        assert.equal(applyBodies.length, 1);
+        assert.deepEqual(
+          applyBodies[0]!.repairs.map((repair) => [repair.candidateId, repair.canonicalNoteId]),
+          [["a".repeat(64), "a-canonical"]],
+        );
+        await identityPage.waitForFunction(() => document.querySelectorAll("[data-ltm-identity-row]").length === 0);
+        assert.equal(await identityRow.count(), 0, "a merged pair is no longer offered");
+        // The merged pair unmounts this item with its Preview button, so focus falls back to the review queue itself
+        // (the one named target), never to <body> or an arbitrary button.
+        await identityPage.waitForFunction(
+          () => document.activeElement?.matches('[data-ltm-surface="review-queue"]') ?? false,
+        );
+        // Other: two pairs, three duplicates, lists of three names and two match bases; Keep both hides one pair.
         previewCandidates = [
           candidate("a", ["Mira", "Mirabel", "Mimi"], ["exact_name", "unique_alias"], ["a-copy"]),
           candidate("b", ["Sol"], ["exact_name"], ["b-copy", "b-copy-two"]),
         ];
-        await maintenance.getByRole("button", { name: "Preview identity repairs" }).click();
-        const firstCandidate = maintenance.locator("label", { hasText: "Mira, Mirabel, and Mimi" });
+        await openReview();
+        await identityRow.nth(1).waitFor();
+        assert.equal(await identityRow.count(), 2);
+        await identityPage.getByRole("button", { name: "Preview identity repairs" }).click();
+        const firstCandidate = identityPreview.locator("label", { hasText: "Mira, Mirabel, and Mimi" });
         await firstCandidate.waitFor();
         assert.match(
           (await firstCandidate.innerText()).replace(/\s+/gu, " "),
           /Mira, Mirabel, and Mimi .*match via exact name, unique alias\./u,
         );
-        await maintenance.getByRole("button", { name: /Apply selected repairs/u }).click();
-        await pluralPage.waitForFunction(
-          () => ((window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0) === 2,
+        const confirmsBefore = await confirmCount();
+        await identityPage.getByRole("button", { name: /Apply selected repairs/u }).click();
+        await identityPage.waitForFunction(
+          (before) => ((window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0) > before,
+          confirmsBefore,
         );
-        assert.equal(await confirmCount(), 2);
         assert.deepEqual(await lastConfirm(), {
           title: "Apply identity repairs?",
           message:
@@ -5659,34 +8080,110 @@ async function main() {
           confirmLabel: "Apply 2 repairs",
           tone: "destructive",
         });
-        await pluralPage.close();
+        await identityPage.getByRole("button", { name: "Cancel", exact: true }).click();
+        await identityPreview.waitFor({ state: "detached" });
+        await identityRow.first().getByRole("button", { name: "Keep both", exact: true }).click();
+        await identityPage.waitForFunction(() => document.querySelectorAll("[data-ltm-identity-row]").length === 1);
+        await identityPage.waitForFunction(
+          (id) =>
+            document.activeElement?.closest("[data-ltm-identity-row]")?.getAttribute("data-ltm-identity-row") === id,
+          "b".repeat(64),
+        );
+        await openReview();
+        await identityRow.first().waitFor();
+        assert.equal(await identityRow.count(), 1, "Keep both is remembered after Review reopens");
+        assert.equal(await identityRow.first().getAttribute("data-ltm-identity-row"), "b".repeat(64));
+        // Keep both on the last row leaves no row, but the preview stays reachable and lists every pair.
+        await identityRow.first().getByRole("button", { name: "Keep both", exact: true }).click();
+        await identityPage.waitForFunction(() => document.querySelectorAll("[data-ltm-identity-row]").length === 0);
+        assert.doesNotMatch(await identityPage.locator("[data-ltm-identity-item]").innerText(), /\(\d+\)/u);
+        await identityPage.getByRole("button", { name: "Preview identity repairs" }).click();
+        await identityPreview.waitFor();
+        assert.equal(await identityPreview.locator(":scope > div").count(), 2, "kept pairs are still previewable");
+        // A candidate with nothing to archive (a bind-only repair) has no row, yet the preview still opens.
+        previewCandidates = [candidate("c", ["Rue"], ["exact_name"], [])];
+        await openReview();
+        await identityPage.getByRole("button", { name: "Preview identity repairs" }).waitFor();
+        assert.equal(await identityRow.count(), 0, "nothing to merge means no Merge row");
+        await identityPage.getByRole("button", { name: "Preview identity repairs" }).click();
+        await identityPreview.waitFor();
+        assert.equal(await identityPreview.locator(":scope > div").count(), 1);
+        await identityPage.close();
       }
-      // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
-      // new settings instead of the cached ones the action replaced. An import whose integrity read
-      // alone fails still shows the settings it refetched (and says the backup was imported).
-      for (const failure of ["reset", "import", "import-integrity"] as const) {
+      // soup/review-skipped: every skipped change is listed with why it was not saved, and an action.
+      {
+        const skippedPage = await browserContext.newPage();
+        await skippedPage.goto(`http://127.0.0.1:${address.port}/`);
+        await skippedPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await skippedPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await skippedPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+        const skippedChip = skippedPage.locator("[data-ltm-review-navigator] [data-ltm-skipped-toggle]");
+        await skippedChip.waitFor();
+        const skippedTotal = Number((await skippedChip.innerText()).match(/^Skipped \((\d+)\)$/u)?.[1]);
+        assert.ok(skippedTotal >= 3, "the seeded rejected suggestions are counted");
+        // soup/ltm-sources-review: the chip sits at the right of the Review heading row, the list is closed until it
+        // opens, and the heading row's summary strip carries the counts in one line with no "Modes:" text.
+        const skippedList = skippedPage.locator("[data-ltm-skipped-list]");
+        assert.equal(await skippedChip.getAttribute("aria-expanded"), "false");
+        assert.equal(await skippedList.count(), 0);
+        const headingRow = await skippedPage.evaluate(() => {
+          const heading = document.querySelector("[data-ltm-review-navigator] h2")!.getBoundingClientRect();
+          const chip = document
+            .querySelector("[data-ltm-review-navigator] [data-ltm-skipped-toggle]")!
+            .getBoundingClientRect();
+          return {
+            sameRow: Math.abs(chip.top + chip.height / 2 - (heading.top + heading.height / 2)) < 24,
+            right: chip.left >= heading.right,
+          };
+        });
+        assert.deepEqual(headingRow, { sameRow: true, right: true });
+        assert.match(
+          await skippedPage.locator("[data-ltm-review-progress]:visible").innerText(),
+          /^\d+ sources? · \d+ pending · \d+ ready(?: · \d+ blocked)?$/u,
+        );
+        assert.doesNotMatch(await skippedPage.locator('[data-ltm-surface="review-queue"]').innerText(), /Modes:/u);
+        await skippedChip.click();
+        await skippedList.waitFor();
+        assert.equal(await skippedChip.getAttribute("aria-expanded"), "true");
+        assert.equal(await skippedList.locator("[data-ltm-skipped-item]").count(), skippedTotal);
+        const skippedItem = skippedList.locator(`[data-ltm-skipped-item="${rejectedSuggestionId}"]`);
+        const skippedText = (await skippedItem.innerText()).replace(/\s+/gu, " ");
+        assert.match(skippedText, /A recoverable mobile memory\./u);
+        assert.match(skippedText, /Why it wasn't saved: A recoverable mobile memory\./u);
+        assert.match(skippedText, /Source note: /u);
+        // A change with no message of its own says its reason in words, never the raw code.
+        const reasonOnly = skippedList.locator("[data-ltm-skipped-item]").filter({ hasText: "Why it wasn't saved:" });
+        assert.equal(await reasonOnly.count(), skippedTotal, "every change states why it was not saved");
+        assert.doesNotMatch(
+          await skippedList.innerText(),
+          /invalid_format|unsupported_bucket|missing_source_evidence/u,
+        );
+        assert.equal(await skippedItem.getByRole("button", { name: "Open source", exact: true }).count(), 1);
+        // Add anyway opens the same recovery as a source's "Recover manually".
+        await skippedItem.getByRole("button", { name: /^Add anyway: / }).click();
+        await skippedPage.locator("[data-ltm-note-editor]").waitFor();
+        await skippedPage.close();
+      }
+      // #1452: when the settings read after Reset fails, Retry on the error surface loads the new settings
+      // instead of the cached ones the action replaced. (A Vault restore needs no such retry: Memory Settings
+      // refetches when it opens; see soup/vault-backup.)
+      {
         const failPage = await browserContext.newPage();
-        const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
-        let nextMaxChunks: number | null = null;
+        let nextBudget: number | null = null;
         let failSettings = false;
-        let failIntegrity = false;
         await failPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
-        await failPage.route("**/api/long-term-memory/backup/preview", (route) =>
-          route.fulfill({ json: { incoming: counts, current: counts } }),
-        );
-        await failPage.route("**/api/long-term-memory/backup/import", (route) => route.fulfill({ json: {} }));
-        await failPage.route("**/api/long-term-memory/integrity", (route) =>
-          failIntegrity
-            ? route.fulfill({ status: 500, json: { error: "Fixture integrity read failed." } })
-            : route.continue(),
-        );
         await failPage.route("**/api/long-term-memory/settings", async (route) => {
-          if (nextMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (nextBudget === null || route.request().method() !== "GET") return route.continue();
           if (failSettings) return route.fulfill({ status: 500, json: { error: "Fixture settings read failed." } });
           const response = await route.fetch();
           await route.fulfill({
             response,
-            json: { ...(await response.json()), longTermMemoryMaxChunks: nextMaxChunks },
+            json: { ...(await response.json()), longTermMemoryBudgetTokens: nextBudget },
           });
         });
         await failPage.goto(`http://127.0.0.1:${address.port}/`);
@@ -5698,75 +8195,37 @@ async function main() {
           document.body.append(element);
         })()`);
         await failPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
-        const maxChunks = failPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
-        const cachedMaxChunks = Number(await maxChunks.inputValue());
-        await failPage.locator("#settings-tab-maintenance").click();
-        const maintenancePanel = failPage.locator("#settings-panel-maintenance");
-        nextMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
-        failSettings = failure !== "import-integrity";
-        failIntegrity = failure === "import-integrity";
-        if (failure === "reset") {
-          await maintenancePanel.getByRole("button", { name: "Reset settings" }).click();
-        } else {
-          await maintenancePanel
-            .getByLabel("Choose backup", { exact: true })
-            .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from("{}") });
-          await maintenancePanel.getByRole("button", { name: "Replace with this backup" }).click();
-        }
-        if (failSettings) {
-          const loadError = failPage
-            .locator('[data-ltm-status="danger"]')
-            .filter({ hasText: "Could not load memory settings." });
-          await loadError.waitFor({ timeout: 5000 });
-          failSettings = false;
-          const loadRetry = loadError.getByRole("button", { name: "Retry" });
-          // #1673: a text-style retry keeps the 2.75rem touch floor.
-          assert.ok(
-            (await loadRetry.evaluate((element) => element.getBoundingClientRect().height)) >= 44,
-            "the settings load retry meets 2.75rem",
-          );
-          await loadRetry.click();
-        }
-        await maintenancePanel
-          .locator("[data-ltm-status]", {
-            hasText:
-              failure === "reset"
-                ? "Memory settings reset to defaults."
-                : failure === "import"
-                  ? "Memory backup imported, but settings could not be refreshed."
-                  : "Memory backup imported.",
-          })
-          .waitFor({ timeout: 5000 });
-        if (failure === "import-integrity") {
-          // The failed integrity read shows only its error, not the report cached before the import.
-          await maintenancePanel.getByText("Integrity check could not load.").waitFor();
-          assert.ok(
-            (await maintenancePanel
-              .getByRole("button", { name: "Retry" })
-              .evaluate((element) => element.getBoundingClientRect().height)) >= 44,
-            "the integrity retry meets 2.75rem",
-          );
-          assert.equal(
-            await maintenancePanel.getByText("Integrity check passed").count(),
-            0,
-            "a failed integrity read hides the report cached before the import",
-          );
-          // Review: the retained "healthy" reading must not sit above the load error (it shows Loading instead).
-          assert.equal(
-            await maintenancePanel.getByText("Vault healthy").count(),
-            0,
-            "a failed integrity read does not show the health reading cached before the import",
-          );
-        }
+        await openRecallAdvanced(failPage);
+        const recallBudget = failPage.getByRole("spinbutton", { name: "Memory budget", exact: true });
+        const cachedBudget = Number(await recallBudget.inputValue());
+        nextBudget = cachedBudget === 2048 ? 2176 : 2048;
+        failSettings = true;
+        await failPage.locator("[data-ltm-reset-settings]").click();
+        const loadError = failPage
+          .locator('[data-ltm-status="danger"]')
+          .filter({ hasText: "Could not load memory settings." });
+        await loadError.waitFor({ timeout: 5000 });
+        // The reset itself succeeded, so its toast is up while the settings read still fails (toasts are brief).
+        await toastWith(failPage, "Memory settings reset to defaults.").waitFor({ timeout: 5000 });
+        failSettings = false;
+        const loadRetry = loadError.getByRole("button", { name: "Retry" });
+        // #1673: a text-style retry keeps the 2.75rem touch floor.
+        assert.ok(
+          (await loadRetry.evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+          "the settings load retry meets 2.75rem",
+        );
+        await loadRetry.click();
+        await loadError.waitFor({ state: "detached", timeout: 5000 });
         await failPage.locator("#settings-tab-recall").click();
+        await openRecallAdvanced(failPage);
         assert.equal(
-          await maxChunks.inputValue(),
-          String(nextMaxChunks),
-          `${failure}: the forms show the settings read after the action`,
+          await recallBudget.inputValue(),
+          String(nextBudget),
+          "reset: the forms show the settings read after the action",
         );
         await failPage.close();
       }
-      // #1673: the connections-load Retry and every active-template "Reset to default" meet the 2.75rem floor.
+      // #1673: the connections-load Retry and every active-template Edit button meet the 2.75rem floor.
       {
         const touchPage = await browserContext.newPage();
         await touchPage.route("**/api/connections", (route) =>
@@ -5792,31 +8251,32 @@ async function main() {
             .evaluate((element) => element.getBoundingClientRect().height)) >= 44,
           "the connections retry meets 2.75rem",
         );
-        const resets = touchPage.getByRole("button", { name: "Reset to default", exact: true });
-        const resetCount = await resets.count();
-        assert.ok(resetCount > 0, "the active-template pickers render their Reset to default buttons");
-        for (let index = 0; index < resetCount; index += 1) {
+        const edits = touchPage.getByRole("button", { name: /^Edit instructions /u });
+        const editCount = await edits.count();
+        assert.equal(editCount, 3, "each active-template picker has its Edit button");
+        for (let index = 0; index < editCount; index += 1) {
           assert.ok(
-            (await resets.nth(index).evaluate((element) => element.getBoundingClientRect().height)) >= 44,
-            `Reset to default ${index + 1} meets 2.75rem`,
+            (await edits.nth(index).evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+            `Edit ${index + 1} meets 2.75rem`,
           );
         }
+        assert.equal(await touchPage.getByRole("button", { name: "Reset to default", exact: true }).count(), 0);
         await touchPage.close();
       }
       // Settings that remount after a failed reload wait for a successful read instead of filling
       // the forms from the settings cached before the Reset, which the next Save would write back.
       {
         const remountPage = await browserContext.newPage();
-        let nextMaxChunks: number | null = null;
+        let nextBudget: number | null = null;
         let failSettings = false;
         await remountPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
         await remountPage.route("**/api/long-term-memory/settings", async (route) => {
-          if (nextMaxChunks === null || route.request().method() !== "GET") return route.continue();
+          if (nextBudget === null || route.request().method() !== "GET") return route.continue();
           if (failSettings) return route.fulfill({ status: 500, json: { error: "Fixture settings read failed." } });
           const response = await route.fetch();
           await route.fulfill({
             response,
-            json: { ...(await response.json()), longTermMemoryMaxChunks: nextMaxChunks },
+            json: { ...(await response.json()), longTermMemoryBudgetTokens: nextBudget },
           });
         });
         await remountPage.goto(`http://127.0.0.1:${address.port}/`);
@@ -5829,15 +8289,12 @@ async function main() {
         })()`);
         const settingsNav = remountPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]');
         await settingsNav.click();
-        const maxChunks = remountPage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
-        const cachedMaxChunks = Number(await maxChunks.inputValue());
-        await remountPage.locator("#settings-tab-maintenance").click();
-        nextMaxChunks = cachedMaxChunks === 37 ? 38 : 37;
+        await openRecallAdvanced(remountPage);
+        const recallBudget = remountPage.getByRole("spinbutton", { name: "Memory budget", exact: true });
+        const cachedBudget = Number(await recallBudget.inputValue());
+        nextBudget = cachedBudget === 2048 ? 2176 : 2048;
         failSettings = true;
-        await remountPage
-          .locator("#settings-panel-maintenance")
-          .getByRole("button", { name: "Reset settings" })
-          .click();
+        await remountPage.locator("[data-ltm-reset-settings]").click();
         await remountPage
           .locator('[data-ltm-status="danger"]')
           .filter({ hasText: "Could not load memory settings." })
@@ -5845,26 +8302,22 @@ async function main() {
         await remountPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
         failSettings = false;
         await settingsNav.click();
-        await maxChunks.waitFor({ timeout: 5000 });
+        await openRecallAdvanced(remountPage);
+        await recallBudget.waitFor({ timeout: 5000 });
         assert.equal(
-          await maxChunks.inputValue(),
-          String(nextMaxChunks),
+          await recallBudget.inputValue(),
+          String(nextBudget),
           "Settings reopened after a failed reload show the settings read after the Reset",
         );
         await remountPage.close();
       }
-      // Reset and Import hide the Maintenance panel while the forms reload. Focus then returns to
-      // the control that started the action; Import's Replace button is gone, so it lands on Choose backup.
+      // Reset hides the forms (and its own link) while they reload. Focus then returns to the link that started
+      // the action.
       {
         const focusPage = await browserContext.newPage();
-        const counts = { notes: 0, drafts: 0, rejectedSuggestions: 0 };
         let settingsGate: Promise<void> | null = null;
         let releaseSettings = () => {};
         await focusPage.route("**/api/long-term-memory/settings/reset", (route) => route.fulfill({ json: {} }));
-        await focusPage.route("**/api/long-term-memory/backup/preview", (route) =>
-          route.fulfill({ json: { incoming: counts, current: counts } }),
-        );
-        await focusPage.route("**/api/long-term-memory/backup/import", (route) => route.fulfill({ json: {} }));
         await focusPage.route("**/api/long-term-memory/settings", async (route) => {
           if (route.request().method() === "GET" && settingsGate) await settingsGate;
           await route.continue();
@@ -5878,61 +8331,343 @@ async function main() {
           document.body.append(element);
         })()`);
         await focusPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
-        await focusPage.locator("#settings-tab-maintenance").click();
-        const maintenancePanel = focusPage.locator("#settings-panel-maintenance");
         const focusedControl = () =>
           focusPage.evaluate(() =>
             document.activeElement === document.body ? "body" : (document.activeElement?.textContent?.trim() ?? ""),
           );
-        // The visible Choose backup button opens the file input, so Tab skips the input and goes to the next
-        // control, the first repair option (#1584, #1659).
+        settingsGate = new Promise<void>((resolve) => {
+          releaseSettings = () => resolve();
+        });
+        const settingsRefetch = focusPage.waitForRequest(
+          (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
+        );
+        // Keyboard activation, so focus starts on the control.
+        await focusPage.locator("[data-ltm-reset-settings]").press("Enter");
+        await settingsRefetch;
+        await focusPage.waitForTimeout(300);
+        settingsGate = null;
+        releaseSettings();
+        await toastWith(focusPage, "Memory settings reset to defaults.").waitFor({ timeout: 5000 });
+        await focusPage
+          .waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 2000 })
+          .catch(() => undefined);
+        assert.equal(
+          await focusedControl(),
+          "Reset to defaults",
+          "reset: focus returns to the Reset link after the settings reload",
+        );
+        await focusPage.close();
+      }
+      // soup/vault-backup: Back up and Restore are in the Vault header. Restore keeps the real flow (Choose
+      // backup, the incoming counts, then the host's "Replace Long-Term Memory data?"), the results show in the
+      // Vault, and Memory Settings shows the settings read after a restore.
+      {
+        const backupPage = await browserContext.newPage();
+        const backupFile = JSON.stringify({ version: 1, notes: [] });
+        let exportRequests = 0;
+        const previewBodies: unknown[] = [];
+        const importBodies: unknown[] = [];
+        let importedBudget: number | null = null;
+        await backupPage.route("**/api/long-term-memory/backup/export", (route) => {
+          exportRequests += 1;
+          return route.fulfill({ json: { version: 1, notes: [] } });
+        });
+        await backupPage.route("**/api/long-term-memory/backup/preview", (route) => {
+          previewBodies.push(route.request().postDataJSON());
+          return route.fulfill({
+            json: {
+              incoming: { notes: 2, drafts: 1, rejectedSuggestions: 0 },
+              current: { notes: 5, drafts: 0, rejectedSuggestions: 3 },
+            },
+          });
+        });
+        await backupPage.route("**/api/long-term-memory/backup/import", (route) => {
+          importBodies.push(route.request().postDataJSON());
+          return route.fulfill({ json: {} });
+        });
+        await backupPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (importedBudget === null || route.request().method() !== "GET") return route.continue();
+          const response = await route.fetch();
+          await route.fulfill({
+            response,
+            json: { ...(await response.json()), longTermMemoryBudgetTokens: importedBudget },
+          });
+        });
+        await backupPage.goto(`http://127.0.0.1:${address.port}/`);
+        await backupPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await backupPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = {
+            confirmAction: (options) => {
+              window.__ltmConfirms = [...(window.__ltmConfirms ?? []), options];
+              return window.__ltmConfirmResult ?? false;
+            },
+          };
+          document.body.append(element);
+        })()`);
+        // Back up and Restore sit behind the header's "⋯" button, closed until opened.
+        const moreToggle = backupPage.locator("[data-ltm-vault-header] [data-ltm-vault-more]");
+        await moreToggle.waitFor();
+        assert.equal(await moreToggle.getAttribute("aria-expanded"), "false");
+        assert.equal(await backupPage.locator("[data-ltm-vault-more-menu]").count(), 0, "the menu starts closed");
+        await moreToggle.click();
+        assert.equal(await moreToggle.getAttribute("aria-expanded"), "true");
+        const moreMenu = backupPage.locator("[data-ltm-vault-more-menu]");
+        const backUp = moreMenu.getByRole("button", { name: "Back up", exact: true });
+        const restore = moreMenu.getByRole("button", { name: "Restore", exact: true });
+        await backUp.waitFor();
+        const confirms = () =>
+          backupPage.evaluate(
+            () => (window as unknown as { __ltmConfirms?: Array<Record<string, unknown>> }).__ltmConfirms ?? [],
+          );
+        // Back up downloads the file and says so in the Vault.
+        const [download] = await Promise.all([backupPage.waitForEvent("download"), backUp.click()]);
+        assert.equal(download.suggestedFilename(), "long-term-memory-backup.json");
+        await toastWith(backupPage, "Memory backup exported.").waitFor({ timeout: 5000 });
+        assert.equal(exportRequests, 1, "Back up exports once");
+        // Restore opens the real flow; nothing is sent until the file is chosen and the host confirms.
+        assert.equal(await restore.getAttribute("aria-expanded"), "false");
+        await restore.click();
+        assert.equal(await restore.getAttribute("aria-expanded"), "true");
+        const restorePanel = backupPage.locator("[data-ltm-vault-restore-panel]");
+        await restorePanel.getByRole("button", { name: "Choose backup" }).waitFor();
+        // Closing "⋯" under an open Restore panel keeps the panel; Cancel then returns focus to the "⋯" toggle.
+        await moreToggle.click();
+        assert.equal(await moreMenu.count(), 0, "the menu closes under the open Restore panel");
+        await restorePanel.getByRole("button", { name: "Cancel", exact: true }).click();
+        assert.equal(await restorePanel.count(), 0);
+        assert.equal(
+          await moreToggle.evaluate((element) => element === document.activeElement),
+          true,
+          "Cancel returns focus to the ⋯ toggle when Restore is unmounted",
+        );
+        await moreToggle.click();
+        await restore.click();
+        await restorePanel.getByRole("button", { name: "Choose backup" }).waitFor();
         assert.deepEqual(
-          await maintenancePanel
+          await restorePanel
             .locator('input[type="file"]')
             .evaluate((input) => [(input as HTMLInputElement).tabIndex, input.getAttribute("aria-hidden")]),
           [-1, "true"],
+          "the visible Choose backup button opens the hidden file input",
         );
-        await maintenancePanel.locator("button", { hasText: "Choose backup" }).focus();
-        await focusPage.keyboard.press("Tab");
+        await restorePanel
+          .locator('input[type="file"]')
+          .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(backupFile) });
+        await restorePanel.getByText("Validated backup ready to import").waitFor({ timeout: 5000 });
+        assert.deepEqual(previewBodies, [JSON.parse(backupFile)], "the chosen file is validated first");
+        assert.match(
+          (await restorePanel.textContent()) ?? "",
+          /Current: 5 memories, 0 drafts\. Incoming: 2 memories, 1 drafts\./u,
+          "the restore panel shows the current and incoming counts",
+        );
+        assert.deepEqual(importBodies, [], "choosing a file imports nothing");
+        // Declining the host confirmation imports nothing and keeps the preview.
+        const replace = restorePanel.getByRole("button", { name: "Replace with this backup" });
+        await replace.click();
+        await backupPage.waitForFunction(
+          () => ((window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0) === 1,
+        );
+        const [firstConfirm] = await confirms();
+        assert.equal(firstConfirm?.title, "Replace Long-Term Memory data?");
+        assert.equal(firstConfirm?.confirmLabel, "Replace data");
+        assert.equal(firstConfirm?.tone, "destructive");
+        assert.match(
+          String(firstConfirm?.message),
+          /replaces 5 current memories and 0 drafts with 2 memories and 1 drafts/u,
+        );
+        assert.deepEqual(importBodies, [], "a declined confirmation imports nothing");
+        assert.equal(await replace.count(), 1, "a declined confirmation keeps the preview");
+        // Accepting imports the validated file, closes the panel and reports in the Vault.
+        await backupPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = true;
+        });
+        importedBudget = 2560;
+        await replace.click();
+        await toastWith(backupPage, "Memory backup imported.").waitFor({ timeout: 5000 });
+        assert.deepEqual(importBodies, [JSON.parse(backupFile)], "the validated file is imported once");
+        assert.equal(await restorePanel.count(), 0, "the restore panel closes after the import");
+        assert.equal(await restore.getAttribute("aria-expanded"), "false");
+        // Memory Settings refills from the settings read after the restore.
+        await backupPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await openRecallAdvanced(backupPage);
         assert.equal(
-          await focusPage.evaluate(() => document.activeElement?.closest("label")?.textContent?.trim()),
-          "Reindex recall data",
+          await backupPage.getByRole("spinbutton", { name: "Memory budget", exact: true }).inputValue(),
+          "2560",
+          "Settings shows the restored settings",
         );
-        for (const action of ["reset", "import"] as const) {
-          settingsGate = new Promise<void>((resolve) => {
-            releaseSettings = () => resolve();
+        await openTroubleshooting(backupPage);
+        assert.equal(
+          await backupPage
+            .locator("#settings-panel-troubleshooting")
+            .getByRole("button", { name: "Choose backup" })
+            .count(),
+          0,
+          "Troubleshooting no longer holds Restore",
+        );
+        await backupPage.close();
+      }
+      // soup/vault-fix-bar: the repair checklist is one "N memories need fixing · Fix" bar over the Vault list.
+      // Fix opens the real maintenance actions, a run holds the Vault lock and shows its result, and each
+      // memory's info has a History list of its changes. Troubleshooting no longer holds the checklist.
+      {
+        const fixPage = await browserContext.newPage();
+        let repaired = false;
+        const repairBodies: unknown[] = [];
+        let releaseRepair: () => void = () => undefined;
+        const repairHold = new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        await fixPage.route("**/api/long-term-memory/integrity", (route) =>
+          route.request().method() !== "GET"
+            ? route.fallback()
+            : route.fulfill({
+                json: repaired
+                  ? { health: "healthy", ok: true, noteCount: 3, issues: [] }
+                  : {
+                      health: "degraded",
+                      ok: false,
+                      noteCount: 3,
+                      issues: [
+                        {
+                          severity: "error",
+                          code: "note_invalid",
+                          noteId: "broken-memory",
+                          message: "Note failed validation.",
+                        },
+                      ],
+                    },
+              }),
+        );
+        await fixPage.route("**/api/long-term-memory/repair", async (route) => {
+          repairBodies.push(route.request().postDataJSON());
+          await repairHold;
+          repaired = true;
+          return route.fulfill({
+            json: {
+              repairedAt: new Date().toISOString(),
+              actions: [{ action: "rebuild_indexes", result: "rebuilt", count: 4 }],
+            },
           });
-          const settingsRefetch = focusPage.waitForRequest(
-            (request) => request.method() === "GET" && new URL(request.url()).pathname.endsWith("/settings"),
-          );
-          // Keyboard activation, so focus starts on the control.
-          if (action === "reset") {
-            await maintenancePanel.getByRole("button", { name: "Reset settings" }).press("Enter");
-          } else {
-            await maintenancePanel
-              .getByLabel("Choose backup", { exact: true })
-              .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from("{}") });
-            await maintenancePanel.getByRole("button", { name: "Replace with this backup" }).press("Enter");
-          }
-          await settingsRefetch;
-          await focusPage.waitForTimeout(300);
-          settingsGate = null;
-          releaseSettings();
-          await maintenancePanel
-            .locator("[data-ltm-status]", {
-              hasText: action === "reset" ? "Memory settings reset to defaults." : "Memory backup imported.",
-            })
-            .waitFor({ timeout: 5000 });
-          await focusPage
-            .waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 2000 })
-            .catch(() => undefined);
-          assert.equal(
-            await focusedControl(),
-            action === "reset" ? "Reset settings" : "Choose backup",
-            `${action}: focus returns to the Maintenance panel after the settings reload`,
-          );
+        });
+        await fixPage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/events") && url.searchParams.has("noteId"),
+          (route) =>
+            route.fulfill({
+              json: {
+                events: [
+                  {
+                    id: "history-2",
+                    ts: "2026-11-02T10:00:00.000Z",
+                    type: "note_updated",
+                    summary: "Edited the first section",
+                  },
+                  { id: "history-1", ts: "2026-11-01T10:00:00.000Z", type: "note_created", summary: "Memory created" },
+                ],
+              },
+            }),
+        );
+        await fixPage.goto(`http://127.0.0.1:${address.port}/`);
+        await fixPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await fixPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        const fixBar = fixPage.locator("[data-ltm-vault-fix-bar]");
+        await fixBar.waitFor();
+        assert.match((await fixBar.textContent()) ?? "", /1 memory needs fixing ·/u, "the bar counts the memories");
+        const fix = fixBar.getByRole("button", { name: "Fix", exact: true });
+        assert.equal(await fix.getAttribute("aria-expanded"), "false");
+        assert.equal(await fixPage.locator("[data-ltm-vault-fix-panel]").count(), 0, "nothing opens until Fix");
+        await fix.click();
+        assert.equal(await fix.getAttribute("aria-expanded"), "true");
+        const fixPanel = fixPage.getByRole("group", { name: "Vault Maintenance" });
+        await fixPanel.waitFor();
+        assert.match((await fixPanel.textContent()) ?? "", /1 integrity issue\(s\) found\./u);
+        const runFix = fixPanel.getByRole("button", { name: "Run selected maintenance", exact: true });
+        assert.equal(await runFix.isDisabled(), true, "Run waits for a chosen action");
+        // Every AI check opens from the Fix panel and from the Vault's More menu; nothing is sent before Start.
+        const requestsBefore = tidyPreviewRequests + linksPreviewRequests + peoplePreviewRequests;
+        for (const [opener, kind] of [
+          ["[data-ltm-vault-fix-tidy]", "tidy"],
+          ["[data-ltm-vault-tidy]", "tidy"],
+          ["[data-ltm-vault-fix-links]", "links"],
+          ["[data-ltm-vault-links]", "links"],
+          ["[data-ltm-vault-fix-people]", "people"],
+          ["[data-ltm-vault-people]", "people"],
+        ] as const) {
+          const viaMenu = !opener.startsWith("[data-ltm-vault-fix-");
+          if (viaMenu) await fixPage.locator("[data-ltm-vault-more]").click();
+          await fixPage.locator(opener).click();
+          const tidyDialog = fixPage.locator("[data-ltm-tidy-dialog]");
+          await tidyDialog.locator('[data-ltm-tidy-state="confirm"]').waitFor();
+          assert.equal(await tidyDialog.locator(`[data-ltm-ai-check="${kind}"]`).count(), 1, opener);
+          await tidyDialog.locator("[data-ltm-tidy-back]").click();
+          await tidyDialog.waitFor({ state: "detached" });
+          if (viaMenu) await fixPage.locator("[data-ltm-vault-more]").click();
         }
-        await focusPage.close();
+        assert.equal(
+          tidyPreviewRequests + linksPreviewRequests + peoplePreviewRequests,
+          requestsBefore,
+          "opening an AI check sends nothing",
+        );
+        await fixPanel.getByRole("checkbox", { name: /Reindex recall data/u }).check();
+        // A run holds the Vault lock: both buttons stay focusable but refuse a second request.
+        await runFix.click();
+        await fixPage.waitForFunction(
+          () => document.querySelector("[data-ltm-vault-fix-bar] button")?.getAttribute("aria-disabled") === "true",
+        );
+        assert.equal(await runFix.getAttribute("aria-disabled"), "true");
+        // Playwright treats aria-disabled as not enabled, so the second press is forced.
+        await runFix.click({ force: true });
+        await fixPage.waitForTimeout(100);
+        assert.deepEqual(repairBodies, [{ actions: ["rebuild_indexes"] }], "one repair request while it runs");
+        releaseRepair();
+        await toastWith(fixPage, "Reindex recall data: Rebuilt (4)").waitFor({ timeout: 5000 });
+        assert.equal(await fixPage.locator("[data-ltm-vault-fix-result]").count(), 0, "no inline result remains");
+        // The run empties the selection and Run turns disabled; focus lands on the panel's Close button.
+        await fixPage.waitForFunction(() => {
+          const active = document.activeElement;
+          return (
+            active instanceof HTMLButtonElement &&
+            active.textContent?.trim() === "Close" &&
+            active.closest("[data-ltm-vault-fix-panel]") !== null
+          );
+        });
+        await fixBar.waitFor({ state: "detached" });
+        // Troubleshooting keeps only its own groups.
+        await fixPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await openTroubleshooting(fixPage);
+        assert.equal(
+          await fixPage
+            .locator("#settings-panel-troubleshooting")
+            .getByRole("button", { name: "Run selected maintenance" })
+            .count(),
+          0,
+          "Troubleshooting no longer holds the repair checklist",
+        );
+        // History: the memory info lists that memory's changes.
+        await fixPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        await fixPage.locator('[data-ltm-surface="vault"]').waitFor();
+        await fixPage.locator("[data-ltm-note-type]").first().locator("button").first().click();
+        if ((await fixPage.locator("[data-ltm-details-toggle]").getAttribute("aria-pressed")) !== "true")
+          await fixPage.locator("[data-ltm-details-toggle]").click();
+        await fixPage
+          .locator("[data-ltm-record-info]")
+          .first()
+          .evaluate((element) => {
+            (element as HTMLDetailsElement).open = true;
+          });
+        const history = fixPage
+          .locator("[data-ltm-note-inspector]")
+          .getByText("History", { exact: true })
+          .locator("xpath=..");
+        await history.getByText("Edited the first section").waitFor({ timeout: 5000 });
+        assert.match((await history.textContent()) ?? "", /Memory created/u, "History lists every change");
+        await fixPage.close();
       }
       {
         // #1588: clearing the memory search keeps focus in the search box, Create detail moves focus into the
@@ -5961,22 +8696,22 @@ async function main() {
           .first();
         await detailCard.waitFor();
         await detailCard.locator("button").first().click();
-        const createDetail = detailPage.getByRole("button", { name: "Create new memory detail" });
+        const createDetail = detailPage.getByRole("button", { name: "Add new memory section" });
         await createDetail.waitFor();
         await createDetail.click();
         await detailPage.locator("[data-ltm-details]").getByRole("button", { name: "Cancel", exact: true }).click();
         await detailPage.waitForFunction(
-          () => document.activeElement?.textContent?.trim() === "Create new memory detail",
+          () => document.activeElement?.textContent?.trim() === "Add new memory section",
         );
         await createDetail.click();
-        const detailName = detailPage.locator("[data-ltm-details]").getByLabel("New detail name");
+        const detailName = detailPage.locator("[data-ltm-details]").getByLabel("New section name");
         // A refused name is explained on the field, which keeps focus and links the reason.
         await detailName.fill("日本語");
-        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.getByRole("button", { name: "Add section", exact: true }).click();
         await detailPage.locator("#ltm-new-section-error").waitFor();
         assert.match(await detailPage.locator("#ltm-new-section-error").innerText(), /letter A-Z or a number/u);
         await detailPage.waitForFunction(
-          () => document.activeElement?.getAttribute("aria-label") === "New detail name",
+          () => document.activeElement?.getAttribute("aria-label") === "New section name",
         );
         assert.match((await detailName.getAttribute("aria-describedby")) ?? "", /ltm-new-section-error/u);
         await detailName.fill("Facts");
@@ -5986,14 +8721,14 @@ async function main() {
           .first()
           .getAttribute("id");
         await detailName.fill(existingKey?.replace("ltm-section-", "") ?? "facts");
-        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.getByRole("button", { name: "Add section", exact: true }).click();
         await detailPage.locator("#ltm-new-section-error").waitFor();
         assert.match(await detailPage.locator("#ltm-new-section-error").innerText(), /already exists/u);
         await detailPage.waitForFunction(
-          () => document.activeElement?.getAttribute("aria-label") === "New detail name",
+          () => document.activeElement?.getAttribute("aria-label") === "New section name",
         );
         await detailName.fill("habits");
-        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.getByRole("button", { name: "Add section", exact: true }).click();
         await detailPage.waitForFunction(() => document.activeElement?.id === "ltm-section-habits");
         await detailPage.close();
       }
@@ -6015,38 +8750,33 @@ async function main() {
       const selectBox = await chatSettings.locator('select[data-ltm-control="select"]').first().boundingBox();
       assert.ok(selectBox);
       assert.ok(selectBox.height <= 38, `Expected compact select height <= 38px, got ${selectBox.height}`);
-      // #1588: the compact info button keeps its 1.75rem look but answers taps 0.5rem around it.
-      assert.equal(
-        await chatSettings.locator('[data-ltm-info="Recall style"]').evaluate((button) => {
-          button.scrollIntoView({ block: "center" });
-          const rect = button.getBoundingClientRect();
-          const hit = document.elementFromPoint(rect.left - 6, rect.top + rect.height / 2);
-          return button.contains(hit) ? "inside" : `${rect.width}x${rect.height} hit ${hit?.outerHTML.slice(0, 120)}`;
+      // soup/ltm-settings-tidy: the drawer's guidance is a hint under each field, not an (i) button.
+      assert.equal(await chatSettings.locator("[data-ltm-info]").count(), 0, "the drawer card has no (i) buttons");
+      assert.match(
+        await chatSettings.getByLabel("Memory budget", { exact: true }).evaluate((input) => {
+          const ids = (input.getAttribute("aria-describedby") ?? "").split(/\s+/u);
+          return ids.map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
         }),
-        "inside",
+        /Maximum number of tokens that recalled memories may add/u,
+        "the budget hint is read with its field",
       );
-      assert.equal(await touchTargetSize(chatSettings.locator('[data-ltm-info="Recall style"] > span')), "fits");
-      // #1617: the Recall style popover lists every style and marks the one in use.
-      await chatSettings.locator('[data-ltm-info="Recall style"]').click();
-      const styleOptions = page.locator('[data-ltm-info-panel="Recall style"] [data-ltm-recall-style-option]');
-      await styleOptions.nth(4).waitFor();
-      assert.deepEqual(
-        await styleOptions.evaluateAll((items) =>
-          items.map((item) => item.getAttribute("data-ltm-recall-style-option")),
-        ),
-        ["balanced", "exact", "broad", "story", "custom"],
-      );
-      await page
-        .locator('[data-ltm-info-panel="Recall style"] [data-ltm-recall-style-option="balanced"]')
-        .getByText("Current", { exact: true })
-        .waitFor();
+      // soup/chat-recalled: the recall style is described in place (no popover, no "Current" chip) and follows the select.
+      assert.equal(await chatSettings.locator('[data-ltm-info="Recall style"]').count(), 0);
+      const styleDescription = chatSettings.locator("[data-ltm-recall-style-description]");
+      await styleDescription.waitFor();
+      assert.match(await styleDescription.innerText(), /Balanced suits most chats/u);
+      assert.equal(await chatSettings.getByText("Current", { exact: true }).count(), 0);
       assert.equal(
-        await page.locator('[data-ltm-info-panel="Recall style"]').getByText("Current", { exact: true }).count(),
-        1,
+        await chatSettings
+          .getByLabel("Recall style", { exact: true })
+          .evaluate(
+            (select) =>
+              select.getAttribute("aria-describedby") ===
+              document.querySelector("[data-ltm-recall-style-description]")?.id,
+          ),
+        true,
       );
-      await page.keyboard.press("Escape");
-      await page.locator('[data-ltm-info-panel="Recall style"]').waitFor({ state: "detached" });
-      // #1617: until the global defaults arrive, an inherited value shows a neutral placeholder, not 4096 / 20 / balanced.
+      // #1617: until the global defaults arrive, an inherited value shows a neutral placeholder, not 1024 / balanced.
       {
         const loadingPage = await browserContext.newPage();
         let releaseDefaults = () => {};
@@ -6070,42 +8800,333 @@ async function main() {
         const loadingSettings = loadingPage.locator('[data-ltm-surface="chat-settings"]');
         await loadingSettings.waitFor();
         const loadingStyle = loadingSettings.getByLabel("Recall style", { exact: true });
-        const loadingBudget = loadingSettings.getByRole("spinbutton", { name: "Recall context budget" });
-        const loadingMaxChunks = loadingSettings.getByRole("spinbutton", { name: "Maximum memories" });
+        const loadingBudget = loadingSettings.getByRole("spinbutton", { name: "Memory budget" });
         assert.equal(
           await loadingStyle.evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent),
           "Loading default…",
         );
-        for (const field of [loadingBudget, loadingMaxChunks]) {
+        for (const field of [loadingBudget]) {
           assert.equal(await field.inputValue(), "");
           assert.equal(await field.getAttribute("placeholder"), "Loading default…");
         }
-        assert.equal(await loadingSettings.getByText("Global default").count(), 0);
+        assert.equal(await loadingSettings.getByText("Default for all chats").count(), 0);
         releaseDefaults();
         await loadingPage.waitForFunction(
           (select) => (select as HTMLSelectElement).value === "balanced",
           await loadingStyle.elementHandle(),
         );
-        assert.equal(await loadingBudget.inputValue(), "4096");
-        assert.equal(await loadingMaxChunks.inputValue(), "20");
+        assert.equal(await loadingBudget.inputValue(), "1024");
         // A settled load leaves no placeholder behind, so clearing a field to retype it never announces a load.
-        for (const field of [loadingBudget, loadingMaxChunks]) {
+        for (const field of [loadingBudget]) {
           assert.equal(await field.getAttribute("placeholder"), null);
         }
         await loadingPage.close();
       }
+      // soup/chat-recalled: recalled memories open in the Vault, "Details" explains the recall, and each changed field
+      // offers one click back to the default for all chats.
+      {
+        const recalledPage = await browserContext.newPage();
+        const noteQueriesBeforeRecalled = noteQueries.length;
+        const attemptId = "7f1d2c3b-4a5e-4b6c-8d7e-9f0a1b2c3d4e";
+        const recalledChanges: unknown[] = [];
+        const settingsWrites: unknown[] = [];
+        const attemptDebugEnabled = true;
+        await recalledPage.exposeFunction("onRecalledChatSettingsChange", (patch: unknown) => {
+          recalledChanges.push(patch);
+        });
+        let recalledOverride: Record<string, unknown> | null = null;
+        await recalledPage.route("**/api/long-term-memory/last-injection/**", (route) =>
+          route.fulfill({
+            json: recalledOverride ?? {
+              memoryCount: 1,
+              tokenCount: 42,
+              memories: [{ noteId: "world_legacy_global", title: "Legacy global memory", tokenCount: 42 }],
+              state: "injected",
+              dispatchedAt: "2026-07-30T00:00:00.000Z",
+              attempt: {
+                version: 1,
+                chatId: "chat-artifact",
+                attemptId,
+                at: "2026-07-30T00:00:00.000Z",
+                outcome: "completed",
+                debugEnabled: attemptDebugEnabled,
+                confirmed: true,
+              },
+            },
+          }),
+        );
+        let explanationRequests = 0;
+        await recalledPage.route("**/api/long-term-memory/debug-log?*", (route) => {
+          // The header reading chip polls the extraction phase; only the recall explanation is asserted here.
+          if (new URL(route.request().url()).searchParams.has("phase")) return route.fulfill({ json: { events: [] } });
+          // An attempt that recorded no explanation (Details must not be offered for it).
+          if (route.request().url().includes("operationId=attempt-unrecorded"))
+            return route.fulfill({ json: { events: [] } });
+          explanationRequests += 1;
+          assert.match(route.request().url(), new RegExp(`operationId=${attemptId}`, "u"));
+          return route.fulfill({
+            json: {
+              events: [
+                {
+                  id: "recall-explanation-event",
+                  ts: "2026-07-30T00:00:00.000Z",
+                  operationId: attemptId,
+                  phase: "recall",
+                  action: "recall_explanation",
+                  status: "ok",
+                  counts: { selected: 3 },
+                  // Three added sections of two memories, and four left out for three reasons.
+                  details: {
+                    indexedChunks: 234,
+                    eligibleChunks: 40,
+                    maxTokens: 2048,
+                    maxChunks: 12,
+                    selected: [{ noteId: "note-a" }, { noteId: "note-a" }, { noteId: "note-b" }],
+                    rejected: [
+                      { noteId: "note-c", rejectionReason: "budget" },
+                      { noteId: "note-d", rejectionReason: "budget" },
+                      { noteId: "note-e", rejectionReason: "score_threshold" },
+                      { noteId: "note-f", rejectionReason: "lower_rank" },
+                      { noteId: "note-c", rejectionReason: "budget" },
+                      { noteId: "note-a", rejectionReason: "prompt_budget" },
+                    ],
+                  },
+                  chatId: "chat-artifact",
+                },
+              ],
+            },
+          });
+        });
+        await recalledPage.route("**/api/long-term-memory/settings", async (route) => {
+          if (route.request().method() === "PUT") {
+            settingsWrites.push(route.request().postDataJSON());
+            return route.fulfill({ json: {} });
+          }
+          if (route.request().method() !== "GET") return route.continue();
+          const response = await route.fetch();
+          const body = await response.json();
+          return route.fulfill({
+            response,
+            json: {
+              ...body,
+              longTermMemoryRecallStyle: "exact",
+              longTermMemoryBudgetTokens: 2048,
+            },
+          });
+        });
+        await recalledPage.goto(`http://127.0.0.1:${address.port}/`);
+        await recalledPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await recalledPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "settings");
+          element.capabilityProps = {
+            chatId: "chat-artifact",
+            chatSettings: { longTermMemoryRecallStyle: "story", longTermMemoryBudgetTokens: 512 },
+            onChatSettingsChange: window.onRecalledChatSettingsChange,
+            onOpenAgentSettings: () => {
+              const detail = document.createElement("marinara-capability-long-term-memory");
+              detail.setAttribute("view", "detail");
+              detail.capabilityProps = { chatId: "chat-artifact", confirmAction: () => true };
+              document.body.append(detail);
+            },
+          };
+          document.body.append(element);
+        })()`);
+        const recalledSettings = recalledPage.locator('[data-ltm-surface="chat-settings"]').last();
+        const recalledSummary = recalledSettings.locator("[data-ltm-last-injection]");
+        await recalledSummary.getByText("Used 1 memory").waitFor();
+        // Per-field defaults: changed fields offer the way back with the default's value, the inherited one says so.
+        assert.match(await recalledSettings.locator("[data-ltm-recall-style-description]").innerText(), /story/iu);
+        await recalledSettings
+          .locator('[data-ltm-default-reset="longTermMemoryRecallStyle"]')
+          .getByText("Use the default for all chats (Exact)")
+          .waitFor();
+        await recalledSettings
+          .locator('[data-ltm-default-reset="longTermMemoryBudgetTokens"]')
+          .getByText("Use the default for all chats (2,048)")
+          .waitFor();
+        assert.equal(await recalledSettings.locator('[data-ltm-default-reset="longTermMemoryMaxChunks"]').count(), 0);
+        await recalledSettings.locator('[data-ltm-default-reset="longTermMemoryBudgetTokens"]').click();
+        for (let wait = 0; wait < 50 && recalledChanges.length === 0; wait += 1) await recalledPage.waitForTimeout(100);
+        assert.deepEqual(
+          recalledChanges,
+          [{ longTermMemoryBudgetTokens: null }],
+          "reset sends null so the default applies",
+        );
+        // A saved per-chat field says so beside itself, and number fields are sized to their numbers.
+        await recalledSettings
+          .locator('[data-ltm-chat-saved="longTermMemoryBudgetTokens"]')
+          .getByText("Saved", { exact: true })
+          .waitFor();
+        const drawerNumber = await recalledSettings.locator('[data-ltm-control="number"]').first().boundingBox();
+        assert.ok(
+          drawerNumber && drawerNumber.width <= 128,
+          `a drawer number field is compact (${drawerNumber?.width})`,
+        );
+        // The card only reads the recall explanation (for its "left out" line) and writes nothing.
+        assert.equal(await recalledSummary.locator("[data-ltm-recall-details]").count(), 0);
+        assert.equal(await recalledSummary.locator("[data-ltm-recall-turn-on]").count(), 0);
+        assert.deepEqual(settingsWrites, [], "the card writes no setting");
+        // Part 2: three memories were left out (two by the token limit, one by the count), so the card names the token
+        // limit, and Raise limit focuses that field.
+        const leftOut = recalledSummary.locator('[data-ltm-card-problem="leftOut"]');
+        await leftOut.getByText("3 more left out to fit the limit", { exact: true }).waitFor();
+        assert.equal(await recalledSummary.locator("[data-ltm-card-problem]").count(), 1, "at most one problem line");
+        assert.ok(explanationRequests >= 1, "the card reads the recall's explanation");
+        await leftOut.getByRole("button", { name: "Raise limit", exact: true }).click();
+        const budgetField = recalledSettings.getByRole("spinbutton", { name: "Memory budget" });
+        for (let wait = 0; wait < 20 && !(await budgetField.evaluate((el) => el === document.activeElement)); wait += 1)
+          await recalledPage.waitForTimeout(50);
+        assert.ok(
+          await budgetField.evaluate((el) => el === document.activeElement),
+          "Raise limit focuses the token limit",
+        );
+        // The Agent activity panel (Capability API 1.820) mounts the same card: same lines, Open leaves through
+        // onOpenAgentSettings, no Raise limit (the panel has no limit fields), and nothing without a chat.
+        await recalledPage.evaluate(`(() => {
+          window.activityOpened = 0;
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.id = "ltm-activity-view";
+          element.setAttribute("view", "activity");
+          element.capabilityProps = { chatId: "chat-artifact", onOpenAgentSettings: () => { window.activityOpened += 1; } };
+          const bare = document.createElement("marinara-capability-long-term-memory");
+          bare.id = "ltm-activity-bare";
+          bare.setAttribute("view", "activity");
+          bare.capabilityProps = {};
+          document.body.append(element, bare);
+        })()`);
+        const activityCard = recalledPage.locator("#ltm-activity-view [data-ltm-activity-card]");
+        await activityCard.getByText("Used 1 memory").waitFor();
+        await activityCard
+          .locator('[data-ltm-card-problem="leftOut"]')
+          .getByText("3 more left out to fit the limit", { exact: true })
+          .waitFor();
+        assert.equal(await activityCard.getByRole("button", { name: "Raise limit" }).count(), 0, "no dead Raise limit");
+        await activityCard.locator("[data-ltm-card-open]").click();
+        assert.equal(await recalledPage.evaluate("window.activityOpened"), 1, "Open uses onOpenAgentSettings");
+        assert.equal(await recalledPage.locator("#ltm-activity-bare").innerHTML(), "", "no chat, no card");
+        // Nothing recalled and nothing to say: the panel card renders nothing, so the Engine's own empty line shows.
+        recalledOverride = {
+          memoryCount: 0,
+          tokenCount: 0,
+          memories: [],
+          state: "not_recorded",
+          dispatchedAt: null,
+          attempt: null,
+        };
+        const quietRead = recalledPage.waitForResponse((response) => response.url().includes("/last-injection/"));
+        await recalledPage.evaluate(async () => {
+          const element = document.querySelector("#ltm-activity-view")!;
+          element.remove();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          document.body.append(element);
+        });
+        await quietRead;
+        await recalledPage.waitForTimeout(200);
+        assert.equal(await recalledPage.locator("#ltm-activity-view").innerHTML(), "", "nothing to say, no card");
+        recalledOverride = null;
+        await recalledPage.evaluate(
+          `document.querySelectorAll("#ltm-activity-view, #ltm-activity-bare").forEach((el) => el.remove())`,
+        );
+        // The chat card keeps the quiet read it just cached (nothing polls it here), so mount it again to read the
+        // recall back.
+        await recalledPage.evaluate(async () => {
+          const element = document.querySelector("marinara-capability-long-term-memory")!;
+          element.remove();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          document.body.append(element);
+        });
+        // A title shows that memory's text in place, with a way to open it in the Vault.
+        await recalledSummary.locator('[data-ltm-recalled-note="world_legacy_global"]').click();
+        await recalledSummary.getByText("Legacy global memory text.", { exact: true }).waitFor();
+        // The other part-1 moments: nothing matched (with and without the available count) and a recall that did not run.
+        const remountRecalled = () =>
+          recalledPage.evaluate(async () => {
+            const element = document.querySelector("marinara-capability-long-term-memory")!;
+            element.remove();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            document.body.append(element);
+          });
+        const attempt = (outcome: string, extra: Record<string, unknown> = {}) => ({
+          version: 1,
+          chatId: "chat-artifact",
+          attemptId,
+          at: "2026-07-30T00:00:00.000Z",
+          outcome,
+          debugEnabled: false,
+          confirmed: outcome === "completed",
+          ...extra,
+        });
+        const emptyReceipt = { memoryCount: 0, tokenCount: 0, memories: [], dispatchedAt: "2026-07-30T00:00:00.000Z" };
+        recalledOverride = {
+          ...emptyReceipt,
+          state: "no_matches",
+          availableCount: 248,
+          attempt: attempt("completed", { reason: "no_matches" }),
+        };
+        await remountRecalled();
+        await recalledSummary.getByText("No memories used · 248 available", { exact: true }).waitFor();
+        recalledOverride = {
+          ...emptyReceipt,
+          state: "no_matches",
+          attempt: attempt("completed", { reason: "no_matches" }),
+        };
+        await remountRecalled();
+        await recalledSummary.getByText("No memories used", { exact: true }).waitFor();
+        for (const skipped of [
+          attempt("skipped", { reason: "empty_query", attemptId: "attempt-unrecorded" }),
+          attempt("failed", { attemptId: "attempt-unrecorded" }),
+        ]) {
+          recalledOverride = {
+            memoryCount: 1,
+            tokenCount: 42,
+            memories: [{ noteId: "world_legacy_global", title: "Legacy global memory", tokenCount: 42 }],
+            state: "injected",
+            dispatchedAt: "2026-07-30T00:00:00.000Z",
+            availableCount: 248,
+            attempt: skipped,
+          };
+          await remountRecalled();
+          await recalledSummary.getByText("Memory wasn't used this reply", { exact: true }).waitFor();
+          const reason = recalledSummary.locator('[data-ltm-card-problem="recall"]');
+          await reason
+            .getByText(skipped.outcome === "failed" ? "The recall failed" : "There was no recent context to search", {
+              exact: true,
+            })
+            .waitFor();
+          // These attempts recorded no explanation, so Activity has nothing to open and Details is not offered.
+          assert.equal(await reason.getByRole("button", { name: "Details" }).count(), 0);
+          assert.equal(await recalledSummary.getByText(/No memories used/u).count(), 0);
+          assert.equal(await recalledSummary.locator("[data-ltm-recalled-note]").count(), 0);
+        }
+        recalledOverride = null;
+        await remountRecalled();
+        await recalledSummary.getByText("Used 1 memory").waitFor();
+        await recalledSummary.locator('[data-ltm-recalled-note="world_legacy_global"]').click();
+        await recalledSummary.getByText("Legacy global memory text.", { exact: true }).waitFor();
+        // "Open in Vault" opens the memory in the Vault.
+        const noteRead = recalledPage.waitForRequest((request) =>
+          /\/notes\/world_legacy_global$/u.test(new URL(request.url()).pathname),
+        );
+        await recalledSummary.locator('[data-ltm-recalled-open-vault="world_legacy_global"]').click();
+        await recalledPage.locator('[data-ltm-surface="vault"]').first().waitFor({ timeout: 5_000 });
+        await noteRead;
+        // The opened Vault lists notes with no place on this page, not the main page: let it finish, then drop its
+        // queries so the later "last notes query" assertion keeps reading the main page's own list.
+        await recalledPage.waitForLoadState("networkidle");
+        noteQueries.length = noteQueriesBeforeRecalled;
+        await recalledPage.close();
+      }
       const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
-      await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
-      await lastInjection.click();
+      await lastInjection.getByText("Used 1 memory").waitFor();
       await lastInjection.getByText("Retained memory").waitFor();
-      await lastInjection.locator("summary").getByText("42 tokens").waitFor();
+      assert.equal(await lastInjection.getByText("42 tokens").count(), 0, "the card shows no token count");
       await page.evaluate(async () => {
         const element = document.querySelectorAll("marinara-capability-long-term-memory").item(1)!;
         element.remove();
         await new Promise((resolve) => setTimeout(resolve, 0));
         document.body.append(element);
       });
-      await lastInjection.click();
       await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
       // D18: compact Retry keeps a 24px target.
       const compactRetry = lastInjection.getByRole("button", { name: /retry/i });
@@ -6119,7 +9140,7 @@ async function main() {
       // D27 repair: a cached-data retry still shows the title without a loading flash,
       // but the Retry control stays aria-disabled (and focusable) while that refetch is in flight.
       await page.waitForFunction(() => {
-        const button = [...document.querySelectorAll("button")].find((candidate) =>
+        const button = [...document.querySelectorAll("[data-ltm-last-injection] button")].find((candidate) =>
           /retry/i.test(candidate.textContent ?? ""),
         );
         return (
@@ -6135,7 +9156,7 @@ async function main() {
       lastInjectionHold = null;
       releaseLastInjection();
       await page.waitForFunction(() => {
-        const button = [...document.querySelectorAll("button")].find((candidate) =>
+        const button = [...document.querySelectorAll("[data-ltm-last-injection] button")].find((candidate) =>
           /retry/i.test(candidate.textContent ?? ""),
         );
         return button instanceof HTMLButtonElement && !button.hasAttribute("aria-disabled");
@@ -6182,7 +9203,7 @@ async function main() {
           .evaluateAll((elements) => [
             ...new Set(elements.map((element) => element.getAttribute("data-ltm-destination"))),
           ]),
-        ["vault", "review", "sources", "settings"],
+        ["vault", "review", "sources", "activity", "settings"],
       );
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
@@ -6206,6 +9227,7 @@ async function main() {
       healthState = "degraded";
       await page.reload();
       await page.evaluate((version) => {
+        localStorage.setItem("marinara-long-term-memory-onboarding-v1", "beat:2");
         const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
           capabilityProps?: unknown;
         };
@@ -6217,31 +9239,31 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
-      const restoredGuide = page.locator('[data-ltm-surface="onboarding"]');
+      // soup/setup-beats: setup never opens on its own; Help resumes it at the saved beat.
+      await page.waitForTimeout(300);
+      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
+      await page.locator("[data-ltm-onboarding-help]").click();
+      await page.locator("[data-ltm-help-setup]").click();
+      const restoredGuide = page.locator('[data-ltm-surface="onboarding"][data-ltm-setup-beat="2"]');
       await restoredGuide.waitFor();
-      assert.equal(await restoredGuide.getByText("Step 4 of 7 · Import").count(), 1);
-      // #1714: the sprite follows the guide's container, so a narrow panel on a wide window shows the phone sprite.
-      const shownSprite = () =>
-        page.evaluate(() =>
-          [...document.querySelectorAll<HTMLImageElement>("[data-ltm-onboarding-sprite]")]
-            .filter((image) => image.getClientRects().length > 0)
-            .map((image) => image.getAttribute("data-ltm-onboarding-sprite")),
-        );
-      await page.setViewportSize({ width: 1280, height: 900 });
-      await dockDetailPanel(page, "24rem");
-      assert.deepEqual(await shownSprite(), ["basic/pose-point-down.webp"], "a 24rem panel shows the phone sprite");
-      await dockDetailPanel(page, null);
-      assert.deepEqual(await shownSprite(), ["basic/pose-point-middle.webp"], "a wide panel shows the wide sprite");
-      await page.setViewportSize({ width: 390, height: 844 });
-      assert.deepEqual(await shownSprite(), ["basic/pose-point-down.webp"], "a phone window shows the phone sprite");
-      await restoredGuide.getByRole("button", { name: "Not now" }).click();
+      // The pictures are 128x192 frames drawn at 1x on a phone, so the pixel art stays sharp.
+      const restoredSprite = restoredGuide.locator('[data-ltm-setup-sprite="archivist-modes"]');
+      await restoredSprite.waitFor();
+      assert.deepEqual(
+        await restoredSprite.evaluate((sprite) => {
+          const rect = sprite.getBoundingClientRect();
+          return { width: Math.round(rect.width), height: Math.round(rect.height) };
+        }),
+        { width: 128, height: 192 },
+      );
+      await restoredGuide.locator("[data-ltm-setup-close]").click();
       await restoredGuide.waitFor({ state: "detached" });
-      // #1611: Not now keeps the saved step for the next visit.
+      // Later keeps the saved beat for the next visit.
       assert.equal(
         await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "step:3",
+        "beat:2",
       );
-      // #1588: closing the guide returns focus to the button that reopens it.
+      // #1588: closing setup returns focus to the button that reopens it.
       await page.waitForFunction(() => document.activeElement?.matches("[data-ltm-onboarding-help]") ?? false);
       assert.equal(
         await page
@@ -6273,6 +9295,13 @@ async function main() {
           { destination: "vault", top: true, left: true },
         ],
       );
+      // soup/review-one-press: the Review tab counts the memories waiting (2 sources x 3), not the 2 sources.
+      assert.equal(
+        await page
+          .locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"] [data-ltm-badge]')
+          .innerText(),
+        "6",
+      );
       assert.equal(await page.locator('[data-ltm-workspace-pane-tab="workbench"]').count(), 0);
       assert.deepEqual(
         await page.locator("[data-ltm-workspace]").evaluate((workspace) => ({
@@ -6287,7 +9316,8 @@ async function main() {
       const navigatorBox = await navigatorPane.boundingBox();
       assert.ok(navigatorBox);
       await page.locator('[data-ltm-surface="vault-health-warning"]').waitFor();
-      assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').count(), 1);
+      // soup/ltm-frame: the reindex notice is one slim line with its action and no (i).
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').count(), 0);
       // #1588: the warning banner shows StatusSurface's icon once, not a second one of its own.
       assert.equal(
         await page.locator('[data-ltm-surface="vault-health-warning"]').getAttribute("data-ltm-status"),
@@ -6298,16 +9328,19 @@ async function main() {
         await page.locator('[data-ltm-surface="vault-health-warning"] svg.lucide-triangle-alert').count(),
         1,
       );
-      await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
-      const healthInfoPanel = page.locator("[data-ltm-info-panel]").last();
-      await healthInfoPanel.waitFor();
-      assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
-      assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
-      // #1588: the Reindex result shows under the health banner, not only inside its closed info popover.
-      // A pointer press outside closes the popover; Escape would refocus the trigger, which reopens it.
-      await page.mouse.move(0, 0);
-      await page.locator("body").dispatchEvent("pointerdown");
-      await healthInfoPanel.waitFor({ state: "detached" });
+      // soup/: the banner names no Settings path; it carries the Reindex now button in place.
+      assert.doesNotMatch(
+        await page.locator('[data-ltm-surface="vault-health-warning"]').innerText(),
+        /Settings >|Maintenance|→/u,
+      );
+      assert.equal(
+        await page
+          .locator('[data-ltm-surface="vault-health-warning"]')
+          .getByRole("button", { name: "Reindex now" })
+          .count(),
+        1,
+      );
+      // #1588: the Reindex result shows under the health banner.
       let failReindex = true;
       let reindexRequests = 0;
       let releaseReindex: (() => void) | null = null;
@@ -6329,7 +9362,7 @@ async function main() {
       });
       const reindexButton = page
         .locator('[data-ltm-surface="vault-health-warning"]')
-        .getByRole("button", { name: "Reindex recall" });
+        .getByRole("button", { name: "Reindex now" });
       const reindexResult = (state: string) =>
         page.locator(`[data-ltm-reindex-result="${state}"]`).evaluate((result) => ({
           role: result.getAttribute("role"),
@@ -6352,7 +9385,7 @@ async function main() {
       await page.locator('[data-ltm-reindex-result="pending"]').waitFor();
       assert.deepEqual(await reindexResult("pending"), {
         role: "status",
-        text: "Rebuilding the recall index...",
+        text: "Reindexing recall data...",
         inPopover: false,
         afterBanner: true,
       });
@@ -6370,17 +9403,12 @@ async function main() {
       await page.locator('[data-ltm-reindex-result="success"]').waitFor();
       assert.deepEqual(await reindexResult("success"), {
         role: "status",
-        text: "Recall index repair completed.",
+        text: "Reindex finished.",
         inPopover: false,
         afterBanner: true,
       });
-      // #1588: the result shows once, not a second time inside the health popover.
-      await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
-      await healthInfoPanel.waitFor();
-      assert.equal(await page.getByText("Recall index repair completed.").count(), 1);
-      await page.mouse.move(0, 0);
-      await page.locator("body").dispatchEvent("pointerdown");
-      await healthInfoPanel.waitFor({ state: "detached" });
+      // #1588: the result shows once.
+      assert.equal(await page.getByText("Reindex finished.").count(), 1);
       // #1588: a reindex that ends after you leave its screen shows its outcome on no screen, including the
       // one you return to.
       await page.unroute("**/api/long-term-memory/repair");
@@ -6403,7 +9431,7 @@ async function main() {
       releaseLateReindex();
       await page.waitForFunction(() =>
         [...document.querySelectorAll<HTMLButtonElement>('[data-ltm-surface="vault-health-warning"] button')].some(
-          (button) => button.textContent?.includes("Reindex recall") && button.getAttribute("aria-disabled") !== "true",
+          (button) => button.textContent?.includes("Reindex now") && button.getAttribute("aria-disabled") !== "true",
         ),
       );
       assert.equal(await page.locator("[data-ltm-reindex-result]").count(), 0);
@@ -6464,7 +9492,7 @@ async function main() {
       await reviewContextError.waitFor();
       assert.match(await reviewContextError.innerText(), /review context temporarily unavailable/u);
       assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
-      assert.equal(await page.locator('[data-ltm-review-action="apply"]').count(), 0);
+      assert.equal(await page.locator("[data-ltm-review-action]:visible").count(), 0);
       const reviewUtilitySizes = await page
         .locator('[data-ltm-status="danger"] button, [data-ltm-review-rejected-count]')
         .evaluateAll((elements) =>
@@ -6492,7 +9520,16 @@ async function main() {
         const warning = page.locator("[data-ltm-review-source-missing]");
         await warning.waitFor();
         assert.match(await warning.innerText(), /cannot be accepted/u);
-        assert.equal(await page.getByRole("button", { name: "Open source", exact: true }).count(), 0);
+        // soup/: the missing-source note carries the Sources handoff instead of describing the path.
+        assert.equal(await warning.getByRole("button", { name: "Import sources" }).count(), 1);
+        // Scoped to the workbench: Review's page-level "Skipped" list has its own Open source buttons.
+        assert.equal(
+          await page
+            .locator('[data-ltm-workspace-pane="workbench"]')
+            .getByRole("button", { name: "Open source", exact: true })
+            .count(),
+          0,
+        );
         if (missingSources.includes(sourceNoteId)) {
           assert.equal(await page.locator("[data-ltm-review-mutation]").count(), 1);
           assert.equal(await page.locator("[data-ltm-review-action]").isDisabled(), true);
@@ -6528,49 +9565,55 @@ async function main() {
       await showWorkspacePane("navigator");
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
       await showWorkspacePane("workbench");
+      // soup/review-one-press: one "Add to memory" button per change, enabled, with what it does shown beforehand.
       const restoredAccept = page.locator(
-        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Check change "]`,
+        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="add"]`,
       );
+      await restoredAccept.waitFor();
       assert.equal(await restoredAccept.isDisabled(), false);
-      await restoredAccept.click();
-      await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
-        .waitFor();
+      assert.match((await restoredAccept.getAttribute("aria-label")) ?? "", /^Add .+ to memory$/u);
+      assert.equal(await restoredAccept.innerText(), "Add to memory");
       assert.equal(
         await page
-          .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Apply change "]`)
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-add-effect]`)
           .count(),
         1,
+      );
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-edit]`)
+          .innerText(),
+        "Edit",
       );
       const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
       assert.equal(await firstMutation.locator("[data-ltm-review-summary]").count(), 1);
       assert.equal(await firstMutation.locator("[data-ltm-review-evidence-summary]").count(), 1);
-      const summaryColors = await firstMutation.evaluate((row) => ({
-        change: Array.from(
-          row.querySelector("[data-ltm-review-summary]")!.children,
-          (child) => getComputedStyle(child).color,
-        ),
-        evidence: Array.from(
-          row.querySelector("[data-ltm-review-evidence-summary]")!.children,
-          (child) => getComputedStyle(child).color,
-        ),
-      }));
-      for (const [label, value] of [summaryColors.change, summaryColors.evidence]) {
-        assert.equal(value, label, "the Change and Evidence lines use the full text color");
-      }
+      // The Change line uses the Vault row's "Label: text" preview, with the full text color (#1654).
+      // (An inline callback: a named helper inside evaluate gets tsx's `__name`, which the page does not define.)
+      const changeColors = await firstMutation.evaluate((row) => {
+        const node = row.querySelector("[data-ltm-review-summary]")!;
+        return { text: getComputedStyle(node).color, label: getComputedStyle(node.children[0]!).color };
+      });
+      assert.equal(changeColors.text, changeColors.label, "the Change line uses the full text color");
+      // A card with no quoted line says which source it is from, and its meta line names the source too.
+      assert.equal(await firstMutation.locator("[data-ltm-review-quote]").count(), 0);
+      assert.match(await firstMutation.locator("[data-ltm-review-evidence-summary]").innerText(), /^From /u);
+      assert.match(await firstMutation.locator("[data-ltm-review-meta]").innerText(), / from /u);
+      // Every card names what adding it does with one action chip, and Discard is a labelled button.
+      assert.equal(await firstMutation.locator("[data-ltm-review-operation]").count(), 1);
+      assert.equal(await firstMutation.getByRole("button", { name: /^Discard suggestion /u }).innerText(), "Discard");
+      assert.equal(await firstMutation.locator("[data-ltm-review-disclosure]").getAttribute("aria-expanded"), "false");
       // An accept keeps the queue on screen while its memory context reloads, and every action waits for the
       // reloaded context (#1584).
       const reviewWorkspace = page.locator('[data-ltm-surface="review-queue"] [data-ltm-workspace-container]');
       const reviewContextRoute = (url: URL) =>
         url.pathname.endsWith("/api/long-term-memory/notes") && url.searchParams.has("ids");
-      // #1588: focus moves to the next change, or to the result, instead of the page.
-      const reviewFocusMoved = async () => {
-        await page.waitForFunction(
-          () =>
-            document.activeElement?.matches(
-              '[data-ltm-surface="review-queue"] :is([data-ltm-review-mutation-toggle], [data-ltm-review-result])',
-            ) ?? false,
-        );
+      // #1588: focus moves to the next change, to the inline result of a run that needs attention, or (a clean run
+      // reports in a toast) to the review queue itself, instead of the page.
+      const reviewNextChange = '[data-ltm-surface="review-queue"] [data-ltm-review-mutation-toggle]';
+      const reviewQueueRoot = '[data-ltm-surface="review-queue"]';
+      const reviewFocusMoved = async (selector: string) => {
+        await page.waitForFunction((target) => document.activeElement?.matches(target) ?? false, selector);
       };
       const acceptWithReviewContextHeld = async (
         mutationId: string,
@@ -6634,11 +9677,12 @@ async function main() {
         reviewMutationIds.first,
         () =>
           page
-            .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+            .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="add"]`)
             .click(),
         async () => {
           assert.equal(await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.second}"]`).count(), 1);
-          await reviewFocusMoved();
+          // Another change is left in the queue, so focus lands on it, not on the fallback.
+          await reviewFocusMoved(reviewNextChange);
           await page.keyboard.press("Tab");
           assert.equal(
             await page.evaluate(() => Boolean(document.activeElement?.closest('[data-ltm-surface="review-queue"]'))),
@@ -6647,6 +9691,10 @@ async function main() {
           );
         },
       );
+      // soup/review-one-press: that one press added the change; no separate "Check" press came first.
+      assert.deepEqual(reviewActionCalls, [
+        { action: "accept", draftId: reviewDraftIds.first, mutationIds: [reviewMutationIds.first] },
+      ]);
       reviewSources = reviewSources.filter((source) => !missingSources.includes(source.sourceNoteId));
       missingSourceReview = false;
       const mergeSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
@@ -6690,7 +9738,16 @@ async function main() {
       assert.match(reviewText, /World/u);
       assert.match(reviewText, /Update section/u);
       assert.match(reviewText, /Major/u);
-      assert.equal(await page.locator("[data-ltm-review-operation]").count(), 1);
+      // Each card carries one action chip; the update card quotes the line it came from.
+      const secondReviewMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"]`);
+      assert.equal(
+        await secondReviewMutation.locator("[data-ltm-review-operation]").getAttribute("data-ltm-review-operation"),
+        "update_section",
+      );
+      assert.equal(
+        await secondReviewMutation.locator("[data-ltm-review-evidence-summary][data-ltm-review-quote]").innerText(),
+        "\u201cRika: I have kept the lighthouse key.\u201d",
+      );
       if (visualOutputDir)
         await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-mobile.png"), fullPage: true });
       await page
@@ -6724,13 +9781,15 @@ async function main() {
             visibleText: (button as HTMLElement).innerText,
             iconShown: getComputedStyle(icon).display !== "none",
             chips: button.closest("[role=group]")!.querySelectorAll("[data-ltm-review-state-chip]").length,
+            edit: button.closest("[role=group]")!.querySelector("[data-ltm-review-edit]")?.textContent ?? null,
           };
         });
       assert.ok(acceptButtonSize.width >= 44);
       assert.ok(acceptButtonSize.height >= 44);
-      // #1654: from a 40rem container the commit control is the text "Check" (then "Apply"), not an icon alone.
-      assert.equal(acceptButtonSize.visibleText, "Check");
-      assert.equal(acceptButtonSize.iconShown, false);
+      // soup/review-one-press: the one commit control always says "Add to memory" and Edit sits beside it, at any width.
+      assert.equal(acceptButtonSize.visibleText, "Add to memory");
+      assert.equal(acceptButtonSize.edit, "Edit");
+      assert.equal(acceptButtonSize.iconShown, true);
       assert.equal(acceptButtonSize.chips, 0);
       assert.equal(acceptButtonSize.iconWidth, "1rem");
       assert.equal(acceptButtonSize.iconHeight, "1rem");
@@ -6809,7 +9868,7 @@ async function main() {
       await dockDetailPanel(page, null);
       const partialRow = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
       assert.equal(await touchTargetSize(partialRow.locator('label:has([data-ltm-control="review-select"])')), "fits");
-      assert.equal(await touchTargetSize(partialRow.locator("[data-ltm-review-preview] > summary")), "fits");
+      assert.equal(await touchTargetSize(partialRow.locator("[data-ltm-review-disclosure]")), "fits");
       // Docked narrow on a wide window, the bar keeps sticking and the workbench keeps its phone padding.
       const reviewBarLayout = () =>
         reviewBatchBar.evaluate((bar) => ({
@@ -6864,13 +9923,13 @@ async function main() {
       const emptiedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
       await emptiedPartial.locator("textarea").fill("");
       const partialAcceptReason = emptiedPartial.locator("[data-ltm-review-accept-reason]");
-      assert.equal(await partialAcceptReason.innerText(), "Can't apply yet: an edited section is empty.");
+      assert.equal(await partialAcceptReason.innerText(), "Can't add yet: an edited section is empty.");
       assert.equal(
-        await emptiedPartial.locator('[data-ltm-review-action="review"]').getAttribute("aria-describedby"),
+        await emptiedPartial.locator('[data-ltm-review-action="add"]').getAttribute("aria-describedby"),
         await partialAcceptReason.getAttribute("id"),
       );
       // #1673: the lock is aria-disabled, never `disabled`, so the button takes focus and a press applies nothing.
-      const lockedAccept = emptiedPartial.locator('[data-ltm-review-action="review"]');
+      const lockedAccept = emptiedPartial.locator('[data-ltm-review-action="add"]');
       const lockedAcceptCalls = reviewActionCalls.length;
       await lockedAccept.focus();
       assert.equal(
@@ -6885,7 +9944,7 @@ async function main() {
       await emptiedPartial.locator('[data-ltm-control="review-select"]').check();
       assert.match(
         await page.locator("[data-ltm-review-batch-accept-reason]").innerText(),
-        /^Fix 1 invalid edited change before applying: /u,
+        /^Fix 1 invalid edited change before adding: /u,
       );
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
@@ -6896,7 +9955,8 @@ async function main() {
       );
       reviewPreflightBlocked = true;
       failSecondReviewAccept = false;
-      await page.getByRole("button", { name: "Check eligible (2)" }).click();
+      // soup/review-one-press: one press checks and, because one change is blocked, stops before adding anything.
+      await page.getByRole("button", { name: "Add selected (2)" }).click();
       await page.locator("[data-ltm-review-preflight]").first().waitFor();
       assert.equal(await page.locator('[data-ltm-review-preflight][role="alert"]').count(), 1);
       await page
@@ -6909,20 +9969,25 @@ async function main() {
           .isDisabled(),
         true,
       );
-      assert.equal(await page.getByRole("button", { name: /^Apply checked \(1\)/ }).count(), 1);
+      assert.equal(await page.getByRole("button", { name: /^Add selected \(1\)/ }).count(), 1);
       // The engine's own reason stays after the sentence for a catch-all code.
       assert.equal(
         await page
           .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-preflight] p`)
           .evaluateAll((lines) => lines.map((line) => line.textContent ?? "").join("|")),
-        "Can't apply this proposal|The check blocked this change. Fixture preflight blocked this mutation.",
+        "Can't add this suggestion|The check blocked this change. Fixture preflight blocked this mutation.",
       );
-      // #1654: below 40rem the icon stays and a visible chip carries the state the text button shows when wider.
-      const blockedChip = page.locator(
-        `[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-state-chip="blocked"]`,
+      // soup/review-one-press: no state chip; the blocked row says why, in words, beside its Add button.
+      const blockedRow = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"]`);
+      assert.equal(await blockedRow.locator("[data-ltm-review-state-chip]").count(), 0);
+      assert.equal(
+        await blockedRow.locator("[data-ltm-review-accept-reason]").innerText(),
+        "Can't add this change: its suggestion is blocked or out of date.",
       );
-      assert.equal(await blockedChip.innerText(), "Blocked");
-      assert.equal(await blockedChip.isVisible(), true);
+      assert.match(
+        (await blockedRow.locator("[data-ltm-review-action]").getAttribute("aria-label")) ?? "",
+        /^Can't add /u,
+      );
       // #1654: the run summary sits in the workbench, above the rows, and is a warning while a change is ready.
       const preflightResult = page.locator("[data-ltm-review-result]");
       assert.equal(await preflightResult.getAttribute("data-ltm-status"), "warning");
@@ -6941,7 +10006,8 @@ async function main() {
         await page
           .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-action-text]`)
           .isVisible(),
-        false,
+        true,
+        "the Add button keeps its words at every width",
       );
       assert.deepEqual(reviewActionCalls, [
         {
@@ -6958,15 +10024,22 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
         .check();
+      // soup/review-one-press: a clean check that still reports a conflict stops before adding, so it is read first.
+      reviewPreflightConflictOnly = true;
+      const callsBeforeConflictCheck = reviewActionCalls.length;
+      await page.getByRole("button", { name: "Add selected (2)" }).click();
+      await page.locator("[data-ltm-review-result]").waitFor();
+      assert.equal(reviewActionCalls.length, callsBeforeConflictCheck, "a check with a conflict adds nothing");
+      assert.equal(await page.getByRole("button", { name: "Add selected (2)" }).count(), 1);
+      reviewPreflightConflictOnly = false;
       failSecondReviewAccept = true;
-      await page.getByRole("button", { name: "Check eligible (2)" }).click();
-      // #1654: while the checked changes are being applied the batch button says "Applying...", not "Checking...".
+      // soup/review-one-press: with nothing blocked, the one press checks and adds without a second step.
       let releaseReviewAccept = () => {};
       holdReviewAccept = new Promise<void>((resolve) => (releaseReviewAccept = resolve));
-      await page.getByRole("button", { name: /^Apply checked \(2\)/ }).click();
-      await page.getByRole("button", { name: "Applying..." }).waitFor();
+      await page.getByRole("button", { name: "Add selected (2)" }).click();
+      await page.getByRole("button", { name: "Adding..." }).waitFor();
       assert.equal(await page.getByRole("button", { name: "Checking..." }).count(), 0);
-      // The rows being applied say so too; none of them claims to be checking.
+      // The rows being added say so too; none of them claims to be checking.
       const heldRowLabels = await page
         .locator("[data-ltm-review-action]")
         .evaluateAll((actions) => actions.map((action) => action.getAttribute("aria-label") ?? ""));
@@ -6975,14 +10048,10 @@ async function main() {
         0,
         String(heldRowLabels),
       );
-      assert.equal(
-        heldRowLabels.filter((label) => label.startsWith("Applying change for")).length,
-        2,
-        String(heldRowLabels),
-      );
+      assert.equal(heldRowLabels.filter((label) => label.startsWith("Adding ")).length, 2, String(heldRowLabels));
       holdReviewAccept = null;
       releaseReviewAccept();
-      await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();
+      await page.getByRole("button", { name: "Retry failed actions" }).waitFor();
       // #1375: each part of the batch summary is its own sentence, not a fragment glued to the last.
       assert.equal(
         await page.getByText(/Applied \d+ changes?; [1-9]\d* failed\. .*Draft action failed: .+\./u).count(),
@@ -6997,12 +10066,12 @@ async function main() {
       );
       await partialSelect.uncheck();
       await partialSelect.check();
-      assert.equal(await page.getByRole("button", { name: "Retry failed review actions" }).count(), 1);
+      assert.equal(await page.getByRole("button", { name: "Retry failed actions" }).count(), 1);
       failSecondReviewAccept = false;
-      await page.getByRole("button", { name: "Retry failed review actions" }).click();
-      await page.getByText("Checked again. Review the results before applying.").waitFor();
+      await page.getByRole("button", { name: "Retry failed actions" }).click();
+      await page.getByText("Checked again. Review the results before adding.").waitFor();
       const editedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
-      assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
+      assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited suggestion/u);
       // This accept drops the second change's merge target from the memory context, so the context reloads under a
       // new id list while the last one stays on screen (#1584).
       // The batch bar leaves with its selection while the applied rows stay until the queue reloads, so focus
@@ -7013,9 +10082,11 @@ async function main() {
         async () => {
           await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
           assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
-          await page.getByRole("button", { name: /^Apply checked \(/ }).dispatchEvent("click");
+          await page.getByRole("button", { name: /^Add selected \(/ }).dispatchEvent("click");
         },
-        reviewFocusMoved,
+        // Both rows of this draft were acted on and a clean run has no result, so focus may only reach a change
+        // left elsewhere, a result, or the queue itself.
+        () => reviewFocusMoved(`${reviewNextChange}, [data-ltm-review-result], ${reviewQueueRoot}`),
       );
       assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
       assert.deepEqual(reviewActionCalls, [
@@ -7058,9 +10129,9 @@ async function main() {
         };
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
       });
-      await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
+      await mergeDiscardMutation.getByRole("button", { name: /^Discard suggestion /u }).click();
       assert.equal(reviewActionCalls.length, skipCallCountBeforeDecline);
-      assert.match(lastReviewDiscardMessage, /Dependent proposals may also be discarded\./u);
+      assert.match(lastReviewDiscardMessage, /Dependent suggestions may also be discarded\./u);
       confirmReviewDiscard = true;
       await page.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
@@ -7081,7 +10152,7 @@ async function main() {
           (response) =>
             response.request().method() === "POST" && response.url().endsWith(`/drafts/${reviewDraftIds.merge}/skip`),
         ),
-        mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click(),
+        mergeDiscardMutation.getByRole("button", { name: /^Discard suggestion /u }).click(),
       ]);
       assert.equal(reviewActionCalls.at(-1)?.action, "skip");
 
@@ -7146,7 +10217,7 @@ async function main() {
       for (const checkbox of await invalidatedRows.locator('[data-ltm-control="review-select"]').all()) {
         await checkbox.check();
       }
-      assert.equal(await page.getByRole("button", { name: "Check eligible (0)" }).isDisabled(), true);
+      assert.equal(await page.getByRole("button", { name: "Add selected (0)" }).isDisabled(), true);
       for (const action of await invalidatedRows.locator("[data-ltm-review-action]").all()) {
         assert.equal(await action.isDisabled(), true);
       }
@@ -7165,7 +10236,7 @@ async function main() {
       );
       assert.deepEqual(deletedDraftIds, []);
       assert.match(lastReviewDiscardMessage, /Saved memories will not be changed/u);
-      assert.equal(await invalidatedRows.count(), 3, "cancel must preserve every proposal");
+      assert.equal(await invalidatedRows.count(), 3, "cancel must preserve every suggestion");
       confirmReviewDiscard = true;
       failDraftDeletion = true;
       await discardDraft.click();
@@ -7189,7 +10260,7 @@ async function main() {
       await page.keyboard.press("Enter");
       await page.locator(`[data-ltm-review-draft="${invalidatedDraftId}"]`).waitFor({ state: "detached" });
       assert.deepEqual(deletedDraftIds, [invalidatedDraftId]);
-      const emptyReport = page.getByRole("button", { name: "Dismiss report", exact: true });
+      const emptyReport = page.getByRole("button", { name: "Discard report", exact: true });
       await emptyReport.click();
       await page.locator(`[data-ltm-review-draft="${emptyReportId}"]`).waitFor({ state: "detached" });
       assert.deepEqual(deletedDraftIds, [invalidatedDraftId, emptyReportId]);
@@ -7207,13 +10278,24 @@ async function main() {
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
-      await page
-        .getByText("No proposed memories need review yet. Import a source, then choose Extract to review.")
-        .waitFor();
+      await page.getByText("No proposed memories need review yet.", { exact: true }).waitFor();
+      // soup/: the empty state offers the Sources handoff instead of describing the path.
+      assert.equal(
+        (await page.locator('[data-ltm-surface="detail"]').getByRole("button", { name: "Import sources" }).count()) > 0,
+        true,
+      );
       assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
       reviewQueueEmpty = false;
 
       healthState = "healthy";
+      // A write schedules the index rebuild 1 to 10 s later; the shell polls status until it lands.
+      pendingRebuildReads = 2;
+      const repairPosts: string[] = [];
+      const recordRepair = (request: { method(): string; url(): string }) => {
+        if (request.method() === "POST" && request.url().endsWith("/api/long-term-memory/repair"))
+          repairPosts.push(request.url());
+      };
+      page.on("request", recordRepair);
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.reload();
       await page.evaluate((version) => {
@@ -7228,21 +10310,26 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
+      // The "Recall may miss memories" banner clears on its own once the scheduled rebuild lands, with no Reindex.
+      await page.locator('[data-ltm-surface="vault-health-warning"]').waitFor();
+      await page.locator('[data-ltm-surface="vault-health-warning"]').waitFor({ state: "detached", timeout: 8_000 });
+      page.off("request", recordRepair);
+      assert.deepEqual(repairPosts, []);
+      assert.equal(pendingRebuildReads, 0);
       // The pill shows "Loading status" until the status read returns; wait for the healthy reading.
       await page.locator('[data-ltm-surface="vault-health-pill"]').waitFor({ state: "detached" });
       assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
       assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
-      // #1611: the lexical-recall warning carries its own Reindex button, one Tab from its info trigger and
-      // outside the popover portal.
+      // #1611: the lexical-recall warning carries its own Reindex button and no info trigger.
       const semanticWarning = page.locator('[data-ltm-surface="semantic-recall-warning"]');
       await semanticWarning.waitFor();
-      await semanticWarning.locator("[data-ltm-info]").focus();
-      await page.keyboard.press("Tab");
+      assert.equal(await semanticWarning.locator("[data-ltm-info]").count(), 0);
+      await semanticWarning.getByRole("button", { name: "Reindex now" }).focus();
       assert.equal(
         await page.evaluate(() => {
           const active = document.activeElement;
           return (
-            active?.textContent?.trim() === "Reindex recall" &&
+            active?.textContent?.trim() === "Reindex now" &&
             Boolean(active.closest('[data-ltm-surface="semantic-recall-warning"]')) &&
             !active.closest("[data-ltm-info-panel]")
           );
@@ -7253,8 +10340,71 @@ async function main() {
       await page.keyboard.press("Enter");
       await page.locator('[data-ltm-reindex-result="success"]').waitFor();
       await page.unroute("**/api/long-term-memory/repair");
+      // soup/review-link-cards: a proposed link names the linked memory and the relation in words, never raw ids.
+      const linkCardDraft = makeReviewDraft("10000000-0000-4000-8000-000000000060");
+      linkCardDraft.source.sourceNoteId = "source_link_cards";
+      linkCardSourceNote = true;
+      const linkCardMutation = {
+        id: "10000000-0000-4000-8000-000000000061",
+        kind: "add_link",
+        claimKind: "change",
+        risk: "low",
+        confidence: 0.9,
+        summary: "Link the second mobile memory",
+        evidence: ["source_note:source_link_cards"],
+        noteId: "world_second_mobile",
+        link: { target: "world_second_mobile", relation: "caused_by" },
+      };
+      linkCardDraft.mutations = [linkCardMutation] as typeof linkCardDraft.mutations;
+      reviewSources.push({
+        sourceNoteId: "source_link_cards",
+        modes: ["roleplay"],
+        drafts: [
+          {
+            draft: linkCardDraft,
+            freshness: "fresh",
+            blockReasons: [],
+            diagnostics: [],
+            candidateRejections: [],
+            deduplications: [],
+          },
+        ],
+        targets: [
+          {
+            noteId: "world_second_mobile",
+            title: "Second mobile memory",
+            noteType: "world",
+            rows: [
+              {
+                draftId: linkCardDraft.id,
+                mutation: linkCardMutation,
+                // A link into a saved memory merges into it, which is what makes Review load its title.
+                disposition: "merge",
+                diagnostics: [],
+                changes: [
+                  {
+                    kind: "link",
+                    key: "caused_by:world_second_mobile",
+                    after: "caused_by world_second_mobile",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
+      // The link-card source above is listed too, so pick the source whose rejected suggestions are checked here.
+      const rejectedSource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
+      await rejectedSource.waitFor();
+      if ((await rejectedSource.getAttribute("aria-expanded")) !== "true") await rejectedSource.click();
       await page.locator("[data-ltm-rejected-suggestions]").waitFor();
+      // soup/review-link-cards: the rejected list sits behind one "N rejected" chip, at least 2.75rem tall.
+      const rejectedChip = page.locator("[data-ltm-rejected-suggestions] > summary").first();
+      assert.match((await rejectedChip.innerText()).trim(), /^\d+ rejected$/u);
+      assert.ok(
+        (await rejectedChip.evaluate((element) => Number.parseFloat(getComputedStyle(element).minHeight))) >= 44,
+      );
       assert.equal(
         await page
           .locator("[data-ltm-rejected-suggestions]")
@@ -7270,6 +10420,27 @@ async function main() {
               Node.DOCUMENT_POSITION_FOLLOWING,
           ),
       );
+      await page.locator('[data-ltm-review-source-select="source_link_cards"]').click();
+      await showWorkspacePane("workbench");
+      const linkCard = page.locator(`[data-ltm-review-mutation="${linkCardMutation.id}"]`);
+      await linkCard.waitFor();
+      await linkCard.locator("[data-ltm-review-mutation-toggle]").click();
+      // The target's title comes from the context-notes query, which refetches once the new source adds an id.
+      await page
+        .waitForFunction(
+          (id) =>
+            /Caused by "Second mobile review memory"/u.test(
+              document.querySelector<HTMLElement>(`[data-ltm-review-mutation="${id}"]`)?.innerText ?? "",
+            ),
+          linkCardMutation.id,
+        )
+        .catch(() => undefined);
+      const linkCardText = await linkCard.innerText();
+      assert.match(linkCardText, /Caused by "Second mobile review memory"/u, linkCardText);
+      assert.doesNotMatch(linkCardText, /caused_by|world_second_mobile/u, linkCardText);
+      reviewSources.splice(reviewSources.length - 1, 1);
+      linkCardSourceNote = false;
+      await showWorkspacePane("navigator");
       const recoveryReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
       if ((await recoveryReviewSource.getAttribute("aria-expanded")) !== "true") await recoveryReviewSource.click();
       const rejectedSuggestions = page.locator("[data-ltm-rejected-suggestions]");
@@ -7298,7 +10469,7 @@ async function main() {
       );
       const identityArticle = identityReview.locator("xpath=ancestor::article[@data-ltm-rejected-suggestion]");
       assert.equal(
-        await identityArticle.getByRole("button", { name: /^Delete suggestion:/ }).count(),
+        await identityArticle.getByRole("button", { name: /^Discard suggestion:/ }).count(),
         1,
         "identity rows must keep a per-suggestion delete action",
       );
@@ -7354,7 +10525,7 @@ async function main() {
       assert.ok(lockReasonId, "a locked source names its reason");
       assert.equal(
         (await page.locator(`[id="${lockReasonId}"]`).textContent())?.trim(),
-        "Save or discard identity edits first.",
+        "Review buttons wait until you save or discard your identity choices.",
       );
       const activeSourceBefore = await page
         .locator('[data-ltm-review-source-select][aria-current="true"]')
@@ -7388,7 +10559,13 @@ async function main() {
       );
       await saveIdentityChoices.click();
       assert.equal((await failedIdentitySave).status(), 500);
-      await identityReview.getByRole("alert").getByText("Identity choice fixture failed").waitFor();
+      const failedIdentityToast = toastWith(page, "Identity choice fixture failed");
+      await failedIdentityToast.waitFor();
+      assert.equal(
+        await failedIdentityToast.getAttribute("data-type"),
+        "error",
+        "a failed identity save is an error toast",
+      );
       assert.equal(await identitySelects.nth(0).inputValue(), "character:character-a");
       assert.equal(await identitySelects.nth(1).inputValue(), "different");
       const retriedIdentitySave = page.waitForResponse(
@@ -7545,7 +10722,7 @@ async function main() {
       await page.locator("[data-ltm-details-toggle]").click();
       assert.equal(await page.locator("[data-ltm-details-toggle]").getAttribute("aria-pressed"), "false");
       assert.equal(await page.locator('[data-ltm-workspace-pane="inspector"]').count(), 0);
-      await page.getByRole("button", { name: "Choose where used" }).click();
+      await page.getByRole("button", { name: "Choose where available" }).click();
       await page.locator("[data-ltm-availability-picker] > summary").click();
       const availabilityTabs = page.locator("[data-ltm-availability-tabs]");
       await availabilityTabs.waitFor();
@@ -7712,7 +10889,7 @@ async function main() {
         const reasonId = await applyButton.getAttribute("aria-describedby");
         assert.match(
           await page.locator(`[id="${reasonId}"]`).innerText(),
-          /^Nothing to apply yet\. Choose a status, a mode or a place\.$/u,
+          /^Nothing to apply yet\. Choose a status, a chat type or a place\.$/u,
         );
       }
       assert.equal(
@@ -7740,10 +10917,7 @@ async function main() {
       );
       for (let index = 0; index < (await bulkModeBoxes.count()); index += 1) await bulkModeBoxes.nth(index).uncheck();
       await bulkAvailability.getByRole("button", { name: "Add availability" }).click();
-      assert.equal(
-        await bulkAvailability.getByText("Chat mode eligibility is set separately", { exact: false }).count(),
-        1,
-      );
+      assert.equal(await bulkAvailability.getByText("each memory keeps its chat scope", { exact: false }).count(), 1);
       await bulkAvailability.locator("[data-ltm-availability-picker] > summary").click();
       const bulkRail = bulkAvailability.locator("[data-ltm-availability-tabs]");
       await bulkRail.waitFor();
@@ -7798,7 +10972,11 @@ async function main() {
       );
       await page.getByRole("button", { name: "Save", exact: true }).click();
       await cleanupRequest;
-      await page.locator('[data-ltm-status="success"]').waitFor();
+      await page
+        .locator('[data-sonner-toast][data-type="success"]')
+        .filter({ hasText: "Memory saved." })
+        .first()
+        .waitFor();
       assert.equal(await page.locator('[role="alert"]').count(), 0);
       assert.equal(deletedSuggestionId, rejectedSuggestionId);
       assert.equal(savedNote?.type, "world");
@@ -7814,49 +10992,39 @@ async function main() {
       await activeWorldCard.locator('input[type="checkbox"]').check();
       await resolvedWorldCard.locator('input[type="checkbox"]').check();
       await archiveBatch.getByRole("button", { name: "Archive" }).click();
-      await page
-        .locator("[data-ltm-vault-feedback]")
-        .getByText(/2 memories archived/u)
-        .waitFor();
-      // #1588: the batch bar leaves with the selection, so focus moves to the result, which holds Undo.
-      const vaultFeedbackFocused = (text: string) =>
+      // The archive is an Engine toast (sonner) that carries Undo; the package shows no banner of its own.
+      const archivedToast = toastWith(page, /2 memories archived/u);
+      await archivedToast.waitFor();
+      assert.equal(await archivedToast.getAttribute("data-type"), "success");
+      // #1588: the batch bar leaves with the selection, so focus moves to a control that stays (the search field),
+      // not to <body> and not to the toast.
+      const vaultFocusKept = () =>
         page.waitForFunction(
-          (expected) =>
-            (document.activeElement?.matches("[data-ltm-vault-feedback] [data-ltm-status]") &&
-              document.activeElement.textContent?.includes(expected)) ??
-            false,
-          text,
+          () =>
+            document.activeElement !== document.body &&
+            Boolean(document.activeElement?.closest('[data-ltm-surface="vault"]')),
         );
-      await vaultFeedbackFocused("2 memories archived");
-      const undoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
-      assert.equal(await undoButton.count(), 1);
-      // The Undo's caption has its own element and the notice slot stays empty beside it.
-      const undoCaption = page.locator("[data-ltm-vault-feedback] [data-ltm-archive-undo-caption]");
-      assert.equal((await undoCaption.innerText()).trim(), "2 memories archived.");
-      assert.equal(await page.locator("[data-ltm-vault-feedback] [data-ltm-status] > span").count(), 1);
+      await vaultFocusKept();
+      assert.equal(await archivedToast.getByRole("button", { name: "Undo" }).count(), 1);
+      assert.equal((await archivedToast.locator("[data-title]").innerText()).trim(), "2 memories archived.");
+      assert.equal(
+        await page.locator("[data-ltm-vault-feedback] [data-ltm-status]").count(),
+        0,
+        "the archive leaves no inline result beside the toast",
+      );
+      // After a failed undo the failure toast offers Undo again.
+      const undoFailedToast = page
+        .locator('[data-sonner-toast][data-type="error"]')
+        .filter({ hasText: "Could not undo the archive" });
+      const undoOffer = () => page.locator("[data-sonner-toast]").getByRole("button", { name: "Undo" });
 
       // 1. Partial failure restores successful restores back to archived and surfaces error.
       batchNotesPartial = true;
-      await undoButton.click();
-      await page.locator('[data-ltm-vault-feedback] [role="alert"]').waitFor();
-      await vaultFeedbackFocused("Could not undo the archive");
-      assert.match(
-        await page.locator('[data-ltm-vault-feedback] [role="alert"]').innerText(),
-        /Could not undo the archive/u,
-      );
-      // #1588: the danger border applies; the Engine's unlayered panel border used to outrank its utility class.
-      assert.equal(
-        await page.locator('[data-ltm-vault-feedback] [role="alert"]').evaluate((surface) => {
-          const probe = document.createElement("div");
-          probe.style.border = "1px solid color-mix(in oklab, var(--destructive) 35%, transparent)";
-          surface.parentElement?.append(probe);
-          const expected = getComputedStyle(probe).borderTopColor;
-          probe.remove();
-          const actual = getComputedStyle(surface).borderTopColor;
-          return actual === expected ? "danger" : `${actual} is not ${expected}`;
-        }),
-        "danger",
-      );
+      await archivedToast.getByRole("button", { name: "Undo" }).click();
+      await undoFailedToast.first().waitFor();
+      await vaultFocusKept();
+      assert.match(await undoFailedToast.first().innerText(), /Could not undo the archive/u);
+      assert.equal(await undoFailedToast.first().getByRole("button", { name: "Undo" }).count(), 1);
       // The rollback call re-archives only the successfully restored active note, leaving the failed resolved note untouched
       const rollbackCall = batchNotesCalls.at(-1);
       assert.equal(rollbackCall?.status, "archived");
@@ -7879,22 +11047,22 @@ async function main() {
         { times: 2 },
       );
       const batchCallsBeforeUndo = batchNotesCalls.length;
-      await undoButton.click();
+      await undoFailedToast.first().getByRole("button", { name: "Undo" }).click();
+      // Pressing Undo dismisses the failure toast, and the held run shows nothing until it ends.
+      await undoFailedToast.waitFor({ state: "detached" });
       await activeWorldCard.locator("button").first().click();
       await page.waitForFunction(
         () =>
           document.querySelector<HTMLInputElement>("[data-ltm-field='title']")?.value === "Second mobile review memory",
       );
       releaseUndo?.();
-      // The undo still rolls back the partial restore, and Undo works again.
-      await page
-        .locator("[data-ltm-vault-feedback] button:enabled:not([aria-disabled='true'])", { hasText: "Undo" })
-        .waitFor();
+      // The undo still rolls back the partial restore, and the failure toast offers Undo again.
+      await undoFailedToast.first().getByRole("button", { name: "Undo" }).waitFor();
       assert.equal(batchNotesCalls.length, batchCallsBeforeUndo + 3);
       assert.deepEqual(batchNotesCalls.at(-1), { noteIds: ["world_second_mobile"], status: "archived" });
       batchNotesPartial = false;
 
-      // A later notice leaves the caption standing: save the open memory while Undo is still offered.
+      // A later toast leaves the Undo offer standing: save the open memory while Undo is still offered.
       await page.route("**/api/long-term-memory/notes/world_second_mobile", async (route) => {
         if (route.request().method() !== "PATCH") return route.fallback();
         const current = await (await page.request.get(route.request().url())).json();
@@ -7903,12 +11071,12 @@ async function main() {
       const titleField = page.locator("[data-ltm-field='title']");
       await titleField.fill("Second mobile review memory, saved");
       await page.getByRole("button", { name: "Save", exact: true }).click();
-      await page
-        .locator("[data-ltm-vault-feedback]")
-        .getByText(/Memory saved/u)
-        .waitFor();
-      assert.equal((await undoCaption.innerText()).trim(), "2 memories archived.");
-      assert.equal(await undoButton.count(), 1);
+      await toastWith(page, "Memory saved.").waitFor();
+      assert.equal(
+        (await undoFailedToast.first().locator("[data-title]").innerText()).trim(),
+        "Could not undo the archive.",
+      );
+      assert.equal(await undoOffer().count(), 1);
       await page.unroute("**/api/long-term-memory/notes/world_second_mobile");
 
       // 2. Complete restore sends restore batches grouped by prior status.
@@ -7921,27 +11089,29 @@ async function main() {
       await activeWorldCard.locator('input[type="checkbox"]').check();
       await resolvedWorldCard.locator('input[type="checkbox"]').check();
       await archiveBatch.getByRole("button", { name: "Archive" }).click();
-      await page
-        .locator("[data-ltm-vault-feedback]")
-        .getByText(/2 memories archived/u)
-        .waitFor();
-      const freshUndoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
+      const freshArchivedToast = toastWith(page, /2 memories archived/u);
+      await freshArchivedToast.waitFor();
+      // A new batch makes the earlier Undo stale, so only this archive offers Undo.
+      await undoFailedToast.waitFor({ state: "detached" });
+      const freshUndoButton = freshArchivedToast.getByRole("button", { name: "Undo" });
+      assert.equal(await undoOffer().count(), 1);
       // The undo reloads the open memory it restored, as the archive did.
-      await page
-        .locator("[data-ltm-vault-feedback] button:enabled:not([aria-disabled='true'])", { hasText: "Undo" })
-        .waitFor();
       const restoredNoteReload = page.waitForRequest(
         (request) =>
           request.method() === "GET" && request.url().endsWith("/long-term-memory/notes/world_second_mobile"),
       );
       await freshUndoButton.click();
-      await page
-        .locator("[data-ltm-vault-feedback]")
-        .getByText(/2 memories restored/u)
-        .waitFor();
-      assert.equal(await undoCaption.count(), 0);
+      await toastWith(page, /2 memories restored/u).waitFor();
+      assert.equal(
+        await toastWith(page, /2 memories restored/u).getAttribute("data-type"),
+        "success",
+        "a finished undo is a success toast",
+      );
       await restoredNoteReload;
-      assert.equal(await page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" }).count(), 0);
+      await vaultFocusKept();
+      // Pressing Undo dismisses its toast, and the restore offers no further Undo.
+      await freshArchivedToast.waitFor({ state: "detached" });
+      assert.equal(await undoOffer().count(), 0);
       const restoreCalls = batchNotesCalls.slice(-2);
       const activeRestoreCall = restoreCalls.find((call) => call.status === "active");
       const resolvedRestoreCall = restoreCalls.find((call) => call.status === "resolved");
@@ -8069,10 +11239,11 @@ async function main() {
       assert.ok(noteQueries.length > noteQueriesBeforeDelete, "the memory list reloads after the deletion");
       assert.equal(await deleteTargetCards[0]!.locator('input[type="checkbox"]').isChecked(), false);
       assert.equal(await page.locator("[data-ltm-note-editor]").count(), 0);
+      await toastWith(page, "2 memories deleted.").waitFor();
       assert.equal(
-        await page.locator("[data-ltm-vault-feedback]").getByText("2 memories deleted.").count(),
+        await page.locator("[data-sonner-toast]").filter({ hasText: "2 memories deleted." }).count(),
         1,
-        "the notice says why the open memory closed",
+        "the toast says why the open memory closed",
       );
 
       // A selection change while the delete-target lookup is still resolving must
@@ -8176,10 +11347,9 @@ async function main() {
       });
       clearRejectedSuggestionsFailure = true;
       await clearRejectedButton.click();
-      await page
-        .locator('[data-ltm-status="danger"]')
-        .filter({ hasText: "Clear rejected suggestions fixture failed" })
-        .waitFor();
+      const failedClearToast = toastWith(page, "Clear rejected suggestions fixture failed");
+      await failedClearToast.waitFor();
+      assert.equal(await failedClearToast.getAttribute("data-type"), "error", "a failed clear is an error toast");
       assert.equal(await clearSourceSuggestions.count(), 1);
       clearRejectedSuggestionsFailure = false;
       await clearRejectedButton.click();
@@ -8203,11 +11373,54 @@ async function main() {
         chatIds: ["desktop-chat"],
       };
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+      // soup/sources-review: Sources opens on Chat Messages, the first tab, and every kind tab carries its icon.
+      await page.locator('[data-ltm-source-tab="messages"][aria-selected="true"]').waitFor();
+      assert.deepEqual(
+        await page.locator("[data-ltm-source-tab]").evaluateAll((tabs) =>
+          tabs.map((tab) => {
+            const icon = tab.querySelector("svg");
+            // Visible, not just present: the Engine sheds .mari-editor-tab > svg in mid-width containers.
+            return [
+              tab.getAttribute("data-ltm-source-tab"),
+              icon !== null && getComputedStyle(icon).display !== "none",
+            ];
+          }),
+        ),
+        [
+          ["messages", true],
+          ["chats", true],
+          ["characters", true],
+          ["lorebooks", true],
+        ],
+      );
       await page.locator('[data-ltm-source-tab="chats"]').click();
       await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
       const sourceScopePicker = page.locator('[data-ltm-scope-picker="source"]');
       const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All/u);
+      // soup/ltm-frame-vault: "Find sources in" explains itself under the picker, with no (i) button.
+      const sourceScopeHint = page.locator("[data-ltm-source-scope-hint]");
+      assert.equal(
+        (await sourceScopeHint.innerText()).trim(),
+        "Search every available character, lorebook, and chat.",
+        "Find sources in shows its hint",
+      );
+      assert.equal(await page.locator('[data-ltm-info="Find sources in"]').count(), 0, "Find sources in has no (i)");
+      assert.equal(
+        await sourceScopeTrigger.evaluate(
+          (trigger, hintId) => (trigger.getAttribute("aria-describedby") ?? "").split(" ").includes(hintId),
+          (await sourceScopeHint.getAttribute("id")) ?? "",
+        ),
+        true,
+        "the picker is described by its hint",
+      );
+      const scopeTriggerBox = await sourceScopeTrigger.boundingBox();
+      const scopeHintBox = await sourceScopeHint.boundingBox();
+      assert.ok(scopeTriggerBox && scopeHintBox);
+      assert.ok(
+        scopeHintBox.y >= scopeTriggerBox.y + scopeTriggerBox.height - 1,
+        "the Find sources in hint sits under the picker, not beside it",
+      );
       await sourceScopeTrigger.click();
       assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
       assert.deepEqual(
@@ -8343,20 +11556,110 @@ async function main() {
       await destinationPanel.waitFor();
       const destinationScope = destinationPanel.locator("[data-ltm-destination-scope]");
       assert.equal(await destinationScope.getAttribute("open"), null, "destination scope starts collapsed");
-      assert.match(
-        await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText(),
-        /Choose a destination/u,
+      // soup/sources-review: one bar closes the list. This scenario opens no chat, so the chosen source reads by its
+      // own label; the "This chat" default is checked in the chat-mounted block after the detail mount.
+      assert.equal(
+        (await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText()).trim(),
+        "Current",
+        "soup/sources-review: a chosen destination shows in the bar, not the Choose chip",
+      );
+      const importAllNew = page.locator('[data-ltm-source-preview="chats"] [data-ltm-source-action="import-all-new"]');
+      assert.equal(await importAllNew.getAttribute("aria-disabled"), null, "Import all new needs no destination step");
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-source-action="import-all-new"]').count(),
+        1,
+        "soup/sources-review: Import all new sits in the one bar",
+      );
+      assert.equal(
+        await destinationPanel.locator("[data-ltm-import-limit-hint]").innerText(),
+        "You can choose up to 100 parts per import.",
+        "soup/sources-review: the bar carries one hint line",
+      );
+      assert.equal(await destinationPanel.evaluate((bar) => getComputedStyle(bar).position), "sticky");
+      assert.equal(
+        await page
+          .locator('[data-ltm-source-preview="chats"] [data-ltm-source-navigator] > :last-child')
+          .evaluate((last) => last.id),
+        "ltm-destination-scope-control",
+        "soup/sources-review: the bar is the card's last element, so it never covers a row",
+      );
+      assert.equal(
+        (await destinationScope.locator("[data-ltm-destination-change]").innerText()).trim(),
+        "Change",
+        "soup/sources-destination: the chip offers Change",
+      );
+      assert.equal(await importAllNew.count(), 1, "soup/sources-review: one Import all new");
+      assert.equal(
+        await page.locator('[data-ltm-source-preview="chats"] [data-ltm-source-group="ready"]').getAttribute("open"),
+        "",
+        "soup/sources-destination: Ready to import starts open",
       );
       assert.equal(
         await destinationScope.locator('[data-ltm-availability-tab="all"]').isVisible(),
         false,
         "destination tab rail stays inside the collapsed disclosure",
       );
+      // soup/sources-mobile: at phone width the open picker unpins and reads in the page's own scroll. Opening scrolls
+      // to it with its "Available in" line held at the top; closing returns the list to where it was.
+      const wideViewport = page.viewportSize();
+      await page.setViewportSize({ width: 390, height: 844 });
+      const listTop = await destinationPanel.evaluate((bar) => {
+        const spacer = document.createElement("div");
+        spacer.setAttribute("data-ltm-test-spacer", "");
+        spacer.style.height = "2000px";
+        bar.before(spacer);
+        // The app's editor shell is viewport-bound, so its content is the scroller; the harness shell is not.
+        document.querySelector<HTMLElement>("main.mari-editor-shell")!.style.height = "844px";
+        const content = document.querySelector(".mari-editor-content")!;
+        content.scrollTop = 900;
+        return content.scrollTop;
+      });
+      const phoneLayout = () =>
+        destinationPanel.evaluate((bar) => {
+          const content = document.querySelector(".mari-editor-content")!;
+          return {
+            position: getComputedStyle(bar).position,
+            summaryOffset: Math.round(
+              bar.querySelector("summary")!.getBoundingClientRect().top - content.getBoundingClientRect().top,
+            ),
+            scrollTop: content.scrollTop,
+          };
+        });
+      assert.equal((await phoneLayout()).position, "sticky", "soup/sources-mobile: the closed bar stays pinned");
+      await destinationScope.locator("summary").click();
+      await page.waitForFunction((top) => document.querySelector(".mari-editor-content")!.scrollTop > top, listTop);
+      const opened = await phoneLayout();
+      assert.equal(opened.position, "static", "soup/sources-mobile: the open picker leaves the pin");
+      assert.ok(
+        opened.summaryOffset < 40,
+        `soup/sources-mobile: opening scrolls to the picker (${opened.summaryOffset})`,
+      );
+      await page.evaluate(() => (document.querySelector(".mari-editor-content")!.scrollTop += 500));
+      assert.equal(
+        (await phoneLayout()).summaryOffset,
+        opened.summaryOffset,
+        "soup/sources-mobile: the Available in line stays at the top while the picker scrolls",
+      );
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-destination-phone-open.png") });
+      await destinationScope.locator("summary").click();
+      await page.waitForFunction((top) => document.querySelector(".mari-editor-content")!.scrollTop === top, listTop);
+      assert.equal((await phoneLayout()).position, "sticky", "soup/sources-mobile: closing pins the bar again");
+      await page.evaluate(() => {
+        document.querySelector("[data-ltm-test-spacer]")!.remove();
+        document.querySelector<HTMLElement>("main.mari-editor-shell")!.style.height = "";
+      });
+      if (wideViewport) await page.setViewportSize(wideViewport);
       await destinationScope.locator("summary").click();
       assert.notEqual(
         await destinationScope.getAttribute("open"),
         null,
         "destination scope expands when the summary is clicked",
+      );
+      assert.equal(
+        await destinationPanel.evaluate((bar) => getComputedStyle(bar).position),
+        "sticky",
+        "soup/sources-mobile: on a wide screen the open picker stays pinned",
       );
       assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
       assert.equal(await page.locator("[data-ltm-add-destination]").count(), 0);
@@ -8375,11 +11678,23 @@ async function main() {
         ],
         "the destination shares the four place tabs and opens on All",
       );
-      // No active chat in this source workflow, so no destination is pre-selected and import is blocked.
+      // Emptying the default leaves import blocked until a destination is chosen again.
+      assert.equal(await destinationPanel.locator('button[aria-label^="Remove "]').count(), 1);
+      await destinationPanel.locator('button[aria-label^="Remove "]').click();
       assert.equal(await destinationPanel.locator('button[aria-label^="Remove "]').count(), 0);
       assert.equal(
-        await destinationPanel.getByText("Choose a destination before importing scoped memories.").count(),
-        1,
+        (await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText()).trim(),
+        "Choose",
+        "soup/sources-review: with no destination the chip reads Choose",
+      );
+      assert.equal(await destinationScope.locator("[data-ltm-destination-change]").count(), 0);
+      // The reason is a screen-reader-only description: no warning sentence and no second link on screen.
+      assert.equal(await page.locator("[data-ltm-import-reason], [data-ltm-choose-destination]").count(), 0);
+      assert.equal(await importAllNew.getAttribute("aria-disabled"), "true", "Import all new waits for a destination");
+      const importAllNewReason = await importAllNew.getAttribute("aria-describedby");
+      assert.equal(
+        await page.locator(`[id="${importAllNewReason}"][data-ltm-destination-hint]`).textContent(),
+        "Choose a destination before importing scoped memories.",
       );
       // #1588: the selection bar says why Import is off, and the button points at that reason.
       const chatsSelectToggle = page
@@ -8394,9 +11709,9 @@ async function main() {
         .first()
         .getAttribute("aria-describedby");
       assert.ok(importReasonId, "the off Import button points at its reason");
-      const importReasonLine = page.locator(`[id="${importReasonId}"][data-ltm-import-reason]:visible`);
-      assert.equal(await importReasonLine.count(), 1, "the reason the button points at is on screen");
-      assert.equal(await importReasonLine.innerText(), "Choose a destination before importing scoped memories.");
+      const importReasonLine = page.locator(`[id="${importReasonId}"][data-ltm-destination-hint]`);
+      assert.equal(await importReasonLine.count(), 1, "the reason the button points at is the bar's status line");
+      assert.equal(await importReasonLine.textContent(), "Choose a destination before importing scoped memories.");
       // The button stays focusable, so a keyboard user hears that reason as its description, and pressing it
       // does nothing.
       const waitingImport = page
@@ -8409,22 +11724,19 @@ async function main() {
       const destinationReasonCount = await destinationReasons.count();
       await page.keyboard.press("Enter");
       assert.equal(await destinationReasons.count(), destinationReasonCount);
-      // #1659: the reason is on screen once (the panel's copy is screen-reader only) and ends with a route to the
-      // destination: at every width it shows the destination pane, opens the collapsed disclosure and puts focus
-      // on its summary.
-      assert.equal(await page.locator("[data-ltm-import-reason]:visible").count(), 1, "the reason shows once");
+      // soup/sources-review: the reason is read, never shown as a sentence with a second link; the chip is the one
+      // route to the destination and opens the picker at every width.
+      assert.equal(await page.locator("[data-ltm-import-reason]").count(), 0, "no warning sentence");
       const destinationHintBox = await destinationPanel.locator("[data-ltm-destination-hint]").boundingBox();
       assert.ok(destinationHintBox && destinationHintBox.width <= 1 && destinationHintBox.height <= 1);
       for (const width of [1280, 900, 390]) {
         await page.setViewportSize({ width, height: 844 });
-        await showWorkspacePane("navigator");
         await destinationScope.evaluate((details) => {
           (details as HTMLDetailsElement).open = false;
         });
-        const chooseDestination = page.locator("[data-ltm-choose-destination]:visible");
-        assert.equal(await chooseDestination.count(), 1, `${width}px: one Choose destination button`);
-        assert.equal((await chooseDestination.innerText()).trim(), "Choose destination");
-        await chooseDestination.click();
+        assert.equal(await page.locator("[data-ltm-choose-destination]").count(), 0, `${width}px: no second link`);
+        await destinationScope.locator("summary").scrollIntoViewIfNeeded();
+        await destinationScope.locator("summary").click();
         assert.equal(await destinationScope.evaluate((details) => (details as HTMLDetailsElement).open), true, width);
         await destinationScope.locator("summary").waitFor({ state: "visible" });
         assert.equal(
@@ -8441,7 +11753,6 @@ async function main() {
         );
       }
       await page.setViewportSize({ width: 1280, height: 900 });
-      await showWorkspacePane("navigator");
       await firstSourceSelect.uncheck();
       await page
         .locator('[data-ltm-source-preview="chats"]')
@@ -8523,7 +11834,7 @@ async function main() {
           target,
         );
       }
-      assert.equal(await destinationPanel.getByText(/Some locations cannot be added/u).count(), 1);
+      assert.equal(await destinationPanel.getByText(/some locations can't be added/u).count(), 1);
       // ponytail: 100 chips squeeze the rail as they did the old list; click through the DOM until the panel scrolls.
       await allChatsDestination.evaluate((element) => (element as HTMLButtonElement).click());
       assert.equal(await allChatsDestination.getAttribute("aria-pressed"), "false");
@@ -8585,7 +11896,13 @@ async function main() {
       // The collapsed summary tracks the current destination selection.
       assert.doesNotMatch(
         await destinationScope.locator("[data-ltm-destination-scope-summary]").innerText(),
-        /^Choose a destination$/u,
+        /^Choose$/u,
+      );
+      // Choosing a destination again enables Import all new.
+      assert.equal(
+        await importAllNew.getAttribute("aria-disabled"),
+        null,
+        "a chosen destination enables Import all new",
       );
 
       // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
@@ -8601,7 +11918,7 @@ async function main() {
       const blockedBulkChat = destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"]');
       await blockedBulkChat.evaluate((element) => (element as HTMLButtonElement).click());
       assert.equal(await blockedBulkChat.getAttribute("aria-pressed"), "false", "a place past the limit is not added");
-      assert.equal(await destinationPanel.getByText(/Some locations cannot be added/u).count(), 1);
+      assert.equal(await destinationPanel.getByText(/some locations can't be added/u).count(), 1);
       // Reset the chat selection back to the current chat only.
       await toggleBulkDestinationChats();
 
@@ -8629,9 +11946,8 @@ async function main() {
       const docHeightAfter = await destinationList.evaluate(() => document.documentElement.scrollHeight);
       assert.ok(docHeightAfter < listMetrics.docHeightBefore + destinationListHeightAllowance);
 
-      // Mobile: the same list stays touch/wheel-scrollable inside the inspector pane.
+      // Mobile: the same list stays touch/wheel-scrollable inside the list pane, where the destination now lives.
       await page.setViewportSize({ width: 390, height: 844 });
-      await showWorkspacePane("inspector");
       await destinationList.scrollIntoViewIfNeeded();
       const mobileListScrollable = await destinationList.evaluate((element) => ({
         scrollHeight: element.scrollHeight,
@@ -8658,6 +11974,28 @@ async function main() {
         .click();
       await page.locator('[data-ltm-source-status-filter="ready"]').click();
       await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      // soup/sources-destination: changing the destination keeps the entries you ticked.
+      await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
+      const personaDestination = destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]');
+      await personaDestination.click();
+      assert.equal(await personaDestination.getAttribute("aria-pressed"), "false");
+      assert.equal(
+        await page.locator('[data-ltm-source-select="character-outside-current-chat"]').isChecked(),
+        true,
+        "soup/sources-destination: the ticked entry survives a destination change",
+      );
+      assert.equal(
+        await page.locator('[data-ltm-source-action="import-selected"]').count(),
+        1,
+        "soup/sources-destination: Import selected stays available after a destination change",
+      );
+      assert.match(
+        await page.locator('[data-ltm-source-preview="chats"]').innerText(),
+        /\b1 selected\b/iu,
+        "soup/sources-destination: the selected count stays at 1",
+      );
+      await personaDestination.click();
+      assert.equal(await personaDestination.getAttribute("aria-pressed"), "true");
       assert.equal(
         await page.locator("[data-ltm-import-result-status]").count(),
         1,
@@ -8694,9 +12032,13 @@ async function main() {
         true,
         "the status line stays mounted, so the result is read as a change",
       );
+      // The failed result takes over the column, so return to the list to reach the destination bar.
+      await page.getByRole("button", { name: "Back to preview" }).click();
       await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
       // A whole chat and a character found by keyboard search import into the chosen places.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      // The list is collapsed again after the import, so open it before reaching the last chats.
+      if (await destinationShowMore.count()) await destinationShowMore.click();
       await destinationPanel.locator('[data-ltm-availability-target="chat:valid-group"]').click();
       assert.equal(
         await destinationPanel
@@ -8761,6 +12103,31 @@ async function main() {
           .click();
       }
       await selectedCharacter.check();
+      // soup/sources-navigator: the flat list's search, Mode, Reload and status tabs share one header bar, and
+      // "Load more" sits under the list instead of in that bar.
+      {
+        const flatBar = page.locator('[data-ltm-source-preview="characters"] header', {
+          has: page.locator("[data-ltm-source-search]"),
+        });
+        for (const control of [
+          "[data-ltm-source-search]",
+          "[data-ltm-source-mode]",
+          '[data-ltm-source-action="refresh-preview"]',
+          '[data-ltm-source-status-filter="all"]',
+        ])
+          assert.equal(await flatBar.locator(control).count(), 1, `the bar holds ${control}`);
+        assert.equal(
+          await flatBar.locator('[data-ltm-source-action="load-more"]').count(),
+          0,
+          "Load more is not in the bar",
+        );
+        const loadMoreBox = await page.locator('[data-ltm-source-action="load-more"]').boundingBox();
+        const lastRowBox = await page.locator("[data-ltm-source-row-status]").last().boundingBox();
+        assert.ok(
+          loadMoreBox && lastRowBox && loadMoreBox.y >= lastRowBox.y + lastRowBox.height - 1,
+          "Load more sits under the last row",
+        );
+      }
       await page.locator('[data-ltm-source-action="load-more"]').click();
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]').waitFor();
       assert.equal(await selectedCharacter.isChecked(), true, "pagination preserves the selected source");
@@ -8773,30 +12140,62 @@ async function main() {
         sourcePreviewRequests.filter((request) => request.source === "characters").at(-1)?.cursor,
         "characters-page-2",
       );
-      // #1588: docked narrow on a wide window, a source's Import bar stays pinned to the bottom of a long
-      // preview, the row checkbox label is a 44px target and the destination panel has no viewport-height cap.
+      // #1588: docked narrow on a wide window, the row checkbox label is a 44px target and the destination panel
+      // has no viewport-height cap. soup/sources-review: Sources is one column, so a row's preview opens under it.
       await dockDetailPanel(page, "24rem");
-      await showWorkspacePane("navigator");
       assert.equal(
         await touchTargetSize(page.locator('label:has([data-ltm-source-select="character-outside-current-chat"])')),
         "fits",
       );
-      await page.locator('[data-ltm-source-open="character-outside-current-chat"]').click();
-      await showWorkspacePane("workbench");
-      const flatSourceBar = page.locator("[data-ltm-source-workbench] [data-ltm-source-primary-actions]");
-      await flatSourceBar.evaluate((bar) => {
-        (bar.previousElementSibling as HTMLElement).style.minHeight = "150vh";
-      });
-      assert.equal(await stickyBarInView(flatSourceBar, "top"), "in view");
+      const characterRowOpen = page.locator('[data-ltm-source-open="character-outside-current-chat"]');
+      assert.equal(await characterRowOpen.getAttribute("aria-expanded"), "false");
+      await characterRowOpen.click();
+      const characterRegion = page.locator(
+        '[role="listitem"]:has([data-ltm-source-open="character-outside-current-chat"]) > [data-ltm-source-workbench]',
+      );
+      await characterRegion.waitFor();
+      assert.equal(await characterRowOpen.getAttribute("aria-expanded"), "true");
+      assert.equal(await characterRowOpen.getAttribute("aria-controls"), await characterRegion.getAttribute("id"));
+      await characterRegion.locator("[data-ltm-source-primary-actions]").waitFor();
+      // One column: no pane switcher and no side-by-side panes, at this docked width and at any other.
+      assert.equal(await page.locator('[data-ltm-surface="sources"] [data-ltm-workspace-pane-tab]').count(), 0);
+      assert.equal(await page.locator('[data-ltm-surface="sources"] [data-ltm-workspace-pane]').count(), 0);
       if (visualOutputDir)
         await page.screenshot({ path: join(visualOutputDir, "long-term-memory-source-bar-docked.png") });
-      await flatSourceBar.evaluate((bar) => {
-        (bar.previousElementSibling as HTMLElement).style.minHeight = "";
+      // Esc closes the preview and focus returns to the row.
+      await characterRowOpen.focus();
+      await page.keyboard.press("Escape");
+      await characterRegion.waitFor({ state: "detached" });
+      assert.equal(await characterRowOpen.getAttribute("aria-expanded"), "false");
+      assert.equal(await characterRowOpen.evaluate((button) => button === document.activeElement), true);
+      // Esc from inside the preview closes it and moves focus back to the row; so does Close.
+      await characterRowOpen.click();
+      await characterRegion.waitFor();
+      await characterRegion.locator("[data-ltm-source-action]").first().focus();
+      await page.keyboard.press("Escape");
+      await characterRegion.waitFor({ state: "detached" });
+      assert.equal(await characterRowOpen.evaluate((button) => button === document.activeElement), true);
+      await characterRowOpen.click();
+      await characterRegion.locator("[data-ltm-source-preview-close]").click();
+      await characterRegion.waitFor({ state: "detached" });
+      assert.equal(await characterRowOpen.evaluate((button) => button === document.activeElement), true);
+      // Clicking an open row closes it too; open it again for what follows.
+      await characterRowOpen.click();
+      await characterRegion.waitFor();
+      await characterRowOpen.click();
+      await characterRegion.waitFor({ state: "detached" });
+      await characterRowOpen.click();
+      await characterRegion.waitFor();
+      // The bar only caps its height while the picker is open, and then stays inside the window.
+      const importBar = page.locator("#ltm-destination-scope-control");
+      await destinationScope.evaluate((details) => {
+        (details as HTMLDetailsElement).open = false;
       });
-      assert.equal(
-        await page.locator("#ltm-destination-scope-control").evaluate((panel) => getComputedStyle(panel).maxHeight),
-        "none",
-      );
+      assert.equal(await importBar.evaluate((panel) => getComputedStyle(panel).maxHeight), "none");
+      await destinationScope.evaluate((details) => {
+        (details as HTMLDetailsElement).open = true;
+      });
+      assert.ok(((await importBar.boundingBox())?.height ?? Infinity) <= 900, "an open picker stays inside the window");
       await dockDetailPanel(page, null);
       if (visualOutputDir)
         await page.screenshot({
@@ -8917,6 +12316,8 @@ async function main() {
       await page.unroute(importRoute);
       assert.equal(await importingButton.isEnabled(), true);
       assert.equal(await importingButton.locator("svg").getAttribute("class"), idleIcon);
+      // A finished import's result takes over the column, so return to the list before ticking the next row.
+      await page.getByRole("button", { name: "Back to preview" }).click();
       await selectedCharacter.check();
       const searchRoute = "**/api/long-term-memory/import/preview";
       let releaseSearch!: () => void;
@@ -8976,9 +12377,38 @@ async function main() {
       );
       // #1783: on a Chat Messages row with a long chat name, the name is cut and the range stays whole.
       await page.locator('[data-ltm-source-tab="messages"]').click();
-      await page.locator('[data-ltm-source-group="ready"] > summary').click();
+      assert.equal(
+        await page.locator('[data-ltm-source-group="ready"]').getAttribute("open"),
+        "",
+        "soup/sources-destination: Ready to import starts open on every source tab",
+      );
       await page.locator('[data-ltm-source-id="chat-long:messages:m1"] [data-ltm-source-message-range]').waitFor();
       const rangeViewport = page.viewportSize();
+      // soup/sources-review: a ready row shows its checkbox before Select, an initials avatar and what it imports as.
+      for (const [sourceId, meta] of [
+        ["chat-long:messages:m1", "120 messages · Imports as Roleplay"],
+        ["chat-long:messages:m121", "1 message · Imports as Roleplay"],
+      ]) {
+        const readyRow = page.locator(`[data-ltm-source-id="${sourceId}"][data-ltm-source-row-status]`);
+        assert.equal(
+          await readyRow.locator("[data-ltm-source-select]").isVisible(),
+          true,
+          `${sourceId}: checkbox shows before Select`,
+        );
+        assert.equal((await readyRow.locator("[data-ltm-source-avatar]").innerText()).trim(), "MV");
+        assert.equal((await readyRow.locator("[data-ltm-source-meta]").innerText()).trim(), meta);
+      }
+      // Ticking one starts selection without pressing Select, and Done still ends it.
+      await page.locator('[data-ltm-source-select="chat-long:messages:m1"]').check();
+      await page
+        .locator('[data-ltm-source-preview="messages"]')
+        .getByText(/\b1 selected\b/iu)
+        .waitFor();
+      await page.locator('[data-ltm-source-select="chat-long:messages:m1"]').uncheck();
+      await page
+        .locator('[data-ltm-source-preview="messages"]')
+        .getByRole("button", { name: "Done", exact: true })
+        .click();
       await page.setViewportSize({ width: 320, height: 844 });
       for (const [sourceId, label] of [
         ["chat-long:messages:m1", "messages 1–120"],
@@ -9048,8 +12478,8 @@ async function main() {
       await page.locator('[data-ltm-source-status-filter="imported"]').click();
       assert.match(await page.locator('[data-ltm-source-status-filter="imported"]').innerText(), /\([1-9]\d*\)/u);
       const desktopReextractRow = page.locator('[data-ltm-source-id="chat-a:summary-desktop-reextract"]');
-      // Tab reaches the name of an imported row, which has no Import button, and Enter opens the row in the
-      // workbench (#1584).
+      // Tab reaches the name of an imported row, which has no Import button, and Enter opens the row's preview
+      // under it (#1584).
       await page.locator('[data-ltm-source-status-filter="imported"]').focus();
       const reextractRowNameFocused = () =>
         page.evaluate(
@@ -9062,7 +12492,7 @@ async function main() {
           request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-details"),
       );
       await page.keyboard.press("Enter");
-      await page.locator("[data-ltm-source-workbench] h2", { hasText: "Desktop re-extract source" }).waitFor();
+      await page.locator("[data-ltm-source-workbench] h3", { hasText: "Desktop re-extract source" }).waitFor();
       const sourceDetailsRequest = (await sourceDetailsRequestPromise).postDataJSON() as Record<string, unknown>;
       assert.equal(Object.hasOwn(sourceDetailsRequest, "chatId"), false);
       await page.locator("[data-ltm-source-management] > summary").click();
@@ -9074,7 +12504,7 @@ async function main() {
         () => document.activeElement?.matches("[data-ltm-source-operation-workbench] h2") ?? false,
       );
       assert.equal(
-        await sourceOperationWorkbench.evaluate((element) => Boolean(element.closest("[data-ltm-source-workbench]"))),
+        await sourceOperationWorkbench.evaluate((element) => Boolean(element.closest("[data-ltm-source-column]"))),
         true,
       );
       // #1588: Close leaves the action and returns focus to the menu item that opened it.
@@ -9132,8 +12562,8 @@ async function main() {
       await sourceOperationWorkbench.waitFor({ state: "detached" });
       releaseTransferPreview();
       await page.unroute("**/api/long-term-memory/notes/transfer-preview");
-      // Render-level: the hidden status copy beside the result is mounted before the run and is the same node
-      // after it, so the finished run is read out instead of mounting with its text (one utterance per run).
+      // The finished run's summary is an Engine toast, which the host announces once; the workbench keeps no live
+      // copy of its own, and what happened to each memory stays in the result block to read.
       const archiveBatchRoute = "**/api/long-term-memory/notes/batch";
       await page.route(archiveBatchRoute, (route) =>
         route.fulfill({ json: { updatedNoteIds: ["archived-source"], skippedNoteIds: [], failedNoteIds: [] } }),
@@ -9146,40 +12576,35 @@ async function main() {
             .filter((node) => !node.hasAttribute("data-ltm-source-operation-preview-summary"))
             .map((node) => ({ marked: node.hasAttribute("data-ltm-test-mounted"), text: node.textContent ?? "" })),
         );
-      assert.deepEqual(await workbenchLiveCopy(), [{ marked: false, text: "" }], "the live copy is mounted and empty");
+      assert.deepEqual(await workbenchLiveCopy(), [], "the workbench keeps no live copy of its own");
       assert.equal(await sourceOperationWorkbench.locator("[data-ltm-source-operation-result]").count(), 0);
-      await sourceOperationWorkbench.evaluate((workbench) => {
-        const live = [...workbench.querySelectorAll('[role="status"]')].find(
-          (node) => !node.hasAttribute("data-ltm-source-operation-preview-summary"),
-        );
-        live?.setAttribute("data-ltm-test-mounted", "");
-      });
       await sourceOperationWorkbench.locator('[data-ltm-source-operation-action="preview"]').click();
-      // This host has no confirmAction here, so Apply asks through window.confirm; accept it.
-      const applyDialog = page.waitForEvent("dialog");
-      const applyClick = sourceOperationWorkbench.locator('[data-ltm-source-operation-action="apply"]').click();
-      await (await applyDialog).accept();
-      await applyClick;
+      // This host has no confirmAction here, so Apply asks through the package's own confirm dialog; accept it.
+      await sourceOperationWorkbench.locator('[data-ltm-source-operation-action="apply"]').click();
+      await page.locator("[data-ltm-confirm-ok]").click();
       const workbenchResult = sourceOperationWorkbench.locator("[data-ltm-source-operation-result]");
       await workbenchResult.waitFor();
-      assert.deepEqual(
-        await workbenchLiveCopy(),
-        [{ marked: true, text: "Updated 1; deleted 0; detached 0; excluded 0; skipped 0; failed 0." }],
-        "the same status node now carries the result, and nothing else announces it",
-      );
-      assert.equal(
-        (await workbenchResult.locator("[data-ltm-status]").first().innerText()).trim(),
-        "Updated 1; deleted 0; detached 0; excluded 0; skipped 0; failed 0.",
+      const summaryToast = toastWith(page, "Updated 1; deleted 0; detached 0; excluded 0; skipped 0; failed 0.");
+      await summaryToast.waitFor();
+      assert.equal(await summaryToast.getAttribute("data-type"), "success");
+      assert.deepEqual(await workbenchLiveCopy(), [], "nothing in the workbench announces the result a second time");
+      assert.equal(await workbenchResult.locator("[data-ltm-status], [role=status], [aria-live]").count(), 0);
+      assert.equal(await workbenchResult.locator("[data-ltm-source-operation-result-memory]").count(), 1);
+      assert.match(
+        await workbenchResult.locator("[data-ltm-source-operation-result-memory]").innerText(),
+        /: Updated$/u,
       );
       await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
       await sourceOperationWorkbench.waitFor({ state: "detached" });
       await page.unroute(archiveBatchRoute);
       await page.unroute(derivedRoute);
-      await page.locator("[data-ltm-source-workbench] h2", { hasText: "Desktop re-extract source" }).waitFor();
+      await page.locator("[data-ltm-source-workbench] h3", { hasText: "Desktop re-extract source" }).waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
       await page.locator('[data-ltm-source-preview="characters"]').waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
-      await desktopReextractRow.click();
+      // The row's preview is still open from before the tab switch; clicking an open row would close it.
+      if ((await desktopReextractRow.getAttribute("data-ltm-source-focused")) === null)
+        await desktopReextractRow.click();
       const desktopReextract = page.locator('[data-ltm-source-inspector-action="re-extract"]');
       await desktopReextract.click();
       await page.waitForFunction(
@@ -9269,14 +12694,9 @@ async function main() {
       const lorebookPreviewRequest = lorebookPreviewRequests.at(-1);
       assert.ok(lorebookPreviewRequest);
       assert.equal(Object.hasOwn(lorebookPreviewRequest, "sourceScope"), false);
-      const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
-      await sourcesWorkspace.waitFor();
-      assert.equal(
-        await sourcesWorkspace.evaluate(
-          (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/u).length,
-        ),
-        3,
-      );
+      // soup/sources-review: the lorebook list is one column too, with no pane switcher.
+      await page.locator('[data-ltm-surface="sources"] [data-ltm-source-column]').waitFor();
+      assert.equal(await page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]').count(), 0);
       if ((await destinationScope.getAttribute("open")) === null) {
         await destinationScope.locator("summary").click();
       }
@@ -9302,6 +12722,18 @@ async function main() {
       assert.match(lorebookDetailText, /\b1 entry\b/u);
       assert.doesNotMatch(lorebookDetailText, /1 entries|entries ·/u);
       assert.match(await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').innerText(), /\b1 entry\b/u);
+      // soup/sources-navigator: the lorebook navigator is the same bar as the flat list.
+      for (const control of [
+        "[data-ltm-source-search]",
+        "[data-ltm-source-mode]",
+        '[data-ltm-source-action="refresh-preview"]',
+        '[data-ltm-source-status-filter="ready"]',
+      ])
+        assert.equal(
+          await page.locator("[data-ltm-lorebook-browser]").locator(control).count(),
+          1,
+          `the lorebook bar holds ${control}`,
+        );
       await page.locator("[data-ltm-lorebook-browser]").getByRole("button", { name: "Select", exact: true }).click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_mobile_harbor"]').check();
       // #1588: the label around an entry checkbox is a 44px target.
@@ -9311,15 +12743,10 @@ async function main() {
       );
       await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_outside_current_chat"]').check();
-      const selectionDialog = new Promise<void>((resolveDialog) => {
-        page.once("dialog", async (dialog) => {
-          assert.match(dialog.message(), /2/u);
-          await dialog.dismiss();
-          resolveDialog();
-        });
-      });
       await page.locator('[data-ltm-source-tab="chats"]').click();
-      await selectionDialog;
+      assert.match(await page.locator("[data-ltm-confirm-dialog]").innerText(), /2/u);
+      await page.locator("[data-ltm-confirm-cancel]").click();
+      await page.locator("[data-ltm-confirm-dialog]").waitFor({ state: "detached" });
       assert.equal(await page.locator('[data-ltm-source-tab="lorebooks"]').getAttribute("aria-selected"), "true");
       const persistedImportRequest = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
@@ -9335,8 +12762,31 @@ async function main() {
       });
       const liveImportResult = page.locator("[data-ltm-source-import-result]");
       await liveImportResult.waitFor();
+      // soup/sources-result: the outcome line comes first, a result that needs attention keeps its Details open,
+      // and without proposed memories there is no Open Review.
+      {
+        const outcome = liveImportResult.locator("[data-ltm-import-result-outcome]");
+        assert.notEqual(((await outcome.textContent()) ?? "").trim(), "");
+        const details = liveImportResult.locator("[data-ltm-import-result-details]");
+        assert.equal(await details.getAttribute("open"), "", "a failed import opens its Details");
+        assert.equal(await details.locator("[data-ltm-import-scope-result]").isVisible(), true);
+        assert.equal(await liveImportResult.locator('[data-ltm-source-action="review-imported-drafts"]').count(), 0);
+        assert.equal(
+          await liveImportResult.evaluate((panel) => {
+            const outcomeNode = panel.querySelector("[data-ltm-import-result-outcome]");
+            const detailsNode = panel.querySelector("[data-ltm-import-result-details]");
+            return Boolean(
+              outcomeNode &&
+              detailsNode &&
+              outcomeNode.compareDocumentPosition(detailsNode) & Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+          }),
+          true,
+          "the outcome precedes the details",
+        );
+      }
       assert.equal(
-        await liveImportResult.evaluate((element) => Boolean(element.closest("[data-ltm-lorebook-workbench]"))),
+        await liveImportResult.evaluate((element) => Boolean(element.closest("[data-ltm-source-column]"))),
         true,
       );
 
@@ -9361,7 +12811,7 @@ async function main() {
         /lorebook_outside_current_chat:entry_outside_current_chat:0/u,
       );
       assert.equal(
-        await restoredSourceResult.evaluate((element) => Boolean(element.closest("[data-ltm-lorebook-workbench]"))),
+        await restoredSourceResult.evaluate((element) => Boolean(element.closest("[data-ltm-source-column]"))),
         true,
       );
       await restoredSourceResult.getByRole("button", { name: "Back to preview" }).click();
@@ -9424,12 +12874,7 @@ async function main() {
         viewport: { width: 390, height: 844 },
       });
       const mobilePage = await mobileContext.newPage();
-      const activationChanges: boolean[] = [];
-      let holdActivation: Promise<void> | null = null;
-      await mobilePage.exposeFunction("onMobileActivationChange", async (enabled: boolean) => {
-        activationChanges.push(enabled);
-        await holdActivation;
-      });
+      await mobilePage.exposeFunction("onMobileActivationChange", () => {});
       await mobilePage.exposeFunction("onMobileManagePackage", () => {});
       await mobilePage.goto(`http://127.0.0.1:${address.port}/`);
       await mobilePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
@@ -9458,120 +12903,50 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await mobilePage.locator('[data-ltm-surface="detail"]').waitFor();
+      // The Engine header's Active switch is the one per-chat on/off; the package draws no second control.
       const activation = mobilePage.locator('[data-ltm-control="activation"]');
-      assert.equal(await activation.count(), 1);
-      assert.equal(await activation.isVisible(), true);
-      assert.equal(await activation.getAttribute("aria-checked"), "true");
-      const activationTrack = activation.locator("[data-ltm-activation-track]");
-      const activationGeometry = await activation.evaluate((element) => {
-        const button = element.getBoundingClientRect();
-        const track = element.querySelector("[data-ltm-activation-track]")!.getBoundingClientRect();
-        const knob = element.querySelector("[data-ltm-activation-knob]")!.getBoundingClientRect();
-        const style = getComputedStyle(element.querySelector("[data-ltm-activation-track]")!);
-        return {
-          button: { width: button.width, height: button.height },
-          track: {
-            x: track.left - button.left,
-            y: track.top - button.top,
-            width: track.width,
-            height: track.height,
-          },
-          knob: {
-            x: knob.left - track.left,
-            y: knob.top - track.top,
-            width: knob.width,
-            height: knob.height,
-          },
-          backgroundColor: style.backgroundColor,
-          borderWidth: style.borderWidth,
-        };
-      });
-      assert.equal(activationGeometry.button.height, 44);
-      assert.equal(activationGeometry.button.width > 48, true);
-      assert.equal(activationGeometry.track.width, 44);
-      assert.equal(activationGeometry.track.height, 24);
-      assert.equal(activationGeometry.knob.width, 20);
-      assert.equal(activationGeometry.knob.height, 20);
-      assert.ok(activationGeometry.knob.x + activationGeometry.knob.width / 2 > activationGeometry.track.width / 2);
-      assert.ok(activationGeometry.knob.x + activationGeometry.knob.width <= activationGeometry.track.width);
-      assert.notEqual(activationGeometry.backgroundColor, "rgba(0, 0, 0, 0)");
-      assert.equal(activationGeometry.borderWidth, "1px");
-      const activationTrackStyle = await activationTrack.evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return {
-          width: rect.width,
-          height: rect.height,
-          backgroundColor: style.backgroundColor,
-        };
-      });
-      assert.deepEqual(
-        { width: activationTrackStyle.width, height: activationTrackStyle.height },
-        { width: 44, height: 24 },
-      );
-      assert.equal(activationTrackStyle.backgroundColor, activationGeometry.backgroundColor);
-      const activationMetrics = await activation.evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        const center = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        return {
-          box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-          display: style.display,
-          visibility: style.visibility,
-          opacity: style.opacity,
-          nearbyText: element.parentElement?.innerText ?? "",
-          withinViewport: rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
-          centerCovered: center === element || element.contains(center),
-        };
-      });
-      console.log(`LTM mobile activation baseline: ${JSON.stringify(activationMetrics)}`);
-      assert.ok(activationMetrics.box.width > 0 && activationMetrics.box.height > 0);
-      assert.ok(activationMetrics.box.width >= 40 && activationMetrics.box.height >= 36);
-      assert.equal(activationMetrics.withinViewport, true);
-      assert.equal(activationMetrics.centerCovered, true);
+      const activationChip = mobilePage.locator('[data-ltm-surface="activation-chip"]');
+      assert.equal(await activation.count(), 0);
+      assert.equal(await activationChip.count(), 0);
       assert.ok(
         (await mobilePage.locator(".mari-editor-header").evaluate((header) => {
           const [main, actions] = [...header.children].map((child) => child.getBoundingClientRect());
           return Math.abs(main.top + main.height / 2 - (actions.top + actions.height / 2));
         })) <= 1,
       );
-      const addMemoriesBox = await mobilePage.locator('[aria-label="Add memories"]').boundingBox();
-      assert.ok(addMemoriesBox);
-      assert.equal(
-        Math.abs((await activationTrack.boundingBox())!.y + 12 - (addMemoriesBox.y + addMemoriesBox.height / 2)) <= 1,
-        true,
-      );
-      assert.equal(await activation.getAttribute("title"), "Active in kirei");
-      assert.equal((await activation.innerText()).trim(), "Active");
       assert.equal(
         await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
         true,
       );
-      // Pending keeps keyboard focus: while the change is held, the switch stays focused and named, is
-      // aria-disabled instead of `disabled`, and a second Enter or click makes no second change.
-      let releaseActivation = () => {};
-      holdActivation = new Promise<void>((resolve) => {
-        releaseActivation = resolve;
-      });
-      await activation.click();
-      await mobilePage.waitForFunction(
-        () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-disabled") === "true",
+      // soup/shell-activation: "Add memories" stays on every tab, including Review and Sources.
+      for (const destination of ["review", "sources", "vault"]) {
+        await mobilePage.locator(`[data-ltm-navigation="mobile"] [data-ltm-destination="${destination}"]`).click();
+        assert.equal(
+          await mobilePage.locator('[aria-label="Add memories"]').isVisible(),
+          true,
+          `Add memories shows on ${destination}`,
+        );
+      }
+      // soup/shell-activation: "Create manually" from Review opens the Vault editor.
+      await mobilePage.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await mobilePage.locator('[aria-label="Add memories"]').click();
+      await mobilePage.getByRole("button", { name: /Create manually/u }).click();
+      await mobilePage
+        .locator('[data-ltm-navigation="mobile"] [data-ltm-destination="vault"][aria-current="page"]')
+        .waitFor();
+      // Each tab says what it holds.
+      assert.deepEqual(
+        await mobilePage
+          .locator('[data-ltm-navigation="mobile"] [data-ltm-control="navigation"]')
+          .evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("title"))),
+        [
+          "Saved memories",
+          "Proposals waiting for your OK",
+          "Import from chats, lorebooks, characters",
+          "What memory did and why",
+          "Recall and extraction options",
+        ],
       );
-      const activationIsFocused = () => activation.evaluate((element) => element === document.activeElement);
-      assert.equal(await activation.evaluate((element) => element.matches(":disabled")), false);
-      assert.equal(await activation.getAttribute("aria-label"), "Active in kirei");
-      assert.equal(await activationIsFocused(), true);
-      await mobilePage.keyboard.press("Enter");
-      await activation.dispatchEvent("click");
-      await mobilePage.waitForTimeout(150);
-      assert.deepEqual(activationChanges, [false]);
-      assert.equal(await activationIsFocused(), true);
-      releaseActivation();
-      await mobilePage.waitForFunction(
-        () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-disabled") === null,
-      );
-      assert.equal(await activationIsFocused(), true);
-      assert.deepEqual(activationChanges, [false]);
       // Chat Settings pending keeps keyboard focus too: committing one field on blur starts the save while
       // the next field is already focused, and that field must stay focused, named and read-only.
       const chatSettingChanges: unknown[] = [];
@@ -9602,22 +12977,25 @@ async function main() {
       const heldChatSettings = mobilePage.locator('[data-ltm-surface="chat-settings"]');
       await heldChatSettings.waitFor();
       const heldStyle = heldChatSettings.getByLabel("Recall style", { exact: true });
-      const heldBudget = heldChatSettings.getByRole("spinbutton", { name: "Recall context budget" });
-      const heldMaxChunks = heldChatSettings.getByRole("spinbutton", { name: "Maximum memories" });
+      const heldBudget = heldChatSettings.getByRole("spinbutton", { name: "Memory budget" });
       const isFocused = (target: typeof heldBudget) => target.evaluate((element) => element === document.activeElement);
       await heldBudget.fill("256");
-      await heldMaxChunks.click();
-      await heldMaxChunks.waitFor();
+      // Moving focus to the Recall style select commits the budget on blur and starts the save.
+      await heldStyle.focus();
       await mobilePage.waitForFunction(() =>
         [...document.querySelectorAll('[data-ltm-surface="chat-settings"] input[type="number"]')].every(
           (input) => input.getAttribute("aria-disabled") === "true",
         ),
       );
       assert.deepEqual(chatSettingChanges, [{ longTermMemoryBudgetTokens: 256 }]);
-      assert.equal(await heldMaxChunks.evaluate((input) => input.matches(":disabled")), false);
-      assert.equal(await isFocused(heldMaxChunks), true);
+      assert.equal(await isFocused(heldStyle), true);
+      // The number field stays focusable and named while the save is in flight, but typing changes nothing.
+      await heldBudget.focus();
+      assert.equal(await heldBudget.evaluate((input) => input.matches(":disabled")), false);
+      assert.equal(await isFocused(heldBudget), true);
+      const heldBudgetValue = await heldBudget.inputValue();
       await mobilePage.keyboard.type("5");
-      assert.equal(await heldMaxChunks.inputValue(), "20");
+      assert.equal(await heldBudget.inputValue(), heldBudgetValue);
       // An ignored change on the aria-disabled select snaps the controlled value back and starts no second save.
       assert.equal(await heldStyle.getAttribute("aria-disabled"), "true");
       assert.equal(await heldStyle.evaluate((select) => select.matches(":disabled")), false);
@@ -9634,62 +13012,10 @@ async function main() {
           (control) => control.getAttribute("aria-disabled") === null,
         ),
       );
-      assert.equal(await isFocused(heldMaxChunks), true);
+      assert.equal(await isFocused(heldBudget), true);
       assert.equal(chatSettingChanges.length, 1);
       await mobilePage.evaluate(() =>
         document.querySelectorAll("marinara-capability-long-term-memory").item(1)?.remove(),
-      );
-      await mobilePage.evaluate(() => {
-        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
-          capabilityProps?: Record<string, unknown>;
-        };
-        element.capabilityProps = {
-          ...element.capabilityProps,
-          enabledForChat: false,
-        };
-        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
-      });
-      await mobilePage.waitForFunction(
-        () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-checked") === "false",
-      );
-      assert.equal(await activation.getAttribute("aria-checked"), "false");
-      assert.equal(await activation.getAttribute("title"), "Inactive in kirei");
-      assert.equal((await activation.innerText()).trim(), "Inactive");
-      const inactiveTrack = await activationTrack.evaluate((element) => {
-        const style = getComputedStyle(element);
-        const track = element.getBoundingClientRect();
-        const knob = element.firstElementChild!.getBoundingClientRect();
-        return {
-          backgroundColor: style.backgroundColor,
-          borderWidth: style.borderWidth,
-          knobRight: knob.right - track.left,
-          width: track.width,
-        };
-      });
-      assert.notEqual(inactiveTrack.backgroundColor, "rgba(0, 0, 0, 0)");
-      assert.equal(inactiveTrack.borderWidth, "1px");
-      assert.ok(inactiveTrack.knobRight <= inactiveTrack.width);
-      const longChatName = "A".repeat(200);
-      await mobilePage.evaluate((chatName) => {
-        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
-          capabilityProps?: Record<string, unknown>;
-        };
-        element.capabilityProps = { ...element.capabilityProps, chatName };
-        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
-      }, longChatName);
-      await mobilePage.waitForFunction(
-        (chatName) =>
-          document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") ===
-          `Inactive in ${chatName}`,
-        longChatName,
-      );
-      const longNameBox = await activation.boundingBox();
-      assert.ok(longNameBox);
-      assert.ok(longNameBox.width >= 40 && longNameBox.height >= 36);
-      assert.equal(longNameBox.x + longNameBox.width <= 390, true);
-      assert.equal(
-        await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
-        true,
       );
       await mobilePage.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
@@ -9704,15 +13030,22 @@ async function main() {
       });
       await mobilePage.waitForFunction(
         () =>
-          document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") ===
-          "Inactive in this chat",
+          document.querySelector('[data-ltm-surface="activation-chip"]')?.getAttribute("data-ltm-activation") ===
+          "no-chat",
       );
-      assert.equal(await activation.count(), 1);
-      assert.equal(await activation.getAttribute("aria-checked"), "false");
+      assert.equal((await activationChip.textContent())?.trim(), "No chat open");
+      assert.equal(await activationChip.getAttribute("aria-label"), "No chat open");
+      assert.equal(await activation.count(), 0, "no chat, no button");
+      // soup/ltm-frame: with no chat open the state is a chip in the header, not a panel in the body.
+      assert.equal(
+        await activationChip.evaluate((chip) => chip.closest(".mari-editor-header") !== null),
+        true,
+        "No chat open shows in the header",
+      );
       const mobileNavigation = mobilePage.locator('[data-ltm-navigation="mobile"]');
       const mobileNavigationItems = mobileNavigation.locator('[data-ltm-control="navigation"]');
-      assert.equal(await mobileNavigationItems.count(), 4);
-      for (const destination of ["vault", "review", "sources", "settings"])
+      assert.equal(await mobileNavigationItems.count(), 5);
+      for (const destination of ["vault", "review", "sources", "activity", "settings"])
         assert.equal(await mobileNavigation.locator(`[data-ltm-destination="${destination}"]`).count(), 1);
       const mobileNavigationLayout = await mobileNavigation.evaluate((navigation) => {
         const rect = navigation.getBoundingClientRect();
@@ -9727,120 +13060,85 @@ async function main() {
         };
       });
       assert.equal(mobileNavigationLayout.visible, true);
-      assert.equal(mobileNavigationLayout.columns, 4);
+      assert.equal(mobileNavigationLayout.columns, 5);
       assert.equal(mobileNavigationLayout.hasSize, true);
       assert.equal(mobileNavigationLayout.fits, true);
       assert.equal(mobileNavigationLayout.touchTargets, true);
       assert.equal(mobileNavigationLayout.oneRow, true);
-      await mobilePage.getByRole("button", { name: "Show setup guide" }).click();
-      const onboardingFooter = mobilePage.locator("[data-ltm-onboarding-footer]");
-      const footerCloseBox = await onboardingFooter.getByRole("button", { name: "Don't show again" }).boundingBox();
-      const footerNoteBox = await onboardingFooter.locator(":scope > p").boundingBox();
-      assert.ok(footerCloseBox);
-      assert.ok(footerNoteBox);
-      // The note sits beside the buttons or wraps below them, never over them.
-      assert.ok(
-        footerNoteBox.x >= footerCloseBox.x + footerCloseBox.width - 1 ||
-          footerNoteBox.y >= footerCloseBox.y + footerCloseBox.height - 1,
-      );
+      // soup/setup-beats: on a phone every setup answer is a 44px touch target and the dialog fits the width.
+      await mobilePage.locator("[data-ltm-onboarding-help]").click();
+      await mobilePage.locator("[data-ltm-help-setup]").click();
+      await mobilePage.locator("[data-ltm-setup-answers]").waitFor();
       assert.ok(
         await mobilePage
           .locator('[data-ltm-surface="onboarding"] [data-ltm-control="button"]')
           .evaluateAll((buttons) => buttons.every((button) => button.getBoundingClientRect().height >= 44)),
       );
-      assert.deepEqual(
-        await mobilePage.locator("[data-ltm-onboarding-actions]").evaluate((actions) => {
-          const buttons = [...actions.querySelectorAll(":scope > button")];
-          return buttons.map((button) => {
-            const actionRect = actions.getBoundingClientRect();
-            const buttonRect = button.getBoundingClientRect();
-            return {
-              left: Math.round(buttonRect.left - actionRect.left),
-              right: Math.round(actionRect.right - buttonRect.right),
-            };
-          });
-        }),
-        [{ left: 0, right: 0 }],
+      assert.equal(
+        await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
       );
-      await mobilePage.getByRole("button", { name: "Next: How recall works" }).click();
-      await mobilePage.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await mobilePage.getByRole("button", { name: "Continue without a chat" }).click();
-      const mobileSourceButtons = mobilePage.locator("[data-ltm-source-choice] > button");
-      assert.deepEqual(await mobileSourceButtons.allInnerTexts(), ["Chat Summary", "Lorebook", "Character"]);
-      const sourceButtonPositions = async () =>
-        mobileSourceButtons.evaluateAll((buttons) =>
-          buttons.map((button) => {
-            const rect = button.getBoundingClientRect();
-            return { left: rect.left, width: rect.width };
-          }),
-        );
-      const initialSourceButtonPositions = await sourceButtonPositions();
-      await mobilePage.getByRole("button", { name: "Lorebook" }).click();
-      assert.deepEqual(await sourceButtonPositions(), initialSourceButtonPositions);
-      await mobilePage.getByRole("button", { name: "Not now" }).click();
+      await mobilePage.locator("[data-ltm-setup-close]").click();
       await mobilePage.locator('[data-ltm-surface="onboarding"]').waitFor({ state: "detached" });
       await mobileNavigation.locator('[data-ltm-destination="sources"]').click();
       await mobilePage.locator('[data-ltm-surface="sources"]').waitFor();
       await mobilePage.locator('[data-ltm-source-tab="lorebooks"]').evaluate((tab) => (tab as HTMLElement).click());
       await mobilePage.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
-      const mobileSourcesWorkspace = mobilePage.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
-      assert.deepEqual(
-        await mobileSourcesWorkspace.evaluate((workspace) => ({
-          innerWidth,
-          mobileMedia: matchMedia("(max-width: 767px)").matches,
-          visiblePanes: [...workspace.querySelectorAll<HTMLElement>("[data-ltm-workspace-pane]")]
-            .filter((pane) => getComputedStyle(pane).display !== "none")
-            .map((pane) => pane.dataset.ltmWorkspacePane),
-        })),
-        {
-          innerWidth: 390,
-          mobileMedia: true,
-          visiblePanes: ["workbench"],
-        },
-      );
+      // soup/sources-review: on a phone Sources is one column: the lorebook opens under its row, with no pane
+      // switcher, and its entries and Import bar are right there.
+      assert.equal(await mobilePage.locator('[data-ltm-surface="sources"] [data-ltm-workspace]').count(), 0);
+      assert.equal(await mobilePage.locator("[data-ltm-workspace-pane-tab]").count(), 0);
       await mobilePage.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
-      assert.equal(
-        (await mobilePage.locator('[data-ltm-workspace-pane-tab="workbench"]').innerText()).trim(),
-        "Entries",
-      );
       assert.equal(
         await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
         true,
       );
-      // #1588: on a phone the lorebook's Import bar sits above the entries and sticks to the top of the
-      // scroller through a long list.
       const lorebookWorkbench = mobilePage.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]');
       await dockDetailPanel(mobilePage, "");
-      await lorebookWorkbench.evaluate((workbench) => {
-        (workbench as HTMLElement).style.minHeight = "250vh";
-      });
+      await lorebookWorkbench.locator("[data-ltm-source-primary-actions]").waitFor();
+      assert.equal(
+        await mobilePage
+          .locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]')
+          .evaluate((row) => row.compareDocumentPosition(document.querySelector("[data-ltm-lorebook-workbench]")!) & 4),
+        4,
+        "the open lorebook sits after its row",
+      );
+      // #1588: the lorebook's Import bar stays pinned to the top while its entries scroll.
       assert.equal(
         await stickyBarInView(lorebookWorkbench.locator("[data-ltm-source-primary-actions]"), "bottom"),
         "in view",
       );
       if (visualOutputDir)
         await mobilePage.screenshot({ path: join(visualOutputDir, "long-term-memory-lorebook-bar-mobile.png") });
-      await lorebookWorkbench.evaluate((workbench) => {
-        (workbench as HTMLElement).style.minHeight = "";
-      });
       await dockDetailPanel(mobilePage, null);
       await mobileNavigation.locator('[data-ltm-destination="settings"]').click();
       await mobilePage.locator("#settings-tab-extraction").click();
       const mobileExtractionLayout = await mobilePage
         .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
         .evaluate((grid) => {
-          const fields = [...grid.children].slice(0, 2) as HTMLElement[];
+          const panel = document.querySelector("#settings-panel-extraction")!;
+          const fields = [
+            panel.querySelector("[data-ltm-chat-memories-field]"),
+            panel.querySelector("[data-ltm-connection-field]"),
+          ] as HTMLElement[];
           const labels = fields.map((field) => field.firstElementChild as HTMLElement);
           const selects = fields.map((field) => field.querySelector("select")!);
           return {
             columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u).length,
-            labelHeights: labels.map((label) => label.getBoundingClientRect().height),
+            labelGaps: fields.map(
+              (field, index) =>
+                field.querySelector("select")!.getBoundingClientRect().top -
+                labels[index]!.getBoundingClientRect().bottom,
+            ),
             selectWidths: selects.map((select) => select.getBoundingClientRect().width),
             fieldWidths: fields.map((field) => field.getBoundingClientRect().width),
           };
         });
       assert.equal(mobileExtractionLayout.columns, 1);
-      assert.deepEqual(mobileExtractionLayout.labelHeights, [44, 44]);
+      assert.ok(
+        mobileExtractionLayout.labelGaps.every((gap) => gap >= 0 && gap <= 8),
+        `each name sits directly above its picker (${mobileExtractionLayout.labelGaps.join(", ")}px)`,
+      );
       assert.deepEqual(mobileExtractionLayout.selectWidths, mobileExtractionLayout.fieldWidths);
       const mobileDebugPage = await openDebugActivity(mobileContext, "mobile");
       await mobileDebugPage.close();
@@ -9854,23 +13152,24 @@ async function main() {
           );
         }),
       );
-      await mobilePage.getByRole("button", { name: "Show setup guide" }).click();
+      await mobilePage.locator("[data-ltm-onboarding-help]").click();
+      await mobilePage.locator("[data-ltm-help-setup]").click();
       await mobilePage.evaluate(() => {
         document.documentElement.style.fontSize = "20px";
       });
       assert.deepEqual(
         await mobilePage.locator('[data-ltm-surface="onboarding"]').evaluate((onboarding) => {
-          const title = onboarding.querySelector<HTMLElement>("#ltm-onboarding-title")!;
-          const description = onboarding.querySelector<HTMLElement>("#ltm-onboarding-description")!;
+          const title = onboarding.querySelector<HTMLElement>("h2")!;
+          const talk = onboarding.querySelector<HTMLElement>("[data-ltm-setup-talk]")!;
           return {
             titleFits: title.scrollWidth <= title.clientWidth,
-            descriptionFits: description.scrollWidth <= description.clientWidth,
+            talkFits: talk.scrollWidth <= talk.clientWidth,
             pageFits:
               onboarding.scrollWidth <= onboarding.clientWidth &&
               document.documentElement.scrollWidth <= document.documentElement.clientWidth,
           };
         }),
-        { titleFits: true, descriptionFits: true, pageFits: true },
+        { titleFits: true, talkFits: true, pageFits: true },
       );
       assert.equal(
         await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
@@ -9879,7 +13178,7 @@ async function main() {
       await mobilePage.evaluate(() => {
         document.documentElement.style.fontSize = "";
       });
-      await mobilePage.getByRole("button", { name: "Not now" }).click();
+      await mobilePage.locator("[data-ltm-setup-close]").click();
       noteTotal = 0;
       const firstRunContext = await browser.newContext({
         viewport: { width: 390, height: 844 },
@@ -9898,61 +13197,47 @@ async function main() {
         };
         document.body.append(element);
       }, packageManifest.version);
+      // soup/setup-beats: a fresh install never opens setup on its own; the empty Vault offers it in place of
+      // New memory, and the first beat is Hello.
       const firstRunGuide = firstRunPage.locator('[data-ltm-surface="onboarding"]');
-      await firstRunGuide.waitFor();
-      await firstRunGuide.getByRole("button", { name: "Next: How recall works" }).click();
-      await firstRunGuide.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      assert.match(await firstRunGuide.innerText(), /Continue without a chat/u);
-      // #1980: a new setup starts on "Save them for me" and keeps it when the guide moves on.
-      const firstRunChoice = firstRunGuide.locator('[data-ltm-chat-memories-choice] [aria-pressed="true"]');
+      const firstRunBeat = (beat: number) =>
+        firstRunPage.locator(`[data-ltm-surface="onboarding"][data-ltm-setup-beat="${beat}"]`);
+      const firstRunSetup = firstRunPage.locator("[data-ltm-vault-setup-open]");
+      await firstRunSetup.waitFor();
+      assert.equal(await firstRunGuide.count(), 0);
+      assert.equal(await firstRunSetup.innerText(), "Set up memory");
+      assert.equal(await firstRunPage.getByRole("button", { name: "New memory" }).count(), 0);
+      await firstRunSetup.click();
+      await firstRunBeat(1).waitFor();
+      // With no chat open, Hello offers only "Pick one later".
+      await firstRunPage.locator('[data-ltm-setup-choice="pick-later"]').click();
+      await firstRunBeat(2).waitFor();
+      // #1980: a new setup starts on "Save them for me", and Next keeps it.
+      const firstRunChoice = firstRunPage.locator('[data-ltm-setup-choice="save"][aria-pressed="true"]');
       await firstRunChoice.waitFor({ timeout: 5_000 });
-      assert.equal(await firstRunChoice.innerText(), "Save them for me");
-      assert.equal(await firstRunGuide.locator('[data-ltm-chat-memories-sample="save"]').count(), 1);
+      const firstRunSample = firstRunGuide.locator('[data-ltm-chat-memories-sample="save"]');
+      assert.equal(await firstRunSample.count(), 1);
       assert.match(
-        (await firstRunGuide.locator('[data-ltm-chat-memories-sample="save"]').innerText()).replace(/\s+/gu, " "),
+        (await firstRunSample.innerText()).replace(/\s+/gu, " "),
         /^after a reply 2 saved · 1 waits for you$/iu,
       );
       const writesBeforeGuide = extractionWrites.length;
-      await firstRunGuide.getByRole("button", { name: "Continue without a chat" }).click();
-      for (let wait = 0; wait < 50 && extractionWrites.length === writesBeforeGuide; wait += 1)
-        await firstRunPage.waitForTimeout(20);
-      assert.deepEqual(extractionWrites.at(-1), { autoImportChatSources: true, autoAcceptSafeChanges: true });
-      // The import step follows the chosen way: new messages are already collected.
-      await firstRunGuide
-        .getByText("New messages in this chat are already being collected. Older ones can be imported here.")
-        .waitFor({ timeout: 5_000 });
-      assert.doesNotMatch(await firstRunGuide.innerText(), /Importing a Chat Summary saves the source/u);
-      await firstRunGuide.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
-      await firstRunGuide.getByRole("button", { name: "Next: Check it works" }).click();
-      assert.equal(await firstRunGuide.getByRole("button", { name: "Choose a Source" }).count(), 1);
-      await firstRunGuide.getByRole("button", { name: "Choose a Source" }).click();
-      // #1611: no source type was picked in step 4, so the default (chats) opens, and the guide becomes a bar.
-      await firstRunPage.locator('[data-ltm-source-tab="chats"][aria-selected="true"]').waitFor();
-      const firstRunBar = firstRunPage.locator('[data-ltm-surface="onboarding-bar"]');
-      await firstRunBar.waitFor();
-      assert.equal(await firstRunGuide.count(), 0);
-      assert.equal(await firstRunBar.getByText("Setup guide · step 6 of 7").count(), 1);
-      await firstRunPage.waitForFunction(
-        () => document.activeElement?.matches('[data-ltm-surface="onboarding-bar"]') ?? false,
-      );
-      // Resume returns to the Vault at the saved step.
-      await firstRunBar.getByRole("button", { name: "Resume" }).click();
-      await firstRunGuide.waitFor();
-      assert.equal(await firstRunPage.locator("#ltm-onboarding-title").innerText(), "Check What the Chat Used");
-      // Off the Vault the full guide is the bar again, and it comes back in place with the Vault.
-      const firstRunNavigation = firstRunPage.locator('[data-ltm-navigation="mobile"]');
-      await firstRunNavigation.locator('[data-ltm-destination="review"]').click();
-      await firstRunBar.waitFor();
-      assert.equal(await firstRunGuide.count(), 0);
-      await firstRunNavigation.locator('[data-ltm-destination="vault"]').click();
-      await firstRunGuide.waitFor();
-      assert.equal(await firstRunBar.count(), 0);
-      // Not now keeps the saved step.
-      await firstRunGuide.getByRole("button", { name: "Not now" }).click();
+      await firstRunPage.locator("[data-ltm-setup-next]").click();
+      await firstRunBeat(3).waitFor();
+      assert.deepEqual(extractionWrites.slice(writesBeforeGuide), [
+        { autoImportChatSources: true, autoAcceptSafeChanges: true },
+      ]);
+      // Later keeps the beat, and the Vault's button resumes it with the answered count.
+      await firstRunPage.locator("[data-ltm-setup-close]").click();
       await firstRunGuide.waitFor({ state: "detached" });
       assert.equal(
         await firstRunPage.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "step:5",
+        "beat:3",
+      );
+      await firstRunSetup.filter({ hasText: "Resume setup" }).waitFor();
+      assert.equal(
+        await firstRunPage.locator("[data-ltm-vault-setup-ticks]").getAttribute("aria-label"),
+        "2 of 4 answered",
       );
       noteTotal = 0;
       await firstRunPage.reload();
@@ -9968,32 +13253,19 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await firstRunPage.locator('[data-ltm-surface="detail"]').waitFor();
-      // The guide reopens at its saved step once /status has loaded.
-      await firstRunPage.locator('[data-ltm-surface="onboarding"]').waitFor();
-      await firstRunPage.getByRole("button", { name: "Show setup guide" }).click();
-      await firstRunPage.locator('[data-ltm-surface="onboarding"]').waitFor();
-      // Don't show again and the last step's Done both record `complete`.
-      await firstRunGuide.getByRole("button", { name: "Don't show again" }).click();
-      await firstRunGuide.waitFor({ state: "detached" });
+      await firstRunSetup.click();
+      await firstRunBeat(3).waitFor();
+      await firstRunPage.locator('[data-ltm-setup-choice="start-fresh"]').click();
+      await firstRunBeat(4).waitFor();
       assert.equal(
         await firstRunPage.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "complete",
+        "done",
       );
-      await firstRunPage.evaluate(() => localStorage.removeItem("marinara-long-term-memory-onboarding-v1"));
-      await firstRunPage.getByRole("button", { name: "Show setup guide" }).click();
-      await firstRunGuide.getByRole("button", { name: "Next: How recall works" }).click();
-      await firstRunGuide.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
-      await firstRunGuide.getByRole("button", { name: "Continue without a chat" }).click();
-      await firstRunGuide.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
-      await firstRunGuide.getByRole("button", { name: "Next: Check it works" }).click();
-      await firstRunGuide.getByRole("button", { name: "Finish setup" }).click();
-      assert.equal(await firstRunPage.locator("#ltm-onboarding-title").innerText(), "You're Set Up");
-      await firstRunGuide.getByRole("button", { name: "Done", exact: true }).click();
+      // Done opens the Vault, which offers New memory again.
+      await firstRunPage.locator("[data-ltm-setup-open-vault]").click();
       await firstRunGuide.waitFor({ state: "detached" });
-      assert.equal(
-        await firstRunPage.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
-        "complete",
-      );
+      await firstRunPage.getByRole("button", { name: "New memory" }).waitFor();
+      assert.equal(await firstRunSetup.count(), 0);
       await firstRunContext.close();
       // #1611: a failed first status read shows one Retry and no "Status unavailable" pill, and leaves the guide
       // closed and unsaved because the vault count is unknown; Retry recovers to a populated vault without the guide.
@@ -10034,6 +13306,360 @@ async function main() {
       );
       await statusFailContext.close();
       noteTotal = 3;
+      // The one-time "What's new in 1.6" dialog: with setup done and the seen flag absent it opens by itself, Mari's
+      // animation reaches the last frame and replays on click, every close writes the flag, the Help menu reopens it, and
+      // an action row closes it and lands on its page.
+      const whatsNewKey = "marinara-long-term-memory-whats-new-v1";
+      const whatsNewContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      await whatsNewContext.addInitScript(() =>
+        localStorage.setItem("marinara-long-term-memory-onboarding-v1", "done"),
+      );
+      // One named connection so the scope line can show "name · model"; the others fall back to the model or to the count.
+      await whatsNewContext.route("**/api/connections", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            { id: "conn-link", name: "Fictional Link", provider: "openai", model: "fictional-model-2" },
+          ]),
+        }),
+      );
+      const whatsNewPage = await whatsNewContext.newPage();
+      const tidyScopeLine = () => whatsNewPage.locator("[data-ltm-tidy-scope]");
+      const mountWhatsNew = async () => {
+        await whatsNewPage.goto(`http://127.0.0.1:${address.port}/`);
+        await whatsNewPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await whatsNewPage.evaluate((version) => {
+          const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+            capabilityProps?: unknown;
+          };
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+          document.body.append(element);
+        }, packageManifest.version);
+      };
+      const whatsNewDialog = whatsNewPage.locator("[data-ltm-whats-new]");
+      const whatsNewReplay = whatsNewPage.locator("[data-ltm-whats-new-replay]");
+      const whatsNewFrame = async () => Number(await whatsNewReplay.getAttribute("data-ltm-whats-new-frame"));
+      await mountWhatsNew();
+      await whatsNewDialog.waitFor();
+      assert.equal(await whatsNewPage.evaluate((key) => localStorage.getItem(key), whatsNewKey), null);
+      await whatsNewPage.waitForFunction(
+        () => document.querySelector("[data-ltm-whats-new-replay]")?.getAttribute("data-ltm-whats-new-frame") === "11",
+        undefined,
+        { timeout: 10_000 },
+      );
+      assert.equal(await whatsNewPage.locator("[data-ltm-whats-new-change]").count(), 6);
+      assert.equal(await whatsNewPage.locator("[data-ltm-whats-new-action]").count(), 2);
+      assert.equal(
+        await whatsNewPage.locator("[data-ltm-whats-new-ai]").count(),
+        3,
+        "Tidy, Link and People are AI rows",
+      );
+      assert.equal(await whatsNewPage.locator('[data-ltm-whats-new-action="vault"]').count(), 0);
+      assert.equal(
+        (await whatsNewPage.locator("[data-ltm-whats-new-hint]").innerText()).trim(),
+        "You can open this again from the ? button.",
+      );
+      assert.equal(
+        await whatsNewPage.evaluate(() => document.activeElement?.hasAttribute("data-ltm-whats-new-close")),
+        true,
+      );
+      const whatsNewMore = whatsNewPage.locator("[data-ltm-whats-new-more]");
+      assert.equal(await whatsNewMore.locator("li").first().isVisible(), false, "the long list starts closed");
+      await whatsNewMore.locator("summary").click();
+      assert.equal(await whatsNewMore.locator("li").count(), 9);
+      assert.equal(await whatsNewMore.locator("li").last().isVisible(), true);
+      assert.equal(/whatsnew\.more/.test(await whatsNewMore.innerText()), false, "every line is translated");
+      await whatsNewMore.locator("summary").click();
+      await whatsNewReplay.click();
+      assert.ok((await whatsNewFrame()) < 11, "Clicking Mari must replay the animation");
+      await whatsNewPage.waitForFunction(
+        () => document.querySelector("[data-ltm-whats-new-replay]")?.getAttribute("data-ltm-whats-new-frame") === "11",
+        undefined,
+        { timeout: 10_000 },
+      );
+      // 1280x900 shot of the finished dialog, when the caller asks for one.
+      if (process.env.WHATS_NEW_SHOT_DIR) {
+        await whatsNewPage.screenshot({ path: join(process.env.WHATS_NEW_SHOT_DIR, "whats-new-1280.png") });
+        await whatsNewPage.setViewportSize({ width: 390, height: 844 });
+        await whatsNewPage.screenshot({ path: join(process.env.WHATS_NEW_SHOT_DIR, "whats-new-390.png") });
+        await whatsNewPage.setViewportSize({ width: 1280, height: 900 });
+      }
+      await whatsNewPage.locator("[data-ltm-whats-new-close]").click();
+      await whatsNewDialog.waitFor({ state: "detached" });
+      assert.equal(await whatsNewPage.evaluate((key) => localStorage.getItem(key), whatsNewKey), "1.6");
+      await mountWhatsNew();
+      await whatsNewPage.locator('[data-ltm-surface="detail"]').waitFor();
+      assert.equal(await whatsNewDialog.count(), 0, "A seen dialog must not open again by itself");
+      // The Help menu reopens it, and closing it returns focus to the Help button.
+      await whatsNewPage.locator("[data-ltm-onboarding-help]").click();
+      await whatsNewPage.locator("[data-ltm-help-whats-new]").click();
+      await whatsNewDialog.waitFor();
+      await whatsNewPage.locator("[data-ltm-whats-new-close]").click();
+      await whatsNewDialog.waitFor({ state: "detached" });
+      await whatsNewPage.waitForFunction(() => document.activeElement?.hasAttribute("data-ltm-onboarding-help"));
+      // An action row closes the dialog and lands on its page.
+      await whatsNewPage.locator("[data-ltm-onboarding-help]").click();
+      await whatsNewPage.locator("[data-ltm-help-whats-new]").click();
+      await whatsNewDialog.waitFor();
+      await whatsNewPage.locator('[data-ltm-whats-new-action="sources"]').click();
+      await whatsNewDialog.waitFor({ state: "detached" });
+      await whatsNewPage.locator('[data-ltm-surface="sources"]').waitFor();
+      // A phone-width dialog has no sideways scroll.
+      await whatsNewPage.setViewportSize({ width: 390, height: 844 });
+      await whatsNewPage.locator("[data-ltm-onboarding-help]").click();
+      await whatsNewPage.locator("[data-ltm-help-whats-new]").click();
+      await whatsNewDialog.waitFor();
+      assert.equal(
+        await whatsNewPage.evaluate(() => {
+          const panel = document.querySelector<HTMLElement>("[data-ltm-whats-new]")!;
+          return (
+            document.documentElement.scrollWidth <= document.documentElement.clientWidth &&
+            panel.scrollWidth <= panel.clientWidth
+          );
+        }),
+        true,
+      );
+      // Tidy with AI lives inside the dialog: nothing is sent before Start, the results list the suggestions with every
+      // archive entry ticked, only the ticked ids are applied, and a failed read shows the server's message.
+      const tidyShot = async (state: string) => {
+        if (!process.env.WHATS_NEW_SHOT_DIR) return;
+        const shotDir = process.env.WHATS_NEW_SHOT_DIR;
+        await whatsNewPage.screenshot({ path: join(shotDir, `tidy-${state}-390.png`) });
+        await whatsNewPage.setViewportSize({ width: 1280, height: 900 });
+        await whatsNewPage.screenshot({ path: join(shotDir, `tidy-${state}-1280.png`) });
+        await whatsNewPage.setViewportSize({ width: 390, height: 844 });
+      };
+      const tidyState = (state: string) => whatsNewPage.locator(`[data-ltm-tidy-state="${state}"]`);
+      const tidyFocused = (selector: string) =>
+        whatsNewPage.evaluate((value) => document.activeElement?.matches(value) ?? false, selector);
+      tidyPreviewReply = {
+        status: 200,
+        body: {
+          total: 12,
+          checked: 9,
+          truncated: true,
+          failedChunks: 0,
+          suggestions: [
+            {
+              reason: "duplicate",
+              keep: { id: "tidy-keep-1", title: "Ilse leaves the lighthouse" },
+              archive: [
+                { id: "tidy-dup-1", title: "Ilse left the lighthouse" },
+                { id: "tidy-dup-2", title: "Ilse walks away from the lighthouse" },
+              ],
+            },
+            { reason: "placeholder", keep: null, archive: [{ id: "tidy-empty-1", title: "Untitled memory" }] },
+          ],
+        },
+      };
+      tidyPreviewRequests = 0;
+      // A connection the list does not hold falls back to the model name.
+      tidyScopeReply = { status: 200, body: { count: 9, connectionId: "conn-missing", model: "fictional-model-1" } };
+      await whatsNewPage.locator("[data-ltm-whats-new-tidy]").click();
+      await tidyState("confirm").waitFor();
+      await tidyScopeLine().getByText("Uses fictional-model-1. Checks 9 memories.", { exact: true }).waitFor();
+      assert.equal(tidyPreviewRequests, 0, "Reading the scope sends nothing to the model");
+      assert.equal(await whatsNewPage.locator("[data-ltm-whats-new-change]").count(), 0);
+      assert.equal(await whatsNewPage.locator("[data-ltm-whats-new-action]").count(), 0);
+      assert.equal(await tidyFocused("[data-ltm-tidy-start]"), true, "Confirm takes focus on Start");
+      assert.equal(tidyPreviewRequests, 0, "Nothing is sent before Start");
+      await tidyShot("confirm");
+      // Cancel while the model reads aborts the request and returns to the confirm view.
+      let releaseTidyPreview!: () => void;
+      holdTidyPreview = new Promise<void>((resolveHold) => (releaseTidyPreview = resolveHold));
+      await whatsNewPage.locator("[data-ltm-tidy-start]").click();
+      await tidyState("checking").waitFor();
+      assert.equal(await tidyFocused("[data-ltm-tidy-cancel]"), true, "Checking takes focus on Cancel");
+      assert.equal(await whatsNewPage.locator('[data-ltm-tidy-state="checking"] [aria-live="polite"]').count(), 1);
+      await whatsNewPage.locator("[data-ltm-tidy-cancel]").click();
+      await tidyState("confirm").waitFor();
+      releaseTidyPreview();
+      holdTidyPreview = null;
+      await whatsNewPage.waitForTimeout(150);
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-state]").getAttribute("data-ltm-tidy-state"), "confirm");
+      // Start shows the suggestions, every archive entry ticked.
+      await whatsNewPage.locator("[data-ltm-tidy-start]").click();
+      await tidyState("results").waitFor();
+      assert.equal(tidyPreviewRequests, 2);
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-suggestion]").count(), 2);
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-item]").count(), 3);
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-item]:checked").count(), 3);
+      assert.equal(await tidyFocused("[data-ltm-tidy-item]"), true, "Results take focus on the first memory");
+      const tidyText = (await tidyState("results").innerText()).replace(/\s+/gu, " ");
+      assert.ok(tidyText.includes("Repeat") && tidyText.includes("Empty"));
+      assert.ok(tidyText.includes("Keeps: Ilse leaves the lighthouse"));
+      assert.ok(tidyText.includes("Checked 9 of 12 memories."));
+      assert.equal(
+        await whatsNewPage.locator('[data-ltm-tidy-suggestion="placeholder"]').getByText("Keeps:").count(),
+        0,
+        "A placeholder has no memory to keep",
+      );
+      const tidyApply = whatsNewPage.locator("[data-ltm-tidy-apply]");
+      assert.equal((await tidyApply.innerText()).trim(), "Archive 3 memories");
+      const noOverflow = () =>
+        whatsNewPage.evaluate(() => {
+          const panel = document.querySelector<HTMLElement>("[data-ltm-whats-new]")!;
+          const section = panel.querySelector<HTMLElement>("section")!.getBoundingClientRect();
+          return (
+            document.documentElement.scrollWidth <= document.documentElement.clientWidth &&
+            panel.scrollWidth <= panel.clientWidth &&
+            section.bottom <= window.innerHeight
+          );
+        });
+      assert.equal(await noOverflow(), true, "The results view fits a 390x844 viewport");
+      await tidyShot("results");
+      await whatsNewPage.locator('[data-ltm-tidy-item="tidy-dup-2"]').uncheck();
+      assert.equal((await tidyApply.innerText()).trim(), "Archive 2 memories");
+      await tidyApply.click();
+      await tidyState("done").waitFor();
+      assert.deepEqual(tidyApplyBodies, [{ noteIds: ["tidy-dup-1", "tidy-empty-1"] }]);
+      const doneText = await tidyState("done").innerText();
+      assert.ok(doneText.includes("2 memories archived."));
+      assert.ok(doneText.includes("set Show to Archived"));
+      assert.equal(await tidyFocused("[data-ltm-tidy-focus]"), true);
+      await tidyShot("done");
+      await whatsNewPage.locator("[data-ltm-tidy-focus]").click();
+      await whatsNewDialog.locator("[data-ltm-whats-new-tidy]").waitFor();
+      assert.equal(await tidyFocused("[data-ltm-whats-new-tidy]"), true, "Back returns focus to the Tidy row");
+      // A failed read shows the server's own message and offers Try again; Back returns to What's new.
+      tidyPreviewReply = {
+        status: 400,
+        body: { error: "Pick an extraction model first.", code: "ltm_model_configuration" },
+      };
+      await whatsNewPage.locator("[data-ltm-whats-new-tidy]").click();
+      await whatsNewPage.locator("[data-ltm-tidy-start]").click();
+      await tidyState("error").waitFor();
+      assert.ok((await tidyState("error").innerText()).includes("Pick an extraction model first."));
+      assert.equal(await whatsNewPage.getByRole("button", { name: "Try again" }).count(), 1);
+      tidyPreviewReply = {
+        status: 200,
+        body: { total: 4, checked: 4, truncated: false, failedChunks: 0, suggestions: [] },
+      };
+      await whatsNewPage.getByRole("button", { name: "Try again" }).click();
+      await tidyState("empty").waitFor();
+      assert.ok((await tidyState("empty").innerText()).includes("Nothing to tidy."));
+      await whatsNewPage.locator("[data-ltm-tidy-focus]").click();
+      // Link older relationships opens its flow in the same dialog: confirm sends nothing, Back refocuses its row.
+      const linkRow = whatsNewPage.locator('[data-ltm-whats-new-ai="links"]');
+      linksPreviewReply = {
+        status: 200,
+        body: {
+          total: 5,
+          checked: 3,
+          truncated: true,
+          failedChunks: 0,
+          suggestions: [
+            {
+              relationship: { id: "rel_00000001", title: "Mira and Tomas" },
+              person: { id: "char_00000001", title: "Tomas" },
+              origin: "name",
+            },
+            {
+              relationship: { id: "rel_00000002", title: "Dov and Wren" },
+              person: { id: "char_00000002", title: "Wren" },
+              origin: "model",
+            },
+          ],
+        },
+      };
+      linksPreviewRequests = 0;
+      // A connection in the list is named "name · model".
+      linksScopeReply = { status: 200, body: { count: 3, connectionId: "conn-link", model: "fictional-model-2" } };
+      await linkRow.click();
+      await tidyState("confirm").waitFor();
+      await tidyScopeLine()
+        .getByText("Uses Fictional Link · fictional-model-2. Checks 3 relationship memories.", { exact: true })
+        .waitFor();
+      assert.equal(linksPreviewRequests, 0, "Reading the scope sends nothing to the model");
+      assert.equal(await whatsNewPage.locator('[data-ltm-ai-check="links"]').count(), 1);
+      assert.equal(await whatsNewPage.locator("[data-ltm-whats-new-ai]").count(), 0);
+      assert.ok((await tidyState("confirm").innerText()).includes("to your extraction model"));
+      assert.equal(linksPreviewRequests, 0, "Nothing is sent before Start");
+      await whatsNewPage.locator("[data-ltm-tidy-back]").click();
+      await linkRow.waitFor();
+      assert.equal(
+        await whatsNewPage.evaluate(() => document.activeElement?.getAttribute("data-ltm-whats-new-ai") === "links"),
+        true,
+        "Back returns focus to the Link row",
+      );
+      await linkRow.click();
+      await whatsNewPage.locator("[data-ltm-tidy-start]").click();
+      await tidyState("results").waitFor();
+      assert.equal(linksPreviewRequests, 1);
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-item]:checked").count(), 2);
+      const linksText = (await tidyState("results").innerText()).replace(/\s+/gu, " ");
+      assert.ok(linksText.includes("Mira and Tomas → Tomas") && linksText.includes("Same name"));
+      assert.ok(linksText.includes("Suggested by AI") && linksText.includes("Checked 3 of 5 relationships."));
+      await whatsNewPage.locator('[data-ltm-tidy-item="rel_00000002|char_00000002"]').uncheck();
+      assert.equal((await whatsNewPage.locator("[data-ltm-tidy-apply]").innerText()).trim(), "Add 1 link");
+      await whatsNewPage.locator("[data-ltm-tidy-apply]").click();
+      await tidyState("done").waitFor();
+      assert.deepEqual(linksApplyBodies, [{ links: [{ relationshipId: "rel_00000001", personId: "char_00000001" }] }]);
+      assert.ok((await tidyState("done").innerText()).includes("1 link added."));
+      await whatsNewPage.locator("[data-ltm-tidy-focus]").click();
+      await linkRow.waitFor();
+      // Find duplicate people: nothing is sent before Start, nothing starts ticked, and only the ticked group merges.
+      const peopleRow = whatsNewPage.locator('[data-ltm-whats-new-ai="people"]');
+      peoplePreviewReply = {
+        status: 200,
+        body: {
+          total: 6,
+          checked: 6,
+          truncated: false,
+          failedChunks: 0,
+          suggestions: [
+            {
+              keep: { id: "char_00000011", title: "Elizabeth Marlow" },
+              merge: [
+                { id: "char_00000012", title: "Lizzie" },
+                { id: "char_00000013", title: "Liz" },
+              ],
+            },
+            { keep: { id: "char_00000014", title: "Toby" }, merge: [{ id: "char_00000015", title: "Tobin" }] },
+          ],
+        },
+      };
+      peoplePreviewRequests = 0;
+      // No connection and no model: the count alone, in the singular.
+      peopleScopeReply = { status: 200, body: { count: 1, connectionId: null, model: null } };
+      await peopleRow.click();
+      await tidyState("confirm").waitFor();
+      await tidyScopeLine().getByText("Checks 1 person memory.", { exact: true }).waitFor();
+      assert.equal(peoplePreviewRequests, 0, "Reading the scope sends nothing to the model");
+      assert.equal(await whatsNewPage.locator('[data-ltm-ai-check="people"]').count(), 1);
+      assert.equal(peoplePreviewRequests, 0, "Nothing is sent before Start");
+      await whatsNewPage.locator("[data-ltm-tidy-start]").click();
+      await tidyState("results").waitFor();
+      assert.equal(peoplePreviewRequests, 1);
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-item]").count(), 2);
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-item]:checked").count(), 0, "nothing starts ticked");
+      assert.equal(await whatsNewPage.locator("[data-ltm-tidy-apply]").isDisabled(), true);
+      const peopleText = (await tidyState("results").innerText()).replace(/\s+/gu, " ");
+      assert.ok(peopleText.includes("Maybe the same person") && peopleText.includes("Keeps: Elizabeth Marlow"));
+      assert.ok(peopleText.includes("Merge in: Lizzie, Liz") && peopleText.includes("Merge in: Tobin"));
+      await whatsNewPage.locator('[data-ltm-tidy-item="char_00000011|char_00000012,char_00000013"]').check();
+      assert.equal((await whatsNewPage.locator("[data-ltm-tidy-apply]").innerText()).trim(), "Merge 1 group");
+      await whatsNewPage.locator("[data-ltm-tidy-apply]").click();
+      await tidyState("done").waitFor();
+      assert.deepEqual(peopleApplyBodies, [
+        { groups: [{ keepId: "char_00000011", mergeIds: ["char_00000012", "char_00000013"] }] },
+      ]);
+      const peopleDone = await tidyState("done").innerText();
+      assert.ok(peopleDone.includes("1 group merged.") && peopleDone.includes("a backup was saved first"));
+      await whatsNewPage.locator("[data-ltm-tidy-focus]").click();
+      await peopleRow.waitFor();
+      // Closing the dialog while the model reads aborts the request and still writes the seen flag.
+      holdTidyPreview = new Promise<void>((resolveHold) => (releaseTidyPreview = resolveHold));
+      await whatsNewPage.locator("[data-ltm-whats-new-tidy]").click();
+      await whatsNewPage.locator("[data-ltm-tidy-start]").click();
+      await tidyState("checking").waitFor();
+      await whatsNewPage.keyboard.press("Escape");
+      await whatsNewDialog.waitFor({ state: "detached" });
+      releaseTidyPreview();
+      holdTidyPreview = null;
+      await whatsNewContext.close();
       await mobileContext.close();
     },
     [

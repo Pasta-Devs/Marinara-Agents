@@ -76,35 +76,159 @@ export function resolveChatLtmWriteScope(chat: { id: string; groupId?: string | 
 }
 
 /**
+ * The last message number of a chat transcript piece or numbered summary range source note
+ * (`message_range:<first>-<last>` or `message_range:<n>` evidence), or undefined for any other source.
+ */
+export function ltmSourceLastMessageNumber(note: LtmNote | undefined) {
+  if (note?.provenance?.kind !== "chat_transcript" && note?.provenance?.kind !== "chat_summary") return undefined;
+  const range = note.sections.source?.evidence
+    ?.find((entry) => entry.startsWith("message_range:"))
+    ?.slice("message_range:".length)
+    .trim()
+    .match(/^(\d+)(?:-(\d+))?$/);
+  const first = Number(range?.[1]),
+    last = Number(range?.[2] ?? range?.[1]);
+  return range && first > 0 && first <= last ? last : undefined;
+}
+
+type LtmBranchChat = { id: string; metadata: unknown };
+
+/**
+ * How many messages, counted from the start, `chatId` shares with each of `otherChatIds` in its
+ * conversation. Engine copies a branch's first messages from its parent in order under new ids and
+ * records `branchParentChatId` and `branchMessageId` (its copy of the fork message), so a branch's
+ * copied count is that message's position in its own messages; a branch made before the first message
+ * records both message ids as null and copied none. Siblings and grandchildren share the smallest
+ * copied count on the way to their common ancestor. Older branches without the fork message, an unknown
+ * fork message and chats with no recorded link compare the messages' `createdAt`, which the copy keeps.
+ * `listMessages` is called at most once per chat, and only where those need it.
+ * ponytail: positions are fork-time positions and the copies are trusted as copied. A parent message
+ * deleted before the fork point after branching shifts later numbers by one, and a copied message the
+ * branch later edits, rerolls or deletes still shares the parent's memories of the original.
+ * Upgrade path: map pieces by the Engine's copied message ids and compare their content.
+ */
+export async function sharedLtmMessageCounts(input: {
+  chatId: string;
+  chats: readonly LtmBranchChat[];
+  otherChatIds: Iterable<string>;
+  listMessages: (chatId: string) => Promise<ReadonlyArray<{ id: string; createdAt: string }>>;
+}) {
+  const metadataById = new Map(input.chats.map((chat) => [chat.id, parseLtmChatMetadata(chat.metadata)]));
+  const parentOf = (chatId: string) => {
+    const parentId = metadataById.get(chatId)?.branchParentChatId;
+    return typeof parentId === "string" && parentId !== chatId && metadataById.has(parentId) ? parentId : undefined;
+  };
+  const chainOf = (chatId: string) => {
+    const chain = [chatId];
+    for (let parentId = parentOf(chatId); parentId && !chain.includes(parentId); parentId = parentOf(parentId))
+      chain.push(parentId);
+    return chain;
+  };
+  const listed = new Map<string, ReturnType<typeof input.listMessages>>();
+  const messagesOf = (chatId: string) => {
+    if (!listed.has(chatId)) listed.set(chatId, input.listMessages(chatId));
+    return listed.get(chatId)!;
+  };
+  const createdAtPrefix = async (leftId: string, rightId: string) => {
+    const [left, right] = await Promise.all([messagesOf(leftId), messagesOf(rightId)]);
+    let count = 0;
+    while (count < left.length && count < right.length && left[count]!.createdAt === right[count]!.createdAt) count++;
+    return count;
+  };
+  const copied = new Map<string, Promise<number>>();
+  const copiedCount = (chatId: string) => {
+    if (!copied.has(chatId))
+      copied.set(
+        chatId,
+        (async () => {
+          const metadata = metadataById.get(chatId)!;
+          if (metadata.branchMessageId === null && metadata.branchParentMessageId === null) return 0;
+          const forkMessageId = metadata.branchMessageId;
+          const index =
+            typeof forkMessageId === "string" && forkMessageId
+              ? (await messagesOf(chatId)).findIndex((message) => message.id === forkMessageId)
+              : -1;
+          return index >= 0 ? index + 1 : createdAtPrefix(chatId, parentOf(chatId)!);
+        })(),
+      );
+    return copied.get(chatId)!;
+  };
+  const ownChain = chainOf(input.chatId);
+  const counts = new Map<string, number>();
+  for (const otherId of new Set(input.otherChatIds)) {
+    if (otherId === input.chatId) continue;
+    const otherChain = chainOf(otherId);
+    const ancestor = ownChain.find((id) => otherChain.includes(id));
+    if (!ancestor) {
+      counts.set(otherId, await createdAtPrefix(input.chatId, otherId));
+      continue;
+    }
+    const below = [
+      ...ownChain.slice(0, ownChain.indexOf(ancestor)),
+      ...otherChain.slice(0, otherChain.indexOf(ancestor)),
+    ];
+    counts.set(otherId, Math.min(...(await Promise.all(below.map(copiedCount)))));
+  }
+  return counts;
+}
+
+/**
+ * Whether `chatId` shares a source note of its own conversation: one of its own sources, a chat
+ * summary whose entry is one of `chatId`'s (`summaryEntryIds`), or a chat transcript piece or numbered
+ * summary range that ends within the messages `chatId` shares with the source's chat
+ * (`sharedMessageCounts`, from `sharedLtmMessageCounts`; a chat missing from it shares none).
+ */
+export function isLtmSourceSharedWithChat(
+  source: LtmNote | undefined,
+  input: { chatId: string; summaryEntryIds?: ReadonlySet<string>; sharedMessageCounts?: ReadonlyMap<string, number> },
+) {
+  const provenance = source?.provenance;
+  if (!provenance) return false;
+  if (
+    provenance.kind === "chat_summary" &&
+    provenance.entryId !== undefined &&
+    input.summaryEntryIds?.has(provenance.entryId)
+  )
+    return true;
+  const last = ltmSourceLastMessageNumber(source);
+  const shared =
+    provenance.sourceId === input.chatId ? Infinity : (input.sharedMessageCounts?.get(provenance.sourceId) ?? 0);
+  return last !== undefined && last <= shared;
+}
+
+/**
  * Issue #1433: Engine copies the summary entries a branch shares with its parent, ids included.
  * A branch therefore also recalls a memory saved to another branch of its conversation when every
- * chat summary the memory was extracted from is one of the branch's own. Recall only: the stored
- * scope, saving and editing are unchanged.
+ * source the memory was extracted from is shared: a chat summary that is one of the branch's own,
+ * or a chat transcript piece or numbered summary range that ends within the messages the two chats
+ * share (`sharedMessageCounts`, from `sharedLtmMessageCounts`). Recall only: the stored scope,
+ * saving and editing are unchanged.
  */
 export function inheritedBranchLtmNoteIds(input: {
   chatId: string;
   branchChatIds: readonly string[];
   summaryEntryIds: ReadonlySet<string>;
   notes: readonly LtmNote[];
+  sharedMessageCounts?: ReadonlyMap<string, number>;
 }) {
   const branchChatIds = new Set(input.branchChatIds.filter((id) => id !== input.chatId));
   const conversationChatIds = new Set([input.chatId, ...branchChatIds]);
   const notesById = new Map(input.notes.map((note) => [note.id, note]));
-  // A link to a missing note, or to a source that is not a shared chat summary, fails the test.
-  const sharedSummary = (noteId: string) => {
-    const provenance = notesById.get(noteId)?.provenance;
+  // A link to a missing note, or to a source that is neither a shared chat summary nor a piece of
+  // the shared messages, fails the test.
+  const sharedSource = (noteId: string) => {
+    const source = notesById.get(noteId);
     return (
-      provenance?.kind === "chat_summary" &&
-      conversationChatIds.has(provenance.sourceId) &&
-      provenance.entryId !== undefined &&
-      input.summaryEntryIds.has(provenance.entryId)
+      source?.provenance !== undefined &&
+      conversationChatIds.has(source.provenance.sourceId) &&
+      isLtmSourceSharedWithChat(source, input)
     );
   };
   const inherited = new Set<string>();
   for (const note of input.notes) {
     if (!getLtmScopeChatIds(note.scope).some((id) => branchChatIds.has(id))) continue;
     const sources = note.links.filter((link) => link.relation === "extracted_from");
-    if (sources.length && sources.every((link) => sharedSummary(link.target))) inherited.add(note.id);
+    if (sources.length && sources.every((link) => sharedSource(link.target))) inherited.add(note.id);
   }
   return inherited;
 }

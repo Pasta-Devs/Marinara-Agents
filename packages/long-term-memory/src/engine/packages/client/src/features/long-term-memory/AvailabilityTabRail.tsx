@@ -1,8 +1,9 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { labelKeys } from "./display-labels";
 import { useLtmTranslation } from "./localization";
 import { placeListLimit } from "./scope-targets";
+import { PickerRowBody, pickerRowClass } from "./picker";
 import { inputClass } from "./shared-controls";
 import { nextTabIndex } from "./tab-keys";
 
@@ -114,6 +115,20 @@ export function AvailabilityTabRail({
     );
   };
   const panelId = `${railId}-panel`;
+  // Arrow Up and Down move between the search box, the rows and Show more; Tab still reaches every row.
+  const handlePanelKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const stops = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        "[data-ltm-availability-search], [data-ltm-availability-target], [data-ltm-availability-show-more]",
+      ),
+    );
+    const index = stops.indexOf(document.activeElement as HTMLElement);
+    if (index < 0) return;
+    const next = stops[index + (event.key === "ArrowDown" ? 1 : -1)];
+    event.preventDefault();
+    next?.focus();
+  };
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const nextIndex = nextTabIndex(event.key, index, sections.length);
     if (nextIndex === null) return;
@@ -219,6 +234,7 @@ export function AvailabilityTabRail({
         aria-labelledby={`${railId}-${activeKind}-tab`}
         data-ltm-availability-panel={activeKind}
         className="space-y-3 p-3"
+        onKeyDown={handlePanelKey}
       >
         <label className="relative block">
           <Search
@@ -254,24 +270,12 @@ export function AvailabilityTabRail({
                   data-selected={selected ? "true" : "false"}
                   aria-pressed={selected}
                   aria-disabled={disabled || undefined}
-                  className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}${disabled ? " opacity-50" : ""}`}
+                  className={`${pickerRowClass({ selected })}${disabled ? " opacity-50" : ""}`}
                   onClick={() => {
                     if (!disabled) onToggle(target.kind, target.id);
                   }}
                 >
-                  <Check
-                    aria-hidden="true"
-                    size="0.875rem"
-                    className={selected ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-normal text-[var(--marinara-editor-text)]">
-                      {target.label}
-                    </span>
-                    {comment ? (
-                      <span className="block truncate text-xs text-[var(--marinara-editor-muted)]">{comment}</span>
-                    ) : null}
-                  </span>
+                  <PickerRowBody kind={target.kind} label={target.label} comment={comment} selected={selected} />
                 </button>
               );
             })
@@ -283,7 +287,7 @@ export function AvailabilityTabRail({
               type="button"
               data-ltm-availability-show-more
               aria-disabled={disabled || undefined}
-              className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center rounded-none border-t-0 px-3 py-2 text-left text-xs font-semibold text-[var(--marinara-editor-muted)] last:border-b-0${disabled ? " opacity-50" : ""}`}
+              className={`${pickerRowClass()} text-xs font-semibold text-[var(--marinara-editor-muted)]${disabled ? " opacity-50" : ""}`}
               onClick={() => {
                 if (!disabled) showMore();
               }}

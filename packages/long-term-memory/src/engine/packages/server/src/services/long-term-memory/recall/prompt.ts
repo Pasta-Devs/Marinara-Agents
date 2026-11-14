@@ -117,7 +117,7 @@ export function serializeLongTermMemoryPrompt(
     // Fit against the rendered prompt so labels, titles, escaping and framing count.
     // A chunk that does not fit is skipped, never popped off the end, so smaller later
     // chunks are still tried. Re-rendering per candidate is O(n²) in chunks, and n is
-    // bounded by the caller's maxChunks recall cap.
+    // bounded by the recall budget (a few hundred at its 16,384-token maximum).
     if (renderLongTermMemoryPrompt(selected, options).estimatedTokens > options.maxTokens) selected.pop();
   }
   if (!selected.length) return null;

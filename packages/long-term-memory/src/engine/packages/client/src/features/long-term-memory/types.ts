@@ -39,6 +39,8 @@ export type CapabilityProps = {
   onOpenActivePromptPresetEditor?: () => void;
   onClose?: () => void;
   onManagePackage?: () => void;
+  /** The installed version, which busts the browser cache of the package's pictures after an update. */
+  packageVersion?: string | null;
   /** Capability API 1.390: the Engine draws the header and gives a slot for header buttons. */
   engineHeader?: boolean;
   headerSlot?: HTMLElement | null;
@@ -58,7 +60,7 @@ export type CapabilityElement = HTMLElement & {
   __root?: Root | null;
 };
 
-export type LongTermMemoryDestination = "vault" | "review" | "sources" | "settings";
+export type LongTermMemoryDestination = "vault" | "review" | "sources" | "activity" | "settings";
 
 export type SourceTab = "characters" | "lorebooks" | "chats" | "messages";
 
@@ -82,14 +84,26 @@ export type LongTermMemoryDestinationProps = {
   onOpenVault?: () => void;
   onOpenSources?: (source?: SourceTab, sourceNoteId?: string) => boolean | Promise<boolean>;
   onOpenReview?: (sourceNoteId?: string) => void;
+  /** Opens Professor Mari's setup; passed only until setup is done, so the empty Vault offers it. */
+  onOpenSetup?: () => void;
+  /** Reopens Mari's setup from Troubleshooting. */
+  onRunSetup?: () => void;
+  /** Replays Mari's tour from Troubleshooting. */
+  onStartTour?: () => void;
   onOpenActivity?: (memoryId: string) => void;
-  openActivityRequest?: number;
+  /** Mari's tour is on its Graph stop: a Vault with nothing to draw shows a made-up example graph. */
+  exampleGraph?: boolean;
+  /** Opens Activity filtered to one memory. */
   openActivityMemoryId?: string | null;
-  onOpenActivityHandled?: () => void;
+  /** Opens Activity with this recall operation selected (the chat drawer's "Open in Activity"). */
+  openActivityOperationId?: string | null;
   /** Chat Settings asked to choose the extraction connection: open Extraction with that field focused. */
   openForConnection?: boolean;
   onOpenForConnectionHandled?: () => void;
+  /** Activity asks for Memory Settings on its Recall tab. */
+  onOpenRecallSettings?: () => void;
   onOpenActivityMemoryIdHandled?: () => void;
+  onOpenActivityOperationIdHandled?: () => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,
     scope: LtmScope,

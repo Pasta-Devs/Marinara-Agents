@@ -9,11 +9,11 @@ import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-help
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
   const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
-  // engine.min cannot tell Engine staging from the 2.5.1 release; capability API 1.390 (E2 + E3, Engine header) can.
-  assert.equal(packageManifest.engine.min, "2.5.1");
+  // engine.min cannot tell Engine staging from the 2.5.2 release; capability API 1.820 (the chat-activity slot) can.
+  assert.equal(packageManifest.engine.min, "2.5.2");
   assert.deepEqual(
     packageManifest.capabilityApi,
-    { major: 1, minor: 390 },
+    { major: 1, minor: 820 },
     "Long-Term Memory is gated by its capability API",
   );
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
@@ -49,7 +49,12 @@ async function main() {
     recordLongTermMemoryAttempt,
   } = await import(`${source}/recall/usage.ts`);
   const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
-  const { resolveLongTermMemoryRecallSettings, LTM_RECALL_SCORE_THRESHOLD_CEILING } =
+  const {
+    resolveLongTermMemoryRecallSettings,
+    LTM_RECALL_SCORE_THRESHOLD_CEILING,
+    ltmRecallBudgetMemories,
+    ltmRecallBudgetWithLegacyCount,
+  } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/runtime-settings.ts");
   const { DEFAULT_LTM_GLOBAL_SETTINGS } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
@@ -376,7 +381,22 @@ async function main() {
           ],
         ] as const)
           await recallStorage.createNote(note(id, "chat-r", `${id} keeps the cobalt archive`, overrides));
-        const recall = createLtmRecallService(recallStorage);
+        const recallService = createLtmRecallService(recallStorage);
+        // Sharing is per Agent: "slurp" is granted reads here and is the default caller below.
+        await updateLtmGlobalSettings({ longTermMemoryPackageAccess: { slurp: { read: true } } }, recallRoot);
+        const recall = {
+          recall: (input: Record<string, unknown>) => recallService.recall({ caller: "slurp", ...input }),
+        };
+        assert.equal(
+          await recallService.recall({ queryText: "cobalt archive", characterIds: ["char-a"] }),
+          null,
+          "a recall that names no caller must be denied: access is set per Agent",
+        );
+        assert.equal(
+          await recall.recall({ caller: "tally", characterIds: ["char-a"] }),
+          null,
+          "an Agent not in the access map must be denied",
+        );
         const recalled = async (input: Record<string, unknown>) =>
           (
             (await recall.recall({ queryText: "cobalt archive", ...input })) as {
@@ -572,9 +592,10 @@ async function main() {
           null,
           "an aborted recall must return null",
         );
-        assert.ok(
+        assert.equal(
           await recall.recall({ caller: "Slurp 0.3!", queryText: "cobalt archive", characterIds: ["char-a"] }),
-          "a malformed caller name must not stop the read",
+          null,
+          "a malformed caller name names no Agent, so the read must be denied",
         );
         const noodleRead = await recall.recall({
           caller: "noodle",
@@ -585,8 +606,8 @@ async function main() {
           (await listLtmPackageReaders(recallRoot))
             .map((reader: { caller: string | null }) => String(reader.caller))
             .sort(),
-          ["noodle", "null", "slurp"],
-          "Memory Settings must list the packages that read memories, and one that gave no name",
+          ["noodle", "slurp"],
+          "Memory Settings must list the packages that read memories; a denied read is not listed",
         );
         await recordLtmPackageRead(recallRoot, "package_recall", "tally", 3);
         await recordLtmPackageRead(recallRoot, "package_list", "tally", 2);
@@ -658,17 +679,39 @@ async function main() {
           noodleRead?.sections.length,
           "a reader's memories must add up what its reads returned",
         );
-        await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: false }, recallRoot);
+        await updateLtmGlobalSettings({ longTermMemoryPackageAccess: { slurp: { read: false } } }, recallRoot);
         assert.equal(
           await recall.recall({ queryText: "cobalt archive", characterIds: ["char-a"] }),
           null,
-          "turning off Other Agents can read memories must stop recall for other packages",
+          "turning off one Agent's Can read must stop its recall",
         );
         assert.equal(
           await recall.recall({ queryText: "cobalt archive", characterIds: ["char-w"], whole: true }),
           null,
-          "turning off Other Agents can read memories must stop whole recall too",
+          "turning off one Agent's Can read must stop its whole recall too",
         );
+        assert.ok(
+          await recall.recall({ caller: "noodle", queryText: "cobalt archive", characterIds: ["char-a"] }),
+          "turning off one Agent's Can read must leave the other Agents reading",
+        );
+        // The switch reads as a summary (on only while every listed Agent reads), so sending what it shows is no change.
+        await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: false }, recallRoot);
+        assert.ok(
+          await recall.recall({ caller: "noodle", queryText: "cobalt archive", characterIds: ["char-a"] }),
+          "an older client sending the global switch unchanged must not change any Agent",
+        );
+        await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: true }, recallRoot);
+        assert.ok(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-a"] }),
+          "an older Slurp or Noodle offer turning the global switch on must turn on every listed Agent",
+        );
+        await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: false }, recallRoot);
+        for (const caller of ["slurp", "noodle"])
+          assert.equal(
+            await recall.recall({ caller, queryText: "cobalt archive", characterIds: ["char-a"] }),
+            null,
+            `turning the global switch off must stop every listed Agent (${caller})`,
+          );
       } finally {
         await recallStorage.cleanup();
         await rm(recallRoot, { recursive: true, force: true });
@@ -768,12 +811,41 @@ async function main() {
         assert.deepEqual(resolveLongTermMemoryRecallSettings(testCase.input).weights, testCase.expected);
       }
 
+      // Recall is limited by its token budget alone: a legacy per-chat count only caps that chat's budget.
+      const legacyCountSettings = (chatMetadata: Record<string, unknown>) =>
+        resolveLongTermMemoryRecallSettings({
+          chatMode: "roleplay",
+          chatMetadata,
+          globalSettings: DEFAULT_LTM_GLOBAL_SETTINGS,
+        });
+      assert.equal(DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryBudgetTokens, 1024);
+      assert.equal("longTermMemoryMaxChunks" in DEFAULT_LTM_GLOBAL_SETTINGS, false);
+      const legacyCappedSettings = legacyCountSettings({ longTermMemoryMaxChunks: 1 });
+      assert.equal(legacyCappedSettings.budgetTokens, 256, "a legacy chat count of 1 caps the budget at 256");
+      assert.equal("maxChunks" in legacyCappedSettings, false, "resolved recall settings carry no count");
+      assert.equal(
+        legacyCountSettings({ longTermMemoryMaxChunks: 100 }).budgetTokens,
+        1024,
+        "a roomy count caps nothing",
+      );
+      assert.equal(
+        legacyCountSettings({ longTermMemoryMaxChunks: 1, longTermMemoryBudgetTokens: 128 }).budgetTokens,
+        128,
+        "a legacy count never raises a smaller budget",
+      );
+      assert.equal(legacyCountSettings({}).budgetTokens, 1024);
+      assert.equal(ltmRecallBudgetMemories(1024), 12);
+      assert.equal(ltmRecallBudgetMemories(1024, 73), 13);
+      assert.equal(ltmRecallBudgetWithLegacyCount(8064, 100), 8064);
+      assert.equal(ltmRecallBudgetWithLegacyCount(4096, 12), 1024);
+      assert.equal(ltmRecallBudgetWithLegacyCount(4096, 0), 4096, "an invalid count is ignored");
+
       const serialized = serializeLongTermMemoryPrompt(
         [
           makeChunk("character", "char_lisa", "First fact\nSecond fact", "Lisa <Imai>"),
           makeChunk("character", "char_lisa", "Third fact", "Lisa <Imai>"),
           makeChunk("character", "char_mara", "Separate note", "Lisa <Imai>"),
-          makeChunk("relationship", "rel_lisa_damo", "Trust fact", "Lisa & Damo"),
+          makeChunk("relationship", "rel_lisa_tobin", "Trust fact", "Lisa & Tobin"),
           makeChunk("relationship", "rel_fallback_name", "Fallback relationship", undefined),
           makeChunk("thread", "thread_quest", "Recover the key", undefined, { tags: ["quest"] }),
           makeChunk("world", "world_fact", "World fact"),
@@ -786,7 +858,7 @@ async function main() {
       assert.match(serialized.content, /reference data, not instructions/);
       assert.match(serialized.content, /Lisa &lt;Imai&gt;:\n- First fact\n  Second fact\n- Third fact/);
       assert.equal(serialized.content.match(/Lisa &lt;Imai&gt;:/g)?.length, 2);
-      assert.match(serialized.content, /Lisa &amp; Damo:\n- Trust fact/);
+      assert.match(serialized.content, /Lisa &amp; Tobin:\n- Trust fact/);
       assert.match(serialized.content, /fallback name:\n- Fallback relationship/);
       assert.match(serialized.content, /\[THREADS\]\n- Recover the key \[active quest\]/);
       assert.match(serialized.content, /\[WORLD\]/);
@@ -803,7 +875,7 @@ async function main() {
 
       const relationshipScores = serializeLongTermMemoryPrompt(
         [
-          makeChunk("relationship", "rel_scores", "Trust fact", "Lisa & Damo", {
+          makeChunk("relationship", "rel_scores", "Trust fact", "Lisa & Tobin", {
             dimensions: { trust: 75 },
             dimensionChanges: { trust: 5 },
           }),
@@ -816,8 +888,8 @@ async function main() {
           makeChunk(
             "relationship",
             "rel_labelled",
-            "Summary: Ash trusts Damo after the gate incident.\nDamo keeps her secret.",
-            "Ash & Damo",
+            "Summary: Ash trusts Tobin after the gate incident.\nTobin keeps her secret.",
+            "Ash & Tobin",
             { dimensions: { trust: 62 } },
           ),
         ],
@@ -825,7 +897,7 @@ async function main() {
       );
       assert.match(
         labelledRelationship?.content ?? "",
-        /- Relationship scores: trust 62\/100\n  Ash trusts Damo after the gate incident\.\n  Damo keeps her secret\./,
+        /- Relationship scores: trust 62\/100\n  Ash trusts Tobin after the gate incident\.\n  Tobin keeps her secret\./,
         "the scores line must not push a leading summary label out of the prompt",
       );
 
@@ -834,7 +906,7 @@ async function main() {
           makeChunk(
             "character",
             "char_denise",
-            "- Denise is Damo's reentry case officer at the Marlowe Street reentry office and treats his case as an exoneree case rather than parole.\ntext: Damo's reentry case officer at the Marlowe Street reentry office; distinguishes his case as an \"exoneree\" rather than parolee, entitling him to state compensation.",
+            "- Denise is Tobin's reentry case officer at the Marlowe Street reentry office and treats his case as an exoneree case rather than parole.\ntext: Tobin's reentry case officer at the Marlowe Street reentry office; distinguishes his case as an \"exoneree\" rather than parolee, entitling him to state compensation.",
             "Denise",
           ),
         ],
@@ -842,7 +914,7 @@ async function main() {
       );
       assert.match(
         legacyBullets?.content ?? "",
-        /Denise:\n- Denise is Damo's reentry case officer at the Marlowe Street reentry office and treats his case as an exoneree case rather than parole\./,
+        /Denise:\n- Denise is Tobin's reentry case officer at the Marlowe Street reentry office and treats his case as an exoneree case rather than parole\./,
       );
       assert.doesNotMatch(legacyBullets?.content ?? "", /- - /);
       assert.doesNotMatch(legacyBullets?.content ?? "", /\n\s*text:/);
@@ -895,6 +967,429 @@ async function main() {
         deduped.chunks.map(({ chunk }) => chunk.noteId),
         ["world_duplicate_a"],
       );
+
+      // Events lead the lanes; they may hold a quarter of the slots (at least 3) so other memories fit.
+      const slotPool = (events: number, others: number) => {
+        const entries = [
+          ...Array.from(
+            { length: events },
+            (_, index) => makeChunk("timeline_event", `event_slot_${index + 1}`, `Event ${index + 1} happened`).chunk,
+          ),
+          ...Array.from(
+            { length: others },
+            (_, index) =>
+              makeChunk("character", `character_slot_${index + 1}`, `Character ${index + 1} is known`).chunk,
+          ),
+        ];
+        return {
+          candidates: entries.map((chunk, index) => ({
+            chunkId: chunk.id,
+            score: 100 - index,
+            reasons: [],
+            lanes: [],
+            fusedRank: index + 1,
+          })),
+          chunksById: new Map(entries.map((chunk) => [chunk.id, chunk])),
+        };
+      };
+      const slotRun = (events: number, others: number, maxChunks: number, eventSlotFloor?: number) => {
+        const pool = slotPool(events, others);
+        const result = applyLtmBudget(pool.candidates, pool.chunksById, {
+          maxChunks,
+          maxTokens: 100000,
+          explain: true,
+          rejectedLimit: 50,
+          eventSlotFloor,
+        });
+        const types = result.chunks.map(({ chunk }) => chunk.noteType);
+        return {
+          result,
+          events: types.filter((type) => type === "timeline_event").length,
+          others: types.filter((type) => type !== "timeline_event").length,
+        };
+      };
+      const capped = slotRun(12, 8, 8);
+      assert.equal(capped.events, 3, "maxChunks 8 allows 3 events");
+      assert.equal(capped.others, 5, "the other slots go to lower-ranked non-events");
+      assert.deepEqual(
+        capped.result.rejected.filter((row) => row.rejectionReason === "type_cap").map((row) => row.noteId),
+        Array.from({ length: 9 }, (_, index) => `event_slot_${index + 4}`),
+        "events 4-12 are passed over with type_cap",
+      );
+      assert.equal(capped.result.rejected.filter((row) => row.rejectionReason === "lower_rank").length, 3);
+      const eventsOnly = slotRun(10, 0, 8);
+      assert.equal(eventsOnly.events, 8, "with nothing else to recall the passed-over events fill every slot");
+      assert.equal(
+        eventsOnly.result.rejected.some((row) => row.rejectionReason === "type_cap"),
+        false,
+      );
+      assert.deepEqual(
+        eventsOnly.result.chunks.map(({ chunk }) => chunk.noteId).sort(),
+        Array.from({ length: 8 }, (_, index) => `event_slot_${index + 1}`).sort(),
+        "the refilled events are the best-ranked ones",
+      );
+      assert.deepEqual(
+        eventsOnly.result.rejected.map((row) => row.rejectionReason),
+        ["lower_rank", "lower_rank"],
+        "once the refill fills the slots the memory limit keeps the rest out",
+      );
+      const partial = slotRun(12, 2, 8);
+      assert.equal(partial.events, 6, "3 capped events plus 3 refilled ones");
+      assert.equal(partial.others, 2);
+      assert.equal(partial.result.rejected.filter((row) => row.rejectionReason === "lower_rank").length, 6);
+      assert.equal(
+        partial.result.rejected.some((row) => row.rejectionReason === "type_cap"),
+        false,
+      );
+      const seededEvents = slotRun(12, 8, 8, 6);
+      assert.equal(seededEvents.events, 6, "the linked pass keeps the event slots recalled memories already hold");
+      const smallCap = slotRun(6, 2, 4);
+      assert.equal(smallCap.events, 3, "maxChunks 4 still allows 3 events");
+      assert.equal(smallCap.others, 1);
+      const defaultCap = slotRun(10, 15, 20);
+      assert.equal(defaultCap.events, 5, "a quarter of 20 slots is 5");
+      assert.equal(defaultCap.others, 15);
+
+      // Without a count, recall is limited by its token budget alone: whole chunks in rank order, never truncated.
+      {
+        const countFree = (candidatePool: ReturnType<typeof slotPool>, maxTokens: number) => {
+          const result = applyLtmBudget(candidatePool.candidates, candidatePool.chunksById, {
+            maxTokens,
+            explain: true,
+            rejectedLimit: 100,
+          });
+          assert.ok(
+            result.chunks.reduce((sum, item) => sum + item.estimatedTokens, 0) <= maxTokens,
+            "the selected chunks never exceed the token budget",
+          );
+          return result;
+        };
+        const sizedEntries = [
+          makeChunk("world", "world_fit_a", "A".repeat(40)).chunk,
+          makeChunk("world", "world_fit_big", "B".repeat(400)).chunk,
+          makeChunk("world", "world_fit_c", "C".repeat(40)).chunk,
+        ];
+        const sizedPool = {
+          candidates: sizedEntries.map((chunk, index) => ({
+            chunkId: chunk.id,
+            score: 10 - index,
+            reasons: [],
+            lanes: [],
+            fusedRank: index + 1,
+          })),
+          chunksById: new Map(sizedEntries.map((chunk) => [chunk.id, chunk])),
+        };
+        const sized = countFree(sizedPool, 30);
+        assert.deepEqual(
+          sized.chunks.map(({ chunk }) => chunk.noteId),
+          ["world_fit_a", "world_fit_c"],
+          "a chunk too large for the remaining budget is skipped and a smaller lower-ranked one still fits",
+        );
+        assert.deepEqual(
+          sized.rejected.map((row) => [row.noteId, row.rejectionReason]),
+          [["world_fit_big", "budget"]],
+        );
+        assert.deepEqual(
+          sized.chunks.map(({ chunk }) => chunk.text),
+          [sizedEntries[0].text, sizedEntries[2].text],
+          "a selected chunk is whole, never truncated",
+        );
+
+        // Neither 12, 20 nor 100 memories is a ceiling any more.
+        const manyEntries = Array.from(
+          { length: 150 },
+          (_, index) => makeChunk("world", `world_many_${index + 1}`, `Fact ${index + 1}`).chunk,
+        );
+        const manyPool = {
+          candidates: manyEntries.map((chunk, index) => ({
+            chunkId: chunk.id,
+            score: 200 - index,
+            reasons: [],
+            lanes: [],
+            fusedRank: index + 1,
+          })),
+          chunksById: new Map(manyEntries.map((chunk) => [chunk.id, chunk])),
+        };
+        assert.equal(countFree(manyPool, 100000).chunks.length, 150, "every small chunk fits a large budget");
+        const manyTight = countFree(manyPool, 240);
+        assert.ok(manyTight.chunks.length > 100, "a tight budget still holds more than 100 small memories");
+        assert.ok(manyTight.chunks.length < 150);
+        assert.equal(
+          manyTight.rejected.every((row) => row.rejectionReason === "budget"),
+          true,
+          "what the budget leaves out is rejected as budget, never lower_rank",
+        );
+
+        // Events lead the ranking; without a count they hold max(3 events, a quarter of the token budget).
+        const eventsOf = (result: ReturnType<typeof countFree>) =>
+          result.chunks.filter(({ chunk }) => chunk.noteType === "timeline_event");
+        const wide = countFree(slotPool(12, 30), 100);
+        assert.equal(eventsOf(wide).length, 6, "events stop once they would pass 25 of the 100 budget tokens");
+        assert.ok(eventsOf(wide).reduce((sum, item) => sum + item.estimatedTokens, 0) <= 25);
+        assert.equal(wide.chunks.length - eventsOf(wide).length, 14, "other notes fill the rest of the budget");
+        assert.deepEqual(
+          wide.rejected.filter((row) => row.noteId?.startsWith("event_slot_")).map((row) => row.rejectionReason),
+          Array.from({ length: 6 }, () => "budget"),
+          "the passed-over events do not come back once nothing is left for them",
+        );
+        const narrow = countFree(slotPool(12, 30), 40);
+        assert.equal(eventsOf(narrow).length, 3, "a small budget still allows 3 events");
+        assert.equal(narrow.chunks.length - eventsOf(narrow).length, 5);
+        const eventsOnlyFree = countFree(slotPool(12, 0), 100);
+        assert.equal(eventsOnlyFree.chunks.length, 12, "with nothing else to recall the passed-over events come back");
+      }
+
+      // The linked pass walks linked candidates before the rest; the explained rows must still be the nearest misses.
+      const missPool = slotPool(0, 30);
+      const missCandidates = [
+        ...missPool.candidates.slice(24).map((candidate) => ({ ...candidate, linked: true })),
+        ...missPool.candidates.slice(0, 24),
+      ];
+      const nearestMisses = applyLtmBudget(missCandidates, missPool.chunksById, {
+        maxChunks: 5,
+        maxTokens: 100000,
+        explain: true,
+        rejectedLimit: 5,
+      });
+      assert.deepEqual(
+        nearestMisses.rejected.map((row) => row.fusedRank),
+        [1, 2, 3, 4, 5],
+        "the rejected rows are the best-ranked candidates left out, in rank order, not the linked ones first",
+      );
+      const allMisses = applyLtmBudget(missCandidates, missPool.chunksById, {
+        maxChunks: 5,
+        maxTokens: 100000,
+        explain: true,
+        rejectedLimit: 80,
+      });
+      assert.deepEqual(
+        allMisses.rejected.map((row) => row.fusedRank),
+        Array.from({ length: 25 }, (_, index) => (index < 24 ? index + 1 : 30)),
+        "every rejected candidate is listed once, ascending by fused rank",
+      );
+      assert.equal(
+        allMisses.rejected.every((row) => row.rejectionReason === "lower_rank"),
+        true,
+      );
+
+      // Item 14: a recalled character brings its note's top critical section (a death, a lasting status) along.
+      {
+        const section = (noteId: string, sectionKey: string, text: string, overrides: Record<string, unknown> = {}) =>
+          makeChunk("character", noteId, text, noteId, {
+            id: `${noteId}::${sectionKey}`,
+            sectionKey,
+            ...overrides,
+          }).chunk;
+        const ranked = (chunks: Array<{ id: string }>) =>
+          chunks.map((chunk, index) => ({
+            chunkId: chunk.id,
+            score: 100 - index,
+            reasons: [`lane:${index}`],
+            lanes: [],
+            fusedRank: index + 1,
+          }));
+        const run = (
+          selected: Array<{ id: string }>,
+          pool: Array<{ id: string; [key: string]: unknown }>,
+          companionChunks: unknown[] | undefined,
+          options: Record<string, unknown> = {},
+        ) =>
+          applyLtmBudget(ranked(selected), new Map(pool.map((chunk) => [chunk.id, chunk as any])), {
+            maxChunks: 10,
+            maxTokens: 100000,
+            explain: true,
+            rejectedLimit: 50,
+            companionChunks,
+            ...options,
+          } as any);
+        const ids = (result: { chunks: Array<{ chunk: { id: string } }> }) =>
+          result.chunks.map(({ chunk }) => chunk.id);
+
+        const work = section("char_mara", "work", "Mara runs the harbour ledgers");
+        const status = section("char_mara", "status", "Mara died at the pier", {
+          importance: "critical",
+          salience: 0.9,
+        });
+        const worldA = makeChunk("world", "world_a", "The pier is old").chunk;
+        const worldB = makeChunk("world", "world_b", "The harbour is cold").chunk;
+        const pool = [work, worldA, worldB, status];
+
+        const base = run([work, worldA, worldB], pool, [status]);
+        assert.deepEqual(
+          ids(base),
+          ["char_mara::work", "char_mara::status", "world_a::facts", "world_b::facts"],
+          "the critical section comes right after its character's matching section",
+        );
+        const companion = base.chunks.find(({ chunk }) => chunk.id === status.id);
+        assert.equal(companion?.companion, true);
+        assert.ok(
+          companion?.reasons.includes("status_companion:work"),
+          "the debug reasons name the section the companion came with",
+        );
+        assert.equal(
+          base.chunks.find(({ chunk }) => chunk.id === work.id)?.companion,
+          undefined,
+          "the matching section is not a companion",
+        );
+
+        // At the cap the lowest-ranked chunk that is not tier 1 makes room.
+        const full = run([work, worldA, worldB], pool, [status], { maxChunks: 3 });
+        assert.deepEqual(ids(full), ["char_mara::work", "char_mara::status", "world_a::facts"]);
+        assert.deepEqual(
+          full.rejected.map((row) => [row.noteId, row.rejectionReason]),
+          [["world_b", "lower_rank"]],
+        );
+        const core = section("char_ines", "core", "Ines is the harbour master");
+        const tierOne = run([work, worldA, core], [...pool, core], [status], { maxChunks: 3 });
+        assert.deepEqual(
+          ids(tierOne).sort(),
+          ["char_ines::core", "char_mara::status", "char_mara::work"],
+          "a tier 1 chunk is never the one dropped; the lower-ranked world note is",
+        );
+        const onlyTierOne = run([work, core], [work, core, status], [status], { maxChunks: 2 });
+        assert.deepEqual(
+          ids(onlyTierOne).sort(),
+          ["char_ines::core", "char_mara::work"],
+          "with nothing droppable left the companion is skipped; the section it would follow stays",
+        );
+
+        // Not in the eligible pool (other scope, past the branch point, excluded): never added.
+        assert.deepEqual(ids(run([work, worldA, worldB], pool, [])), [
+          "char_mara::work",
+          "world_a::facts",
+          "world_b::facts",
+        ]);
+        assert.deepEqual(ids(run([work, worldA, worldB], pool, undefined)), [
+          "char_mara::work",
+          "world_a::facts",
+          "world_b::facts",
+        ]);
+
+        // No critical section: unchanged. A critical section already selected: no duplicate.
+        const plain = section("char_otto", "work", "Otto mends nets");
+        assert.deepEqual(ids(run([plain, worldA], [plain, worldA], [])), ["char_otto::work", "world_a::facts"]);
+        const both = run([work, status, worldA], pool, [status]);
+        assert.deepEqual(ids(both), ["char_mara::work", "char_mara::status", "world_a::facts"]);
+        assert.equal(
+          both.chunks.some(({ companion: added }) => added),
+          false,
+        );
+
+        // Two critical sections: only the higher salience joins; an equal pair takes the smaller id.
+        const lesser = section("char_mara", "oath", "Mara swore to guard the pier", {
+          importance: "critical",
+          salience: 0.4,
+        });
+        const two = run([work, worldA], [...pool, lesser], [lesser, status]);
+        assert.deepEqual(ids(two), ["char_mara::work", "char_mara::status", "world_a::facts"]);
+        const tie = section("char_mara", "debt", "Mara owes the guild", { importance: "critical", salience: 0.9 });
+        assert.deepEqual(ids(run([work], [work, status, tie], [tie, status])), ["char_mara::work", "char_mara::debt"]);
+
+        const otherWork = section("char_ines", "work", "Ines audits the harbour dues");
+        // Another character's own critical section is never the one dropped to make room (it ranks last here).
+        const ownCritical = section("char_ines", "status", "Ines was exiled", {
+          importance: "critical",
+          salience: 0.5,
+        });
+        const keepOwn = run(
+          [work, otherWork, ownCritical],
+          [work, status, otherWork, ownCritical],
+          [status, ownCritical],
+          {
+            maxChunks: 3,
+          },
+        );
+        assert.deepEqual(
+          ids(keepOwn).sort(),
+          ["char_ines::status", "char_mara::status", "char_mara::work"],
+          "the lower-ranked work section makes room; the death another character holds stays",
+        );
+
+        // One companion per character; each follows its own character's best-ranked section.
+        const otherStatus = section("char_ines", "status", "Ines was exiled", {
+          importance: "critical",
+          salience: 0.5,
+        });
+        const pair = run(
+          [otherWork, worldA, work],
+          [otherWork, worldA, work, status, otherStatus],
+          [status, otherStatus],
+        );
+        assert.deepEqual(ids(pair), [
+          "char_ines::work",
+          "char_ines::status",
+          "world_a::facts",
+          "char_mara::work",
+          "char_mara::status",
+        ]);
+
+        // The token budget counts the companion too: a companion that cannot fit even after drops is skipped.
+        const heavy = section("char_mara", "status", "x".repeat(4000), { importance: "critical", salience: 0.9 });
+        const tight = run([work, worldA], [work, worldA, heavy], [heavy], { maxTokens: 50 });
+        assert.deepEqual(ids(tight), ["char_mara::work", "world_a::facts"]);
+
+        // Through retrieval: the eligible pool (here an excluded chunk) decides what a companion can be.
+        const companionScope = { chatId: "chat-companion", chatIds: ["chat-companion"] };
+        await storage.createNote(
+          note("char_companion_mara", "chat-companion", "unused", {
+            type: "character",
+            keywords: [],
+            scope: { ...companionScope, characterIds: ["char-companion-mara"] },
+            sections: {
+              work: { text: "Mara runs the harbour ledgers at dawn", updatedAt: timestamp },
+              status: {
+                text: "Mara is dead. Her body was found at the pier.",
+                updatedAt: timestamp,
+                importance: "critical",
+                salience: 0.9,
+              },
+            },
+          }),
+        );
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+        const companionRecall = (extra: Record<string, unknown> = {}) =>
+          retrieveLongTermMemory({
+            root: storage.root,
+            queryText: "harbour ledgers",
+            scope: companionScope,
+            characterIds: ["char-companion-mara"],
+            mode: "roleplay",
+            semanticWeight: 0,
+            lexicalWeight: 1,
+            graphWeight: 0,
+            keywordWeight: 0,
+            maxChunks: 5,
+            maxTokens: 4096,
+            explain: true,
+            ...extra,
+          } as any);
+        const recalled = await companionRecall();
+        const marked = recalled.chunks.filter(({ chunk }: any) => chunk.noteId === "char_companion_mara");
+        assert.deepEqual(
+          marked.map(({ chunk }: any) => chunk.sectionKey),
+          ["work", "status"],
+          "the matching section is followed by the section the words did not match",
+        );
+        assert.ok(marked[1].reasons.includes("status_companion:work"));
+        const noCompanion = await companionRecall({ statusCompanions: false });
+        assert.deepEqual(
+          noCompanion.chunks
+            .filter(({ chunk }: any) => chunk.noteId === "char_companion_mara")
+            .map(({ chunk }: any) => chunk.sectionKey),
+          ["work"],
+          "a caller that picks notes can turn companions off",
+        );
+        const excluded = await companionRecall({
+          excludedChunk: (chunk: { sectionKey: string }) => chunk.sectionKey === "status",
+        });
+        assert.deepEqual(
+          excluded.chunks
+            .filter(({ chunk }: any) => chunk.noteId === "char_companion_mara")
+            .map(({ chunk }: any) => chunk.sectionKey),
+          ["work"],
+          "a chunk the caller excluded is not brought back as a companion",
+        );
+      }
 
       assert.ok(runtime, "package activation must register the runtime service");
       assert.deepEqual(
@@ -1026,6 +1521,174 @@ async function main() {
       assert.equal(semantic.chunks[0]?.chunk.noteId, "world_visible");
       assert.equal(embedCalls.includes("observatory"), true);
       assert.equal(embedInputTypes.get("observatory"), "query", "recall must embed its query as a query");
+      // Item 8: the vector lane embeds `vectorQueryText` when given.
+      {
+        const wideQuery = "a long unrelated opening the local embedder would read first";
+        for (const [vectorQueryText, embedded] of [
+          ["observatory", "observatory"],
+          ["   ", wideQuery],
+          [undefined, wideQuery],
+        ] as const) {
+          embedCalls.length = 0;
+          const recall = await retrieveLongTermMemory({
+            root: storage.root,
+            queryText: wideQuery,
+            ...(vectorQueryText === undefined ? {} : { vectorQueryText }),
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            mode: "roleplay",
+            semanticWeight: 1,
+            lexicalWeight: 0,
+            graphWeight: 0,
+            keywordWeight: 0,
+            maxChunks: 5,
+            maxTokens: 4096,
+          });
+          assert.deepEqual(
+            embedCalls,
+            [embedded],
+            `the vector lane embeds ${JSON.stringify(vectorQueryText)} as given`,
+          );
+          if (vectorQueryText === "observatory")
+            assert.equal(recall.chunks[0]?.chunk.noteId, "world_visible", "the vector query picks the memory");
+        }
+      }
+      // Item 9: a turn whose best cosine is under the cut recalls nothing, but only in the local MiniLM space.
+      {
+        let queryCosine = 0.3;
+        const gateAdapter = (spaceId: string) => ({
+          spaceId,
+          label: "gate test embeddings",
+          async embed(texts: string[], _signal?: AbortSignal, inputType?: "query" | "document") {
+            return texts.map((text) =>
+              inputType === "query"
+                ? [queryCosine, Math.sqrt(1 - queryCosine ** 2)]
+                : text.includes("beneath the observatory")
+                  ? [1, 0]
+                  : [0, 0],
+            );
+          },
+        });
+        const recallWith = (spaceId: string, queryText: string, vectors = true, semanticWeight = 1) =>
+          retrieveLongTermMemory({
+            root: storage.root,
+            queryText,
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            mode: "roleplay",
+            semanticWeight: vectors ? semanticWeight : 0,
+            lexicalWeight: 1,
+            graphWeight: 0,
+            keywordWeight: 0,
+            maxChunks: 5,
+            maxTokens: 4096,
+            embeddingAdapter: gateAdapter(spaceId),
+          });
+        const miniLm = "local:Xenova/all-MiniLM-L6-v2:q8";
+        for (const spaceId of [miniLm, "other-space"]) {
+          await rebuildLongTermMemoryIndexes({ root: storage.root, embeddingAdapter: gateAdapter(spaceId) });
+          queryCosine = 0.3;
+          const below = await recallWith(spaceId, "a question about the cobalt archive");
+          queryCosine = 0.6;
+          const above = await recallWith(spaceId, "a question about the cobalt archive");
+          assert.equal(above.chunks[0]?.chunk.noteId, "world_visible", `${spaceId}: a close memory is still selected`);
+          // The rank sum carries semanticWeight x 10/7 (1.0 at the default 0.7); the ranking test covers relevance.
+          for (const semanticWeight of [1, 0.7]) {
+            const weighted = await recallWith(spaceId, "a question about the cobalt archive", true, semanticWeight);
+            const top = weighted.chunks
+              .filter((entry) => entry.laneScores?.vector !== undefined)
+              .sort((left, right) => right.laneScores!.vector! - left.laneScores!.vector!)[0];
+            assert.ok(top, `${spaceId}: the vector lane scored a chunk at semantic weight ${semanticWeight}`);
+            assert.ok(
+              Math.abs(top.laneScores!.vector! - ((semanticWeight * (10 / 7)) / 61) * top.rawLaneScores!.vector!) <
+                1e-9,
+              `${spaceId}: the vector rank weight is semanticWeight x 10/7 at ${semanticWeight}`,
+            );
+          }
+          if (spaceId === miniLm) {
+            assert.equal(below.chunks.length, 0, "every cosine under the cut recalls nothing");
+            assert.equal(below.skippedUnrelated, true);
+            assert.equal(above.skippedUnrelated, false);
+            queryCosine = 0;
+            const orthogonal = await recallWith(spaceId, "a question about the cobalt archive");
+            assert.equal(orthogonal.chunks.length, 0, "a query far from every memory recalls nothing either");
+            queryCosine = 0.3;
+            const direct = await recallWith(spaceId, "what about world_visible_second");
+            assert.deepEqual(
+              direct.chunks.map((chunk) => chunk.chunk.noteId),
+              ["world_visible_second"],
+              "an explicit id hit survives the gate",
+            );
+            assert.equal(direct.skippedUnrelated, false, "a surviving id hit is not reported as a skipped recall");
+            const lexical = await recallWith(spaceId, "observatory", false);
+            assert.equal(lexical.chunks[0]?.chunk.noteId, "world_visible", "lexical-only recall is never gated");
+            assert.equal(lexical.skippedUnrelated, false);
+          } else {
+            assert.equal(below.chunks[0]?.chunk.noteId, "world_visible", "another space keeps today's selection");
+            assert.equal(below.skippedUnrelated, false);
+          }
+        }
+        // Item 13: a short reply must not skip the recall while the joined window is on topic.
+        {
+          const cosines = new Map([
+            ["ok", 0.2],
+            ["the window about the cobalt archive", 0.6],
+          ]);
+          const queryEmbeds: string[] = [];
+          const shortReplyAdapter = {
+            spaceId: miniLm,
+            label: "short reply test embeddings",
+            async embed(texts: string[], _signal?: AbortSignal, inputType?: "query" | "document") {
+              return texts.map((text) => {
+                if (inputType !== "query") return text.includes("beneath the observatory") ? [1, 0] : [0, 0];
+                queryEmbeds.push(text);
+                const cosine = cosines.get(text) ?? 0.3;
+                return [cosine, Math.sqrt(1 - cosine ** 2)];
+              });
+            },
+          };
+          await rebuildLongTermMemoryIndexes({ root: storage.root, embeddingAdapter: shortReplyAdapter });
+          const recallShort = async (queryText: string, vectorQueryText?: string) => {
+            queryEmbeds.length = 0;
+            const recall = await retrieveLongTermMemory({
+              root: storage.root,
+              queryText,
+              ...(vectorQueryText === undefined ? {} : { vectorQueryText }),
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              mode: "roleplay",
+              semanticWeight: 1,
+              lexicalWeight: 1,
+              graphWeight: 0,
+              keywordWeight: 0,
+              maxChunks: 5,
+              maxTokens: 4096,
+              embeddingAdapter: shortReplyAdapter,
+            });
+            return { recall, embeds: [...queryEmbeds] };
+          };
+          const onTopic = await recallShort("the window about the cobalt archive", "ok");
+          assert.equal(onTopic.recall.skippedUnrelated, false, "a short reply after an on-topic window is not skipped");
+          assert.equal(onTopic.recall.chunks[0]?.chunk.noteId, "world_visible");
+          assert.deepEqual(onTopic.embeds, ["ok", "the window about the cobalt archive"]);
+          const laneCosine = onTopic.recall.chunks[0]?.rawLaneScores?.vector;
+          assert.ok(
+            laneCosine !== undefined && Math.abs(laneCosine - 0.2) < 1e-9,
+            "the vector lane still ranks by the short query, not the window",
+          );
+          const offTopic = await recallShort("the window about nothing", "ok");
+          assert.equal(offTopic.recall.chunks.length, 0, "both under the cut still recalls nothing");
+          assert.equal(offTopic.recall.skippedUnrelated, true);
+          const aboveAlone = await recallShort("ok", "the window about the cobalt archive");
+          assert.equal(aboveAlone.recall.skippedUnrelated, false);
+          assert.deepEqual(aboveAlone.embeds, ["the window about the cobalt archive"], "no second embed above the cut");
+          const same = await recallShort("ok");
+          assert.equal(same.recall.skippedUnrelated, true, "no vector query is item 9 as today");
+          assert.deepEqual(same.embeds, ["ok"]);
+          const identical = await recallShort("ok", " ok ");
+          assert.equal(identical.recall.skippedUnrelated, true);
+          assert.deepEqual(identical.embeds, ["ok"], "an identical window is not embedded twice");
+        }
+        // Put the index back in the space the rest of this suite uses.
+        await rebuildLongTermMemoryIndexes({ root: storage.root });
+      }
       await storage.createNote({
         id: "world_vector_only",
         title: "world_vector_only",
@@ -1679,7 +2342,7 @@ async function main() {
       }
       // #1962: a recall arms the chat's background import only when the setting is on, and never waits for it.
       {
-        const { isLtmAutoImportArmed, resumeLtmAutoImport, stopLtmAutoImport } = await import(
+        const { isLtmAutoImportArmed, isLtmAutoImportReading, resumeLtmAutoImport, stopLtmAutoImport } = await import(
           `${source}/sources/auto-import-job.ts`
         );
         const { updateLtmExtractionConfig } = await import(`${source}/extraction/extraction-config.ts`);
@@ -1687,12 +2350,19 @@ async function main() {
         assert.match((await runtime.recall(input)).text, /beneath the observatory/);
         await settle();
         assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), false, "the setting off arms nothing");
+        assert.equal(
+          isLtmAutoImportReading(storage.root, input.chatId),
+          false,
+          "no import queued or running is not reading",
+        );
         await updateLtmExtractionConfig({ autoImportChatSources: true }, storage.root);
         assert.match((await runtime.recall(input)).text, /beneath the observatory/, "recall results do not change");
         for (let wait = 0; wait < 100 && !isLtmAutoImportArmed(storage.root, input.chatId); wait += 1) await settle();
         assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), true, "the setting on arms the chat's import");
+        assert.equal(isLtmAutoImportReading(storage.root, input.chatId), true, "a queued or running import is reading");
         await stopLtmAutoImport(storage.root);
         assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), false, "deactivation drops a pending import");
+        assert.equal(isLtmAutoImportReading(storage.root, input.chatId), false, "a dropped import is not reading");
         resumeLtmAutoImport(storage.root);
         // "Memories from this chat": the chat's choice beats the global one; no choice uses the global one.
         const armedChat = chats.find((chat) => chat.id === input.chatId)!;
@@ -1766,6 +2436,76 @@ async function main() {
       );
       assert.equal(explanationDetails.rejectedLimit, 20);
       assert.equal(typeof explanationDetails.contextMessagesUsed, "number");
+      assert.equal(explanationDetails.vectorQueryMessages, 1, "one message in view is one vector query message");
+
+      // Item 8: with a long window the meaning search embeds the newest messages, not the oldest.
+      {
+        const windowMetadata = chats[0].metadata;
+        const longMessage = (marker: string, size: number) =>
+          `${marker} ${"cobalt archive watch ".repeat(40)}`.slice(0, size);
+        try {
+          chats[0].metadata = {
+            ...windowMetadata,
+            longTermMemoryRecallContextMessages: 10,
+            longTermMemorySemanticWeight: 1,
+          };
+          embedCalls.length = 0;
+          await runtime.recall({
+            ...input,
+            debugMode: true,
+            messages: Array.from({ length: 10 }, (_, index) => ({
+              role: "user",
+              content: longMessage(`MARK${index}`, 700),
+            })),
+          });
+          const sent = embedCalls.filter((text) => text.includes("MARK"));
+          assert.equal(sent.length, 1, "the meaning search embeds one query");
+          assert.ok(sent[0]!.endsWith(longMessage("MARK9", 700)), "the query ends with the last message");
+          assert.ok(!sent[0]!.includes("MARK0"), "the query leaves out the oldest message");
+          assert.ok(sent[0]!.length <= 1600, "the query fits the embedder budget");
+          assert.deepEqual(
+            sent[0]!.split("\n").map((part) => part.slice(0, 5)),
+            ["MARK8", "MARK9"],
+            "whole messages stay, in chat order",
+          );
+          const windowed = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)?.details as Record<
+            string,
+            unknown
+          >;
+          assert.equal(windowed.contextMessagesUsed, 10);
+          assert.equal(windowed.vectorQueryMessages, 2, "the debug record counts the messages the meaning search read");
+
+          // One over-long last message: its tail is sent, cut from the end backwards.
+          embedCalls.length = 0;
+          const huge = `START${"x".repeat(3000)}TAILEND`;
+          await runtime.recall({
+            ...input,
+            messages: [
+              { role: "user", content: longMessage("MARKOLD", 300) },
+              { role: "user", content: huge },
+            ],
+          });
+          const hugeSent = embedCalls.filter((text) => text.includes("TAILEND"));
+          assert.deepEqual(hugeSent, [huge.slice(-1600)], "an over-long newest message is cut from its end backwards");
+
+          // A blank newest message is skipped, so it cannot push the search back to the oldest-first query.
+          embedCalls.length = 0;
+          await runtime.recall({
+            ...input,
+            messages: [
+              { role: "user", content: huge },
+              { role: "user", content: "  \n" },
+            ],
+          });
+          assert.deepEqual(
+            embedCalls.filter((text) => text.includes("TAILEND")),
+            [huge.slice(-1600)],
+            "a blank newest message does not replace the vector query",
+          );
+        } finally {
+          chats[0].metadata = windowMetadata;
+        }
+      }
 
       const originalRecallMetadata = chats[0].metadata;
       try {
@@ -1967,13 +2707,14 @@ async function main() {
         await rebuildLongTermMemoryIndexes({ root: storage.root });
         for (const candidateCount of [120, 25]) {
           const queryText = noteIds.slice(0, candidateCount).join(" ");
+          // Recall no longer passes a count, so the retrieval mirror passes none either.
           const candidates = await retrieveLongTermMemory({
             root: storage.root,
             queryText,
             scope: { chatId: boundedChat.id, chatIds: [boundedChat.id] },
             mode: "roleplay",
-            maxChunks: 100,
             maxTokens: 128,
+            promptNormalizedEstimate: true,
             semanticWeight: 0,
             lexicalWeight: 0,
             keywordWeight: 0,
@@ -1981,8 +2722,13 @@ async function main() {
             explain: true,
             rejectedLimit: 20,
           });
-          assert.equal(candidates.chunks.length, Math.min(100, candidateCount));
-          assert.equal(candidates.rejected.length, candidateCount === 120 ? 20 : 0);
+          // No count cut: about one token per memory, so the token budget alone decides.
+          assert.equal(candidates.chunks.length, Math.min(108, candidateCount));
+          assert.equal(candidates.rejected.length, candidateCount === 120 ? 12 : 0);
+          assert.ok(
+            candidates.rejected.every((rejected: any) => rejected.rejectionReason === "budget"),
+            "memories that do not fit the token budget are rejected as budget, never lower_rank",
+          );
           assert.equal(
             candidates.chunks.some((candidate: any) =>
               candidates.rejected.some((rejected: any) => rejected.chunkId === candidate.chunk.id),
@@ -2010,14 +2756,12 @@ async function main() {
           );
           assert.deepEqual(
             explanation.details.rejected.map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
-            candidates.rejected.length
-              ? [
-                  ...candidates.rejected
-                    .slice(0, 19)
-                    .map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
-                  [candidates.chunks[0].chunk.noteId, "prompt_budget"],
-                ]
-              : candidates.chunks.slice(0, 20).map((candidate: any) => [candidate.chunk.noteId, "prompt_budget"]),
+            [
+              ...candidates.rejected
+                .slice(0, 19)
+                .map((candidate: any) => [candidate.noteId, candidate.rejectionReason]),
+              ...candidates.chunks.map((candidate: any) => [candidate.chunk.noteId, "prompt_budget"]),
+            ].slice(0, 20),
             "reserve a bounded slot for a prompt-budget omission while retaining retrieval rejections",
           );
         }
@@ -2071,8 +2815,10 @@ async function main() {
         ...chats[0].metadata,
         longTermMemoryMaxChunks: 1,
       };
-      const limited = await runtime.recall(input);
-      assert.equal(limited.receipt.artifact.chunks.length, 1, "chat max chunks must constrain recall");
+      // A legacy chat count no longer cuts recall by count: it caps that chat's token budget.
+      await runtime.recall({ ...input, debugMode: true });
+      const legacyCapped = (await readLtmDebugLog({ phase: "retrieval" }, storage.root)).at(-1)!;
+      assert.equal(legacyCapped.details.maxTokens, 256, "a legacy chat memory count caps the chat budget");
       chats[0].metadata = {
         ...chats[0].metadata,
         enableLongTermMemory: false,
@@ -2825,6 +3571,11 @@ async function main() {
           "the runtime service must expose a private vault-mutation hook",
         );
         assert.equal(typeof liveRuntime.recall, "function", "recall must remain registered");
+        assert.equal(typeof liveRuntime.chatBranched, "function", "chatBranched must be registered for the Engine");
+        await liveRuntime.chatBranched({
+          chatId: "chat-that-does-not-exist",
+          parentChatId: "parent-that-does-not-exist",
+        });
         assert.equal(
           typeof liveRuntime.recordPromptAccepted,
           "function",

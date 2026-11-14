@@ -15,11 +15,35 @@ import {
   ltmSectionKeySchema,
 } from "./primitives.js";
 
+// ponytail: the host cannot list the installed Agents that use memories, so the migration from the two global
+// switches knows only these. Upgrade path: the Engine tells LTM which installed Agents can use it (Engine issue
+// draft scratch/issues/engine-ltm-installed-agents.md); then the migration and "Add Agent" use that list.
+export const LTM_PACKAGE_AGENTS = ["slurp2", "noodle"] as const;
+// ponytail: the Engine does not tell a service who calls it, so `caller` is self-reported and any package
+// can name itself "slurp2". The list only keeps unknown names out; a package that lies still needs the user's
+// "Can add" switch on for that name. Upgrade path: the Engine passes the caller's id
+// (`registerService(key, service, { forCaller })`).
+export const LTM_INTAKE_CALLERS = ["slurp2"] as const;
+export const ltmPackageCanAdd = (agentId: string) => (LTM_INTAKE_CALLERS as readonly string[]).includes(agentId);
+/** A package's caller id, as packages name themselves to the recall and intake services. */
+export const LTM_PACKAGE_AGENT_ID_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,63}$/iu;
+const ltmPackageAgentIdSchema = z.string().regex(LTM_PACKAGE_AGENT_ID_PATTERN);
+const LTM_PACKAGE_ACCESS_MAX = 50;
+/** The largest number of latest messages "Hide remembered messages from the AI" can keep visible. */
+export const LTM_HIDE_TAIL_MESSAGES_MAX = 1000;
+export type LtmPackageAccess = { read: boolean; add: boolean };
+/** What the two retired global switches allowed, as one entry per known Agent. Only an intake caller can add. */
+export function ltmPackageAccessFromSwitches(share: boolean, accept: boolean): Record<string, LtmPackageAccess> {
+  return Object.fromEntries(LTM_PACKAGE_AGENTS.map((id) => [id, { read: share, add: accept && ltmPackageCanAdd(id) }]));
+}
+
 const ltmGlobalSettingsShape = z
   .object({
     version: z.literal(1).default(1),
     enableLongTermMemory: z.boolean().optional(),
     longTermMemoryBudgetTokens: z.number().int().min(128).max(16_384).optional(),
+    // Legacy: recall is budget-only. A stored count caps the budget until a budget is saved (see
+    // `ltmRecallBudgetWithLegacyCount`); it is never part of the resolved settings.
     longTermMemoryMaxChunks: z.number().int().min(1).max(100).optional(),
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1).optional(),
     longTermMemoryRecallContextMessages: z.number().int().min(1).max(20).optional(),
@@ -33,9 +57,23 @@ const ltmGlobalSettingsShape = z
     longTermMemoryIncludeResolved: z.boolean().optional(),
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
+    // ponytail: deprecated, replaced by `longTermMemoryPackageAccess`; remove once Slurp and Noodle send per-Agent writes. A write applies it to
+    // every Agent in the map (older Slurp and Noodle offers send it), and the file keeps a summary for older versions.
     longTermMemoryShareWithPackages: z.boolean().optional(),
     longTermMemoryAcceptFromPackages: z.boolean().optional(),
+    // Per Agent: what it may read and add. In a write, an entry changes only the fields it names, and null removes the
+    // Agent. Missing from the file until the migration from the global switches ran.
+    longTermMemoryPackageAccess: z
+      .record(
+        ltmPackageAgentIdSchema,
+        z.object({ read: z.boolean().optional(), add: z.boolean().optional() }).strict().nullable(),
+      )
+      .refine((access) => Object.keys(access).length <= LTM_PACKAGE_ACCESS_MAX, {
+        message: `At most ${LTM_PACKAGE_ACCESS_MAX} Agents can be listed.`,
+      })
+      .optional(),
     longTermMemoryHideImportedMessages: z.boolean().optional(),
+    longTermMemoryHideTailMessages: z.number().int().min(0).max(LTM_HIDE_TAIL_MESSAGES_MAX).optional(),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
@@ -78,7 +116,6 @@ export const ltmResolvedGlobalSettingsSchema = z
     version: z.literal(1),
     enableLongTermMemory: z.boolean(),
     longTermMemoryBudgetTokens: z.number().int().min(128).max(16_384),
-    longTermMemoryMaxChunks: z.number().int().min(1).max(100),
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1),
     longTermMemoryRecallContextMessages: z.number().int().min(1).max(20),
     longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story", "custom"]),
@@ -91,12 +128,22 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryIncludeResolved: z.boolean(),
     longTermMemoryRecallPreamble: z.string().max(500),
     longTermMemoryDebug: z.boolean(),
-    /** Other packages (Slurp, Noodle) may read memories available everywhere through the package services. */
+    /**
+     * ponytail: deprecated summary of `longTermMemoryPackageAccess` for older Slurp and Noodle versions; remove with
+     * the fields above. True when every listed Agent may read memories.
+     */
     longTermMemoryShareWithPackages: z.boolean(),
-    /** Other packages (Slurp) may add memories through the intake service. */
+    /** ponytail: deprecated summary, as above. True when every listed Agent that can add may add memories. */
     longTermMemoryAcceptFromPackages: z.boolean(),
+    /** Per Agent: may it read memories available everywhere (recall), may it add memories (intake). */
+    longTermMemoryPackageAccess: z.record(
+      ltmPackageAgentIdSchema,
+      z.object({ read: z.boolean(), add: z.boolean() }).strict(),
+    ),
     /** Imported Chat Messages pieces are hidden from the AI, except the chat's recent tail. */
     longTermMemoryHideImportedMessages: z.boolean(),
+    /** How many of a chat's latest messages stay visible while hiding; a chat's own `summaryTailMessages` wins. */
+    longTermMemoryHideTailMessages: z.number().int().min(0).max(LTM_HIDE_TAIL_MESSAGES_MAX),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
@@ -104,8 +151,8 @@ export const ltmResolvedGlobalSettingsSchema = z
 export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse({
   version: 1,
   enableLongTermMemory: true,
-  longTermMemoryBudgetTokens: 4096,
-  longTermMemoryMaxChunks: 12,
+  // About 12 memories, what the default count of 12 recalled before recall became budget-only.
+  longTermMemoryBudgetTokens: 1024,
   longTermMemoryScoreThreshold: 0.35,
   longTermMemoryRecallContextMessages: 4,
   longTermMemoryRecallStyle: DEFAULT_LTM_RECALL_STYLE,
@@ -120,8 +167,22 @@ export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse
   longTermMemoryDebug: false,
   longTermMemoryShareWithPackages: true,
   longTermMemoryAcceptFromPackages: false,
+  longTermMemoryPackageAccess: ltmPackageAccessFromSwitches(true, false),
   longTermMemoryHideImportedMessages: false,
+  longTermMemoryHideTailMessages: 10,
 });
+
+/** What one Agent may do. An unnamed caller and an Agent not in the map may do nothing. */
+export function packageAccess(
+  settings: Pick<LtmResolvedGlobalSettings, "longTermMemoryPackageAccess">,
+  agentId: string | null | undefined,
+): LtmPackageAccess {
+  const entry =
+    agentId && Object.prototype.hasOwnProperty.call(settings.longTermMemoryPackageAccess, agentId)
+      ? settings.longTermMemoryPackageAccess[agentId]
+      : undefined;
+  return { read: entry?.read === true, add: entry?.add === true && ltmPackageCanAdd(agentId!) };
+}
 
 const ltmExtractionPromptTemplateIdSchema = z.string().trim().min(1).max(64);
 
@@ -311,6 +372,8 @@ const ltmExtractionSettingsFields = {
   finishCutOffAnswers: z.boolean().optional(),
   autoAcceptSafeChanges: z.boolean().optional(),
   autoImportChatSources: z.boolean().optional(),
+  // Background import waits until this many newer messages follow a finished piece.
+  autoImportLeaveMessages: z.number().int().min(0).max(LTM_HIDE_TAIL_MESSAGES_MAX).optional(),
   chatImportDetail: ltmChatImportDetailSchema.optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
@@ -361,6 +424,7 @@ export const ltmResolvedExtractionSettingsSchema = z
     finishCutOffAnswers: z.boolean(),
     autoAcceptSafeChanges: z.boolean(),
     autoImportChatSources: z.boolean(),
+    autoImportLeaveMessages: z.number().int().min(0).max(LTM_HIDE_TAIL_MESSAGES_MAX),
     chatImportDetail: ltmChatImportDetailSchema,
     useExtractionAgentOnGameMode: z.boolean(),
   })

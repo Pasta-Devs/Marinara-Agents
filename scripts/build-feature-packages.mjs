@@ -87,8 +87,9 @@ const PACKAGE_BUILT_AGAINST = Object.freeze({
 });
 // Capability API 1.387 ships Engine E2 (no built-in recall where Long-Term Memory is on) with E3, so only an Engine
 // that leaves recall to this package installs the version that learns from chat messages (Pasta-Devs/Marinara-Agents#1744).
-// Capability API 1.390 lets the Engine draw the agent page header (agentDetail.header: "engine").
-const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 390 });
+// Capability API 1.390 lets the Engine draw the agent page header (agentDetail.header: "engine"); 1.820 adds the
+// chat-activity slot, so an Engine without it refuses the manifest instead of dropping the Agent activity card.
+const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 820 });
 // Capability API 1.819 gives packages characters on api.runtime.resources and the `character-write` permission
 // (Pasta-Devs/Marinara-Engine#9043), so Calls, Noodle and Slurp stop bundling the Engine's characters storage
 // (Pasta-Devs/Marinara-Agents#2242). Built against the Engine commit that added it.
@@ -112,6 +113,12 @@ const longTermMemoryOwnedSourcePaths = [
   "packages/client/src/features/long-term-memory",
 ];
 const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
+// The archivist pictures for setup and the tour. The package ships every picture in the folder; the client names
+// them in features/long-term-memory/onboarding/assets.ts.
+const longTermMemoryServedAssetPaths = readdirSync(join(packagesDir, "long-term-memory/assets/onboarding"))
+  .filter((filename) => filename.endsWith(".webp"))
+  .sort()
+  .map((filename) => `assets/onboarding/${filename}`);
 const memoryNagSourceRoot = join(packagesDir, "memory-nag/src/engine");
 const memoryNagOwnedSourcePaths = [
   "packages/shared/src/features/agents/memory-nag",
@@ -580,8 +587,11 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.29",
-    minEngineVersion: "2.5.1",
+    version: "1.6.0",
+    // ponytail: Engine 2.5.2 is the newest release and predates Capability API 1.820, so a version cannot tell an Engine
+    // with it from one without; the capabilityApi declaration is what makes an older Engine refuse this package. Raise
+    // minEngineVersion to the first Engine release that carries 1.820 once it exists.
+    minEngineVersion: "2.5.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description:
@@ -598,9 +608,12 @@ const features = [
     engineBoundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
     boundaryDisplayName: "Long-Term Memory",
     capabilityApi: LONG_TERM_MEMORY_CAPABILITY_API,
+    assetPaths: longTermMemoryServedAssetPaths,
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"], header: "engine" },
-      slots: ["chat-settings"],
+      // The conversation surface only holds the pop-up for a branch's hand-hidden latest messages.
+      slots: ["chat-settings", "conversation-surface", "chat-activity"],
+      assets: { paths: longTermMemoryServedAssetPaths },
     },
   },
   {

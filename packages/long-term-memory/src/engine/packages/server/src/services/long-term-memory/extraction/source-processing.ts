@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import type {
   LtmExtractionAccounting,
   LtmExtractionDiagnostic,
+  LtmExtractionDraft,
   LtmExtractionFingerprint,
   LtmExtractionOutcome,
   LtmExtractionResponse,
@@ -32,6 +33,7 @@ import { extractionFingerprintForLtmSourceNote } from "./source-hash.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { LtmServiceError } from "../service-error.js";
 import { addRejectedSuggestions } from "../drafts/rejected-suggestions.js";
+import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { watchLtmVaultWrites } from "../persistence/vault-snapshot.js";
 import { LTM_VAULT_DIR } from "../persistence/paths.js";
@@ -141,15 +143,20 @@ function reviewRequiredForExtraction(
 }
 function canMarkCurrent(prepared: PreparedSource) {
   if (prepared.outcome.incomplete) return false;
-  if (prepared.diagnostics.some((item) => item.severity === "error")) return false;
+  // An error with a candidate index is one dropped candidate, which Review lists; any other error fails the run.
+  if (prepared.diagnostics.some((item) => item.severity === "error" && item.candidateIndex === undefined)) return false;
   if (prepared.outcome.state === "success") return true;
-  if (prepared.outcome.state === "no_suggestions_created") return prepared.outcome.droppedUnits === 0;
-  if (prepared.outcome.state === "partial_success") {
-    // Deterministic compilation may drop malformed source blocks without invalidating the run. A provider batch
-    // whose only non-kept units were deduplicated is equally complete and must not churn on re-extraction.
-    return prepared.extractionMethod === "deterministic" || prepared.outcome.droppedUnits === 0;
-  }
-  return false;
+  // Nothing kept and something dropped: the run produced nothing to review, so a later pass tries again. Dropped
+  // placeholders are the model saying there is nothing to add, which is the same answer as an empty list.
+  if (prepared.outcome.state === "no_suggestions_created")
+    return (
+      prepared.outcome.droppedUnits === 0 ||
+      (!prepared.outcome.droppedCandidateDetailsTruncated &&
+        prepared.outcome.droppedCandidates.every((item) => item.validatorCode === "placeholder_text"))
+    );
+  // A finished run that kept some candidates is done: extracting the same text again only replaces its draft with
+  // another attempt, so its dropped candidates wait in Review instead. Past the detail cap Review cannot list them all.
+  return prepared.outcome.state === "partial_success" && !prepared.outcome.droppedCandidateDetailsTruncated;
 }
 function deterministicUuid(seed: string) {
   const hex = createHash("sha256").update(seed).digest("hex");
@@ -400,6 +407,8 @@ async function commitPreparedLongTermMemorySource(
     overlay?: Map<string, LtmNote>;
     applyLowRisk?: boolean;
     committedNotes?: BatchCommittedNotes;
+    /** A background import's earlier drafts, newest first: a read that falls far short of the last one waits. */
+    earlierDrafts?: () => Promise<LtmExtractionDraft[]>;
   },
 ) {
   const storage = new LongTermMemoryStorage(options.root);
@@ -429,6 +438,23 @@ async function commitPreparedLongTermMemorySource(
         reviewRequiredForExtraction(prepared.sourceNote, {
           diagnostics,
         });
+    // A background read of unchanged text that keeps far fewer memories than the last read of it is more likely a
+    // model slip than a better reading: it waits in Review, and the last read's draft stays if it is still waiting.
+    const sourceHash = sourceHashForEvidenceUnitExtraction(prepared.sourceNote);
+    const lastRead = (await options.earlierDrafts?.())?.find(
+      (draft) => draft.source.sourceNoteId === prepared.sourceNote.id && draft.source.sourceHash === sourceHash,
+    );
+    // Units that match memories already saved are deduplicated, not kept, so a re-read of applied text counts them.
+    const found = (counts?: LtmExtractionAccounting) => (counts?.keptUnits ?? 0) + (counts?.deduplications ?? 0);
+    const lastFound = found(lastRead?.accounting);
+    const fallsShort = lastFound >= 6 && found(accounting) * 3 < lastFound;
+    if (fallsShort)
+      logger.info(
+        "[ltm] Source %s found %d memories where its last read found %d; the new draft waits in Review",
+        prepared.sourceNote.id,
+        found(accounting),
+        lastFound,
+      );
     const draft = await finalizeLongTermMemoryExtractionDraft(
       {
         sourceNote: prepared.sourceNote,
@@ -441,12 +467,10 @@ async function commitPreparedLongTermMemorySource(
         diagnostics,
         outcome,
         accounting,
-        reviewRequired,
+        reviewRequired: reviewRequired || fallsShort,
+        ...(fallsShort && lastRead?.status === "pending" ? { keepPendingDraftId: lastRead.id } : {}),
         chatId: prepared.chatId,
-        afterWrite: (draft) =>
-          draft.extractionOutcome?.droppedCandidates.length
-            ? addRejectedSuggestions(draft, options.root)
-            : Promise.resolve(),
+        afterWrite: (draft, superseded) => addRejectedSuggestions(draft, options.root, superseded),
       },
       { root: options.root, overlay: options.overlay },
     );
@@ -463,7 +487,7 @@ async function commitPreparedLongTermMemorySource(
         : prepared.sourceNote;
     const fingerprintPersisted = markCurrent && Boolean(note.extractionFingerprint);
     const applyResult =
-      options.applyLowRisk && !reviewRequired && fingerprintPersisted && draft.mutations.length
+      options.applyLowRisk && !draft.reviewRequired && fingerprintPersisted && draft.mutations.length
         ? await applyLongTermMemoryDraft(draft.id, {
             root: options.root,
             actor: "maintenance_api",
@@ -493,7 +517,7 @@ async function commitPreparedLongTermMemorySource(
       diagnostics,
       outcome,
       accounting,
-      reviewRequired,
+      reviewRequired: draft.reviewRequired,
     };
   });
 }
@@ -592,6 +616,8 @@ export async function processLongTermMemorySourceBatch(options: {
   operationId: string;
   signal: AbortSignal;
   applyLowRisk?: boolean;
+  /** Background import: a read that keeps far fewer memories than the last read of the same text waits in Review. */
+  keepPendingDrafts?: boolean;
   concurrency: number;
   root: string;
   chatId?: string;
@@ -607,6 +633,8 @@ export async function processLongTermMemorySourceBatch(options: {
   const storage = new LongTermMemoryStorage(options.root);
   const committedNotes = batchCommittedNotes(storage);
   let deterministicSnapshot: Promise<LtmNote[]> | undefined;
+  // Listed once per batch: a batch reads each source once, so its own drafts never count as an earlier read.
+  let earlierDrafts: Promise<LtmExtractionDraft[]> | undefined;
   const commitItem = async (item: ImportedSourceItem, prepared: PreparedSource): Promise<LtmImportedSourceResult> => {
     try {
       throwIfAborted(options.signal);
@@ -615,6 +643,9 @@ export async function processLongTermMemorySourceBatch(options: {
         overlay,
         applyLowRisk: options.applyLowRisk,
         committedNotes,
+        ...(options.keepPendingDrafts
+          ? { earlierDrafts: () => (earlierDrafts ??= new LongTermMemoryDraftStore(options.root).listDrafts()) }
+          : {}),
       });
       hasAppliedMutations ||= (committed.applyResult?.appliedMutationIds.length ?? 0) > 0;
       // extractionStatus and retryable both follow outcome.incomplete, which the union type cannot see.

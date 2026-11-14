@@ -235,6 +235,11 @@ export const ltmExtractionFingerprintSchema = z
   .object({
     version: z.union([z.literal(2), z.literal(3)]),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    // The source text alone, so a piece that was only re-labelled is not read again. Older fingerprints have none.
+    textHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     provenance: ltmSourceProvenanceSchema.nullable(),
     scope: ltmScopeSchema,
     modes: z.array(ltmModeSchema).min(1).max(8),

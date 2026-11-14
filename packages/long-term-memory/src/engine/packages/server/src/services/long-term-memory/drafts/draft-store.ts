@@ -36,7 +36,10 @@ export interface StoreLtmDraftOptions extends CreateLtmExtractionDraftInput {
   outcome?: LtmExtractionOutcome;
   accounting?: LtmExtractionAccounting;
   reviewRequired?: boolean;
-  afterWrite?: (draft: LtmExtractionDraft) => Promise<unknown>;
+  /** A pending draft of the same source that this one leaves pending instead of superseding. */
+  keepPendingDraftId?: string;
+  /** Runs after the write with the pending drafts this one superseded. */
+  afterWrite?: (draft: LtmExtractionDraft, superseded: LtmExtractionDraft[]) => Promise<unknown>;
 }
 
 class LtmSupersessionError extends Error {
@@ -112,7 +115,7 @@ export class LongTermMemoryDraftStore {
       throw new Error("Long-term memory drafts must be tied to a source note.");
     }
     const sourceNoteId = options.source.sourceNoteId;
-    const { draft, afterWrite } = await withLtmVaultLock(this.root, () =>
+    const { draft, afterWrite, superseded } = await withLtmVaultLock(this.root, () =>
       withDraftWriteLock(sourceDraftLockKey(this.root, sourceNoteId), async () => {
         const sourceNote = await this.storage.getNote(sourceNoteId);
         const source = {
@@ -220,8 +223,9 @@ export class LongTermMemoryDraftStore {
         }
         const draft = parsedDraft.data;
         await writeJsonAtomic(draftPathForId(draft.id, this.root), draft);
+        let superseded: LtmExtractionDraft[];
         try {
-          await this.supersedeOlderPendingDrafts(draft);
+          superseded = await this.supersedeOlderPendingDrafts(draft, options.keepPendingDraftId);
         } catch (error) {
           const superseded = error instanceof LtmSupersessionError ? error.superseded : [];
           const rollback = await Promise.allSettled([
@@ -233,16 +237,19 @@ export class LongTermMemoryDraftStore {
             throw new AggregateError([error, ...failures], "Long-Term Memory draft creation and rollback both failed.");
           throw error;
         }
-        return { draft, afterWrite: options.afterWrite };
+        return { draft, afterWrite: options.afterWrite, superseded };
       }),
     );
-    if (afterWrite) await afterWrite(draft);
+    if (afterWrite) await afterWrite(draft, superseded);
     return draft;
   }
 
-  private async supersedeOlderPendingDrafts(replacement: LtmExtractionDraft) {
+  private async supersedeOlderPendingDrafts(replacement: LtmExtractionDraft, keepDraftId?: string) {
     const pending = (await this.listDrafts({ status: "pending" })).filter(
-      (draft) => draft.id !== replacement.id && draft.source.sourceNoteId === replacement.source.sourceNoteId,
+      (draft) =>
+        draft.id !== replacement.id &&
+        draft.id !== keepDraftId &&
+        draft.source.sourceNoteId === replacement.source.sourceNoteId,
     );
     const updated: LtmExtractionDraft[] = [];
     try {

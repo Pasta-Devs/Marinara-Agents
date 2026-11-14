@@ -27,18 +27,18 @@ The shared layer is in `src/engine/packages/shared/src/features/agents/long-term
 importers keep one specifier. A file imports only from the files above it in
 this list, so the zod schemas are defined before use.
 
-| File (`schema/`) | Defines |
-| --- | --- |
-| `primitives` | note types, statuses, modes, vault folders, ids, subjects, scopes, links and other building blocks the rest reuse |
-| `settings` | global, extraction, retrieval, retention and per-agent settings, and the defaults |
-| `debug` | debug log statuses, phases, errors and events |
-| `recall` | usage counts, the last-injection summary and recall attempts |
-| `notes` | notes, sections, evidence units, events, bulk actions, note transfer and fork, section rename and delete |
-| `indexes` | index health, chunks, and the embedding, BM25 and graph indexes |
-| `identity` | identity-repair previews, candidates and conflicts |
-| `drafts` | drafts, extraction outcomes and diagnostics, rejected suggestions, draft review and preflight |
-| `sources` | Engine chat and lorebook previews, source details and source import |
-| `backup` | the backup file |
+| File (`schema/`) | Defines                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `primitives`     | note types, statuses, modes, vault folders, ids, subjects, scopes, links and other building blocks the rest reuse |
+| `settings`       | global, extraction, retrieval, retention and per-agent settings, and the defaults                                 |
+| `debug`          | debug log statuses, phases, errors and events                                                                     |
+| `recall`         | usage counts, the last-injection summary and recall attempts                                                      |
+| `notes`          | notes, sections, evidence units, events, bulk actions, note transfer and fork, section rename and delete          |
+| `indexes`        | index health, chunks, and the embedding, BM25 and graph indexes                                                   |
+| `identity`       | identity-repair previews, candidates and conflicts                                                                |
+| `drafts`         | drafts, extraction outcomes and diagnostics, rejected suggestions, draft review and preflight                     |
+| `sources`        | Engine chat and lorebook previews, source details and source import                                               |
+| `backup`         | the backup file                                                                                                   |
 
 ### Engine fields read directly
 
@@ -49,13 +49,13 @@ Engine checkout and fails when one is renamed or removed. A failure means Source
 quietly stops finding those summaries, or the built-in assistant starts appearing
 as a source and place.
 
-| Field or constant | Feeds | Engine definition |
-| --- | --- | --- |
-| `ChatMetadata.daySummaries`, `weekSummaries` | day and week conversation summaries | `packages/shared/src/types/chat.ts` |
-| `ChatMetadata.summaryEntries` | agent summary entries | `packages/shared/src/types/chat.ts` |
-| `ChatMetadata.summary` | the single legacy summary | `packages/shared/src/types/chat.ts` |
-| `ChatMetadata.gamePreviousSessionSummaries` | game session summaries | `packages/shared/src/types/chat.ts` |
-| `PROFESSOR_MARI_ID` (`__professor_mari__`) | excludes the built-in assistant from sources and places | `packages/shared/src/constants/defaults.ts` |
+| Field or constant                            | Feeds                                                   | Engine definition                           |
+| -------------------------------------------- | ------------------------------------------------------- | ------------------------------------------- |
+| `ChatMetadata.daySummaries`, `weekSummaries` | day and week conversation summaries                     | `packages/shared/src/types/chat.ts`         |
+| `ChatMetadata.summaryEntries`                | agent summary entries                                   | `packages/shared/src/types/chat.ts`         |
+| `ChatMetadata.summary`                       | the single legacy summary                               | `packages/shared/src/types/chat.ts`         |
+| `ChatMetadata.gamePreviousSessionSummaries`  | game session summaries                                  | `packages/shared/src/types/chat.ts`         |
+| `PROFESSOR_MARI_ID` (`__professor_mari__`)   | excludes the built-in assistant from sources and places | `packages/shared/src/constants/defaults.ts` |
 
 The reads are in `sources/interop.ts`. The long-term fix is an Engine API for chat
 summaries, which needs a higher minimum Engine version.
@@ -66,18 +66,18 @@ Server source is in `src/engine/packages/server/src/services/long-term-memory/`.
 The top level holds the Engine entry points and helpers used everywhere; each
 folder owns one area.
 
-| Folder | Owns | Files (`.ts`) |
-| --- | --- | --- |
-| top level | Engine registration, runtime services, settings, route composition, shared errors and helpers | `server-entry`, `runtime`, `package-runtime`, `routes`, `settings`, `default-config`, `service-error`, `ltm-utils` |
-| `routes/` | HTTP handlers, one file per area, and the helpers they share (`shared`) | `notes`, `drafts`, `imports`, `maintenance`, `settings`, `shared` |
-| `persistence/` | vault storage, atomic writes, the vault lock, mutation journals, index state, the activity index, per-section source contributions, retention, backup and restore | `storage`, `mutation-transaction`, `atomic-json`, `paths`, `vault-lock`, `vault-snapshot`, `stored-note`, `index-state`, `index-quarantine`, `retention`, `backup-restore`, `restore-recovery`, `activity-index`, `section-contributions` |
-| `recall/` | chunking, keyword, BM25, graph and embedding indexes, ranking, budget, the recall prompt, generation injection, injection receipts and usage | `chunking`, `bm25`, `keyword-extract`, `keyword-index`, `hangul-lexical`, `graph`, `metadata-index`, `ranking`, `budget`, `prompt`, `prompt-text`, `retrieval`, `rebuild`, `embedding-adapter`, `generation-injection`, `usage` |
-| `extraction/` | evidence-unit extraction, validation and compilation, source processing and hashes, candidate reconciliation, extraction settings | `evidence-unit-extraction`, `evidence-unit-validation`, `evidence-unit-compiler`, `structured-summary-normalizer`, `source-extraction`, `source-processing`, `source-hash`, `dedup`, `candidate-reconciliation`, `scoped-targets`, `extraction-config` |
-| `identity/` | subject identity (`subject-names`: name text rules; `subject-matching`: the trusted catalog's types, index and matchers; `subject-catalog`: building and loading the catalog and checking stored notes against it; `subject-identity`: resolving a batch's subjects), chat scope and scope links, identity and fork repair | `subject-names`, `subject-matching`, `subject-catalog`, `subject-identity`, `subject-choice-review`, `subject-equality`, `identity-repair`, `note-fork-repair`, `chat-scope`, `scope-links` |
-| `drafts/` | the draft store, projection and review, applying drafts to notes, rejected suggestions | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions` |
-| `maintenance/` | integrity checks and repair, note transfer, legacy agent-settings adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
-| `sources/` | Engine chats, summaries and messages read as sources | `interop`, `source-identity` |
-| `services/` | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), the shareable-memory rule, the reads switch and the reader list | `recall`, `storage-read` |
+| Folder         | Owns                                                                                                                                                                                                                                                                                                                       | Files (`.ts`)                                                                                                                                                                                                                                          |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| top level      | Engine registration, runtime services, settings, route composition, shared errors and helpers                                                                                                                                                                                                                              | `server-entry`, `runtime`, `package-runtime`, `routes`, `settings`, `default-config`, `service-error`, `ltm-utils`                                                                                                                                     |
+| `routes/`      | HTTP handlers, one file per area, and the helpers they share (`shared`)                                                                                                                                                                                                                                                    | `notes`, `drafts`, `imports`, `maintenance`, `settings`, `shared`                                                                                                                                                                                      |
+| `persistence/` | vault storage, atomic writes, the vault lock, mutation journals, index state, the activity index, per-section source contributions, retention, backup and restore                                                                                                                                                          | `storage`, `mutation-transaction`, `atomic-json`, `paths`, `vault-lock`, `vault-snapshot`, `stored-note`, `index-state`, `index-quarantine`, `retention`, `backup-restore`, `restore-recovery`, `activity-index`, `section-contributions`              |
+| `recall/`      | chunking, keyword, BM25, graph and embedding indexes, ranking, budget, the recall prompt, generation injection, injection receipts and usage                                                                                                                                                                               | `chunking`, `bm25`, `keyword-extract`, `keyword-index`, `hangul-lexical`, `graph`, `metadata-index`, `ranking`, `budget`, `prompt`, `prompt-text`, `retrieval`, `rebuild`, `embedding-adapter`, `generation-injection`, `usage`                        |
+| `extraction/`  | evidence-unit extraction, validation and compilation, source processing and hashes, candidate reconciliation, extraction settings                                                                                                                                                                                          | `evidence-unit-extraction`, `evidence-unit-validation`, `evidence-unit-compiler`, `structured-summary-normalizer`, `source-extraction`, `source-processing`, `source-hash`, `dedup`, `candidate-reconciliation`, `scoped-targets`, `extraction-config` |
+| `identity/`    | subject identity (`subject-names`: name text rules; `subject-matching`: the trusted catalog's types, index and matchers; `subject-catalog`: building and loading the catalog and checking stored notes against it; `subject-identity`: resolving a batch's subjects), chat scope and scope links, identity and fork repair | `subject-names`, `subject-matching`, `subject-catalog`, `subject-identity`, `subject-choice-review`, `subject-equality`, `identity-repair`, `note-fork-repair`, `chat-scope`, `scope-links`                                                            |
+| `drafts/`      | the draft store, projection and review, applying drafts to notes, rejected suggestions                                                                                                                                                                                                                                     | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions`                                                                                                                                                             |
+| `maintenance/` | integrity checks and repair, note transfer, legacy agent-settings adoption and quarantine, the debug log                                                                                                                                                                                                                   | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log`                                                                                                                                                             |
+| `sources/`     | Engine chats, summaries and messages read as sources                                                                                                                                                                                                                                                                       | `interop`, `source-identity`                                                                                                                                                                                                                           |
+| `services/`    | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), the shareable-memory rule, the reads switch and the reader list                                                                                                                                         | `recall`, `storage-read`                                                                                                                                                                                                                               |
 
 The folders are areas, not enforced layers. `persistence/` still imports from
 the areas above it: `storage.ts` uses `drafts/draft-projector`,
@@ -125,8 +125,8 @@ for interrupted work. Review remains mandatory: generation recall never writes
 durable memory directly.
 
 Before compiling, source extraction recalls existing memories that match the
-source, bounded by the `existingNoteMaxChunks` and `existingNoteMaxTokens`
-extraction settings. The server uses them to drop duplicate details and to pick
+source, bounded by a fixed window (12 chunks, 4,096 tokens; the stored
+`existingNoteMaxChunks` and `existingNoteMaxTokens` values are ignored). The server uses them to drop duplicate details and to pick
 the memories a new unit updates. They are never sent to the model.
 
 Memories from chats decides whether chats are imported in the background and
@@ -228,7 +228,17 @@ Other packages look these up with `api.runtime.services.get(key)`. The Engine
 does not say who asks, so `caller` is the name a package gives itself. Each read
 is a debug-log line ("Read by another Agent" in Activity), and Memory Settings
 lists the ten names that read most lately, so Clear log empties that list.
-Recall gives nothing while "Other Agents can read memories" is off.
+Sharing is set per Agent (`longTermMemoryPackageAccess`, one `{ read, add }` row
+per Agent id). Recall gives nothing to an Agent whose read switch is off, to an
+Agent not in that map, and to a call without a valid `caller`. The map starts
+from the two older global switches, once, at activation: each Agent LTM knows
+(`LTM_PACKAGE_AGENTS`, Slurp and Noodle until the Engine can list installed
+Agents) gets what the switches gave it. The settings file still carries the two
+switches as a summary of the map: read is on only while every known and listed
+Agent may read, and add only while Slurp may add. An older LTM version cannot tell Agents
+apart, so it then lets any caller read, as it did before; turn reading off for
+an Agent and the older version lets none read. A switch an older version turns
+off stays off for every Agent after upgrading.
 
 `long-term-memory:recall`, version 1:
 
@@ -275,7 +285,7 @@ recall({
 
 `long-term-memory:intake`, version 1, lets a package add what it knows about a
 character. Only `caller: "slurp2"` is accepted. The name is self-reported, so
-the user's "Other Agents can add memories" switch (off by default) is the real
+Slurp's own "Can add" switch in the per-Agent map (off by default) is the real
 gate; an Engine-supplied caller id is the upgrade path.
 
 ```ts

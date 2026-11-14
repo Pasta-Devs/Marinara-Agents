@@ -51,7 +51,7 @@ async function main() {
   const sourceNote = (
     id: string,
     provenance: {
-      kind: "chat_summary" | "lorebook";
+      kind: "chat_summary" | "chat_transcript" | "lorebook";
       sourceId: string;
       entryId: string;
     },
@@ -166,16 +166,24 @@ async function main() {
       dimensionChanges: { trust: -12 },
     }),
   ]);
-  assert.equal(relationshipWithoutCause.accounting.keptUnits, 0);
-  assert.equal(
-    relationshipWithoutCause.outcome.droppedCandidates.some((candidate) =>
-      candidate.message.includes("missing a caused_by link"),
-    ),
-    true,
+  // A relationship change with no cause keeps its fact as a static claim without the dimension change.
+  assert.equal(relationshipWithoutCause.accounting.keptUnits, 1);
+  assert.equal(relationshipWithoutCause.outcome.droppedCandidates.length, 0);
+  assert.deepEqual(
+    relationshipWithoutCause.diagnostics
+      .filter((diagnostic) => diagnostic.code === "relationship_state_missing_caused_by")
+      .map((diagnostic) => [diagnostic.severity, diagnostic.details?.validationStage]),
+    [["warning", "initial"]],
   );
+  const keptRelationship = relationshipWithoutCause.compiledResponse.mutations.find(
+    (mutation) => mutation.kind === "create_note",
+  );
+  assert.equal(keptRelationship?.claimKind, "static");
+  assert.equal(keptRelationship?.kind === "create_note" && keptRelationship.note.type, "relationship");
   assert.equal(
-    relationshipWithoutCause.outcome.droppedCandidates[0]?.validatorCode,
-    "relationship_state_missing_caused_by",
+    keptRelationship?.kind === "create_note" &&
+      Object.values(keptRelationship.note.sections).some((section) => section.dimensionChanges),
+    false,
   );
 
   const relationshipWithMissingCause = compile(chat, [
@@ -190,18 +198,25 @@ async function main() {
       links: [{ target: "timeline_missing_argument", relation: "caused_by" }],
     }),
   ]);
-  assert.equal(relationshipWithMissingCause.accounting.keptUnits, 0);
-  assert.equal(
-    relationshipWithMissingCause.outcome.droppedCandidates.some(
-      (candidate) =>
-        candidate.message.includes("missing a caused_by link") &&
-        !candidate.message.includes("timeline_missing_argument"),
-    ),
-    true,
+  assert.equal(relationshipWithMissingCause.accounting.keptUnits, 1);
+  assert.equal(relationshipWithMissingCause.outcome.droppedCandidates.length, 0);
+  assert.deepEqual(
+    relationshipWithMissingCause.diagnostics
+      .filter((diagnostic) => diagnostic.severity === "warning")
+      .map((diagnostic) => [
+        diagnostic.code,
+        diagnostic.details?.linkTarget ?? diagnostic.details?.invalidCausedByTargets,
+      ]),
+    [
+      ["unknown_link_target", "timeline_missing_argument"],
+      ["relationship_state_missing_caused_by", ["timeline_missing_argument"]],
+    ],
   );
   assert.equal(
-    relationshipWithMissingCause.outcome.droppedCandidates[0]?.validatorCode,
-    "relationship_state_missing_caused_by",
+    relationshipWithMissingCause.compiledResponse.mutations.some(
+      (mutation) => mutation.kind === "create_note" && mutation.note.links.length > 0,
+    ),
+    false,
   );
   const unknownLinkTarget = compile(chat, [
     unit(chat, {
@@ -209,39 +224,76 @@ async function main() {
       subjectId: "missing_link_fact",
       sectionKey: "facts",
       text: "A fact linked to a missing memory.",
+      claimKind: "static",
       links: [{ target: "missing_memory", relation: "evidenced_by" }],
     }),
   ]);
-  assert.equal(unknownLinkTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
-  assert.doesNotMatch(unknownLinkTarget.outcome.droppedCandidates[0]?.message ?? "", /missing_memory/u);
-  const closureAfterInitialDrop = compile(chat, [
+  // A link to a memory that does not exist is removed and the memory is kept.
+  assert.equal(unknownLinkTarget.accounting.keptUnits, 1);
+  assert.equal(unknownLinkTarget.outcome.droppedCandidates.length, 0);
+  assert.deepEqual(
+    unknownLinkTarget.diagnostics
+      .filter((diagnostic) => diagnostic.code === "unknown_link_target")
+      .map((diagnostic) => [diagnostic.severity, diagnostic.details?.linkTarget, diagnostic.details?.validationStage]),
+    [["warning", "missing_memory", "initial"]],
+  );
+  assert.equal(
+    unknownLinkTarget.compiledResponse.mutations.some(
+      (mutation) =>
+        mutation.kind === "create_note" && mutation.note.links.some((link) => link.target === "missing_memory"),
+    ),
+    false,
+  );
+  // A copied placeholder link target still drops the whole unit; it is not repaired like an unknown link.
+  const placeholderLink = compile(chat, [
     unit(chat, {
-      bucket: "relationship_state",
-      subjectId: "removed_relationship",
-      sectionKey: "state",
-      text: "Alice and Rowan's trust changed after the argument.",
-      claimKind: "change",
-      subjectNames: ["Alice", "Rowan"],
-      dimensionChanges: { trust: -12 },
+      bucket: "world_fact",
+      subjectId: "placeholder_link_fact",
+      sectionKey: "facts",
+      text: "A fact linked to a copied placeholder.",
+      claimKind: "static",
+      links: [{ target: "target_note_id", relation: "involves" }],
     }),
+  ]);
+  assert.equal(placeholderLink.accounting.keptUnits, 0);
+  assert.deepEqual(
+    placeholderLink.outcome.droppedCandidates.map((candidate) => [candidate.reason, candidate.validatorCode]),
+    [["placeholder_output", "placeholder_link_target"]],
+  );
+  assert.deepEqual(placeholderLink.outcome.droppedCandidates[0]?.recoveryCandidate?.links, [
+    { target: "target_note_id", relation: "involves" },
+  ]);
+  // A link to a unit that validation drops for another reason is removed in the closure stage, not cascaded.
+  const closureAfterInitialDrop = compile(chat, [
+    {
+      ...unit(chat, {
+        bucket: "world_fact",
+        subjectId: "removed_fact",
+        sectionKey: "facts",
+        text: "The observatory kept a record of Alice and Rowan's trust.",
+        claimKind: "static",
+      }),
+      sourceHash: "stale-source-hash",
+    },
     unit(chat, {
       bucket: "world_fact",
       subjectId: "dependent_fact",
       sectionKey: "facts",
       text: "The observatory kept a record of Alice and Rowan's trust.",
-      links: [{ target: "rel_removed_relationship", relation: "evidenced_by" }],
+      claimKind: "static",
+      links: [{ target: "world_removed_fact", relation: "evidenced_by" }],
     }),
   ]);
-  const closureDrop = closureAfterInitialDrop.outcome.droppedCandidates.find(
-    (candidate) => candidate.validatorCode === "unknown_link_target",
+  assert.equal(closureAfterInitialDrop.accounting.keptUnits, 1);
+  assert.deepEqual(
+    closureAfterInitialDrop.outcome.droppedCandidates.map((candidate) => candidate.validatorCode),
+    ["source_hash_mismatch"],
   );
-  assert.ok(closureDrop);
-  assert.doesNotMatch(closureDrop.message, /rel_removed_relationship/u);
-  assert.equal(
-    closureAfterInitialDrop.diagnostics.find(
-      (diagnostic) => diagnostic.details?.validatorCode === "unknown_link_target",
-    )?.details?.validationStage,
-    "closure",
+  assert.deepEqual(
+    closureAfterInitialDrop.diagnostics
+      .filter((diagnostic) => diagnostic.code === "unknown_link_target")
+      .map((diagnostic) => [diagnostic.severity, diagnostic.details?.linkTarget, diagnostic.details?.validationStage]),
+    [["warning", "world_removed_fact", "closure"]],
   );
   // Issue #1448: a unit dropped after validation must not leave a dangling link in the compiled draft.
   const lateDropSource = sourceNote(
@@ -353,16 +405,21 @@ async function main() {
   ]);
   assert.deepEqual(
     lateCause.compiledResponse.mutations.flatMap((mutation) =>
-      mutation.kind === "create_note" ? [mutation.note.type] : [],
+      mutation.kind === "create_note" ? [[mutation.note.type, mutation.claimKind]] : [],
     ),
-    ["timeline_event"],
+    [
+      ["timeline_event", "change"],
+      ["relationship", "static"],
+    ],
+    "the relationship whose cause was dropped late is kept without its change",
   );
-  const lateCauseDrop = lateCause.diagnostics.find(
-    (diagnostic) => diagnostic.details?.validatorCode === "relationship_state_missing_caused_by",
+  const lateCauseWarning = lateCause.diagnostics.find(
+    (diagnostic) => diagnostic.code === "relationship_state_missing_caused_by",
   );
-  assert.equal(lateCauseDrop?.details?.validationStage, "closure");
-  assert.equal(lateCause.accounting.keptUnits, 1);
-  assert.equal(lateCause.accounting.validationRejections, 2, "the late relationship drop is counted");
+  assert.equal(lateCauseWarning?.severity, "warning");
+  assert.equal(lateCauseWarning?.details?.validationStage, "closure");
+  assert.equal(lateCause.accounting.keptUnits, 2);
+  assert.equal(lateCause.accounting.validationRejections, 1, "only the uncaused event is dropped");
   const sourceHashMismatch = compile(chat, [
     {
       ...unit(chat, {
@@ -523,8 +580,18 @@ async function main() {
     false,
   );
   const missingThreadTarget = compile(chat, [resolvedThread]);
+  // The dangling link is only removed; the resolution still needs its event, so the source-graph rule drops it.
   assert.equal(missingThreadTarget.accounting.keptUnits, 0);
-  assert.equal(missingThreadTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
+  assert.deepEqual(
+    missingThreadTarget.outcome.droppedCandidates.map((candidate) => candidate.validatorCode),
+    ["source_event_graph_open"],
+  );
+  assert.equal(
+    missingThreadTarget.diagnostics.some(
+      (diagnostic) => diagnostic.code === "unknown_link_target" && diagnostic.severity === "warning",
+    ),
+    true,
+  );
   // Issue #1137: a resolution event from a flat summary is normalized to the
   // event section, so it still satisfies the resolved thread's fan-out.
   const repairedResolutionEvent = compile(chat, [resolvedThread, { ...resolutionEvent, sectionKey: "facts" }]);
@@ -590,8 +657,8 @@ async function main() {
     { kind: "chat_summary", sourceId: "chat-b", entryId: "summary-b" },
     [
       "## character_fact",
-      "- Denise: Damo's reentry case officer at the Marlowe Street reentry office and identifies his case as an exoneree case rather than parole. | text: Damo's reentry case officer at the Marlowe Street reentry office; distinguishes his case as an \"exoneree\" rather than parolee, entitling him to state compensation.",
-      "- Denise | text: Began processing Damo's state compensation claim using his college records as evidence of disrupted earning potential, and referred him to civil rights attorney Mara Castellano for a possible civil suit.",
+      "- Denise: Tobin's reentry case officer at the Marlowe Street reentry office and identifies his case as an exoneree case rather than parole. | text: Tobin's reentry case officer at the Marlowe Street reentry office; distinguishes his case as an \"exoneree\" rather than parolee, entitling him to state compensation.",
+      "- Denise | text: Began processing Tobin's state compensation claim using his college records as evidence of disrupted earning potential, and referred him to civil rights attorney Mara Castellano for a possible civil suit.",
     ].join("\n"),
   );
   const structuredCharacterUnits = normalizeStructuredSummaryEvidenceUnits({
@@ -615,7 +682,7 @@ async function main() {
     structuredCharacterUnits[0]?.text.includes('distinguishes his case as an "exoneree" rather than parolee'),
     true,
   );
-  assert.equal(structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"), true);
+  assert.equal(structuredCharacterUnits[1]?.text.startsWith("Began processing Tobin's state compensation claim"), true);
 
   // Issue #1137: an unrecognized `##` heading must close the previous section so
   // its following fields are not misattributed to the last known bucket.
@@ -653,14 +720,14 @@ async function main() {
         bucket: "character_fact",
         subjectId: "denise",
         sectionKey: "facts",
-        text: 'Damo\'s reentry case officer at the Marlowe Street reentry office; distinguishes his case as an "exoneree" rather than parolee, entitling him to state compensation.',
+        text: 'Tobin\'s reentry case officer at the Marlowe Street reentry office; distinguishes his case as an "exoneree" rather than parolee, entitling him to state compensation.',
         subjectNames: ["Denise"],
       }),
       unit(structuredCharacterSource, {
         bucket: "character_fact",
         subjectId: "denise",
         sectionKey: "facts",
-        text: "Began processing Damo's state compensation claim using his college records as evidence of disrupted earning potential, and referred him to civil rights attorney Mara Castellano for a possible civil suit.",
+        text: "Began processing Tobin's state compensation claim using his college records as evidence of disrupted earning potential, and referred him to civil rights attorney Mara Castellano for a possible civil suit.",
         subjectNames: ["Denise"],
       }),
     ],
@@ -2216,13 +2283,19 @@ async function main() {
   ]);
   assert.equal(invalidEventWithStaticFact.accounting.keptUnits, 1);
   assert.equal(invalidEventWithStaticFact.compiledResponse.mutations[0]?.claimKind, "static");
+  // The dependent change loses only its link to the dropped event; the source-graph rule then drops it.
   assert.equal(
     invalidEventWithDependent.diagnostics.some(
       (diagnostic) =>
-        diagnostic.details?.validatorCode === "unknown_link_target" &&
+        diagnostic.code === "unknown_link_target" &&
+        diagnostic.severity === "warning" &&
         diagnostic.details?.validationStage === "closure",
     ),
     true,
+  );
+  assert.deepEqual(
+    invalidEventWithDependent.outcome.droppedCandidates.map((candidate) => candidate.validatorCode).sort(),
+    ["source_event_graph_open", "source_hash_mismatch"],
   );
 
   const lore = sourceNote(
@@ -2383,6 +2456,69 @@ async function main() {
       `${source.id}: the character card rule goes to card sources only, once`,
     );
   }
+  // Chat messages are remembered as story: a transcript source says so in the request and gets the transcript rule,
+  // while a summary keeps the prose "every beat" rule and no transcript kind.
+  const transcript = sourceNote(
+    "source_transcript_graph_regression",
+    { kind: "chat_transcript", sourceId: "chat-a", entryId: "piece-a" },
+    "Mara: I will bring the ledger back by dawn.\nIlse: Then the harbor stays closed until you do.",
+  );
+  for (const [source, isTranscript] of [
+    [transcript, true],
+    [chat, false],
+  ] as const) {
+    const transcriptMessages = evidenceUnitMessages({
+      sourceNote: source,
+      sourceText: source.sections.source.text,
+      scope: {},
+      modes: ["roleplay"],
+      sourceHash,
+      mode: "roleplay",
+    } as any);
+    const transcriptSystem = String(transcriptMessages[0]?.content);
+    const transcriptPayload = JSON.parse(String(transcriptMessages[1]?.content));
+    assert.equal(
+      transcriptPayload.sourceNote.kind,
+      isTranscript ? "chat_transcript" : undefined,
+      `${source.id}: only a chat transcript sends the transcript kind`,
+    );
+    assert.match(transcriptSystem, /For chat_transcript:\n- Raw messages hold many small actions/);
+    assert.match(
+      transcriptSystem,
+      /For prose_summary:\n- A prose summary is already a selection of what mattered: account for every narrated beat/,
+      "a summary keeps the every-beat rule",
+    );
+    assert.match(transcriptSystem, /For chat transcripts, prefer fewer, outcome-level events over beat coverage/);
+    assert.match(transcriptPayload.unitFields.title, /^required short memory label/);
+    assert.match(transcriptPayload.streamDescriptions.timeline_event, /story-changing/);
+    assert.match(transcriptPayload.streamDescriptions.timeline_event, /not the live current scene/);
+    // A single object is never a world memory: the prompt contract and the roleplay stream description both say so.
+    assert.match(
+      transcriptSystem,
+      /A single object \(a keepsake, letter, key, watch, weapon, garment\) is never a world memory: put it in the event where it matters or in the holder's character memory/,
+    );
+    assert.match(
+      transcriptPayload.streamDescriptions.world_fact,
+      /single object \(keepsake, letter, key, watch, weapon, garment\) is never world/,
+    );
+    assert.match(transcriptSystem, /A world_reference entry that defines an object of the setting is the exception/);
+    assert.match(
+      transcriptPayload.streamDescriptions.world_fact,
+      /unless the story keeps returning to it \(that is an anchor\)/,
+    );
+  }
+  // The fallback description (no mode) carries the same single-object rule.
+  const fallbackMessages = evidenceUnitMessages({
+    sourceNote: transcript,
+    sourceText: transcript.sections.source.text,
+    scope: {},
+    modes: ["roleplay"],
+    sourceHash,
+  } as any);
+  assert.match(
+    JSON.parse(String(fallbackMessages[1]?.content)).streamDescriptions.world_fact,
+    /single object \(keepsake, letter, key, watch, weapon, garment\) is never world/,
+  );
   // An empty or null optional field no longer drops a unit, and evidence always comes from the source note.
   const trustedEvidence = [`source_note:${chat.id}`, "chat:chat-a"];
   const optionalFieldUnits = parseEvidenceUnitPayload(
@@ -2415,6 +2551,69 @@ async function main() {
   );
   for (const parsedUnit of optionalFieldUnits.response.units) assert.deepEqual(parsedUnit.evidence, trustedEvidence);
   assert.equal(optionalFieldUnits.response.units[1]?.title, undefined);
+  // A sentence label past 80 characters and extra keywords are cosmetic: the memory is kept with a label shortened
+  // on a whole word instead of being dropped as invalid_evidence_unit_format.
+  const sentenceTitle =
+    "The lighthouse keeper quietly agrees to guard the northern archive, until the late spring thaw.";
+  const longKeyword = `${"harbour ".repeat(11)}beacon`;
+  const cosmeticUnit = {
+    bucket: "world_fact",
+    subjectId: "lighthouse_archive",
+    sectionKey: "facts",
+    title: sentenceTitle,
+    text: "The lighthouse keeper guards the northern archive until the thaw.",
+    claimKind: "static",
+    importance: "minor",
+    keywords: [longKeyword, "y".repeat(90), ...Array.from({ length: 22 }, (_, index) => `beacon ${index}`)],
+    confidence: 0.9,
+    salience: 0.5,
+    status: "active",
+    links: [],
+    subjectNames: [],
+  };
+  const cosmeticPayload = parseEvidenceUnitPayload(
+    { summary: "Cosmetic overruns", units: [cosmeticUnit] },
+    sourceHash,
+    trustedEvidence,
+  );
+  assert.deepEqual(cosmeticPayload.droppedCandidates, []);
+  const cosmeticKept = cosmeticPayload.response.units[0];
+  assert.equal(cosmeticKept?.title, "The lighthouse keeper quietly agrees to guard the northern archive");
+  assert.ok(sentenceTitle.startsWith(`${cosmeticKept?.title},`), "the label ends on a whole word");
+  assert.equal(cosmeticKept?.keywords.length, 20);
+  assert.equal(cosmeticKept?.keywords[0], `${"harbour ".repeat(9)}harbour`);
+  assert.equal(cosmeticKept?.keywords[1], "beacon 0", "an unbreakable keyword is dropped, not the memory");
+  assert.equal(cosmeticKept?.keywords[19], "beacon 18");
+  const cosmeticCompilation = compileEvidenceUnitExtraction({
+    unitResponse: cosmeticPayload.response,
+    providerCandidates: cosmeticPayload.totalCandidates,
+    parserRejectionCount: cosmeticPayload.parserRejections,
+    parserDroppedCandidates: cosmeticPayload.droppedCandidates,
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    scope: {},
+    modes: ["roleplay"],
+    mode: "roleplay",
+    sourceHash,
+    skipStructuredBackfill: true,
+  });
+  assert.equal(cosmeticCompilation.outcome.state, "success");
+  assert.equal(cosmeticCompilation.outcome.droppedUnits, 0);
+  // A label with no word break is removed, and a long label never hides a real format error.
+  const unbrokenTitle = parseEvidenceUnitPayload(
+    {
+      units: [
+        { ...cosmeticUnit, title: "x".repeat(90) },
+        { ...cosmeticUnit, subjectId: "lighthouse_empty", text: "" },
+      ],
+    },
+    sourceHash,
+    trustedEvidence,
+  );
+  assert.equal(unbrokenTitle.response.units.length, 1);
+  assert.equal(unbrokenTitle.response.units[0]?.title, undefined);
+  assert.equal(unbrokenTitle.droppedCandidates[0]?.validatorCode, "invalid_evidence_unit_format");
   // Issue #1448: a whitespace-only prompt template falls back to the mode's default prompt.
   assert.ok(
     String(
@@ -2503,7 +2702,22 @@ async function main() {
     "a bare id the request did not name must still read as a timeline subject",
   );
   const bareSourceCompile = compile(headedChat, bareSourceLinks.response.units as ReturnType<typeof unit>[]);
-  assert.equal(bareSourceCompile.accounting.keptUnits, 1);
+  // The fact citing an unknown timeline subject is kept without that link.
+  assert.equal(bareSourceCompile.accounting.keptUnits, 2);
+  assert.equal(
+    bareSourceCompile.compiledResponse.mutations.some(
+      (mutation) =>
+        mutation.kind === "create_note" &&
+        mutation.note.links.some((link) => link.target === "timeline_source_chat_other_summary"),
+    ),
+    false,
+  );
+  assert.equal(
+    bareSourceCompile.diagnostics.some(
+      (diagnostic) => diagnostic.code === "unknown_link_target" && diagnostic.severity === "warning",
+    ),
+    true,
+  );
   assert.ok(
     bareSourceCompile.compiledResponse.mutations.some(
       (mutation) =>
@@ -2782,6 +2996,131 @@ async function main() {
     chatCopy.id,
     "a chat that already keeps its own copy goes on updating it, as candidate reconciliation and the prompt do",
   );
+  // World and tone memories already kept for the scope are listed in the request, so the model can grow one by
+  // reusing its subjectId. A scoped copy lists the subjectId that derives back to its own id, not to the base note.
+  const toneRegister = { ...legacyNote, id: "tone_dread", type: "tone" as const, title: "Creeping Dread" };
+  const listedMessages = (options: Record<string, unknown>) =>
+    JSON.parse(
+      String(
+        evidenceUnitMessages({
+          sourceNote: chat,
+          sourceText: chat.sections.source.text,
+          scope: chatOnlyDestination,
+          modes: ["roleplay"],
+          sourceHash,
+          mode: "roleplay",
+          ...options,
+        } as any)[1]?.content,
+      ),
+    );
+  const listedPayload = listedMessages({ existingWorldTone: { world: [chatCopy], tone: [toneRegister] } });
+  assert.deepEqual(listedPayload.existingWorld, [
+    { subjectId: chatCopy.id.slice("world_".length), title: chatCopy.title },
+  ]);
+  assert.deepEqual(listedPayload.existingTone, [{ subjectId: "dread", title: "Creeping Dread" }]);
+  assert.ok(
+    listedPayload.targetNoteRules.some((rule: string) =>
+      rule.startsWith("To add to an existing world or tone memory, reuse its subjectId"),
+    ),
+    "the request tells the model to reuse a listed subjectId",
+  );
+  // An id whose rest starts with a digit is no valid subjectId, so it is listed whole; the compiler still keeps it.
+  const digitWorld = { ...chatCopy, id: "world_9th_legion", title: "The 9th Legion" };
+  const digitListed = listedMessages({ existingWorldTone: { world: [digitWorld], tone: [] } }).existingWorld;
+  assert.deepEqual(digitListed, [{ subjectId: "world_9th_legion", title: "The 9th Legion" }]);
+  assert.equal(
+    compileLtmEvidenceUnits({
+      units: [
+        unit(chat, {
+          bucket: "world_fact",
+          subjectId: digitListed[0].subjectId,
+          sectionKey: "facts",
+          text: "The legion marched at dusk.",
+          links: [{ target: chat.id, relation: "extracted_from" }],
+        }),
+      ],
+      existingNotes: [digitWorld],
+      scope: chatOnlyDestination,
+      modes: ["roleplay"],
+      createdAt: timestamp,
+    }).mutations.every((mutation) => mutation.kind !== "create_note"),
+    true,
+    "a digit-leading id listed whole still updates its own note",
+  );
+  const emptyPayload = listedMessages({ existingWorldTone: { world: [], tone: [] } });
+  assert.equal("existingWorld" in emptyPayload, false, "no world memories: the list is omitted");
+  assert.equal("existingTone" in emptyPayload, false, "no tone memories: the list is omitted");
+  assert.equal("existingWorld" in listedMessages({}), false, "a request without the context keeps its old shape");
+  assert.equal(
+    emptyPayload.targetNoteRules.some((rule: string) => rule.includes("existing world or tone memory")),
+    false,
+    "the reuse rule is sent only when something is listed",
+  );
+  const reusedCopy = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: listedPayload.existingWorld[0].subjectId,
+        sectionKey: "facts",
+        text: "Patrols enforce the curfew.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [chatCopy],
+    storage: { getNotesByIds: async () => new Map([[chatCopy.id, chatCopy]]) },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(reusedCopy.remaps.size, 0, "reusing a scoped copy's listed subjectId keeps that copy as the target");
+  assert.equal(
+    reusedCopy.existingNotes.some((note) => note.id === chatCopy.id),
+    true,
+  );
+  assert.equal(
+    compileLtmEvidenceUnits({
+      units: reusedCopy.units,
+      existingNotes: reusedCopy.existingNotes,
+      scope: chatOnlyDestination,
+      modes: ["roleplay"],
+      createdAt: timestamp,
+    }).mutations.every((mutation) => mutation.kind !== "create_note"),
+    true,
+    "the reused subjectId updates the scoped copy instead of creating another world note",
+  );
+  // A unit whose whole text is a placeholder is dropped; a real sentence that contains "ignore", and a short real
+  // fact in any script, are kept.
+  const keptEvents = (text: string) => {
+    const compiled = compile(chat, [
+      unit(chat, {
+        bucket: "timeline_event",
+        subjectId: "placeholder_probe",
+        sectionKey: "event",
+        text,
+        claimKind: "change",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ]);
+    return {
+      kept: compiled.accounting.keptUnits > 0,
+      dropped: compiled.outcome.droppedCandidates.map((item) => [item.reason, item.validatorCode]),
+    };
+  };
+  for (const placeholder of ["- ignore", "None.", "N/A", "“nothing new”", "Same as above", "TBD", "—", "No change"]) {
+    assert.deepEqual(
+      keptEvents(placeholder),
+      { kept: false, dropped: [["placeholder_output", "placeholder_text"]] },
+      `${placeholder} is dropped as a placeholder`,
+    );
+  }
+  for (const real of [
+    "The guards ignore the warning at the gate.",
+    "Ines trusts Damo",
+    "Ines left",
+    "Damo won",
+    "카이가 죽었다",
+    "夜明けに封印が割れた。",
+  ]) {
+    assert.equal(keptEvents(real).kept, true, `${real} is kept`);
+  }
   const otherChatNote = {
     ...legacyNote,
     id: "world_legacy_scope_fact",
@@ -3065,6 +3404,75 @@ async function main() {
   assert.equal(fallbackTitles.get("tone"), "Tone: Guarded Register");
   assert.equal(fallbackTitles.get("character"), "Mara");
   assert.equal(fallbackTitles.get("relationship"), "Alice and Rowan");
+
+  // Titles never end in an internal id token or a stray possessive; a hex-looking word with no digit stays.
+  const cleanTitles = new Map(
+    compileTitleCases([
+      {
+        bucket: "timeline_event",
+        subjectId: "phone_returned_0996ab5940",
+        sectionKey: "event",
+        text: "Tomas returned the phone to Ilse.",
+      },
+      {
+        bucket: "timeline_event",
+        subjectId: "facade_cracks",
+        sectionKey: "event",
+        title: "Facade",
+        text: "The facade cracked in front of the guests.",
+      },
+      {
+        bucket: "world_fact",
+        subjectId: "back_room_rule",
+        sectionKey: "facts",
+        title: "Back Room Rule 0996AB5940",
+        text: "Nobody speaks in the back room.",
+        claimKind: "static",
+      },
+      {
+        bucket: "relationship_state",
+        subjectId: "tomas_ilse",
+        sectionKey: "state",
+        text: "Tomas and Ilse trust each other less.",
+        claimKind: "change",
+        subjectNames: ["Tomas", "Ilse\u2019s"],
+      },
+      {
+        bucket: "character_fact",
+        subjectId: "mira_dace",
+        sectionKey: "abilities",
+        text: "Mira Dace can pick any lock.",
+        claimKind: "static",
+        subjectNames: ["Mira Dace E77e67c2d0c3"],
+      },
+      {
+        bucket: "timeline_event",
+        subjectId: "signal_sent",
+        sectionKey: "event",
+        title: "Code Deadbeefaa",
+        text: "The code was sent.",
+      },
+      {
+        bucket: "timeline_event",
+        subjectId: "short_tail",
+        sectionKey: "event",
+        title: "Ledger 0996ab59401",
+        text: "The ledger was opened.",
+      },
+    ])
+      .mutations.filter(
+        (mutation): mutation is Extract<(typeof titledCreateCompilation.mutations)[number], { kind: "create_note" }> =>
+          mutation.kind === "create_note",
+      )
+      .map((mutation) => [mutation.note.id, mutation.note.title]),
+  );
+  assert.equal(cleanTitles.get("timeline_phone_returned_0996ab5940"), "Phone Returned");
+  assert.equal(cleanTitles.get("timeline_facade_cracks"), "Facade");
+  assert.equal(cleanTitles.get("world_back_room_rule"), "Back Room Rule");
+  assert.equal(cleanTitles.get("rel_ilse_tomas") ?? cleanTitles.get("rel_tomas_ilse"), "Tomas and Ilse");
+  assert.ok([...cleanTitles.values()].includes("Mira Dace"), "a character title drops its id token");
+  assert.equal(cleanTitles.get("timeline_signal_sent"), "Code Deadbeefaa", "a hex-looking word with no digit stays");
+  assert.equal(cleanTitles.get("timeline_short_tail"), "Ledger 0996ab59401", "an 11-hex token stays");
 
   const existingWorld = {
     id: "world_observatory_script",
@@ -3563,6 +3971,20 @@ async function main() {
     },
     { label: "card nickname that is not a name part", roster: ["Ashleigh Farraday"], names: ["Ash"], expect: ["Ash"] },
     { label: "card short name", roster: ["Ashleigh Farraday"], names: ["Ashleigh"], expect: ["review"] },
+    // A longer form of a card or persona name must not fork its own character either.
+    {
+      label: "card full name of a short card name",
+      roster: ["Ashleigh"],
+      names: ["Ashleigh Farraday"],
+      expect: ["review"],
+    },
+    {
+      label: "a surname beside a long form of a short card name",
+      roster: ["Ashleigh"],
+      names: ["Ashleigh Farraday", "Farraday"],
+      expect: ["review", "review"],
+    },
+    { label: "a card name is not a camel-case part", roster: ["Ann"], names: ["JoAnn"], expect: ["JoAnn"] },
   ] as Array<{ label: string; roster?: string[]; saved?: string[]; names: string[]; expect: string[] }>) {
     const rosterCatalog = buildTrustedLtmSubjectCatalog({
       roster: roster.map((name) => ({ kind: "character" as const, id: name.toLowerCase(), name, aliases: [] })),
