@@ -183,8 +183,10 @@ async function recalledLine(
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
     // #2066: the newest small memory he holds (recalls come in story order); a chapter's says which it is (its tag).
     const newest = result.status.phase === "ready" ? result.recalls?.at(-1) : undefined;
-    const top = (newest?.content ?? "").trim();
-    return top ? `${newest!.tag ? `${newest!.tag} ` : ""}${sliceTextToTokenBudget(top, RECALLED_TOKENS)}` : "";
+    const top = newest?.content.trim();
+    if (!top) return "";
+    const text = sliceTextToTokenBudget(top, RECALLED_TOKENS);
+    return newest?.tag ? `${newest.tag} ${text}` : text;
   } catch {
     return "";
   }

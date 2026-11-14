@@ -443,11 +443,14 @@ export interface StoryTag {
   where?: string;
 }
 
-/** `title` with its chapter's tag before it ("[Character Story 2, after chapter 3] …"), or as it is without one. */
-export function tagged(tag: StoryTag | undefined, title: string): string {
+/** A chapter's tag as the prompts write it: "[Character Story 2, after chapter 3]", or "" without one. */
+export function tagText(tag: StoryTag | undefined): string {
   const text = [tag?.name, tag?.where].filter(Boolean).join(", ");
-  return text ? `[${text[0]!.toUpperCase()}${text.slice(1)}] ${title}`.trim() : title;
+  return text ? `[${text[0]!.toUpperCase()}${text.slice(1)}]` : "";
 }
+
+/** `title` with its chapter's tag before it ("[Character Story 2, after chapter 3] …"), or as it is without one. */
+export const tagged = (tag: StoryTag | undefined, title: string) => [tagText(tag), title].filter(Boolean).join(" ");
 
 /**
  * The main chapters a condensed head holds (the timeline's `covered` minus its entries), as its tag: "[Chapters 1–4]"
@@ -464,6 +467,29 @@ function headTag(covered: Iterable<string>, entries: ReadonlySet<string>): strin
 }
 
 /**
+ * Every completed chapter's tag (storyTags), as every prompt tells it: from all of them in story order, never only those
+ * a prompt may know or those with canon, so one chapter has one tag wherever it goes. His side (#2155) is tagged where
+ * the chapter it tells again falls, not where it was read: an unread side stays on offer, so it may be read chapters
+ * later (completedChapters sorts it by its read).
+ */
+export function chapterTags(chapters: readonly Completed[]): Map<string, StoryTag> {
+  const orders = new Map(chapters.map(({ chapter, order }) => [chapter.key, order]));
+  return storyTags(
+    chapters.map(({ chapter, order }) => {
+      const ref = chapter.hisSide?.ref;
+      return { key: chapter.key, order: (ref ? orders.get(ref.slice(0, ref.lastIndexOf("/"))) : undefined) ?? order };
+    }),
+  );
+}
+
+/**
+ * A chapter as a memory source, with its tag (chapterTags) for the recall pool (S/memory/memory.ts), which tells a date
+ * or Character Story under it. The kit keeps only the fields it knows, so the tag reaches no record, fingerprint or
+ * summary prompt.
+ */
+export type StorySource = ForgeMemorySource & { tag?: StoryTag };
+
+/**
  * The chapters as memory sources (their whole canon), in the order given; one not settled yet is left out. A love
  * interest's own chapter carries its audience (see the header).
  */
@@ -472,13 +498,15 @@ async function sourcesOf(
   runId: string,
   chapters: readonly Completed[],
   protagonist: string,
-): Promise<ForgeMemorySource[]> {
-  const sources: ForgeMemorySource[] = [];
+): Promise<StorySource[]> {
+  const tags = chapterTags(chapters);
+  const sources: StorySource[] = [];
   for (const completed of chapters) {
     const { chapter, order, audience } = completed;
     const content = await chapterCanon(store, runId, chapter, protagonist);
     if (!content?.trim()) continue;
     const guests = completed.guests;
+    const tag = tags.get(chapter.key);
     sources.push({
       id: chapter.key,
       kind: kindOf(chapter),
@@ -486,6 +514,7 @@ async function sourcesOf(
       content,
       order,
       ...(audience ? { audience } : {}),
+      ...(tag ? { tag } : {}),
     });
   }
   return sources;
@@ -497,7 +526,7 @@ export async function readStorySources(
   runId: string,
   state: RunState,
   protagonist: string,
-): Promise<ForgeMemorySource[]> {
+): Promise<StorySource[]> {
   return sourcesOf(store, runId, await completedChapters(store, runId, state), protagonist);
 }
 
@@ -704,17 +733,9 @@ export async function recallText(
     }),
   ]);
   const { chapters, protagonist } = story;
-  // Each chapter's tag (storyTags): from every completed chapter, whoever the prompt is for, so a cached story context
-  // stays the same whatever the call's cast.
-  // His side (#2155) is tagged where the chapter it tells again falls, not where it was read: an unread side stays on
-  // offer, so it may be read chapters later (completedChapters sorts it by its read).
-  const orders = new Map(chapters.map(({ chapter, order }) => [chapter.key, order]));
-  const tags = storyTags(
-    chapters.map(({ chapter, order }) => {
-      const ref = chapter.hisSide?.ref;
-      return { key: chapter.key, order: (ref ? orders.get(ref.slice(0, ref.lastIndexOf("/"))) : undefined) ?? order };
-    }),
-  );
+  // Each chapter's tag (chapterTags): from every completed chapter, whoever the prompt is for, so a cached story
+  // context stays the same whatever the call's cast, and the recall pool tags the same chapter the same way.
+  const tags = chapterTags(chapters);
   const heading = (completed: Completed) => tagged(tags.get(completed.chapter.key), titleOf(completed));
   // The last Character Story goes in whoever the prompt is for (#2126, see the header).
   const lastStory = withLastStory ? lastStoryOf(chapters) : undefined;

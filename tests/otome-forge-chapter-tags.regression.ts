@@ -21,6 +21,7 @@ import {
   stateId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
+import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
   normalizeBeat,
@@ -226,4 +227,32 @@ test("his side is tagged where the chapter it tells again falls, however late it
   const { text } = await recallText({ store: t.store }, t.runId, { job: "narration", cast: [KAI], continues: "main" });
   assert.match(text, /# Canon in full: \[After chapter 2\] Kai's side of "Night 2" \(/u, text);
   assert.ok(!text.includes("[After chapter 5] Kai's side"), "not where it was read");
+});
+
+test("a Character Story has one number in every block, even after one with no canon to give (Dottore, #2291)", async () => {
+  const t = await inProgress("r-tagsgone-aaaaaa");
+  // Completed, its scene since gone (a missing beat), so it has no canon and is no memory source; it is still counted,
+  // as every completed chapter is.
+  const gone = { key: "story-item-gone-0001", kind: "story", li: KAI, lead: KAI, title: "Gone" } as const;
+  await complete(t, gone, at(2, 10));
+  assert.ok(await t.store.removeDoc(beatId(t.runId, gone.key, 0)));
+  const sources = await readMemorySources(t.store, t.runId);
+  assert.ok(!sources.some(({ id }) => id === gone.key), "it gave no source");
+  const { text } = await recallText({ store: t.store }, t.runId, {
+    job: "narration",
+    cast: [KAI],
+    continues: "main",
+    recalled: ["story-item-shell-0001"],
+  });
+  assert.ok(text.includes(`# Character Story 2 in detail, after chapter 2: ${SHELL}`), text);
+  const real = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    // The Home note's recall (no timeline, so his Character Stories come as recalls): the same number.
+    const { recalls } = await real.recall({ runId: t.runId, job: "chat", reader: KAI, ownStories: true });
+    const shell = recalls?.find(({ id }) => id === "story-item-shell-0001");
+    assert.equal(shell?.tag, "[Character Story 2, after chapter 2]");
+    assert.equal(shell?.title, `[Character Story 2, after chapter 2] ${SHELL}`);
+  } finally {
+    real.dispose();
+  }
 });
