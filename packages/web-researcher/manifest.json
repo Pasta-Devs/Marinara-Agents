@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "web-researcher",
+  "name": "Web Researcher",
+  "version": "1.0.0",
+  "description": "Looks up real-world facts on the web before the reply, so characters get games, films, music, history and other real details right. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
+  "engine": {
+    "min": "2.5.2",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "0cb5c0c512e1301ede6c4c352cae7e4c0047d36662d5c4e986611b7c4ed15501",
+      "bytes": 2267
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

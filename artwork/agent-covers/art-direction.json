@@ -5,7 +5,11 @@
     "format": "png",
     "width": 512,
     "height": 512,
-    "displaySizes": [44, 80, 96]
+    "displaySizes": [
+      44,
+      80,
+      96
+    ]
   },
   "referenceRoles": [
     "chibi-professor-mari.png: compact chibi proportions, mascot silhouette, thick outline language",
@@ -272,6 +276,12 @@
       "name": "Otome Hearth",
       "concept": "At the maintainer's request, Dottore stands beside Mari as her love interest: chibi Dottore, at Mari's chibi scale, with swept-back pale icy blue hair, his black crested mask, black gloves and a white laboratory coat, smiles as he offers a blushing, heart-eyed Professor Mari a single red rose, his other hand over his heart, while she clasps her hands under her chin; bold red hearts float above them against a soft heart-shaped glow.",
       "palette": "rose pink, lavender, heart red, icy light blue, laboratory white, deep navy, warm gold"
+    },
+    {
+      "id": "web-researcher",
+      "name": "Web Researcher",
+      "concept": "Mari peers through a large magnifying glass at a glowing globe, with a few bright fact cards and a search sparkle orbiting the medallion, as if checking a detail before telling a story.",
+      "palette": "indigo, teal, warm gold, cream"
     }
   ]
 }

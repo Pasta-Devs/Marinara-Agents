@@ -320,6 +320,13 @@
       "bannerPath": "../store/banners/uno.webp",
       "bannerSmallPath": "../store/banners/uno-1200.webp"
     },
+    "web-researcher": {
+      "section": "writing",
+      "tagline": "Checks real-world facts before the reply.",
+      "iconPath": "../store/icons/web-researcher.webp",
+      "bannerPath": "../store/banners/web-researcher.webp",
+      "bannerSmallPath": "../store/banners/web-researcher-1200.webp"
+    },
     "world-state": {
       "section": "trackers",
       "tagline": "Date, time, weather and place.",

@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Web Researcher",
+    "description": "Looks up real-world facts on the web before the reply, so characters get games, films, music, history and other real details right. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
+  },
+  "agents": {
+    "web-researcher": {
+      "name": "Web Researcher",
+      "description": "Looks up real-world facts on the web before the reply, so characters get games, films, music, history and other real details right."
+    }
+  }
+}

@@ -192,6 +192,10 @@
       "section": "games",
       "tagline": "Play UNO with your characters."
     },
+    "web-researcher": {
+      "section": "writing",
+      "tagline": "Checks real-world facts before the reply."
+    },
     "world-state": {
       "section": "trackers",
       "tagline": "Date, time, weather and place."

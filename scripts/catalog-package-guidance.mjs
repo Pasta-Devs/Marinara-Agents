@@ -19,6 +19,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
   },
+  "web-researcher": {
+    modes: ["roleplay"],
+    activation: "Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
+  },
   "prose-guardian": {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
