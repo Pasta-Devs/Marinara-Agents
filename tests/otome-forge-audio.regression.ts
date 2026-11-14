@@ -1,5 +1,5 @@
 // Otome Forge M2b: music briefs (P14), generated tracks, the audio settings (S/audio/music.ts, S/routes/audio.ts), the
-// stock cue each story cue falls back on, and whose voice reads each line (C/lib/audio.ts with the kit's
+// stock cue each story cue falls back on, and whose voice reads each line (C/lib/audio.ts lineVoice, over the kit's
 // forgeSpeakerVoice).
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -10,10 +10,10 @@ import {
   normalizeOtomeAudio,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/audio.ts";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
-import { forgeSpeakerVoice } from "@forge-kit/voice-picking.mjs";
 import {
   ENGINE_MUSIC_CUE,
   lineSpeaker,
+  lineVoice,
   runIdOf,
   wouldVoice,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
@@ -267,6 +267,12 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
           { characterId: "card-kai", voice: "kai-voice" },
           { characterId: "card-mireille", voice: "mireille-card-voice" },
           { characterId: "persona-ines", voice: "ines-voice" },
+          // Engine cards met only as NPCs in the story: their rows carry the card's name.
+          { characterId: "card-pulcinella", characterName: "Pulcinella", voice: "pulcinella-voice" },
+          { characterId: "card-arlecchino", characterName: "Arlecchino (The Knave)", voice: "knave-voice" },
+          { characterId: "card-twin-a", characterName: "The Twin (Elder)", voice: "twin-a-voice" },
+          { characterId: "card-twin-b", characterName: "The Twin (Younger)", voice: "twin-b-voice" },
+          { characterId: "card-kai-copy", characterName: "Kai", voice: "kai-copy-voice" },
         ],
         npcDefaultMaleVoices: ["m1", "m2", "m3"],
         npcDefaultFemaleVoices: ["f1", "f2"],
@@ -304,7 +310,7 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
   const voice = async (speaker: string, text = "A line.", extra: Record<string, unknown> = {}) => {
     const who = lineSpeaker({ speaker, text, ...extra }, lis, player);
     if (!wouldVoice(settings, who)) return null;
-    return forgeSpeakerVoice(config, who, who.cast || settings.otherVoices, listVoices);
+    return lineVoice(config, who, who.cast || settings.otherVoices, listVoices);
   };
 
   assert.equal(await voice("Kai"), "kai-voice", "his card's Engine voice");
@@ -329,6 +335,17 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
   );
   settings.otherVoices = true;
   assert.ok(["m1", "m2", "m3"].includes((await voice("The Harbour Master", "Move along.", { gender: "male" }))!));
+  // An NPC with an Engine card takes the voice assigned to that card's name, as the Engine's own chats do.
+  assert.equal(await voice("Pulcinella", "Child.", { gender: "male" }), "pulcinella-voice", "his assigned voice");
+  assert.equal(await voice("pulcinella"), "pulcinella-voice", "whatever the case");
+  assert.equal(await voice("Arlecchino", "Sit.", { gender: "female" }), "knave-voice", "by the card's base name");
+  assert.equal(await voice("Arlecchino (Father)"), "knave-voice", "or the line's");
+  assert.ok(
+    ["m1", "m2", "m3"].includes((await voice("The Twin", "Hm.", { gender: "male" }))!),
+    "two cards that share a base name with different voices give none: the pool",
+  );
+  assert.equal(await voice("Kai"), "kai-voice", "a love interest keeps his own card's voice over a namesake's");
+  assert.equal(await voice("Ines"), "ines-voice", "and the protagonist her persona's");
   assert.equal(await voice(""), null, "narration is never voiced");
   assert.equal(await voice("Kai", "...don't leave again.", { thought: true }), null, "nor a thought");
   settings.tts = false;

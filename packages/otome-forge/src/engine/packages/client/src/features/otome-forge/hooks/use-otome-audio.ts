@@ -11,9 +11,10 @@
 //   saved: Settings → Audio's unsaved preview of Mute and the volumes changes only what is heard. A chapter's theme is
 //   held with its chapter: its saved track plays wherever it is held (the reader, the Album's Soundtrack), never a
 //   chosen music folder in its place, and a new one is made only while chapter themes are on.
-// - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win; the protagonist uses her
-//   persona's voice or stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool
-//   voice for their gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
+// - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win, and anyone outside the
+//   cast takes the voice assigned to their name, lib/audio.ts lineVoice; the protagonist uses her persona's voice or
+//   stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool voice for their
+//   gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
 //   backlog plays the saved clip; a comfort line (M3's Rough day?) is voiced with none, so it never lands in the
 //   Engine's audio cache (plan §1.9).
 // - One controller per story. <OtomeAudioProvider> makes it; a provider inside another one adds nothing, so OtomeForgeView
@@ -34,7 +35,6 @@ import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { forgeSoundtrackContextKey } from "@forge-kit/audio-settings.mjs";
 import { chapterMusicCue, musicAssetsInFolder, normalizeOtomeAudio } from "../shared/audio";
-import { forgeSpeakerVoice } from "@forge-kit/voice-picking.mjs";
 import { host } from "marinara:host";
 import { api } from "../../../lib/api-client";
 import { ttsService, ttsUnavailableReason } from "../../../lib/tts-service";
@@ -44,6 +44,7 @@ import {
   MUSIC_LENGTH_MS,
   MUSIC_SCOPE,
   lineSpeaker,
+  lineVoice,
   runIdOf,
   voiceCacheKey,
   worldTracks,
@@ -645,7 +646,7 @@ export class OtomeAudioController {
     this.update({ speaking: ref });
     try {
       const config = await this.readTtsConfig();
-      const voice = await forgeSpeakerVoice(config, speaker, speaker.cast || settings.otherVoices, this.listVoices);
+      const voice = await lineVoice(config, speaker, speaker.cast || settings.otherVoices, this.listVoices);
       if (abort.signal.aborted || this.disposed) return "stopped";
       if (!voice) return "silent";
       const connectionId = isRecord(config) && typeof config.connectionId === "string" ? config.connectionId : "";

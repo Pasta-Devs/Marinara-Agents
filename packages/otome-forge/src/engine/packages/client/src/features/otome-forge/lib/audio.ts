@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────
 // hooks/use-otome-audio.ts plays them through the Engine's player and voice service; this file has no host access, so
 // the regressions run it as it is.
-import { forgeStoryPersona, type ForgeVoiceSpeaker } from "@forge-kit/voice-picking.mjs";
+import { forgeSpeakerVoice, forgeStoryPersona, type ForgeVoiceSpeaker } from "@forge-kit/voice-picking.mjs";
 import type {
   AudioSettings,
   Player,
@@ -83,6 +83,72 @@ export function lineSpeaker(
   const persona = forgeStoryPersona({ name: player.name, personaId: player.personaId }, voice.name);
   if (persona) return { name: persona.name, characterId: persona.characterId, persona: true, cast: true };
   return { name: voice.name, ...(segment.gender ? { gender: segment.gender } : {}), cast: false };
+}
+
+// The Engine's speaker-name normalizers (packages/client/src/lib/tts-dialogue.ts normalizeTTSCharacterName and
+// normalizeTTSCharacterBaseName), which the host contract does not expose to packages.
+const ttsName = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+function ttsBaseName(value: unknown): string {
+  let name = ttsName(value);
+  let previous = "";
+  while (name && name !== previous) {
+    previous = name;
+    name = name
+      .replace(/^[`*"'“”‘’]+|[`*"'“”‘’:]+$/g, "")
+      .replace(/\s*(?:\([^()]*\)|\[[^\]]*\]|\{[^{}]*})\s*$/g, "")
+      .trim();
+  }
+  return name.match(/^(.+?)\s+(?:[-–—:|])\s+[^-–—:|]+$/)?.[1]?.trim() || name;
+}
+
+/**
+ * The voice an Engine voice row gives a speaker by name, as the Engine's resolveTTSVoiceForSpeaker does for one with no
+ * card of its own: the row with the same name, else the rows with the same base name ("Pulcinella (Fatui)") when they
+ * all name one voice. Rows are read from the same place the kit reads them (the connection's profile, or the config).
+ * ponytail: no short-form match ("Junpei" for a card called "Junpei Iori", Engine #8638); move this into the kit's
+ * forgeSpeakerVoice (and rebuild Gacha Forge) or use the Engine's resolver once the host contract exposes it.
+ */
+export function namedVoice(config: unknown, name: string): string | null {
+  const settings = config as {
+    enabled?: boolean;
+    connectionId?: string;
+    voiceAssignments?: unknown;
+    connectionProfiles?: Record<string, { voiceAssignments?: unknown } | undefined>;
+  } | null;
+  if (!settings || (!settings.connectionId && settings.enabled === false)) return null;
+  const assignments = settings.connectionId
+    ? settings.connectionProfiles?.[settings.connectionId]?.voiceAssignments
+    : settings.voiceAssignments;
+  const rows = (Array.isArray(assignments) ? assignments : []).flatMap((row) =>
+    row && typeof row.voice === "string" && row.voice.trim() && typeof row.characterName === "string"
+      ? [{ name: row.characterName, voice: row.voice.trim() }]
+      : [],
+  );
+  const exact = ttsName(name);
+  const same = exact ? rows.find((row) => ttsName(row.name) === exact) : undefined;
+  if (same) return same.voice;
+  const base = ttsBaseName(name);
+  const voices = new Set(base ? rows.filter((row) => ttsBaseName(row.name) === base).map((row) => row.voice) : []);
+  return voices.size === 1 ? [...voices][0]! : null;
+}
+
+/**
+ * The voice that reads a speaker's line: the kit's pick (a card's own row, the protagonist's persona, the NPC pool),
+ * except that someone outside the cast with no card first takes the voice the Engine assigned to their name.
+ */
+export async function lineVoice(
+  config: unknown,
+  speaker: LineSpeaker,
+  others: boolean,
+  listVoices: (config: unknown) => Promise<string[]>,
+): Promise<string | null> {
+  const named = !speaker.cast && !speaker.characterId ? namedVoice(config, speaker.name) : null;
+  return named ?? forgeSpeakerVoice(config, speaker, others, listVoices);
 }
 
 /** True when the settings would voice this speaker at all (the Engine may still have no voice for them). */
