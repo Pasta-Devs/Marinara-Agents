@@ -21,10 +21,12 @@ export const ltmDuplicatePeoplePreviewResponseSchema = z
   .object({
     /** Active person memories in places that hold at least two. */
     total: z.number().int().min(0),
-    /** Person memories shown to the model. */
+    /** Person memories whose model call returned a usable answer. */
     checked: z.number().int().min(0),
     /** True when some person memories were left unchecked to keep one review bounded. */
     truncated: z.boolean(),
+    /** Position to carry on after when this batch stopped at the call limit (send it as `after`); null when nothing is left. */
+    next: z.string().nullable(),
     /** Model calls whose reply could not be used. */
     failedChunks: z.number().int().min(0),
     suggestions: z.array(ltmDuplicatePeopleSuggestionSchema),

@@ -4,6 +4,12 @@ import { ltmIsoTimestampSchema, ltmNoteIdSchema } from "./primitives.js";
 /** One Tidy with AI apply archives at most this many memories (the same cap as other bulk note requests). */
 export const LTM_TIDY_APPLY_MAX_NOTES = 500;
 
+/**
+ * The request every AI check preview takes: `after` is the previous response's `next`, an opaque position in the
+ * check's order. Only memories after it are read, so the vault changing between batches cannot skip or repeat any.
+ */
+export const ltmAiCheckPreviewRequestSchema = z.object({ after: z.string().optional() }).strict();
+
 export const ltmTidyReasonSchema = z.enum(["duplicate", "covered", "placeholder"]);
 
 const ltmTidyMemoryRefSchema = z.object({ id: ltmNoteIdSchema, title: z.string().max(240) }).strict();
@@ -21,10 +27,12 @@ export const ltmTidyPreviewResponseSchema = z
   .object({
     /** Memories that could be tidied (not source records, not archived). */
     total: z.number().int().min(0),
-    /** Memories the model was actually shown. */
+    /** Memories whose model call returned a usable answer. */
     checked: z.number().int().min(0),
     /** True when some groups were left unchecked to keep one review bounded. */
     truncated: z.boolean(),
+    /** Position to carry on after when this batch stopped at the call limit (send it as `after`); null when nothing is left. */
+    next: z.string().nullable(),
     /** Model calls whose reply could not be used. */
     failedChunks: z.number().int().min(0),
     suggestions: z.array(ltmTidySuggestionSchema),

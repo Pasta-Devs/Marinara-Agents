@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.6.1 — 2026-11-14
+
+- "Checked N of M" in the three AI checks counts only memories the model actually reviewed, and a check that stops at its limit has a "Check the next batch" button, so every memory can be reviewed.
+
 ## 1.6.0 — 2026-11-14
 
 - The Memory Vault has a Graph view of your memories and their links.

@@ -18,7 +18,7 @@ import { recordLtmDebugEvent } from "./debug-log.js";
 
 const MAX_CHUNK_MEMORIES = 80;
 const MAX_CHUNK_CHARS = 24_000;
-const MAX_CHUNKS = 12;
+export const MAX_CHUNKS = 12;
 const MAX_BODY_CHARS = 600;
 const MAX_OUTPUT_TOKENS = 2_000;
 
@@ -43,6 +43,20 @@ const groupSchema = z.object({
   archive: z.array(z.string()),
   reason: ltmTidyReasonSchema,
 });
+
+/**
+ * Where a memory sits in a check's order: its group key, then its id, compared as plain strings. A cursor is the
+ * position of the last memory a batch read, so it stays valid however the vault changes before the next call, and a
+ * cursor that names nothing (or is malformed) still sorts to a place in the order.
+ */
+export const planPosition = (key: string, id: string) => `${key}\u0000${id}`;
+export const byPlan = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** The first MAX_CHUNKS chunks of a plan, and the cursor to carry on from when more are left. */
+export function takeBatch<T>(chunks: T[], lastPosition: (chunk: T) => string) {
+  const processed = chunks.slice(0, MAX_CHUNKS);
+  return { processed, next: chunks.length > processed.length ? lastPosition(processed[processed.length - 1]!) : null };
+}
 
 export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -90,6 +104,8 @@ function chunkGroup(group: TidyMemory[]) {
   // A single leftover memory has nothing to compare with.
   return chunks.filter((chunk) => chunk.length >= 2);
 }
+
+type TidyChunk = { key: string; memories: TidyMemory[] };
 
 function parseSuggestions(content: string, chunk: TidyMemory[]): LtmTidySuggestion[] | null {
   const text = content.trim();
@@ -151,31 +167,34 @@ export function defaultComplete(languageModel: PackageLanguageModel): LtmTidyCom
 
 /**
  * The memories a Tidy check would read, grouped and cut into the chunks sent to the model. The preview and the scope
- * both take their numbers from here, so the count shown before Start is the count the run reads.
+ * both take their numbers from here, so the count shown before Start is the count the run reads. The order is the
+ * group key, then the memory id, never a group's size, so it holds when memories are archived between batches. With
+ * `after`, only the memories after that position are planned; a group split by a batch boundary continues from its
+ * next memory, and the memories before and after the boundary are not compared with each other.
  */
-async function planLtmTidy(storage: LongTermMemoryStorage) {
+async function planLtmTidy(storage: LongTermMemoryStorage, after?: string) {
   // Source records are not memories, and an archived note is already tidy. Nothing else is held back: the Vault
   // has no profile-style note type, so character and relationship memories are compared like the rest.
   const eligible = (await storage.listNotes({ skipInvalid: true })).filter(
     (note) => note.type !== "source" && note.status !== "archived",
   );
   const groups = new Map<string, TidyMemory[]>();
-  for (const note of [...eligible].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))) {
+  for (const note of [...eligible].sort((a, b) => byPlan(a.id, b.id))) {
     const key = groupKey(note);
-    groups.set(key, [...(groups.get(key) ?? []), toMemory(note)]);
+    if (after === undefined || planPosition(key, note.id) > after)
+      groups.set(key, [...(groups.get(key) ?? []), toMemory(note)]);
   }
-  const chunks = [...groups.entries()]
+  const chunks: TidyChunk[] = [...groups.entries()]
     .filter(([, group]) => group.length >= 2)
-    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
-    .flatMap(([, group]) => chunkGroup(group));
-  const processed = chunks.slice(0, MAX_CHUNKS);
-  return { eligible, chunks, processed };
+    .sort((a, b) => byPlan(a[0], b[0]))
+    .flatMap(([key, group]) => chunkGroup(group).map((memories) => ({ key, memories })));
+  return { eligible, chunks };
 }
 
 /** How many memories a Tidy check would read if every model call succeeded. Reads notes only; the model is not called. */
 export async function scopeLtmTidy(options: { storage: LongTermMemoryStorage }) {
-  const { processed } = await planLtmTidy(options.storage);
-  return { count: processed.reduce((sum, chunk) => sum + chunk.length, 0) };
+  const { chunks } = await planLtmTidy(options.storage);
+  return { count: chunks.slice(0, MAX_CHUNKS).reduce((sum, chunk) => sum + chunk.memories.length, 0) };
 }
 
 export async function previewLtmTidy(options: {
@@ -184,13 +203,17 @@ export async function previewLtmTidy(options: {
   languageModel: PackageLanguageModel;
   signal?: AbortSignal;
   complete?: LtmTidyComplete;
+  /** Position to carry on after; a check cut short at the call limit returns it as `next`. */
+  after?: string;
 }): Promise<LtmTidyPreviewResponse> {
   const { root, languageModel, signal } = options;
   const complete = options.complete ?? defaultComplete(languageModel);
-  const { eligible, chunks, processed } = await planLtmTidy(options.storage);
+  const { eligible, chunks } = await planLtmTidy(options.storage, options.after);
+  const { processed, next } = takeBatch(chunks, (chunk) => planPosition(chunk.key, chunk.memories.at(-1)!.id));
   const suggestions: LtmTidySuggestion[] = [];
+  let checked = 0;
   let failedChunks = 0;
-  for (const chunk of processed) {
+  for (const { memories: chunk } of processed) {
     signal?.throwIfAborted();
     const messages: TidyMessage[] = [
       { role: "system", content: TIDY_SYSTEM_PROMPT },
@@ -219,6 +242,7 @@ export async function previewLtmTidy(options: {
         });
         continue;
       }
+      checked += chunk.length;
       suggestions.push(...found);
       await recordLtmDebugEvent({ ...debug, status: "ok", durationMs: Date.now() - started, counts });
     } catch (error) {
@@ -242,8 +266,9 @@ export async function previewLtmTidy(options: {
     );
   return ltmTidyPreviewResponseSchema.parse({
     total: eligible.length,
-    checked: processed.reduce((sum, chunk) => sum + chunk.length, 0),
-    truncated: chunks.length > processed.length,
+    checked,
+    truncated: next !== null,
+    next,
     failedChunks,
     suggestions,
   });

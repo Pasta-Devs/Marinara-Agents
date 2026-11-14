@@ -400,6 +400,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.1",
+          "date": "2026-11-14",
+          "notes": "- \"Checked N of M\" in the three AI checks counts only memories the model actually reviewed, and a check that stops at its limit has a \"Check the next batch\" button, so every memory can be reviewed.",
+          "highlight": false
+        },
+        {
           "version": "1.6.0",
           "date": "2026-11-14",
           "notes": "- The Memory Vault has a Graph view of your memories and their links.\n- Each reply has a Long-Term Memory card in the chat's Agent activity panel and drawer, and Activity has its own page.\n- Branched chats remember what their other branches saved and keep their latest messages visible.\n- Recall is set by one token budget, uses whole memories only and matches the meaning of the latest messages.\n- Extraction saves fewer, story-level memories, and \"Newest messages to leave for later\" keeps it off a scene that is still going. Background import now reads messages only; import chat summaries by hand from Sources.\n- Sharing is set per Agent, with \"Can read\" and \"Can add\" switches.\n- New: setup and a tour with Mari, a one-time \"What's new\", and three AI checks for older memories (\"Tidy with AI\", \"Link older relationships\", \"Find duplicate people\") that change only what you tick.\n- Memory Settings, Sources, Review and the Vault are simpler to read.\n- Needs an Engine with Capability API 1.820.",
@@ -511,12 +517,6 @@
           "version": "1.5.12",
           "date": "2026-10-30",
           "notes": "- Sources → Chat Summaries keeps the range visible when a chat has a long name: the name is cut, and the message range, day, week or game session stays whole beside it.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.11",
-          "date": "2026-10-30",
-          "notes": "- A memory whose score (salience or confidence) the model writes in quotes (\"0.5\") is kept instead of dropped, and a chat piece whose every memory is malformed fails with Retry instead of reporting success with nothing kept.",
           "highlight": false
         }
       ]

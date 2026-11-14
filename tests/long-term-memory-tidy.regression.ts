@@ -161,6 +161,7 @@ async function main() {
         },
       });
       assert.equal(flaky.failedChunks, 1);
+      assert.equal(flaky.checked, 2, "memories the model could not read are not counted as checked");
       assert.equal(flaky.suggestions.length, 1);
       await assert.rejects(
         previewLtmTidy({
@@ -247,6 +248,63 @@ async function main() {
         (_, index) => `world_${index.toString(16).padStart(8, "0")}`,
       );
       assert.ok(!ltmTidyApplyRequestSchema.safeParse({ noteIds: many }).success);
+
+      // More groups than one run reads: `after: next` reads the rest, so every memory can be reviewed.
+      const wide = new LongTermMemoryStorage(join(dataDir, "wide"));
+      await wide.initializeLtmStore();
+      for (let chat = 0; chat < 14; chat += 1)
+        for (const side of ["a", "b"])
+          await wide.createNote(
+            note("world", `Memory ${chat}${side}`, `Fact ${chat}${side}.`, {
+              chatId: `wide-${chat}`,
+              chatIds: [`wide-${chat}`],
+            }),
+          );
+      let seen: string[] = [];
+      const readWide = (after?: string) =>
+        previewLtmTidy({
+          root,
+          storage: wide,
+          languageModel: model as never,
+          after,
+          complete: async (messages) => {
+            seen.push(...messages[1]!.content.split("\n").map((line) => line.split(" | ")[1]!));
+            return '{"groups":[]}';
+          },
+        });
+      const firstBatch = await readWide();
+      assert.deepEqual([firstBatch.checked, typeof firstBatch.next, firstBatch.truncated], [24, "string", true]);
+      const firstSeen = [...seen];
+      const secondBatch = await readWide(firstBatch.next!);
+      assert.deepEqual([secondBatch.checked, secondBatch.next, secondBatch.truncated], [4, null, false]);
+      assert.equal(new Set(seen).size, 28, "each memory is read exactly once across the two batches");
+      assert.equal(seen.length, 28);
+      assert.equal((await readWide("\uffff")).checked, 0, "a cursor past the last memory reads nothing");
+      assert.equal((await readWide("not a cursor from this check")).total, 28, "an unknown cursor does not throw");
+
+      // Apply archives memories the first batch read: the next call still reads exactly what the first did not.
+      seen = [];
+      const readByFirst = (await wide.listNotes({ skipInvalid: true })).filter((entry) =>
+        firstSeen.includes(entry.title ?? ""),
+      );
+      assert.equal(readByFirst.length, 24);
+      await applyLtmTidy({
+        root,
+        storage: wide,
+        noteIds: readByFirst.filter((entry) => entry.title?.endsWith("a")).map((entry) => entry.id),
+        rebuild: async () => ({ status: "deferred" as const, error: "test" }) as never,
+      });
+      const afterApply = await readWide(firstBatch.next!);
+      assert.equal(afterApply.next, null);
+      const unread = (await wide.listNotes({ skipInvalid: true }))
+        .map((entry) => entry.title ?? "")
+        .filter((title) => !firstSeen.includes(title));
+      assert.deepEqual(
+        [...seen].sort(),
+        unread.sort(),
+        "after an apply, the next batch reads exactly what the first did not",
+      );
+      assert.equal(seen.length, 4);
     },
     [() => releaseHost(), () => rm(dataDir, { recursive: true, force: true })],
   );

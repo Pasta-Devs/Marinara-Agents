@@ -311,6 +311,71 @@ async function main() {
         personId: mira.id,
       }));
       assert.ok(!ltmRelationshipLinksApplyRequestSchema.safeParse({ links: many }).success);
+
+      // More places than one run reads: `after: next` reads the rest, and the name matches stay with the first batch.
+      const wide = new LongTermMemoryStorage(join(dataDir, "wide"));
+      await wide.initializeLtmStore();
+      for (let chat = 0; chat < 14; chat += 1) {
+        const scope = { chatId: `wide-${chat}`, chatIds: [`wide-${chat}`] };
+        await wide.createNote(note("character", `Person ${chat}`, `Lives in ${chat}.`, scope));
+        await wide.createNote(note("relationship", `Bond ${chat}`, `A bond in ${chat}.`, scope));
+      }
+      await wide.createNote(note("character", "Wren", "A weaver.", { chatId: "wide-0", chatIds: ["wide-0"] }));
+      await wide.createNote(note("relationship", "Wren & Bond", "Close.", { chatId: "wide-0", chatIds: ["wide-0"] }));
+      let seen: string[] = [];
+      const readWide = (after?: string) =>
+        previewLtmRelationshipLinks({
+          root,
+          storage: wide,
+          languageModel: model as never,
+          after,
+          complete: async (messages) => {
+            const block = messages[1]!.content.split("Relationships:\n")[1]!;
+            seen.push(...block.split("\n").map((line) => line.split(" | ")[1]!));
+            return '{"links":[]}';
+          },
+        });
+      const firstBatch = await readWide();
+      assert.deepEqual([typeof firstBatch.next, firstBatch.truncated], ["string", true]);
+      const firstSeen = [...seen];
+      assert.equal(firstBatch.suggestions.filter((suggestion) => suggestion.origin === "name").length, 1);
+      const secondBatch = await readWide(firstBatch.next!);
+      assert.deepEqual([secondBatch.next, secondBatch.truncated], [null, false]);
+      assert.equal(secondBatch.suggestions.length, 0, "name matches are not repeated in a later batch");
+      assert.equal(new Set(seen).size, 14, "each relationship the model reads is read exactly once");
+      assert.equal(seen.length, 14);
+      assert.equal(firstBatch.checked + secondBatch.checked, 15, "the name match plus every relationship read");
+      assert.equal((await readWide("not a cursor from this check")).total, 15, "an unknown cursor does not throw");
+
+      // Apply links relationships the first batch read: the next call still reads exactly what the first did not.
+      seen = [];
+      const wideNotes = await wide.listNotes({ skipInvalid: true });
+      const links = firstSeen.map((title) => ({
+        relationshipId: wideNotes.find((entry) => entry.title === title)!.id,
+        personId: wideNotes.find((entry) => entry.title === `Person ${title.slice(5)}`)!.id,
+      }));
+      assert.equal(links.length, 12);
+      const linked = await applyLtmRelationshipLinks({
+        root,
+        storage: wide,
+        links,
+        rebuild: async () => ({ status: "deferred" as const, error: "test" }) as never,
+      });
+      assert.equal(linked.linked.length, 12);
+      const afterApply = await readWide(firstBatch.next!);
+      assert.equal(afterApply.next, null);
+      const unread = wideNotes
+        .filter(
+          (entry) =>
+            entry.type === "relationship" && entry.title?.startsWith("Bond ") && !firstSeen.includes(entry.title),
+        )
+        .map((entry) => entry.title ?? "");
+      assert.deepEqual(
+        [...seen].sort(),
+        unread.sort(),
+        "after an apply, the next batch reads exactly what the first did not",
+      );
+      assert.equal(seen.length, 2);
     },
     [() => releaseHost(), () => rm(dataDir, { recursive: true, force: true })],
   );

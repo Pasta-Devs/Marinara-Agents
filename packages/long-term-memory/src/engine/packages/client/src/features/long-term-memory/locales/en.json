@@ -846,6 +846,7 @@
   "ui.longTermMemory.tidy.applyOne": "Archive {{count}} memory",
   "ui.longTermMemory.tidy.applyOther": "Archive {{count}} memories",
   "ui.longTermMemory.tidy.checked": "Checked {{checked}} of {{total}} memories.",
+  "ui.longTermMemory.tidy.nextBatch": "Check the next batch",
   "ui.longTermMemory.tidy.scopeUses": "Uses {{connection}}.",
   "ui.longTermMemory.tidy.scopeOne": "Checks {{count}} memory.",
   "ui.longTermMemory.tidy.scopeOther": "Checks {{count}} memories.",

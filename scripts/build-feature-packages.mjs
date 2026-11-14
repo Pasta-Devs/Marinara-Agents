@@ -587,7 +587,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.6.0",
+    version: "1.6.1",
     // ponytail: Engine 2.5.2 is the newest release and predates Capability API 1.820, so a version cannot tell an Engine
     // with it from one without; the capabilityApi declaration is what makes an older Engine refuse this package. Raise
     // minEngineVersion to the first Engine release that carries 1.820 once it exists.

@@ -15,16 +15,19 @@ import { rebuildAfterMutation } from "../routes/shared.js";
 import { LtmServiceError } from "../service-error.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
 import {
+  byPlan,
   defaultComplete,
+  MAX_CHUNKS,
   oneLine,
   placeKey,
+  planPosition,
   summarizeRebuild,
+  takeBatch,
   type LtmTidyComplete,
   type TidyMessage,
 } from "./tidy.js";
 
 const MAX_CHUNK_RELATIONSHIPS = 40;
-const MAX_CHUNKS = 12;
 const MAX_BODY_CHARS = 600;
 const MAX_PERSON_CHARS = 200;
 const MAX_PEOPLE = 100;
@@ -44,7 +47,6 @@ const linkSchema = z.object({ relationship: z.string(), people: z.array(z.string
 
 const norm = (text: string) => oneLine(text).toLowerCase();
 const placeOf = (note: LtmNote) => JSON.stringify(placeKey(note));
-const byAge = (a: LtmNote, b: LtmNote) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 const refOf = (note: LtmNote) => ({ id: note.id, title: oneLine(note.title ?? "") || "Untitled memory" });
 const textOf = (note: LtmNote, max: number) =>
   oneLine(
@@ -92,13 +94,15 @@ function parseLinks(content: string, relationships: LtmNote[], people: LtmNote[]
 
 /**
  * What a link check would do before the first model call: the name matches that need no model, and the chunks the
- * model reads for the rest. The preview and the scope both take their numbers from here.
+ * model reads for the rest. The preview and the scope both take their numbers from here. The order is the place, then
+ * the relationship id, never a place's size, so it holds when relationships are linked between batches. With `after`,
+ * only the relationships after that position are chunked; every chunk still carries the whole place's people.
  */
-async function planLtmRelationshipLinks(storage: LongTermMemoryStorage) {
+async function planLtmRelationshipLinks(storage: LongTermMemoryStorage, after?: string) {
   const notes = (await storage.listNotes({ skipInvalid: true })).filter((note) => note.status !== "archived");
   const personIds = new Set(notes.filter((note) => note.type === "character").map((note) => note.id));
   const places = new Map<string, Place>();
-  for (const note of [...notes].sort(byAge)) {
+  for (const note of [...notes].sort((a, b) => byPlan(a.id, b.id))) {
     if (note.type !== "character" && note.type !== "relationship") continue;
     // A relationship that already links to a person is left alone; only the unlinked ones are checked.
     if (note.type === "relationship" && note.links.some((link) => personIds.has(link.target))) continue;
@@ -114,7 +118,7 @@ async function planLtmRelationshipLinks(storage: LongTermMemoryStorage) {
   let total = 0;
   let checked = 0;
   let peopleTruncated = false;
-  for (const [key, place] of places) {
+  for (const [key, place] of [...places].sort((a, b) => byPlan(a[0], b[0]))) {
     if (!place.people.length || !place.relationships.length) continue;
     total += place.relationships.length;
     // Names first: a subject, or a name in the title, that matches exactly one person memory needs no model.
@@ -149,6 +153,7 @@ async function planLtmRelationshipLinks(storage: LongTermMemoryStorage) {
     let chunk: LtmNote[] = [];
     let chars = 0;
     for (const relationship of rest) {
+      if (after !== undefined && planPosition(key, relationship.id) <= after) continue;
       const size = textOf(relationship, MAX_BODY_CHARS).length + (relationship.title ?? "").length;
       if (chunk.length && (chunk.length >= MAX_CHUNK_RELATIONSHIPS || chars + size > MAX_CHUNK_CHARS)) {
         queue.push({ relationships: chunk, people, key });
@@ -160,9 +165,7 @@ async function planLtmRelationshipLinks(storage: LongTermMemoryStorage) {
     }
     if (chunk.length) queue.push({ relationships: chunk, people, key });
   }
-  queue.sort((a, b) => b.relationships.length - a.relationships.length || a.key.localeCompare(b.key));
-  const processed = queue.slice(0, MAX_CHUNKS);
-  return { suggestions, queue, processed, total, checked, peopleTruncated };
+  return { suggestions, queue, total, checked, peopleTruncated };
 }
 
 /**
@@ -170,8 +173,8 @@ async function planLtmRelationshipLinks(storage: LongTermMemoryStorage) {
  * the chunks the model reads. Reads notes only; the model is not called.
  */
 export async function scopeLtmRelationshipLinks(options: { storage: LongTermMemoryStorage }) {
-  const { processed, checked } = await planLtmRelationshipLinks(options.storage);
-  return { count: processed.reduce((sum, chunk) => sum + chunk.relationships.length, checked) };
+  const { queue, checked } = await planLtmRelationshipLinks(options.storage);
+  return { count: queue.slice(0, MAX_CHUNKS).reduce((sum, chunk) => sum + chunk.relationships.length, checked) };
 }
 
 export async function previewLtmRelationshipLinks(options: {
@@ -180,13 +183,18 @@ export async function previewLtmRelationshipLinks(options: {
   languageModel: PackageLanguageModel;
   signal?: AbortSignal;
   complete?: LtmLinksComplete;
+  /** Position to carry on after; a check cut short at the call limit returns it as `next`. */
+  after?: string;
 }): Promise<LtmRelationshipLinksPreviewResponse> {
   const { root, languageModel, signal } = options;
   const complete = options.complete ?? defaultComplete(languageModel);
-  const plan = await planLtmRelationshipLinks(options.storage);
-  const { queue, processed, total, peopleTruncated } = plan;
-  const suggestions = [...plan.suggestions];
-  let checked = plan.checked;
+  const plan = await planLtmRelationshipLinks(options.storage, options.after);
+  const { queue, total, peopleTruncated } = plan;
+  const { processed, next } = takeBatch(queue, (chunk) => planPosition(chunk.key, chunk.relationships.at(-1)!.id));
+  // The matches by name need no model call, so they belong to the first batch only; later batches carry on from there.
+  const first = options.after === undefined;
+  const suggestions = first ? [...plan.suggestions] : [];
+  let checked = first ? plan.checked : 0;
   let failedChunks = 0;
   for (const chunk of processed) {
     signal?.throwIfAborted();
@@ -258,7 +266,8 @@ export async function previewLtmRelationshipLinks(options: {
   return ltmRelationshipLinksPreviewResponseSchema.parse({
     total,
     checked,
-    truncated: queue.length > processed.length || peopleTruncated,
+    truncated: next !== null || peopleTruncated,
+    next,
     failedChunks,
     suggestions,
   });
