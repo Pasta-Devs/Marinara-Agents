@@ -199,6 +199,9 @@ export function paintSlot<T>(connectionId: string, task: () => Promise<T>, lane:
 
 // ── Repainting a picture that is already there ──
 
+/** A paint record's picture, or an Album entry's (a couple set's pair portrait is kept as one). */
+type Picture = Pick<Paint, "url" | "ref">;
+
 /**
  * The record an explicit repaint starts on (0.24.0): pending, keeping the picture it showed, so it is still on screen
  * while the new one paints and still there if it fails, as a base look's portrait stays until its new one is saved.
@@ -216,7 +219,7 @@ export function withKeptPicture(art: Paint, replaced: Paint | null | undefined):
 }
 
 /** True when two records show the same picture (a banner and its featured 5★ share one). */
-export function samePicture(a: Paint | null | undefined, b: Paint | null | undefined): boolean {
+export function samePicture(a: Picture | null | undefined, b: Picture | null | undefined): boolean {
   return !!a && !!b && ((!!a.ref && a.ref === b.ref) || (!!a.url && a.url === b.url));
 }
 
@@ -226,8 +229,8 @@ export function samePicture(a: Paint | null | undefined, b: Paint | null | undef
  */
 export async function releaseReplacedImage(
   deps: ArtDeps,
-  replaced: Paint | null | undefined,
-  saved: Paint | null | undefined,
+  replaced: Picture | null | undefined,
+  saved: Picture | null | undefined,
 ): Promise<void> {
   const ref = replaced?.ref;
   if (!ref?.startsWith(GALLERY_REF_PREFIX) || ref === saved?.ref) return;

@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Wardrobe. Complete looks only, for each love interest and for the player (Me): wear one at home,
 // show one of hers to a love interest (their one line about it, voiced; the first show of a look pays affection), and
-// the couple sets a look of hers makes with one of theirs, with a pair portrait once both are painted. A love
+// the couple sets a look of hers makes with one of theirs, with a pair portrait once both are painted (#2299: and its
+// Repaint once it is painted, the old portrait shown until the new one lands). A love
 // interest is named or referred to by their own pronouns, never "him" by default.
 // ──────────────────────────────────────────────
 // Routes (S/routes/wardrobe.ts): GET /runs/:run/wardrobe → WardrobeView; POST .../wardrobe/wear {owner, look} →
@@ -622,8 +623,11 @@ function CoupleCard({
   const li = view.lis.find((item) => item.id === couple.his.li) ?? null;
   const target = pairTarget(runKey, couple);
   const busy = actions.busy.has(target.id);
+  // #2299: a kept portrait stays on screen while a repaint paints it again and after that failed.
   const pair = readyArt(couple.pair);
   const painting = couple.pair?.state === "pending" || busy;
+  const repaint = couple.pair?.state === "ready";
+  const retry = couple.pair?.state === "failed" || couple.pair?.state === "stopped";
   // "Paint a pair portrait" leaves while it paints: focus goes to the set's title, then the status under it is read.
   const onFocus = useRefocus(`${painting}|${!!pair}`, () => titleRef.current);
   const half = (side: "his" | "hers") => {
@@ -677,7 +681,8 @@ function CoupleCard({
           src={pair}
           alt={t("ui.otomeForge.wardrobe.pairAlt", { name: li?.name ?? "" })}
         />
-      ) : painting ? (
+      ) : null}
+      {painting ? (
         <p className="of-hint" role="status">
           {t("ui.otomeForge.wardrobe.pairPainting")}
         </p>
@@ -692,13 +697,15 @@ function CoupleCard({
             }}
           >
             <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
-            {couple.pair?.state === "failed" || couple.pair?.state === "stopped"
+            {retry
               ? t("ui.otomeForge.wish.paintRetry")
-              : t("ui.otomeForge.wardrobe.paintPair")}
+              : repaint
+                ? t("ui.otomeForge.wardrobe.repaintPair")
+                : t("ui.otomeForge.wardrobe.paintPair")}
           </button>
           <CostHint images={1} />
         </div>
-      ) : !couple.complete ? (
+      ) : pair ? null : !couple.complete ? (
         <p className="of-hint">{t("ui.otomeForge.wardrobe.coupleHint")}</p>
       ) : null}
       {actions.errors[target.id] ? (
