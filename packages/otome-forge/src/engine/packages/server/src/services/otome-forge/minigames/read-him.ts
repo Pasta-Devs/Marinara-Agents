@@ -362,9 +362,12 @@ export async function recalledLine(
       query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
-    // #2066: the newest small memory he holds (recalls come in story order).
-    const top = result.status.phase === "ready" ? (result.recalls?.at(-1)?.content ?? "").trim() : "";
-    return top ? sliceTextToTokenBudget(top, RECALLED_TOKENS) : "";
+    // #2066: the newest small memory he holds (recalls come in story order); a chapter's says which it is (its tag).
+    const newest = result.status.phase === "ready" ? result.recalls?.at(-1) : undefined;
+    const top = newest?.content.trim();
+    if (!top) return "";
+    const text = sliceTextToTokenBudget(top, RECALLED_TOKENS);
+    return newest?.tag ? `${newest.tag} ${text}` : text;
   } catch {
     return "";
   }

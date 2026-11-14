@@ -108,7 +108,7 @@ import {
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
-import { mayKnow } from "../story/canon.js";
+import { mayKnow, tagText, type StorySource } from "../story/canon.js";
 import { readMemorySources } from "./sources.js";
 import {
   HEADROOM_TOKENS,
@@ -308,6 +308,8 @@ export interface RecallItem {
   title: string;
   content: string;
   order: number;
+  /** A chapter's tag on its own ("[After chapter 3]", S/story/canon.ts storyTags), for a reader that drops the title. */
+  tag?: string;
 }
 
 /**
@@ -688,10 +690,15 @@ export function createOtomeMemory({
       const saved = sideStories.length
         ? savedStory((await documents.getById(OTOME_FORGE_PACKAGE_ID, memoryId(options.runId)))?.data)
         : null;
+      // Each under its chapter's tag, the one its source carries (S/story/canon.ts chapterTags): the same as every
+      // other block of the prompt gives that chapter.
       const told = sideStories.flatMap((source): RecallItem[] => {
         const key = JSON.stringify([source.kind, source.id]);
         const summary = saved?.covered.has(key) ? saved.summaries.get(key) : undefined;
-        return summary ? [{ id: source.id, title: source.title, content: summary, order: source.order ?? 0 }] : [];
+        const tag = tagText((source as StorySource).tag);
+        if (!summary) return [];
+        const title = tag ? `${tag} ${source.title}` : source.title;
+        return [{ id: source.id, title, content: summary, order: source.order ?? 0, ...(tag ? { tag } : {}) }];
       });
       // A recall pool that fails only loses its memories; the prompt still goes out with everything else.
       const recalls = await recallPool(options, sources, pooled, told).catch((error): null => {
