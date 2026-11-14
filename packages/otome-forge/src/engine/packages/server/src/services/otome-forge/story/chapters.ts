@@ -23,7 +23,8 @@
 // them.
 // Long-term recall (0.19.0, S/story/canon.ts recallText): the plan chooses the earlier chapters its story context
 // recalls in detail, by its arc's purpose for it, its Lead and cast, those thoughts and how the previous chapter ended,
-// after its arc is known, and saves them on the chapter (`recalled`), so each of its scenes sends exactly those.
+// after its arc is known, among the chapters its Lead led (#2304: main chapters they led, their route and repair), and
+// saves them on the chapter (`recalled`), so each of its scenes sends exactly those.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   ArcJudgment,
@@ -555,7 +556,9 @@ export async function planNextChapter(
       // As every scene of the chapter is, so the story context stays theirs (S/story/beats.ts generateBeat).
       lastStory: true,
       query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
-      // Long-term recall (see the header): the earlier chapters this one is about, saved below for its scenes.
+      // Long-term recall (see the header): the earlier chapters this one is about, among those its Lead led (#2304),
+      // saved below for its scenes.
+      recallLed: lead,
       chooseBy: [
         arc.plan.find((entry) => entry.n === number)?.purpose ?? "",
         others.length ? `${leadName} leads, with ${others.join(", ")}.` : `${leadName} leads.`,
