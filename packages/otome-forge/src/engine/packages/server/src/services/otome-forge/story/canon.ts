@@ -407,13 +407,15 @@ function lastStoryTitle({ chapter, owner, guests }: Completed, protagonist: stri
  * Where each completed chapter falls in the story, as the prompts tag it before its title (the maintainer's, 2026-11-10
  * and 2026-11-14: every summary says which chapter it is, so the model knows what happened when):
  * - a main chapter is "[Chapter 3]";
- * - a Character Story (a Memory's, a Moment or a first-wear scene) is "[Character Story 2, after chapter 3]", numbered in
- *   the order they were finished; a bond story, a figurine scene and a birthday scene are none (isFigurineOrBirthday);
- * - every other chapter (route, repair, date, his side, bond, figurine, birthday) is "[After chapter 3]", or "[Before
- *   chapter 1 ended]" while no main chapter was done when it was.
+ * - a Character Story (a Memory's, a Moment, a first-wear scene or a bond story, S/story/bond.ts) is "[Character Story
+ *   2, after chapter 3]", numbered in the order they were finished; a figurine or birthday scene is none
+ *   (isFigurineOrBirthday: neither counts toward the story);
+ * - every other chapter (route, repair, date, his side, figurine, birthday) is "[After chapter 3]", or "[Before chapter
+ *   1 ended]" while no main chapter was done when it was.
  * `chapters` are every completed chapter's key and story order (completedChapters, or the memory's sources), oldest
- * first. Only the prompts read the tags: titleOf and the titles saved with the memory stay as they are (they feed the
- * summary prompt, the kit's fingerprints and the timeline's entries), so every chapter already saved is tagged too.
+ * first; recallText gives his side its chapter's order. Only the prompts read the tags: titleOf and the titles saved
+ * with the memory stay as they are (they feed the summary prompt, the kit's fingerprints and the timeline's entries),
+ * so every chapter already saved is tagged too.
  */
 export function storyTags(chapters: Iterable<{ key: string; order: number }>): Map<string, StoryTag> {
   const tags = new Map<string, StoryTag>();
@@ -427,7 +429,7 @@ export function storyTags(chapters: Iterable<{ key: string; order: number }>): M
     // A chapter that is not a main one sorts after the main chapters done before it (completedChapters).
     const done = Math.floor(order / 10000);
     const where = done > 0 ? `after chapter ${done}` : "before chapter 1 ended";
-    const story = isItemStoryKey(key) && !key.startsWith("story-bond-") && !isFigurineOrBirthday(key);
+    const story = isItemStoryKey(key) && !isFigurineOrBirthday(key);
     tags.set(key, story ? { name: `Character Story ${++stories}`, where } : { where });
   }
   return tags;
@@ -704,7 +706,15 @@ export async function recallText(
   const { chapters, protagonist } = story;
   // Each chapter's tag (storyTags): from every completed chapter, whoever the prompt is for, so a cached story context
   // stays the same whatever the call's cast.
-  const tags = storyTags(chapters.map(({ chapter, order }) => ({ key: chapter.key, order })));
+  // His side (#2155) is tagged where the chapter it tells again falls, not where it was read: an unread side stays on
+  // offer, so it may be read chapters later (completedChapters sorts it by its read).
+  const orders = new Map(chapters.map(({ chapter, order }) => [chapter.key, order]));
+  const tags = storyTags(
+    chapters.map(({ chapter, order }) => {
+      const ref = chapter.hisSide?.ref;
+      return { key: chapter.key, order: (ref && orders.get(ref.slice(0, ref.lastIndexOf("/")))) ?? order };
+    }),
+  );
   const heading = (completed: Completed) => tagged(tags.get(completed.chapter.key), titleOf(completed));
   // The last Character Story goes in whoever the prompt is for (#2126, see the header).
   const lastStory = withLastStory ? lastStoryOf(chapters) : undefined;

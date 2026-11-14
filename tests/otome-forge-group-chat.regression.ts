@@ -709,7 +709,7 @@ test("P17g recalls as the group: no date, Claw round, own chapter in full or wha
   }));
   const PRIVATE = [
     "KAI-ROUTE-SCENE",
-    "Previous chapter in full: Kai",
+    "Previous chapter in full: [After chapter 1] Kai",
     "KAI-DATE-SCENE",
     "Jellyfish Hour",
     "The claw machine with Kai",
