@@ -564,6 +564,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.17",
+          "date": "2026-11-14",
+          "notes": "- Fixed: \"Edit image instructions\" on a character's Noodle profile opens the character's Selfie instructions in the Images tab, where Marinara Engine keeps them now, instead of the Convo tab. Needs a Marinara Engine with capability API 1.826 or newer. (#2296)",
+          "highlight": false
+        },
+        {
           "version": "1.5.16",
           "date": "2026-11-13",
           "notes": "- Fixed: A profile now loads and pages all of that account's posts, not only the ones already loaded in the main timeline. Activity links to older posts now open the post, or show an error when it is gone. The Likes tab loads every post the account liked and has a \"Load more\" button. Activity also covers older posts that got recent likes, replies and reposts, and older posts that mention you. (#2273)",
@@ -675,12 +681,6 @@
           "version": "1.4.0",
           "date": "2026-10-01",
           "notes": "- You can now translate posts and comments, your own included. Pick Translate in a post's menu or under a comment, and use the same button to hide it again. Noodle uses the translator defaults you saved in a chat's Translation settings, or Google Translate into English if you have not saved any.\n- In Chrome on Android, adding a picture to a post or comment now offers the camera as well as your files. The Marinara Android app doesn't offer the camera yet.\n- Noodle's description now says what it is in plain words.",
-          "highlight": true
-        },
-        {
-          "version": "1.3.1",
-          "date": "2026-09-30",
-          "notes": "- When Noodle cannot load, it now says so instead of showing an empty timeline. If Marinara Engine blocked it because this device has no Admin Secret, it explains how to set one.",
           "highlight": true
         }
       ]
