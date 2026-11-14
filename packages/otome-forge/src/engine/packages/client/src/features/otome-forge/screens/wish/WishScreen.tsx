@@ -48,6 +48,7 @@ import {
   FOUR_STAR_RATE,
   HARD_PITY,
   SOFT_PITY_FROM,
+  isLookKind,
   wishCost,
   type BannerView,
   type ItemView,
@@ -134,6 +135,8 @@ interface WishScreenProps {
   /** Opens a Character Story, a Moment or a first-wear beat in the reader. */
   onOpenStory: (key: string) => void;
   onOpenWardrobe: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
 }
 
 interface Sequence {
@@ -143,7 +146,7 @@ interface Sequence {
   phase: { at: "letter" } | { at: "reveal"; index: number } | { at: "results" };
 }
 
-export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishScreenProps) {
+export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe, onOpenDate }: WishScreenProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -316,6 +319,7 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
           onClose={() => setSequence(null)}
           onOpenStory={onOpenStory}
           onOpenWardrobe={onOpenWardrobe}
+          onOpenDate={onOpenDate}
         />
       ) : null}
     </div>
@@ -486,7 +490,8 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
   const number = new Intl.NumberFormat(locale);
   const li = view.lis.find((item) => item.id === banner.featuredLi) ?? null;
   const bannerTitle = banner.title || banner.five.title;
-  const look = banner.kind !== "memories";
+  // A wardrobe banner's art is a look on its wearer; a Memory's is a key image and (#2303) a date's its place.
+  const look = isLookKind(banner.five.kind);
   const picture = readyPicture(banner) ?? readyPicture(banner.five);
   const art = useSpriteDisplay(picture?.url ?? null, look && !picture?.cut);
   const [expanded, setExpanded] = useState(false);
@@ -596,7 +601,14 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
               </span>
             ) : null}
           </p>
-          {li ? <p className="of-banner-who">{t("ui.otomeForge.wish.with", { name: li.name })}</p> : null}
+          {li && banner.kind !== "dates" ? (
+            <p className="of-banner-who">{t("ui.otomeForge.wish.with", { name: li.name })}</p>
+          ) : null}
+          {banner.five.place ? (
+            <p className="of-banner-who">
+              {t("ui.otomeForge.wish.datePlace", { place: banner.five.place.name, count: banner.five.scenes ?? 1 })}
+            </p>
+          ) : null}
         </div>
       </div>
       {banner.art?.state === "pending" ? (
@@ -720,7 +732,7 @@ function BannerContents({ view, banner }: { view: RunView; banner: BannerView })
                 <li key={item.id} className="of-banner-item">
                   <ItemArt item={item} view={view} />
                   <span className="of-banner-item-name">
-                    {rarity === 3
+                    {rarity === 3 && !item.look
                       ? (view.lis.find((li) => li.id === item.li)?.name ?? item.title)
                       : item.look?.name || item.title}
                   </span>
@@ -943,6 +955,8 @@ interface PullSequenceProps {
   onClose: () => void;
   onOpenStory: (key: string) => void;
   onOpenWardrobe: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
 }
 
 function PullSequence({
@@ -955,6 +969,7 @@ function PullSequence({
   onClose,
   onOpenStory,
   onOpenWardrobe,
+  onOpenDate,
 }: PullSequenceProps) {
   const { t } = useTranslation();
   const audio = useOtomeAudio();
@@ -1008,6 +1023,7 @@ function PullSequence({
         onDone={onClose}
         onOpenStory={onOpenStory}
         onOpenWardrobe={onOpenWardrobe}
+        onOpenDate={onOpenDate}
       />
     );
   }

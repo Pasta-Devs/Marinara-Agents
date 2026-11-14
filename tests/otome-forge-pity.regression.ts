@@ -38,10 +38,13 @@ test("Wish's numbers are pinned", () => {
       refunds: wish.DUPLICATE_REFUNDS,
       counts: wish.PULL_COUNTS,
       sizes: wish.BANNER_SIZES,
+      looks3: wish.WARDROBE_LOOKS3,
+      snapshots: wish.BANNER_KINDS.map(wish.snapshotsOf),
+      scenes: wish.DATE_SCENES,
       costs: [wish.wishCost(1), wish.wishCost(10)],
     },
     {
-      kinds: ["memories", "his-wardrobe", "my-wardrobe"],
+      kinds: ["memories", "his-wardrobe", "my-wardrobe", "dates"],
       days: 14,
       five: 0.015,
       soft: 46,
@@ -51,6 +54,9 @@ test("Wish's numbers are pinned", () => {
       refunds: { 5: 400, 4: 60, 3: 10 },
       counts: [1, 10],
       sizes: { five: 1, four: 3, three: 6 },
+      looks3: 3,
+      snapshots: [6, 3, 3, 6],
+      scenes: { four: { min: 1, max: 3 }, five: { min: 4, max: 6 } },
       costs: [100, 1000],
     },
   );
@@ -247,6 +253,7 @@ test("pity is per kind, carried over to the next banner, and shared by Echoes", 
     memories: { count: 11, since4: 1 },
     "his-wardrobe": { count: 0, since4: 0 },
     "my-wardrobe": { count: 0, since4: 0 },
+    dates: { count: 0, since4: 0 },
   });
   // A wardrobe pull moves only its own counter.
   await pullWish(t.deps, t.runId, { banner: "his-wardrobe-0", count: 1, random: always(0.5) });
@@ -258,7 +265,7 @@ test("pity is per kind, carried over to the next banner, and shared by Echoes", 
   assert.deepEqual(opened.body.failed, []);
   assert.deepEqual(
     opened.body.wish.echoes.map((banner: { key: string }) => banner.key),
-    ["my-wardrobe-0", "his-wardrobe-0", "memories-0"],
+    ["dates-0", "my-wardrobe-0", "his-wardrobe-0", "memories-0"],
   );
   assert.equal(opened.body.wish.pity.memories.fiveIn, 49);
   const echo = await pullWish(t.deps, t.runId, { banner: "memories-0", count: 1, random: always(0.5) });

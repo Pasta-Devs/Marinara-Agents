@@ -271,7 +271,11 @@ import {
 import { STICKERS_PER_LI } from "../../../../client/src/features/otome-forge/shared/stickers.js";
 import { NOTICED_WORDS_MAX, SHOW_WORDS_MAX } from "../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import {
+  BANNER_ITEM_KINDS,
   BANNER_SIZES,
+  DATE_SCENES,
+  WARDROBE_LOOKS3,
+  snapshotsOf,
   type BannerKind,
   type Item,
   type ItemLook,
@@ -4960,10 +4964,9 @@ const SEASON_CUES: Record<Season, { month: string; theme: string }> = {
 const KIND_TEXT: Record<BannerKind, string> = {
   memories:
     "MEMORIES: the 5★ is a Memory of the featured love interest (a key image, a 3–5 scene Character Story and one voiced line, all written later from your premise); each 4★ is a one-scene Moment with one love interest of the cast.",
-  "his-wardrobe":
-    "HIS WARDROBE: the 5★ is a complete new look for the featured love interest; each 4★ is a complete look for one of the other love interests.",
-  "my-wardrobe":
-    "MY WARDROBE: the 5★ is a complete look for the protagonist that pairs with the featured love interest's look named below as a couple set; each 4★ is another complete look for the protagonist.",
+  "his-wardrobe": `HIS WARDROBE: the 5★ is a complete new look for the featured love interest; each 4★ is a complete look for one of the other love interests; each of the ${WARDROBE_LOOKS3} 3★ looks is an everyday look for the featured love interest.`,
+  "my-wardrobe": `MY WARDROBE: the 5★ is a complete look for the protagonist that pairs with the featured love interest's look named below as a couple set; each 4★ is another complete look for the protagonist; each of the ${WARDROBE_LOOKS3} 3★ looks is an everyday look for the protagonist.`,
+  dates: `DATES: each date is one the player plays with love interests of their choosing (one, several or all of them), chosen when they play it, so a date is never written for one love interest. The 5★ is a date scenario with events of its own, played as ${DATE_SCENES.five.min} to ${DATE_SCENES.five.max} scenes; each 4★ is a place to go together, played as ${DATE_SCENES.four.min} to ${DATE_SCENES.four.max} scenes.`,
 };
 
 const LOOK_SHAPE = `{"name": "<look name>", "outfitLine": "<English outfit tags>"}`;
@@ -4974,10 +4977,14 @@ const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "
  */
 const memoriesShape = ({ explicit, moments }: { explicit: boolean; moments: boolean }) =>
   `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false, "clothedBrief": "<English, 1–4 sentences, only when explicit is true>"' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
+/** #2303: a wardrobe banner's 3★ looks. */
+const LOOKS3_SHAPE = `"looks": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×${WARDROBE_LOOKS3}]`;
+const PLACE_SHAPE = `"place": {"name": "<the place's name>", "tags": "<English place tags>"}`;
 const SHAPES: Record<BannerKind, string> = {
   memories: memoriesShape({ explicit: false, moments: false }),
-  "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
-  "my-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
+  "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], ${LOOKS3_SHAPE}, "snapshots": [${SNAPSHOT_SHAPE} ×${snapshotsOf("his-wardrobe")}]}`,
+  "my-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×3], ${LOOKS3_SHAPE}, "snapshots": [${SNAPSHOT_SHAPE} ×${snapshotsOf("my-wardrobe")}]}`,
+  dates: `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", ${PLACE_SHAPE}, "scenes": ${DATE_SCENES.five.min}}, "four": [{"title": "<title>", "premise": "<1–2 sentences>", ${PLACE_SHAPE}, "scenes": ${DATE_SCENES.four.min}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
 };
 
 /**
@@ -4988,6 +4995,13 @@ const PREMISE_HEAT: Partial<Record<World["content"]["heat"], string>> = {
   fade: "- Premises span the Heat across the featured Memory and the 4★s: SFW ones, and suggestive ones (desire, tension, a night that fades to black).",
   explicit:
     "- Premises span the Heat across the featured Memory and the 4★s: SFW ones, suggestive ones (desire, tension, a near miss) and explicit ones (sex between the adults, written on the page when the scene is written).",
+};
+
+/** #2303: above SFW Heat, how far the dates go, mixed across the 5★ and the 4★s, as PREMISE_HEAT for Memories. */
+const DATE_HEAT: Partial<Record<World["content"]["heat"], string>> = {
+  fade: "- Dates span the Heat across the 5★ and the 4★s: SFW ones, and suggestive ones (desire, tension, an evening that fades to black).",
+  explicit:
+    "- Dates span the Heat across the 5★ and the 4★s: SFW ones, suggestive ones (desire, tension, a near miss) and explicit ones (sex between the adults, written on the page when the scenes are written).",
 };
 
 /**
@@ -5091,6 +5105,13 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       "RULES",
       "- A premise is a situation: where they are, what is happening, what each of them wants from it. Never a plot turn, a reveal, a confession or anything the main story has not reached. How close they are follows their current stage; the scene itself is written later, when the item is first opened.",
       kind === "memories" ? (PREMISE_HEAT[world.content.heat] ?? "") : "",
+      kind === "dates" ? (DATE_HEAT[world.content.heat] ?? "") : "",
+      kind === "dates"
+        ? `- A date's premise is its situation for whoever comes: never name or assume who that is, how many they are or their gender. The 5★'s premise also sets the events of its own that happen on it. "scenes" is how many scenes it is played as: ${DATE_SCENES.five.min}–${DATE_SCENES.five.max} for the 5★, ${DATE_SCENES.four.min}–${DATE_SCENES.four.max} for each 4★, as much as it holds.`
+        : "",
+      kind === "dates"
+        ? `- A place's name is how this world names it, in ${world.language || "English"}. Its tags are English, visual-only, comma-separated tags for a picture of the place with nobody in it (setting, light, time of day, weather). Every date goes somewhere different.`
+        : "",
       `- Titles, premises, look names and Snapshots are written in ${world.language || "English"}. Outfit lines and the key image brief are always English.`,
       "- An outfit line is English, visual-only, comma-separated tags for one complete look: clothes, shoes and accessories. Never the body, face, hair, pose, background or other people.",
       world.images.rating === "sfw"
@@ -5104,8 +5125,8 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       moments
         ? `- Each 4★'s cgBrief is one to four English sentences for its Moment's illustration: the place, light and what they are doing, never anyone's looks. ${BRIEF_STAGING} Whatever its premise holds, the picture follows this: ${momentRule} cgCast names only that love interest and, when shown, the protagonist.`
         : "",
-      `- Exactly ${BANNER_SIZES.four} entries in "four" and ${BANNER_SIZES.three} in "snapshots". Use the love interest ids given below for "li".`,
-      `- Snapshots: 2–3 sentences each, a small everyday moment between one love interest and the protagonist, in the third person. Spread them across the cast, at least two with ${featured.name}. Each one stays within what that love interest has seen or been told.`,
+      `- Exactly ${BANNER_SIZES.four} entries in "four"${BANNER_ITEM_KINDS[kind].looks3 ? `, ${WARDROBE_LOOKS3} in "looks"` : ""} and ${snapshotsOf(kind)} in "snapshots". Use the love interest ids given below for "li".`,
+      `- Snapshots: 2–3 sentences each, a small everyday moment between one love interest and the protagonist, in the third person. Spread them across the cast, at least ${snapshotsOf(kind) >= BANNER_SIZES.three ? "two" : "one"} with ${featured.name}. Each one stays within what that love interest has seen or been told.`,
       `- Each Snapshot's cgBrief illustrates its saved vignette: the actual place, light and action, never an invented plot turn or anyone's looks. ${BRIEF_STAGING} Write the brief in English; cgCast names only that love interest and, when shown, the protagonist. Its picture stays clothed and within the Snapshot's SFW contract.`,
       "- Every love interest keeps their own voice, wants and mask; tenderness before stage 4 costs them something.",
       "- New ideas only: never repeat an earlier banner's title or situation.",
@@ -5123,8 +5144,9 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
 
   const cast = units.map((unit) => {
     const liState = sharedState(state.lis[unit.id] ?? defaultLiState());
-    // Their tastes can shape a Character Story's premise; a wardrobe banner plans looks, which they have no part in.
-    const tastes = kind === "memories" ? intimacyLine(world, unit) : "";
+    // Their tastes can shape a Character Story's or a date's premise; a wardrobe banner plans looks, which they have no
+    // part in.
+    const tastes = kind === "memories" || kind === "dates" ? intimacyLine(world, unit) : "";
     return [`id ${unit.id}: ${sharedCard(unit, liState)}`, tastes, betweenYou(unit, liState)]
       .filter(Boolean)
       .join("\n");

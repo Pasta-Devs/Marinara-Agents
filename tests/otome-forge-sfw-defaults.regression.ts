@@ -122,7 +122,7 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
   const fight = node({ kind: "confrontation", cg: true });
   const close = node({ kind: "closer", cg: true });
   const arc = { world, player, units, state, li: KAI, memory: "" };
-  const banner = (kind: "memories" | "his-wardrobe" | "my-wardrobe") =>
+  const banner = (kind: "memories" | "his-wardrobe" | "my-wardrobe" | "dates") =>
     text(
       bannerPlanMessages({
         kind,
@@ -173,6 +173,7 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
     bannerMemories: banner("memories"),
     bannerHis: banner("his-wardrobe"),
     bannerMine: banner("my-wardrobe"),
+    bannerDates: banner("dates"),
   };
 }
 
@@ -254,9 +255,10 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "49861081dcc45db3",
+  bannerDates: "63cb92272b679d99",
+  bannerHis: "4152bfc91b646eff",
   bannerMemories: "3383bf6abce8a4fa",
-  bannerMine: "6e3372632cf89823",
+  bannerMine: "d86d6605c97bad0d",
   beat: "8b7a95e162545c7d",
   beatWithCg: "bc15cfbe2ef5124e",
   chapterPlan: "42dd694241ff4c94",
@@ -273,10 +275,13 @@ const EXPECTED_ANGST: Record<string, string> = {
 // 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
 // 0.23.0: the affection line reads "of 20" (the bond ranks), so both sets moved again.
 // 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so both sets moved.
+// 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so both sets' bannerHis and
+// bannerMine moved; bannerMemories is unchanged, and bannerDates (the Dates banner) is new.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "5b62b08ce07157ab",
+  bannerDates: "968ce90a1f9164be",
+  bannerHis: "b7295c0a54564baf",
   bannerMemories: "afba92bf75a051b7",
-  bannerMine: "6aef7d64a723b757",
+  bannerMine: "ac66d85d6e1ac63b",
   beat: "db7ff607a8c2ac4e",
   beatWithCg: "0431170b2b0a35a2",
   chapterPlan: "fb82db1eb1efc02d",

@@ -6,7 +6,7 @@
 // ──────────────────────────────────────────────
 import { useRef, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { BookHeart, History, Shirt, Sparkles, Store, type LucideIcon } from "lucide-react";
+import { BookHeart, History, Shirt, Sparkles, Store, Wine, type LucideIcon } from "lucide-react";
 import type { BannerKind } from "../../shared/wish";
 
 interface TabListProps<T extends string> {
@@ -99,12 +99,13 @@ export function TabList<T extends string>({
 }
 
 export type WishTab = BannerKind | "echoes" | "shop";
-export const WISH_TABS: readonly WishTab[] = ["memories", "his-wardrobe", "my-wardrobe", "echoes", "shop"];
+export const WISH_TABS: readonly WishTab[] = ["memories", "his-wardrobe", "my-wardrobe", "dates", "echoes", "shop"];
 
 const TAB_ICONS: Record<WishTab, LucideIcon> = {
   memories: BookHeart,
   "his-wardrobe": Shirt,
   "my-wardrobe": Sparkles,
+  dates: Wine,
   echoes: History,
   shop: Store,
 };
@@ -118,9 +119,11 @@ export function tabLabel(t: ReturnType<typeof useTranslation>["t"], tab: WishTab
         : t("ui.otomeForge.wish.tabTheirWardrobe")
       : tab === "my-wardrobe"
         ? t("ui.otomeForge.wish.tabMyWardrobe")
-        : tab === "shop"
-          ? t("ui.otomeForge.wish.tabShop")
-          : t("ui.otomeForge.wish.tabEchoes");
+        : tab === "dates"
+          ? t("ui.otomeForge.wish.tabDates")
+          : tab === "shop"
+            ? t("ui.otomeForge.wish.tabShop")
+            : t("ui.otomeForge.wish.tabEchoes");
 }
 
 interface BannerTabsProps {

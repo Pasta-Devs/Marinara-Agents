@@ -75,14 +75,24 @@ test("a rotation is floor(days since the world was created / 14), with its first
   assert.equal(wish.parseBannerKey("his-wardrobe-01"), null);
   assert.ok(wish.isItemId("my-wardrobe-3-s6"));
   assert.ok(!wish.isItemId("my-wardrobe-3-s7"));
+  // #2303: the Dates banner and a wardrobe banner's 3★ looks; a wardrobe look stays in the Wardrobe, a date in the Album.
+  assert.deepEqual(wish.parseBannerKey("dates-4"), { kind: "dates", rotation: 4 });
+  assert.ok(wish.isItemId("dates-4-f") && wish.isItemId("his-wardrobe-2-l3") && !wish.isItemId("his-wardrobe-2-l4"));
+  assert.equal(wish.bannerKeyOfItem("my-wardrobe-2-l1"), "my-wardrobe-2");
+  assert.deepEqual(["his-wardrobe-2-l1", "my-wardrobe-2-s1", "dates-2-f", "dates-2-a1"].map(wish.collectionOf), [
+    "wardrobe",
+    "album",
+    "album",
+    "album",
+  ]);
 });
 
-test("a read creates nothing; Wish open creates the rotation's three banners once, even when opened twice at once", async () => {
+test("a read creates nothing; Wish open creates the rotation's four banners once, even when opened twice at once", async () => {
   const t = await wishWorld({ runKey: "r-m4bann01-aaaaaa", images: NO_IMAGES, replies: rotationReplies() });
   const read = await t.call("GET", "/runs/:run/wish");
   assert.equal(read.status, 200);
   assert.deepEqual(read.body.banners, []);
-  assert.deepEqual(read.body.missing, ["memories", "his-wardrobe", "my-wardrobe"]);
+  assert.deepEqual(read.body.missing, ["memories", "his-wardrobe", "my-wardrobe", "dates"]);
   assert.equal(read.body.creating, false);
   assert.equal(t.calls.length, 0, "a read never calls a model");
   assert.equal((await t.store.listRun("banner", t.runId)).length, 0);
@@ -94,7 +104,7 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
   assert.equal(first.status, 200, JSON.stringify(first.body));
   assert.deepEqual(first.body.failed, []);
   assert.deepEqual(second.body.wish.banners, first.body.wish.banners);
-  assert.equal(t.calls.length, 3, "one P20 call per banner");
+  assert.equal(t.calls.length, 4, "one P20 call per banner");
   const view = first.body.wish as wish.WishView;
   assert.deepEqual(
     view.banners.map((banner) => [banner.key, banner.featuredLi, banner.echo]),
@@ -102,9 +112,49 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
       ["memories-0", KAI, false],
       ["his-wardrobe-0", KAI, false],
       ["my-wardrobe-0", KAI, false],
+      ["dates-0", KAI, false],
     ],
   );
   assert.deepEqual(view.missing, []);
+  // #2303: a wardrobe banner's 3★ items are its three looks (the featured love interest's on His Wardrobe, hers on
+  // My Wardrobe), then three Snapshots.
+  const his = view.banners[1]!;
+  assert.deepEqual(
+    his.three.map((item) => [item.id, item.kind, item.li]),
+    [
+      ["his-wardrobe-0-l1", "his-look3", KAI],
+      ["his-wardrobe-0-l2", "his-look3", KAI],
+      ["his-wardrobe-0-l3", "his-look3", KAI],
+      ["his-wardrobe-0-s1", "snapshot3", KAI],
+      ["his-wardrobe-0-s2", "snapshot3", MIR],
+      ["his-wardrobe-0-s3", "snapshot3", SOL],
+    ],
+  );
+  assert.deepEqual(
+    view.banners[2]!.three.slice(0, 3).map((item) => [item.kind, item.li, item.look?.name]),
+    [
+      ["her-look3", null, "Everyday 1"],
+      ["her-look3", null, "Everyday 2"],
+      ["her-look3", null, "Everyday 3"],
+    ],
+  );
+  // #2303: a date is no one's (the player takes whoever they like), with its place and its scenes, 4–6 for the 5★
+  // and 1–3 for each 4★.
+  const dates = view.banners[3]!;
+  assert.deepEqual(
+    [dates.five, ...dates.four].map((item) => [item.kind, item.li, item.place?.name, item.scenes]),
+    [
+      ["date5", null, "The Regatta Pier", 5],
+      ["date4", null, "Night Market", 1],
+      ["date4", null, "Old Observatory", 2],
+      ["date4", null, "Tide Pools", 3],
+    ],
+  );
+  assert.equal(dates.five.premise?.startsWith("The harbour races paper lanterns"), true);
+  assert.deepEqual((await readItem(t.store, t.runId, "dates-0-f"))?.place, {
+    name: "The Regatta Pier",
+    tags: "the regatta pier, evening, lanterns, no people",
+  });
   assert.deepEqual(view.pity.memories, { fiveIn: 60, fourIn: 10 });
   const memories = view.banners[0]!;
   assert.equal(memories.title, "Lantern Vigil");
@@ -138,10 +188,15 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
 
   // P20 for My Wardrobe was told which look it pairs with.
   assert.match(t.calls[2]!.messages[1]!.content, /THIS PAIRS WITH: "Harbour Night"/);
+  // #2303: P20 for the Dates banner plans dates for whoever comes, and asks His Wardrobe for three 3★ looks.
+  const datesPlan = t.calls[3]!.messages[0]!.content;
+  assert.match(datesPlan, /DATES: each date is one the player plays with love interests of their choosing/);
+  assert.match(datesPlan, /never name or assume who that is/);
+  assert.match(t.calls[1]!.messages[0]!.content, /Exactly 3 entries in "four", 3 in "looks" and 3 in "snapshots"/);
   // Opening again once they exist calls no model.
   const again = await t.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(again.body.failed, []);
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
 });
 
 test("a Memories banner's art prompt follows the Image style with a comma, as a wardrobe banner's and a repaint's do", async () => {
@@ -170,7 +225,7 @@ test("a Memories banner's art prompt follows the Image style with a comma, as a 
 });
 
 test("every banner stores a Snapshot's optional English illustration brief without painting unowned rewards", async () => {
-  const kinds = ["memories", "his-wardrobe", "my-wardrobe"] as const;
+  const kinds = ["memories", "his-wardrobe", "my-wardrobe", "dates"] as const;
   const brief = `A quiet shared cup of tea beside the lantern.\nKeep the authored spacing  here. ${"Evening light and the quiet room. ".repeat(150)}FINAL ILLUSTRATION DETAIL.`;
   assert.ok(brief.length > 4000);
   const replies = kinds.map((kind) => {
@@ -202,16 +257,17 @@ test("every banner stores a Snapshot's optional English illustration brief witho
     assert.equal("cg" in banner.three[0], false, "the private image brief stays on the server");
   }
   assert.deepEqual(t.paid, [], "planning and listing Snapshot rewards do not paint their pictures");
-  assert.equal(t.calls.length, 3, "the existing one planner call per banner is enough");
+  assert.equal(t.calls.length, 4, "the existing one planner call per banner is enough");
   await setImages(t.store, t.runId, { connectionId: "conn-image" });
   for (const kind of kinds) {
-    const pulled = await pullWish(t.deps, t.runId, { banner: `${kind}-0`, count: 1, random: () => 0.5 });
+    // #2303: a wardrobe banner's 3★ items are its three looks, then its Snapshots: 0.99 picks the last of them.
+    const pulled = await pullWish(t.deps, t.runId, { banner: `${kind}-0`, count: 1, random: () => 0.99 });
     assert.equal(pulled.results[0]!.item.kind, "snapshot3");
     assert.equal(pulled.results[0]!.item.art, null);
   }
   await t.call("GET", "/runs/:run/wish");
   assert.deepEqual(t.paid, [], "wishes and list reads do not paint even with image generation enabled");
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
 });
 
 test("an explicit Memory's art is painted explicit only under Explicit Heat and the Explicit rating (#1951)", async () => {
@@ -430,17 +486,17 @@ test("a pull succeeds with a model that throws if called, and an Echo pulls on t
   const pulled = await t.call("POST", "/runs/:run/wish/pull", { banner: "memories-0", count: 10 });
   assert.equal(pulled.status, 200, JSON.stringify(pulled.body));
   assert.equal(pulled.body.results.length, 10);
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
 
   // Fourteen days on: rotation 1 opens with Mireille (featured least recently) and rotation 0 waits in Echoes.
   await ageWorld(t, 15);
   const stale = await t.call("GET", "/runs/:run/wish");
-  assert.deepEqual(stale.body.missing, ["memories", "his-wardrobe", "my-wardrobe"], "not created by a read");
-  assert.equal(stale.body.echoes.length, 3);
-  assert.equal(t.calls.length, 3);
+  assert.deepEqual(stale.body.missing, ["memories", "his-wardrobe", "my-wardrobe", "dates"], "not created by a read");
+  assert.equal(stale.body.echoes.length, 4);
+  assert.equal(t.calls.length, 4);
   const echo = await t.call("POST", "/runs/:run/wish/pull", { banner: "his-wardrobe-0", count: 1 });
   assert.equal(echo.status, 200, "an Echo is pullable");
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
 });
 
 test("the next rotation features whoever was featured least recently, and My Wardrobe pairs with His Wardrobe", async () => {
@@ -458,11 +514,13 @@ test("the next rotation features whoever was featured least recently, and My War
       ["memories-1", MIR],
       ["his-wardrobe-1", MIR],
       ["my-wardrobe-1", MIR],
+      ["dates-1", MIR],
     ],
   );
   assert.deepEqual(
     second.echoes.map((banner) => [banner.key, banner.echo]),
     [
+      ["dates-0", true],
       ["my-wardrobe-0", true],
       ["his-wardrobe-0", true],
       ["memories-0", true],
@@ -470,14 +528,15 @@ test("the next rotation features whoever was featured least recently, and My War
   );
   assert.equal((await readItem(t.store, t.runId, "my-wardrobe-1-f"))?.coupleWith, "his-wardrobe-1-f");
   // P20 hears the earlier titles of its kind, so it does not repeat them.
-  assert.match(t.calls[3]!.messages[1]!.content, /EARLIER BANNERS OF THIS KIND \(do not repeat\): Lantern Vigil/);
+  assert.match(t.calls[4]!.messages[1]!.content, /EARLIER BANNERS OF THIS KIND \(do not repeat\): Lantern Vigil/);
+  assert.match(t.calls[7]!.messages[1]!.content, /EARLIER BANNERS OF THIS KIND \(do not repeat\): Lantern Regatta/);
   await ageWorld(t, 29);
   const third = (await t.call("POST", "/runs/:run/wish/open")).body.wish as wish.WishView;
   assert.deepEqual(
     third.banners.map((banner) => banner.featuredLi),
-    [SOL, SOL, SOL],
+    [SOL, SOL, SOL, SOL],
   );
-  assert.equal(third.echoes.length, 6);
+  assert.equal(third.echoes.length, 8);
 });
 
 test("a kind that fails is reported and created on the next open; My Wardrobe waits for His Wardrobe", async () => {
@@ -489,6 +548,7 @@ test("a kind that fails is reported and created on the next open; My Wardrobe wa
       JSON.stringify(bannerReply("memories")),
       bad,
       bad,
+      JSON.stringify(bannerReply("dates")),
       JSON.stringify(bannerReply("his-wardrobe")),
       JSON.stringify(bannerReply("my-wardrobe")),
     ],
@@ -501,14 +561,14 @@ test("a kind that fails is reported and created on the next open; My Wardrobe wa
   ]);
   assert.deepEqual(
     opened.body.wish.banners.map((banner: { key: string }) => banner.key),
-    ["memories-0"],
+    ["memories-0", "dates-0"],
   );
   assert.deepEqual(opened.body.wish.missing, ["his-wardrobe", "my-wardrobe"]);
-  assert.equal(t.calls.length, 3, "My Wardrobe made no call of its own");
+  assert.equal(t.calls.length, 4, "My Wardrobe made no call of its own");
   const retried = await t.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(retried.body.failed, []);
   assert.deepEqual(retried.body.wish.missing, []);
-  assert.equal(t.calls.length, 5);
+  assert.equal(t.calls.length, 6);
 
   // Without a connection the open says so for every kind and writes nothing.
   const u = await wishWorld({ runKey: "r-m4bann06-ffffff", images: NO_IMAGES });
@@ -519,7 +579,7 @@ test("a kind that fails is reported and created on the next open; My Wardrobe wa
   const none = await u.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(
     none.body.failed.map((entry: { code: string }) => entry.code),
-    ["no-connection", "no-connection", "no-connection"],
+    ["no-connection", "no-connection", "no-connection", "no-connection"],
   );
   assert.equal((await u.store.listRun("item", u.runId)).length, 0);
 });
@@ -577,6 +637,8 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
       ["generateBannerArt", 768, 1344],
       ["generatePortrait", 832, 1216],
       ["generatePortrait", 832, 1216],
+      // #2303: the Dates banner's art is its 5★ date's place, painted as a scene's place is, with nobody in it.
+      ["generateImage", 768, 1344],
     ],
   );
   const memoryArt = t.paid[0]!.request;
@@ -585,10 +647,12 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
   assert.match(memoryArt.negativePrompt, /child, childlike/);
   assert.match(t.paid[1]!.request.prompt, /navy greatcoat, brass buttons/);
   assert.match(t.paid[2]!.request.prompt, /deep blue silk dress/);
+  assert.match(t.paid[3]!.request.prompt, /the regatta pier, evening, lanterns, no people/);
+  assert.equal(t.paid[3]!.request.units, undefined, "a place has no likeness to send");
   const view = (await t.call("GET", "/runs/:run/wish")).body as wish.WishView;
   assert.deepEqual(
     view.banners.map((banner) => banner.art?.state),
-    ["ready", "ready", "ready"],
+    ["ready", "ready", "ready", "ready"],
   );
   // Each banner's art is its featured item's own picture, so the item's first open finds it painted; others have none.
   for (const banner of view.banners) {
@@ -598,14 +662,14 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
   }
   // 0.24.0: a tap on ready art repaints it (see the repaint test below); it is still ready when it answers.
   assert.equal((await t.call("POST", "/runs/:run/wish/art", { banner: "memories-0" })).body.art.state, "ready");
-  assert.equal(t.paid.length, 4);
+  assert.equal(t.paid.length, 5);
 
   // Ask before painting: nothing paints by itself; two taps at once pay once.
   const u = await wishWorld({ runKey: "r-m4bann09-iiiiii", images: { ask: true }, replies: rotationReplies() });
   const asked = await u.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(
     asked.body.wish.banners.map((banner: wish.BannerView) => banner.art?.state),
-    ["waiting-consent", "waiting-consent", "waiting-consent"],
+    ["waiting-consent", "waiting-consent", "waiting-consent", "waiting-consent"],
   );
   await paintsDone();
   assert.equal(u.paid.length, 0);
@@ -664,7 +728,7 @@ test("a featured 5★ and its banner share one picture: whichever paints first i
   await held;
   const tapped = await tap;
   await paintsDone();
-  assert.equal(u.paid.length, 3, "one paid image per banner, none more for the item");
+  assert.equal(u.paid.length, 4, "one paid image per banner, none more for the item");
   const banner = (await u.call("GET", "/runs/:run/wish")).body.banners[0] as wish.BannerView;
   assert.deepEqual([tapped?.url, (await item(u, "memories-0-f")).art?.url], [banner.art?.url, banner.art?.url]);
 
@@ -750,7 +814,7 @@ test("a teardown stops banner art still waiting for its paid call", async () => 
   const view = (await call("GET", "/runs/:run/wish")).body as wish.WishView;
   assert.deepEqual(
     view.banners.map((banner) => banner.art?.state),
-    ["stopped", "stopped", "stopped"],
+    ["stopped", "stopped", "stopped", "stopped"],
   );
 });
 

@@ -66,6 +66,8 @@ export function itemView(runId: string, item: Item, owned: boolean): ItemView {
     ...(item.text && owned ? { text: item.text } : {}),
     ...(item.look ? { look: { name: item.look.name } } : {}),
     ...(item.coupleWith ? { coupleWith: item.coupleWith } : {}),
+    ...(item.place ? { place: { name: item.place.name } } : {}),
+    ...(item.scenes ? { scenes: item.scenes } : {}),
     owned,
     art: itemArtView(runId, item),
     story: item.story,

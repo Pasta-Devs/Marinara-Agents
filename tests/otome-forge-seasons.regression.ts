@@ -159,10 +159,13 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
 // 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
 // 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved again.
+// 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so theirs moved; Memories is
+// unchanged, and the Dates banner's is new.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
   memories: "819504f34beb3118",
-  "his-wardrobe": "82b6d0a72a456dd0",
-  "my-wardrobe": "017e38e786816e3d",
+  "his-wardrobe": "a55677dfa2055c10",
+  "my-wardrobe": "670c93b6ee4d889b",
+  dates: "51f6e60481eeea47",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {
@@ -245,7 +248,7 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
     await createdOn(t, "2026-10-05T09:00:00.000Z");
     const user = (call: number) => t.calls[call]!.messages[1]!.content as string;
 
-    // Rotation 0 starts on October 5th: all three banners are Halloween's.
+    // Rotation 0 starts on October 5th: all four banners are Halloween's.
     const october = (await t.call("POST", "/runs/:run/wish/open")).body.wish as wish.WishView;
     assert.deepEqual(october.rotation, { number: 0, startsDay: "2026-10-05", endsDay: "2026-10-18" });
     assert.deepEqual(
@@ -254,10 +257,11 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
         ["memories-0", "halloween"],
         ["his-wardrobe-0", "halloween"],
         ["my-wardrobe-0", "halloween"],
+        ["dates-0", "halloween"],
       ],
     );
-    assert.equal(t.calls.length, 3);
-    for (const call of [0, 1, 2]) {
+    assert.equal(t.calls.length, 4);
+    for (const call of [0, 1, 2, 3]) {
       assert.ok(
         user(call).includes("SEASON: this rotation is October's seasonal banner. Theme: Halloween."),
         `${call}`,
@@ -274,18 +278,20 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
         ["memories-1", false],
         ["his-wardrobe-1", false],
         ["my-wardrobe-1", false],
+        ["dates-1", false],
       ],
     );
     assert.deepEqual(
       later.echoes.map((banner) => [banner.key, banner.season]),
       [
+        ["dates-0", "halloween"],
         ["my-wardrobe-0", "halloween"],
         ["his-wardrobe-0", "halloween"],
         ["memories-0", "halloween"],
       ],
     );
-    assert.equal(t.calls.length, 6);
-    for (const call of [3, 4, 5]) assert.doesNotMatch(user(call), /SEASON:|EARLIER [A-Z]+ BANNERS/, `${call}`);
+    assert.equal(t.calls.length, 8);
+    for (const call of [4, 5, 6, 7]) assert.doesNotMatch(user(call), /SEASON:|EARLIER [A-Z]+ BANNERS/, `${call}`);
     assert.equal((await readBanner(t.store, t.runId, "memories-1"))?.season, undefined);
 
     // A year on (rotation 26 starts on October 4th, 2027), twelve later Memories banners have pushed last October's
@@ -299,13 +305,15 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
         ["memories-26", "halloween"],
         ["his-wardrobe-26", "halloween"],
         ["my-wardrobe-26", "halloween"],
+        ["dates-26", "halloween"],
       ],
     );
-    const memories = user(6);
+    const memories = user(8);
     const earlier = memories.split("\n").find((line) => line.startsWith("EARLIER BANNERS OF THIS KIND"))!;
     assert.ok(!earlier.includes("Lantern Vigil"), "last October's title is past the last twelve");
     assert.ok(memories.includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Lantern Vigil\n"), memories);
-    assert.ok(user(7).includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Harbour Night\n"));
+    assert.ok(user(9).includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Harbour Night\n"));
+    assert.ok(user(11).includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Lantern Regatta\n"));
   } finally {
     mock.restoreAll();
   }
