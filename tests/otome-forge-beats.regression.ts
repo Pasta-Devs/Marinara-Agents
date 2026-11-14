@@ -80,6 +80,7 @@ import {
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   normalizeBeatReply,
+  repeatsLine,
   segmentLists,
   withoutMaskedThoughts,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
@@ -530,6 +531,75 @@ test("a masked love interest's thought line is dropped, and each choice's and th
   const pov = normalizeBeatReply({ segments: reply.segments.slice(0, 3) }, { ...context, pov: KAI });
   assert.ok(typeof pov === "object", String(pov));
   assert.equal(pov.segments.length, 3);
+});
+
+test("#2306: a line written twice in a row stays once, and each choice's and the CG's `at` moves with it", () => {
+  const units = [{ id: KAI, name: "Kai Arden" }];
+  const at = { i: 0, kind: "beat", guide: "Rain.", cast: [KAI] } as ChapterNode;
+  const context = { node: at, units, state: normalizeState({ lis: { [KAI]: { stage: 2 } } }), last: false };
+  const lantern = "You let it go. The empty lantern on your wrist knocks the desk leg and swings.";
+  // The maintainer's report: the same line again, a word longer.
+  assert.equal(repeatsLine(lantern, `${lantern.slice(0, -1)} there.`), true);
+  assert.equal(repeatsLine("You step closer.", "You step closer to the window and look out at the lights."), false);
+  assert.equal(repeatsLine("Yes.", "Yes!"), true, "short lines repeat only when they are the same words");
+  assert.equal(repeatsLine("No.", "No, not yet."), false);
+  const reply = {
+    segments: [
+      { speaker: "", text: "Rain on the glass." },
+      { speaker: "Kai", text: "You're late." },
+      { speaker: "Kai", text: "You're late!" },
+      { speaker: "", text: "Rain runs down the glass in long silver threads." },
+      { speaker: "", text: "Rain runs down the glass in long silver threads again." },
+    ],
+    choices: [
+      {
+        kind: "small",
+        at: 2,
+        options: [
+          {
+            text: "Let it go",
+            selection: { kind: "action", text: lantern },
+            segments: [
+              { speaker: "", text: `${lantern.slice(0, -1)} there.` },
+              { speaker: "Kai", text: "Hm." },
+            ],
+          },
+          // A branch's only line stays, even when it repeats the selection: a branch needs one.
+          {
+            text: "Wait",
+            selection: { kind: "action", text: "You wait." },
+            segments: [{ speaker: "", text: "You wait." }],
+          },
+        ],
+      },
+    ],
+    cg: { at: 4, brief: "Rain on the window.", cast: ["Kai Arden"] },
+  };
+  const beat = normalizeBeatReply(reply, { ...context, node: { ...at, cg: true } });
+  assert.ok(typeof beat === "object", String(beat));
+  assert.deepEqual(
+    beat.segments.map((segment) => segment.text),
+    ["Rain on the glass.", "You're late.", "Rain runs down the glass in long silver threads."],
+  );
+  assert.equal(beat.choices[0]!.at, 1, "the choice on the dropped repeat moves to the line it repeats");
+  assert.equal(beat.cg?.at, 2, "and so does the key image");
+  assert.deepEqual(
+    beat.choices[0]!.options.map((option) => option.segments.map((segment) => segment.text)),
+    [["Hm."], ["You wait."]],
+  );
+  // Another speaker, or a thought beside a spoken line, is no repeat.
+  const kept = normalizeBeatReply(
+    {
+      segments: [
+        { speaker: "Kai", text: "Stay." },
+        { speaker: "", text: "Stay." },
+        { speaker: "Kai", text: "Stay.", thought: true },
+      ],
+    },
+    context,
+  );
+  assert.ok(typeof kept === "object", String(kept));
+  assert.equal(kept.segments.length, 3);
 });
 
 test("a love interest's thought under his first name alone keeps the stage and one-per-beat rules", () => {

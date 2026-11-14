@@ -774,7 +774,11 @@ test("his side's reply: only his thoughts, at any stage, and no choice; other ch
   const thought = (speaker: string) => ({ speaker, text: `${speaker || "nobody"} thinks.`, thought: true });
   const reply = (segments: unknown[]) =>
     beatReply({ segments: [{ speaker: "", text: "The lamp." }, ...segments] }) as BeatReply;
-  const kept = normalizeBeatReply(reply([thought("Kai"), thought("Kai"), thought("Kai")]), context);
+  // Three different thoughts: one thought written three times would be one line (#2306).
+  const kept = normalizeBeatReply(
+    reply(["first", "second", "third"].map((word) => ({ ...thought("Kai"), text: `Kai's ${word} thought.` }))),
+    context,
+  );
   assert.ok(typeof kept !== "string", String(kept));
   assert.equal(kept.segments.filter((segment) => segment.thought).length, 3, "at stage 1, three of his thoughts");
   for (const [speaker, who] of [
