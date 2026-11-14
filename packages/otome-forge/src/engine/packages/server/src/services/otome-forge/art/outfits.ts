@@ -24,6 +24,8 @@
 // the same paint slot, so the other's paint queued behind it finds its record replaced and pays for nothing.
 // A couple set's pair portrait is painted only by its tap ("Paint a pair portrait (1 image)"): both looks, both people,
 // one paid image. It is kept in the Album (`state.album.cgs`, key `pair:<her look's id>`), so the state holds it once.
+// #2299: a tap repaints a kept one; the old portrait stays on screen while it paints and after a failure, and once the
+// new one is kept in its place the old image leaves the gallery.
 import type {
   AlbumCg,
   Outfit,
@@ -486,14 +488,21 @@ export async function paintItemNow(
 
 // ── A couple set's pair portrait ──
 
-/** The last failed pair portrait per `${runId}|${hers}`, for the taps that waited on it (never stored). */
+/** The last failed pair portrait per `${runId}|${hers}`, until one is painted (never stored). */
 const pairFailures = new Map<string, Paint>();
 
-/** The pair portrait of the set whose her-look is `hers`: ready once kept in the Album, pending while it paints. */
+/**
+ * The pair portrait of the set whose her-look is `hers`: pending while it paints, failed after a tap that failed, and
+ * ready once kept in the Album. A kept one's picture stays on the record while a repaint paints and after it failed
+ * (#2299), as a repainted look's does.
+ */
 export function pairView(runId: string, cgs: readonly AlbumCg[], hers: string): Paint | null {
   const kept = cgs.find((entry) => entry.key === pairKey(hers));
-  if (kept) return { state: "ready", at: kept.at, url: kept.url, ref: kept.ref };
-  return paintIsLive(runId, pairOwner(hers)) ? { state: "pending", at: new Date().toISOString() } : null;
+  const picture = kept ? { url: kept.url, ref: kept.ref } : {};
+  if (paintIsLive(runId, pairOwner(hers))) return { state: "pending", at: new Date().toISOString(), ...picture };
+  const failure = pairFailures.get(`${runId}|${hers}`);
+  if (failure) return { ...failure, ...picture };
+  return kept ? { state: "ready", at: kept.at, ...picture } : null;
 }
 
 /** The couple set of `hers`: both items, owned and painted, or the reason the pair cannot be painted. */
@@ -573,9 +582,9 @@ export async function pairPrompt(
 }
 
 /**
- * POST /runs/:run/wardrobe/pair: the tap that paints the set's pair portrait (one image). Waits for it; a set that has
- * one answers with it, and a second tap while it paints waits for that paint. A failure is answered, never kept: the
- * offer stays, and its next tap tries again.
+ * POST /runs/:run/wardrobe/pair: the tap that paints the set's pair portrait (one image), or (#2299) repaints the one
+ * kept. Waits for it; a second tap while it paints waits for that paint, so no tap pays twice. A failure is answered,
+ * never stored: the offer stays, and its next tap tries again.
  */
 export async function paintPairNow(
   deps: ItemArtDeps,
@@ -585,20 +594,28 @@ export async function paintPairNow(
 ): Promise<Paint> {
   const key = `${runId}|${hers}`;
   const asked = new Date().toISOString();
-  const kept = async () =>
-    pairView(runId, (await deps.store.readDoc(stateId(runId), normalizeState))?.album.cgs ?? [], hers);
+  const cgs = async () => (await deps.store.readDoc(stateId(runId), normalizeState))?.album.cgs ?? [];
+  const kept = async () => pairView(runId, await cgs(), hers);
+  /** The portrait kept now, as ready: the tap's own answer, read while its paint is still live. */
+  const keptReady = async (): Promise<Paint | null> => {
+    const entry = (await cgs()).find((item) => item.key === pairKey(hers));
+    return entry ? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref } : null;
+  };
+  // Only the portrait kept when the tap began is one it repaints: one that lands while it waits is its answer.
+  const first = await keptReady();
   const art = await tapPaint(
     runId,
     async () => pairOwner(hers),
     async () => {
-      // A tap that waited on a paint that failed answers with that failure, so a double tap never pays twice.
-      const failure = pairFailures.get(key);
-      const left = (await kept()) ?? (failure && failure.at >= asked ? failure : undefined);
-      return { value: left ?? null, art: left };
+      // A tap that waited on a paint answers with what it left, so a double tap never pays twice; a failure from before
+      // this tap is no answer to it.
+      const left = await kept();
+      const answer = left?.state === "failed" && left.at < asked ? undefined : (left ?? undefined);
+      return { value: answer ?? null, art: answer };
     },
     async (): Promise<Paint | null> => {
-      const already = await kept();
-      if (already?.state === "ready") return already;
+      const already = await keptReady();
+      if (already && !samePicture(already, first)) return already;
       // Refused before it waits in the lane: no set, a half not owned or not painted, no connection.
       const connectionId = (await readPair(deps, runId, hers)).run.world.images.connectionId;
       if (!connectionId) throw noConnection();
@@ -643,25 +660,37 @@ export async function paintPairNow(
         ...(built.his.li ? { li: built.his.li } : {}),
       };
       let saved = false;
+      let replaced: AlbumCg | undefined;
       try {
         const result = await updateIfChanged(
           deps.store,
           runDocTarget("state", stateId(runId)),
           normalizeState,
-          (current) =>
-            current.album.cgs.some((item) => item.key === entry.key)
-              ? undefined
-              : {
-                  ...current,
-                  album: { ...current.album, cgs: keepNewest([...current.album.cgs, entry], STATE_LIMITS.album) },
-                },
+          (current) => {
+            const cgs = current.album.cgs;
+            const at = cgs.findIndex((item) => item.key === entry.key);
+            if (at < 0) {
+              return {
+                ...current,
+                album: { ...current.album, cgs: keepNewest([...cgs, entry], STATE_LIMITS.album) },
+              };
+            }
+            // A repaint takes the old portrait's place (and its date, so the Album keeps its order); a portrait kept
+            // meanwhile by someone else stays.
+            if (!samePicture(cgs[at], first)) return undefined;
+            replaced = cgs[at];
+            const next = [...cgs];
+            next[at] = { ...entry, at: cgs[at]!.at };
+            return { ...current, album: { ...current.album, cgs: next } };
+          },
         );
         saved = !!result?.changed;
       } finally {
         // Kept already (another process) or the run was deleted: nothing refers to this image.
         if (!saved && image.id) await images.deleteGalleryImage(image.id);
       }
-      return (await kept()) ?? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref };
+      if (saved) await releaseReplacedImage(deps, replaced, entry);
+      return (await keptReady()) ?? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref };
     },
   );
   return art ?? { state: "failed", at: new Date().toISOString(), error: "The pair portrait was not painted." };

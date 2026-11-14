@@ -1110,6 +1110,55 @@ test("the pair portrait is built at its paid call: a rating lowered while it wai
   assert.equal(t.paid.length, paidBefore + 1, "nothing is paid on the old connection");
 });
 
+test("#2299: a pair portrait repaints with a tap: one more image, in its place in the Album, the old image gone", async () => {
+  let fails = false;
+  const t = await itemsWorld("r-pairrepaint-aaaaaa", {
+    before: () => {
+      if (fails) throw new Error("provider down");
+    },
+  });
+  await t.open(ITEMS.herLook.id);
+  await t.open(ITEMS.hisLook.id);
+  await Promise.all([t.painted(ITEMS.hisLook.id), t.painted(ITEMS.herLook.id)]);
+  // Deleting answers as the Engine does: a picture a stored document still holds is refused.
+  t.deps.images = { ...t.deps.images!, deleteGalleryImage: engineDeletes(t.fake.rows, t.deleted) };
+  const pair = () => t.call("POST", "/runs/:run/wardrobe/pair", { hers: ITEMS.herLook.id });
+  const first = (await pair()).body.art;
+  assert.equal(first.state, "ready", JSON.stringify(first));
+  const keptAt = (await t.state()).album.cgs[0]!.at;
+  const paid = t.paid.length;
+
+  const [one, two] = await Promise.all([pair(), pair()]);
+  assert.deepEqual([one.body.art.state, two.body.art.state], ["ready", "ready"], JSON.stringify(one.body));
+  assert.equal(two.body.art.url, one.body.art.url, "the second tap answers with the first one's portrait");
+  assert.notEqual(one.body.art.url, first.url);
+  assert.equal(t.paid.length, paid + 1, "a repaint is one more image, however many taps");
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => [entry.key, entry.url, entry.at]),
+    [[`pair:${ITEMS.herLook.id}`, one.body.art.url, keptAt]],
+    "the new portrait takes the old one's place and date in the Album",
+  );
+  assert.deepEqual(t.deleted, [first.ref.slice("global-gallery:".length)], "the old image leaves the gallery");
+  let couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url, couple.canPaintPair], ["ready", one.body.art.url, true]);
+
+  // A failed repaint keeps the portrait it painted over, offers Try again, and deletes nothing.
+  fails = true;
+  assert.equal((await pair()).body.art.state, "failed");
+  couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url], ["failed", one.body.art.url]);
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => entry.url),
+    [one.body.art.url],
+  );
+  assert.equal(t.deleted.length, 1);
+  fails = false;
+  const retried = (await pair()).body.art;
+  assert.equal(retried.state, "ready");
+  couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url], ["ready", retried.url], "a success clears the failure");
+});
+
 test("a Memory whose item link was lost after its chapter was saved gets its voiced line on the next open", async () => {
   const t = await itemsWorld("r-m4bline-aaaaaa", { images: { connectionId: null }, replies: [json(storyPlan())] });
   assert.equal((await t.open(ITEMS.memory.id)).status, 200);

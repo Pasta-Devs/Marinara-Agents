@@ -417,7 +417,10 @@ function useStickerImages(view: RunView, stickers: readonly AlbumSticker[]) {
   return { tiles, images };
 }
 
-/** The protagonist's stickers, then each love interest's: painted ones open the viewer, waiting ones offer Paint. */
+/**
+ * The protagonist's stickers, then each love interest's: painted ones open the viewer and offer Repaint (#2299), waiting
+ * ones offer Paint.
+ */
 function StickerGrid({
   runKey,
   view,
@@ -464,20 +467,63 @@ function StickerGrid({
                 const busy = actions.busy.has(target.id);
                 const error = actions.errors[target.id];
                 const titleId = `${id}-${sticker.id}`;
+                // #2299: a painted sticker (the Album sends no paint for one) can be painted again; it stays shown
+                // while the new one paints and after a failure, which offers Try again.
+                const repaint = imagesOn(view) && !sticker.art;
                 return (
                   <li key={sticker.id}>
                     {index !== undefined ? (
-                      <button
-                        type="button"
-                        className="of-album-cg of-album-sticker"
-                        aria-label={t("ui.otomeForge.album.viewCg", { title: tileTitle })}
-                        onClick={() => onView(index)}
-                      >
-                        <img src={sticker.url} alt="" loading="lazy" decoding="async" />
-                        <span className="of-album-cg-caption" aria-hidden="true">
-                          <span className="of-album-cg-title">{tileTitle}</span>
-                        </span>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="of-album-cg of-album-sticker"
+                          aria-label={t("ui.otomeForge.album.viewCg", { title: tileTitle })}
+                          onClick={() => onView(index)}
+                        >
+                          <img src={sticker.url} alt="" loading="lazy" decoding="async" />
+                          <span className="of-album-cg-caption" aria-hidden="true">
+                            <span id={titleId} className="of-album-cg-title">
+                              {tileTitle}
+                            </span>
+                          </span>
+                        </button>
+                        {busy || sticker.art?.state === "pending" ? (
+                          <span className="of-hint" role="status">
+                            {t("ui.otomeForge.wish.painting")}
+                          </span>
+                        ) : null}
+                        {repaint || (imagesOn(view) && paintWaits(sticker.art)) ? (
+                          <>
+                            <button
+                              type="button"
+                              className="of-button of-button--quiet of-button--small of-glass"
+                              aria-describedby={titleId}
+                              aria-label={
+                                repaint ? t("ui.otomeForge.album.repaintSticker", { title: tileTitle }) : undefined
+                              }
+                              aria-disabled={busy}
+                              onClick={() => {
+                                if (!busy) void actions.paint(target);
+                              }}
+                            >
+                              {repaint ? (
+                                <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
+                              ) : (
+                                <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
+                              )}
+                              {repaint
+                                ? t("ui.otomeForge.album.repaintStickerShort")
+                                : t("ui.otomeForge.wish.paintRetry")}
+                            </button>
+                            <CostHint images={1} />
+                          </>
+                        ) : null}
+                        {error ? (
+                          <span className="of-error" role="alert">
+                            {error}
+                          </span>
+                        ) : null}
+                      </>
                     ) : (
                       <div className="of-album-cg of-album-sticker of-album-sticker--quiet">
                         <Icon size={28} strokeWidth={1.7} aria-hidden="true" />

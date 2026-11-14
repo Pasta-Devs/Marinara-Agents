@@ -334,9 +334,20 @@ test("his set is nine distinct emotions, never another love interest's nine", ()
 });
 
 /** The art world with the run, art, phone-start and Album routes, a background lane and free cut-outs. */
-async function stickerWorld(runKey: string, options: { ask?: boolean; replies?: string[]; hold?: boolean } = {}) {
+async function stickerWorld(
+  runKey: string,
+  options: {
+    ask?: boolean;
+    replies?: string[];
+    hold?: boolean;
+    before?: Parameters<typeof artWorld>[0]["before"];
+    engineDeletes?: boolean;
+  } = {},
+) {
   const t = await artWorld({
     runKey,
+    before: options.before,
+    engineDeletes: options.engineDeletes,
     images: { ask: options.ask ?? false },
     replies: options.replies ?? [
       setReply(),
@@ -535,10 +546,10 @@ test("Ask before painting or prompt review leaves them waiting for a tap, which 
   ]);
   assert.deepEqual([one.body.art.state, two.body.art.state], ["ready", "ready"]);
   assert.equal(t.stickerPaints().length, 1, "two taps pay once");
-  // A tap on one already painted answers with it and pays nothing, even once images are turned off.
+  // #2299: a tap on one already painted repaints it, so with images off it is refused and pays nothing.
   await setImages(t.store, t.runId, { connectionId: null });
   const again = await t.arts("POST", "/runs/:run/art/sticker", { sticker: `${KAI}:guarded` });
-  assert.deepEqual([again.status, again.body.art?.state], [200, "ready"]);
+  assert.deepEqual([again.status, (await t.unit()).stickers!.art.guarded!.state], [503, "ready"]);
   assert.equal(t.stickerPaints().length, 1);
   await setImages(t.store, t.runId, { connectionId: "conn-image" });
   // Review mode from a GET does the same with Ask off.
@@ -549,6 +560,61 @@ test("Ask before painting or prompt review leaves them waiting for a tap, which 
   await until(async () => !!(await u.unit()).stickers?.art.guarded, "the sticker is claimed");
   assert.equal((await u.unit()).stickers!.art.guarded!.state, "waiting-consent");
   assert.equal(u.paid.length, 0);
+});
+
+test("#2299: a painted sticker repaints with a tap, shown as it was while it paints and kept when that fails", async () => {
+  let fails = false;
+  let hold: Promise<void> | undefined;
+  const t = await stickerWorld("r-strepaint-aaaaaa", {
+    engineDeletes: true,
+    before: async () => {
+      await hold;
+      if (fails) throw new Error("provider down");
+    },
+  });
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  await t.settle();
+  const id = `${KAI}:guarded`;
+  const first = (await t.unit()).stickers!.art.guarded!;
+  assert.equal(first.state, "ready");
+  const shownNow = async () => (await t.view()).stickers.find((sticker) => sticker.id === id)?.url;
+  const inAlbum = async () => {
+    const sticker = (await t.album("GET", "/runs/:run/album")).body.stickers.find((s: { id: string }) => s.id === id);
+    return [sticker?.url ?? null, sticker?.art?.state ?? null];
+  };
+  const old = `${first.url}.cut.png`;
+  assert.equal(await shownNow(), old);
+  assert.deepEqual(await inAlbum(), [old, null], "a painted sticker: the Album offers its Repaint");
+  const paid = t.stickerPaints().length;
+  const deleted = t.deleted.length;
+
+  let release = () => {};
+  hold = new Promise<void>((resolve) => (release = resolve));
+  const tap = t.arts("POST", "/runs/:run/art/sticker", { sticker: id });
+  try {
+    await until(() => t.stickerPaints().length > paid, "the repaint is paid for");
+    assert.equal(await shownNow(), old, "chats show the old sticker while the new one paints");
+    assert.deepEqual(await inAlbum(), [old, "pending"]);
+  } finally {
+    hold = undefined;
+    release();
+  }
+  const repainted = (await tap).body.art;
+  assert.equal(repainted.state, "ready", JSON.stringify(repainted));
+  assert.notEqual(repainted.url, first.url);
+  assert.equal(t.stickerPaints().length, paid + 1, "a repaint is one more image");
+  await t.settle();
+  assert.equal(await shownNow(), `${repainted.url}.cut.png`, "the new sticker everywhere once it is cut out");
+  assert.deepEqual(t.deleted.slice(deleted), [first.ref!.slice("global-gallery:".length)], "the old image goes");
+
+  // A failed repaint keeps the sticker it painted over, the Album offers Try again, and nothing is deleted.
+  fails = true;
+  const failed = (await t.arts("POST", "/runs/:run/art/sticker", { sticker: id })).body.art;
+  assert.deepEqual([failed.state, failed.url], ["failed", repainted.url]);
+  assert.equal(await shownNow(), `${repainted.url}.cut.png`);
+  assert.deepEqual(await inAlbum(), [`${repainted.url}.cut.png`, "failed"]);
+  assert.equal(t.deleted.length, deleted + 1);
 });
 
 test("a sticker is listed only after its cut-out settles, and a restart leaves at most one stopped", async () => {

@@ -727,6 +727,50 @@ test("Otome Hearth look art: Wardrobe cleans LI and persona looks, faces and cou
   expect(wardrobe.me[0].url).toBe(RAW_LOOK);
 });
 
+test("Otome Hearth Wardrobe: a painted pair portrait offers Repaint and stays shown while the new one paints", async ({
+  page,
+}) => {
+  // #2299: the couple set's portrait is painted again for 1 image; the old one shows until the new one is kept.
+  const calls: Call[] = [];
+  const { answer } = wishStub();
+  const wardrobe = wardrobeView();
+  const couple = wardrobe.couples[0];
+  couple.his.owned = true;
+  couple.complete = true;
+  couple.canPaintPair = true;
+  couple.pair = ready(CG);
+  const AGAIN = art("#4a2f5c");
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path.endsWith("/wardrobe/pair")) {
+        couple.pair = ready(AGAIN);
+        return { status: 200, json: { art: ready(AGAIN) }, delay: 300 };
+      }
+      return call.path.endsWith("/wardrobe") ? { status: 200, json: wardrobe } : answer(call);
+    },
+    calls,
+  );
+  const root = await openOtome(page);
+  await openDock(root, "Wardrobe");
+  const owners = root.getByRole("group", { name: "Whose wardrobe" });
+  await owners.getByText("Me", { exact: true }).click();
+  await expect(root.getByRole("heading", { name: "My looks" })).toBeVisible();
+  const card = root.locator(".of-couple");
+  const portrait = card.locator(".of-couple-portrait");
+  await expect(portrait).toHaveAttribute("src", CG);
+  const repaint = card.getByRole("button", { name: "Repaint the pair portrait" });
+  await expect(card.getByText("Paints 1 image")).toBeVisible();
+  await repaint.click();
+  await expect(card.getByRole("status")).toHaveText("Painting the pair portrait…");
+  await expect(portrait).toHaveAttribute("src", CG);
+  // Its button leaves while it paints: focus waits on the set's title.
+  await expect(card.getByRole("heading", { level: 3 })).toBeFocused();
+  await expect(portrait).toHaveAttribute("src", AGAIN);
+  await expect(repaint).toBeVisible();
+  expect(posts(calls, "/wardrobe/pair").map((call) => call.body?.hers)).toEqual(["my-wardrobe-0-f"]);
+});
+
 test("Otome Hearth look art: the server's cut-outs show as they are in the Wardrobe and Wish, never cleaned again", async ({
   page,
 }) => {
@@ -1520,10 +1564,12 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
   const LAUGH = "/api/gallery/file/sticker-mira-laugh.png";
   const SMUG = "/api/gallery/file/sticker-ilvar-smug.png";
   const PENSIVE = "/api/gallery/file/sticker-ilvar-pensive.png";
-  for (const url of [LAUGH, SMUG, PENSIVE]) {
+  const SMUG_AGAIN = "/api/gallery/file/sticker-ilvar-smug-2.png";
+  for (const url of [LAUGH, SMUG, PENSIVE, SMUG_AGAIN]) {
     await page.route(`**${url}`, (route) => route.fulfill({ body: PNG, contentType: "image/png" }));
   }
   let painted = false;
+  let repainted = false;
   const album = () => ({
     ...albumView(),
     stickers: [
@@ -1536,7 +1582,7 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
         name: "ilvar_thorne_smug",
         label: "Smug",
         level: 2,
-        url: SMUG,
+        url: repainted ? SMUG_AGAIN : SMUG,
       },
       {
         id: `${ILVAR}:pensive`,
@@ -1557,10 +1603,12 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
       if (path === `/runs/${RUN}`) return { status: 200, json: { view } };
       if (path === `/runs/${RUN}/album`) return { status: 200, json: album() };
       if (path === `/runs/${RUN}/art/sticker`) {
-        painted = true;
+        const smug = call.body?.sticker === `${ILVAR}:smug`;
+        if (smug) repainted = true;
+        else painted = true;
         return {
           status: 200,
-          json: { art: { state: "ready", at: "2026-11-02T10:01:00.000Z", url: PENSIVE } },
+          json: { art: { state: "ready", at: "2026-11-02T10:01:00.000Z", url: smug ? SMUG_AGAIN : PENSIVE } },
           delay: 300,
         };
       }
@@ -1601,12 +1649,31 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
   // His level 3 sticker waits for the tap (Ask before painting): Paint it paints that one sticker, then it opens.
   const paint = panel.getByRole("button", { name: "Paint it" });
   await expect(paint).toHaveAccessibleDescription("Ilvar Thorne · Pensive");
-  await expect(panel.getByText("Paints 1 image")).toBeVisible();
+  const tile = (title: string) => panel.getByRole("listitem").filter({ hasText: title });
+  await expect(tile("Ilvar Thorne · Pensive").getByText("Paints 1 image")).toBeVisible();
   const box = await paint.boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(44);
   await paint.click();
   await expect(panel.getByRole("button", { name: "View: Ilvar Thorne · Pensive" })).toBeVisible();
   expect(posts(calls, "/art/sticker").map((call) => call.body?.sticker)).toEqual([`${ILVAR}:pensive`]);
+  // #2299: a painted sticker offers Repaint (1 image), and stays shown while the new one paints.
+  const repaint = panel.getByRole("button", { name: "Paint Ilvar Thorne · Smug again" });
+  const smugTile = tile("Ilvar Thorne · Smug");
+  const smugImage = panel.getByRole("button", { name: "View: Ilvar Thorne · Smug" }).locator("img");
+  await expect(repaint).toHaveText("Repaint");
+  await expect(repaint).toHaveAccessibleDescription("Ilvar Thorne · Smug");
+  await expect(smugTile.getByText("Paints 1 image")).toBeVisible();
+  expect((await repaint.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await expect(panel.getByRole("button", { name: "Paint Mira Vale · Laughing again" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /Mira Vale · In love again/ })).toHaveCount(0);
+  await repaint.click();
+  await expect(smugTile.getByRole("status")).toHaveText("Painting…");
+  await expect(repaint).toHaveAttribute("aria-disabled", "true");
+  await expect(smugImage).toHaveAttribute("src", SMUG);
+  await expect(smugImage).toHaveAttribute("src", SMUG_AGAIN);
+  await expect(smugTile.getByRole("status")).toHaveCount(0);
+  await expect(repaint).toHaveAttribute("aria-disabled", "false");
+  expect(posts(calls, "/art/sticker").map((call) => call.body?.sticker)).toEqual([`${ILVAR}:pensive`, `${ILVAR}:smug`]);
   const width = page.viewportSize()!.width;
   const overflow = await root.evaluate((element) => element.scrollWidth - element.clientWidth);
   expect(overflow, `no sideways scroll at ${width} px`).toBeLessThanOrEqual(0);

@@ -87,9 +87,12 @@ export interface CoupleSet {
   his: { id: string; li: LiId | null; name: string; owned: boolean; url?: string; cut?: true };
   hers: { id: string; name: string; owned: boolean; url?: string; cut?: true };
   complete: boolean;
-  /** The pair portrait: ready once painted, pending while it paints, null until then. */
+  /**
+   * The pair portrait: ready once painted, pending while it paints, failed after a tap that failed, null until then. A
+   * painted one keeps its `url` while a repaint paints and after it failed (#2299).
+   */
   pair: Paint | null;
-  /** Complete and both looks painted: "Paint a pair portrait (1 image)" may be offered. */
+  /** Complete and both looks painted: "Paint a pair portrait (1 image)", or its Repaint, may be offered. */
   canPaintPair: boolean;
 }
 
