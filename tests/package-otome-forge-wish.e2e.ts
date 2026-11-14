@@ -1570,6 +1570,8 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
   }
   let painted = false;
   let repainted = false;
+  // #2299: while his smug sticker repaints, the server lists it as painting over its old picture.
+  let smugPainting = false;
   const album = () => ({
     ...albumView(),
     stickers: [
@@ -1583,6 +1585,7 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
         label: "Smug",
         level: 2,
         url: repainted ? SMUG_AGAIN : SMUG,
+        ...(smugPainting ? { art: { state: "pending", at: "2026-11-02T10:00:30.000Z" } } : {}),
       },
       {
         id: `${ILVAR}:pensive`,
@@ -1604,12 +1607,17 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
       if (path === `/runs/${RUN}/album`) return { status: 200, json: album() };
       if (path === `/runs/${RUN}/art/sticker`) {
         const smug = call.body?.sticker === `${ILVAR}:smug`;
-        if (smug) repainted = true;
-        else painted = true;
+        if (smug) {
+          smugPainting = true;
+          setTimeout(() => {
+            smugPainting = false;
+            repainted = true;
+          }, 2_400);
+        } else painted = true;
         return {
           status: 200,
           json: { art: { state: "ready", at: "2026-11-02T10:01:00.000Z", url: smug ? SMUG_AGAIN : PENSIVE } },
-          delay: 300,
+          delay: smug ? 2_500 : 300,
         };
       }
       return undefined;
@@ -1669,10 +1677,17 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
   await repaint.click();
   await expect(smugTile.getByRole("status")).toHaveText("Painting…");
   await expect(repaint).toHaveAttribute("aria-disabled", "true");
+  // The Album reads itself again while it paints: the sticker comes back painting, and its Repaint keeps focus.
+  await page.evaluate(() =>
+    (globalThis as any).__MARINARA_HOST__.queryClient.invalidateQueries({ queryKey: ["otome-forge", "album"] }),
+  );
   await expect(smugImage).toHaveAttribute("src", SMUG);
+  await expect(repaint).toBeFocused();
+  await expect(repaint).toHaveAttribute("aria-disabled", "true");
   await expect(smugImage).toHaveAttribute("src", SMUG_AGAIN);
   await expect(smugTile.getByRole("status")).toHaveCount(0);
   await expect(repaint).toHaveAttribute("aria-disabled", "false");
+  await expect(repaint).toBeFocused();
   expect(posts(calls, "/art/sticker").map((call) => call.body?.sticker)).toEqual([`${ILVAR}:pensive`, `${ILVAR}:smug`]);
   const width = page.viewportSize()!.width;
   const overflow = await root.evaluate((element) => element.scrollWidth - element.clientWidth);
