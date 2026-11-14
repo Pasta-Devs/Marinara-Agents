@@ -290,18 +290,79 @@ function maskedThought(context: BeatContext, raw: unknown): boolean {
   return !!li && (context.state.lis[li.id]?.stage ?? 1) < 2;
 }
 
+/** The least length (letters and digits) a line needs for a longer one that starts with it to count as its repeat. */
+const REPEAT_MIN = 12;
+/** How much of the longer line the shorter must be for it to count as a repeat: one of a few words added at its end. */
+const REPEAT_SHARE = 0.85;
+
+/** A line's letters and digits, lower case: what two lines are compared by (spaces and punctuation aside). */
+const lineKey = (value: unknown) =>
+  str(value, SEGMENT_TEXT_MAX)
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+
+/**
+ * True when `text` repeats `before`: the same words, or one of them the other with a few words more at its end ("…and
+ * swings." then "…and swings there."). The model sometimes writes a line twice in a row.
+ */
+export function repeatsLine(before: unknown, text: unknown): boolean {
+  const a = lineKey(before);
+  const b = lineKey(text);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length >= REPEAT_MIN && long.startsWith(short) && short.length >= long.length * REPEAT_SHARE;
+}
+
+/** A raw segment's fields, or null for one that is not an object. */
+const rawSegment = (value: unknown) => (value && typeof value === "object" ? (value as Record<string, unknown>) : null);
+
+/**
+ * True when `segment` repeats the line before it (`previous`, a raw segment of the same list, or the text of the choice
+ * option's selection just before its branch): the same speaker, both thoughts or neither, and the same words
+ * (repeatsLine). A selection is compared by its words only, as the kit tells it never to be the branch's first line.
+ */
+function repeatsPrevious(previous: unknown, segment: unknown): boolean {
+  const line = rawSegment(segment);
+  if (!line) return false;
+  if (typeof previous === "string") return repeatsLine(previous, line.text);
+  const before = rawSegment(previous);
+  if (!before) return false;
+  const thought = (value: Record<string, unknown>) => value.thought === true || value.thought === "true";
+  return (
+    lineKey(before.speaker) === lineKey(line.speaker) &&
+    thought(before) === thought(line) &&
+    repeatsLine(before.text, line.text)
+  );
+}
+
 /**
  * The list without the thought lines of love interests still behind their mask: the model sometimes writes one anyway,
- * and only that line goes, instead of the whole reply. `at` maps an index into the list as written to the list kept: it
- * moves back past each dropped line, and an index on a dropped line moves to the line before it (0 at the least).
+ * and only that line goes, instead of the whole reply. #2306: also without a line that repeats the one kept before it
+ * (repeatsPrevious), the first line compared with `after` (a branch's option selection) when there is one; a repeat is
+ * kept when it is the list's only line, as a branch needs one. `at` maps an index into the list as written to the list
+ * kept: it moves back past each dropped line, and an index on a dropped line moves to the line before it (0 at the least).
  */
 export function withoutMaskedThoughts(
   context: BeatContext,
   raw: unknown,
+  { after }: { after?: string } = {},
 ): { segments: unknown; at(index: unknown): unknown } {
-  const dropped = Array.isArray(raw)
-    ? raw.flatMap((segment, index) => (maskedThought(context, segment) ? [index] : []))
-    : [];
+  const dropped: number[] = [];
+  if (Array.isArray(raw)) {
+    // The masked thoughts go first, so a repeat is dropped only while another line that stays is left (Dottore, #2307).
+    const masked = new Set(raw.flatMap((segment, index) => (maskedThought(context, segment) ? [index] : [])));
+    let staying = raw.length - masked.size;
+    let previous: unknown = after?.trim() ? after : undefined;
+    raw.forEach((segment, index) => {
+      if (masked.has(index)) dropped.push(index);
+      else if (previous !== undefined && staying > 1 && repeatsPrevious(previous, segment)) {
+        dropped.push(index);
+        staying -= 1;
+      } else previous = segment;
+    });
+  }
   if (!dropped.length) return { segments: raw, at: (index) => index };
   return {
     segments: (raw as unknown[]).filter((_, index) => !dropped.includes(index)),
@@ -412,8 +473,9 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
 type NormalizedBeat = BeatBody & { choices: ForgeChoice[]; sideWith?: Beat["sideWith"] };
 
 /**
- * The reply with every masked love interest's thought line dropped (withoutMaskedThoughts), from its segments and each
- * choice's branches, and the choices' and the CG's `at` moved to match.
+ * The reply with every masked love interest's thought line, and (#2306) every line that repeats the one before it,
+ * dropped (withoutMaskedThoughts), from its segments and each choice's branches (whose first line is compared with the
+ * option's selection), and the choices' and the CG's `at` moved to match.
  */
 function unmasked(reply: BeatReply, context: BeatContext): BeatReply {
   const main = withoutMaskedThoughts(context, reply.segments);
@@ -425,8 +487,14 @@ function unmasked(reply: BeatReply, context: BeatContext): BeatReply {
         const options = Array.isArray(choice.options)
           ? choice.options.map((option) => {
               const fields = record(option);
+              const selection = rawSegment(fields?.selection)?.text;
               return fields
-                ? { ...fields, segments: withoutMaskedThoughts(context, fields.segments).segments }
+                ? {
+                    ...fields,
+                    segments: withoutMaskedThoughts(context, fields.segments, {
+                      ...(typeof selection === "string" ? { after: selection } : {}),
+                    }).segments,
+                  }
                 : option;
             })
           : choice.options;
