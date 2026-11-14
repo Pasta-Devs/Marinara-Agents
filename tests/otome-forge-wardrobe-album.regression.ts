@@ -1110,6 +1110,140 @@ test("the pair portrait is built at its paid call: a rating lowered while it wai
   assert.equal(t.paid.length, paidBefore + 1, "nothing is paid on the old connection");
 });
 
+test("#2299: a pair portrait repaints with a tap: one more image, in its place in the Album, the old image gone", async () => {
+  let fails = false;
+  const t = await itemsWorld("r-pairrepaint-aaaaaa", {
+    before: () => {
+      if (fails) throw new Error("provider down");
+    },
+  });
+  await t.open(ITEMS.herLook.id);
+  await t.open(ITEMS.hisLook.id);
+  await Promise.all([t.painted(ITEMS.hisLook.id), t.painted(ITEMS.herLook.id)]);
+  // Deleting answers as the Engine does: a picture a stored document still holds is refused.
+  t.deps.images = { ...t.deps.images!, deleteGalleryImage: engineDeletes(t.fake.rows, t.deleted) };
+  const pair = () => t.call("POST", "/runs/:run/wardrobe/pair", { hers: ITEMS.herLook.id });
+  const first = (await pair()).body.art;
+  assert.equal(first.state, "ready", JSON.stringify(first));
+  const keptAt = (await t.state()).album.cgs[0]!.at;
+  const paid = t.paid.length;
+
+  const [one, two] = await Promise.all([pair(), pair()]);
+  assert.deepEqual([one.body.art.state, two.body.art.state], ["ready", "ready"], JSON.stringify(one.body));
+  assert.equal(two.body.art.url, one.body.art.url, "the second tap answers with the first one's portrait");
+  assert.notEqual(one.body.art.url, first.url);
+  assert.equal(t.paid.length, paid + 1, "a repaint is one more image, however many taps");
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => [entry.key, entry.url, entry.at]),
+    [[`pair:${ITEMS.herLook.id}`, one.body.art.url, keptAt]],
+    "the new portrait takes the old one's place and date in the Album",
+  );
+  assert.deepEqual(t.deleted, [first.ref.slice("global-gallery:".length)], "the old image leaves the gallery");
+  let couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url, couple.canPaintPair], ["ready", one.body.art.url, true]);
+
+  // A failed repaint keeps the portrait it painted over, offers Try again, and deletes nothing.
+  fails = true;
+  assert.equal((await pair()).body.art.state, "failed");
+  couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url], ["failed", one.body.art.url]);
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => entry.url),
+    [one.body.art.url],
+  );
+  assert.equal(t.deleted.length, 1);
+  fails = false;
+  const retried = (await pair()).body.art;
+  assert.equal(retried.state, "ready");
+  couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url], ["ready", retried.url], "a success clears the failure");
+});
+
+test("#2299: a repaint tap that waited on a refused one paints itself, never answering with the old portrait", async () => {
+  const t = await itemsWorld("r-pairrefused-aaaaaa");
+  await t.open(ITEMS.herLook.id);
+  await t.open(ITEMS.hisLook.id);
+  await Promise.all([t.painted(ITEMS.hisLook.id), t.painted(ITEMS.herLook.id)]);
+  const old = (await t.call("POST", "/runs/:run/wardrobe/pair", { hers: ITEMS.herLook.id })).body.art;
+  assert.equal(old.state, "ready");
+  const paid = t.paid.length;
+  /** A store that counts reads of `id`, so a test knows how far a tap has gone. */
+  const counting = (id: string) => {
+    const counted = { reads: 0, store: Object.create(t.store) as typeof t.store };
+    counted.store.readDoc = async (doc, normalize) => {
+      if (doc === id) counted.reads += 1;
+      return t.store.readDoc(doc, normalize);
+    };
+    return counted;
+  };
+  const settle = (tap: Promise<unknown>) =>
+    tap.then(
+      (art) => ({ art: art as { state: string; url?: string } }),
+      (error: { statusCode?: number; code?: string }) => ({ error }),
+    );
+  // Tap A waits in the lane; tap B, from another tab, waits on A; the connection changes before A's paid call.
+  let release = () => {};
+  const held = paintSlot("conn-image", () => new Promise<void>((resolve) => (release = resolve)));
+  const a = counting(itemId(t.runId, ITEMS.hisLook.id));
+  const tapA = settle(paintPairNow({ ...t.deps, store: a.store }, t.runId, ITEMS.herLook.id, { debugMode: false }));
+  await until(() => a.reads > 0, "tap A read its couple set");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const b = counting(stateId(t.runId));
+  const tapB = settle(paintPairNow({ ...t.deps, store: b.store }, t.runId, ITEMS.herLook.id, { debugMode: false }));
+  await until(() => b.reads > 0, "tap B read the kept portrait");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await setImages(t.store, t.runId, { connectionId: "conn-other" });
+  release();
+  await held;
+  const [refused, waited] = await Promise.all([tapA, tapB]);
+  assert.deepEqual([refused.error?.statusCode, refused.error?.code], [409, "conflict"]);
+  assert.equal(waited.art?.state, "ready", JSON.stringify(waited));
+  assert.notEqual(waited.art?.url, old.url, "the waiting tap is no answer from the portrait it came to repaint");
+  assert.equal(t.paid.length, paid + 1, "it painted once itself, on the connection now in force");
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => entry.url),
+    [waited.art?.url],
+  );
+});
+
+test("#2299: a repaint whose portrait was saved is the answer to a tap that waited on it, even if its read-back failed", async () => {
+  const t = await itemsWorld("r-pairsaved-aaaaaa");
+  await t.open(ITEMS.herLook.id);
+  await t.open(ITEMS.hisLook.id);
+  await Promise.all([t.painted(ITEMS.hisLook.id), t.painted(ITEMS.herLook.id)]);
+  assert.equal((await t.call("POST", "/runs/:run/wardrobe/pair", { hers: ITEMS.herLook.id })).body.art.state, "ready");
+  const paid = t.paid.length;
+  // Tap A saves its new portrait, then its read of the state fails once (held until tap B waits on it).
+  let saved = false;
+  let blocked = false;
+  let open = () => {};
+  const gate = new Promise<void>((resolve) => (open = resolve));
+  const store = Object.create(t.store) as typeof t.store;
+  store.updateDoc = async (...args: Parameters<typeof t.store.updateDoc>) => {
+    const result = await t.store.updateDoc(...args);
+    if (args[0].id === stateId(t.runId)) saved = true;
+    return result;
+  };
+  store.readDoc = async (doc, normalize) => {
+    if (saved && doc === stateId(t.runId) && !blocked) {
+      blocked = true;
+      await gate;
+      throw new Error("store read failed");
+    }
+    return t.store.readDoc(doc, normalize);
+  };
+  const tapA = paintPairNow({ ...t.deps, store }, t.runId, ITEMS.herLook.id, { debugMode: false });
+  await until(() => blocked, "tap A saved its portrait and is reading it back");
+  const kept = (await t.state()).album.cgs[0]!;
+  const tapB = paintPairNow(t.deps, t.runId, ITEMS.herLook.id, { debugMode: false });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  open();
+  const [a, b] = await Promise.all([tapA, tapB]);
+  assert.deepEqual([a.state, a.url], ["ready", kept.url], "the tap that painted answers with what it saved");
+  assert.deepEqual([b.state, b.url], ["ready", kept.url], "the waiting tap takes it");
+  assert.equal(t.paid.length, paid + 1, "one image for both taps");
+});
+
 test("a Memory whose item link was lost after its chapter was saved gets its voiced line on the next open", async () => {
   const t = await itemsWorld("r-m4bline-aaaaaa", { images: { connectionId: null }, replies: [json(storyPlan())] });
   assert.equal((await t.open(ITEMS.memory.id)).status, 200);

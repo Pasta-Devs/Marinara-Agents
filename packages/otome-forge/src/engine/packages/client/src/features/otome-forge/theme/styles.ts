@@ -1385,6 +1385,10 @@ ${R} .of-album-sticker--quiet {
 ${R} .of-album-sticker--quiet svg { color: var(--of-accent-text); }
 ${R} .of-album-sticker--quiet .of-button { min-height: 44px; }
 ${R} .of-album-sticker--quiet .of-cost { justify-content: center; }
+/* #2299: a painted sticker's Repaint, its status and its cost sit under it, centred as a card's do. */
+${R} .of-album-cgs--sticker > li { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; text-align: center; }
+${R} .of-album-cgs--sticker > li > .of-button { min-height: 44px; }
+${R} .of-album-cgs--sticker > li > .of-cost { justify-content: center; }
 /* #2151: Tarot night's cards, each its whole card face (TAROT_RULES), labelled under it; three across on a phone. */
 ${R} .of-album-cgs--card { grid-template-columns: repeat(auto-fill, minmax(min(112px, 30%), 1fr)); gap: 14px 10px; }
 ${R} .of-album-card { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; text-align: center; }

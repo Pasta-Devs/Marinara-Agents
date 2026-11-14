@@ -755,8 +755,10 @@ async function generateBeat(
       ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
       ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
       lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
-      // Long-term recall: exactly the earlier chapters its plan chose, in their order (S/story/canon.ts).
+      // Long-term recall: exactly the earlier chapters its plan chose, in their order (S/story/canon.ts), its Lead's
+      // route and repair chapters among them (#2304).
       ...(chapter.recalled ? { recalled: chapter.recalled } : {}),
+      ...(chapter.kind === "main" && chapter.recalled ? { recallLed: chapter.lead } : {}),
       pool: { cast: everyone, ...(memories ? { ids: memories } : {}) },
       query: {
         cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),

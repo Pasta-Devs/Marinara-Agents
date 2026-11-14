@@ -518,6 +518,64 @@ test("only chapters the head condensed, that every scene may know, at least the 
   assert.deepEqual((await plan(["Nothing in particular."])).recalled, ["main-2", "main-3", "main-4"]);
 });
 
+test("#2304: a main chapter's plan recalls only chapters its Lead led, and its scenes send exactly those", async () => {
+  const t = await harbour("r-recalllead-aaaaaa");
+  // Night 2 was Sol's to lead; the lighthouse query scores it .71, so it would be chosen if any lead's counted.
+  await t.store.updateDoc(runDocTarget("chapter", chapterId(t.runId, "main-2")), normalizeChapter, (chapter) => ({
+    ...chapter,
+    lead: SOL,
+  }));
+  await t.recall.ensure(t.runId);
+  await settled(t.recall, t.runId);
+  const offered: string[][] = [];
+  const spy = {
+    choose: async (runId: string, options: Parameters<typeof t.recall.choose>[1]) => {
+      offered.push(options.candidates.map((candidate) => candidate.title));
+      return t.recall.choose(runId, options);
+    },
+  };
+  const plan = (recallLed?: string) =>
+    recallText({ store: t.store, recall: spy }, t.runId, {
+      job: "structured",
+      cast: recallLed ? [recallLed] : [KAI],
+      continues: "main",
+      cached: {},
+      lastStory: true,
+      chooseBy: ["lighthouse"],
+      ...(recallLed ? { recallLed } : {}),
+    });
+  assert.deepEqual((await plan()).recalled, ["main-1", "main-2", "main-3"], "without a lead, as before");
+  assert.deepEqual((await plan(KAI)).recalled, ["main-1", "main-3", "main-4"], "Kai's own, Sol's Night 2 left out");
+  assert.deepEqual(offered.at(-1), ["Night 1", "Night 3", "Night 4"]);
+  assert.equal((await plan(SOL)).recalled?.join(), "main-2", "Sol's one chapter");
+  // Mireille led no main chapter, but her own route chapter is hers: recalled, titled private, in the shared context.
+  const hers = await plan(MIR);
+  assert.deepEqual(hers.recalled, [`route-${MIR}-2`]);
+  assert.ok(hers.text.includes(`# Earlier, in detail: [After chapter 4] ${HER_FIRST}\nHER-FIRST-SUMMARY`), hers.text);
+  // Her chapter's scenes send it too, for every cast, as the plan saved it; without the Lead a scene could not.
+  const scene = (recallLed?: string) =>
+    recallText({ store: t.store }, t.runId, {
+      job: "narration",
+      cast: [SOL],
+      continues: "main",
+      cached: {},
+      lastStory: true,
+      recalled: [`route-${MIR}-2`],
+      ...(recallLed ? { recallLed } : {}),
+    });
+  assert.equal((await scene(MIR)).text, hers.text, "byte for byte, as the plan cached it");
+  assert.equal((await scene()).recalled, undefined);
+
+  // The plan behind POST /chapters/next does the same, and saves it for the chapter's scenes.
+  const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const chapter = (await t.store.readDoc(chapterId(t.runId, "main-7"), normalizeChapter))!;
+  assert.deepEqual(chapter.recalled, ["main-1", "main-3", "main-4"]);
+  const story = storyPart(t.calls.find((call) => isPlanner(call.messages))!.messages);
+  assert.ok(!story.includes(SUMMARIES[keyOf("main-2")]), "Sol's Night 2 is not recalled in detail");
+  assert.ok(story.includes(SUMMARIES[keyOf("main-4")]), story);
+});
+
 test("a chapter's plan saves what it recalls, between the head and the newest entries, and its scenes send exactly that", async () => {
   const t = await harbour("r-recallplan-aaaaaa");
   await t.recall.ensure(t.runId);
