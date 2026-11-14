@@ -5461,7 +5461,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                           {openCharacter && (
                             <button
                               type="button"
-                              onClick={() => openCharacter(viewedCharacterId, { tab: "convo" })}
+                              onClick={() => openCharacter(viewedCharacterId, { tab: "image-instructions" })}
                               className="ml-5 text-xs font-semibold text-[var(--noodle-accent)] hover:underline"
                             >
                               {localizeUi("ui.noodle.noodlehome.editImageInstructions")}
