@@ -116,14 +116,13 @@ async function planLtmDuplicatePeople(storage: LongTermMemoryStorage) {
     if (chunk.length > 1) queue.push({ people: chunk, key });
   }
   queue.sort((a, b) => b.people.length - a.people.length || a.key.localeCompare(b.key));
-  const processed = queue.slice(0, MAX_CHUNKS);
-  return { queue, processed, total };
+  return { queue, total };
 }
 
 /** How many person memories a duplicate check would read if every model call succeeded. The model is not called. */
 export async function scopeLtmDuplicatePeople(options: { storage: LongTermMemoryStorage }) {
-  const { processed } = await planLtmDuplicatePeople(options.storage);
-  return { count: processed.reduce((sum, chunk) => sum + chunk.people.length, 0) };
+  const { queue } = await planLtmDuplicatePeople(options.storage);
+  return { count: queue.slice(0, MAX_CHUNKS).reduce((sum, chunk) => sum + chunk.people.length, 0) };
 }
 
 export async function previewLtmDuplicatePeople(options: {
@@ -132,10 +131,16 @@ export async function previewLtmDuplicatePeople(options: {
   languageModel: PackageLanguageModel;
   signal?: AbortSignal;
   complete?: LtmPeopleComplete;
+  /** Index of the first chunk to read; a check cut short at the call limit returns `next` to carry on from. */
+  start?: number;
 }): Promise<LtmDuplicatePeoplePreviewResponse> {
   const { root, languageModel, signal } = options;
   const complete = options.complete ?? defaultComplete(languageModel);
-  const { queue, processed, total } = await planLtmDuplicatePeople(options.storage);
+  const { queue, total } = await planLtmDuplicatePeople(options.storage);
+  // ponytail: the cursor is an index into a plan rebuilt on each call, so a vault that changes between batches can skip or repeat a batch (apply re-validates); upgrade path: a key-based cursor.
+  const start = options.start ?? 0;
+  const processed = queue.slice(start, start + MAX_CHUNKS);
+  const next = start + processed.length < queue.length ? start + processed.length : null;
   const suggestions: LtmDuplicatePeopleSuggestion[] = [];
   let checked = 0;
   let failedChunks = 0;
@@ -201,7 +206,8 @@ export async function previewLtmDuplicatePeople(options: {
   return ltmDuplicatePeoplePreviewResponseSchema.parse({
     total,
     checked,
-    truncated: queue.length > processed.length,
+    truncated: next !== null,
+    next,
     failedChunks,
     suggestions,
   });

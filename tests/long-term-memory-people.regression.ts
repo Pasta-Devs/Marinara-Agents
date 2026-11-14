@@ -295,6 +295,41 @@ async function main() {
         mergeIds: [`char_${(index * 2 + 1).toString(16).padStart(8, "0")}`],
       }));
       assert.ok(!ltmDuplicatePeopleApplyRequestSchema.safeParse({ groups: many }).success);
+
+      // More places than one run reads: `start: next` reads the rest, so every person can be reviewed.
+      const wide = new LongTermMemoryStorage(join(dataDir, "wide"));
+      await wide.initializeLtmStore();
+      for (let chat = 0; chat < 14; chat += 1)
+        for (const side of ["a", "b"])
+          await wide.createNote(
+            note("character", `Person ${chat}${side}`, `Lives in ${chat}${side}.`, {
+              chatId: `wide-${chat}`,
+              chatIds: [`wide-${chat}`],
+            }),
+          );
+      const seen: string[] = [];
+      const readWide = (start?: number) =>
+        previewLtmDuplicatePeople({
+          root,
+          storage: wide,
+          languageModel: model as never,
+          start,
+          complete: async (messages) => {
+            seen.push(
+              ...messages[1]!.content
+                .split("\n")
+                .slice(1)
+                .map((line) => line.split(" | ")[1]!),
+            );
+            return '{"groups":[]}';
+          },
+        });
+      const firstBatch = await readWide();
+      assert.deepEqual([firstBatch.checked, firstBatch.next, firstBatch.truncated], [24, 12, true]);
+      const secondBatch = await readWide(firstBatch.next!);
+      assert.deepEqual([secondBatch.checked, secondBatch.next, secondBatch.truncated], [4, null, false]);
+      assert.equal(new Set(seen).size, 28, "each person is read exactly once across the two batches");
+      assert.equal(seen.length, 28);
     },
     [() => releaseHost(), () => rm(dataDir, { recursive: true, force: true })],
   );

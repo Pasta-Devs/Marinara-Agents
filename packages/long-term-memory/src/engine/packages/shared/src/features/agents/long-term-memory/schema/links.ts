@@ -20,10 +20,12 @@ export const ltmRelationshipLinksPreviewResponseSchema = z
   .object({
     /** Active relationship memories with no link to a person memory yet. */
     total: z.number().int().min(0),
-    /** Relationships matched by name or shown to the model. */
+    /** Relationships matched by name or whose model call returned a usable answer. */
     checked: z.number().int().min(0),
     /** True when some relationships were left unchecked to keep one review bounded. */
     truncated: z.boolean(),
+    /** Index of the next batch to check when this one stopped at the call limit; null when nothing is left. */
+    next: z.number().int().min(0).nullable(),
     /** Model calls whose reply could not be used. */
     failedChunks: z.number().int().min(0),
     suggestions: z.array(ltmRelationshipLinkSuggestionSchema),

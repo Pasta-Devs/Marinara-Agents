@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { z } from "zod";
 import {
+  ltmAiCheckPreviewRequestSchema,
   ltmAiCheckScopeResponseSchema,
   ltmDebugPhaseSchema,
   ltmDebugStatusSchema,
@@ -410,10 +411,11 @@ export function registerMaintenanceRoutes(app: FastifyInstance, runtime: LtmRout
     request.raw.once("aborted", abort);
     request.raw.once("close", close);
     try {
+      const start = ltmAiCheckPreviewRequestSchema.parse(request.body ?? {});
       const extractionConfig = await getLtmExtractionConfig(root);
       const languageModel = await resolvePackageLanguageModel({ connectionId: extractionConfig.connectionId });
       return ltmTidyPreviewResponseSchema.parse(
-        await previewLtmTidy({ root, storage, languageModel, signal: controller.signal }),
+        await previewLtmTidy({ root, storage, languageModel, signal: controller.signal, ...start }),
       );
     } catch (error) {
       const result = routeError(error, "Could not preview Tidy with AI");
@@ -453,10 +455,11 @@ export function registerMaintenanceRoutes(app: FastifyInstance, runtime: LtmRout
     request.raw.once("aborted", abort);
     request.raw.once("close", close);
     try {
+      const start = ltmAiCheckPreviewRequestSchema.parse(request.body ?? {});
       const extractionConfig = await getLtmExtractionConfig(root);
       const languageModel = await resolvePackageLanguageModel({ connectionId: extractionConfig.connectionId });
       return ltmRelationshipLinksPreviewResponseSchema.parse(
-        await previewLtmRelationshipLinks({ root, storage, languageModel, signal: controller.signal }),
+        await previewLtmRelationshipLinks({ root, storage, languageModel, signal: controller.signal, ...start }),
       );
     } catch (error) {
       const result = routeError(error, "Could not preview relationship links");
@@ -500,10 +503,11 @@ export function registerMaintenanceRoutes(app: FastifyInstance, runtime: LtmRout
       request.raw.once("aborted", abort);
       request.raw.once("close", close);
       try {
+        const start = ltmAiCheckPreviewRequestSchema.parse(request.body ?? {});
         const extractionConfig = await getLtmExtractionConfig(root);
         const languageModel = await resolvePackageLanguageModel({ connectionId: extractionConfig.connectionId });
         return ltmDuplicatePeoplePreviewResponseSchema.parse(
-          await previewLtmDuplicatePeople({ root, storage, languageModel, signal: controller.signal }),
+          await previewLtmDuplicatePeople({ root, storage, languageModel, signal: controller.signal, ...start }),
         );
       } catch (error) {
         const result = routeError(error, "Could not look for duplicate people");

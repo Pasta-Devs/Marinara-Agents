@@ -161,6 +161,7 @@ async function main() {
         },
       });
       assert.equal(flaky.failedChunks, 1);
+      assert.equal(flaky.checked, 2, "memories the model could not read are not counted as checked");
       assert.equal(flaky.suggestions.length, 1);
       await assert.rejects(
         previewLtmTidy({
@@ -247,6 +248,37 @@ async function main() {
         (_, index) => `world_${index.toString(16).padStart(8, "0")}`,
       );
       assert.ok(!ltmTidyApplyRequestSchema.safeParse({ noteIds: many }).success);
+
+      // More groups than one run reads: `start: next` reads the rest, so every memory can be reviewed.
+      const wide = new LongTermMemoryStorage(join(dataDir, "wide"));
+      await wide.initializeLtmStore();
+      for (let chat = 0; chat < 14; chat += 1)
+        for (const side of ["a", "b"])
+          await wide.createNote(
+            note("world", `Memory ${chat}${side}`, `Fact ${chat}${side}.`, {
+              chatId: `wide-${chat}`,
+              chatIds: [`wide-${chat}`],
+            }),
+          );
+      const seen: string[] = [];
+      const readWide = (start?: number) =>
+        previewLtmTidy({
+          root,
+          storage: wide,
+          languageModel: model as never,
+          start,
+          complete: async (messages) => {
+            seen.push(...messages[1]!.content.split("\n").map((line) => line.split(" | ")[1]!));
+            return '{"groups":[]}';
+          },
+        });
+      const firstBatch = await readWide();
+      assert.deepEqual([firstBatch.checked, firstBatch.next, firstBatch.truncated], [24, 12, true]);
+      const secondBatch = await readWide(firstBatch.next!);
+      assert.deepEqual([secondBatch.checked, secondBatch.next, secondBatch.truncated], [4, null, false]);
+      assert.equal(new Set(seen).size, 28, "each memory is read exactly once across the two batches");
+      assert.equal(seen.length, 28);
+      assert.equal((await readWide(99)).checked, 0, "a start past the last batch reads nothing");
     },
     [() => releaseHost(), () => rm(dataDir, { recursive: true, force: true })],
   );

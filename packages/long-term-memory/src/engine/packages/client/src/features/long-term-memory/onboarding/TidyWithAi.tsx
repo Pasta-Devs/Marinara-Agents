@@ -22,7 +22,15 @@ export type LtmAiCheckKind = "tidy" | "links" | "people";
 
 type CheckItem = { id: string; label: string };
 type CheckRow = { heading: string; keepLine: string | null; marker: string; items: CheckItem[] };
-type CheckPreview = { checked: number; total: number; truncated: boolean; failedChunks: number; rows: CheckRow[] };
+type CheckPreview = {
+  checked: number;
+  total: number;
+  truncated: boolean;
+  /** The batch to carry on from when this one stopped at the call limit; null when nothing is left. */
+  next: number | null;
+  failedChunks: number;
+  rows: CheckRow[];
+};
 type CheckTranslate = (key: string, values?: Record<string, string | number>) => string;
 
 type CheckConfig = {
@@ -92,6 +100,7 @@ const CHECKS: Record<LtmAiCheckKind, CheckConfig> = {
       checked: response.checked,
       total: response.total,
       truncated: response.truncated,
+      next: response.next,
       failedChunks: response.failedChunks,
       rows: response.suggestions.map((suggestion) => ({
         heading: translate(TIDY_REASON_KEYS[suggestion.reason]!),
@@ -127,6 +136,7 @@ const CHECKS: Record<LtmAiCheckKind, CheckConfig> = {
       checked: response.checked,
       total: response.total,
       truncated: response.truncated,
+      next: response.next,
       failedChunks: response.failedChunks,
       rows: response.suggestions.map((suggestion) => ({
         heading: translate(LINK_ORIGIN_KEYS[suggestion.origin]!),
@@ -175,6 +185,7 @@ const CHECKS: Record<LtmAiCheckKind, CheckConfig> = {
       checked: response.checked,
       total: response.total,
       truncated: response.truncated,
+      next: response.next,
       failedChunks: response.failedChunks,
       rows: response.suggestions.map((suggestion) => ({
         heading: translate("ui.longTermMemory.people.heading"),
@@ -222,6 +233,8 @@ export function TidyWithAi({ kind = "tidy", onBack }: { kind?: LtmAiCheckKind; o
   const [changedCount, setChangedCount] = useState(0);
   const root = useRef<HTMLDivElement>(null);
   const controller = useRef<AbortController | null>(null);
+  // The batch the last run began at, so "Try again" after a failed next batch repeats that batch and not the first.
+  const lastFrom = useRef<number | undefined>(undefined);
   // What Start will read and with which connection, fetched when the confirm view shows. A failed read shows nothing
   // extra: Start still works and reports a missing connection itself.
   const scope = useQuery({
@@ -241,14 +254,21 @@ export function TidyWithAi({ kind = "tidy", onBack }: { kind?: LtmAiCheckKind; o
     root.current?.querySelector<HTMLElement>("[data-ltm-tidy-focus]")?.focus({ preventScroll: true });
   }, [phase]);
 
-  const start = async () => {
+  // `from` is the batch to begin at; Start begins at the first, "Check the next batch" at the one the last run stopped before.
+  const start = async (from?: number) => {
     controller.current?.abort();
     const current = new AbortController();
     controller.current = current;
+    lastFrom.current = from;
     setMessage("");
     setPhase("checking");
     try {
-      const response = await request<never>(check.previewPath, "POST", undefined, current.signal);
+      const response = await request<never>(
+        check.previewPath,
+        "POST",
+        from === undefined ? undefined : { start: from },
+        current.signal,
+      );
       if (current.signal.aborted) return;
       const next = check.preview(response, localizeUi);
       setPreview(next);
@@ -304,9 +324,22 @@ export function TidyWithAi({ kind = "tidy", onBack }: { kind?: LtmAiCheckKind; o
     : "";
   const checkedLine =
     preview && (preview.truncated || preview.failedChunks > 0) ? (
-      <p className="text-xs text-[var(--muted-foreground)]">
-        {localizeUi(check.checkedKey, { checked: preview.checked, total: preview.total })}
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi(check.checkedKey, { checked: preview.checked, total: preview.total })}
+        </p>
+        {preview.next !== null ? (
+          <Button
+            data-ltm-tidy-next
+            onClick={() => {
+              if (!saving) void start(preview.next ?? undefined);
+            }}
+            {...lockedActionProps(saving)}
+          >
+            {localizeUi("ui.longTermMemory.tidy.nextBatch")}
+          </Button>
+        ) : null}
+      </div>
     ) : null;
   const back = (
     <Button data-ltm-tidy-back onClick={onBack}>
@@ -397,7 +430,7 @@ export function TidyWithAi({ kind = "tidy", onBack }: { kind?: LtmAiCheckKind; o
           <StatusSurface tone="danger">{message}</StatusSurface>
           <div className="flex flex-wrap justify-end gap-2">
             {back}
-            <Button primary data-ltm-tidy-focus onClick={() => void start()}>
+            <Button primary data-ltm-tidy-focus onClick={() => void start(lastFrom.current)}>
               {localizeUi("errors.tryAgain")}
             </Button>
           </div>

@@ -311,6 +311,39 @@ async function main() {
         personId: mira.id,
       }));
       assert.ok(!ltmRelationshipLinksApplyRequestSchema.safeParse({ links: many }).success);
+
+      // More places than one run reads: `start: next` reads the rest, and the name matches stay with the first batch.
+      const wide = new LongTermMemoryStorage(join(dataDir, "wide"));
+      await wide.initializeLtmStore();
+      for (let chat = 0; chat < 14; chat += 1) {
+        const scope = { chatId: `wide-${chat}`, chatIds: [`wide-${chat}`] };
+        await wide.createNote(note("character", `Person ${chat}`, `Lives in ${chat}.`, scope));
+        await wide.createNote(note("relationship", `Bond ${chat}`, `A bond in ${chat}.`, scope));
+      }
+      await wide.createNote(note("character", "Wren", "A weaver.", { chatId: "wide-0", chatIds: ["wide-0"] }));
+      await wide.createNote(note("relationship", "Wren & Bond", "Close.", { chatId: "wide-0", chatIds: ["wide-0"] }));
+      const seen: string[] = [];
+      const readWide = (start?: number) =>
+        previewLtmRelationshipLinks({
+          root,
+          storage: wide,
+          languageModel: model as never,
+          start,
+          complete: async (messages) => {
+            const block = messages[1]!.content.split("Relationships:\n")[1]!;
+            seen.push(...block.split("\n").map((line) => line.split(" | ")[1]!));
+            return '{"links":[]}';
+          },
+        });
+      const firstBatch = await readWide();
+      assert.deepEqual([firstBatch.next, firstBatch.truncated], [12, true]);
+      assert.equal(firstBatch.suggestions.filter((suggestion) => suggestion.origin === "name").length, 1);
+      const secondBatch = await readWide(firstBatch.next!);
+      assert.deepEqual([secondBatch.next, secondBatch.truncated], [null, false]);
+      assert.equal(secondBatch.suggestions.length, 0, "name matches are not repeated in a later batch");
+      assert.equal(new Set(seen).size, 14, "each relationship the model reads is read exactly once");
+      assert.equal(seen.length, 14);
+      assert.equal(firstBatch.checked + secondBatch.checked, 15, "the name match plus every relationship read");
     },
     [() => releaseHost(), () => rm(dataDir, { recursive: true, force: true })],
   );

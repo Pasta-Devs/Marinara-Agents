@@ -161,8 +161,7 @@ async function planLtmRelationshipLinks(storage: LongTermMemoryStorage) {
     if (chunk.length) queue.push({ relationships: chunk, people, key });
   }
   queue.sort((a, b) => b.relationships.length - a.relationships.length || a.key.localeCompare(b.key));
-  const processed = queue.slice(0, MAX_CHUNKS);
-  return { suggestions, queue, processed, total, checked, peopleTruncated };
+  return { suggestions, queue, total, checked, peopleTruncated };
 }
 
 /**
@@ -170,8 +169,8 @@ async function planLtmRelationshipLinks(storage: LongTermMemoryStorage) {
  * the chunks the model reads. Reads notes only; the model is not called.
  */
 export async function scopeLtmRelationshipLinks(options: { storage: LongTermMemoryStorage }) {
-  const { processed, checked } = await planLtmRelationshipLinks(options.storage);
-  return { count: processed.reduce((sum, chunk) => sum + chunk.relationships.length, checked) };
+  const { queue, checked } = await planLtmRelationshipLinks(options.storage);
+  return { count: queue.slice(0, MAX_CHUNKS).reduce((sum, chunk) => sum + chunk.relationships.length, checked) };
 }
 
 export async function previewLtmRelationshipLinks(options: {
@@ -180,13 +179,20 @@ export async function previewLtmRelationshipLinks(options: {
   languageModel: PackageLanguageModel;
   signal?: AbortSignal;
   complete?: LtmLinksComplete;
+  /** Index of the first chunk to read; a check cut short at the call limit returns `next` to carry on from. */
+  start?: number;
 }): Promise<LtmRelationshipLinksPreviewResponse> {
   const { root, languageModel, signal } = options;
   const complete = options.complete ?? defaultComplete(languageModel);
   const plan = await planLtmRelationshipLinks(options.storage);
-  const { queue, processed, total, peopleTruncated } = plan;
-  const suggestions = [...plan.suggestions];
-  let checked = plan.checked;
+  const { queue, total, peopleTruncated } = plan;
+  // ponytail: the cursor is an index into a plan rebuilt on each call, so a vault that changes between batches can skip or repeat a batch (apply re-validates); upgrade path: a key-based cursor.
+  const start = options.start ?? 0;
+  const processed = queue.slice(start, start + MAX_CHUNKS);
+  const next = start + processed.length < queue.length ? start + processed.length : null;
+  // The matches by name need no model call, so they belong to the first batch only; later batches carry on from there.
+  const suggestions = start === 0 ? [...plan.suggestions] : [];
+  let checked = start === 0 ? plan.checked : 0;
   let failedChunks = 0;
   for (const chunk of processed) {
     signal?.throwIfAborted();
@@ -258,7 +264,8 @@ export async function previewLtmRelationshipLinks(options: {
   return ltmRelationshipLinksPreviewResponseSchema.parse({
     total,
     checked,
-    truncated: queue.length > processed.length || peopleTruncated,
+    truncated: next !== null || peopleTruncated,
+    next,
     failedChunks,
     suggestions,
   });

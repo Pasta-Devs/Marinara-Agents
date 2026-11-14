@@ -168,14 +168,13 @@ async function planLtmTidy(storage: LongTermMemoryStorage) {
     .filter(([, group]) => group.length >= 2)
     .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
     .flatMap(([, group]) => chunkGroup(group));
-  const processed = chunks.slice(0, MAX_CHUNKS);
-  return { eligible, chunks, processed };
+  return { eligible, chunks };
 }
 
 /** How many memories a Tidy check would read if every model call succeeded. Reads notes only; the model is not called. */
 export async function scopeLtmTidy(options: { storage: LongTermMemoryStorage }) {
-  const { processed } = await planLtmTidy(options.storage);
-  return { count: processed.reduce((sum, chunk) => sum + chunk.length, 0) };
+  const { chunks } = await planLtmTidy(options.storage);
+  return { count: chunks.slice(0, MAX_CHUNKS).reduce((sum, chunk) => sum + chunk.length, 0) };
 }
 
 export async function previewLtmTidy(options: {
@@ -184,11 +183,18 @@ export async function previewLtmTidy(options: {
   languageModel: PackageLanguageModel;
   signal?: AbortSignal;
   complete?: LtmTidyComplete;
+  /** Index of the first chunk to read; a check cut short at the call limit returns `next` to carry on from. */
+  start?: number;
 }): Promise<LtmTidyPreviewResponse> {
   const { root, languageModel, signal } = options;
   const complete = options.complete ?? defaultComplete(languageModel);
-  const { eligible, chunks, processed } = await planLtmTidy(options.storage);
+  const { eligible, chunks } = await planLtmTidy(options.storage);
+  // ponytail: the cursor is an index into a plan rebuilt on each call, so a vault that changes between batches can skip or repeat a batch (apply re-validates); upgrade path: a key-based cursor.
+  const start = options.start ?? 0;
+  const processed = chunks.slice(start, start + MAX_CHUNKS);
+  const next = start + processed.length < chunks.length ? start + processed.length : null;
   const suggestions: LtmTidySuggestion[] = [];
+  let checked = 0;
   let failedChunks = 0;
   for (const chunk of processed) {
     signal?.throwIfAborted();
@@ -219,6 +225,7 @@ export async function previewLtmTidy(options: {
         });
         continue;
       }
+      checked += chunk.length;
       suggestions.push(...found);
       await recordLtmDebugEvent({ ...debug, status: "ok", durationMs: Date.now() - started, counts });
     } catch (error) {
@@ -242,8 +249,9 @@ export async function previewLtmTidy(options: {
     );
   return ltmTidyPreviewResponseSchema.parse({
     total: eligible.length,
-    checked: processed.reduce((sum, chunk) => sum + chunk.length, 0),
-    truncated: chunks.length > processed.length,
+    checked,
+    truncated: next !== null,
+    next,
     failedChunks,
     suggestions,
   });
