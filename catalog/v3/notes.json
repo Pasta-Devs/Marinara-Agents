@@ -688,6 +688,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.32.2",
+          "date": "2026-11-15",
+          "notes": "- **Characters outside the cast keep the voice you gave them.** With **Voice everyone else** on, a character outside the cast who has an Engine character card now speaks with the voice assigned to that card in the Engine's voice settings, matched by name as the Engine's own chats do. Before, they got one of the Engine's default voices. Anyone with no assigned voice still gets a default voice.",
+          "highlight": false
+        },
+        {
           "version": "0.32.1",
           "date": "2026-11-14",
           "notes": "- **A line written twice shows once.** When the model writes a scene line twice in a row, the same or with a word or two more at its end, only the first stays. That includes a line right after a choice that repeats what you chose. Scenes written before this update are not changed.",
@@ -799,12 +805,6 @@
           "version": "0.22.7",
           "date": "2026-11-11",
           "notes": "- **A new love interest gets his own colour.** A love interest who joins the story after it has started, such as one an arc adds, now has his name tag and glow picked from his own portrait like everyone else's, instead of keeping a colour that could match another love interest's. Names that don't share a portrait yet spread across the colour wheel, so two of them rarely look alike. A story already in progress picks its colours again when it is opened.",
-          "highlight": false
-        },
-        {
-          "version": "0.22.6",
-          "date": "2026-11-11",
-          "notes": "- **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to \"Expressions\" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.",
           "highlight": false
         }
       ]
