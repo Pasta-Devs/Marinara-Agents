@@ -31,8 +31,31 @@ const DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TILE: Record<WordleMark, string> = { correct: "🟩", present: "🟨", absent: "⬛" };
 const MARK_RANK: Record<WordleMark, number> = { absent: 0, present: 1, correct: 2 };
 const ORDINAL = ["1st", "2nd", "3rd", "4th", "5th"];
-/** How many example words a rejected human guess gets back as `legalMoves`. */
-const LEGAL_SAMPLE = 12;
+/**
+ * Example guesses for `legalMoves`. Every dictionary word is legal, so these are only examples, and they are fixed on
+ * purpose: words picked to fit a seat's clues would narrow toward the answer, and a rejected guess sends its
+ * `legalMoves` back to the browser.
+ */
+const EXAMPLE_GUESSES = [
+  "crane",
+  "slate",
+  "audio",
+  "stern",
+  "pilot",
+  "mound",
+  "chirp",
+  "glyph",
+  "brick",
+  "fuzzy",
+  "waltz",
+  "jumbo",
+] as const;
+/**
+ * The seat count the engine reports to the Engine. A start that names no characters (a solo game) makes the Engine
+ * seat every character in the chat, and it checks this limit before setup runs, so the limit has to fit a crowded
+ * chat. Setup then seats the human and at most WORDLE_MAX_PLAYERS - 1 characters.
+ */
+const ENGINE_SEAT_LIMIT = 256;
 
 const clone = cloneState<WordleState>;
 const nameOf = nameOfSeat;
@@ -137,14 +160,12 @@ function candidatesFor(board: WordleBoard): string[] {
   return WORDLE_ANSWERS.filter((word) => fitsBoard(word, board));
 }
 
-// ponytail: every dictionary word is legal, so this is a sample (answer-list words that fit the seat's clues), not
-// the full set. The runner never reads it; it only rides along with a rejected guess.
-function sampleLegalMoves(state: WordleState, seatId: string): WordleMove[] {
+// The same handful of examples for every seat and every answer (see EXAMPLE_GUESSES), minus words already guessed.
+function exampleMoves(state: WordleState, seatId: string): WordleMove[] {
   const board = state.boards[seatId];
   if (!board || currentSeatOf(state) !== seatId) return [];
-  return candidatesFor(board)
-    .slice(0, LEGAL_SAMPLE)
-    .map((word) => ({ type: "guess" as const, word }));
+  const used = new Set(board.guesses.map((row) => row.word));
+  return EXAMPLE_GUESSES.filter((word) => !used.has(word)).map((word) => ({ type: "guess" as const, word }));
 }
 
 // ── turn order ──────────────────────────────────────────────────────────────
@@ -346,7 +367,7 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
   schemaVersion: 1,
   label: "Wordle",
   minPlayers: WORDLE_MIN_PLAYERS,
-  maxPlayers: WORDLE_MAX_PLAYERS,
+  maxPlayers: ENGINE_SEAT_LIMIT,
   hiddenInformation: true,
 
   defaultConfig() {
@@ -380,12 +401,11 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
   setup(config, seats: Seat[], seed) {
     // The Engine seats every character in the chat when the start request names none, so the characters actually
     // chosen ride in the config: an empty list is a solo game, and a character who already played today stays out.
+    // The Engine's own player check uses ENGINE_SEAT_LIMIT, so the real cap is applied here.
     const chosen = config.players ? new Set(config.players) : null;
     const human = seats.filter((seat) => seat.kind === "human");
-    const ordered = [
-      ...human,
-      ...seats.filter((seat) => seat.kind !== "human" && (!chosen || chosen.has(seat.seatId))),
-    ];
+    const characters = seats.filter((seat) => seat.kind !== "human" && (!chosen || chosen.has(seat.seatId)));
+    const ordered = [...human, ...characters.slice(0, Math.max(0, WORDLE_MAX_PLAYERS - human.length))];
     const seatNames: Record<string, string> = {};
     const boards: Record<string, WordleBoard> = {};
     for (const seat of ordered) {
@@ -424,7 +444,7 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
   },
 
   legalMoves(state, seatId) {
-    return sampleLegalMoves(state, seatId);
+    return exampleMoves(state, seatId);
   },
 
   applyMove(state, seatId, move): MoveResult<WordleState, WordleMove> {
@@ -435,14 +455,14 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
       return {
         ok: false,
         error: `Guesses are ${WORDLE_WORD_LENGTH} letters.`,
-        legalMoves: sampleLegalMoves(state, seatId),
+        legalMoves: exampleMoves(state, seatId),
       };
     }
     if (!isWordleWord(word)) {
       return {
         ok: false,
         error: `${word.toUpperCase()} is not in the word list.`,
-        legalMoves: sampleLegalMoves(state, seatId),
+        legalMoves: exampleMoves(state, seatId),
       };
     }
 
@@ -510,7 +530,7 @@ export const wordleEngine: TurnGameEngine<WordleState, WordleMove, WordleConfig,
   describeForModel(state, seatId): ModelTurnView<WordleMove> {
     return {
       boardSummary: buildBoardSummary(state, seatId),
-      legalMoves: sampleLegalMoves(state, seatId),
+      legalMoves: exampleMoves(state, seatId),
       instructions: buildInstructions(),
     };
   },

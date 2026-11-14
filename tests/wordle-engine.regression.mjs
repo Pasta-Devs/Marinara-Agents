@@ -147,6 +147,22 @@ const daily = async (chatId, day) => {
   assert.equal(unknown.ok, false);
   assert.match(unknown.error, /not in the word list/);
   assert.ok(unknown.legalMoves.length > 0 && unknown.legalMoves.length <= 12);
+  for (const example of unknown.legalMoves) assert.ok(engine.applyMove(state, "you", example).ok, example.word);
+  // A rejected guess must not hint at the answer: the examples are the same whatever the word and the clues.
+  let reign = withAnswer(fresh({}, SEATS.slice(0, 1)), "reign");
+  let crane = withAnswer(fresh({}, SEATS.slice(0, 1)), "crane");
+  for (const word of ["moist", "lunch"]) {
+    reign = guess(reign, "you", word).state;
+    crane = guess(crane, "you", word).state;
+  }
+  const hintA = engine.applyMove(reign, "you", { type: "guess", word: "zzzzz" }).legalMoves.map((m) => m.word);
+  const hintB = engine.applyMove(crane, "you", { type: "guess", word: "zzzzz" }).legalMoves.map((m) => m.word);
+  assert.deepEqual(hintA, hintB);
+  assert.ok(!hintA.includes("reign"));
+  assert.deepEqual(
+    engine.describeForModel(reign, "you").legalMoves.map((m) => m.word),
+    hintA,
+  );
   const early = engine.applyMove(state, "bo", { type: "guess", word: "crane" });
   assert.equal(early.ok, false, "not Bo's turn yet");
   assert.equal(engine.parseToolCall("wordle_guess", { word: "  CRANE " }).word, "crane");
@@ -226,6 +242,24 @@ const daily = async (chatId, day) => {
   assert.equal(marks.length, 5);
 }
 
+// ── a solo game in a crowded chat ────────────────────────────────────────────
+{
+  // With no characters named, the Engine seats every character in the chat and checks maxPlayers before setup.
+  const crowd = [
+    SEATS[0],
+    ...Array.from({ length: 12 }, (_, i) => ({
+      seatId: `c${i}`,
+      kind: "bot",
+      characterId: `c${i}`,
+      displayName: `C${i}`,
+    })),
+  ];
+  assert.ok(engine.maxPlayers >= crowd.length);
+  assert.deepEqual(fresh({ players: [] }, crowd).order, ["you"]);
+  assert.deepEqual(fresh({ players: ["c3", "c9"] }, crowd).order, ["you", "c3", "c9"]);
+  assert.equal(fresh({ players: null }, crowd).order.length, 8, "an unnamed start still seats at most eight");
+}
+
 // ── every accepted guess is saved to the chat's daily record ─────────────────
 {
   const chatId = "chat-record";
@@ -264,6 +298,36 @@ const daily = async (chatId, day) => {
   ({ body } = await daily(chatId, utcDay(1)));
   assert.deepEqual(body.results, {});
   assert.equal(body.standings.you.before, 2);
+
+  // A failed day ends the streak at once.
+  const failChat = "chat-fail";
+  const solvedYesterday = fresh({ chatId: failChat, day: utcDay(-1) }, SEATS.slice(0, 1));
+  guess(solvedYesterday, "you", solvedYesterday.answer);
+  let failing = fresh({ chatId: failChat, day: TODAY }, SEATS.slice(0, 1));
+  const misses = ["slate", "crane", "audio", "pilot", "mound", "chirp", "brick", "fuzzy"].filter(
+    (w) => w !== failing.answer,
+  );
+  failing = guess(failing, "you", misses[0]).state;
+  await settle();
+  ({ body } = await daily(failChat, TODAY));
+  assert.equal(body.standings.you.current, 1, "a day still being played keeps the streak");
+  for (const word of misses.slice(1, 6)) failing = guess(failing, "you", word).state;
+  await settle();
+  ({ body } = await daily(failChat, TODAY));
+  assert.equal(body.results.you.status, "failed");
+  assert.equal(body.standings.you.current, 0);
+  assert.equal(body.standings.you.before, 1);
+
+  // A rewind never gives guesses back, and a finished result stays final.
+  const rewindChat = "chat-rewind";
+  let long = fresh({ chatId: rewindChat, day: TODAY }, SEATS.slice(0, 2));
+  const rewound = long;
+  for (const word of misses.slice(0, 3)) long = guess(guess(long, "you", word).state, "bo", word).state;
+  guess(guess(rewound, "you", rewound.answer).state, "bo", misses[0]);
+  await settle();
+  ({ body } = await daily(rewindChat, TODAY));
+  assert.deepEqual(body.results.you, { name: "You", status: "solved", guesses: 3 });
+  assert.deepEqual(body.results.bo, { name: "Bo", status: "playing", guesses: 3 });
 
   // A day far off is clamped to the server's day, and a bad chat id is refused.
   ({ body } = await daily(chatId, "2999-01-01"));

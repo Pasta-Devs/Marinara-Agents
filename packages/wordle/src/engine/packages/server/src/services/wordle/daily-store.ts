@@ -131,8 +131,10 @@ function standingFor(days: Record<string, DayResults>, seatId: string, today: st
   }
   const todayNumber = dayNumber(today);
   const before = runEnding(todayNumber - 1);
+  // A failed day ends the streak now; a day still being played keeps yesterday's streak until it is decided.
+  const todayStatus = days[today]?.[seatId]?.status;
   return {
-    current: solvedOn.has(todayNumber) ? before + 1 : before,
+    current: solvedOn.has(todayNumber) ? before + 1 : todayStatus === "failed" ? 0 : before,
     before,
     best,
     played,
@@ -200,15 +202,21 @@ export function createWordleStore(persistence: WordlePersistence, options: { now
   }
 
   return {
-    /** Keep a seat's board for the day. A finished result is final; an unfinished one follows the game. */
+    /**
+     * Keep a seat's board for the day: each seat gets one go. A finished result is final, and an unfinished one
+     * follows the game without ever giving guesses back. Editing, branching or regenerating a message rewinds the
+     * game, so a seat rewound from five guesses to two still counts five, and a solve after that counts five too.
+     */
     recordBoard(chatId: string, day: string, seatId: string, result: WordleDayResult): Promise<void> {
       if (!chatId || !DAY_PATTERN.test(day)) return Promise.resolve();
       return serialized(chatId, () =>
         change(chatId, (days) => {
           const results = (days[day] ??= {});
           const previous = results[seatId];
-          if (previous && (previous.status !== "playing" || previous.guesses > result.guesses)) return false;
-          results[seatId] = result;
+          if (previous && previous.status !== "playing") return false;
+          const guesses = Math.max(previous?.guesses ?? 0, result.guesses);
+          if (previous && previous.status === result.status && previous.guesses === guesses) return false;
+          results[seatId] = { ...result, guesses };
           return true;
         }),
       );
