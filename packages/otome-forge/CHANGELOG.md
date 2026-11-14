@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.32.0 — 2026-11-14
+
+- **Recall follows the lead.** When a main chapter is planned, the earlier chapters it brings back in detail now come only from chapters the love interest you picked to lead it led: main chapters they led, and their own route and repair chapters. A route or repair chapter comes back marked as private to them. The condensed timeline, the recent chapters' summaries and the last chapter in full are sent as before.
+
 ## 0.31.0 — 2026-11-14
 
 - **Repaint a couple set's portrait.** In the Wardrobe, a painted pair portrait now offers **Repaint the pair portrait**, for 1 image. The old portrait stays on screen while the new one paints, and stays if the paint fails. The new one replaces it in the Album too.
