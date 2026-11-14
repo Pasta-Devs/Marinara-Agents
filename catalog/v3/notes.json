@@ -698,6 +698,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.32.1",
+          "date": "2026-11-14",
+          "notes": "- **A line written twice shows once.** When the model writes a scene line twice in a row, the same or with a word or two more at its end, only the first stays. That includes a line right after a choice that repeats what you chose. Scenes written before this update are not changed.",
+          "highlight": false
+        },
+        {
           "version": "0.32.0",
           "date": "2026-11-14",
           "notes": "- **Recall follows the lead.** When a main chapter is planned, the earlier chapters it brings back in detail now come only from chapters the love interest you picked to lead it led: main chapters they led, and their own route and repair chapters. A route or repair chapter comes back marked as private to them. The condensed timeline, the recent chapters' summaries and the last chapter in full are sent as before.",
@@ -809,12 +815,6 @@
           "version": "0.22.6",
           "date": "2026-11-11",
           "notes": "- **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to \"Expressions\" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.",
-          "highlight": false
-        },
-        {
-          "version": "0.22.5",
-          "date": "2026-11-11",
-          "notes": "- **A chapter no longer ends on a choice you never get to make.** When a chapter's last scene leaves a decision to you, it now ends on that choice for you to pick, instead of saying you'll decide later. The next chapter also never acts as if you chose something you weren't offered.",
           "highlight": false
         }
       ]
