@@ -468,8 +468,10 @@ function StickerGrid({
                 const error = actions.errors[target.id];
                 const titleId = `${id}-${sticker.id}`;
                 // #2299: a painted sticker (the Album sends no paint for one) can be painted again; it stays shown
-                // while the new one paints and after a failure, which offers Try again.
-                const repaint = imagesOn(view) && !sticker.art;
+                // while the new one paints and is cut out (pending), and after a failure, which offers Try again. Its
+                // Repaint stays in place, disabled, while it paints, so a refetch never takes away the focused button.
+                const painting = busy || sticker.art?.state === "pending";
+                const repaint = imagesOn(view) && (!sticker.art || sticker.art.state === "pending");
                 return (
                   <li key={sticker.id}>
                     {index !== undefined ? (
@@ -487,7 +489,7 @@ function StickerGrid({
                             </span>
                           </span>
                         </button>
-                        {busy || sticker.art?.state === "pending" ? (
+                        {painting ? (
                           <span className="of-hint" role="status">
                             {t("ui.otomeForge.wish.painting")}
                           </span>
@@ -501,9 +503,9 @@ function StickerGrid({
                               aria-label={
                                 repaint ? t("ui.otomeForge.album.repaintSticker", { title: tileTitle }) : undefined
                               }
-                              aria-disabled={busy}
+                              aria-disabled={painting}
                               onClick={() => {
-                                if (!busy) void actions.paint(target);
+                                if (!painting) void actions.paint(target);
                               }}
                             >
                               {repaint ? (

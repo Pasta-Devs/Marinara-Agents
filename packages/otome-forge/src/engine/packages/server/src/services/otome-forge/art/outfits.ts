@@ -606,11 +606,13 @@ export async function paintPairNow(
   const art = await tapPaint(
     runId,
     async () => pairOwner(hers),
-    async () => {
-      // A tap that waited on a paint answers with what it left, so a double tap never pays twice; a failure from before
-      // this tap is no answer to it.
+    async ({ threw }) => {
+      // A tap that waited on a paint answers with what it left, so a double tap never pays twice. A failure from before
+      // this tap is no answer to it, nor (#2299) is the portrait it came to repaint, left as it was by a paint that was
+      // refused: the tap then paints itself, or is refused in turn.
       const left = await kept();
-      const answer = left?.state === "failed" && left.at < asked ? undefined : (left ?? undefined);
+      const stale = left?.state === "failed" ? left.at < asked : threw && samePicture(left, first);
+      const answer = stale ? undefined : (left ?? undefined);
       return { value: answer ?? null, art: answer };
     },
     async (): Promise<Paint | null> => {
@@ -690,7 +692,9 @@ export async function paintPairNow(
         if (!saved && image.id) await images.deleteGalleryImage(image.id);
       }
       if (saved) await releaseReplacedImage(deps, replaced, entry);
-      return (await keptReady()) ?? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref };
+      // Once its portrait is saved this paint never throws, so a tap waiting on it takes that portrait (tapPaint
+      // `threw`).
+      return (await keptReady().catch(() => null)) ?? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref };
     },
   );
   return art ?? { state: "failed", at: new Date().toISOString(), error: "The pair portrait was not painted." };

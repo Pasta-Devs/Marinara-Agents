@@ -83,7 +83,8 @@ export type PaintOwner =
   | `tarot:${string}`
   | `side:${string}`;
 
-const live = new Map<string, { settled: Promise<void>; settle: () => void }>();
+/** A live paint; `threw` once a tap's paint ended in a throw (a refusal), for the taps that waited on it. */
+const live = new Map<string, { settled: Promise<void>; settle: () => void; threw?: boolean }>();
 const liveKey = (runId: string, owner: PaintOwner) => `${runId}|${owner}`;
 
 export function paintIsLive(runId: string, owner: PaintOwner): boolean {
@@ -112,12 +113,14 @@ export function paintSettled(runId: string, owner: PaintOwner): Promise<void> {
 /**
  * A tap's paint, as the owner's only live paint in this process. A tap that finds another paint live waits for it:
  * when that one left the record ready or failed, the tap answers with it, so no tap pays twice; when it painted
- * nothing (an automatic pass that only looked, or left it waiting), the tap goes ahead itself.
+ * nothing (an automatic pass that only looked, or left it waiting), the tap goes ahead itself. `after` learns whether
+ * the paint it waited on was a tap's that threw (#2299): a repaint can then tell a record that tap left untouched, which
+ * is no answer to it, from one it painted.
  */
 export async function tapPaint<T>(
   runId: string,
   owner: () => Promise<PaintOwner>,
-  after: () => Promise<{ value: T; art?: Paint }>,
+  after: (waited: { threw: boolean }) => Promise<{ value: T; art?: Paint }>,
   paint: () => Promise<T>,
 ): Promise<T> {
   for (;;) {
@@ -126,12 +129,18 @@ export async function tapPaint<T>(
     if (release) {
       try {
         return await paint();
+      } catch (error) {
+        // Marked before the release below wakes the taps waiting on it.
+        const entry = live.get(liveKey(runId, current));
+        if (entry) entry.threw = true;
+        throw error;
       } finally {
         release();
       }
     }
-    await paintSettled(runId, current);
-    const left = await after();
+    const waited = live.get(liveKey(runId, current));
+    await (waited?.settled ?? Promise.resolve());
+    const left = await after({ threw: !!waited?.threw });
     if (left.art?.state === "ready" || left.art?.state === "failed") return left.value;
   }
 }
