@@ -756,7 +756,12 @@ test("P17 keeps the overview and recalled details whole beside the previous chap
   const sent = await phone("POST", send, { li: KAI, body: { text: "Do you remember my sister's name?" } });
   assert.equal(sent.status, 200, JSON.stringify(sent.body));
   const user = t.calls.find((call) => isReplyPrompt(call.messages))!.messages[1]!.content;
-  for (const mark of ["OVERVIEW-MARK", "OLD-SESSION-MARK", "# Previous chapter in full: Harbour", "LATEST-END-MARK"]) {
+  for (const mark of [
+    "OVERVIEW-MARK",
+    "OLD-SESSION-MARK",
+    "# Previous chapter in full: [Chapter 1] Harbour",
+    "LATEST-END-MARK",
+  ]) {
     assert.ok(user.includes(mark), `P17 holds ${mark}`);
   }
   assert.ok(user.includes("LATEST-START-MARK"), "the previous chapter goes in whole, as GF's chat gets it");

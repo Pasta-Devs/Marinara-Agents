@@ -652,7 +652,9 @@ test("his side is part of the chapter it follows: the next chapter's prompts get
   for (const options of [{ continues: KAI }, {}]) {
     const { text } = await recall({ ...narration, ...options });
     const previous = text.indexOf("# Previous chapter in full:");
-    const other = text.indexOf(`# The previous chapter's other side, in full: Kai's side of "The North Light"`);
+    const other = text.indexOf(
+      `# The previous chapter's other side, in full: [Before chapter 1 ended] Kai's side of "The North Light"`,
+    );
     assert.ok(previous >= 0 && other > previous, JSON.stringify(options));
     assert.ok(text.indexOf(SIDE_LINE) > other, "his side in full, right after the chapter");
     assert.ok(!text.includes("ROUTE-SUMMARY") && !text.includes("SIDE-SUMMARY"), "neither entry beside them");
@@ -721,7 +723,7 @@ test("a Closer's Opened up notes his side at its climax; Routes offers it once t
   } as const;
   for (const [what, options] of Object.entries(hers)) {
     const text = both(await recall(options));
-    assert.ok(text.includes("# Previous chapter in full: The Dark Quay"), what);
+    assert.ok(text.includes("# Previous chapter in full: [Chapter 1] The Dark Quay"), what);
     assert.ok(!text.includes(SIDE_LINE) && !text.includes("other side"), what);
   }
   for (const options of [
@@ -729,13 +731,15 @@ test("a Closer's Opened up notes his side at its climax; Routes offers it once t
     { job: "narration", reader: KAI, cached: { li: KAI } },
   ] as const) {
     const text = (await recall(options)).text;
-    assert.ok(text.includes(`# The previous chapter's other side, in full: Kai's side of "The Dark Quay"`));
+    assert.ok(
+      text.includes(`# The previous chapter's other side, in full: [After chapter 1] Kai's side of "The Dark Quay"`),
+    );
     assert.ok(text.includes(SIDE_LINE), options.job);
   }
   const date = await recall({ job: "narration", cast: [MIR, KAI], cached: { li: MIR } });
   assert.ok(!date.text.includes(SIDE_LINE) && !date.text.includes("other side"), "never in the cached part");
   assert.ok(
-    date.recalls?.text.includes(`# Canon in full: Kai's side of "The Dark Quay"`),
+    date.recalls?.text.includes(`# Canon in full: [After chapter 1] Kai's side of "The Dark Quay"`),
     "his own canon, in his scene",
   );
 
@@ -745,9 +749,11 @@ test("a Closer's Opened up notes his side at its climax; Routes offers it once t
   assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: MIR })).status, 200);
   const plan = plans()[planned]!.messages;
   const all = plan.map((message) => message.content).join("\n");
-  assert.ok(all.includes("# Previous chapter in full: The Dark Quay"));
-  assert.ok(all.includes(`# The previous chapter's other side, in full: Kai's side of "The Dark Quay"`));
-  assert.ok(all.indexOf(SIDE_LINE) > all.indexOf("# Previous chapter in full: The Dark Quay"));
+  assert.ok(all.includes("# Previous chapter in full: [Chapter 1] The Dark Quay"));
+  assert.ok(
+    all.includes(`# The previous chapter's other side, in full: [After chapter 1] Kai's side of "The Dark Quay"`),
+  );
+  assert.ok(all.indexOf(SIDE_LINE) > all.indexOf("# Previous chapter in full: [Chapter 1] The Dark Quay"));
   // Its scenes too: in the story context every call of the chapter shares (the cached part), whoever is in the node.
   assert.equal((await t.call("POST", beatPath, {}, { key: "main-2", i: "0" })).status, 200);
   const scene = t.calls.filter((call) => /Narrate node 1 of/u.test(user(call.messages))).at(-1)!.messages;

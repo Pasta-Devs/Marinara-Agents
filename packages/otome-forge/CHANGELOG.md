@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.30.0 — 2026-11-14
+
+- **The story knows what happened when.** Every chapter's summary now reaches the model with its place in the story: "[Chapter 3]" for a main chapter, "[Character Story 2, after chapter 3]" for a Character Story, and "[After chapter 3]" for route, repair, date and his-side chapters. The condensed part of the timeline says which chapters it covers ("[Chapters 1–4]"), and a chapter recalled by meaning goes as "Chapter 3 in detail".
+- **Stories in progress get it too.** The tags are added when each prompt is built, so a saved story has them on its next scene or message, with nothing summarized again. A chapter you are partway through keeps the story it was planned with, so its tags start with the next chapter.
+
 ## 0.29.0 — 2026-11-14
 
 - **Messages read like people texting.** Love interests write in plain, everyday words, the way a real person types, with no ornate metaphors or lines that belong in a novel. This holds in private threads and in the group chat.
