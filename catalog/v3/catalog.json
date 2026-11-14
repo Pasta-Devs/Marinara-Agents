@@ -280,6 +280,83 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
+          "minor": 341
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.0",
+          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+        },
+        "id": "blackjack",
+        "name": "Blackjack",
+        "version": "1.0.0",
+        "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Characters cannot start a game on their own yet.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/blackjack",
+            "aliases": [
+              "blackjack",
+              "black jack",
+              "twenty-one"
+            ],
+            "playerLabel": "Table game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "0bab18126b37a8782f05a3b3d6983587dea55f0b12ebe6d0f9b84aa0a20b1216",
+            "bytes": 633
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "a1837084f1898fd55fa1b42f1ad273972fbfa3de930cf1ecbc6cd2d5495e9b2d",
+            "bytes": 17479
+          },
+          {
+            "path": "client.js",
+            "sha256": "86f49d7296e634c7cb9954fe59b1bf262c29ead4da948620ecb109b982ee12b5",
+            "bytes": 162378
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/blackjack.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/blackjack-1.0.0.zip",
+        "sha256": "43f9607bf5327ccf3444d058a837229b5dcdaf1dc4d51c0ac15d6ab8a4b94dda",
+        "bytes": 182507
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#blackjack"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
           "minor": 819
         },
         "builtAgainst": {
@@ -4722,6 +4799,84 @@
         "bytes": 59861
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 386
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.1",
+          "engineCommit": "54e6848c818ae4150f108ab9614986bb7610891d"
+        },
+        "id": "wordle",
+        "name": "Wordle",
+        "version": "1.0.0",
+        "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Characters cannot start a game on their own yet.",
+        "engine": {
+          "min": "2.5.1",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/wordle",
+            "aliases": [
+              "wordle",
+              "word of the day",
+              "daily word"
+            ],
+            "playerLabel": "Daily word game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "d9395b58809fdd7c120198aae10a8af411a57a3700307876a21c294930dac67c",
+            "bytes": 605
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "87f9ce2877bcf9bdbf27564c85157d21ebe22a59553a28e2ed177f3de7e6fc37",
+            "bytes": 64320
+          },
+          {
+            "path": "client.js",
+            "sha256": "51dd6f293a9db327b9c17248f7025d87037624a6ed845c0a34bd561d4558949c",
+            "bytes": 159809
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/wordle.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/wordle-1.0.0.zip",
+        "sha256": "4999bcff56c386ed32147c7d0b2718bc3d1929cc12a87f6cbf7978cd0e8aed16",
+        "bytes": 226741
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#wordle"
     },
     {
       "manifest": {
