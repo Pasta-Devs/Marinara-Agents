@@ -192,6 +192,10 @@
       "section": "games",
       "tagline": "Play UNO with your characters."
     },
+    "wordle": {
+      "section": "games",
+      "tagline": "One word a day, raced with your characters."
+    },
     "world-state": {
       "section": "trackers",
       "tagline": "Date, time, weather and place."
@@ -229,7 +233,8 @@
         "chess",
         "poker",
         "blackjack",
-        "uno"
+        "uno",
+        "wordle"
       ]
     }
   ]

@@ -9,6 +9,14 @@
 - **Clearing the air is its own scene,** opened when you accept the invitation.
 - **More looks.** His and My Wardrobe banners hold three 3★ everyday looks in place of three Snapshots.
 
+## 0.32.2 — 2026-11-15
+
+- **Characters outside the cast keep the voice you gave them.** With **Voice everyone else** on, a character outside the cast who has an Engine character card now speaks with the voice assigned to that card in the Engine's voice settings, matched by name as the Engine's own chats do. Before, they got one of the Engine's default voices. Anyone with no assigned voice still gets a default voice.
+
+## 0.32.1 — 2026-11-14
+
+- **A line written twice shows once.** When the model writes a scene line twice in a row, the same or with a word or two more at its end, only the first stays. That includes a line right after a choice that repeats what you chose. Scenes written before this update are not changed.
+
 ## 0.32.0 — 2026-11-14
 
 - **Recall follows the lead.** When a main chapter is planned, the earlier chapters it brings back in detail now come only from chapters the love interest you picked to lead it led: main chapters they led, and their own route and repair chapters. A route or repair chapter comes back marked as private to them. The condensed timeline, the recent chapters' summaries and the last chapter in full are sent as before.

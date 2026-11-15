@@ -73,6 +73,16 @@
         }
       ]
     },
+    "blackjack": {
+      "versions": [
+        {
+          "version": "1.0.0",
+          "date": "2026-10-22",
+          "notes": "- New Conversation game: play Blackjack against the house with up to six characters, from /blackjack or the games picker.\n- Pick a character to deal and call each round in their own voice, or let the house deal silently.\n- Hit, stand, double down, and split a pair once. Blackjack pays 3 to 2, and the dealer can hit or stand on soft 17.\n- Set the starting chips, minimum bet, decks in the shoe, and an optional round limit.",
+          "highlight": false
+        }
+      ]
+    },
     "character-tracker": {
       "versions": [
         {
@@ -694,6 +704,18 @@
           "highlight": true
         },
         {
+          "version": "0.32.2",
+          "date": "2026-11-15",
+          "notes": "- **Characters outside the cast keep the voice you gave them.** With **Voice everyone else** on, a character outside the cast who has an Engine character card now speaks with the voice assigned to that card in the Engine's voice settings, matched by name as the Engine's own chats do. Before, they got one of the Engine's default voices. Anyone with no assigned voice still gets a default voice.",
+          "highlight": false
+        },
+        {
+          "version": "0.32.1",
+          "date": "2026-11-14",
+          "notes": "- **A line written twice shows once.** When the model writes a scene line twice in a row, the same or with a word or two more at its end, only the first stays. That includes a line right after a choice that repeats what you chose. Scenes written before this update are not changed.",
+          "highlight": false
+        },
+        {
           "version": "0.32.0",
           "date": "2026-11-14",
           "notes": "- **Recall follows the lead.** When a main chapter is planned, the earlier chapters it brings back in detail now come only from chapters the love interest you picked to lead it led: main chapters they led, and their own route and repair chapters. A route or repair chapter comes back marked as private to them. The condensed timeline, the recent chapters' summaries and the last chapter in full are sent as before.",
@@ -794,18 +816,6 @@
           "date": "2026-11-11",
           "notes": "- **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.\n- **One rank at a time.** A rank's story is played before the next opens, so banked affection skips none; each level from 11 to 20 costs 650, then 50 more.\n- **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.\n- **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.",
           "highlight": true
-        },
-        {
-          "version": "0.22.7",
-          "date": "2026-11-11",
-          "notes": "- **A new love interest gets his own colour.** A love interest who joins the story after it has started, such as one an arc adds, now has his name tag and glow picked from his own portrait like everyone else's, instead of keeping a colour that could match another love interest's. Names that don't share a portrait yet spread across the colour wheel, so two of them rarely look alike. A story already in progress picks its colours again when it is opened.",
-          "highlight": false
-        },
-        {
-          "version": "0.22.6",
-          "date": "2026-11-11",
-          "notes": "- **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to \"Expressions\" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.",
-          "highlight": false
         }
       ]
     },
@@ -1221,6 +1231,16 @@
           "version": "0.1.0",
           "date": "2026-10-25",
           "notes": "- New Home tab: Story Writer, a co-writing book where the model writes your story chapter by chapter.\n- Pick a connection, characters, personas and lorebooks, describe the story, and press Write. The chapter streams onto the page.\n- Read it as an open book or an e-book, light or dark, with your own font, color and size. A portrait phone shows one page.\n- Click anywhere to edit, or start a chapter yourself and let the model continue it.\n- A sticky author's note tells the model what you want next, placed at a depth like Roleplay's Author's Notes.\n- Author tools: chapter summaries for long stories, a timeline the model follows (it can fill it in for you), and a target story length.\n- Every story saves itself: start new ones, come back to old ones any time, and download them as Markdown or plain text.\n- Change the prompt, banned phrases and continue message.",
+          "highlight": false
+        }
+      ]
+    },
+    "wordle": {
+      "versions": [
+        {
+          "version": "1.0.0",
+          "date": "2026-11-14",
+          "notes": "- New Conversation game: a daily Wordle for you and up to seven characters, from /wordle or the games picker.\n- Each chat has its own word of the day, and the day rolls over at your local midnight.\n- Everyone guesses the same word on their own board, one guess per turn. The table sees each player's colors but not their letters until the game is over, and the fewest guesses wins.\n- Each seat gets one go a day. Today's results and daily streaks are kept per chat, and characters can talk about how their own game went.",
           "highlight": false
         }
       ]
