@@ -229,15 +229,20 @@ export function DateNight({
     } else setStep({ kind: "company" });
   }
 
-  const go = useCallback(
-    (next: Step) => {
-      moved.current = true;
-      setStep(next);
-      if (next.kind === "reading") onResume?.({ key: next.key });
-      if (next.kind === "ending") onResume?.({ key: next.key, at: "ending" });
-    },
-    [onResume],
-  );
+  const go = useCallback((next: Step) => {
+    moved.current = true;
+    setStep(next);
+  }, []);
+
+  // #2302: where the date is now, whichever way it got there (the first step a date opens at included), so a trip to
+  // Settings opens it there again.
+  const stepKind = step?.kind;
+  const stepKey = step && "key" in step ? step.key : null;
+  useEffect(() => {
+    if (!stepKey) return;
+    if (stepKind === "reading") onResume?.({ key: stepKey });
+    if (stepKind === "ending") onResume?.({ key: stepKey, at: "ending" });
+  }, [onResume, stepKind, stepKey]);
 
   const reading = step?.kind === "reading";
   useEffect(() => {
@@ -1142,6 +1147,26 @@ function Keepsake({ runKey, view, who, entry, onPainted, onImageSettings }: Keep
     else void start();
   };
 
+  // #2302: a keepsake still painting from before a trip to Settings shows as painting, and is read again until it lands.
+  const painting = art?.state === "pending";
+  const queryClient = useQueryClient();
+  const dates = useDates(runKey);
+  const listed = allEntries(dates.data).find((item) => item.key === entry.key)?.keepsake;
+  useEffect(() => {
+    if (!painting) return;
+    const timer = window.setInterval(
+      () => void queryClient.invalidateQueries({ queryKey: datesQueryKey(runKey) }),
+      4000,
+    );
+    return () => window.clearInterval(timer);
+  }, [painting, queryClient, runKey]);
+  useEffect(() => {
+    if (painting && listed && listed.state !== "pending") {
+      setArt(listed);
+      if (listed.state === "ready") onPainted();
+    }
+  }, [listed, onPainted, painting]);
+
   const ready = art?.state === "ready" && art.url ? art : null;
   const failed = art?.state === "failed" || art?.state === "stopped";
   return (
@@ -1157,7 +1182,7 @@ function Keepsake({ runKey, view, who, entry, onPainted, onImageSettings }: Keep
       ) : (
         <>
           <p className="of-body">{t("ui.otomeForge.dateNight.keepsakeText", { name: who })}</p>
-          {busy && !review ? (
+          {(busy || painting) && !review ? (
             <p className="of-hint of-keepsake-busy" role="status">
               <Paintbrush className="of-pulse" size={15} strokeWidth={2} aria-hidden="true" />
               {t("ui.otomeForge.dateNight.keepsakePainting")}
@@ -1179,8 +1204,10 @@ function Keepsake({ runKey, view, who, entry, onPainted, onImageSettings }: Keep
           <button
             type="button"
             className="of-button of-button--primary of-button--small"
-            aria-disabled={busy}
-            onClick={tap}
+            aria-disabled={busy || painting}
+            onClick={() => {
+              if (!painting) tap();
+            }}
           >
             {failed ? (
               <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
