@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.34.2 — 2026-11-15
+
+- **A too-long timeline gets shortened.** When condensing the timeline comes back over 5,000 words, the result goes back on its own, told how long it is and how many words to cut, up to three times. Before, the whole timeline went back with it, and the model copied it out again, so the rebuild stopped.
+- **Prompts keep the old timeline during a rebuild.** Until a rebuild finishes, story prompts use the earlier timeline instead of the half-rebuilt one. A half-rebuilt timeline covered only the first chapters, so every later chapter went in on its own and a chapter plan could pass 160,000 tokens.
+
 ## 0.34.1 — 2026-11-15
 
 - **The timeline rebuild can finish.** The condensing prompt no longer also asks to keep every event, which fought its 5,000-word limit. Models kept bringing back about 7,400 words, so the rebuild stopped with **Retry the summary**. Until it finishes, each later chapter is sent on its own, which made chapter prompts very large.

@@ -704,6 +704,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.2",
+          "date": "2026-11-15",
+          "notes": "- **A too-long timeline gets shortened.** When condensing the timeline comes back over 5,000 words, the result goes back on its own, told how long it is and how many words to cut, up to three times. Before, the whole timeline went back with it, and the model copied it out again, so the rebuild stopped.\n- **Prompts keep the old timeline during a rebuild.** Until a rebuild finishes, story prompts use the earlier timeline instead of the half-rebuilt one. A half-rebuilt timeline covered only the first chapters, so every later chapter went in on its own and a chapter plan could pass 160,000 tokens.",
+          "highlight": false
+        },
+        {
           "version": "0.34.1",
           "date": "2026-11-15",
           "notes": "- **The timeline rebuild can finish.** The condensing prompt no longer also asks to keep every event, which fought its 5,000-word limit. Models kept bringing back about 7,400 words, so the rebuild stopped with **Retry the summary**. Until it finishes, each later chapter is sent on its own, which made chapter prompts very large.\n- **Summaries keep a story's periods and pregnancies.** Summaries no longer leave out anyone's period or cycle, so a character's period or a pregnancy in your story is remembered like anything else. The period tracker's data still never reaches memory.",
@@ -815,12 +821,6 @@
           "version": "0.24.4",
           "date": "2026-11-12",
           "notes": "- **The Image style is set off with a comma everywhere.** A Memories banner's art (Wish → paint the banner), key images, outfit scenes, keepsakes, Photo Shoot photos and tarot cards with people ran your Image style straight into the first sentence of the picture's prompt (\"soft watercolor The lamp room at night…\"). They now follow it with a comma, as a cast repaint and every other picture already did.",
-          "highlight": false
-        },
-        {
-          "version": "0.24.3",
-          "date": "2026-11-12",
-          "notes": "- **A chapter keeps its story on smaller connections too.** 0.24.2 kept the story a chapter opened with, but a scene that had to leave out some older chapters to fit a smaller connection rebuilt the story from scratch to do it, and so went back to the newer version after all. A chapter now keeps every part of its story, so a scene that has to leave something out leaves it out of the chapter's own.",
           "highlight": false
         }
       ]
