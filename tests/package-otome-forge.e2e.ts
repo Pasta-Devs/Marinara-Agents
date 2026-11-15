@@ -95,6 +95,8 @@ function createOtomeStub() {
           content: setup.content,
           images: setup.images,
           connections: setup.connections,
+          // The server's world view always carries its audio settings (normalizeWorld); 0.34.0's haptics read them.
+          audio: {},
           forge,
         },
         player: { personaId: setup.protagonist.personaId, name: "Mira Vale", pronouns: setup.protagonist.pronouns },
