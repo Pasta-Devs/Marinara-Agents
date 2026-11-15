@@ -394,7 +394,10 @@ const mainChapters = (count: number): ForgeMemorySource[] =>
 
 /** The condensing call's input timeline: its first user message (a repair turn adds a plain-text note after it). */
 const foldedInput = (messages: Array<{ role?: string; content: string }>) =>
-  JSON.parse(messages.find((message) => message.role === "user")!.content) as { source?: { id: string }; timeline?: string };
+  JSON.parse(messages.find((message) => message.role === "user")!.content) as {
+    source?: { id: string };
+    timeline?: string;
+  };
 /** A repair turn's note (S/generation.ts): the reply before it was refused. */
 const repairNote = (messages: Array<{ content: string }>) =>
   messages.at(-1)!.content.startsWith("That reply did not match") ? messages.at(-1)!.content : null;
@@ -613,7 +616,10 @@ test("a condensed head over its length twice fails with Otome's own words, and n
   assert.equal(await memory.maintain({ runId: RUN }), true);
   const failed = await settle(memory);
   assert.deepEqual([failed.phase, failed.retryable, failed.reason], ["error", true, "timeline-too-long"]);
-  assert.match(failed.message!, /^The Memory connection's model condensed the story's timeline to about [\d,]+ words, twice, past the 5,000 it may keep, so nothing was saved\./u);
+  assert.match(
+    failed.message!,
+    /^The Memory connection's model condensed the story's timeline to about [\d,]+ words, twice, past the 5,000 it may keep, so nothing was saved\./u,
+  );
   assert.equal(calls.filter((call) => !foldedInput(call.messages).source).length, 2, "the condensing and its repair");
   const content = (fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } }).overview.content;
   assert.ok(!content.includes("LONG-HEAD"), "the long head is never saved");

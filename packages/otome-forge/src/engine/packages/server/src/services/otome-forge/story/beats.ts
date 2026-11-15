@@ -219,6 +219,8 @@ export interface BeatContext {
   pov?: LiId;
   /** 0.34.0: the story's haptics are on (SH/haptics.ts hapticsOn): a segment keeps its haptic cues. */
   haptics?: boolean;
+  /** 0.34.0: the world's Emotion cues are on: a spoken line keeps its bracketed cues in `voiced`, never in `text`. */
+  cues?: boolean;
 }
 
 interface NormalizeOptions {
@@ -303,9 +305,46 @@ const REPEAT_MIN = 12;
 /** How much of the longer line the shorter must be for it to count as a repeat: one of a few words added at its end. */
 const REPEAT_SHARE = 0.85;
 
-/** A line's letters and digits, lower case: what two lines are compared by (spaces and punctuation aside). */
+/**
+ * 0.34.0: one delivery cue in a spoken line ("[hushed whisper]", "[gasps]"), written when the world's Emotion cues are
+ * on, with the blanks before it and any punctuation right after it. The voice model performs it; the reader never shows
+ * it (withoutCues).
+ */
+const CUE = /[ \t]*\[[^\[\]\n]{1,80}\]([.!?,;:…]*)/gu;
+const HAS_CUE = /\[[^\[\]\n]{1,80}\]/u;
+
+/**
+ * The line as shown: its cues dropped. Punctuation right after a cue (or a run of them) stays only when the words before
+ * it need it ("No [whispers]..." keeps its dots; "Dottore. [gasps] [moans]." loses the second full stop). A cue between
+ * two words with no space leaves one; a cue between dashes leaves one dash.
+ */
+export function withoutCues(text: string): string {
+  let shown = "";
+  let at = 0;
+  for (const match of text.matchAll(CUE)) {
+    const index = match.index ?? 0;
+    shown += text.slice(at, index);
+    at = index + match[0].length;
+    const after = match[1] ?? "";
+    const before = shown.trimEnd();
+    const next = text.slice(at);
+    if (after && before && !/[.!?,;:…—–-]$/u.test(before)) shown = before + after;
+    else if (/[—–-]$/u.test(before) && /^\s*[—–-]/u.test(next)) {
+      // "I—[gasps]—can't": the second dash goes with the cue.
+      shown = before;
+      at += next.length - next.replace(/^\s*[—–-]/u, "").length;
+    } else if (/\S$/u.test(shown) && /^[^\s.!?,;:…—–-]/u.test(next)) shown += " ";
+  }
+  shown += text.slice(at);
+  return shown
+    .replace(/ {2,}/gu, " ")
+    .replace(/^[\s.!?,;:…]+/u, "")
+    .trim();
+}
+
+/** A line's letters and digits, lower case: what two lines are compared by (spaces, punctuation and cues aside). */
 const lineKey = (value: unknown) =>
-  str(value, SEGMENT_TEXT_MAX)
+  withoutCues(str(value, SEGMENT_TEXT_MAX))
     .normalize("NFKC")
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "");
@@ -440,10 +479,15 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
   for (const entry of reply.segments) {
     if (!entry || typeof entry !== "object") continue;
     const source = entry as Record<string, unknown>;
-    const text = str(source.text, SEGMENT_TEXT_MAX);
-    if (!text) continue;
+    const written = str(source.text, SEGMENT_TEXT_MAX);
+    if (!written) continue;
+    // A line that is only a cue ("[gasps]") stays a line, shown as "…", so no choice's `at` moves.
+    const cued = !!options.context.cues && HAS_CUE.test(written);
+    const text = cued ? withoutCues(written) || "…" : written;
     const segment: Segment = { speaker: str(source.speaker, NAME_MAX), text };
     if (source.thought === true || source.thought === "true") segment.thought = true;
+    // Narration and thoughts are never voiced, so their cues are only dropped.
+    if (cued && segment.speaker && !segment.thought) segment.voiced = written;
     const expression = segment.speaker ? normalizeForgeStoryExpression(source.expression, FACES) : "";
     if (expression) segment.expression = expression as Segment["expression"];
     const exits = exitsOf(options.context, source.exits);
@@ -555,6 +599,15 @@ export function normalizeBeatReply(written: BeatReply, context: BeatContext): No
     return "the segments or choices did not follow the format (check the PLAYER CHOICES rules: 2-4 options, a selection each, branches of 1-8 segments, distinct `at` indexes)";
   }
   const choices = (beat.choices ?? []) as ForgeChoice[];
+  // The protagonist's own words are shown, never voiced: a cue there is only dropped (Dottore on #2325).
+  if (context.cues) {
+    for (const choice of choices) {
+      for (const option of choice.options) {
+        option.text = withoutCues(option.text) || option.text;
+        option.selection = { ...option.selection, text: withoutCues(option.selection.text) || option.selection.text };
+      }
+    }
+  }
   if (context.mustChoose && !choices.some((choice) => choice.kind === "big")) {
     return "this node must end on ONE big choice (see the PLAYER CHOICES rules for a big choice)";
   }
@@ -573,6 +626,7 @@ export function segmentLists(context: BeatContext): SegmentLists {
       return typeof places === "string" ? places : "";
     },
     list: (raw, start) => normalizeBeatBody(raw, { start, context }),
+    shown: (text) => (context.cues ? withoutCues(text) || text : text),
     thoughts: (raw, counts) => thoughtProblem(context, raw, counts),
     unmask: (raw) => withoutMaskedThoughts(context, raw),
   };
@@ -903,6 +957,7 @@ async function generateBeat(
     mustChoose,
     cgExplicit,
     ...(hapticsOn(run.world) ? { haptics: true } : {}),
+    ...(run.world.audio.emotionCues && run.world.audio.tts ? { cues: true } : {}),
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
     ...(side ? { sideWith: side } : {}),
     ...(pov ? { pov } : {}),

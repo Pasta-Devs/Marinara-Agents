@@ -650,14 +650,16 @@ export class OtomeAudioController {
       if (abort.signal.aborted || this.disposed) return "stopped";
       if (!voice) return "silent";
       const connectionId = isRecord(config) && typeof config.connectionId === "string" ? config.connectionId : "";
+      // 0.34.0: with Emotion cues on, the line as written, cues and all; its clip is kept apart from the plain one.
+      const voiced = settings.emotionCues ? segment.voiced : undefined;
       await ttsService.speakSequence(
         [
           {
-            text: segment.text,
+            text: voiced ?? segment.text,
             speaker: segment.speaker,
             voice,
             ...(speaker.characterId ? { characterId: speaker.characterId } : {}),
-            ...(cache ? { cacheKey: voiceCacheKey(this.runKey, ref) } : {}),
+            ...(cache ? { cacheKey: voiceCacheKey(this.runKey, voiced ? `${ref}~cues` : ref) } : {}),
           },
         ],
         `${this.voicePrefix}${(this.voiceIndex += 1)}`,

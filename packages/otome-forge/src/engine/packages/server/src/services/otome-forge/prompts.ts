@@ -2340,6 +2340,17 @@ const toysLines = (world: Pick<World, "content" | "audio">, toys = "") =>
 const EXITS_RULE =
   '- exits: only on the segment where love interests leave the scene, or the protagonist leaves them behind: the exact names of those no longer with the protagonist ("exits": ["Name"]). Omit it on every other segment.';
 
+/**
+ * 0.34.0: the world's Emotion cues (Settings, Audio, Voices). S/story/beats.ts withoutCues keeps them from the reader and
+ * sends the line with them to the voice model (Segment.voiced). The scene prompts carry it only while the setting is on.
+ */
+const EMOTION_CUES_RULE =
+  "- Emotion cues: in every spoken line (a segment with a speaker that is not a thought), write in square brackets how the line is said and the sounds made while saying it: the emotion, the delivery, and sounds such as gasps, sighs, laughs, sobs or moans, e.g. \"[hushed, breathless whisper] I love you. [gasps]\". Put a cue before the words it colours, or where the sound happens; keep each cue a few English words. Everything outside the brackets is spoken aloud as written. Never use square brackets in narration, thoughts, a choice's label or the protagonist's selection.";
+
+/** Only while the dialogue is voiced: nothing performs a cue otherwise (Dottore on #2325). */
+const emotionCues = (world: Pick<World, "audio">) =>
+  world.audio.emotionCues && world.audio.tts ? [EMOTION_CUES_RULE] : [];
+
 const VOICES_INSTRUCTION = `
 
 SPEAKER VOICES (extend the JSON shape above with an optional top-level "voices" object):
@@ -2441,6 +2452,7 @@ export function beatMessages({
     beatShape,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
+    ...emotionCues(world),
     pov
       ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
       : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
@@ -3095,6 +3107,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- grievance.text: what a walkout leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in reveal, as one short third-person sentence ("The protagonist said their brother drowned here.").`,
     `- musicMood: tense or angst.`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
+    ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
@@ -3200,6 +3213,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- grievance.text: what being shut out leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in mirror, as one short third-person sentence ("The protagonist said they still sleep with a light on.").`,
     "- musicMood: tender or confession.",
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
+    ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,

@@ -29,6 +29,7 @@ type AudioForm = Pick<
   | "otherVoices"
   | "haptics"
   | "hapticsUrl"
+  | "emotionCues"
   | "generate"
   | "chapterThemes"
   | "musicFolder"
@@ -43,6 +44,7 @@ const toForm = (audio: AudioSettings): AudioForm => ({
   otherVoices: audio.otherVoices,
   haptics: audio.haptics,
   hapticsUrl: audio.hapticsUrl,
+  emotionCues: audio.emotionCues,
   generate: audio.generate,
   chapterThemes: audio.chapterThemes,
   musicFolder: audio.musicFolder,
@@ -234,6 +236,13 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
           checked={form.otherVoices}
           disabled={!form.tts}
           onChange={(otherVoices) => set({ otherVoices })}
+        />
+        <Switch
+          label={t("ui.otomeForge.audio.emotionCues")}
+          hint={t("ui.otomeForge.audio.emotionCuesHint")}
+          checked={form.tts && form.emotionCues}
+          disabled={!form.tts}
+          onChange={(emotionCues) => set({ emotionCues })}
         />
       </Section>
       <Section title={t("ui.otomeForge.audio.musicTitle")} hint={t("ui.otomeForge.audio.musicHint")}>

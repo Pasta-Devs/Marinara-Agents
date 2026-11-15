@@ -95,6 +95,7 @@ export const SegmentSchema: ZodType<Segment> = z.object({
   gender: short(20).optional(),
   exits: z.array(z.string()).optional(),
   haptic: HapticCuesSchema.optional(),
+  voiced: short(4000).optional(),
 });
 
 const ChoiceSchema: ZodType<ForgeChoice> = z.object({
