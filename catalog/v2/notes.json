@@ -704,6 +704,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.0",
+          "date": "2026-11-15",
+          "notes": "- **Emotion cues.** Turn on **Emotion cues** in **Settings → Audio → Voices**: with voiced dialogue, new scenes mark how lines are said, like [hushed whisper] or [gasps]. The voice performs them; the dialogue box hides them. ElevenLabs v3 and v4 act on them; other models may read the brackets aloud.\n- **Haptics.** In an explicit story, **Settings → Audio → Haptics** connects your toys through Intiface Central and tests them all. Sex scenes then drive them, each cue looping until the story changes it, and in Messages you can hand him the remote. **Stop the toys** stays on screen while they play.\n- **Memory keeps its newest chapters.** Condensing the timeline now keeps the newest three chapters as written and refuses a result that comes back too long, which had lost chapters. Every story's timeline is rebuilt once from its saved summaries.",
+          "highlight": true
+        },
+        {
           "version": "0.33.3",
           "date": "2026-11-15",
           "notes": "- **Date cards that fit a phone.** In Album → Dates, each date's text now uses the card's full width, with **Plan a date**, **Read again** and an evening's outcome in one row below it.\n- **A picture for 4★ dates.** A 4★ date now paints its place, with nobody in it, when you first open it, 1 image, as a 5★ date shows its banner's picture. A date won before this update offers **Paint it** in Album → Dates.\n- **Narration and dialogue.** Every story prompt now asks narration to show what happens, not what doesn't. Dialogue should sound spoken, in each speaker's own voice, with everyday words. No echoing or parroting.",
@@ -815,12 +821,6 @@
           "version": "0.24.2",
           "date": "2026-11-12",
           "notes": "- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.",
-          "highlight": false
-        },
-        {
-          "version": "0.24.1",
-          "date": "2026-11-12",
-          "notes": "- **Cheaper prompts.** Every prompt Otome Hearth sends to Claude now asks for the five-minute prompt cache instead of the hour-long one. A cached prompt is usually read again within a minute or two (the next scene, the next beat of a chapter), where the five-minute cache costs a quarter of the input to write and the hour-long one twice it — so the hour mostly doubled the price of a prompt that was read seconds later. Group replies, which had been paying the hour-long price, now use the five-minute one too.",
           "highlight": false
         }
       ]

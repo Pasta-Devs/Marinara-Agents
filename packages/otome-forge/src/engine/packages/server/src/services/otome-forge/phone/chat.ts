@@ -48,12 +48,15 @@ import type {
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { hapticsOn } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { sendableStickers, stickerBook, stickerLookup } from "../art/stickers.js";
 import { generateJson, runForeground, type GenerationDeps } from "../generation.js";
+import type { OtomeHaptics } from "../haptics.js";
 import { OtomeForgeError } from "../http.js";
 import { chatId, isLiId, runDocTarget, worldId } from "../ids.js";
 import { isRecord, readFields, validItems } from "../schemas/common.js";
+import { HapticCuesSchema } from "../schemas/story.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
@@ -94,6 +97,7 @@ const MESSAGE_DISPLAY = {
     status: z.enum(["pending", "accepted", "declined", "lapsed"]),
     scene: z.string().max(120).optional(),
   }),
+  haptic: HapticCuesSchema,
 };
 const SESSION_DISPLAY = { name: z.string().max(SESSION_NAME_MAX), members: z.array(LI).max(LIS_MAX) };
 
@@ -106,6 +110,7 @@ const MessageSchema: ZodType<PhoneMessage> = z.object({
   quote: MESSAGE_DISPLAY.quote.optional(),
   li: MESSAGE_DISPLAY.li.optional(),
   invite: MESSAGE_DISPLAY.invite.optional(),
+  haptic: MESSAGE_DISPLAY.haptic.optional(),
 });
 
 const SessionSchema: ZodType<PhoneSession> = z.object({
@@ -186,6 +191,8 @@ const later = (a: string | null, b: string) => (a && Date.parse(a) >= Date.parse
 export interface PhoneDeps extends GenerationDeps {
   store: OtomeStore;
   memory?: StoryMemory;
+  /** 0.34.0: the toys (S/haptics.ts), whose connected list his reply's prompt names while he holds the remote. */
+  haptics?: Pick<OtomeHaptics, "devicesText">;
 }
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");
@@ -323,6 +330,11 @@ export interface SendInput {
   id?: string;
   /** Answer the messages still waiting for his reply (after one failed) without a new message. */
   retry?: boolean;
+  /**
+   * 0.34.0: he holds the remote of her toys for about this many more minutes (the client keeps it): his reply may drive
+   * them. Read only while the story's haptics are on.
+   */
+  remote?: number;
 }
 
 /** His reply to message `index`: the run of his messages after it, past any more of hers. */
@@ -370,10 +382,13 @@ async function writeReply(
     first = false,
     connectionId,
     reason,
-  }: { debugMode: boolean; first?: boolean; connectionId?: string; reason?: "upset" },
+    remote: heldFor,
+  }: { debugMode: boolean; first?: boolean; connectionId?: string; reason?: "upset"; remote?: number },
 ): Promise<PhoneMessage[]> {
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
   const invite = inviteOffered(run.state.lis[li]!, thread);
+  // 0.34.0: only her reply while he holds the remote, never a message he writes first, may drive her toys.
+  const remote = !first && heldFor && hapticsOn(run.world) ? Math.round(heldFor) : 0;
   const tail = openMessages(thread).slice(-TAIL_MESSAGES);
   const memories = thread.sessions.slice(-LISTED_SESSIONS);
   const story = await recallText(deps, runId, {
@@ -403,12 +418,13 @@ async function writeReply(
       stickers,
       invite,
       reason,
+      ...(remote ? { remote, toys: deps.haptics?.devicesText() ?? "" } : {}),
     }),
     memory: story,
     // A conversation's replies come minutes apart, so the five-minute cache, at a cheaper write, carries it (0.20.2).
     cacheTtl: "5m",
     schema: ChatReplySchema,
-    normalize: (raw) => normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite),
+    normalize: (raw) => normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite, remote > 0),
     maxTokens: 1200,
     debugMode,
     ...(connectionId ? { lane: "background" as const, connectionId } : { lane: "foreground" as const }),
@@ -423,6 +439,7 @@ async function writeReply(
     ...(message.sticker ? { sticker: message.sticker } : {}),
     at,
     ...(written.invite && index === all.length - 1 ? { invite: { status: "pending" as const } } : {}),
+    ...(message.haptic?.length ? { haptic: message.haptic } : {}),
   }));
 }
 
@@ -465,13 +482,14 @@ export function answerIn<T>(
 }
 
 /** His reply (P17) to the open conversation, through answerIn. */
-const answer = (deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean) =>
+const answer = (deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean, remote?: number) =>
   answerIn(
     deps,
     runId,
     li,
     () => loadThreadRun(deps, runId, li),
-    ({ run, unit }, thread) => writeReply(deps, runId, li, { run, unit, thread }, { debugMode }),
+    ({ run, unit }, thread) =>
+      writeReply(deps, runId, li, { run, unit, thread }, { debugMode, ...(remote ? { remote } : {}) }),
   );
 
 /**
@@ -535,7 +553,7 @@ async function send(
       const { his, yours } = sendableStickers(stickerBook(runId, run), run.world, li);
       return [...his, ...yours].map((sticker) => sticker.id);
     },
-    answer: () => answer(deps, runId, li, debugMode),
+    answer: () => answer(deps, runId, li, debugMode, input.remote),
   });
 }
 

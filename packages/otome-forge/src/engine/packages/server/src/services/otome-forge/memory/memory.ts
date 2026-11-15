@@ -89,6 +89,7 @@ import { createBackgroundQueue, type BackgroundQueue } from "../background-queue
 import {
   ROMANTIC_FIRSTS,
   SUMMARY_WORDING,
+  TIMELINE_FOLD_WORDS,
   notebookMemories,
   otomeContentContract,
   romanticFirstsAsk,
@@ -165,6 +166,21 @@ const tooSmall = (maxContext: number, task: "write a summary" | "condense the st
   message: `The Memory connection's model (${maxContext.toLocaleString("en-US")} tokens of context) is too small to ${task}. Choose a connection with a larger context.`,
 });
 
+/**
+ * 0.34.0: the longest condensed head kept, in estimated tokens: TIMELINE_FOLD_WORDS at the estimator's 1.35 tokens a
+ * word, with a quarter of leeway. A longer one is refused with one repair turn that names its length, then fails as a
+ * summary does, with Otome's own words (timelineTooLong), and nothing of it is saved.
+ */
+const TIMELINE_HEAD_TOKENS = Math.round(TIMELINE_FOLD_WORDS * 1.35 * 1.25);
+/** About how many words a condensed head of `tokens` estimated tokens holds, as the repair turn and the status say it. */
+const headWords = (tokens: number) => Math.round(tokens / 1.35);
+
+/** A condensing that came back over TIMELINE_HEAD_TOKENS twice: Otome's own words (see tooSmall). */
+const timelineTooLong = (tokens: number) => ({
+  reason: "timeline-too-long",
+  message: `The Memory connection's model condensed the story's timeline to about ${headWords(tokens).toLocaleString("en-US")} words, twice, past the ${TIMELINE_FOLD_WORDS.toLocaleString("en-US")} it may keep, so nothing was saved. Retry to ask again, or choose a stronger model for Memory.`,
+});
+
 /** How many characters of its source a detail request carries (the kit's `range`); a piece of one is the smallest. */
 /** The id of the source a chapter summary request summarizes (its chapter key), when the kit's message carries one. */
 const sourceIdOf = (request: SummaryRequest): string | undefined => {
@@ -184,7 +200,7 @@ type SavedForm =
       overview?: unknown;
       overviewStyle?: unknown;
       legacyOverview?: unknown;
-      status?: { phase?: unknown; unknownReaders?: unknown };
+      status?: { phase?: unknown; unknownReaders?: unknown; retryable?: unknown; reason?: unknown };
     }
   | null
   | undefined;
@@ -197,10 +213,18 @@ type SavedForm =
  */
 const currentForm = (data: unknown) => {
   const saved = data as SavedForm;
-  const form: SavedForm =
-    saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE
-      ? { ...saved, overview: null, legacyOverview: saved.overview }
-      : saved;
+  const earlier = !!saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE;
+  // 0.34.0: a story whose memory waited for Retry when its form changed rebuilds by itself, as every other one does.
+  const form: SavedForm = earlier
+    ? {
+        ...saved,
+        overview: null,
+        legacyOverview: saved!.overview,
+        ...(saved!.status?.phase === "error"
+          ? { status: { phase: "stale", retryable: true, reason: "not-prepared" } }
+          : {}),
+      }
+    : saved;
   const status = form?.status;
   if (status?.phase === "context-unknown")
     return { ...form, status: { phase: "stale", retryable: true, reason: "not-prepared" } };
@@ -211,9 +235,15 @@ const currentForm = (data: unknown) => {
   return form ?? null;
 };
 
-/** The memory as the kit writes it: one with an overview carries its form, and the earlier one is let go. */
+/**
+ * The memory as the kit writes it: one with an overview carries its form. 0.34.0: the earlier overview is let go only
+ * once the rebuild's status is ready, so `legacyOverview` says a rebuild is under way through all of its folds
+ * (S/memory/timeline.ts savedStory `rebuilding`); What happened so far… shows the new timeline as soon as it has one.
+ */
 const stampedForm = (data: unknown) => {
-  if (!(data as SavedForm)?.overview) return data;
+  const saved = data as SavedForm;
+  if (!saved?.overview) return data;
+  if (saved.legacyOverview && saved.status?.phase !== "ready") return { ...saved, overviewStyle: OVERVIEW_STYLE };
   const { legacyOverview: _earlier, ...rest } = data as Record<string, unknown>;
   return { ...rest, overviewStyle: OVERVIEW_STYLE };
 };
@@ -522,7 +552,12 @@ export function createOtomeMemory({
       const request = value as SummaryRequest;
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
       if (!job) throw new Error("memory-unavailable");
-      const call = async (kind: string, messages: OtomeMessage[], maxTokens = SUMMARY_OUTPUT_TOKENS) => {
+      const call = async (
+        kind: string,
+        messages: OtomeMessage[],
+        maxTokens = SUMMARY_OUTPUT_TOKENS,
+        normalize?: (reply: z.infer<typeof SummarySchema>) => z.infer<typeof SummarySchema> | string,
+      ) => {
         const { value: reply } = await generateJson(
           { runtime, store },
           {
@@ -531,6 +566,7 @@ export function createOtomeMemory({
             label: `memory-${kind}`,
             messages,
             schema: SummarySchema,
+            ...(normalize ? { normalize } : {}),
             maxTokens,
             debugMode: request.debugMode === true,
             lane: "background",
@@ -594,9 +630,25 @@ export function createOtomeMemory({
           failures.set(request.runId, tooSmall(job.maxContext ?? 0, "condense the story's timeline"));
           throw new Error("summary-context-too-small");
         }
-        head = cleanSummary(
-          await ask("timeline", condense({ head, entries: pending.slice(0, take) }), TIMELINE_OUTPUT_TOKENS),
-        );
+        // 0.34.0: a head over its length goes back once with its length named (generateJson's repair turn); a second
+        // one fails the condensing, so a copied-out timeline is never saved in place of a condensed one.
+        let tooLong = 0;
+        const reply = await call(
+          "timeline",
+          condense({ head, entries: pending.slice(0, take) }),
+          TIMELINE_OUTPUT_TOKENS,
+          (value) => {
+            const tokens = estimateTextTokens(value.summary);
+            tooLong = tokens > TIMELINE_HEAD_TOKENS ? tokens : 0;
+            return tooLong
+              ? `the condensed timeline is about ${headWords(tokens)} words, but it must be at most ${TIMELINE_FOLD_WORDS} words: condense it much further, compressing the oldest parts the most`
+              : value;
+          },
+        ).catch((error: unknown) => {
+          if (tooLong) failures.set(request.runId, timelineTooLong(tooLong));
+          throw error;
+        });
+        head = cleanSummary(reply.summary);
         pending = pending.slice(take);
       }
       return serializeTimeline({ head, entries: keptPart(timeline) });

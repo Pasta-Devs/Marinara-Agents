@@ -46,6 +46,11 @@ import {
   type DateScore,
 } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import {
+  HAPTIC_ACTIONS,
+  HAPTIC_CUES_MAX,
+  HAPTIC_PATTERNS,
+} from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { isChapterKey } from "../ids.js";
@@ -69,6 +74,18 @@ export const HisSideNoteSchema: ZodType<HisSideNote> = z.object({
   at: short(40),
 });
 
+/** 0.34.0: a segment's haptic cues as normalizeHapticCues keeps them (SH/haptics.ts). */
+export const HapticCuesSchema = z
+  .array(
+    z.object({
+      action: z.enum(HAPTIC_ACTIONS),
+      pattern: z.enum(HAPTIC_PATTERNS).optional(),
+      intensity: z.number().min(0).max(1).optional(),
+      device: short(80).optional(),
+    }),
+  )
+  .max(HAPTIC_CUES_MAX);
+
 export const SegmentSchema: ZodType<Segment> = z.object({
   speaker: short(120),
   text: short(4000),
@@ -77,6 +94,8 @@ export const SegmentSchema: ZodType<Segment> = z.object({
   place: short(120).optional(),
   gender: short(20).optional(),
   exits: z.array(z.string()).optional(),
+  haptic: HapticCuesSchema.optional(),
+  voiced: short(4000).optional(),
 });
 
 const ChoiceSchema: ZodType<ForgeChoice> = z.object({
@@ -292,6 +311,8 @@ export function normalizeChapter(data: unknown): Chapter | null {
           prefix: z.string(),
           fate: z.string(),
           optional: z.array(z.string()),
+          // 0.34.0: the timeline form it was read from. Optional, so a context saved before reads with none.
+          form: z.number().int().optional(),
         })
         .optional(),
       // 0.20.4: its small memories' ids, [] when it has none (S/story/beats.ts).

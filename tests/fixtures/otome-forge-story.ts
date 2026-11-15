@@ -28,6 +28,7 @@ import {
   worldId,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
+  OVERVIEW_STYLE,
   serializeTimeline,
   type TimelineEntry,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
@@ -465,7 +466,7 @@ export async function saveStoryMemory(
         content: serializeTimeline({ head, entries }),
         sources: [...entries.map((entry) => entry.key), ...covered].map(stamp),
       },
-      overviewStyle: 4,
+      overviewStyle: OVERVIEW_STYLE,
       status: { phase: "ready", retryable: false },
     }),
   );

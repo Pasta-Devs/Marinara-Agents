@@ -166,6 +166,22 @@ test("the audio settings are bounded, keep the briefs and tracks, and never show
   assert.equal((await t.call("POST", "/runs/:run/audio/settings", { audio: "loud" })).status, 400);
 });
 
+test("0.34.0: Emotion cues start off, are on only when saved as true, and survive unrelated audio saves", async () => {
+  for (const value of [undefined, null, {}, { emotionCues: "true" }, { emotionCues: 1 }, { emotionCues: false }]) {
+    assert.equal(normalizeOtomeAudio(value).emotionCues, false, JSON.stringify(value));
+  }
+  assert.equal(normalizeOtomeAudio({ emotionCues: true }).emotionCues, true);
+  assert.equal(normalizeWorld({}).audio.emotionCues, false, "a story saved before 0.34.0 has them off");
+  const t = await audioWorld("r-cues-eeeeee");
+  const saved = await t.call("POST", "/runs/:run/audio/settings", { audio: { tts: true, emotionCues: true } });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.audio.emotionCues, true);
+  const next = await t.call("POST", "/runs/:run/audio/settings", { audio: { dialogueVolume: 0.5 } });
+  assert.equal(next.body.audio.emotionCues, true);
+  assert.equal((await t.world()).audio.emotionCues, true);
+  assert.equal(t.calls.length, 0, "the switch alone calls no model");
+});
+
 test("an uploaded music folder is saved without generation and survives unrelated audio saves", async () => {
   assert.equal(normalizeOtomeAudio(undefined).musicFolder, "");
   const t = await audioWorld("r-foldermusic1-dddddd");

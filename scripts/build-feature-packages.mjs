@@ -938,7 +938,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.33.3",
+    version: "0.34.0",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),
@@ -950,7 +950,8 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["routes", "storage", "ui"],
+    // 0.34.0: `network` for the Engine's haptics (api.runtime.integrations.haptics, Capability API 1.341).
+    permissions: ["network", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/otome-forge/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/otome-forge/client-entry.tsx",

@@ -10,7 +10,9 @@
 // one speaker alone, or a reply with nothing from a member the protagonist's newest message names (the maintainer's
 // rule: whoever is named answers). Each speaker sends at most one sticker in a reply, their own or the protagonist's.
 import { z, type ZodType } from "zod";
+import type { HapticCue } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { normalizeHapticCues } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { NOTE_TEXT_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import type { StickerLookup } from "../art/stickers.js";
 import { fold, nameCore } from "../names.js";
@@ -92,13 +94,13 @@ export function stickerMatcher(listed: readonly ReplySticker[]): (token: string)
 
 /** P17's reply as the model sends it (nulls allowed); normalizeChatReply makes it a ChatReply. */
 export interface ChatReplyRaw {
-  messages: Array<{ text?: string | null; sticker?: string | null }>;
+  messages: Array<{ text?: string | null; sticker?: string | null; haptic?: unknown }>;
   invite?: boolean | null;
 }
 
 export interface ChatReply {
-  /** `sticker` is a listed sticker's id (S/art/stickers.ts). */
-  messages: Array<{ text: string; sticker?: string }>;
+  /** `sticker` is a listed sticker's id (S/art/stickers.ts); `haptic` (0.34.0) only while he holds the remote. */
+  messages: Array<{ text: string; sticker?: string; haptic?: HapticCue[] }>;
   /** #2156: his last message asks her out to clear the air (kept only when P17 offered it). */
   invite?: true;
 }
@@ -106,7 +108,11 @@ export interface ChatReply {
 export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
   messages: z
     .array(
-      z.object({ text: z.string().max(4000).nullable().optional(), sticker: z.string().max(40).nullable().optional() }),
+      z.object({
+        text: z.string().max(4000).nullable().optional(),
+        sticker: z.string().max(40).nullable().optional(),
+        haptic: z.unknown().optional(),
+      }),
     )
     .min(1)
     .max(8),
@@ -119,13 +125,14 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
  * written as the protagonist, or a reply with nothing in it, is refused (the repair turn names why). A sticker is the
  * first bracketed name of `listed` in the reply (either order; a `sticker` field is read the same way); every other
  * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays. `invite` (#2156) is kept
- * only when P17 offered it (`offered`).
+ * only when P17 offered it (`offered`); a message's haptic cues (0.34.0) only while he holds the remote (`remote`).
  */
 export function normalizeChatReply(
   raw: ChatReplyRaw,
   names: ThreadNames,
   listed: readonly ReplySticker[] = [],
   offered = false,
+  remote = false,
 ): ChatReply | string {
   const messages: ChatReply["messages"] = [];
   const match = stickerMatcher(listed);
@@ -137,7 +144,8 @@ export function normalizeChatReply(
     }
     if (!message) continue;
     if (message.sticker) stickers += 1;
-    messages.push(message);
+    const haptic = remote ? normalizeHapticCues(entry.haptic) : [];
+    messages.push(haptic.length ? { ...message, haptic } : message);
   }
   if (!messages.length) return `the reply had no message from ${names.li}`;
   return {

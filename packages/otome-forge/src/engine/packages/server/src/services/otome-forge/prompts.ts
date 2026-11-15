@@ -205,6 +205,7 @@ import {
   limitIsFixed,
 } from "../../../../client/src/features/otome-forge/shared/content.js";
 import { MUSIC_MEDIUM, MUSIC_SCENES } from "../../../../client/src/features/otome-forge/shared/cues.js";
+import { hapticsOn } from "../../../../client/src/features/otome-forge/shared/haptics.js";
 import {
   DATE_BEATS,
   type DatePlace,
@@ -2313,9 +2314,42 @@ SIDE WITH (this node): ${who} disagree here: they argue, or want to handle somet
 - Leave "effects" out of that choice: the game settles what siding with them changes.`;
 }
 
+/**
+ * 0.34.0: the haptic cues a scene may carry when the story's haptics are on (an explicit story; SH/haptics.ts). Constant,
+ * so the cached instructions stay the same through the chapter; the connected toys go in the task turn (toysLines). The
+ * maintainer's rules: no cap on strength (the whole 0–1, 1.0 included), and every cue loops until it is replaced.
+ */
+const HAPTICS_RULE =
+  '- haptic: the protagonist\'s connected toys play the scene on their body. On a segment where what the toys do should start or change, add "haptic": [{"action": "vibrate|rotate|oscillate|constrict|inflate|position|stop", "pattern": "steady|tap|pulse|wave|ramp|impact", "intensity": 0.0-1.0, "device": "toy name"}], one cue for each toy. Tie each cue to what is being done to the protagonist at that line (a touch, a mouth, a thrust, a tease that stops short), building and easing with it. A cue keeps looping until a later segment\'s "haptic" replaces it, so a later cue lists every toy that should keep going; "stop" stops the toy it names, or every toy without a device. Leave "device" out to drive every toy that can do the action. Intensity uses the whole range up to 1.0. Each node starts with the toys still: when the action carries on from the node before, set its cue again on the first segment. Use cues whenever the protagonist is touched, teased or pleasured, and leave them off otherwise.';
+
+/** The haptic rule for a story whose haptics are on (an explicit story with the setting on), else none. */
+const hapticRules = (world: Pick<World, "content" | "audio">) => (hapticsOn(world) ? [HAPTICS_RULE] : []);
+
+/** 0.34.0: the connected toys, in a scene's task turn (never the cached instructions), when haptics are on. */
+const toysLines = (world: Pick<World, "content" | "audio">, toys = "") =>
+  hapticsOn(world)
+    ? [
+        "",
+        toys.trim()
+          ? `THE PROTAGONIST'S TOYS, CONNECTED NOW (name: what it can do)\n${toys.trim()}`
+          : "No toy is connected right now. Write the haptic cues anyway: they play on whatever toy is connected when the line is read.",
+      ]
+    : [];
+
 /** #2024: who is no longer in the scene, so the reader takes them off the stage (S/story/beats.ts exitsOf). */
 const EXITS_RULE =
   '- exits: only on the segment where love interests leave the scene, or the protagonist leaves them behind: the exact names of those no longer with the protagonist ("exits": ["Name"]). Omit it on every other segment.';
+
+/**
+ * 0.34.0: the world's Emotion cues (Settings, Audio, Voices). S/story/beats.ts withoutCues keeps them from the reader and
+ * sends the line with them to the voice model (Segment.voiced). The scene prompts carry it only while the setting is on.
+ */
+const EMOTION_CUES_RULE =
+  "- Emotion cues: in every spoken line (a segment with a speaker that is not a thought), write in square brackets how the line is said and the sounds made while saying it: the emotion, the delivery, and sounds such as gasps, sighs, laughs, sobs or moans, e.g. \"[hushed, breathless whisper] I love you. [gasps]\". Put a cue before the words it colours, or where the sound happens; keep each cue a few English words. Everything outside the brackets is spoken aloud as written. Never use square brackets in narration, thoughts, a choice's label or the protagonist's selection.";
+
+/** Only while the dialogue is voiced: nothing performs a cue otherwise (Dottore on #2325). */
+const emotionCues = (world: Pick<World, "audio">) =>
+  world.audio.emotionCues && world.audio.tts ? [EMOTION_CUES_RULE] : [];
 
 const VOICES_INSTRUCTION = `
 
@@ -2362,6 +2396,8 @@ export interface BeatMessagesInput {
   hisSide?: string;
   /** The last Character Story's title when this chapter picks up from it (recallText `handOff`, storyHandOff), or "". */
   handOff?: string;
+  /** 0.34.0: the protagonist's connected toys as S/haptics.ts devicesText lists them, or "" (with haptics on). */
+  toys?: string;
 }
 
 export function beatMessages({
@@ -2379,6 +2415,7 @@ export function beatMessages({
   prologue = "",
   hisSide = "",
   handOff = "",
+  toys = "",
 }: BeatMessagesInput): OtomeMessage[] {
   const backgrounds = savedBackgrounds(world);
   // #2155: his side tells one scene again from his point of view: only he thinks, and it offers no choice. Only his
@@ -2415,11 +2452,13 @@ export function beatMessages({
     beatShape,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
+    ...emotionCues(world),
     pov
       ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
       : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
+    ...hapticRules(world),
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
     `- places: every place the node happens in, in order (at most ${BEAT_PLACES_MAX}). A place is a room, a street, a garden: never the time of day or the mood. tags: the same place as 4-8 short comma-separated English tags for an image model, with "no humans". place on a segment: which place it happens in; omit it while the scene has not moved.`,
     "- Honour the story so far: keep established names, facts and open threads; never contradict them, and never undo a choice already made.",
@@ -2514,6 +2553,7 @@ export function beatMessages({
     // the shape it must reply in. It sits before the content-contract reminder, which stays the final line; this
     // message is never cached, so saying it here costs nothing. "PLUS the extra keys this node asks for" keeps the
     // choice-effects, cg and voices blocks above from reading as optional extras a strict "ONLY" would drop.
+    ...toysLines(world, toys),
     `Reply with ONLY the JSON object, no markdown and no code fence, in the shape above (plus the extra keys this node asks for, such as "choices", "effects", "cg" or "voices"): ${beatShape}`,
     otomeContractReminder("scene"),
   ];
@@ -3046,6 +3086,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     pool = "",
     arc = null,
     li,
+    toys = "",
   } = input;
   const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id) || unit.id === li);
@@ -3066,9 +3107,11 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- grievance.text: what a walkout leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in reveal, as one short third-person sentence ("The protagonist said their brother drowned here.").`,
     `- musicMood: tense or angst.`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
+    ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
+    ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
@@ -3113,6 +3156,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
     ...arcFraming({ chapter, node, units, state, world }),
+    ...toysLines(world, toys),
     otomeContractReminder("scene"),
   ];
   return storyMessages(
@@ -3145,6 +3189,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     pool = "",
     arc = null,
     li,
+    toys = "",
   } = input;
   const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id) || unit.id === li);
@@ -3168,9 +3213,11 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- grievance.text: what being shut out leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in mirror, as one short third-person sentence ("The protagonist said they still sleep with a light on.").`,
     "- musicMood: tender or confession.",
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
+    ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
+    ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
@@ -3211,6 +3258,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
     ...arcFraming({ chapter, node, units, state, world }),
+    ...toysLines(world, toys),
     otomeContractReminder("scene"),
   ];
   return storyMessages(
@@ -3262,10 +3310,13 @@ export const TIMELINE_FOLD_WORDS = 5000;
 export const CHAPTER_SUMMARY_WORDING = `Summarize this one chapter, as it was played, in at most ${CHAPTER_SUMMARY_WORDS} words, in the past tense and in story order: what happened; the most important lines of dialogue, quoted with who said them; and every choice the protagonist made, including any big choice, a judgment they made and whom they sided with over whom. When the source's title says it is someone's own private chapter, begin the summary with "Private: only <their name> and the protagonist know this." When its title says someone else also appears in it, name them in that opening instead ("Private: only <their name>, <who also appears> and the protagonist know this.") and say in the summary which parts each of them was there for.`;
 
 /**
- * What condensing the timeline asks for (#2066): everything but the newest chapter, retold shorter. The newest stays as
- * it is, so the timeline goes on in order.
+ * What condensing the timeline asks for (#2066): everything but the newest three chapters (S/memory/timeline.ts
+ * KEPT_ENTRIES), retold much shorter. 0.34.0: a model told to keep "every event" copied a 20,000-word timeline nearly
+ * whole and lost four chapters at its end, so the wording puts the length first and says what gives way: the oldest
+ * parts, and detail that no longer matters, never the state things are in now. A head over the length is refused
+ * (S/memory/memory.ts).
  */
-export const TIMELINE_FOLD_WORDING = `Condense the story's timeline below to about ${TIMELINE_FOLD_WORDS} words, and no more. Keep every event that still matters, every relationship turn, every choice the protagonist made (big choices, judgments, whom they sided with) and the names, in story order. A part that begins "Private: only … know this." stays private: keep that opening for it.`;
+export const TIMELINE_FOLD_WORDING = `Condense the story's timeline below into a recollection of at most ${TIMELINE_FOLD_WORDS} words. It must come back far shorter than the timeline you are given: never copy it out, and never go past ${TIMELINE_FOLD_WORDS} words, however long the story is. Compress the oldest parts the most; a chapter long past may shrink to a sentence or merge with the ones around it. Keep, in story order: every big choice and judgment the protagonist made and whom they sided with; where each relationship stands now and the turns that brought it there; the current state of anything that changed and stays changed (what was given, taken, removed, destroyed, revealed or promised, and who knows what); the threads still open; and the names. Drop detail that no longer matters. A part that begins "Private: only … know this." stays private: keep that opening for it.`;
 
 /** The timeline-condensing call (#2066): the timeline as data, and the kit's summary rules in Otome's words. */
 export function timelineFoldMessages(timeline: string): OtomeMessage[] {
@@ -3415,12 +3466,19 @@ const CHAT_STAGE: Record<number, string> = {
 const RUPTURE_LINE =
   "A rupture stands between you. Answer curt and cold, at a distance, within your red lines. Do not pretend it is fine, and do not mend it here.";
 
+/**
+ * 0.34.0: what a message may do with her toys, in the system while the story's haptics are on (constant, so the system
+ * prefix never varies); whether he holds the remote now, and the toys, go in the turn after it. No cap on strength.
+ */
+const CHAT_HAPTICS_RULE =
+  '- The protagonist may hand you the remote of their toys for a while; you are told below when you hold it. While you do, a message may drive the toys: add "haptic": [{"action": "vibrate|rotate|oscillate|constrict|inflate|position|stop", "pattern": "steady|tap|pulse|wave|ramp|impact", "intensity": 0.0-1.0, "device": "toy name"}] to it, one cue for each toy, matched to what the message says. It plays as they read that message and keeps looping until your next cue replaces it; "stop" stops the toy it names, or every toy without a device. Intensity uses the whole range up to 1.0. Without the remote, never add "haptic".';
+
 /** #2156: the one meeting a message may set up, kept by the Dates screen (constant, so the system prefix never varies). */
 const CLEAR_AIR_RULE =
   "- The one exception: when you are told below that you may, you may ask them out to clear the air. That evening is kept by the game, not by your message.";
 
 export interface ChatReplyInput {
-  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases" | "audio">;
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
@@ -3442,6 +3500,10 @@ export interface ChatReplyInput {
   invite?: boolean;
   /** #2156: he writes first because she has just told him she is upset with him (S/phone/upset.ts). */
   reason?: "upset";
+  /** 0.34.0: he holds the remote of her toys for about this many more minutes (with haptics on), or none. */
+  remote?: number;
+  /** 0.34.0: her connected toys as S/haptics.ts devicesText lists them, while he holds the remote. */
+  toys?: string;
 }
 
 export function chatReplyMessages({
@@ -3458,6 +3520,8 @@ export function chatReplyMessages({
   stickers,
   invite = false,
   reason,
+  remote = 0,
+  toys = "",
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
@@ -3479,6 +3543,7 @@ export function chatReplyMessages({
     `{"messages": [{"text": "..."}]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
     stickerRule,
+    hapticsOn(world) ? CHAT_HAPTICS_RULE : "",
     `- Write every message in ${world.language}.`,
     "",
     "HOW CLOSE YOU ARE",
@@ -3543,6 +3608,9 @@ export function chatReplyMessages({
     "",
     invite
       ? `You may ask ${them} out to clear the air. If, as ${name}, you would, write that invitation as your last message and add "invite": true to the JSON object. Whether you ask is yours, from who you are.`
+      : "",
+    remote && hapticsOn(world)
+      ? `${them} has handed you the remote of their toys, for about ${remote} more minute${remote === 1 ? "" : "s"}. ${toys.trim() ? `Connected now (name: what it can do):\n${toys.trim()}` : "No toy is connected right now; your cues play on whatever is connected when they read your message."}\nWhat the toys do is yours to decide, as ${name}: add "haptic" to the messages that should move them.`
       : "",
     reason === "upset"
       ? `Write ${name}'s next message now: ${them} has just told you they are upset with you, and you write to them about it first, on your own, in your own voice. One or two short messages.`

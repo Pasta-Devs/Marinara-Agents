@@ -21,6 +21,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookHeart, ChevronLeft, Heart, HeartHandshake, RotateCcw, SendHorizontal, X } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar, AvatarCluster } from "../../components/Avatar";
+import { phoneHapticKey, useOtomeHaptics } from "../../hooks/use-otome-haptics";
 import { storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
@@ -37,10 +38,12 @@ import type {
   RunView,
 } from "../../shared/api-types";
 import { isFace } from "../../shared/faces";
+import { hapticsOn } from "../../shared/haptics";
 import { GROUP_THREAD } from "../../shared/home";
 import { playQueryKey } from "../dates/DatesHub";
 import { homeQueryKey } from "../home/HomeScreen";
 import { CloseAndRemember } from "./CloseAndRemember";
+import { RemoteControl } from "./RemoteControl";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 import { Sticker, StickerArt, StickerPicker, stickerLabel, useStickers, type Stickers } from "./StickerPicker";
 import { messageTime } from "./ThreadList";
@@ -108,6 +111,7 @@ export function Thread({
 }: ThreadProps) {
   const { t } = useTranslation();
   const stickers = useStickers(view, li);
+  const haptics = useOtomeHaptics();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
   const { localization, timeZone } = useOtomeProps();
@@ -217,7 +221,9 @@ export function Thread({
       setQuote(null);
     }
     try {
-      const result = await otome.post<PhoneSendResult>(`${path}/send`, body);
+      // 0.34.0: while he holds the remote of her toys, his reply may drive them (the minutes he still has it).
+      const held = li && haptics && hapticsOn(view.world) ? haptics.remoteMinutes(li.id) : 0;
+      const result = await otome.post<PhoneSendResult>(`${path}/send`, held ? { ...body, remote: held } : body);
       const rows = Array.isArray(result.messages) ? result.messages : [];
       setIncoming({
         mine: rows.filter((row) => row.who === "player"),
@@ -248,7 +254,8 @@ export function Thread({
     }
   };
 
-  // His messages appear one by one, each after its typing delay; then the thread keeps them.
+  // His messages appear one by one, each after its typing delay; then the thread keeps them. A message that drives her
+  // toys (0.34.0, while he holds the remote) plays as it appears, and loops until his next cue or Stop.
   useEffect(() => {
     if (!incoming) return;
     if (incoming.shown < incoming.his.length) {
@@ -257,6 +264,9 @@ export function Thread({
       const timer = setTimeout(
         () => {
           setIncoming((current) => (current === incoming ? { ...current, shown: current.shown + 1 } : current));
+          if (li && next.haptic?.length && haptics?.remoteMinutes(li.id)) {
+            haptics.play(phoneHapticKey(li.id, next.id), next.haptic);
+          }
           setAnnounce(
             next.text.trim()
               ? t("ui.otomeForge.phone.said", { name: nameOf(next), text: next.text })
@@ -449,6 +459,7 @@ export function Thread({
             </div>
           </>
         )}
+        {li && haptics && hapticsOn(view.world) ? <RemoteControl li={li} /> : null}
         <CloseAndRemember
           path={path}
           text={

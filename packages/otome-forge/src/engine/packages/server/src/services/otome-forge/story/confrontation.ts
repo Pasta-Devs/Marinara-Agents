@@ -153,6 +153,8 @@ export interface SegmentLists {
   thoughts(raw: unknown[], counts: Map<string, number>): string;
   /** The list without masked love interests' thought lines, and where an index into it moves (beats.ts withoutMaskedThoughts). */
   unmask(raw: unknown): { segments: unknown; at(index: unknown): unknown };
+  /** 0.34.0: the protagonist's own line as shown: without Emotion cues while they are on (beats.ts withoutCues). */
+  shown?(text: string): string;
 }
 
 /** The stored parts a P12 (P12c) reply becomes: the opening (the beat's segments) and the rest of the game. */
@@ -277,7 +279,12 @@ export function normalizeConfrontationReply(
       if (typeof segments === "string") return segments;
       const move = Number(option[spec.moveField]);
       if (![-1, 0, 1].includes(move)) return `rounds[${index}].options.${stance}.${spec.moveField} must be -1, 0 or 1`;
-      options[stance] = { label, selection: { kind, text: said }, segments, composure: move as -1 | 0 | 1 };
+      options[stance] = {
+        label: lists.shown?.(label) ?? label,
+        selection: { kind, text: lists.shown?.(said) ?? said },
+        segments,
+        composure: move as -1 | 0 | 1,
+      };
     }
     rounds.push({ his, options });
     counts = busiest(answers);

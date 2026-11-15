@@ -40,8 +40,12 @@ export function nextMemoryView(before: MemoryView | undefined, status: MemorySta
     : status;
 }
 
-/** Whether a status's `message` is Otome's own (the memory model too small, S/memory/memory.ts), not the provider's. */
-export const ownMessage = (status: Pick<MemoryStatus, "reason">) => status.reason === "context-too-small";
+/**
+ * Whether a status's `message` is Otome's own (the memory model too small, or 0.34.0's condensed timeline refused as too
+ * long twice; S/memory/memory.ts), not the provider's.
+ */
+export const ownMessage = (status: Pick<MemoryStatus, "reason">) =>
+  status.reason === "context-too-small" || status.reason === "timeline-too-long";
 
 /** The provider's message on one line, cut at a word within `limit` characters, or null when there is none. */
 export function shortMessage(message: string | undefined, limit = NOTICE_MESSAGE_CHARACTERS): string | null {

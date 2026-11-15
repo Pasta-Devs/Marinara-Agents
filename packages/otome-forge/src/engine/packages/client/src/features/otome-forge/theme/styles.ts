@@ -3260,6 +3260,28 @@ ${R} .of-care-source { text-align: center; }
 const DIALOG_RULES = `
 ${R} .of-stage-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
 ${R} .of-stage-layer:empty { display: none; }
+/* 0.34.0: Stop the toys, over every screen while they play (components/HapticsStop.tsx). */
+${R} .of-haptics-stop {
+  position: absolute; z-index: 3; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 18px; border-radius: 999px;
+  pointer-events: auto; font: inherit; font-weight: 800; font-size: 0.92rem; cursor: pointer;
+  color: var(--of-text); background: color-mix(in srgb, var(--of-rose) 30%, var(--of-surface-strong, var(--of-surface)));
+  border: 1px solid color-mix(in srgb, var(--of-rose) 60%, var(--of-border-strong));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+${R} .of-haptics-stop:focus-visible { outline: 2px solid var(--of-rose); outline-offset: 3px; }
+/* 0.34.0: Settings → Audio → Haptics (screens/settings/Haptics.tsx). */
+${R} .of-haptics-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+${R} .of-haptics-devices { display: flex; flex-direction: column; gap: 4px; }
+${R} .of-haptics-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+${R} .of-haptics-name { font-weight: 700; overflow-wrap: anywhere; }
+/* 0.34.0: hand him the remote, in his thread's header (screens/phone/RemoteControl.tsx). */
+${R} .of-remote { position: relative; display: flex; align-items: center; gap: 4px; flex: none; }
+${R} .of-remote-held { font-size: 0.8rem; font-weight: 700; color: var(--of-accent-text); max-width: 16ch; }
+${R} .of-remote-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 4; display: flex; flex-direction: column; gap: 4px;
+  padding: 8px; border-radius: 16px;
+}
 /* Above a takeover (z-index 1) in the same layer, so a dialog opened from a wish's results is the one on top. */
 ${R} .of-dialog-backdrop {
   position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; padding: 16px; pointer-events: auto;

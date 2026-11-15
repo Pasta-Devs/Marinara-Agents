@@ -37,7 +37,9 @@ export function Favorites({ view, favorites }: { view: RunView; favorites: Favor
         .sort((a, b) => b.at.localeCompare(a.at))
         .map((favorite) => {
           const person = view.lis.find((item) => item.id === favorite.li) ?? null;
-          const segment = person ? { speaker: person.name, text: favorite.text } : null;
+          const segment = person
+            ? { speaker: person.name, text: favorite.text, ...(favorite.voiced ? { voiced: favorite.voiced } : {}) }
+            : null;
           const voiced = !!segment && !!audio?.wouldSpeak(segment);
           const playing = speaking === favorite.ref;
           return (

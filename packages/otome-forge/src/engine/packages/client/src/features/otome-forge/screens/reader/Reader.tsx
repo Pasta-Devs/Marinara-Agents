@@ -57,9 +57,10 @@ import {
   useOtomeAudio,
   type SpeakOutcome,
 } from "../../hooks/use-otome-audio";
+import { useOtomeHaptics } from "../../hooks/use-otome-haptics";
 import { useReader, useReducedMotion, type ReaderState } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
-import { canonOption, cgOnLine, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
+import { canonOption, cgOnLine, hapticAt, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, LiId, RunLiView, RunView } from "../../shared/api-types";
 import { OWN_OPTION } from "../../shared/arcs";
@@ -338,6 +339,20 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     // Once per line: the segment and ref belong to the line key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audio, voicedKey]);
+
+  // 0.34.0: the toys play the newest cue up to this line, from the line it is on, and loop until a later line's cue
+  // replaces it; leaving the scene (or its end, or the tags card) lets them go. A beat starts still.
+  const haptics = useOtomeHaptics();
+  const cue = reading && !aftermath && reader.timeline ? hapticAt(reader.timeline, reader.lineIndex) : null;
+  const hapticKey = cue && reader.position ? `${reader.position.id}:${cue.index}` : "";
+  const hapticCues = cue?.cues;
+  useEffect(() => {
+    if (!haptics || !hapticKey || !hapticCues) return;
+    haptics.play(hapticKey, hapticCues);
+    return () => haptics.release(hapticKey);
+    // Once per cue: the cues belong to the key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [haptics, hapticKey]);
 
   // Music or a voice that could not play says so once per kind in this visit, and the scene goes on. The story's audio
   // outlives the reader, so a notice it already held when this visit began (Home's music, an earlier chapter's voice)

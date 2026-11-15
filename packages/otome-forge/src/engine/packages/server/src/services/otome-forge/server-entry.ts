@@ -7,6 +7,7 @@ import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { createOtomeArt } from "./art/expressions.js";
 import { createBackgroundQueue } from "./background-queue.js";
+import { createOtomeHaptics } from "./haptics.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
 import { createOtomeMemory } from "./memory/memory.js";
@@ -18,6 +19,7 @@ import { registerAudioRoutes } from "./routes/audio.js";
 import { registerCareRoutes } from "./routes/care.js";
 import { registerClawRoutes } from "./routes/claw.js";
 import { registerDateRoutes } from "./routes/dates.js";
+import { registerHapticsRoutes } from "./routes/haptics.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerIndexRoutes } from "./routes/index.js";
 import { registerItemRoutes } from "./routes/items.js";
@@ -66,7 +68,8 @@ export async function activate({ api }: ActivationContext) {
   const memory = createOtomeMemory({ runtime, store, background, afterUpkeep });
   const cancellation = createForgeStoryCancellation();
   const art = createOtomeArt({ runtime, store });
-  const deps: RouteDeps = { runtime, store, handle, memory, recall, cancellation, art, background };
+  const haptics = createOtomeHaptics(runtime);
+  const deps: RouteDeps = { runtime, store, handle, memory, recall, cancellation, art, background, haptics };
   // Wish's banner art paints in the background (M4); after teardown nothing more is paid for.
   let disposed = false;
   const active = () => !disposed;
@@ -97,6 +100,7 @@ export async function activate({ api }: ActivationContext) {
       registerTarotRoutes(router, deps);
       registerQuizRoutes(router, deps);
       registerDateRoutes(router, deps);
+      registerHapticsRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },
   );
@@ -105,6 +109,7 @@ export async function activate({ api }: ActivationContext) {
     if (activeStore === store) activeStore = null;
     // Nothing more is paid for after teardown: queued faces, scene paints and banner art stop before their paid call.
     disposed = true;
+    haptics.dispose();
     art.dispose();
     cancellation.dispose();
     memory.dispose();

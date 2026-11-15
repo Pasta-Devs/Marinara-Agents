@@ -1,11 +1,16 @@
 import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
 import type { AudioSettings } from "./api-types";
+import { isHapticsUrl } from "./haptics";
 
-/** Otome's optional chapter themes leave the other games' audio settings unchanged. */
+/** Otome's optional chapter themes, emotion cues and haptics leave the other games' audio settings unchanged. */
 export function normalizeOtomeAudio(value: unknown): AudioSettings {
+  const fields = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
     ...normalizeForgeAudio(value),
+    haptics: fields.haptics === true,
+    hapticsUrl: isHapticsUrl(fields.hapticsUrl) ? fields.hapticsUrl : "",
     chapterThemes: !!value && typeof value === "object" && "chapterThemes" in value && value.chapterThemes === true,
+    emotionCues: !!value && typeof value === "object" && "emotionCues" in value && value.emotionCues === true,
     musicFolder:
       value && typeof value === "object" && "musicFolder" in value && isMusicFolder(value.musicFolder)
         ? value.musicFolder

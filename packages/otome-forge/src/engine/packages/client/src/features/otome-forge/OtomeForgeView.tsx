@@ -21,6 +21,8 @@ import { TopBar } from "./components/TopBar";
 import { INDEX_QUERY_KEY, useOtomeIndex } from "./hooks/use-index";
 import { useLook, type LookPreference } from "./hooks/use-look";
 import { OtomeAudioProvider } from "./hooks/use-otome-audio";
+import { OtomeHapticsProvider } from "./hooks/use-otome-haptics";
+import { HapticsStop } from "./components/HapticsStop";
 import { fetchRunView, runQueryKey, useRun, useSampledAccents } from "./hooks/use-run";
 import { accentOf } from "./lib/accent";
 import { dropStaleCareNotes } from "./lib/cycle-storage";
@@ -425,54 +427,58 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
 
   return (
     <OtomeAudioProvider run={view} cue={playsHomeCue(screen, settingsReturn) ? "home" : null}>
-      {/* The reader (and a date's scenes) are full-stage: their own header carries the way out. */}
-      {screen === "reader" || (screen === "date-night" && immersive) ? null : (
-        <TopBar
-          run={
-            RUN_SCREENS.has(screen)
-              ? {
-                  li: homeLi ? { name: homeLi.name, accent: accentOf(homeLi) } : null,
-                  starlight: view?.starlight ?? null,
-                }
-              : null
+      <OtomeHapticsProvider run={view}>
+        {/* The reader (and a date's scenes) are full-stage: their own header carries the way out. */}
+        {screen === "reader" || (screen === "date-night" && immersive) ? null : (
+          <TopBar
+            run={
+              RUN_SCREENS.has(screen)
+                ? {
+                    li: homeLi ? { name: homeLi.name, accent: accentOf(homeLi) } : null,
+                    starlight: view?.starlight ?? null,
+                  }
+                : null
+            }
+            onBack={backTo ? () => go(backTo) : undefined}
+            onHome={() => go("home")}
+            onSettings={screen === "settings" ? undefined : () => openSettings()}
+          />
+        )}
+        {activeRun && view && screen !== "picker" && screen !== "setup" ? (
+          <MemoryBanner
+            key={activeRun}
+            runKey={activeRun}
+            onOpenConnections={(memory) => openSettings("connections", memory)}
+            onLeave={() => screenRef.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true })}
+          />
+        ) : null}
+        <div
+          key={
+            screen === "bible"
+              ? `bible-${bibleLi}`
+              : screen === "reader"
+                ? `reader-${chapterKey}`
+                : screen === "read-him" ||
+                    screen === "read-me" ||
+                    screen === "tarot" ||
+                    screen === "photo-shoot" ||
+                    screen === "claw"
+                  ? `${screen}-${datesOf?.id ?? ""}`
+                  : screen === "date-night"
+                    ? `date-${dateOpen ? JSON.stringify(dateOpen) : ""}`
+                    : screen
           }
-          onBack={backTo ? () => go(backTo) : undefined}
-          onHome={() => go("home")}
-          onSettings={screen === "settings" ? undefined : () => openSettings()}
-        />
-      )}
-      {activeRun && view && screen !== "picker" && screen !== "setup" ? (
-        <MemoryBanner
-          key={activeRun}
-          runKey={activeRun}
-          onOpenConnections={(memory) => openSettings("connections", memory)}
-          onLeave={() => screenRef.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true })}
-        />
-      ) : null}
-      <div
-        key={
-          screen === "bible"
-            ? `bible-${bibleLi}`
-            : screen === "reader"
-              ? `reader-${chapterKey}`
-              : screen === "read-him" ||
-                  screen === "read-me" ||
-                  screen === "tarot" ||
-                  screen === "photo-shoot" ||
-                  screen === "claw"
-                ? `${screen}-${datesOf?.id ?? ""}`
-                : screen === "date-night"
-                  ? `date-${dateOpen ? JSON.stringify(dateOpen) : ""}`
-                  : screen
-        }
-        ref={screenRef}
-        className="of-screen"
-      >
-        {content}
-      </div>
-      {/* "You unlocked a new sticker" (#2044), over whichever screen is open. */}
-      {view && activeRun ? <StickerNotice view={view} /> : null}
-      {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} unseen={view?.unseen} /> : null}
+          ref={screenRef}
+          className="of-screen"
+        >
+          {content}
+        </div>
+        {/* "You unlocked a new sticker" (#2044), over whichever screen is open. */}
+        {view && activeRun ? <StickerNotice view={view} /> : null}
+        {/* 0.34.0: Stop the toys, over whichever screen is open while they play. */}
+        <HapticsStop />
+        {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} unseen={view?.unseen} /> : null}
+      </OtomeHapticsProvider>
     </OtomeAudioProvider>
   );
 }

@@ -15,6 +15,7 @@ import type {
   ConfrontationView,
   ForgeChoice,
   Grant,
+  HapticCue,
   LiId,
   OtomeErrorCode,
   Paint,
@@ -127,6 +128,19 @@ export function lineRef(timeline: Timeline, index: number, base: string): string
   const first = timeline.lines.findIndex((item) => item.main === line.main && item.kind !== "segment");
   const own = line.kind === "segment" ? "" : line.optionId ? `:${line.optionId}+${index - first}` : `+${line.kind}`;
   return `${base}/${line.main}${own}`;
+}
+
+/**
+ * 0.34.0: what the toys do at line `index`: the newest line up to it that carries haptic cues, by its index (null before
+ * the first, and from a line of stops on). A line's cues replace every cue before it, and each beat starts still.
+ */
+export function hapticAt(timeline: Timeline, index: number): { index: number; cues: HapticCue[] } | null {
+  for (let at = Math.min(index, timeline.lines.length - 1); at >= 0; at -= 1) {
+    const cues = timeline.lines[at]!.segment.haptic;
+    if (!cues?.length) continue;
+    return cues.some((cue) => cue.action !== "stop") ? { index: at, cues } : null;
+  }
+  return null;
 }
 
 /** The choice id a Confrontation round's stances are offered under. */

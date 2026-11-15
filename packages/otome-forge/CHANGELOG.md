@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.34.0 — 2026-11-15
+
+- **Emotion cues.** Turn on **Emotion cues** in **Settings → Audio → Voices**: with voiced dialogue, new scenes mark how lines are said, like [hushed whisper] or [gasps]. The voice performs them; the dialogue box hides them. ElevenLabs v3 and v4 act on them; other models may read the brackets aloud.
+- **Haptics.** In an explicit story, **Settings → Audio → Haptics** connects your toys through Intiface Central and tests them all. Sex scenes then drive them, each cue looping until the story changes it, and in Messages you can hand him the remote. **Stop the toys** stays on screen while they play.
+- **Memory keeps its newest chapters.** Condensing the timeline now keeps the newest three chapters as written and refuses a result that comes back too long, which had lost chapters. Every story's timeline is rebuilt once from its saved summaries.
+
 ## 0.33.3 — 2026-11-15
 
 - **Date cards that fit a phone.** In Album → Dates, each date's text now uses the card's full width, with **Plan a date**, **Read again** and an evening's outcome in one row below it.
