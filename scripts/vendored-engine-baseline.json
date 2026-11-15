@@ -29,7 +29,6 @@
   "packages/client/src/components/ui/Modal.tsx": "drifted:1f05a67d5d37fb1ade7305056c3abaf0b9361012053323823ecaea128a0dbd3b:9b18969b98401c3340b7844ebc0182e3d309b4c0572f946bda8dd1b4a335e639",
   "packages/client/src/features/chat-settings/ChatSettingsSection.tsx": "drifted:5652086b273fc19fc16e8f90db04650e95ce5bcb959de208d5174269414760cb:19ca2e4fe3cc0155db5e3e484b11a4f8771b16fbd2c6c894c644d00e1eb4377e",
   "packages/client/src/hooks/turn-game-keys.ts": "orphaned:0991ac96088b0ed3646bc7132071c0409318eb4e4a9166e039d1e069e7c4fca8:orphaned",
-  "packages/client/src/hooks/use-characters.ts": "drifted:906cf4a919b9183e7e952199eedd8521f819d5de08e32f97e9b306667c10004c:a3145a8994c05a16623832b70c9442fee41641884fca1035d8e8b13b614d6f61",
   "packages/client/src/hooks/use-chats.ts": "drifted:8b70bdceb76ac936d7b8415657dbcf482e13fb05564a453deba8c6424b609918:c72d2b9fde5a9905d024c0a41bd9a3bf22fe3d90e54a36d4314e634d6011bcee",
   "packages/client/src/hooks/use-chess.ts": "orphaned:8b76bb52bed9676db739e8b882088021dbfec8f153fece046270f719552cc3fa:orphaned",
   "packages/client/src/hooks/use-connections.ts": "drifted:3b4a7f32b2a10ac3aa2280c8be2c0654e4c82716df93b85b7b00e0c31abc4e4d:82f747d64e8270d7ee30ebabebcf9f6fad56d888d43e493d5b62767582d974d7",

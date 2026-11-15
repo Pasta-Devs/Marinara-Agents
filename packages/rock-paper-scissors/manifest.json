@@ -10,7 +10,7 @@
   },
   "id": "rock-paper-scissors",
   "name": "Rock-Paper-Scissors",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   "engine": {
     "min": "2.3.0",
@@ -52,8 +52,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "f54e32bbbb7792e54d5fe0aa2881a92556e74bab32ac060da350ca0147f926e1",
-      "bytes": 27976
+      "sha256": "2948ac44bcdef943295273c1bc3b034b4d087d6bf1401c7da8c6e7b4f1fee9bf",
+      "bytes": 159704
     }
   ],
   "permissions": [
