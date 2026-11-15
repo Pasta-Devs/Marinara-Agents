@@ -94,6 +94,7 @@ function createStub() {
   };
   const upset: Record<string, boolean> = { [KAI]: false, [MIR]: false };
   let asked = false;
+  let eveningCounted = false;
   const messages: Json[] = [
     { id: "m-mine-0001", who: "player", text: "You didn't even look at me.", at: now() },
     {
@@ -260,11 +261,52 @@ function createStub() {
         },
       };
     }
+    // #2302: an earlier Date Night evening with Mireille, read to its end and not counted yet ("done"); counting it
+    // (its finish) makes it "finished". Its keepsake is offered, and this story has no image connection.
+    const evening = () => ({
+      key: "date-1",
+      li: MIR,
+      title: "Lanterns on the Canal",
+      place: "fairground",
+      placeName: "The Lantern Fair",
+      makeItRight: false,
+      state: eveningCounted ? "finished" : "done",
+      outcome: eveningCounted ? "good" : null,
+      plannedAt: now(),
+      completedAt: now(),
+      keepsake: null,
+    });
     if (path === `${base}/dates` && call.method === "GET") {
       return {
         status: 200,
-        json: { dates: [], open: [], pulled: [{ item: WON_DATE, plays: [], playedBy: [] }] },
+        json: {
+          dates: eveningCounted ? [evening()] : [],
+          open: eveningCounted ? [] : [evening()],
+          pulled: [{ item: WON_DATE, plays: [], playedBy: [] }],
+        },
       };
+    }
+    if (path === `${base}/dates/date-1/finish`) {
+      const counted = !eveningCounted;
+      eveningCounted = true;
+      return {
+        status: 200,
+        json: {
+          date: evening(),
+          outcome: "good",
+          picks: [],
+          line: "",
+          grants: counted ? [{ source: "date", starlight: 120 }] : [],
+          starlight: 2000,
+          counted,
+          repaired: false,
+          mends: false,
+          keepsake: { offer: true },
+        },
+      };
+    }
+    if (path === `${base}/art/keepsake`) {
+      return { status: 503, json: { error: "This world has no image connection.", code: "no-connection" } };
     }
     if (path === `${base}/dates/pulled`) {
       return { status: 503, json: { error: "No connection.", code: "no-connection" } };
@@ -589,6 +631,40 @@ test("Otome Hearth grievances: one picked for a date before his grievance shows 
   await press(begin);
   await expect.poll(() => posts(stub, "/dates/pulled").length).toBe(1);
   expect(posts(stub, "/dates/pulled")[0]!.body).toMatchObject({ item: WON_DATE.id, cast: [MIR] });
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth #2302: an earlier evening opened at its ending comes back there after Settings → Images", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "light" : "dark", reducedMotion: "reduce" });
+  const stub = createStub();
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+
+  // The Album's earlier evening, read to its end: Continue opens it at its ending, which counts it.
+  await press(dock(root, "Album"));
+  await press(root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true }));
+  await press(root.getByRole("button", { name: "Continue: Lanterns on the Canal" }));
+  const keepsake = root.locator(".of-date-keepsake");
+  await expect(keepsake.getByRole("button", { name: "Paint the keepsake" })).toBeVisible();
+  const heading = await root.getByRole("heading", { level: 1 }).textContent();
+
+  // Its keepsake can't paint here: the way to Settings → Images, and back to the same ending, not the scenes.
+  await press(keepsake.getByRole("button", { name: "Paint the keepsake" }));
+  await expect(keepsake.getByRole("alert")).toBeVisible();
+  await press(keepsake.getByRole("button", { name: "Change the image connection" }));
+  await expect(root.getByRole("tab", { name: "Images", exact: true })).toHaveAttribute("aria-selected", "true");
+  await noWider(page);
+  await press(root.getByRole("button", { name: "Back", exact: true }));
+  await expect(root.getByRole("heading", { level: 1 })).toHaveText(heading!);
+  await expect(root.locator(".of-date-keepsake").getByRole("button", { name: "Paint the keepsake" })).toBeVisible();
+  expect(stub.calls.filter((call) => call.path.endsWith("/chapters/date-1"))).toHaveLength(0);
   expect(pageErrors).toEqual([]);
 });
 

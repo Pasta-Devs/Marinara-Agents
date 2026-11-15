@@ -704,6 +704,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.33.2",
+          "date": "2026-11-15",
+          "notes": "- **A date opens where you left it.** Going to Settings from a date's scenes or its ending and coming back opens it there again, where it used to start over at its first step. A trip to Settings no longer resets the Album to its first tab either.\n- **A failed keepsake can switch connections.** When a keepsake fails to paint, **Change the image connection** opens Settings → Images. Back returns to the date's ending, where you can paint the keepsake again. One still painting when you left shows as painting until it lands.",
+          "highlight": false
+        },
+        {
           "version": "0.33.1",
           "date": "2026-11-15",
           "notes": "- **Dates sits next to Memories in Wish.** Wish's tabs now read Memories, Dates, the love interest's wardrobe, My Wardrobe, Echoes and Shop.\n- **No dates card on the Dates screen.** Dates shows only its activities, today's rewards and the plush shelf. Plan your won dates from Album → Dates.\n- **Dates no longer slides sideways on a phone.** The love interests to pick from, on Dates and on a date's **Who's coming?**, wrap onto rows, so the screen only scrolls down.",
@@ -816,12 +822,6 @@
           "date": "2026-11-11",
           "notes": "- **You can paint a picture again.** Any picture Otome Hearth has already painted can now be painted a second time when you want a different take: a scene's key image, the place it happens in, a Wish banner, a look in the Wardrobe, or a tarot card. The new picture costs one image, and the old one stays on screen while it paints, so nothing goes blank if the paint fails. Once the new one arrives it replaces the old one everywhere it showed, including your Album, and the old image leaves your gallery.",
           "highlight": true
-        },
-        {
-          "version": "0.23.1",
-          "date": "2026-11-11",
-          "notes": "- **Each bond rank's truth stays with you.** Past the finale, the story keeps every bond reveal you have reached, rather than the three newest, so a truth learned at rank 11 still holds at rank 15; the card's own size limit still governs what it sends.\n- **The story speaks of the rank by name.** A settled couple's card and every prompt that writes their words now read the rank's word beside its number (\"bond rank 15 of 20 — tested\"), the same rank the Story screen shows.\n- **An afternoon stays an afternoon.** A scene told from their side counts only the bond ranks reached by the moment it retells, so it never carries what was learned weeks later.",
-          "highlight": false
         }
       ]
     },

@@ -285,6 +285,8 @@ function createLoopStub({ seeded = false } = {}) {
   let wish = false;
   let herWorn = "base";
   let dateDone = false;
+  // The date is counted once (S/minigames/date-night.ts finishDate): asking again pays nothing.
+  let dateCounted = false;
   // Long-term recall's index (0.19.0): failed on an Engine before capability API 1.818, until Retry indexing.
   let recall: Json = { phase: "failed", indexed: 2, total: 5, message: "FAKE-EMBEDDINGS-DOWN", choosable: false };
   const picks: Array<number | undefined> = [];
@@ -860,6 +862,8 @@ function createLoopStub({ seeded = false } = {}) {
       return { status: 200, json: { date: dateEntry("reading"), resumed: false } };
     }
     if (path === `${base}/dates/date-1/finish`) {
+      const counted = !dateCounted;
+      dateCounted = true;
       return {
         status: 200,
         json: {
@@ -867,9 +871,9 @@ function createLoopStub({ seeded = false } = {}) {
           outcome: "great",
           picks: DATE_BEATS.map((_, i) => ({ text: `Take his hand (${i + 1})`, score: 1 })),
           line: "I would come here again. With you.",
-          grants: pay("date", ILVAR, 120, 100),
+          grants: counted ? pay("date", ILVAR, 120, 100) : [],
           starlight: view.starlight,
-          counted: true,
+          counted,
           repaired: false,
           mends: false,
           keepsake: { offer: true },
@@ -1602,6 +1606,21 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     expect(title.width, "the title spans the card, not one word per line").toBeGreaterThan(card.width / 2);
     await auditScreen(page, root, "date: ending");
     await shot("09-date");
+    // #2302: a keepsake that fails offers Settings → Images, and coming back opens the date at its ending again, not
+    // at who's coming. (This story has no image connection, so the paint is refused.)
+    const outcome = await ending.textContent();
+    await paintKeepsake.click();
+    await expect(keepsakeCard.getByRole("alert")).toBeVisible();
+    await keepsakeCard.getByRole("button", { name: "Change the image connection" }).click();
+    await expect(root.getByRole("tab", { name: "Images", exact: true })).toHaveAttribute("aria-selected", "true");
+    await root.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(root.getByRole("heading", { level: 1 })).toHaveText(outcome!);
+    await expect(root.getByRole("heading", { level: 1, name: "Who's coming?" })).toHaveCount(0);
+    await expect(root.locator(".of-date-keepsake").getByRole("button", { name: "Paint the keepsake" })).toBeVisible();
+    // And from the top bar's Settings too.
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(root.getByRole("heading", { level: 1 })).toHaveText(outcome!);
     await root.getByRole("button", { name: "Back to Album" }).first().click();
     await expect(root.getByRole("tab", { name: "Dates", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(root.locator(".of-album-date")).toContainText("Been on it: Ilvar Thorne");

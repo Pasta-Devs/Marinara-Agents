@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.33.2 — 2026-11-15
+
+- **A date opens where you left it.** Going to Settings from a date's scenes or its ending and coming back opens it there again, where it used to start over at its first step. A trip to Settings no longer resets the Album to its first tab either.
+- **A failed keepsake can switch connections.** When a keepsake fails to paint, **Change the image connection** opens Settings → Images. Back returns to the date's ending, where you can paint the keepsake again. One still painting when you left shows as painting until it lands.
+
 ## 0.33.1 — 2026-11-15
 
 - **Dates sits next to Memories in Wish.** Wish's tabs now read Memories, Dates, the love interest's wardrobe, My Wardrobe, Echoes and Shop.

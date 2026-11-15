@@ -101,6 +101,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // #2303: the date the date screen shows (a won date to plan, or an earlier one by its key), and where Back leads.
   const [dateOpen, setDateOpen] = useState<DateOpen | null>(null);
   const [dateReturn, setDateReturn] = useState<ScreenId>("album");
+  // #2302: where the open date is now (a playthrough's scenes or its ending), so coming back from Settings opens it
+  // there, not at its first step. Kept apart from dateOpen, which keys the screen and must not remount it mid-date.
+  const [dateAt, setDateAt] = useState<DateOpen | null>(null);
   // The Album's tab when it opens again after a date or a story it opened (#2303), else its own first.
   const [albumTab, setAlbumTab] = useState<AlbumTab | undefined>();
   const [opening, setOpening] = useState<string | null>(null);
@@ -127,9 +130,11 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // where the forge screen alone would have left him on the colour his name hashes to.
   useSampledAccents(view ?? undefined);
 
-  // Kept while the Album opens a date or a story and Back returns to it; anywhere else, the Album opens as usual.
+  // Kept while the Album opens a date or a story and Back returns to it, and through Settings on the way (#2302);
+  // anywhere else, the Album opens as usual.
   useEffect(() => {
-    if (screen !== "album" && screen !== "date-night" && screen !== "reader") setAlbumTab(undefined);
+    if (screen !== "album" && screen !== "date-night" && screen !== "reader" && screen !== "settings")
+      setAlbumTab(undefined);
   }, [screen]);
   // Once the active story has loaded, its opening screen stays put: a world that finishes forging while the player
   // watches keeps showing the forge (its cast and paint offer) until they choose to go Home.
@@ -248,6 +253,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   /** #2303: the date screen, for a won date or an earlier date, from Wish or the Album. */
   const openDate = (from: ScreenId) => (open: DateOpen) => {
     setDateOpen(open);
+    setDateAt(null);
     setDateReturn(from);
     go("date-night");
   };
@@ -398,11 +404,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       <DateNight
         runKey={activeRun}
         view={view}
-        open={dateOpen}
+        open={dateAt ?? dateOpen}
         onExit={() => go(dateReturn)}
         exitLabel={t("ui.otomeForge.reader.backTo", { screen: t(SCREEN_NAME_KEYS[dateReturn]) })}
         onHome={() => go("home")}
         onImmersive={setImmersive}
+        onResume={setDateAt}
+        onImageSettings={() => openSettings("images")}
       />
     ) : screen === "photo-shoot" && activeRun && view && datesOf ? (
       <PhotoShoot runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
