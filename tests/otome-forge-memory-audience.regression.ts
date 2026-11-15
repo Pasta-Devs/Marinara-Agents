@@ -445,6 +445,8 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
       assert.ok(system.includes("far shorter than the timeline you are given: never copy it out"));
       assert.ok(system.includes("Compress the oldest parts the most"));
       assert.ok(system.includes("the current state of anything that changed and stays changed"));
+      // 0.34.1: nothing after the limit asks to keep every event, which brought heads back at ~7,400 words.
+      assert.doesNotMatch(system, /keep every/iu, "no keep-everything line fights the 5000-word limit");
     }
     assert.equal(system.includes(OVERVIEW_WORDING), !detail, "the condensed part reads as a recollection");
     assert.ok(call.options!.maxTokens! >= 10240, "the word limits are the prompt's; the reply room stays 10240");

@@ -3290,9 +3290,11 @@ export const SUMMARY_WORDING =
 /**
  * How the condensed timeline reads (0.6.19; since #2066 only the condensing call carries it). Models kept persona
  * facts, a summary per chapter and markdown labels in an overview; the prompts carry the cast on their own.
+ * 0.34.1: it no longer says to keep "every established event": after TIMELINE_FOLD_WORDING's 5000-word limit, that line
+ * made a model bring back about 7,400 words twice, so the rebuild stopped. What to keep is TIMELINE_FOLD_WORDING's list.
  */
 export const OVERVIEW_WORDING =
-  "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep every established event, relationship turn and irrevocable decision, the chronology and the names, and who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
+  "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
 
 /** The most a chapter summary may run to (#2066). Said in the prompt; the reply's own allowance stays 10240 tokens. */
 export const CHAPTER_SUMMARY_WORDS = 1000;
