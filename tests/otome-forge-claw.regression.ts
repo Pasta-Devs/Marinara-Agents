@@ -360,18 +360,14 @@ test("the play view: today's caps, the shelf, and how each love interest plays",
     cheat: "nudge",
     style: "Careful and patient, lines it up twice.",
     rupture: false,
-    makeItRight: false,
     held: false,
-    asked: false,
     lines: { claw: { cheer: ["c"], cheat: ["x"], win: ["w"], miss: ["m"], plush: [PLUSH_LINE] }, cold: [] },
   });
   assert.deepEqual(view.lis[MIR], {
     cheat: "steady",
     style: "",
     rupture: false,
-    makeItRight: false,
     held: false,
-    asked: false,
     lines: { claw: null, cold: [] },
   });
   // A new local day shows nothing earned yet.

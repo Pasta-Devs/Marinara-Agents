@@ -134,7 +134,7 @@ const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "
 
 /** A wardrobe banner's other half of its couple set: His Wardrobe's 5★ and My Wardrobe's of the same rotation. */
 async function couplePartner(store: OtomeStore, runId: string, banner: Banner, items: ReadonlyMap<string, Item>) {
-  if (banner.kind === "memories") return [];
+  if (banner.kind !== "his-wardrobe" && banner.kind !== "my-wardrobe") return [];
   const partner =
     banner.kind === "my-wardrobe"
       ? items.get(banner.items.five[0]!)?.coupleWith

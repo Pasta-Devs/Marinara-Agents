@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useSpriteDisplay } from "../../hooks/use-sprite-display";
-import { BookOpen, ChevronLeft, Feather, Paintbrush, RotateCcw, Shirt, Sparkle, Star } from "lucide-react";
+import { BookOpen, ChevronLeft, Feather, Paintbrush, RotateCcw, Shirt, Sparkle, Star, Wine } from "lucide-react";
 import { CostHint } from "../../components/CostHint";
 import { PromptReviewDialog } from "../../components/PromptReviewDialog";
 import {
@@ -25,7 +25,7 @@ import { useOtomeAudio, useAudioSnapshot } from "../../hooks/use-otome-audio";
 import { accentOf, initialsOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { RunLiView, RunView } from "../../shared/api-types";
-import { isLookKind, type ItemKind, type ItemView, type PullResult, type Rarity } from "../../shared/wish";
+import { isDateKind, isLookKind, type ItemKind, type ItemView, type PullResult, type Rarity } from "../../shared/wish";
 import { RARITY_NAMES } from "./SealedLetter";
 
 const KIND_KEYS: Record<ItemKind, string> = {
@@ -36,6 +36,10 @@ const KIND_KEYS: Record<ItemKind, string> = {
   "his-look4": "ui.otomeForge.wish.kindTheirLook",
   "her-look5": "ui.otomeForge.wish.kindMyLook",
   "her-look4": "ui.otomeForge.wish.kindMyLook",
+  date5: "ui.otomeForge.wish.kindDateScenario",
+  date4: "ui.otomeForge.wish.kindDatePlace",
+  "his-look3": "ui.otomeForge.wish.kindTheirLook",
+  "her-look3": "ui.otomeForge.wish.kindMyLook",
 };
 
 const RARITY_KEYS: Record<Rarity, string> = {
@@ -114,6 +118,8 @@ interface ItemDetailProps {
   fallbackArt?: ReadyPicture | null;
   onOpenStory?: (key: string) => void;
   onOpenWardrobe?: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
   /** Where focus starts (the item's title, so a screen reader reads it). */
   autoFocus?: boolean;
 }
@@ -126,6 +132,7 @@ export function ItemDetail({
   fallbackArt,
   onOpenStory,
   onOpenWardrobe,
+  onOpenDate,
   autoFocus,
 }: ItemDetailProps) {
   const { t } = useTranslation();
@@ -173,6 +180,11 @@ export function ItemDetail({
           {item.look?.name || item.title}
         </h3>
         {li ? <p className="of-item-who">{t("ui.otomeForge.wish.with", { name: li.name })}</p> : null}
+        {item.place ? (
+          <p className="of-item-who">
+            {t("ui.otomeForge.wish.datePlace", { place: item.place.name, count: item.scenes ?? 1 })}
+          </p>
+        ) : null}
         {item.premise ? <p className="of-item-text">{item.premise}</p> : null}
         {item.text ? <p className="of-item-text of-item-text--snapshot">{item.text}</p> : null}
         {item.voicedLine ? (
@@ -255,6 +267,12 @@ export function ItemDetail({
               {t("ui.otomeForge.wish.toWardrobe")}
             </button>
           ) : null}
+          {isDateKind(item.kind) && item.owned && onOpenDate ? (
+            <button type="button" className="of-button of-button--primary" onClick={() => onOpenDate(item.id)}>
+              <Wine size={16} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.wish.toDate")}
+            </button>
+          ) : null}
         </div>
         {error ? (
           <p className="of-notice of-notice--error" role="alert">
@@ -323,6 +341,8 @@ interface TenPullGridProps {
   onDone: () => void;
   onOpenStory?: (key: string) => void;
   onOpenWardrobe?: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
 }
 
 export function TenPullGrid({
@@ -336,6 +356,7 @@ export function TenPullGrid({
   onDone,
   onOpenStory,
   onOpenWardrobe,
+  onOpenDate,
 }: TenPullGridProps) {
   const { t } = useTranslation();
   const kindLabel = useKindLabel();
@@ -377,6 +398,7 @@ export function TenPullGrid({
           fallbackArt={result.rarity === 5 ? bannerArt : null}
           onOpenStory={onOpenStory}
           onOpenWardrobe={onOpenWardrobe}
+          onOpenDate={onOpenDate}
           autoFocus
         />
       </div>

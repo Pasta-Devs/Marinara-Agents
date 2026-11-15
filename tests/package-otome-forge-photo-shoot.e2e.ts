@@ -210,7 +210,7 @@ function createPhotoStub({
           lis: Object.fromEntries(
             [KAI, MIR].map((li) => [
               li,
-              { cheat: "nudge", style: "", rupture: false, makeItRight: false, lines: { claw: null, cold: [] } },
+              { cheat: "nudge", style: "", rupture: false, lines: { claw: null, cold: [] } },
             ]),
           ),
         },

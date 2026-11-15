@@ -22,7 +22,14 @@ import {
 } from "lucide-react";
 import { readyUrl } from "../../lib/reader-state";
 import type { WorldView } from "../../shared/api-types";
-import { DATE_PLACES, DATE_PLACE_MOODS, PARTNER_CHOICE, STORY_PLACE, type DatePlace } from "../../shared/dates";
+import {
+  DATE_PLACES,
+  DATE_PLACE_MOODS,
+  PARTNER_CHOICE,
+  PULLED_PLACE,
+  STORY_PLACE,
+  type DatePlace,
+} from "../../shared/dates";
 
 export const PLACE_NAME_KEYS: Record<DatePlace, string> = {
   aquarium: "ui.otomeForge.dateNight.placeAquarium",
@@ -35,6 +42,7 @@ export const PLACE_NAME_KEYS: Record<DatePlace, string> = {
   fairground: "ui.otomeForge.dateNight.placeFairground",
   [PARTNER_CHOICE]: "ui.otomeForge.dateNight.placePartnerChoice",
   [STORY_PLACE]: "ui.otomeForge.dateNight.placeStory",
+  [PULLED_PLACE]: "ui.otomeForge.dateNight.placeStory",
 };
 
 const PLACE_TEXT_KEYS: Record<DatePlace, string> = {
@@ -48,6 +56,7 @@ const PLACE_TEXT_KEYS: Record<DatePlace, string> = {
   fairground: "ui.otomeForge.dateNight.placeFairgroundText",
   [PARTNER_CHOICE]: "ui.otomeForge.dateNight.placePartnerChoiceText",
   [STORY_PLACE]: "ui.otomeForge.dateNight.placeStoryText",
+  [PULLED_PLACE]: "ui.otomeForge.dateNight.placeStoryText",
 };
 
 export const PLACE_ICONS: Record<DatePlace, LucideIcon> = {
@@ -61,6 +70,7 @@ export const PLACE_ICONS: Record<DatePlace, LucideIcon> = {
   fairground: FerrisWheel,
   [PARTNER_CHOICE]: Sparkles,
   [STORY_PLACE]: MapPin,
+  [PULLED_PLACE]: MapPin,
 };
 
 /** What the player picked: one of the picker's places, or a painted place of the story (its key and name). */

@@ -15,7 +15,8 @@ import type { Player, RunLiView } from "../../shared/api-types";
 import type { LookView } from "../../shared/wardrobe";
 
 interface LookPickerProps {
-  partner: RunLiView;
+  /** Whose looks show beside hers; none (#2303, a pulled date) shows only hers, the love interests coming as they are. */
+  partner: RunLiView | null;
   player: Player;
   /** Their looks and yours, from the Wardrobe; absent while it loads (only the everyday looks show). */
   hisLooks?: LookView[];
@@ -108,17 +109,19 @@ export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLo
   ].filter(Boolean);
   return (
     <div className="of-looks">
-      <div className="of-looks-pair">
-        <LookCard
-          group={`${id}-his`}
-          who={t("ui.otomeForge.dateNight.lookTheirs", { name: partner.name })}
-          name={partner.name}
-          url={partner.portrait}
-          looks={his}
-          accent={accentOf(partner)}
-          value={hisLook}
-          onPick={(look) => onChange({ hisLook: look, herLook })}
-        />
+      <div className="of-looks-pair" data-single={partner ? undefined : true}>
+        {partner ? (
+          <LookCard
+            group={`${id}-his`}
+            who={t("ui.otomeForge.dateNight.lookTheirs", { name: partner.name })}
+            name={partner.name}
+            url={partner.portrait}
+            looks={his}
+            accent={accentOf(partner)}
+            value={hisLook}
+            onPick={(look) => onChange({ hisLook: look, herLook })}
+          />
+        ) : null}
         <LookCard
           group={`${id}-hers`}
           who={t("ui.otomeForge.dateNight.lookYours")}

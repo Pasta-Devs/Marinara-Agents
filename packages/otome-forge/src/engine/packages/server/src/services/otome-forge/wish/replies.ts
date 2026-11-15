@@ -8,7 +8,11 @@ import { z } from "zod";
 import type { Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import {
+  BANNER_ITEM_KINDS,
   BANNER_SIZES,
+  DATE_SCENES,
+  WARDROBE_LOOKS3,
+  snapshotsOf,
   type BannerKind,
   type ItemLook,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
@@ -19,6 +23,9 @@ export const BANNER_PLAN_TOKENS = 3000;
 // ── The reply ──
 
 const Look = z.object({ name: z.string().min(1), outfitLine: z.string().min(1) });
+/** #2303: a pulled date's place (its name in the world's language, English picture tags) and its number of scenes. */
+const Place = z.object({ name: z.string().min(1), tags: z.string().min(1) });
+const Scenes = z.number().nullable().optional();
 
 export const BannerPlanSchema = z.object({
   featured: z.object({
@@ -29,6 +36,8 @@ export const BannerPlanSchema = z.object({
     cgCast: z.array(z.string()).optional(),
     explicit: z.boolean().nullable().optional(),
     clothedBrief: z.string().nullable().optional(),
+    place: Place.optional(),
+    scenes: Scenes,
   }),
   four: z.array(
     z.object({
@@ -38,8 +47,12 @@ export const BannerPlanSchema = z.object({
       look: Look.optional(),
       cgBrief: z.string().optional(),
       cgCast: z.array(z.string()).optional(),
+      place: Place.optional(),
+      scenes: Scenes,
     }),
   ),
+  /** #2303: a wardrobe banner's 3★ looks. */
+  looks: z.array(z.object({ title: z.string().min(1), look: Look })).optional(),
   snapshots: z.array(
     z.object({
       li: z.string().min(1),
@@ -52,6 +65,12 @@ export const BannerPlanSchema = z.object({
 });
 export type BannerPlanReply = z.infer<typeof BannerPlanSchema>;
 
+/** #2303: a pulled date's place and scenes, as its item keeps them. */
+export interface DatePlace {
+  place: { name: string; tags: string };
+  scenes: number;
+}
+
 /** The plan as the banner is written from it: love interests as ids, every text clipped to its document's limit. */
 export interface BannerPlan {
   featured: {
@@ -59,15 +78,19 @@ export interface BannerPlan {
     premise?: string;
     look?: ItemLook;
     cg?: { brief: string; cast: string[]; explicit?: true; clothed?: string };
-  };
-  four: Array<{
-    li: string | null;
-    title: string;
-    premise?: string;
-    look?: ItemLook;
-    cg?: { brief: string; cast: string[] };
-  }>;
+  } & Partial<DatePlace>;
+  four: Array<
+    {
+      li: string | null;
+      title: string;
+      premise?: string;
+      look?: ItemLook;
+      cg?: { brief: string; cast: string[] };
+    } & Partial<DatePlace>
+  >;
   snapshots: Array<{ li: string; title: string; text: string; cg?: { brief: string; cast: string[] } }>;
+  /** #2303: a wardrobe banner's 3★ looks (none on another kind). */
+  looks: Array<{ title: string; look: ItemLook }>;
 }
 
 const clip = (value: string, max: number) => {
@@ -84,6 +107,24 @@ const cleanLook = (look: { name: string; outfitLine: string }): ItemLook => ({
   name: clip(look.name, ITEM_LIMITS.title),
   outfitLine: clip(look.outfitLine, ITEM_LIMITS.line),
 });
+
+/** #2303: a date's place and scenes as kept, its scenes held to `range` (a missing or odd count takes the middle). */
+function cleanDate(
+  entry: { place?: { name: string; tags: string }; scenes?: number | null },
+  range: { min: number; max: number },
+  at: string,
+): DatePlace | string {
+  if (!entry.place?.name.trim() || !entry.place.tags.trim()) return `${at}.place needs a name and tags`;
+  // A count left out or null takes the middle (Number(null) would be 0, the minimum).
+  const asked = typeof entry.scenes === "number" ? Math.round(entry.scenes) : Number.NaN;
+  const scenes = Number.isFinite(asked)
+    ? Math.min(range.max, Math.max(range.min, asked))
+    : Math.round((range.min + range.max) / 2);
+  return {
+    place: { name: clip(entry.place.name, ITEM_LIMITS.placeName), tags: clip(entry.place.tags, ITEM_LIMITS.line) },
+    scenes,
+  };
+}
 
 /**
  * The reply as a BannerPlan, or a string naming what is wrong (the generation core's one repair turn). `units` is the
@@ -112,11 +153,29 @@ export function normalizeBannerPlan(
     return units.find((unit) => unit.id === named) ?? units.find((unit) => sameName(named, unit.name)) ?? null;
   };
   const { featured: top } = reply;
+  const snapshots = snapshotsOf(kind);
+  const looks3 = !!BANNER_ITEM_KINDS[kind].looks3;
   if (reply.four.length < BANNER_SIZES.four) return `"four" needs ${BANNER_SIZES.four} entries`;
-  if (reply.snapshots.length < BANNER_SIZES.three) return `"snapshots" needs ${BANNER_SIZES.three} entries`;
+  if (reply.snapshots.length < snapshots) return `"snapshots" needs ${snapshots} entries`;
+  if (looks3 && (reply.looks?.length ?? 0) < WARDROBE_LOOKS3) return `"looks" needs ${WARDROBE_LOOKS3} entries`;
 
-  const plan: BannerPlan = { featured: { title: clip(top.title, ITEM_LIMITS.title) }, four: [], snapshots: [] };
-  if (kind === "memories") {
+  const plan: BannerPlan = {
+    featured: { title: clip(top.title, ITEM_LIMITS.title) },
+    four: [],
+    snapshots: [],
+    looks: looks3
+      ? reply.looks!.slice(0, WARDROBE_LOOKS3).map((entry) => ({
+          title: clip(entry.title, ITEM_LIMITS.title),
+          look: cleanLook(entry.look),
+        }))
+      : [],
+  };
+  if (kind === "dates") {
+    if (!top.premise?.trim()) return "featured.premise is missing";
+    const date = cleanDate(top, DATE_SCENES.five, "featured");
+    if (typeof date === "string") return date;
+    Object.assign(plan.featured, { premise: clip(top.premise, ITEM_LIMITS.premise), ...date });
+  } else if (kind === "memories") {
     if (!top.premise?.trim()) return "featured.premise is missing";
     if (!top.cgBrief?.trim()) return "featured.cgBrief is missing";
     // An explicit brief needs its clothed twin; a null or missing one is fine when the brief is not explicit.
@@ -140,6 +199,19 @@ export function normalizeBannerPlan(
   }
 
   for (const [index, entry] of reply.four.slice(0, BANNER_SIZES.four).entries()) {
+    // #2303: a date is played with whoever the player takes, so it is no one's.
+    if (kind === "dates") {
+      if (!entry.premise?.trim()) return `four[${index}].premise is missing`;
+      const date = cleanDate(entry, DATE_SCENES.four, `four[${index}]`);
+      if (typeof date === "string") return date;
+      plan.four.push({
+        li: null,
+        title: clip(entry.title, ITEM_LIMITS.title),
+        premise: clip(entry.premise, ITEM_LIMITS.premise),
+        ...date,
+      });
+      continue;
+    }
     if (kind === "my-wardrobe") {
       if (!entry.look) return `four[${index}].look is missing`;
       plan.four.push({ li: null, title: clip(entry.title, ITEM_LIMITS.title), look: cleanLook(entry.look) });
@@ -173,7 +245,7 @@ export function normalizeBannerPlan(
     }
   }
 
-  for (const [index, entry] of reply.snapshots.slice(0, BANNER_SIZES.three).entries()) {
+  for (const [index, entry] of reply.snapshots.slice(0, snapshots).entries()) {
     const li = liOf(entry.li);
     if (!li) return `snapshots[${index}].li is not one of the love interest ids given`;
     const text = clip(entry.text, ITEM_LIMITS.snapshot);

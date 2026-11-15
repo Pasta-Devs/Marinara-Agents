@@ -191,7 +191,7 @@ function createTarotStub({ images = false, open = false }: StubOptions = {}) {
           lis: Object.fromEntries(
             [KAI, MIR].map((li) => [
               li,
-              { cheat: "nudge", style: "", rupture: false, makeItRight: false, lines: { claw: null, cold: [] } },
+              { cheat: "nudge", style: "", rupture: false, lines: { claw: null, cold: [] } },
             ]),
           ),
         },
@@ -396,7 +396,7 @@ test("Otome Hearth Tarot night: Kai Ardent reads my cards, picked by tap or clic
     await activities
       .locator(".of-activity")
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.activity)),
-  ).toEqual(["read-him", "read-me", "tarot", "date-night", "photo-shoot", "claw"]);
+  ).toEqual(["read-him", "read-me", "tarot", "photo-shoot", "claw"]);
   const card = root.locator('.of-activity[data-activity="tarot"]');
   await expect(card.getByRole("heading", { name: "Tarot night with Kai Ardent" })).toBeVisible();
   await expect(card).toContainText("+40 Starlight · +40 affection");

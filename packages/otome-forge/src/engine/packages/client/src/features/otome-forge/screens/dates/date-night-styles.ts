@@ -84,6 +84,8 @@ ${R} .of-place-check {
 /* The looks: the two of them side by side. */
 ${R} .of-looks { display: flex; flex-direction: column; gap: 8px; }
 ${R} .of-looks-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+/* #2303: a pulled date shows only her looks. */
+${R} .of-looks-pair[data-single] { grid-template-columns: minmax(0, 1fr); }
 ${R} .of-looks-person { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
 ${R} .of-looks-who {
   padding: 0; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;

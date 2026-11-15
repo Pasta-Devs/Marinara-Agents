@@ -1,7 +1,11 @@
 // A forged Otome Forge world with Wish (M4): the art fixture's world (three love interests, an image connection and an
 // image client that counts paid calls), the Wish routes on a fake router, P20 replies for each banner kind, and a
 // seeded Math.random as in Gacha Forge's summon-rates regression.
-import type { BannerKind } from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
+import {
+  BANNER_KINDS,
+  snapshotsOf,
+  type BannerKind,
+} from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import assert from "node:assert/strict";
 import type {
   OtomeReply,
@@ -31,11 +35,36 @@ const look = (name: string, outfitLine: string) => ({ name, outfitLine });
 /** A valid P20 reply for `kind`; `featured` is whose banner it is (the 4★ looks of His Wardrobe go to others). */
 export function bannerReply(kind: BannerKind, { featured = KAI, tag = "" }: { featured?: string; tag?: string } = {}) {
   const others = [KAI, MIR, SOL].filter((li) => li !== featured);
-  const snapshots = [featured, others[0], others[1], featured, others[0], featured].map((li, i) => ({
-    li,
-    title: `Snapshot ${i + 1}${tag}`,
-    text: `SNAPSHOT-${kind}-${i + 1}${tag}: the lamp hums while they share a late tea. Neither says what they mean.`,
+  const snapshots = [featured, others[0], others[1], featured, others[0], featured]
+    .slice(0, snapshotsOf(kind))
+    .map((li, i) => ({
+      li,
+      title: `Snapshot ${i + 1}${tag}`,
+      text: `SNAPSHOT-${kind}-${i + 1}${tag}: the lamp hums while they share a late tea. Neither says what they mean.`,
+    }));
+  // #2303: a wardrobe banner's three 3★ looks.
+  const looks = [1, 2, 3].map((i) => ({
+    title: `Everyday ${i}${tag}`,
+    look: look(`Everyday ${i}`, "cotton shirt, grey trousers, canvas shoes"),
   }));
+  if (kind === "dates") {
+    const place = (name: string) => ({ name, tags: `${name.toLowerCase()}, evening, lanterns, no people` });
+    return {
+      featured: {
+        title: `Lantern Regatta${tag}`,
+        premise: "The harbour races paper lanterns at dusk, and a gust capsizes theirs before the first buoy.",
+        place: place("The Regatta Pier"),
+        scenes: 5,
+      },
+      four: ["Night Market", "Old Observatory", "Tide Pools"].map((name, i) => ({
+        title: `Date ${i + 1}${tag}`,
+        premise: `An evening at the ${name}, wandering until the lamps go out.`,
+        place: place(name),
+        scenes: i + 1,
+      })),
+      snapshots,
+    };
+  }
   if (kind === "memories") {
     return {
       featured: {
@@ -63,6 +92,7 @@ export function bannerReply(kind: BannerKind, { featured = KAI, tag = "" }: { fe
         title: `Look ${i + 1}${tag}`,
         look: look(`Look ${i + 1}`, "linen shirt, rolled sleeves, leather boots"),
       })),
+      looks,
       snapshots,
     };
   }
@@ -72,6 +102,7 @@ export function bannerReply(kind: BannerKind, { featured = KAI, tag = "" }: { fe
       look: look("Lantern Silk", "deep blue silk dress, silver lantern earrings"),
     },
     four: [1, 2, 3].map((i) => ({ title: `Her look ${i}${tag}`, look: look(`Her look ${i}`, "wool coat, red scarf") })),
+    looks,
     snapshots,
   };
 }
@@ -136,8 +167,9 @@ export async function ageWorld(t: { store: OtomeStore; runId: string }, days: nu
   }));
 }
 
-/** The three P20 replies one open makes for a fresh rotation, featuring `featured` (and His Wardrobe's LI for hers). */
+/**
+ * The P20 replies one open makes for a fresh rotation, one per kind in BANNER_KINDS order (#2303: the Dates banner
+ * last), featuring `featured` (and His Wardrobe's LI for hers).
+ */
 export const rotationReplies = (featured = KAI, tag = "") =>
-  (["memories", "his-wardrobe", "my-wardrobe"] as const).map((kind) =>
-    JSON.stringify(bannerReply(kind, { featured, tag })),
-  );
+  BANNER_KINDS.map((kind) => JSON.stringify(bannerReply(kind, { featured, tag })));

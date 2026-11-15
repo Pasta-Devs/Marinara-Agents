@@ -76,10 +76,10 @@
 //   has none, as above; it goes in even when the timeline covers it, its entry left out of the timeline, or beside the
 //   condensed head that holds it;
 // - the hand-off (`handOff`, the maintainer's, 2026-11-09): when that last Character Story is the newest thing that
-//   happened (no chapter but his side, a figurine scene or a birthday scene completed after it) and its block went
-//   in, the main story's prompts get its title, so a main chapter's plan and first scene pick up from how it ended, as
-//   chapter 1 picks up from the prologue (S/prompts.ts storyHandOff). A figurine or birthday scene is never the last
-//   Character Story (isFigurineOrBirthday);
+//   happened (no chapter but his side or a figurine, birthday or clear-the-air scene completed after it) and its block
+//   went in, the main story's prompts get its title, so a main chapter's plan and first scene pick up from how it
+//   ended, as chapter 1 picks up from the prologue (S/prompts.ts storyHandOff). A figurine, birthday or clear-the-air scene is
+//   never the last Character Story (isFigurineOrBirthday);
 // - the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k tokens, each date the
 //   timeline covers by its summary among them), after the timeline or, when `cached`, as a context of its own that the
 //   prompt sends after its cached part. A recall that fails is the same story context without it.
@@ -129,6 +129,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { birthdayOfKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
+import { clearAirOfKey, dateCast } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { figurineLiOf } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { beatId, chapterId, isItemStoryKey, mainChapterNumber, memoryId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory, RecallPoolOptions } from "../memory/memory.js";
@@ -340,7 +341,11 @@ export async function completedChapters(
     if (!chapter || chapter.kind === "prologue" || chapter.prestige) continue;
     const own = audienceOf(chapter);
     const others = new Map([...cast].filter(([li]) => !own?.includes(li)));
-    const cameos = own ? await cameosOf(store, runId, chapter, others) : [];
+    // #2303: a date taken with several is known to everyone who went on it, as a cameo knows a story: a won date's
+    // company, or an earlier Date Night double date's second love interest.
+    const company =
+      chapter.kind === "date" && chapter.date ? dateCast(chapter.date).filter((li) => others.has(li)) : [];
+    const cameos = own ? [...company, ...(await cameosOf(store, runId, chapter, others))] : [];
     const audience = own ? [...own, ...cameos] : undefined;
     const guests = cameos.map((li) => cast.get(li)!);
     chapters.push({
@@ -373,11 +378,12 @@ function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }):
 }
 
 /**
- * A Shop figurine's scene (#2128) or a birthday scene (#2153): a `story-` chapter with no story item behind it. Neither
- * counts toward the story (the maintainer's, 2026-11-10): it is never the last Character Story, and the hand-off looks
- * past it. It stays its love interest's own chapter, as before.
+ * A Shop figurine's scene (#2128), a birthday scene (#2153) or a scene that clears the air with him (#2303): a `story-`
+ * chapter with no story item behind it. None counts toward the story (the maintainer's, 2026-11-10): it is never the
+ * last Character Story, and the hand-off looks past it. It stays its love interest's own chapter, as before.
  */
-const isFigurineOrBirthday = (key: string) => figurineLiOf(key) !== null || birthdayOfKey(key) !== null;
+const isFigurineOrBirthday = (key: string) =>
+  figurineLiOf(key) !== null || birthdayOfKey(key) !== null || clearAirOfKey(key) !== null;
 
 /**
  * The last Character Story (#2126, see the header): the newest completed `story-<itemId>` chapter (a Memory's

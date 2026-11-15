@@ -6,6 +6,7 @@
 import { z, type ZodType } from "zod";
 import {
   BANNER_KINDS,
+  DATE_SCENES,
   ITEM_KINDS,
   SEASONS,
   isItemId,
@@ -31,6 +32,9 @@ const CgSchema = z.object({
   clothed: text(BRIEF_MAX).optional(),
 });
 const SnapshotCgSchema = CgSchema.extend({ brief: z.string() });
+/** #2303: a pulled date's place: its name in the world's language and English tags for its picture. */
+const PLACE_NAME_MAX = 120;
+const PlaceSchema = z.object({ name: text(PLACE_NAME_MAX), tags: text(LINE_MAX) });
 
 const defaultBanner = (): Banner => ({
   key: "",
@@ -96,6 +100,8 @@ export function normalizeItem(data: unknown): Item {
       text: text(SNAPSHOT_MAX).optional(),
       look: LookSchema.optional(),
       coupleWith: z.string().max(80).optional(),
+      place: PlaceSchema.optional(),
+      scenes: z.number().int().min(DATE_SCENES.four.min).max(DATE_SCENES.five.max).optional(),
       cg: (field(data, "kind") === "snapshot3" ? SnapshotCgSchema : CgSchema).optional(),
       art: PaintSchema.nullable(),
       story: z.object({ key: z.string().max(120) }).nullable(),
@@ -113,4 +119,5 @@ export const ITEM_LIMITS = {
   snapshot: SNAPSHOT_MAX,
   line: LINE_MAX,
   brief: BRIEF_MAX,
+  placeName: PLACE_NAME_MAX,
 };

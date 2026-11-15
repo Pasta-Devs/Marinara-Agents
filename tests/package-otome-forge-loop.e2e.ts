@@ -1,8 +1,8 @@
 // Otome Hearth's whole release-1 loop in the Engine's Home tab, at 1280 × 800 (Midnight) and 390 × 844 (Pearl), at
 // reduced motion and with text only, through /api/otome-forge/** answered in memory by one world: setup (premise,
 // persona, two love interests of different genders, content, connections) and the forge; a main chapter read to its
-// end; Home with his note and a tap; Reply into his thread; a wish; Wear at home; the Album; Read Them, Date Night and
-// a Claw round; Remind Me, the tracker and a Caring message. Starlight earned on one screen is spent and shown on the
+// end; Home with his note and a tap; Reply into his thread; a wish; Wear at home; the Album; Read Them, a date won from
+// Wish (#2303, planned from Album → Dates) and a Claw round; Remind Me, the tracker and a Caring message. Starlight earned on one screen is spent and shown on the
 // next. A second walk, in the other look at each size, visits the screens around the loop: Who’s home, the cast (from
 // Settings → Stories) and a bible, Rough day?, every Settings tab, the reader's Backlog and Ease off, the Album's other
 // tabs and Your stories (from Settings → Stories too).
@@ -113,7 +113,22 @@ const MAIN_BEATS: Json[] = [
   },
 ];
 
-/** Date Night: three scenes, one scored choice each. */
+/** A 4★ date won from Wish's Dates banner (#2303), owned from the start; planned from Album → Dates. */
+const DATE_ITEM = {
+  id: "dates-0-a3",
+  kind: "date4",
+  rarity: 4,
+  banner: "dates-0",
+  li: null,
+  title: "An Evening at the Aquarium",
+  premise: "Blue light and slow jellyfish.",
+  place: { name: "The Moonlit Aquarium" },
+  scenes: 3,
+  owned: true,
+  art: null,
+  story: null,
+};
+/** The date's three scenes, one scored choice each. */
 const DATE_BEATS: Json[] = [0, 1, 2].map((i) => ({
   places: [{ name: "The Moonlit Aquarium", tags: "blue glass, jellyfish" }],
   segments: [
@@ -762,7 +777,6 @@ function createLoopStub({ seeded = false } = {}) {
                 cheat: li === ILVAR ? "nudge" : "calculate",
                 style: li === ILVAR ? "Plays to an audience, all flourish and a wink." : "Calculates the angle aloud.",
                 rupture: false,
-                makeItRight: false,
                 lines: { claw: li === ILVAR ? CLAW_LINES : null, cold: [] },
               },
             ]),
@@ -806,8 +820,10 @@ function createLoopStub({ seeded = false } = {}) {
     const dateEntry = (state: string, outcome: string | null = null) => ({
       key: "date-1",
       li: ILVAR,
+      item: DATE_ITEM.id,
+      cast: [ILVAR],
       title: "An Evening at the Aquarium",
-      place: "aquarium",
+      place: "pulled",
       placeName: "The Moonlit Aquarium",
       makeItRight: false,
       state,
@@ -818,15 +834,18 @@ function createLoopStub({ seeded = false } = {}) {
     });
     if (path === `${base}/dates` && call.method === "GET") {
       const open = chapters.has("date-1") && !progress.get("date-1")!.done ? dateEntry("reading") : null;
+      const played = chapters.has("date-1") ? [dateDone ? dateEntry("finished", "great") : dateEntry("reading")] : [];
       return {
         status: 200,
         json: {
           lis: [ILVAR, ROS].map((li) => ({ li, rupture: false, open: li === ILVAR ? open : null })),
           dates: dateDone ? [dateEntry("finished", "great")] : [],
+          open: open ? [open] : [],
+          pulled: [{ item: DATE_ITEM, plays: played, playedBy: played.length ? [ILVAR] : [] }],
         },
       };
     }
-    if (path === `${base}/dates`) {
+    if (path === `${base}/dates/pulled`) {
       chapters.set("date-1", {
         key: "date-1",
         kind: "date",
@@ -1524,22 +1543,33 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(starlight(root)).toContainText(amount(2190));
   });
 
-  await test.step("Date Night: a place, the looks, three scenes and how it went", async () => {
-    await root.getByRole("button", { name: "Play: Date Night with Ilvar Thorne" }).click();
-    await expect(root.getByRole("heading", { level: 1, name: "Where to tonight?" })).toBeFocused();
-    const places = root.getByRole("group", { name: "Where you and Ilvar Thorne spend the evening" });
-    await auditScreen(page, root, "date night: places");
-    await places.locator("label").first().click();
+  await test.step("A date from Wish: who's coming, the looks, three scenes and how it went", async () => {
+    // #2303: no Date Night among the activities; the hub's card leads to the dates won from Wish, in Album → Dates.
+    await expect(root.getByRole("button", { name: /^Play: Date Night/u })).toHaveCount(0);
+    await root.getByRole("region", { name: "Your dates" }).getByRole("button", { name: "Open" }).click();
+    await expect(root.getByRole("tab", { name: "Dates", exact: true })).toHaveAttribute("aria-selected", "true");
+    await auditScreen(page, root, "album: dates");
+    await root.getByRole("button", { name: "Plan a date: An Evening at the Aquarium" }).click();
+    await expect(root.getByRole("heading", { level: 1, name: "Who's coming?" })).toBeFocused();
+    await auditScreen(page, root, "date: who's coming");
+    await root.locator(".of-partner").filter({ hasText: "Ilvar Thorne" }).click();
+    await expect(root.getByRole("checkbox", { name: /Ilvar Thorne/u })).toBeChecked();
     await root.getByRole("button", { name: "Next: what you wear" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
-    await auditScreen(page, root, "date night: looks");
-    // Her owned look is offered (#1965), and the picker starts on what she wears now: the gown worn at home above.
+    await auditScreen(page, root, "date: looks");
+    // Her owned look is offered (#1965), and the picker starts on what she wears now: the gown worn at home above. The
+    // love interests come as they are, so only hers is picked.
     const yours = root.getByRole("group", { name: "You wear" });
     await expect(yours.getByRole("radio", { name: "Starlit Gown" })).toBeChecked();
     await expect(yours.getByRole("radio", { name: "Everyday look" })).not.toBeChecked();
+    await expect(root.locator(".of-date-summary")).toContainText("An Evening at the Aquarium at The Moonlit Aquarium");
     await root.getByRole("button", { name: "Begin the date" }).click();
-    await expect.poll(() => posts(stub, "/dates").length).toBe(1);
-    expect(posts(stub, "/dates")[0]!.body).toMatchObject({ li: ILVAR, herLook: "my-wardrobe-0-f", hisLook: "base" });
+    await expect.poll(() => posts(stub, "/dates/pulled").length).toBe(1);
+    expect(posts(stub, "/dates/pulled")[0]!.body).toMatchObject({
+      item: DATE_ITEM.id,
+      cast: [ILVAR],
+      herLook: "my-wardrobe-0-f",
+    });
     for (const [i] of DATE_BEATS.entries()) {
       await expect(line(root)).toContainText(`Scene ${i + 1}: the tanks glow blue around you.`);
       await next(root);
@@ -1568,9 +1598,12 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     expect(await keepsakeCard.evaluate((element) => getComputedStyle(element).display)).not.toBe("grid");
     const title = (await keepsakeCard.getByRole("heading", { level: 2 }).boundingBox())!;
     expect(title.width, "the title spans the card, not one word per line").toBeGreaterThan(card.width / 2);
-    await auditScreen(page, root, "date night: ending");
-    await shot("09-date-night");
-    await root.getByRole("button", { name: "Back to Dates" }).first().click();
+    await auditScreen(page, root, "date: ending");
+    await shot("09-date");
+    await root.getByRole("button", { name: "Back to Album" }).first().click();
+    await expect(root.getByRole("tab", { name: "Dates", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(root.locator(".of-album-date")).toContainText("Been on it: Ilvar Thorne");
+    await dock(root, "Dates").click();
     await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
     await expect(starlight(root)).toContainText(amount(2310));
   });

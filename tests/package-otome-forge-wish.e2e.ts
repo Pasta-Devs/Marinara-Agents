@@ -1833,6 +1833,7 @@ test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps 
     "Stickers",
     "Photos",
     "Cards",
+    "Dates",
     "Memories",
     "Love Timeline",
     "Favourite lines",

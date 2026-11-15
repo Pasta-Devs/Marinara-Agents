@@ -30,7 +30,7 @@ import {
   GRIEVANCE_SPACE_CHAPTERS,
   type ClimaxEnding,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
-import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { clearAirOfKey, heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   ACTIVITY_STARLIGHT_DAILY_CAP,
   AFFECTION_EARNINGS,
@@ -288,6 +288,11 @@ export function readBeatToEnd(
   }
   next = saveLedger(next, chapter);
   if (chapter.kind === "main") next = withSpace(next, chapter.key);
+  // #2303: her accepted invitation to clear the air waits no longer once its scene is read to its end, so he may ask
+  // again the next time she is upset with him.
+  const clearing = clearAirOfKey(chapter.key);
+  const asking = clearing ? next.lis[clearing.li] : undefined;
+  if (clearing && asking?.asked) next = { ...next, lis: { ...next.lis, [clearing.li]: { ...asking, asked: null } } };
   const lead = next.lis[chapter.lead];
   if (chapter.kind === "main" && chapter.number && lead) {
     next = { ...next, lis: { ...next.lis, [chapter.lead]: { ...lead, lastLead: chapter.number } } };

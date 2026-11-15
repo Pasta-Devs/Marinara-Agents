@@ -53,6 +53,7 @@ import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { runForeground } from "../generation.js";
 import { ensureQuizScores } from "../minigames/quiz.js";
+import { ensureClearAirScenes } from "../phone/upset.js";
 import { embeddingHost } from "../memory/recall-index.js";
 import {
   OtomeForgeError,
@@ -375,6 +376,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       await settleForge(deps, runId);
       const read = await readRun(store, runId);
       if (!read) throw runNotFound();
+      // #2303: an invitation to clear the air accepted before its scene existed gets that scene, once (no model call).
+      await ensureClearAirScenes(store, runId, read.state);
       // #2174: the love interests' personality quiz answers, once, in the background (a story from before the quiz
       // gets them here, by its first chapter-planning wait); nothing here waits for them.
       void ensureQuizScores(deps, runId, read, { debugMode: debugModeOf(request) }).catch((error: unknown) =>

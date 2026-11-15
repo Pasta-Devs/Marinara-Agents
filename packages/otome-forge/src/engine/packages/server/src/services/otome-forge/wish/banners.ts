@@ -81,6 +81,7 @@ import {
   lookPrompt,
   memoryArtBrief,
   momentBriefs,
+  placePrompt,
 } from "../prompts.js";
 import { generateJson, readOrGenerate } from "../generation.js";
 import { itemView } from "../items/open.js";
@@ -282,6 +283,8 @@ export async function wishView(
       ...cutArt(view, view.five),
       five: cutArt(view.five, view.five),
       four: view.four.map((item) => cutArt(item, item)),
+      // #2303: a wardrobe banner's 3★ looks.
+      three: view.three.map((item) => cutArt(item, item)),
     }));
   await cutouts.queue();
   const current = views.filter((view) => view.rotation === rotation.number);
@@ -326,7 +329,10 @@ interface CreateOptions {
   active?: () => boolean;
 }
 
-/** The items a plan writes, in banner order (5★, 4★s, Snapshots). */
+/**
+ * The items a plan writes, in banner order (5★, 4★s, then the 3★s: #2303, a wardrobe banner's looks before its
+ * Snapshots). A date (#2303) is no one's: the player takes whoever they like on it.
+ */
 function itemsOf(
   key: string,
   kind: BannerKind,
@@ -346,25 +352,38 @@ function itemsOf(
     story: null,
     createdAt: at,
   });
+  const dated = (entry: { place?: Item["place"]; scenes?: number }) => ({
+    ...(entry.place ? { place: entry.place } : {}),
+    ...(entry.scenes ? { scenes: entry.scenes } : {}),
+  });
   const five: Item = {
-    ...base("f", kinds.five, featured.id, plan.featured.title),
+    ...base("f", kinds.five, kind === "dates" ? null : featured.id, plan.featured.title),
     ...(plan.featured.premise ? { premise: plan.featured.premise } : {}),
     ...(plan.featured.look ? { look: plan.featured.look } : {}),
     ...(plan.featured.cg ? { cg: plan.featured.cg } : {}),
     ...(coupleWith ? { coupleWith } : {}),
+    ...dated(plan.featured),
   };
   const four = plan.four.map((entry, index): Item => ({
     ...base(`a${index + 1}` as ItemSlot, kinds.four, entry.li, entry.title),
     ...(entry.premise ? { premise: entry.premise } : {}),
     ...(entry.look ? { look: entry.look } : {}),
     ...(entry.cg ? { cg: entry.cg } : {}),
+    ...dated(entry),
   }));
-  const three = plan.snapshots.map((entry, index): Item => ({
+  // His Wardrobe's 3★ looks are the featured love interest's; My Wardrobe's are the protagonist's.
+  const looks = kinds.looks3
+    ? plan.looks.map((entry, index): Item => ({
+        ...base(`l${index + 1}` as ItemSlot, kinds.looks3!, kind === "his-wardrobe" ? featured.id : null, entry.title),
+        look: entry.look,
+      }))
+    : [];
+  const snapshots = plan.snapshots.map((entry, index): Item => ({
     ...base(`s${index + 1}` as ItemSlot, kinds.three, entry.li, entry.title),
     text: entry.text,
     ...(entry.cg ? { cg: entry.cg } : {}),
   }));
-  return { five, four, three };
+  return { five, four, three: [...looks, ...snapshots] };
 }
 
 /** Writes the banner (after its items) unless one is stored already; null when the run was deleted meanwhile. */
@@ -591,6 +610,26 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
   if (!five) throw bannerNotFound();
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
+  // #2303: a Dates banner shows its 5★ date's place with nobody in it, painted as a scene's place is (S/art/places.ts).
+  if (banner.kind === "dates") {
+    if (!five.place) throw bannerNotFound();
+    const place = five.place;
+    const prompt = placePrompt({ name: place.name, tags: place.tags, world: run.world, style }, edited);
+    return {
+      ...prompt,
+      paint: async (connectionId: string, debugMode: boolean): Promise<PaintedImage> => {
+        const image = await images.generateImage({
+          connectionId,
+          name: place.name,
+          prompt: prompt.prompt,
+          negativePrompt: prompt.negativePrompt,
+          ...SCENE_SIZE,
+          debugMode,
+        });
+        return images.uploadToGallery({ image, name: place.name, prompt: prompt.prompt });
+      },
+    };
+  }
   if (banner.kind === "memories") {
     const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
     // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;

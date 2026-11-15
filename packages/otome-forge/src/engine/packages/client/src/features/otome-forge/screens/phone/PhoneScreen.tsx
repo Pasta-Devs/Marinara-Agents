@@ -110,8 +110,8 @@ interface PhoneScreenProps {
   /** The thread shown (Home's Reply opens one with the note quoted); null, or one not in the cast, shows the list. */
   open: PhoneOpen | null;
   onOpenChange: (open: PhoneOpen | null) => void;
-  /** #2156: she accepted his invitation to clear the air in his thread: Date Night with him. */
-  onDate?: (li: LiId) => void;
+  /** #2156, #2303: opens the scene to clear the air with him, once she accepts his invitation in his thread. */
+  onOpenScene?: (key: string) => void;
 }
 
 /** Starts the protagonist's stickers once, the first time the phone opens with images on (#2044). */
@@ -132,7 +132,7 @@ function useStartStickers(runKey: string, view: RunView) {
   }, [due, otome, queryClient, runKey]);
 }
 
-export function PhoneScreen({ runKey, view, open, onOpenChange, onDate }: PhoneScreenProps) {
+export function PhoneScreen({ runKey, view, open, onOpenChange, onOpenScene }: PhoneScreenProps) {
   useStartStickers(runKey, view);
   // Focus follows the player inside the phone: into a thread they opened here, back to its row when they leave it.
   // A thread opened from Home's Reply leaves for a list read for the first time, whose rows come after it loads: the
@@ -189,7 +189,7 @@ export function PhoneScreen({ runKey, view, open, onOpenChange, onDate }: PhoneS
         onQuoteChange={(quote) => {
           if ((open.quote?.trim() || null) !== quote) onOpenChange({ li: li.id, ...(quote ? { quote } : {}) });
         }}
-        onDate={onDate}
+        onOpenScene={onOpenScene}
       />
     );
   }
