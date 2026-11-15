@@ -3,9 +3,9 @@
 // until he has had it; his affection shows as paused; the Lead dialog says why he can't lead; every activity with him
 // in Dates shows that he needs space, with no Play. Her grievance: "I'm upset with her" beside each route (also at
 // stage 6) is a toggle (aria-pressed) that asks first (a dialog, Escape closes it and sends nothing) and is taken back
-// at once; his invitation in Messages offers Accept and Decline, and Accept opens Date Night on what you wear, with his
-// choice of place picked. Each test runs at phone width (mobile-chromium, 390×844, touch) and on the desktop
-// (desktop-chromium, mouse), with no horizontal scroll.
+// at once; his invitation in Messages offers Accept and Decline, and Accept opens the scene that clears the air with him
+// in the reader (#2303), which the accepted invitation offers again from the thread. Each test runs at phone width
+// (mobile-chromium, 390×844, touch) and on the desktop (desktop-chromium, mouse), with no horizontal scroll.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-grievances.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -26,6 +26,8 @@ const RUN = "r-e2e-griev1";
 const KAI = "li-kai-0001";
 const MIR = "li-mireille-0002";
 const INVITE = "m-invite-0002";
+/** The scene accepting her invitation registers (SH/dates.ts clearAirSceneKey). */
+const SCENE = `story-clear-air-${MIR}-1`;
 
 function createStub() {
   const calls: Call[] = [];
@@ -48,6 +50,8 @@ function createStub() {
       content: { heat: "sfw", darkness: "angst", limits: {}, custom: [] },
       images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
+      // Voices off; the reader reads these settings when the clear-air scene opens.
+      audio: { tts: false },
       forge: { phase: "ready", steps: [] },
     },
     player: {
@@ -173,9 +177,7 @@ function createStub() {
                 cheat: "nudge",
                 style: "",
                 rupture: li === KAI,
-                makeItRight: li === KAI,
                 held: li === KAI,
-                asked: li === MIR && asked,
                 lines: { claw: null, cold: [] },
               },
             ]),
@@ -219,15 +221,46 @@ function createStub() {
       if (action === "seen") return { status: 200, json: {} };
       const accept = !!call.body!.accept;
       messages[1]!.invite = { status: accept ? "accepted" : "declined" };
-      if (accept) asked = true;
-      return { status: 200, json: { status: messages[1]!.invite.status } };
+      if (!accept) return { status: 200, json: { status: "declined" } };
+      asked = true;
+      messages[1]!.invite.scene = SCENE;
+      return { status: 200, json: { status: "accepted", scene: SCENE } };
     }
-    if (path === `${base}/dates` && call.method === "GET") {
+    // The scene her acceptance registered (S/items/character-story.ts clearAirStoryChapter), saved under its English
+    // title and written on its first read.
+    if (asked && path === `${base}/chapters/${SCENE}`) {
+      const chapter = {
+        key: SCENE,
+        kind: "story",
+        li: MIR,
+        lead: MIR,
+        title: "Clearing the Air with Mireille",
+        tags: [],
+        summary: "",
+        nodes: [{ i: 0, kind: "beat" }],
+        plannedAt: now(),
+      };
+      return { status: 200, json: { chapter, beats: [{ i: 0, state: "unwritten" }] } };
+    }
+    if (asked && path === `${base}/chapters/${SCENE}/beats/0`) {
       return {
         status: 200,
         json: {
-          lis: [KAI, MIR].map((li) => ({ li, rupture: li === KAI, open: null, asked: li === MIR && asked })),
-          dates: [],
+          beat: {
+            key: SCENE,
+            i: 0,
+            kind: "beat",
+            places: [],
+            segments: [
+              { speaker: "", text: "The café is nearly empty." },
+              { speaker: "Mireille", text: "I'm sorry about the other night." },
+            ],
+            choices: [],
+            choiceCanon: {},
+            musicMood: "tender",
+            readThrough: 0,
+            written: { at: now(), connectionId: "conn-text", model: "fixture" },
+          },
         },
       };
     }
@@ -397,10 +430,9 @@ test("Otome Hearth grievances: his space, paused affection and waiting dates; I'
   await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
   await expect(root.locator(".of-notice").filter({ hasText: "Kai Ardent needs space." })).toBeVisible();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
-  await expect(activities.locator(".of-activity")).toHaveCount(6);
-  await expect(activities.locator(".of-badge", { hasText: "Kai Ardent needs space" })).toHaveCount(6);
+  await expect(activities.locator(".of-activity")).toHaveCount(5);
+  await expect(activities.locator(".of-badge", { hasText: "Kai Ardent needs space" })).toHaveCount(5);
   await expect(activities.getByRole("button", { name: /^Play:/u })).toHaveCount(0);
-  await expect(activities.locator('.of-activity[data-activity="date-night"]')).not.toContainText("Make it right");
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("05-dates.png"), fullPage: true });
   await press(root.locator(".of-partner").filter({ hasText: "Mireille" }));
@@ -408,7 +440,7 @@ test("Otome Hearth grievances: his space, paused affection and waiting dates; I'
   expect(pageErrors).toEqual([]);
 });
 
-test("Otome Hearth grievances: his invitation to clear the air, accepted in Messages, opens Date Night on what you wear", async ({
+test("Otome Hearth grievances: his invitation to clear the air, accepted in Messages, opens its scene in the reader", async ({
   page,
 }, testInfo) => {
   test.setTimeout(150_000);
@@ -434,27 +466,24 @@ test("Otome Hearth grievances: his invitation to clear the air, accepted in Mess
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("01-invite.png") });
 
-  // Accept: Date Night with her, on what you wear, her choice of place picked.
+  // Accept: the scene that clears the air with her opens in the reader, titled in the player's language.
   await press(accept);
-  await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
   expect(posts(stub, "/invite").map(fields)).toEqual([{ message: INVITE, accept: true }]);
-  await expect(root.locator(".of-date-summary")).toContainText("Wherever Mireille takes you");
-  await expect(root.locator(".of-date-summary")).toContainText("Mireille asked you out tonight to clear the air.");
+  await expect(root.getByRole("heading", { level: 1, name: /Clearing the Air with Mireille/u })).toBeVisible();
+  await expect(root.getByText("Character story").first()).toBeVisible();
+  await expect(root.locator(".of-dialogue .of-line")).toContainText("The café is nearly empty.");
   await noWider(page);
-  await page.screenshot({ path: testInfo.outputPath("02-looks.png"), fullPage: true });
-  // Back reaches the places, with hers picked.
-  await press(root.getByRole("button", { name: "Change the place" }));
-  await expect(root.getByRole("heading", { level: 1, name: "Where to tonight?" })).toBeFocused();
-  await expect(root.getByRole("radio", { name: /Let Mireille choose/u })).toBeChecked();
-  await noWider(page);
-  // The thread keeps what she said.
-  await press(root.getByRole("button", { name: /^Home with/u }));
-  await press(root.locator(".of-home-rail").getByRole("button", { name: /Messages/u }));
-  await press(root.locator(".of-threads").getByRole("button", { name: /Mireille/u }));
-  await expect(root.getByRole("group", { name: "Mireille’s invitation" })).toContainText(
-    "You said yes. Date Night with Mireille waits in Dates.",
-  );
-  await expect(root.getByRole("group", { name: "Mireille’s invitation" }).getByRole("button")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("02-scene.png") });
+  // Leaving goes back to Messages: the thread keeps what she said, and the accepted invitation opens the scene again.
+  await press(root.getByRole("button", { name: "Leave the chapter" }));
+  const thread = root.locator(".of-threads").getByRole("button", { name: /Mireille/u });
+  if (await thread.isVisible()) await press(thread);
+  const accepted = root.getByRole("group", { name: "Mireille’s invitation" });
+  await expect(accepted).toContainText("You said yes. Clearing the air with Mireille waits as a scene.");
+  await expect(accepted.getByRole("button")).toHaveCount(1);
+  await press(accepted.getByRole("button", { name: "Clear the air with Mireille" }));
+  await expect(root.getByRole("heading", { level: 1, name: /Clearing the Air with Mireille/u })).toBeVisible();
+  expect(posts(stub, "/invite")).toHaveLength(1);
   expect(pageErrors).toEqual([]);
 });
 

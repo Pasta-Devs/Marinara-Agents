@@ -88,7 +88,6 @@ import {
   heldAgainst,
   keyImageScene,
   newcomersOf,
-  standingRupture,
   stillToMend,
   type DateEntry,
   type DateFinishResult,
@@ -281,10 +280,6 @@ function partnerOf(run: RunDocuments, li: LiId): Unit {
   return unit;
 }
 
-/** The love interests a date can be with, in cast order. */
-const castOf = (run: RunDocuments) =>
-  Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
-
 /** Every date of the run (a chapter of kind "date" with its plan), newest first. */
 async function dateChapters(store: Pick<OtomeStore, "listRun">, runId: string): Promise<Chapter[]> {
   const number = (chapter: Chapter) => Number(DATE_KEY.exec(chapter.key)?.[1] ?? 0);
@@ -371,10 +366,6 @@ export async function datesView(deps: Pick<DateDeps, "store">, runId: string): P
       entryOf(runId, chapter, run.state, outcomeOf(datePicks(await readBeats(deps.store, runId, chapter)))),
     ),
   );
-  const open = (li: LiId) => {
-    const chapter = chapters.find((item) => item.date!.li === li && !isFinished(run.state, item));
-    return chapter ? entryOf(runId, chapter, run.state, null) : null;
-  };
   const pulled = items.map((item): PulledDate => {
     const plays = chapters.filter((chapter) => chapter.date!.item === item.id);
     return {
@@ -385,37 +376,12 @@ export async function datesView(deps: Pick<DateDeps, "store">, runId: string): P
     };
   });
   return {
-    lis: castOf(run).map((li) => ({
-      li,
-      rupture: !!run.state.lis[li]?.rupture,
-      open: open(li),
-      asked: !!run.state.lis[li]?.asked,
-    })),
     dates,
     open: chapters
       .filter((chapter) => !isFinished(run.state, chapter))
       .map((chapter) => entryOf(runId, chapter, run.state, null)),
     pulled,
   };
-}
-
-/**
- * Date Night with each love interest now (GET /play, the Dates hub's label): whether it is Make it right, by the open
- * date's own plan while its rupture stands (stillToMend) when one is open, else by whether a rupture stands that a new
- * date would try to mend; and whether a date with them is open (#2156: Play resumes it before his invitation's evening).
- */
-export async function dateNightView(
-  store: Pick<OtomeStore, "listRun">,
-  runId: string,
-  state: RunState,
-): Promise<Record<LiId, { makeItRight: boolean; open: boolean }>> {
-  const chapters = await dateChapters(store, runId);
-  const view: Record<LiId, { makeItRight: boolean; open: boolean }> = {};
-  for (const [li, liState] of Object.entries(state.lis)) {
-    const open = chapters.find((item) => item.date!.li === li && !isFinished(state, item));
-    view[li] = { makeItRight: !!(open ? stillToMend(open.date!, state.lis) : standingRupture(liState)), open: !!open };
-  }
-  return view;
 }
 
 // ── Start ──

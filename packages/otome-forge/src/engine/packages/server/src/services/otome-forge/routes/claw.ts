@@ -3,8 +3,8 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/play                                      → PlayView: today's capped earnings, the plush shelf, and
 //                                                             how each love interest plays (bible.play), whether a
-//                                                             rupture stands between them, whether Date Night with
-//                                                             them is Make it right, and their claw and cold lines
+//                                                             rupture stands between them or holds their dates, and
+//                                                             their claw and cold lines
 // POST /runs/:run/claw/finish {li, round, first, caught, cheered} → ClawFinishResult {grants, newPlush, firstPlush,
 //                                                             line?, capped, replay, plush, starlight}
 // A finish never calls a model or paints an image (S/minigames/claw.ts). GET /play only queues, in the background, the
@@ -21,7 +21,7 @@ import {
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRouter, type RouteDeps } from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { finishClawRound, playView } from "../minigames/claw.js";
-import { assertFreeToDate, dateNightView } from "../minigames/date-night.js";
+import { assertFreeToDate } from "../minigames/date-night.js";
 import { ensurePlushArt } from "../minigames/plush.js";
 import { normalizeState, readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -58,8 +58,7 @@ export function registerClawRoutes(
             error instanceof Error ? error.message : String(error),
           ),
       );
-      const dates = await dateNightView(store, runId, run.state);
-      return playView(run.state, run.units, run.world.content, forgeDayKey(Date.now()), dates);
+      return playView(run.state, run.units, run.world.content, forgeDayKey(Date.now()));
     }),
   );
 

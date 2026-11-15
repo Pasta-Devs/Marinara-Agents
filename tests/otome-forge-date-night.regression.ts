@@ -541,7 +541,7 @@ test("a date is 4 model calls, pays once whatever the outcome, and keeps its ans
   const view = await t.call("GET", "/runs/:run/dates");
   assert.equal(view.body.dates.length, 1);
   assert.equal(view.body.dates[0].outcome, "great");
-  assert.equal(view.body.lis.find((entry: { li: string }) => entry.li === KAI).open, null);
+  assert.deepEqual(view.body.open, []);
 
   // #2303: Kai has been on this date, so it only replays for him: the same company again is refused before any call.
   const played = await t.call("POST", "/runs/:run/dates/pulled", START);

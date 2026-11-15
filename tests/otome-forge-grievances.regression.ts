@@ -931,17 +931,6 @@ test("Decline ends his asking; taking it back lapses a waiting invitation; his o
   assert.equal((await his.thread()).messages.at(-1)!.invite, undefined);
 });
 
-test("the hub says his invitation waits only while no date with him is open, which Play resumes first", async () => {
-  const t = await world("r-griev-asked1", { [KAI]: { asked: at } });
-  assert.equal((await t.call("GET", "/runs/:run/play")).body.lis[KAI].asked, true);
-  await seedOpen(t, false);
-  const play = (await t.call("GET", "/runs/:run/play")).body;
-  assert.deepEqual([play.lis[KAI].asked, play.lis[KAI].makeItRight], [false, false]);
-  // The invitation still waits, for the date after it.
-  const dates = (await t.call("GET", "/runs/:run/dates")).body.lis.find((entry: { li: string }) => entry.li === KAI);
-  assert.deepEqual([dates.asked, dates.open?.key], [true, "date-1"]);
-});
-
 test("the memo reaches his messages and the story's plans and scenes after the cache breakpoint, never Home's note", async () => {
   const t = await storyWorld({
     runKey: "r-griev-memo01",

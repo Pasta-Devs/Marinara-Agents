@@ -668,6 +668,7 @@
   "ui.otomeForge.phone.affection": "+{{amount}} affection",
   "ui.otomeForge.phone.allMessages": "All messages",
   "ui.otomeForge.phone.askAgain": "Ask again",
+  "ui.otomeForge.phone.clearAirTitle": "Clearing the Air with {{name}}",
   "ui.otomeForge.phone.close": "Close",
   "ui.otomeForge.phone.closeCancel": "Not yet",
   "ui.otomeForge.phone.closeConfirm": "Close and remember",

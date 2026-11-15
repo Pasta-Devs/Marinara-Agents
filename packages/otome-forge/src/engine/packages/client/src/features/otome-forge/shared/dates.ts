@@ -183,14 +183,6 @@ export interface DateEntry {
 
 /** GET /runs/:run/dates */
 export interface DatesView {
-  /** Each love interest with a bible, in cast order: a rupture makes the next date "Make it right". */
-  lis: Array<{
-    li: LiId;
-    rupture: boolean;
-    open: DateEntry | null;
-    /** #2156: she accepted his invitation to clear the air: the next date with him is that evening (his choice of place). */
-    asked?: boolean;
-  }>;
   /** Finished dates, newest first. */
   dates: DateEntry[];
   /** #2303: every date not counted yet (one read to its end included), newest first. */
