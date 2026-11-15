@@ -400,6 +400,10 @@ export const WRITING_RULES = [
   "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them. The choices the protagonist is offered are plain too, not riddles.",
   "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   "Write what the protagonist feels in their body when something happens to them, not only the action.",
+  // The maintainer's (2026-11-15), word for word.
+  "Narration should show what happens, not what doesn’t.",
+  "Dialogue must be realistic in the speaker’s own voice and rhythm, as if spoken: with contractions, fragments, abandoned sentences, dodged questions, interruptions, stutters, ramblings, and so on. Speech uses everyday words. The line itself must convey its emotions.",
+  "Ban echoing and parroting in any form.",
   "All characters, player included, can change; for better, or worse.",
   "Character change must be earned and consistent with established identity and canonical character cards; it is not automatic redemption or a replacement personality.",
   "Falling for the protagonist does not make a monster good or secretly kind at once; as affection grows and they come to know the protagonist, they may become a better partner to them, in their own way.",

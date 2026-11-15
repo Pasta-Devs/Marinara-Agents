@@ -159,13 +159,14 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
 // 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
 // 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved again.
+// 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so these moved.
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so theirs moved; Memories is
 // unchanged, and the Dates banner's is new.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "819504f34beb3118",
-  "his-wardrobe": "a55677dfa2055c10",
-  "my-wardrobe": "670c93b6ee4d889b",
-  dates: "51f6e60481eeea47",
+  memories: "76ae68aa00073f3a",
+  "his-wardrobe": "62fdfe444aa77aaf",
+  "my-wardrobe": "189509db8b8aaded",
+  dates: "e9101f27986ef692",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

@@ -21,6 +21,7 @@
   "ui.otomeForge.album.datesEarlierHint": "Date Night evenings from before dates came from Wish. Read one again, or finish one you left.",
   "ui.otomeForge.album.datesEmpty": "No dates yet. Win them on the Dates banner in Wish, then plan them here with whoever you like.",
   "ui.otomeForge.album.datesNotYet": "Nobody has been on it yet.",
+  "ui.otomeForge.album.datesPaintLabel": "Paint the place of {{title}}",
   "ui.otomeForge.album.datesPlan": "Plan a date",
   "ui.otomeForge.album.datesPlanLabel": "Plan a date: {{title}}",
   "ui.otomeForge.album.datesWon": "Your dates",

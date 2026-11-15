@@ -166,8 +166,28 @@ ${R} .of-date-memory-art {
 ${R} .of-date-memory-art--quiet > svg { position: relative; }
 ${R} .of-date-memory-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 ${R} .of-date-memory-title {
-  font-family: var(--of-font-display); font-weight: 600; font-size: 1.06rem; line-height: 1.1; overflow-wrap: anywhere;
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.06rem; line-height: 1.1; overflow-wrap: break-word;
 }
+/* Album → Dates (#2303): a card's picture and text side by side, then its badge and button in a row below, so the
+   text keeps the card's width on a phone instead of being squeezed beside the buttons. */
+${R} .of-album-date {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px 12px; padding: 10px;
+  border-radius: 16px; background: var(--of-surface-hover); border-inline-start: 3px solid var(--of-li-accent, var(--of-rose));
+}
+${R} .of-album-date > .of-date-memory-text { grid-column: 2; gap: 3px; }
+${R} .of-album-date > .of-date-memory-text:first-child { grid-column: 1 / -1; }
+${R} .of-album-date-art {
+  width: 64px; height: 64px; border-radius: 12px; object-fit: cover; background: var(--of-surface);
+}
+${R} .of-album-date-actions {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
+}
+${R} .of-album-date-actions > .of-badge { margin-inline-end: auto; }
+${R} .of-album-date .of-body { max-width: none; }
+/* The pin stays on the place's first line. */
+${R} .of-album-date-place { display: flex; align-items: baseline; gap: 4px; }
+${R} .of-album-date-place > svg { flex: none; align-self: center; }
+${R} .of-album-date-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; }
 
 /* How the evening went. */
 ${R} .of-date-counting { margin-top: 18px; }

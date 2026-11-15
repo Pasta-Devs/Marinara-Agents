@@ -1324,11 +1324,12 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
 // 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
 // 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved.
+// 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so these moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "c02a6f0f50ad3958",
-  scene1: "a8a5b77002572ee6",
-  scene2: "a6bc1996ec0154f3",
-  scene3: "c10d89ad4607db8b",
+  plan: "c6a72b88184fb1b7",
+  scene1: "9932909ae8f40609",
+  scene2: "d093f01f249dc9f2",
+  scene3: "6249fff3d128c11e",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */
