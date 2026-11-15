@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.2 — 2026-11-16
 
 - Background import no longer reads a message piece that failed again each time a later piece closes; it is read again on Retry in Chat Settings, after a change of the extraction connection, or on the first reply after ten minutes.
 
