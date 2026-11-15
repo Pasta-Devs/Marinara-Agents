@@ -6,7 +6,10 @@ import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
 import type { PortraitRequest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import type { Item } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
+import {
+  datePlacePaintable,
+  type Item,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import type { OtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { paintPairNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
 import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
@@ -354,6 +357,52 @@ test("an existing owned Snapshot paints its saved vignette once without rewritin
   await t.call("GET", "/runs/:run/album");
   await t.call("GET", "/runs/:run/wardrobe");
   assert.equal(t.paid.length, 1, "repeat opens and list reads reuse the saved picture");
+});
+
+test("#2303: a 4★ date's first open paints its place once, with nobody in it, and a 5★ date paints nothing", async () => {
+  const t = await itemsWorld("r-date4art-aaaaaa");
+  const date4 = item("dates-0-a1", {
+    kind: "date4",
+    li: null,
+    title: "What the Frost Left",
+    place: { name: "Larch Wood, Far Bank", tags: "larch wood, first frost, mushrooms, no people" },
+    scenes: 2,
+  });
+  const date5 = item("dates-0-f", {
+    kind: "date5",
+    li: null,
+    title: "Lantern Regatta",
+    place: { name: "The Regatta Pier", tags: "harbour pier, lanterns, dusk, no people" },
+    scenes: 5,
+  });
+  for (const value of [date4, date5])
+    await t.store.mutateDoc(runDocTarget("item", itemId(t.runId, value.id)), normalizeItem, () => value);
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: { ...state.owned, items: [...state.owned.items, date4.id, date5.id] },
+  }));
+  const [first, second] = await Promise.all([t.open(date4.id), t.open(date4.id)]);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  await t.painted(date4.id);
+  assert.equal(t.paid.length, 1, "concurrent opens share one paid picture");
+  assert.equal(t.paid[0]!.method, "generateImage");
+  assert.match(t.paid[0]!.request.prompt, /larch wood, first frost, mushrooms, no people/);
+  assert.equal(t.paid[0]!.request.units, undefined, "a place has no likeness to send");
+  assert.deepEqual(t.calls, [], "a date's open writes nothing: its scenes come when it is planned");
+  // The 5★'s picture is its banner's art (S/wish/banners.ts), so its own open pays for nothing.
+  assert.equal((await t.open(date5.id)).status, 200);
+  assert.equal(t.paid.length, 1);
+  // The client offers Paint it on the same terms the server paints: a 4★ with a named place, never a 5★ (Dottore).
+  assert.deepEqual(
+    [
+      datePlacePaintable(date4),
+      datePlacePaintable(date5),
+      datePlacePaintable({ kind: "date4" }),
+      datePlacePaintable({ kind: "date4", place: { name: "  " } }),
+    ],
+    [true, false, false, false],
+  );
 });
 
 test("new Snapshot artwork uses its English brief and only the reward's own characters", async () => {

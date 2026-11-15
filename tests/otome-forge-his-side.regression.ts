@@ -834,10 +834,11 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 2026-11-11: the last scene's open-decision rule and the no-assumed-choice rule.
   // Retaken 0.23.0: the affection line reads "of 20" (the bond ranks).
   // Retaken 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register.
-  assert.equal(sha(mainMessages), "8cbfe081907b36282e9a9d698bb65d377aa6791e11a8d7760664975b73d748eb", "a main chapter");
+  // Retaken 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing.
+  assert.equal(sha(mainMessages), "e3ceb88d3c59dcd8122e0a45508d6e5abbd5aac7e316c08fe205ca496c49bc1b", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "64ca6eb26eb8f9308bbc6f8762949e2dce6df51d1b1336af9edb2ee9b24385ab",
+    "70a5be6ea3021a4e81c4cafc085d3f8e3a357f00145253e8d674f16e533fd739",
     "a Character Story, even with a scene handed to it",
   );
 });

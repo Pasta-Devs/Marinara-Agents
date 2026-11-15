@@ -184,6 +184,20 @@ test("writing rules: story prompts get the knowledge boundary first, planners ne
   }
 });
 
+test("the writing rules carry the maintainer's lines on narration, spoken dialogue and echoing, word for word", () => {
+  // The maintainer's (2026-11-15), added to every story prompt's and planner's WRITING RULES as written.
+  for (const story of [true, false]) {
+    const rules = otomeWritingRules({ story });
+    assert.ok(rules.includes("\n- Narration should show what happens, not what doesn’t.\n"));
+    assert.ok(
+      rules.includes(
+        "\n- Dialogue must be realistic in the speaker’s own voice and rhythm, as if spoken: with contractions, fragments, abandoned sentences, dodged questions, interruptions, stutters, ramblings, and so on. Speech uses everyday words. The line itself must convey its emotions.\n",
+      ),
+    );
+    assert.ok(rules.includes("\n- Ban echoing and parroting in any form.\n"));
+  }
+});
+
 test("tells are a few possible signs among others, and the writing rules ask for variety without repeats", () => {
   // The maintainer's (2026-11-10): love interests showed only their bible's tells, often in the same words within a
   // chapter. The card names them as some signs among others, and every story prompt's writing rules forbid reusing one.

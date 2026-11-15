@@ -253,7 +253,7 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs
         />
       </>
     ) : tab === "dates" ? (
-      <Dates runKey={runKey} view={view} onOpenDate={onOpenDate} />
+      <Dates runKey={runKey} view={view} actions={actions} onOpenDate={onOpenDate} />
     ) : tab === "cards" ? (
       <CardGrid runKey={runKey} view={view} cards={cards} actions={actions} onView={setViewingCard} />
     ) : tab === "memories" ? (

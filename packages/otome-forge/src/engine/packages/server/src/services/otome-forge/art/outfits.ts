@@ -15,6 +15,7 @@
 //   in any way art/cg.ts resolveCast knows), without another text call.
 // - his-look5, his-look4: his new look (generateOutfit, 832×1216 full body on grey), keeping his card or portrait as
 //   the likeness reference. her-look5, her-look4: the protagonist's.
+// - date4: its place with nobody in it, painted as a scene's place is (#2303; a 5★ date's is its banner's art).
 // A look's image, once ready, is added to its wearer's `outfits` (the kit's outfit shape), which is what makes it
 // wearable; his faces for it are painted when he wears it (S/routes/wardrobe.ts, through M2b's expressions).
 // Home cuts out his worn look and its ready faces lazily, on the next Home read (S/art/cutout.ts queueCutouts, plan M3
@@ -73,6 +74,7 @@ import {
   cgPrompt,
   lookPrompt,
   memoryArtBrief,
+  placePrompt,
 } from "../prompts.js";
 
 export interface ItemArtDeps extends ArtDeps {
@@ -105,7 +107,8 @@ const bannerPaints = (runId: string, item: Pick<Item, "id" | "banner">) =>
   isFeatured(item) && paintIsLive(runId, bannerArtOwner(item.banner));
 
 /** An illustrated reward or a look. Moments and legacy Snapshots use their saved text without another planner call. */
-export const hasArt = (item: Pick<Item, "kind" | "cg" | "look" | "text" | "premise" | "title">) =>
+export const hasArt = (item: Pick<Item, "kind" | "cg" | "look" | "text" | "premise" | "title" | "place">) =>
+  (item.kind === "date4" && !!item.place?.name.trim() && !!item.place.tags.trim()) ||
   (item.kind === "snapshot3" && !!item.text?.trim()) ||
   (item.kind === "moment4" && !!(item.premise?.trim() || item.title.trim())) ||
   (item.kind === "memory5" && !!item.cg?.brief.trim()) ||
@@ -226,6 +229,26 @@ async function buildItemArt(
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
+  // #2303: a 4★ date's place, with nobody in it, as the Dates banner shows its 5★'s.
+  if (item.kind === "date4" && item.place) {
+    const place = item.place;
+    const prompt = placePrompt({ name: place.name, tags: place.tags, world: run.world, style }, edited);
+    return {
+      ...prompt,
+      world: run.world,
+      paint: async (connectionId, debug) => {
+        const image = await images.generateImage({
+          connectionId,
+          name: place.name,
+          prompt: prompt.prompt,
+          negativePrompt: prompt.negativePrompt,
+          ...SCENE_SIZE,
+          debugMode: debug,
+        });
+        return images.uploadToGallery({ image, name: place.name, prompt: prompt.prompt });
+      },
+    };
+  }
   const privateScene = item.kind === "snapshot3" || item.kind === "moment4";
   if (item.kind === "memory5" || privateScene) {
     const li = privateScene ? run.units.find((unit) => unit.id === item.li) : null;

@@ -3,16 +3,19 @@
 // place and scenes, its premise, and who has been on it; Plan a date opens it in the date screen to choose who's
 // coming (C/screens/dates/DateNight.tsx, `{item}`). A date won and not looked at yet has a dot, and opening it lets it
 // go (useMarkSeen). Then the earlier evenings, Date Night's from before #2303: one not counted yet goes on (`{key}`),
-// a counted one reads again, each with its keepsake when one was painted.
+// a counted one reads again, each with its keepsake when one was painted. A won date shows its place (a 5★'s is its
+// banner's art; a 4★'s is painted on its first open), and one with no picture yet offers Paint it, as Wish does.
 // ──────────────────────────────────────────────
 // Route: GET /runs/:run/dates (S/routes/dates.ts), the same view the date screen reads.
 import { useTranslation } from "react-i18next";
-import { BookOpen, Heart, MapPin, RotateCcw, Wine } from "lucide-react";
+import { BookOpen, Heart, MapPin, Paintbrush, RotateCcw, Wine } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
-import { useMarkSeen } from "../../hooks/use-items";
+import { CostHint } from "../../components/CostHint";
+import { imagesOn, needsOpen, paintWaits, useMarkSeen, type ItemActions } from "../../hooks/use-items";
 import { accentOf } from "../../lib/accent";
 import type { RunView } from "../../shared/api-types";
+import { datePlacePaintable, type ItemView } from "../../shared/wish";
 import { dateCast, type DateEntry } from "../../shared/dates";
 import { OUTCOME_SHORT_KEYS, useDates, useNames, type DateOpen } from "../dates/DateNight";
 import { RarityStars } from "../wish/TenPullGrid";
@@ -20,10 +23,12 @@ import { RarityStars } from "../wish/TenPullGrid";
 interface DatesProps {
   runKey: string;
   view: RunView;
+  /** The Album's item actions: a date's first open (which paints its place) and a tap that paints it again. */
+  actions: ItemActions;
   onOpenDate: (open: DateOpen) => void;
 }
 
-export function Dates({ runKey, view, onOpenDate }: DatesProps) {
+export function Dates({ runKey, view, actions, onOpenDate }: DatesProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const names = useNames();
@@ -68,7 +73,11 @@ export function Dates({ runKey, view, onOpenDate }: DatesProps) {
           </h2>
           <ul className="of-date-history">
             {pulled.map(({ item, playedBy, new: fresh }) => (
-              <li key={item.id} className="of-date-memory of-album-date">
+              <li key={item.id} className="of-album-date">
+                {/* #2303: its place, painted when the date is first opened (a 5★'s is its banner's art). */}
+                {item.art?.state === "ready" && item.art.url ? (
+                  <img className="of-album-date-art" src={item.art.url} alt="" loading="lazy" />
+                ) : null}
                 <span className="of-date-memory-text">
                   <span className="of-date-memory-title">
                     <RarityStars rarity={item.rarity} /> {item.title}
@@ -78,9 +87,11 @@ export function Dates({ runKey, view, onOpenDate }: DatesProps) {
                       </span>
                     ) : null}
                   </span>
-                  <span className="of-hint">
-                    <MapPin size={12} strokeWidth={2} aria-hidden="true" />{" "}
-                    {t("ui.otomeForge.wish.datePlace", { place: item.place?.name ?? "", count: item.scenes ?? 1 })}
+                  <span className="of-hint of-album-date-place">
+                    <MapPin size={12} strokeWidth={2} aria-hidden="true" />
+                    <span>
+                      {t("ui.otomeForge.wish.datePlace", { place: item.place?.name ?? "", count: item.scenes ?? 1 })}
+                    </span>
                   </span>
                   {item.premise ? <span className="of-body">{item.premise}</span> : null}
                   <span className="of-album-date-who">
@@ -108,18 +119,21 @@ export function Dates({ runKey, view, onOpenDate }: DatesProps) {
                     )}
                   </span>
                 </span>
-                <button
-                  type="button"
-                  className="of-button of-button--primary of-button--small"
-                  aria-label={t("ui.otomeForge.album.datesPlanLabel", { title: item.title })}
-                  onClick={() => {
-                    if (fresh) markSeen(item.id);
-                    onOpenDate({ item: item.id });
-                  }}
-                >
-                  <Heart size={14} strokeWidth={2} fill="currentColor" aria-hidden="true" />
-                  {t("ui.otomeForge.album.datesPlan")}
-                </button>
+                <span className="of-album-date-actions">
+                  <DatePlacePaint item={item} view={view} actions={actions} />
+                  <button
+                    type="button"
+                    className="of-button of-button--primary of-button--small"
+                    aria-label={t("ui.otomeForge.album.datesPlanLabel", { title: item.title })}
+                    onClick={() => {
+                      if (fresh) markSeen(item.id);
+                      onOpenDate({ item: item.id });
+                    }}
+                  >
+                    <Heart size={14} strokeWidth={2} fill="currentColor" aria-hidden="true" />
+                    {t("ui.otomeForge.album.datesPlan")}
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
@@ -139,11 +153,11 @@ export function Dates({ runKey, view, onOpenDate }: DatesProps) {
               const first = view.lis.find((li) => li.id === entry.li);
               const counted = entry.state === "finished";
               return (
-                <li key={entry.key} className="of-date-memory">
+                <li key={entry.key} className="of-album-date">
                   {keepsake ? (
-                    <img className="of-date-memory-art" src={keepsake} alt="" loading="lazy" />
+                    <img className="of-album-date-art" src={keepsake} alt="" loading="lazy" />
                   ) : first ? (
-                    <Avatar name={first.name} url={first.portrait} accent={accentOf(first)} size={40} />
+                    <Avatar name={first.name} url={first.portrait} accent={accentOf(first)} size={48} />
                   ) : null}
                   <span className="of-date-memory-text">
                     <span className="of-date-memory-title">{entry.title}</span>
@@ -153,23 +167,25 @@ export function Dates({ runKey, view, onOpenDate }: DatesProps) {
                         .join(" · ")}
                     </span>
                   </span>
-                  {entry.outcome ? (
-                    <span className="of-badge of-badge--soft">{t(OUTCOME_SHORT_KEYS[entry.outcome])}</span>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="of-button of-button--quiet of-glass of-button--small"
-                    aria-label={t("ui.otomeForge.dateNight.playOpenLabel", {
-                      action: counted
-                        ? t("ui.otomeForge.dateNight.playReadAgain")
-                        : t("ui.otomeForge.dateNight.playContinue"),
-                      names: entry.title,
-                    })}
-                    onClick={() => onOpenDate({ key: entry.key })}
-                  >
-                    <BookOpen size={14} strokeWidth={2} aria-hidden="true" />
-                    {counted ? t("ui.otomeForge.dateNight.playReadAgain") : t("ui.otomeForge.dateNight.playContinue")}
-                  </button>
+                  <span className="of-album-date-actions">
+                    {entry.outcome ? (
+                      <span className="of-badge of-badge--soft">{t(OUTCOME_SHORT_KEYS[entry.outcome])}</span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="of-button of-button--quiet of-glass of-button--small"
+                      aria-label={t("ui.otomeForge.dateNight.playOpenLabel", {
+                        action: counted
+                          ? t("ui.otomeForge.dateNight.playReadAgain")
+                          : t("ui.otomeForge.dateNight.playContinue"),
+                        names: entry.title,
+                      })}
+                      onClick={() => onOpenDate({ key: entry.key })}
+                    >
+                      <BookOpen size={14} strokeWidth={2} aria-hidden="true" />
+                      {counted ? t("ui.otomeForge.dateNight.playReadAgain") : t("ui.otomeForge.dateNight.playContinue")}
+                    </button>
+                  </span>
                 </li>
               );
             })}
@@ -177,5 +193,48 @@ export function Dates({ runKey, view, onOpenDate }: DatesProps) {
         </section>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A won date's place picture, while it has none: Paint it (its first open, which paints it, or a tap that paints a
+ * failed or held one again), with its cost and why it failed, or that it is painting. Only a 4★'s: a 5★'s picture is
+ * its banner's art, painted on Wish. Nothing without an image connection.
+ */
+function DatePlacePaint({ item, view, actions }: { item: ItemView; view: RunView; actions: ItemActions }) {
+  const { t } = useTranslation();
+  const images = imagesOn(view);
+  const first = needsOpen(item, images);
+  const again = images && datePlacePaintable(item) && paintWaits(item.art);
+  const error = actions.errors[item.id];
+  if (item.art?.state === "pending")
+    return (
+      <span className="of-hint" role="status">
+        {t("ui.otomeForge.wish.painting")}
+      </span>
+    );
+  if (!first && !again) return null;
+  const busy = actions.busy.has(item.id);
+  return (
+    <>
+      <CostHint images={1} />
+      <button
+        type="button"
+        className="of-button of-button--quiet of-glass of-button--small"
+        aria-label={t("ui.otomeForge.album.datesPaintLabel", { title: item.title })}
+        aria-disabled={busy}
+        onClick={() => {
+          if (!busy) void (first ? actions.open(item) : actions.paintItem(item));
+        }}
+      >
+        <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
+        {t("ui.otomeForge.wish.paint")}
+      </button>
+      {error ? (
+        <span className="of-notice of-notice--error of-album-date-error" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </>
   );
 }

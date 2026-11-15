@@ -42,6 +42,13 @@ const WON_DATE = {
   art: null,
   story: null,
 };
+/** A second won date, no picture, its title one word wider than a phone's card (Dottore, 0.33.3). */
+const LONG_DATE = {
+  ...WON_DATE,
+  id: "dates-0-a2",
+  title: "Moonlitpromenadebeneaththeharbourlanternsatmidnight",
+  place: { name: "The Harbour Wall" },
+};
 /** The scene accepting her invitation registers (SH/dates.ts clearAirSceneKey). */
 const SCENE = `story-clear-air-${MIR}-1`;
 
@@ -268,7 +275,8 @@ function createStub() {
       li: MIR,
       title: "Lanterns on the Canal",
       place: "fairground",
-      placeName: "The Lantern Fair",
+      // As long as the maintainer's own (0.33.3): the card must still give the text its width.
+      placeName: "The Ninth's private box at the capital's opera house, on a closed dress-rehearsal night",
       makeItRight: false,
       state: eveningCounted ? "finished" : "done",
       outcome: eveningCounted ? "good" : null,
@@ -282,7 +290,10 @@ function createStub() {
         json: {
           dates: eveningCounted ? [evening()] : [],
           open: eveningCounted ? [] : [evening()],
-          pulled: [{ item: WON_DATE, plays: [], playedBy: [] }],
+          pulled: [
+            { item: WON_DATE, plays: [], playedBy: [] },
+            { item: LONG_DATE, plays: [], playedBy: [] },
+          ],
         },
       };
     }
@@ -666,6 +677,42 @@ test("Otome Hearth #2302: an earlier evening opened at its ending comes back the
   await expect(root.locator(".of-date-keepsake").getByRole("button", { name: "Paint the keepsake" })).toBeVisible();
   expect(stub.calls.filter((call) => call.path.endsWith("/chapters/date-1"))).toHaveLength(0);
   expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth 0.33.3: Album → Dates cards give their text the full width, with their buttons in a row below", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  const stub = createStub();
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  await press(dock(root, "Album"));
+  await press(root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true }));
+  const cards = root.locator(".of-album-date");
+  // Two won dates (one titled with a single word wider than the card) and the earlier evening.
+  await expect(cards).toHaveCount(3);
+  for (const card of await cards.all()) {
+    const box = (await card.boundingBox())!;
+    const text = (await card.locator(".of-date-memory-text").boundingBox())!;
+    const row = (await card.locator(".of-album-date-actions").boundingBox())!;
+    // Nothing in the card, a long unbroken title included, is wider than the card or scrolls inside it.
+    expect(text.x + text.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    expect(await card.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    // The text is never squeezed beside the buttons: it takes most of the card, and the buttons come after it.
+    expect(text.width).toBeGreaterThan(box.width * 0.6);
+    expect(row.y).toBeGreaterThanOrEqual(text.y + text.height - 1);
+    for (const button of await card.getByRole("button").all()) {
+      const each = (await button.boundingBox())!;
+      expect(each.y).toBeGreaterThanOrEqual(text.y + text.height - 1);
+      expect(each.x + each.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    }
+  }
+  await noWider(page);
+  await cards.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("album-dates.png"), fullPage: true });
 });
 
 test("Otome Hearth grievances: declining his invitation keeps focus on it and says so", async ({ page }, testInfo) => {
