@@ -4,6 +4,7 @@
 
 - **Dates sits next to Memories in Wish.** Wish's tabs now read Memories, Dates, the love interest's wardrobe, My Wardrobe, Echoes and Shop.
 - **No dates card on the Dates screen.** Dates shows only its activities, today's rewards and the plush shelf. Plan your won dates from Album → Dates.
+- **Dates no longer slides sideways on a phone.** The love interests to pick from, on Dates and on a date's **Who's coming?**, wrap onto rows, so the screen only scrolls down.
 
 ## 0.33.0 — 2026-11-15
 

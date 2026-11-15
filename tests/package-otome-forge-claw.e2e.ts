@@ -664,6 +664,46 @@ test("Otome Forge Claw Machine under Mute everything plays no sound, and during 
   expect(pageErrors).toEqual([]);
 });
 
+test("Otome Hearth Dates on a narrow phone with six love interests: their cards wrap, and the screen only scrolls down", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  const stub = createClawStub();
+  const she = { subject: "she", object: "her", possessive: "her" };
+  for (const [n, name] of ["Seraphina Valcourt", "Theodric Ashgrove", "Lysandra", "Bartholomew Quill"].entries())
+    stub.view.lis.push({
+      id: `li-extra-000${n + 3}`,
+      name,
+      pronouns: she,
+      source: "archetype",
+      accent: "#B8E7A6",
+      level: 1,
+      stage: 1,
+    });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  const cards = root.locator(".of-partner-list .of-partner");
+  await expect(cards).toHaveCount(6);
+  // A row that scrolled sideways once made the whole screen slide on a phone: the cards wrap onto rows instead.
+  const tops = await cards.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top));
+  expect(new Set(tops.map(Math.round)).size).toBeGreaterThan(1);
+  const wide = await root.evaluate((element) =>
+    [element, ...element.querySelectorAll<HTMLElement>(".of-page, .of-partner-list")]
+      .filter((each) => each.scrollWidth > each.clientWidth + 1)
+      .map((each) => each.className),
+  );
+  expect(wide).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await page.screenshot({ path: testInfo.outputPath("dates-six-at-360.png") });
+  expect(pageErrors).toEqual([]);
+});
+
 test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, drops and carries", async ({
   page,
 }, testInfo) => {
