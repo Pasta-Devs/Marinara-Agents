@@ -76,6 +76,12 @@
     "blackjack": {
       "versions": [
         {
+          "version": "1.0.1",
+          "date": "2026-11-15",
+          "notes": "- Fixed: the setup screen lists characters by name again on Marinara Engine versions that load the character list one page at a time. (#2318)",
+          "highlight": false
+        },
+        {
           "version": "1.0.0",
           "date": "2026-10-22",
           "notes": "- New Conversation game: play Blackjack against the house with up to six characters, from /blackjack or the games picker.\n- Pick a character to deal and call each round in their own voice, or let the house deal silently.\n- Hit, stand, double down, and split a pair once. Blackjack pays 3 to 2, and the dealer can hit or stand on soft 17.\n- Set the starting chips, minimum bet, decks in the shoe, and an optional round limit.",
@@ -574,6 +580,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.18",
+          "date": "2026-11-15",
+          "notes": "- Fixed: on Marinara Engine versions that load the character list one page at a time, Noodle found none of your characters, so there was nobody to invite. (#2318)",
+          "highlight": false
+        },
+        {
           "version": "1.5.17",
           "date": "2026-11-14",
           "notes": "- Fixed: \"Edit image instructions\" on a character's Noodle profile opens the character's Selfie instructions in the Images tab, where Marinara Engine keeps them now, instead of the Convo tab. Needs a Marinara Engine with capability API 1.826 or newer. (#2296)",
@@ -685,12 +697,6 @@
           "version": "1.4.1",
           "date": "2026-10-02",
           "notes": "- Fixed timeline refreshes on local models that failed after a short, empty-looking answer. When the prompt plus the room Noodle keeps for its answer did not fit the connection's context window, Noodle cut your characters, chats and timeline out of the prompt before sending. It now keeps the whole prompt and lowers the answer limit instead. If too little room is left for an answer, the refresh stops and says what to turn down.",
-          "highlight": true
-        },
-        {
-          "version": "1.4.0",
-          "date": "2026-10-01",
-          "notes": "- You can now translate posts and comments, your own included. Pick Translate in a post's menu or under a comment, and use the same button to hide it again. Noodle uses the translator defaults you saved in a chat's Translation settings, or Google Translate into English if you have not saved any.\n- In Chrome on Android, adding a picture to a post or comment now offers the camera as well as your files. The Marinara Android app doesn't offer the camera yet.\n- Noodle's description now says what it is in plain words.",
           "highlight": true
         }
       ]
@@ -1240,7 +1246,7 @@
         {
           "version": "1.1.0",
           "date": "2026-11-15",
-          "notes": "- With the chat's Wordle switch on in Chat Settings, a character can start today's Wordle by asking you to play. The game is set up like one from /wordle: this chat's word of the day, everyone's streak, and only the characters who haven't played yet. Nothing starts if you've already had your go today.\n- Characters' guesses no longer each post a chat line, so a full table doesn't flood the chat while it races. Needs Marinara Engine with Capability API 1.827; older versions behave as before.",
+          "notes": "- With the chat's Wordle switch on in Chat Settings, a character can start today's Wordle by asking you to play. The game is set up like one from /wordle: this chat's word of the day, everyone's streak, and only the characters who haven't played yet. Nothing starts if you've already had your go today.\n- Characters' guesses no longer each post a chat line, so a full table doesn't flood the chat while it races. Needs Marinara Engine with Capability API 1.827; older versions behave as before.\n- Fixed: the setup screen lists characters by name again on Marinara Engine versions that load the character list one page at a time.",
           "highlight": true
         },
         {

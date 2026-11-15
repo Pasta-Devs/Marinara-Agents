@@ -10,7 +10,7 @@
   },
   "id": "poker",
   "name": "Poker",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Play Texas Hold’em Poker with Conversation characters. Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   "engine": {
     "min": "2.3.0",
@@ -52,8 +52,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "05ac5b92c06509448a457c76593e241b5ede75b74b18dafc136ce15ef0706efd",
-      "bytes": 33965
+      "sha256": "edcc4c2e63c5bbdfcedc1456036c440d88ac1aa47996883ed8cfd86d2672b1d8",
+      "bytes": 163317
     }
   ],
   "permissions": [

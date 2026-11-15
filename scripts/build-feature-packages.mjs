@@ -451,7 +451,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.17",
+    version: "1.5.18",
     minEngineVersion: NOODLE_BUILT_AGAINST.engineVersion,
     capabilityApi: NOODLE_CAPABILITY_API,
     builtAgainst: NOODLE_BUILT_AGAINST,
@@ -825,7 +825,7 @@ const features = [
   ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
     id,
     name,
-    version: "1.0.6",
+    version: "1.0.7",
     maxEngineExclusive: "4.0.0",
     capabilityApi: PACKAGE_CAPABILITY_API,
     builtAgainst: PACKAGE_BUILT_AGAINST,
@@ -852,7 +852,7 @@ const features = [
   {
     id: "blackjack",
     name: "Blackjack",
-    version: "1.0.0",
+    version: "1.0.1",
     maxEngineExclusive: "4.0.0",
     capabilityApi: PACKAGE_CAPABILITY_API,
     builtAgainst: PACKAGE_BUILT_AGAINST,

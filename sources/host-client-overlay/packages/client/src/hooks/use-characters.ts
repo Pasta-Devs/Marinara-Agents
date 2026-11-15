@@ -91,9 +91,9 @@ export function useCharacters(options: UseCharactersOptions = true) {
   return useQuery({
     queryKey: includeBuiltIn ? characterKeys.listWithBuiltIns() : characterKeys.list(),
     queryFn: async () => {
-      const characters = await api.get<Array<{ id?: unknown }>>(
-        includeBuiltIn ? "/characters?includeBuiltIn=true" : "/characters",
-      );
+      // Since Pasta-Devs/Marinara-Engine#9114 the route answers one page per call, so the list is drained page by page
+      // like the Engine's own hook. Older Engines (2.5.1 and on) answer the same paged reads (Marinara-Agents#2318).
+      const characters = await fetchAllCharacterPages({ includeBuiltIn });
       if (includeBuiltIn) return characters;
       return characters.filter((character) => character.id !== PROFESSOR_MARI_ID);
     },
