@@ -879,7 +879,7 @@ const features = [
   {
     id: "wordle",
     name: "Wordle",
-    version: "1.0.0",
+    version: "1.1.0",
     // Package storage and routes (api.runtime.persistence, registerPrivilegedRoutes) arrived in capability API 1.386.
     minEngineVersion: "2.5.1",
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),

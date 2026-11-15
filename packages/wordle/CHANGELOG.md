@@ -1,3 +1,7 @@
+## 1.1.0 — 2026-11-15
+- With the chat's Wordle switch on in Chat Settings, a character can start today's Wordle by asking you to play. The game is set up like one from /wordle: this chat's word of the day, everyone's streak, and only the characters who haven't played yet. Nothing starts if you've already had your go today.
+- Characters' guesses no longer each post a chat line, so a full table doesn't flood the chat while it races. Needs Marinara Engine with Capability API 1.827; older versions behave as before.
+
 ## 1.0.0 — 2026-11-14
 - New Conversation game: a daily Wordle for you and up to seven characters, from /wordle or the games picker.
 - Each chat has its own word of the day, and the day rolls over at your local midnight.

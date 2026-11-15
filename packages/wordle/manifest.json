@@ -10,7 +10,7 @@
   },
   "id": "wordle",
   "name": "Wordle",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Characters cannot start a game on their own yet.",
   "engine": {
     "min": "2.5.1",
@@ -47,8 +47,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "3670f345c6452ecf74c87cfabc9bc48599e541c1fbfdb721227e53e05a253324",
-      "bytes": 64636
+      "sha256": "e21ea9cd7a9fead6b97a1eed1ba113bc70307991382b51d0465fbd667f956a32",
+      "bytes": 65322
     },
     {
       "path": "client.js",
