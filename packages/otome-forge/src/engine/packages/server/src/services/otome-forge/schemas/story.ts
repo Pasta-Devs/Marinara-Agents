@@ -292,6 +292,8 @@ export function normalizeChapter(data: unknown): Chapter | null {
           prefix: z.string(),
           fate: z.string(),
           optional: z.array(z.string()),
+          // 0.34.0: the timeline form it was read from. Optional, so a context saved before reads with none.
+          form: z.number().int().optional(),
         })
         .optional(),
       // 0.20.4: its small memories' ids, [] when it has none (S/story/beats.ts).

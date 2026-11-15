@@ -109,7 +109,8 @@
 // after chapter 3] …", in the timeline's entries and every block above; the condensed head opens with the main
 // chapters it holds ("[Chapters 1–4]"), and an earlier chapter recalled by meaning goes as "# Chapter 3 in detail". The
 // tags are worked out each time from the keys and story order, never saved, so a story already in progress has them
-// on its next prompt, its summaries untouched; a chapter that saved its story context (0.24.2) keeps it as it was.
+// on its next prompt, its summaries untouched; a chapter that saved its story context (0.24.2) keeps it as it was, but
+// for one read from an earlier timeline form (0.34.0, ChapterContext.form), replaced once the rebuild is done.
 // 0.20.4, a chapter's small memories (`pool`, the maintainer's: cached, and never switching between scenes): with
 // `cached`, the recall pool is everyone's in the chapter, chosen once (`memories`, which S/story/beats.ts saves on the
 // chapter) and a context of its own (`pool`), which the prompt sends as its own cached part after the story context.
@@ -134,7 +135,7 @@ import { figurineLiOf } from "../../../../../client/src/features/otome-forge/sha
 import { beatId, chapterId, isItemStoryKey, mainChapterNumber, memoryId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory, RecallPoolOptions } from "../memory/memory.js";
 import { lastWords, type RecallIndex } from "../memory/recall-index.js";
-import { parseTimeline, renderTimeline, savedStory } from "../memory/timeline.js";
+import { OVERVIEW_STYLE, parseTimeline, renderTimeline, savedStory } from "../memory/timeline.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeState } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter } from "../schemas/story.js";
@@ -608,6 +609,11 @@ export type StoryContext = ForgeMemoryContext & {
    * thing that happened, and its block went in.
    */
   handOff?: string;
+  /**
+   * 0.34.0: read from the timeline in its current form with no rebuild under way, and the story and its memory both read:
+   * a chapter context saved from it is marked current (chapterContextOf), and one that is not may be replaced by it.
+   */
+  settled?: boolean;
 };
 
 /** The heading of a chapter's small memories (see the header), which the prompt sends as they are. */
@@ -677,27 +683,35 @@ function contextOf(
   return forgeMemoryContext(result, { prefix, optional: optional.map((entry) => entry.text), renderMemory });
 }
 
-/** 0.24.2: what a chapter keeps of its story context (Chapter.context): the parts it is rendered from (frozenContext). */
+/**
+ * 0.24.2: what a chapter keeps of its story context (Chapter.context): the parts it is rendered from (frozenContext).
+ * 0.34.0: marked with the timeline form it was read from when it was read whole (StoryContext `settled`).
+ */
 export const chapterContextOf = ({
   overview,
   details,
   prefix,
   fate,
   optional,
-}: ForgeMemoryContext): ChapterContext => ({
+  settled,
+}: StoryContext): ChapterContext => ({
   overview,
   details: details.map(({ kind, title, content }) => ({ kind, title, content })),
   prefix,
   fate,
   optional: [...optional],
+  ...(settled ? { form: OVERVIEW_STYLE } : {}),
 });
+
+/** 0.34.0: a saved chapter context read from the timeline in its current form (chapterContextOf). */
+export const currentContext = (context: ChapterContext | undefined) => context?.form === OVERVIEW_STYLE;
 
 /**
  * 0.24.2: `live` with the chapter's story context in place of its own: rebuilt from what the chapter kept, not only its
  * text, so the fitter, which renders a context again from its parts when the prompt must shed some, sheds this one's.
  * The connection's limit, the recalls and the pool stay `live`'s.
  */
-export const frozenContext = (saved: ChapterContext, live: StoryContext): StoryContext => ({
+export const frozenContext = (saved: ChapterContext, { settled: _live, ...live }: StoryContext): StoryContext => ({
   ...live,
   ...forgeMemoryContext(
     { overview: saved.overview, details: saved.details, maxContext: live.maxContext },
@@ -726,6 +740,8 @@ export async function recallText(
   const chapterPool = !!cached && !!recall.pool;
   const warn = (what: string, error: unknown) =>
     deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
+  // 0.34.0: either read failing leaves the context unsettled (StoryContext `settled`).
+  let unread = false;
   const [story, saved] = await Promise.all([
     (async () => {
       const [state, player] = await Promise.all([
@@ -738,11 +754,13 @@ export async function recallText(
       };
     })().catch((error: unknown) => {
       warn("The story could not be read", error);
+      unread = true;
       return { chapters: [] as Completed[], protagonist: "" };
     }),
     // What the memory has saved, read as it is whatever the memory's phase (see the header).
     deps.store.readDoc(memoryId(runId), savedStory).catch((error: unknown) => {
       warn("The saved story memory could not be read", error);
+      unread = true;
       return null;
     }),
   ]);
@@ -984,6 +1002,7 @@ export async function recallText(
     summaries,
   );
   if (earlier.length) context.recalled = earlier.map(({ chapter }) => chapter.key);
+  if (!unread && !saved?.rebuilding) context.settled = true;
   // Only a pool that was read: one that failed sends none, and is chosen again on the next call.
   if (chapterPool && result && !result.poolFailed) context.memories = recalls.map(({ id }) => id).reverse();
   // The hand-off (see the header): only when nothing but his side, a figurine or a birthday scene came after the last

@@ -74,6 +74,7 @@ import type {
   AffectionChange,
   Beat,
   Chapter,
+  ChapterContext,
   ChapterNode,
   ChoiceOption,
   Effect,
@@ -123,6 +124,7 @@ import {
   OWN_ANSWER_LABEL,
   type StoryContext,
   chapterContextOf,
+  currentContext,
   frozenContext,
   chapterScenes,
   chapterSoFar,
@@ -856,18 +858,22 @@ async function generateBeat(
   // and a cache that misses every time the text moves. The context is saved on the chapter by its plan (a main one)
   // or its first scene, and every scene sends it, as `recalled` and the pool ids already are: rebuilt from its parts,
   // so a scene that must shed some of it sheds the chapter's, never the story as it is now (frozenContext).
+  // 0.34.0: one exception, once: a context read from an earlier timeline form (or saved while its rebuild ran) is
+  // replaced by the first scene that reads the rebuilt timeline whole (StoryContext `settled`), so a chapter in progress
+  // learns what the earlier timeline had lost. Until then it keeps its own; after, the new one is kept as before.
   if (!told) {
     const live = memory;
+    const keeps = (context: ChapterContext | undefined) => !!context && (currentContext(context) || !live.settled);
     const saved =
-      chapter.context ??
+      (keeps(chapter.context) ? chapter.context : undefined) ??
       (live.text
         ? // Another scene wrote first: the first save wins, so every scene sends that one.
-          (
+          ((
             await deps.store.updateDoc(runDocTarget("chapter", chapterId(runId, key)), normalizeChapter, (current) =>
-              !current || current.context ? current : { ...current, context: chapterContextOf(live) },
+              !current || keeps(current.context) ? current : { ...current, context: chapterContextOf(live) },
             )
-          )?.context
-        : undefined);
+          )?.context ?? chapter.context)
+        : chapter.context);
     // ponytail: the chapter keeps its context even when a later, longer scene cannot fit what of it cannot give way
     // (the summaries that always stay, the previous chapter's first and last scenes); that scene answers `capacity`
     // until the connection is larger, where before upkeep folding the backlog could have rescued it. Ceiling: a

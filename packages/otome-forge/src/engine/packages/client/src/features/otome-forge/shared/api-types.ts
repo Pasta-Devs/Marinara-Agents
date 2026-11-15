@@ -1046,6 +1046,12 @@ export interface ChapterContext {
   prefix: string;
   fate: string;
   optional: string[];
+  /**
+   * 0.34.0: the timeline's form (S/memory/timeline.ts OVERVIEW_STYLE) it was read from, once that timeline was whole (no
+   * rebuild under way, every read made). Absent on one saved before, or meanwhile: the chapter's next scene after the
+   * rebuild replaces it once (S/story/beats.ts).
+   */
+  form?: number;
 }
 
 /** `${R}:chapter:${key}`: a chapter's plan. */
@@ -1569,7 +1575,8 @@ export interface MemoryStatus {
   retryable: boolean;
   /**
    * English, for Debug: not-prepared, interrupted, source-changed, generation-failed, … With `error`,
-   * `context-too-small` says the server wrote `message` itself (the memory model too small), not the provider.
+   * `context-too-small` (the memory model too small) and `timeline-too-long` (0.34.0: its condensed timeline came back
+   * over its length twice) say the server wrote `message` itself, not the provider.
    */
   reason?: string;
   recordCount?: number;

@@ -3262,10 +3262,13 @@ export const TIMELINE_FOLD_WORDS = 5000;
 export const CHAPTER_SUMMARY_WORDING = `Summarize this one chapter, as it was played, in at most ${CHAPTER_SUMMARY_WORDS} words, in the past tense and in story order: what happened; the most important lines of dialogue, quoted with who said them; and every choice the protagonist made, including any big choice, a judgment they made and whom they sided with over whom. When the source's title says it is someone's own private chapter, begin the summary with "Private: only <their name> and the protagonist know this." When its title says someone else also appears in it, name them in that opening instead ("Private: only <their name>, <who also appears> and the protagonist know this.") and say in the summary which parts each of them was there for.`;
 
 /**
- * What condensing the timeline asks for (#2066): everything but the newest chapter, retold shorter. The newest stays as
- * it is, so the timeline goes on in order.
+ * What condensing the timeline asks for (#2066): everything but the newest three chapters (S/memory/timeline.ts
+ * KEPT_ENTRIES), retold much shorter. 0.34.0: a model told to keep "every event" copied a 20,000-word timeline nearly
+ * whole and lost four chapters at its end, so the wording puts the length first and says what gives way: the oldest
+ * parts, and detail that no longer matters, never the state things are in now. A head over the length is refused
+ * (S/memory/memory.ts).
  */
-export const TIMELINE_FOLD_WORDING = `Condense the story's timeline below to about ${TIMELINE_FOLD_WORDS} words, and no more. Keep every event that still matters, every relationship turn, every choice the protagonist made (big choices, judgments, whom they sided with) and the names, in story order. A part that begins "Private: only … know this." stays private: keep that opening for it.`;
+export const TIMELINE_FOLD_WORDING = `Condense the story's timeline below into a recollection of at most ${TIMELINE_FOLD_WORDS} words. It must come back far shorter than the timeline you are given: never copy it out, and never go past ${TIMELINE_FOLD_WORDS} words, however long the story is. Compress the oldest parts the most; a chapter long past may shrink to a sentence or merge with the ones around it. Keep, in story order: every big choice and judgment the protagonist made and whom they sided with; where each relationship stands now and the turns that brought it there; the current state of anything that changed and stays changed (what was given, taken, removed, destroyed, revealed or promised, and who knows what); the threads still open; and the names. Drop detail that no longer matters. A part that begins "Private: only … know this." stays private: keep that opening for it.`;
 
 /** The timeline-condensing call (#2066): the timeline as data, and the kit's summary rules in Otome's words. */
 export function timelineFoldMessages(timeline: string): OtomeMessage[] {

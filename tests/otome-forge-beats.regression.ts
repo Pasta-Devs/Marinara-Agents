@@ -62,6 +62,7 @@ import {
   storyHandOff,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
+import { OVERVIEW_STYLE } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import {
   WHO_SAID_WHAT_BATCH,
@@ -2195,8 +2196,9 @@ test("the previous chapter in full is the last of the storyline the prompt conti
 });
 
 test("with memory ready, recent canon is GF's: only older chapter summaries may give way, nothing twice", async () => {
-  // Summaries long enough that the timeline crosses its ceiling at Night 2, and a condensing call that is refused: the
-  // timeline holds Night 1 alone, and everything after it is recent canon beside it (#2066).
+  // Summaries long enough that the timeline is past its ceiling from Night 2, and a condensing call that is refused:
+  // condensing waits until the newest three entries have one before them (0.34.0, Night 4), so the timeline holds
+  // Nights 1–3, and everything after them is recent canon beside it (#2066).
   const ebb = Array.from({ length: 6000 }, (_, n) => `ebb${n % 89}`).join(" ");
   const replies = Array.from({ length: 40 }, () => (messages: CapabilityLanguageModelMessage[]) => {
     const input = JSON.parse(messages.at(-1)!.content);
@@ -2224,14 +2226,26 @@ test("with memory ready, recent canon is GF's: only older chapter summaries may 
   );
   await completeChapter(
     t,
+    { key: "main-4", kind: "main", number: 4, lead: KAI, title: "Night 4" },
+    "NIGHT-FOUR: dawn.",
+    "2026-10-28T10:45:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-5", kind: "main", number: 5, lead: KAI, title: "Night 5" },
+    "NIGHT-FIVE: tide.",
+    "2026-10-28T10:50:00.000Z",
+  );
+  await completeChapter(
+    t,
     { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
     "KAI-DATE: Kai counts jellyfish.",
     "2026-10-28T11:00:00.000Z",
   );
   await completeChapter(
     t,
-    { key: "main-4", kind: "main", number: 4, lead: KAI, title: "Night 4" },
-    "NIGHT-FOUR: dawn.",
+    { key: "main-6", kind: "main", number: 6, lead: KAI, title: "Night 6" },
+    "NIGHT-SIX: dawn.",
     "2026-10-28T12:00:00.000Z",
   );
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
@@ -2245,22 +2259,22 @@ test("with memory ready, recent canon is GF's: only older chapter summaries may 
     });
     assert.match(
       overviewOf(context.text),
-      /^\[Chapter 1\] Night 1\nSUMMARY: NIGHT-ONE ebb/u,
-      "the timeline holds Night 1",
+      /^\[Chapter 1\] Night 1\nSUMMARY: NIGHT-ONE ebb[\s\S]*\[Chapter 3\] Night 3\nSUMMARY: NIGHT-THREE ebb/u,
+      "the timeline holds Nights 1–3",
     );
     for (const block of [
-      "# Recent canon summary: [Chapter 2] Night 2\nSUMMARY: NIGHT-TWO",
-      "# Recent canon summary: [Chapter 3] Night 3\nSUMMARY: NIGHT-THREE",
-      `# Recent canon summary: ${placed("After chapter 3", KAI_DATE)}\nSUMMARY: KAI-DATE`,
-      "# Previous chapter in full: [Chapter 4] Night 4\n\nNIGHT-FOUR: dawn.",
+      "# Recent canon summary: [Chapter 4] Night 4\nSUMMARY: NIGHT-FOUR",
+      "# Recent canon summary: [Chapter 5] Night 5\nSUMMARY: NIGHT-FIVE",
+      `# Recent canon summary: ${placed("After chapter 5", KAI_DATE)}\nSUMMARY: KAI-DATE`,
+      "# Previous chapter in full: [Chapter 6] Night 6\n\nNIGHT-SIX: dawn.",
     ]) {
       assert.ok(context.text.includes(block), `${block}\n---\n${context.text}`);
     }
     assert.ok(!context.text.includes("# Recalled memory"), "his date is recent canon, so it is no recall too");
-    // Night 3 is the newest chapter summary though his date is newer, and the date is a Character Story: both stay.
+    // Night 5 is the newest chapter summary though his date is newer, and the date is a Character Story: both stay.
     assert.deepEqual(
       context.optional.map((block) => block.split("\n")[0]),
-      ["# Recent canon summary: [Chapter 2] Night 2"],
+      ["# Recent canon summary: [Chapter 4] Night 4"],
     );
   } finally {
     memory.dispose();
@@ -3949,6 +3963,64 @@ test("a chapter's scenes keep the story context it opened with, though memory up
   );
   assert.ok(prompt.includes("HEAD: the harbour before."), "the second scene sends the context the chapter opened with");
   assert.ok(!prompt.includes("HEAD: MOVED BY UPKEEP."), "never the story as it is now");
+});
+
+test("a chapter opened on an earlier timeline form gets the rebuilt one once, from its first scene after the rebuild (0.34.0)", async () => {
+  // A story whose timeline lost chapters (a condensing that copied it out and dropped its end) is rebuilt on update;
+  // the chapter being played had saved its context from the broken one, and would have kept it to its last scene.
+  const t = await storyWorld({ runKey: "r-rebuiltctx-aaaaaa", replies: router() });
+  await saveStoryMemory(t.store, t.runId, { head: "HEAD: the device still listens." });
+  const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const read = async () => (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!.context;
+  assert.equal((await read())?.form, OVERVIEW_STYLE, "a context read whole is marked with its timeline's form");
+  // As 0.33 saved it: no form. The rebuild is under way (the earlier overview still kept beside the new one).
+  await t.store.mutateDoc(
+    runDocTarget("chapter", chapterId(t.runId, "main-1")),
+    (data) => data,
+    (current) => {
+      const chapter = current as Record<string, unknown> & { context: Record<string, unknown> };
+      const { form: _form, ...context } = chapter.context;
+      return { ...chapter, context };
+    },
+  );
+  const rebuilding = async (head: string, earlier: boolean) => {
+    await saveStoryMemory(t.store, t.runId, { head });
+    if (earlier) {
+      await t.store.mutateDoc(
+        runDocTarget("memory", memoryId(t.runId)),
+        (data) => data,
+        (current) => ({ ...(current as object), legacyOverview: { content: "EARLIER" }, status: { phase: "pending" } }),
+      );
+    }
+  };
+  const scene = async (i: number) => {
+    const served = await t.call("POST", beatPath, {}, node(i));
+    assert.equal(served.status, 200, JSON.stringify(served.body));
+    await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(i));
+    const prompt = whole(
+      t.calls.filter((call) => !isPlanner(call.messages) && !isArcPlan(call.messages)).at(-1)!.messages,
+    );
+    await t.settle();
+    await t.store.removeDoc(beatId(t.runId, "main-1", i + 1));
+    return prompt;
+  };
+  await rebuilding("HEAD: HALF REBUILT.", true);
+  const during = await scene(0);
+  assert.ok(during.includes("HEAD: the device still listens."), "while the rebuild runs, the chapter keeps its own");
+  assert.ok(!during.includes("HEAD: HALF REBUILT."), "never a timeline half rebuilt");
+  assert.equal((await read())?.form, undefined);
+
+  await rebuilding("HEAD: he took the device out.", false);
+  const after = await scene(1);
+  assert.ok(after.includes("HEAD: he took the device out."), "the first scene after the rebuild reads it whole");
+  assert.ok(!after.includes("HEAD: the device still listens."));
+  assert.equal((await read())?.form, OVERVIEW_STYLE, "and saves it, marked");
+
+  await rebuilding("HEAD: MOVED BY UPKEEP.", false);
+  const later = await scene(2);
+  assert.ok(later.includes("HEAD: he took the device out."), "from then on it is kept, as every chapter's is");
+  assert.ok(!later.includes("HEAD: MOVED BY UPKEEP."));
 });
 
 test("a chapter whose story context is longer than 200,000 characters keeps it too", async () => {
