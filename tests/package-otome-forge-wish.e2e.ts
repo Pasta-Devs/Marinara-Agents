@@ -632,6 +632,15 @@ test("Otome Hearth look art: Wish cleans and contains outfits, opens the full im
   await stubRoutes(page, answer, calls);
   const root = await openOtome(page);
   await openDock(root, "Wish");
+  // #2303: the Dates banner comes right after Memories.
+  await expect(root.getByRole("tablist", { name: "Banners and Shop" }).getByRole("tab")).toHaveText([
+    /^Memories/u,
+    /^Dates/u,
+    /^Cassian’s Wardrobe/u,
+    /^My Wardrobe/u,
+    /^Echoes/u,
+    /^Shop/u,
+  ]);
   await expect(root.locator('.of-banner[data-kind="memories"] .of-banner-img')).toHaveAttribute("src", CG);
   expect(cleanup).toHaveLength(0);
   await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();

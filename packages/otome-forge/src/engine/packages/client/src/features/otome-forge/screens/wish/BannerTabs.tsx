@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Wish's tabs. Memories · {name}'s Wardrobe · My Wardrobe · Echoes · Shop (#2128: ShopPanel.tsx, where
-// Starlight buys gifts and figurines). The love interest's wardrobe is named after the one it features this fortnight
-// (whoever they are), never "his". TabList is the tab row itself, which the Album shares: arrow keys move between the
+// Otome Forge: Wish's tabs. Memories · Dates (#2303) · {name}'s Wardrobe · My Wardrobe · Echoes · Shop (#2128:
+// ShopPanel.tsx, where Starlight buys gifts and figurines). The love interest's wardrobe is named after the one it
+// features this fortnight (whoever they are), never "his". TabList is the tab row itself, which the Album shares: arrow keys move between the
 // tabs and select them, Home and End jump to the ends, as Settings' do.
 // ──────────────────────────────────────────────
 import { useRef, type KeyboardEvent } from "react";
@@ -99,7 +99,7 @@ export function TabList<T extends string>({
 }
 
 export type WishTab = BannerKind | "echoes" | "shop";
-export const WISH_TABS: readonly WishTab[] = ["memories", "his-wardrobe", "my-wardrobe", "dates", "echoes", "shop"];
+export const WISH_TABS: readonly WishTab[] = ["memories", "dates", "his-wardrobe", "my-wardrobe", "echoes", "shop"];
 
 const TAB_ICONS: Record<WishTab, LucideIcon> = {
   memories: BookHeart,

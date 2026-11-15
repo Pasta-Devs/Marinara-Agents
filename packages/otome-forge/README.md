@@ -174,7 +174,7 @@ Each love interest has one private thread, written in whatever carries messages 
 
 Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is no real money, and a new story starts with 2,000.
 
-- **Banners:** every 14 days, counted from the day the story began, opening Wish creates four banners: **Memories**, a love interest's **wardrobe**, **yours**, and **Dates**. Each features the love interest featured least recently. A story from before 0.33.0 gets its Dates banner the next time Wish opens.
+- **Banners:** every 14 days, counted from the day the story began, opening Wish creates four banners, in this order of tabs: **Memories**, **Dates**, a love interest's **wardrobe**, and **yours**. Each features the love interest featured least recently. A story from before 0.33.0 gets its Dates banner the next time Wish opens.
 - **Seasonal banners:** the first fortnight that starts in each month (on the 1st to the 14th) is that month's seasonal one: all of its banners follow the month's theme, and a badge names it, such as **October · Halloween**. Any later fortnight that month is your model's free choice, as before. A story set in the real world gets the holiday itself; a world without it gets its own version, such as a winter festival of gifts and lights in December or a night of masks and spirits in October. The themes, January to December: New Year, Valentine's Day, White Day, cherry blossoms, gardens in bloom, June bride, summer festival, summer nights, harvest moon, Halloween, autumn and Christmas. Next year's seasonal banner knows the titles of earlier ones from the same month, so it does not repeat them. Banners made before 0.6.5 have no season.
 - **Echoes:** banners never expire. Past ones wait in **Echoes**, and you can still wish on them; a seasonal one keeps its badge.
 - **What a banner holds:** one featured 5★, three 4★s and six 3★ items: Snapshots, or on a wardrobe banner three 3★ looks and three Snapshots (a wardrobe banner from before 0.33.0 keeps six Snapshots).
@@ -218,7 +218,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 
 ## Dates: Read Them, Read Me, Tarot night, the Photo Shoot and the Claw Machine
 
-Dates is where you spend time with one love interest at a time. Dates themselves come from Wish (see [Dates from Wish](#dates-from-wish)), and a card here leads to them in Album → Dates. Every activity but the Photo Shoot pays, even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 150 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
+Dates is where you spend time with one love interest at a time. Dates themselves are won in Wish and planned from Album → Dates (see [Dates from Wish](#dates-from-wish)). Every activity but the Photo Shoot pays, even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 150 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
 
 ### Read Them
 

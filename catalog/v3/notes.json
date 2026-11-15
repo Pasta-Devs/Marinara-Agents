@@ -698,6 +698,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.33.1",
+          "date": "2026-11-15",
+          "notes": "- **Dates sits next to Memories in Wish.** Wish's tabs now read Memories, Dates, the love interest's wardrobe, My Wardrobe, Echoes and Shop.\n- **No dates card on the Dates screen.** Dates shows only its activities, today's rewards and the plush shelf. Plan your won dates from Album → Dates.",
+          "highlight": false
+        },
+        {
           "version": "0.33.0",
           "date": "2026-11-15",
           "notes": "- **Dates come from Wish.** A Dates banner arrives every fortnight: a 5★ date scenario (4–6 scenes and a key image), three 4★ places to go (1–3 scenes) and six Snapshots. Dates follow your Heat.\n- **Take whoever you like.** Plan a won date from Wish or Album → Dates, with one love interest, several or everyone. Each choice is judged by what the group likes, and you can bring a gift.\n- **Each love interest goes on a date once.** After that it only replays for them; add someone new and a new date is written. A new date pays 120 Starlight, and its affection is shared by its first-timers.\n- **Date Night is gone from Dates.** Earlier evenings stay in Album → Dates.\n- **Clearing the air is its own scene,** opened when you accept the invitation.\n- **More looks.** His and My Wardrobe banners hold three 3★ everyday looks in place of three Snapshots.",
@@ -810,12 +816,6 @@
           "date": "2026-11-11",
           "notes": "- **Each bond rank's truth stays with you.** Past the finale, the story keeps every bond reveal you have reached, rather than the three newest, so a truth learned at rank 11 still holds at rank 15; the card's own size limit still governs what it sends.\n- **The story speaks of the rank by name.** A settled couple's card and every prompt that writes their words now read the rank's word beside its number (\"bond rank 15 of 20 — tested\"), the same rank the Story screen shows.\n- **An afternoon stays an afternoon.** A scene told from their side counts only the bond ranks reached by the moment it retells, so it never carries what was learned weeks later.",
           "highlight": false
-        },
-        {
-          "version": "0.23.0",
-          "date": "2026-11-11",
-          "notes": "- **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.\n- **One rank at a time.** A rank's story is played before the next opens, so banked affection skips none; each level from 11 to 20 costs 650, then 50 more.\n- **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.\n- **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.",
-          "highlight": true
         }
       ]
     },

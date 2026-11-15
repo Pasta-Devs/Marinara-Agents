@@ -9,8 +9,8 @@
 // moment shows the painted face it names, and his plush wears his Home cut-out (M3).
 // His lines come with GET /play, so the machine never asks for GET .../lines (which may queue a pack's write); its
 // sounds play at the world's sound-effect volume and never while Mute everything is on; during a rupture his lines are
-// Home's cold ones, voiced under Home's own ref. #2303: Date Night is no longer an activity; a card leads to the dates
-// won from Wish instead.
+// Home's cold ones, voiced under Home's own ref. #2303: Date Night is no longer an activity, and Dates has no card for
+// the dates won from Wish (they are in Album → Dates).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-claw.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -482,13 +482,12 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
   await expect(activities.getByRole("heading", { name: "Read Kai Ardent" })).toBeVisible();
   await expect(activities.getByRole("heading", { name: "Claw Machine with Kai Ardent" })).toBeVisible();
-  // #2303: no Date Night among them (four to play; the Photo Shoot needs an image connection); dates come from Wish.
+  // #2303: no Date Night among them (four to play; the Photo Shoot needs an image connection), and nothing else about
+  // dates: they are won in Wish and planned from Album → Dates.
   await expect(activities.getByRole("heading", { name: /Date Night/ })).toHaveCount(0);
   await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(4);
   await expect(activities).toContainText("No model calls");
-  const won = root.getByRole("region", { name: "Your dates" });
-  await expect(won).toContainText("Dates come from the Dates banner in Wish.");
-  await expect(won.getByRole("button", { name: "Open" })).toBeVisible();
+  await expect(root.getByRole("region", { name: "Your dates" })).toHaveCount(0);
   await expect(activities).toContainText("+20 Starlight a round, +30 for each plush · +30 affection");
   await expect(root.getByRole("progressbar", { name: "Starlight from activities" })).toHaveAttribute(
     "aria-valuenow",
