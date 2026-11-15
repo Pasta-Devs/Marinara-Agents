@@ -27,6 +27,7 @@ import {
   House,
   MapPin,
   Paintbrush,
+  PlugZap,
   RotateCcw,
   Sparkle,
   Users,
@@ -107,8 +108,11 @@ export function useNames() {
   return (names: readonly string[]) => new Intl.ListFormat(locale, { type: "conjunction" }).format(names);
 }
 
-/** What the date screen opens: a won date to take someone on (#2303), or an earlier date to go on with by its key. */
-export type DateOpen = { item: string } | { key: string };
+/**
+ * What the date screen opens: a won date to take someone on (#2303), or an earlier date to go on with by its key, at
+ * its ending when `at` says so (#2302: where the player was when they left for Settings).
+ */
+export type DateOpen = { item: string } | { key: string; at?: "ending" };
 
 type Step =
   | { kind: "company" }
@@ -128,6 +132,13 @@ export interface DateNightProps {
   onHome?: () => void;
   /** True while the date's scenes are read full-stage (the top bar and the dock step aside), false otherwise. */
   onImmersive?: (immersive: boolean) => void;
+  /**
+   * #2302: where the date is now, each time the player moves to a playthrough's scenes or its ending, so the screen can
+   * open there again after a trip to Settings instead of at its first step.
+   */
+  onResume?: (open: DateOpen) => void;
+  /** #2302: opens Settings → Images, from a keepsake that could not be painted. */
+  onImageSettings?: () => void;
 }
 
 /**
@@ -144,7 +155,17 @@ const allEntries = (view: DatesView | undefined): DateEntry[] => [
   ...(view?.dates ?? []),
 ];
 
-export function DateNight({ runKey, view, open, onExit, exitLabel, onHome = onExit, onImmersive }: DateNightProps) {
+export function DateNight({
+  runKey,
+  view,
+  open,
+  onExit,
+  exitLabel,
+  onHome = onExit,
+  onImmersive,
+  onResume,
+  onImageSettings,
+}: DateNightProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -198,14 +219,25 @@ export function DateNight({ runKey, view, open, onExit, exitLabel, onHome = onEx
     moved.current = true;
     if ("key" in open) {
       const found = allEntries(dates.data).find((item) => item.key === open.key);
-      setStep(found ? stepOf(found) : { kind: "reading", key: open.key });
+      setStep(
+        open.at === "ending"
+          ? { kind: "ending", key: open.key }
+          : found
+            ? stepOf(found)
+            : { kind: "reading", key: open.key },
+      );
     } else setStep({ kind: "company" });
   }
 
-  const go = useCallback((next: Step) => {
-    moved.current = true;
-    setStep(next);
-  }, []);
+  const go = useCallback(
+    (next: Step) => {
+      moved.current = true;
+      setStep(next);
+      if (next.kind === "reading") onResume?.({ key: next.key });
+      if (next.kind === "ending") onResume?.({ key: next.key, at: "ending" });
+    },
+    [onResume],
+  );
 
   const reading = step?.kind === "reading";
   useEffect(() => {
@@ -523,6 +555,7 @@ export function DateNight({ runKey, view, open, onExit, exitLabel, onHome = onEx
             onHome();
           }}
           onCounted={refresh}
+          onImageSettings={onImageSettings}
         />
       ) : null}
     </div>
@@ -783,10 +816,21 @@ interface DateEndingProps {
   onHome: () => void;
   /** The server counted the date (the dates list changed). */
   onCounted: () => void;
+  onImageSettings?: () => void;
 }
 
 /** How the evening went. Counting it is the server's (once); this asks once per date and shows what came back. */
-function DateEnding({ runKey, view, company, dateKey, exitLabel, onDone, onHome, onCounted }: DateEndingProps) {
+function DateEnding({
+  runKey,
+  view,
+  company,
+  dateKey,
+  exitLabel,
+  onDone,
+  onHome,
+  onCounted,
+  onImageSettings,
+}: DateEndingProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -1010,6 +1054,7 @@ function DateEnding({ runKey, view, company, dateKey, exitLabel, onDone, onHome,
           who={names(company.slice(0, date.cast ? 2 : 1).map((li) => li.name))}
           entry={date}
           onPainted={onCounted}
+          onImageSettings={onImageSettings}
         />
       ) : null}
 
@@ -1034,14 +1079,17 @@ interface KeepsakeProps {
   who: string;
   entry: DateEntry;
   onPainted: () => void;
+  /** #2302: Settings → Images, offered beside Try again once a paint fails, to pick another image connection. */
+  onImageSettings?: () => void;
 }
 
 /**
  * The keepsake: offered with its cost, painted only on a tap (after a confirmation when Ask before painting is on,
  * through the prompt review when the Engine asks for it), then kept in a polaroid frame. A failure says so and
- * waits for Try again; it is never repainted by itself.
+ * waits for Try again; it is never repainted by itself. #2302: beside Try again it offers Settings → Images, and the
+ * date opens at its ending again when the player comes back.
  */
-function Keepsake({ runKey, view, who, entry, onPainted }: KeepsakeProps) {
+function Keepsake({ runKey, view, who, entry, onPainted, onImageSettings }: KeepsakeProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const { reviewImagePromptsBeforeSend } = useOtomeProps();
@@ -1141,6 +1189,16 @@ function Keepsake({ runKey, view, who, entry, onPainted }: KeepsakeProps) {
             )}
             {failed ? t("ui.otomeForge.common.retry") : t("ui.otomeForge.dateNight.keepsakePaint")}
           </button>
+          {(failed || error) && !busy && onImageSettings ? (
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              onClick={onImageSettings}
+            >
+              <PlugZap size={15} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.dateNight.keepsakeImageSettings")}
+            </button>
+          ) : null}
         </>
       )}
       {confirming ? (

@@ -405,6 +405,7 @@
   "ui.otomeForge.dateNight.keepsakeAskTitle": "Paint this keepsake?",
   "ui.otomeForge.dateNight.keepsakeAskYes": "Paint it",
   "ui.otomeForge.dateNight.keepsakeFailed": "The keepsake didn’t finish. Otome Hearth paints it again only when you ask.",
+  "ui.otomeForge.dateNight.keepsakeImageSettings": "Change the image connection",
   "ui.otomeForge.dateNight.keepsakePaint": "Paint the keepsake",
   "ui.otomeForge.dateNight.keepsakePainting": "Painting your keepsake…",
   "ui.otomeForge.dateNight.keepsakeStopped": "The keepsake stopped before it was finished.",
