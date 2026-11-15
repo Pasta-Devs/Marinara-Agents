@@ -200,7 +200,7 @@ type SavedForm =
       overview?: unknown;
       overviewStyle?: unknown;
       legacyOverview?: unknown;
-      status?: { phase?: unknown; unknownReaders?: unknown };
+      status?: { phase?: unknown; unknownReaders?: unknown; retryable?: unknown; reason?: unknown };
     }
   | null
   | undefined;

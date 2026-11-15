@@ -104,8 +104,10 @@ import {
   sameName,
   type MusicMood,
 } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { hapticsOn, normalizeHapticCues } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
+import type { OtomeHaptics } from "../haptics.js";
 import { beatMessages, closerMessages, confrontationMessages, explicitCgAllowed, prologueEnding } from "../prompts.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
@@ -168,6 +170,8 @@ export interface BeatDeps extends ChapterDeps, Pick<SideCastDeps, "background" |
   cancellation?: ForgeStoryCancellation;
   /** The story's art (S/art, M2b); without it nothing is painted. */
   art?: OtomeArt;
+  /** 0.34.0: the toys (S/haptics.ts), whose connected list the scene's prompt names; without it none is named. */
+  haptics?: Pick<OtomeHaptics, "devicesText">;
 }
 
 /** How a request paints: its debug mode, and whether the player reviews image prompts first (an automatic paint waits). */
@@ -213,6 +217,8 @@ export interface BeatContext {
   sideWith?: ReadonlyArray<Pick<Unit, "id" | "name">>;
   /** #2155: his side: told from this love interest's point of view, so only he has thoughts, and no choice is offered. */
   pov?: LiId;
+  /** 0.34.0: the story's haptics are on (SH/haptics.ts hapticsOn): a segment keeps its haptic cues. */
+  haptics?: boolean;
 }
 
 interface NormalizeOptions {
@@ -442,6 +448,9 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
     if (expression) segment.expression = expression as Segment["expression"];
     const exits = exitsOf(options.context, source.exits);
     if (exits.length) segment.exits = exits;
+    // A cue that cannot be read is left out, never the line it is on (a lost line would move every choice's `at`).
+    const haptic = options.context.haptics ? normalizeHapticCues(source.haptic) : [];
+    if (haptic.length) segment.haptic = haptic;
     place = resolve(source.place) || place || (options.start ? resolve(options.start) : "");
     if (place) segment.place = place;
     segments.push(segment);
@@ -893,6 +902,7 @@ async function generateBeat(
     last,
     mustChoose,
     cgExplicit,
+    ...(hapticsOn(run.world) ? { haptics: true } : {}),
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
     ...(side ? { sideWith: side } : {}),
     ...(pov ? { pov } : {}),
@@ -926,6 +936,7 @@ async function generateBeat(
     // A main chapter's first scene picks up from the last Character Story, as its plan does (S/story/canon.ts).
     handOff: memory.handOff ?? "",
     ...(told ? { hisSide: told.text } : {}),
+    ...(hapticsOn(run.world) ? { toys: deps.haptics?.devicesText() ?? "" } : {}),
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };

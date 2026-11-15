@@ -9,6 +9,7 @@ import type { ZodType } from "zod";
 import type { OtomeErrorCode } from "../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type { OtomeArt } from "./art/expressions.js";
+import type { OtomeHaptics } from "./haptics.js";
 import type { ImageClient } from "./art/image-client.js";
 import type { BackgroundQueue } from "./background-queue.js";
 import type { OtomeMemory } from "./memory/memory.js";
@@ -115,6 +116,8 @@ export interface RouteDeps {
    * beat written, a replaced beat's CG released. Without it nothing is painted.
    */
   art?: OtomeArt;
+  /** 0.34.0: the toys, through the Engine's Intiface connection (S/haptics.ts); without it nothing is played. */
+  haptics?: OtomeHaptics;
 }
 
 export type RegisterRoutes = (router: OtomeRouter, deps: RouteDeps) => void;

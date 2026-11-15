@@ -20,12 +20,15 @@ import type { AudioSettings, RunView } from "../../shared/api-types";
 import { MUSIC_MOODS } from "../../shared/faces";
 import { ConnectionSelect, Section, Switch } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
+import { HapticsSection } from "./Haptics";
 
 /** What this tab edits; the rest of the kit's audio shape is kept as it is. */
 type AudioForm = Pick<
   AudioSettings,
   | "tts"
   | "otherVoices"
+  | "haptics"
+  | "hapticsUrl"
   | "generate"
   | "chapterThemes"
   | "musicFolder"
@@ -38,6 +41,8 @@ type AudioForm = Pick<
 const toForm = (audio: AudioSettings): AudioForm => ({
   tts: audio.tts,
   otherVoices: audio.otherVoices,
+  haptics: audio.haptics,
+  hapticsUrl: audio.hapticsUrl,
   generate: audio.generate,
   chapterThemes: audio.chapterThemes,
   musicFolder: audio.musicFolder,
@@ -291,6 +296,14 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
           <MusicFolderSelect value={form.musicFolder} onChange={(musicFolder) => set({ musicFolder })} />
         ) : null}
       </Section>
+      {run.world.content.heat === "explicit" ? (
+        <HapticsSection
+          runKey={run.runKey}
+          enabled={form.haptics}
+          url={form.hapticsUrl}
+          onChange={(change) => set(change)}
+        />
+      ) : null}
       <Section title={t("ui.otomeForge.audio.levelsTitle")}>
         <Switch
           label={t("ui.otomeForge.audio.muted")}

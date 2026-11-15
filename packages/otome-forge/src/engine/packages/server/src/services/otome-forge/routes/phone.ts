@@ -38,8 +38,10 @@ const SendBody = z.object({
   sticker: z.string().regex(STICKER_ID).optional(),
   id: z.string().max(60).optional(),
   retry: z.boolean().optional(),
+  // 0.34.0: the minutes he still holds the remote of her toys (the client keeps it), or none.
+  remote: z.number().int().min(1).max(1440).optional(),
 });
-const GroupSendBody = SendBody.omit({ quote: true });
+const GroupSendBody = SendBody.omit({ quote: true, remote: true });
 const SeenBody = z.object({ last: z.string().max(60).optional() });
 const DueBody = z.object({ open: z.string().max(80).nullable().optional() });
 const NoFields = z.object({});

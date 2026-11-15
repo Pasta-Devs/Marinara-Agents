@@ -162,6 +162,10 @@ export interface AudioSettings {
   chapterThemes: boolean;
   /** A Music asset folder (including its subfolders), or empty for Engine's mood library. */
   musicFolder: string;
+  /** 0.34.0: haptics play in this story (only with explicit Heat; SH/haptics.ts hapticsOn). */
+  haptics: boolean;
+  /** 0.34.0: the Intiface Central address to connect to, or "" for the Engine's own. */
+  hapticsUrl: string;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;
@@ -640,6 +644,8 @@ export interface PhoneMessage {
    */
   /** #2303: an accepted invitation names the scene it opened. */
   invite?: { status: PhoneInviteStatus; scene?: string };
+  /** 0.34.0: his message drives the toys while he holds the remote (SH/haptics.ts); it loops until his next cue. */
+  haptic?: HapticCue[];
 }
 
 export type PhoneInviteStatus = "pending" | "accepted" | "declined" | "lapsed";
@@ -1130,6 +1136,18 @@ export interface Chapter {
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
+/**
+ * 0.34.0: one haptic cue on a line or a message (SH/haptics.ts): an action and a pattern at an intensity (0–1, never
+ * capped), for the toy `device` names (as the device list gives it) or for every connected toy that can do it. It loops
+ * until a later cue replaces it or the player stops it.
+ */
+export interface HapticCue {
+  action: "vibrate" | "rotate" | "oscillate" | "constrict" | "inflate" | "position" | "stop";
+  pattern?: "steady" | "tap" | "pulse" | "wave" | "ramp" | "impact";
+  intensity?: number;
+  device?: string;
+}
+
 export interface Segment {
   /** "" for narration. */
   speaker: string;
@@ -1146,6 +1164,11 @@ export interface Segment {
    * stage stops showing them until they speak again.
    */
   exits?: LiId[];
+  /**
+   * 0.34.0: what the toys do from this line on (explicit stories with Haptics on): it replaces every cue before it in the
+   * beat and loops until the next one.
+   */
+  haptic?: HapticCue[];
 }
 
 export interface ChoiceOption {
