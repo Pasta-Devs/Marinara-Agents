@@ -166,7 +166,7 @@ ${R} .of-date-memory-art {
 ${R} .of-date-memory-art--quiet > svg { position: relative; }
 ${R} .of-date-memory-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 ${R} .of-date-memory-title {
-  font-family: var(--of-font-display); font-weight: 600; font-size: 1.06rem; line-height: 1.1; overflow-wrap: break-word;
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.06rem; line-height: 1.1; overflow-wrap: anywhere;
 }
 /* Album → Dates (#2303): a card's picture and text side by side, then its badge and button in a row below, so the
    text keeps the card's width on a phone instead of being squeezed beside the buttons. */
@@ -183,6 +183,7 @@ ${R} .of-album-date-actions {
   grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
 }
 ${R} .of-album-date-actions > .of-badge { margin-inline-end: auto; }
+${R} .of-album-date-error { flex-basis: 100%; }
 ${R} .of-album-date .of-body { max-width: none; }
 /* The pin stays on the place's first line. */
 ${R} .of-album-date-place { display: flex; align-items: baseline; gap: 4px; }

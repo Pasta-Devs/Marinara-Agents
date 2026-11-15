@@ -6,7 +6,10 @@ import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
 import type { PortraitRequest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import type { Item } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
+import {
+  datePlacePaintable,
+  type Item,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import type { OtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { paintPairNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
 import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
@@ -390,6 +393,16 @@ test("#2303: a 4★ date's first open paints its place once, with nobody in it, 
   // The 5★'s picture is its banner's art (S/wish/banners.ts), so its own open pays for nothing.
   assert.equal((await t.open(date5.id)).status, 200);
   assert.equal(t.paid.length, 1);
+  // The client offers Paint it on the same terms the server paints: a 4★ with a named place, never a 5★ (Dottore).
+  assert.deepEqual(
+    [
+      datePlacePaintable(date4),
+      datePlacePaintable(date5),
+      datePlacePaintable({ kind: "date4" }),
+      datePlacePaintable({ kind: "date4", place: { name: "  " } }),
+    ],
+    [true, false, false, false],
+  );
 });
 
 test("new Snapshot artwork uses its English brief and only the reward's own characters", async () => {

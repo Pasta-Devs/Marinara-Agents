@@ -15,7 +15,7 @@ import { CostHint } from "../../components/CostHint";
 import { imagesOn, needsOpen, paintWaits, useMarkSeen, type ItemActions } from "../../hooks/use-items";
 import { accentOf } from "../../lib/accent";
 import type { RunView } from "../../shared/api-types";
-import type { ItemView } from "../../shared/wish";
+import { datePlacePaintable, type ItemView } from "../../shared/wish";
 import { dateCast, type DateEntry } from "../../shared/dates";
 import { OUTCOME_SHORT_KEYS, useDates, useNames, type DateOpen } from "../dates/DateNight";
 import { RarityStars } from "../wish/TenPullGrid";
@@ -198,13 +198,15 @@ export function Dates({ runKey, view, actions, onOpenDate }: DatesProps) {
 
 /**
  * A won date's place picture, while it has none: Paint it (its first open, which paints it, or a tap that paints a
- * failed or held one again), with its cost, or that it is painting. Nothing without an image connection.
+ * failed or held one again), with its cost and why it failed, or that it is painting. Only a 4★'s: a 5★'s picture is
+ * its banner's art, painted on Wish. Nothing without an image connection.
  */
 function DatePlacePaint({ item, view, actions }: { item: ItemView; view: RunView; actions: ItemActions }) {
   const { t } = useTranslation();
   const images = imagesOn(view);
   const first = needsOpen(item, images);
-  const again = images && paintWaits(item.art);
+  const again = images && datePlacePaintable(item) && paintWaits(item.art);
+  const error = actions.errors[item.id];
   if (item.art?.state === "pending")
     return (
       <span className="of-hint" role="status">
@@ -228,6 +230,11 @@ function DatePlacePaint({ item, view, actions }: { item: ItemView; view: RunView
         <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
         {t("ui.otomeForge.wish.paint")}
       </button>
+      {error ? (
+        <span className="of-notice of-notice--error of-album-date-error" role="alert">
+          {error}
+        </span>
+      ) : null}
     </>
   );
 }

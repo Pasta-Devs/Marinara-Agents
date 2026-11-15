@@ -234,6 +234,13 @@ export const isLookKind = (kind: ItemKind) => kind.includes("-look");
 export const isDateKind = (kind: ItemKind) => kind === "date5" || kind === "date4";
 
 /**
+ * #2303: a date whose own place picture can be painted: a 4★ with a named place (S/art/outfits.ts hasArt; the banner
+ * plan never keeps a date without its place's tags). A 5★'s picture is its banner's art, painted on Wish.
+ */
+export const datePlacePaintable = (item: { kind: ItemKind; place?: { name: string } }) =>
+  item.kind === "date4" && !!item.place?.name.trim();
+
+/**
  * An item's slot on its banner: `f` the 5★, `a1`–`a3` the 4★s, `s1`–`s6` the Snapshots, and (#2303) `l1`–`l3` a
  * wardrobe banner's 3★ looks.
  */

@@ -19,7 +19,14 @@ import { homeQueryKey } from "../screens/home/HomeScreen";
 import type { Paint, RunView } from "../shared/api-types";
 import { deckKey, type Arcana } from "../shared/tarot";
 import type { AlbumView, ItemOpenResult, WardrobeView } from "../shared/wardrobe";
-import { collectionOf, isLookKind, type BannerView, type ItemKind, type ItemView } from "../shared/wish";
+import {
+  collectionOf,
+  datePlacePaintable,
+  isLookKind,
+  type BannerView,
+  type ItemKind,
+  type ItemView,
+} from "../shared/wish";
 import { runPath } from "./use-reader";
 import { runQueryKey } from "./use-run";
 
@@ -124,12 +131,12 @@ const WRITTEN_KINDS: ReadonlySet<ItemKind> = new Set(["memory5", "moment4", "his
 export const writesOnOpen = (item: Pick<ItemView, "kind">) => WRITTEN_KINDS.has(item.kind);
 
 /** An illustrated reward or look whose first open can paint, with images on (#2303: a 4★ date paints its place). */
-export const paintsOnOpen = (item: Pick<ItemView, "kind">, images: boolean) =>
+export const paintsOnOpen = (item: Pick<ItemView, "kind" | "place">, images: boolean) =>
   images &&
   (item.kind === "memory5" ||
     item.kind === "moment4" ||
     item.kind === "snapshot3" ||
-    item.kind === "date4" ||
+    datePlacePaintable(item) ||
     isLookKind(item.kind));
 
 /**

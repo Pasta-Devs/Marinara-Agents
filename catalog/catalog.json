@@ -3344,13 +3344,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "0e49b9dd0930db29a2df702b37356031ff76a4247605255d12c038014a862b6b",
-            "bytes": 719790
+            "sha256": "6e8f7f0594c6ce8d24b8325e497b58f11d52f5bb05b759362ee79300dcea721e",
+            "bytes": 719794
           },
           {
             "path": "client.js",
-            "sha256": "a59f85e9142a8ef255f719f894b4b17438b191d5a4e61a815a705cb7d70a6b17",
-            "bytes": 1400417
+            "sha256": "aa0d0f3ee8e5f0875d5ac4223d7ce0dbc8d2bc50245e1c3aae71d63c8fb57dc4",
+            "bytes": 1400626
           },
           {
             "path": "otome-hearth-icon.png",
@@ -3379,8 +3379,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.33.3.zip",
-        "sha256": "727945302f9d52e82eca6a50e797425543d2ef99e8a454432109a59fcc30a875",
-        "bytes": 2271859
+        "sha256": "4b5c5b82f26c49c196164272a284ad249af0356686e373a845d8c4603ce5c606",
+        "bytes": 2272072
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },
