@@ -2477,8 +2477,8 @@
         "schemaVersion": 1,
         "id": "haptic",
         "name": "Haptic Feedback",
-        "version": "1.0.4",
-        "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
+        "version": "1.0.5",
+        "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. No toy yet? No worries, you can grab one now with a discount from Lovense! https://www.lovense.com/r/dupchb Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
         "engine": {
           "min": "2.4.3",
           "maxExclusive": "4.0.0"
@@ -2492,8 +2492,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "31eb959d29a7fa59624295c56a1cf7fdd3de7cd816474d162d195e0df4f24a76",
-            "bytes": 2586
+            "sha256": "4e0952fc60edea9bcf2933da5ccc5da820915557190cbb108ddc81075a174edf",
+            "bytes": 2694
           }
         ],
         "permissions": [
@@ -2508,9 +2508,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/haptic.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.4.zip",
-        "sha256": "8f00a3bb33d478850bbfb7be64ae485b344030cc9520c2772e2c8d18b66cf126",
-        "bytes": 1946
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.5.zip",
+        "sha256": "f1049e5beefe1bf08e3cb30de158f70439330477e6e4cc86b3329fe9123b5de5",
+        "bytes": 2076
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
     },

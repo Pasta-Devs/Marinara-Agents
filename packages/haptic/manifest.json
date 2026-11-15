@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "haptic",
   "name": "Haptic Feedback",
-  "version": "1.0.4",
-  "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
+  "version": "1.0.5",
+  "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. No toy yet? No worries, you can grab one now with a discount from Lovense! https://www.lovense.com/r/dupchb Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
   "engine": {
     "min": "2.4.3",
     "maxExclusive": "4.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "31eb959d29a7fa59624295c56a1cf7fdd3de7cd816474d162d195e0df4f24a76",
-      "bytes": 2586
+      "sha256": "4e0952fc60edea9bcf2933da5ccc5da820915557190cbb108ddc81075a174edf",
+      "bytes": 2694
     }
   ],
   "permissions": [
