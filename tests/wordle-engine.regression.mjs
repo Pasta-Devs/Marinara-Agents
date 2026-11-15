@@ -13,6 +13,7 @@ const documents = new Map();
 const persistence = {
   documents: {
     async getById(packageId, id) {
+      if (id.endsWith("chat-broken")) throw new Error("storage is gone");
       return structuredClone(documents.get(`${packageId}/${id}`) ?? null);
     },
     async create(input) {
@@ -333,6 +334,61 @@ const daily = async (chatId, day) => {
   ({ body } = await daily(chatId, "2999-01-01"));
   assert.equal(body.day, TODAY);
   assert.equal((await daily("", TODAY)).status, 400);
+}
+
+// ── a character's [wordle] tag starts a game set up like the setup screen's ──
+{
+  assert.equal(engine.silentBotMoves, true, "character guesses post no chat line each");
+  assert.equal(typeof command.startConfig, "function");
+  const tagChat = "chat-tag";
+  const context = {
+    chatId: tagChat,
+    characterId: "bo",
+    botCharacterIds: ["bo", "mari"],
+    humanSeatId: "you",
+    timeZone: "UTC",
+  };
+  let start = await command.startConfig(context);
+  assert.deepEqual(start, {
+    config: { day: TODAY, chatId: tagChat, streaks: { you: 0, bo: 0, mari: 0 }, players: ["bo", "mari"] },
+    botCharacterIds: ["bo", "mari"],
+  });
+  // The setup's config seats exactly those players, and a guess lands in this chat's record.
+  let state = engine.setup(engine.normalizeConfig(start.config), SEATS, 3);
+  assert.deepEqual(state.order, ["you", "bo", "mari"]);
+  state = guess(state, "you", state.answer === "slate" ? "crane" : "slate").state;
+  guess(state, "bo", state.answer);
+  await settle();
+  // Bo has played today, so a tag for a player who hasn't (another persona's seat) seats only Mari.
+  start = await command.startConfig({ ...context, humanSeatId: "persona-x" });
+  assert.deepEqual(start.botCharacterIds, ["mari"]);
+  assert.deepEqual(start.config.players, ["mari"]);
+  assert.deepEqual(Object.keys(start.config.streaks), ["persona-x", "mari"]);
+  // You have had your go (one guess counts), so your tag starts nothing.
+  assert.equal(await command.startConfig(context), null);
+  // A chat whose own clock runs a day behind your browser: you already played the next day's word from /wordle, so a
+  // tag on the chat's day starts nothing instead of a second game with the day before's word.
+  const ahead = fresh({ chatId: "chat-ahead", day: utcDay(1) }, SEATS.slice(0, 1));
+  guess(ahead, "you", ahead.answer === "slate" ? "crane" : "slate");
+  await settle();
+  assert.equal(await command.startConfig({ ...context, chatId: "chat-ahead" }), null, "no second go a day behind");
+  assert.notEqual(await command.startConfig({ ...context, chatId: "chat-ahead", humanSeatId: "persona-x" }), null);
+  // A record that cannot be read declines the start and logs why, instead of rejecting.
+  const loggedBefore = errors.length;
+  assert.equal(await command.startConfig({ ...context, chatId: "chat-broken" }), null);
+  assert.equal(errors.length, loggedBefore + 1);
+  assert.match(errors.at(-1)[0], /could not read the record to start a game/);
+  errors.length = loggedBefore;
+  // The day follows the chat's time zone, and an unknown zone falls back to the server's local day.
+  const kiritimati = await command.startConfig({ ...context, chatId: "chat-zone", timeZone: "Pacific/Kiritimati" });
+  assert.equal(
+    kiritimati.config.day,
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Kiritimati" }).format(Date.now()),
+  );
+  const unknown = await command.startConfig({ ...context, chatId: "chat-zone", timeZone: "Not/AZone" });
+  const local = new Date();
+  const localDay = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
+  assert.equal(unknown.config.day, localDay);
 }
 
 // ── the streak a seat brings in shows in its own summary ─────────────────────
