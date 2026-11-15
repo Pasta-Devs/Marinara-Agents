@@ -3281,18 +3281,21 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
 
 /**
  * The `summary` wording every summary prompt carries besides its contract: memory summaries (M2a), chat memory (M3).
- * A summary keeps what happened; only the period tracker's data stays out of memory (design: Calendar and period
- * tracker, rule 2: prompts get today's state, never the history).
+ * A summary keeps what happened. 0.34.1 (the maintainer's): it no longer says never to record anyone's period or cycle,
+ * which dropped story content (a character's period, a pregnancy). The tracker's history still never reaches memory
+ * (design: Calendar and period tracker, rule 2): its line goes only to the Caring message (P27), and care data is never
+ * a memory source (S/phone/memory.ts).
  */
-export const SUMMARY_WORDING =
-  "Record what happened as it happened, without softening it. Never record anything about anyone's period or cycle.";
+export const SUMMARY_WORDING = "Record what happened as it happened, without softening it.";
 
 /**
  * How the condensed timeline reads (0.6.19; since #2066 only the condensing call carries it). Models kept persona
  * facts, a summary per chapter and markdown labels in an overview; the prompts carry the cast on their own.
+ * 0.34.1: it no longer says to keep "every established event": after TIMELINE_FOLD_WORDING's 5000-word limit, that line
+ * made a model bring back about 7,400 words twice, so the rebuild stopped. What to keep is TIMELINE_FOLD_WORDING's list.
  */
 export const OVERVIEW_WORDING =
-  "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep every established event, relationship turn and irrevocable decision, the chronology and the names, and who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
+  "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
 
 /** The most a chapter summary may run to (#2066). Said in the prompt; the reply's own allowance stays 10240 tokens. */
 export const CHAPTER_SUMMARY_WORDS = 1000;

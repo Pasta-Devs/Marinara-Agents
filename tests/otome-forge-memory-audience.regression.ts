@@ -436,6 +436,8 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
     const system = call.messages[0]!.content;
     const detail = kinds[index] === "detail";
     assert.ok(system.includes(SUMMARY_WORDING), "every summary keeps the summary wording");
+    // 0.34.1: a story's own periods and pregnancies are remembered like anything else that happened.
+    assert.doesNotMatch(system, /period or cycle/iu, "no summary is told to leave out a period or cycle");
     assert.equal(system.includes(CHAPTER_SUMMARY_WORDING), detail, "a chapter summary: at most 1000 words, said");
     assert.match(CHAPTER_SUMMARY_WORDING, /at most 1000 words/u);
     assert.equal(system.includes(TIMELINE_FOLD_WORDING), !detail, "condensing: at most 5000 words, said");
@@ -445,6 +447,8 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
       assert.ok(system.includes("far shorter than the timeline you are given: never copy it out"));
       assert.ok(system.includes("Compress the oldest parts the most"));
       assert.ok(system.includes("the current state of anything that changed and stays changed"));
+      // 0.34.1: nothing after the limit asks to keep every event, which brought heads back at ~7,400 words.
+      assert.doesNotMatch(system, /keep every/iu, "no keep-everything line fights the 5000-word limit");
     }
     assert.equal(system.includes(OVERVIEW_WORDING), !detail, "the condensed part reads as a recollection");
     assert.ok(call.options!.maxTokens! >= 10240, "the word limits are the prompt's; the reply room stays 10240");

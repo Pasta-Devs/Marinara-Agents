@@ -704,6 +704,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.1",
+          "date": "2026-11-15",
+          "notes": "- **The timeline rebuild can finish.** The condensing prompt no longer also asks to keep every event, which fought its 5,000-word limit. Models kept bringing back about 7,400 words, so the rebuild stopped with **Retry the summary**. Until it finishes, each later chapter is sent on its own, which made chapter prompts very large.\n- **Summaries keep a story's periods and pregnancies.** Summaries no longer leave out anyone's period or cycle, so a character's period or a pregnancy in your story is remembered like anything else. The period tracker's data still never reaches memory.",
+          "highlight": false
+        },
+        {
           "version": "0.34.0",
           "date": "2026-11-15",
           "notes": "- **Emotion cues.** Turn on **Emotion cues** in **Settings → Audio → Voices**: with voiced dialogue, new scenes mark how lines are said, like [hushed whisper] or [gasps]. The voice performs them; the dialogue box hides them. ElevenLabs v3 and v4 act on them; other models may read the brackets aloud.\n- **Haptics.** In an explicit story, **Settings → Audio → Haptics** connects your toys through Intiface Central and tests them all. Sex scenes then drive them, each cue looping until the story changes it, and in Messages you can hand him the remote. **Stop the toys** stays on screen while they play.\n- **Memory keeps its newest chapters.** Condensing the timeline now keeps the newest three chapters as written and refuses a result that comes back too long, which had lost chapters. Every story's timeline is rebuilt once from its saved summaries.",
@@ -815,12 +821,6 @@
           "version": "0.24.3",
           "date": "2026-11-12",
           "notes": "- **A chapter keeps its story on smaller connections too.** 0.24.2 kept the story a chapter opened with, but a scene that had to leave out some older chapters to fit a smaller connection rebuilt the story from scratch to do it, and so went back to the newer version after all. A chapter now keeps every part of its story, so a scene that has to leave something out leaves it out of the chapter's own.",
-          "highlight": false
-        },
-        {
-          "version": "0.24.2",
-          "date": "2026-11-12",
-          "notes": "- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.",
           "highlight": false
         }
       ]
