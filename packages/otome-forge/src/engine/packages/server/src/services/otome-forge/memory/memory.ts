@@ -94,6 +94,7 @@ import {
   otomeContentContract,
   romanticFirstsAsk,
   timelineFoldMessages,
+  timelineShortenMessages,
   withRules,
 } from "../prompts.js";
 import { OUTPUT_FLOOR, generateJson, promptRoom, resolveConnectionId, type OtomeMessage } from "../generation.js";
@@ -168,17 +169,19 @@ const tooSmall = (maxContext: number, task: "write a summary" | "condense the st
 
 /**
  * 0.34.0: the longest condensed head kept, in estimated tokens: TIMELINE_FOLD_WORDS at the estimator's 1.35 tokens a
- * word, with a quarter of leeway. A longer one is refused with one repair turn that names its length, then fails as a
- * summary does, with Otome's own words (timelineTooLong), and nothing of it is saved.
+ * word, with a quarter of leeway. 0.34.2: a longer one is shortened (SHORTEN_PASSES), then fails as a summary does,
+ * with Otome's own words (timelineTooLong), and nothing of it is saved.
  */
 const TIMELINE_HEAD_TOKENS = Math.round(TIMELINE_FOLD_WORDS * 1.35 * 1.25);
-/** About how many words a condensed head of `tokens` estimated tokens holds, as the repair turn and the status say it. */
+/** About how many words a condensed head of `tokens` estimated tokens holds, as the shortening and the status say it. */
 const headWords = (tokens: number) => Math.round(tokens / 1.35);
+/** 0.34.2: how many times a condensed head over its length goes back to be shortened before the condensing fails. */
+const SHORTEN_PASSES = 3;
 
-/** A condensing that came back over TIMELINE_HEAD_TOKENS twice: Otome's own words (see tooSmall). */
+/** A condensing still over TIMELINE_HEAD_TOKENS after its shortenings: Otome's own words (see tooSmall). */
 const timelineTooLong = (tokens: number) => ({
   reason: "timeline-too-long",
-  message: `The Memory connection's model condensed the story's timeline to about ${headWords(tokens).toLocaleString("en-US")} words, twice, past the ${TIMELINE_FOLD_WORDS.toLocaleString("en-US")} it may keep, so nothing was saved. Retry to ask again, or choose a stronger model for Memory.`,
+  message: `The Memory connection's model condensed the story's timeline and shortened it ${SHORTEN_PASSES} times, but it still came back at about ${headWords(tokens).toLocaleString("en-US")} words, past the ${TIMELINE_FOLD_WORDS.toLocaleString("en-US")} it may keep, so nothing was saved. Retry to ask again, or choose a stronger model for Memory.`,
 });
 
 /** How many characters of its source a detail request carries (the kit's `range`); a piece of one is the smallest. */
@@ -630,25 +633,28 @@ export function createOtomeMemory({
           failures.set(request.runId, tooSmall(job.maxContext ?? 0, "condense the story's timeline"));
           throw new Error("summary-context-too-small");
         }
-        // 0.34.0: a head over its length goes back once with its length named (generateJson's repair turn); a second
-        // one fails the condensing, so a copied-out timeline is never saved in place of a condensed one.
-        let tooLong = 0;
-        const reply = await call(
-          "timeline",
-          condense({ head, entries: pending.slice(0, take) }),
-          TIMELINE_OUTPUT_TOKENS,
-          (value) => {
-            const tokens = estimateTextTokens(value.summary);
-            tooLong = tokens > TIMELINE_HEAD_TOKENS ? tokens : 0;
-            return tooLong
-              ? `the condensed timeline is about ${headWords(tokens)} words, but it must be at most ${TIMELINE_FOLD_WORDS} words: condense it much further, compressing the oldest parts the most`
-              : value;
-          },
-        ).catch((error: unknown) => {
-          if (tooLong) failures.set(request.runId, timelineTooLong(tooLong));
-          throw error;
-        });
-        head = cleanSummary(reply.summary);
+        let condensed = cleanSummary(
+          (await call("timeline", condense({ head, entries: pending.slice(0, take) }), TIMELINE_OUTPUT_TOKENS)).summary,
+        );
+        // 0.34.2 (the maintainer's): a head over its length goes back alone, told how many words to cut, up to
+        // SHORTEN_PASSES times, each from the last one's reply. Still over, it fails the condensing, so a copied-out
+        // timeline is never saved in place of a condensed one.
+        for (let pass = 0; estimateTextTokens(condensed) > TIMELINE_HEAD_TOKENS; pass += 1) {
+          const tokens = estimateTextTokens(condensed);
+          if (pass === SHORTEN_PASSES) {
+            failures.set(request.runId, timelineTooLong(tokens));
+            throw new Error("timeline-too-long");
+          }
+          const shorten = {
+            ...request,
+            kind: "timeline",
+            messages: timelineShortenMessages(condensed, headWords(tokens)),
+          };
+          condensed = cleanSummary(
+            (await call("timeline-shorten", withRules(shorten, job), TIMELINE_OUTPUT_TOKENS)).summary,
+          );
+        }
+        head = condensed;
         pending = pending.slice(take);
       }
       return serializeTimeline({ head, entries: keptPart(timeline) });

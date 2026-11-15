@@ -2260,17 +2260,17 @@ test("a story saved by 0.6.16 catches up in the background: its own chapters are
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
   t.deps.memory = memory;
   try {
-    // Before the catch-up: a prompt goes out at once on what is saved, and queues the upkeep. The old overview is no
-    // timeline, so Night 1 goes by its saved summary; her route chapter, whose 0.6.16 record is a `chat`, has no summary
-    // of its own yet, so it goes in full.
+    // Before the catch-up: a prompt goes out at once on what is saved, and queues the upkeep. 0.34.2 (the maintainer's):
+    // the old overview stays the timeline until the new one is ready, so Night 1 goes in through it alone; her route
+    // chapter, whose 0.6.16 record is a `chat`, has no summary of its own yet, so it goes in full.
     const before = await recallText(t.deps, t.runId, { job: "narration", cast: [MIR], continues: "main" });
     assert.match(before.text, /# Previous chapter in full: \[Chapter 2\] Night 2\n\nSECOND-NIGHT/u);
-    assert.ok(before.text.includes("# Recent canon summary: [Chapter 1] Night 1\nSUMMARY: SHARED-QUAY"), before.text);
+    assert.ok(before.text.includes("# Canon to date\n[Chapters 1–2]\nOLD-OVERVIEW"), before.text);
     assert.ok(
-      !before.text.includes("Canon in full: [Chapter 1] Night 1"),
-      "a chapter with a summary never goes in full",
+      !before.text.includes("Recent canon summary: [Chapter 1] Night 1") &&
+        !before.text.includes("Canon in full: [Chapter 1] Night 1"),
+      "a chapter the old overview covers never goes in by itself",
     );
-    assert.ok(!before.text.includes("# Canon to date") && !before.text.includes("OLD-OVERVIEW"));
     assert.ok(before.text.includes(`# Canon in full: ${placed("After chapter 1", MIREILLE_LEDGER)}\nPRIVATE-LEDGER`));
     assert.equal((await memory.status(t.runId)).phase, "pending", "the catch-up is queued in the background");
     // A real prompt meanwhile: P5 is sent whole within the connection's context, the previous chapter in it.
@@ -2622,16 +2622,17 @@ test("dates with no summary yet go in full beside the summaries there are, the o
   });
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
   try {
-    // As saved: the old overview is no timeline, and Night 1 goes by its summary. His dates, whose 0.6.16 records are
-    // `chat`s, have no summary of their own yet: each goes in full, and at the reply floor the older gives way first.
+    // As saved: the old overview is the timeline until the new one is ready (0.34.2), so Night 1 goes in through it. His
+    // dates, whose 0.6.16 records are `chat`s, have no summary of their own yet: each goes in full, and at the reply
+    // floor the older gives way first.
     const context = await recallText({ store: t.store, memory }, t.runId, {
       job: "narration",
       cast: [KAI],
       continues: "main",
     });
     const before = context.text;
-    assert.ok(!before.includes("# Canon to date"), before);
-    assert.ok(before.includes("# Recent canon summary: [Chapter 1] Night 1\nSUMMARY: NIGHT-ONE"), before);
+    assert.ok(before.includes("# Canon to date\n[Chapters 1–2]\nSUMMARY: NIGHT-ONE SUMMARY: NIGHT-TWO"), before);
+    assert.ok(!before.includes("# Recent canon summary: [Chapter 1] Night 1"), before);
     const date = (title: string) =>
       `# Canon in full: [After chapter 1] Kai's own date chapter "${title}" (private: only the people in its scenes know what happened in it)`;
     assert.ok(

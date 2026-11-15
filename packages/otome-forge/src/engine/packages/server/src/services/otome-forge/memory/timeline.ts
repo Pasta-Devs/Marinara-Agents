@@ -132,7 +132,7 @@ export const OVERVIEW_STYLE = 5;
 
 /** What the story memory has saved for a run, as every story prompt reads it (see the header). */
 export interface SavedStory {
-  /** The timeline (the kit's overview content); "" before the first one, or while one of an earlier form waits. */
+  /** The timeline (the kit's overview content), the earlier one while a rebuild runs; "" before the first one. */
   timeline: string;
   /** The kit's source keys (JSON [kind, id]) the timeline covers: a date's too, though a date is never in its text. */
   covered: ReadonlySet<string>;
@@ -146,22 +146,33 @@ export interface SavedStory {
 }
 
 /**
- * The saved memory document's data (the kit's v1 store, `${R}:memory`) as a SavedStory. An overview of an earlier form
- * is no timeline (OVERVIEW_STYLE), so what it covered counts as not covered until the rebuild folds it again.
+ * The saved memory document's data (the kit's v1 store, `${R}:memory`) as a SavedStory.
+ * 0.34.2 (the maintainer's): while a rebuild runs, prompts read the earlier timeline and what it covered, never the
+ * half-rebuilt one. A half-rebuilt timeline covers only its first chapters, so every later chapter went in as its own
+ * summary: a 94-chapter story's chapter plan reached 168,875 tokens. The earlier one is `legacyOverview`, or the
+ * overview itself before the rebuild's first fold; one with no text leaves the half-rebuilt one in use.
  * ponytail: reads the kit's v1 store and, unlike the kit's own recall, trusts the saved overview without checking that
  * every source it covers is still canon: Otome never takes a completed chapter back. The upgrade path is the kit
  * returning its overview and records in every phase.
  */
 export function savedStory(data: unknown): SavedStory {
+  type Overview = { content?: unknown; sources?: unknown } | null | undefined;
   const saved = data as {
-    overview?: { content?: unknown; sources?: unknown } | null;
+    overview?: Overview;
     overviewStyle?: unknown;
-    legacyOverview?: unknown;
+    legacyOverview?: Overview;
     records?: unknown;
   } | null;
-  const content = saved?.overviewStyle === OVERVIEW_STYLE ? saved.overview?.content : undefined;
   const rebuilding = !!saved?.legacyOverview || (!!saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE);
-  const stamps = typeof content === "string" && Array.isArray(saved?.overview?.sources) ? saved.overview.sources : [];
+  const earlier = saved?.legacyOverview ?? (rebuilding ? saved?.overview : undefined);
+  const read: Overview =
+    rebuilding && typeof earlier?.content === "string" && earlier.content.trim()
+      ? earlier
+      : saved?.overviewStyle === OVERVIEW_STYLE
+        ? saved.overview
+        : undefined;
+  const content = read?.content;
+  const stamps = typeof content === "string" && Array.isArray(read?.sources) ? read.sources : [];
   const covered = new Set<string>();
   for (const stamp of stamps) if (Array.isArray(stamp) && typeof stamp[0] === "string") covered.add(stamp[0]);
   const summaries = new Map<string, string>();

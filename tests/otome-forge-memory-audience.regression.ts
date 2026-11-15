@@ -71,6 +71,7 @@ import {
   parseTimeline,
   renderTimeline,
   savedStory,
+  serializeTimeline,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import { recalledLine } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts";
 import {
@@ -392,12 +393,15 @@ const mainChapters = (count: number): ForgeMemorySource[] =>
     order: (index + 1) * 10000,
   }));
 
-/** The condensing call's input timeline: its first user message (a repair turn adds a plain-text note after it). */
+/** The condensing call's input timeline: its first user message's JSON (a shortening says its length after it). */
 const foldedInput = (messages: Array<{ role?: string; content: string }>) =>
-  JSON.parse(messages.find((message) => message.role === "user")!.content) as {
+  JSON.parse(messages.find((message) => message.role === "user")!.content.split("\n\n")[0]!) as {
     source?: { id: string };
     timeline?: string;
   };
+/** A shortening call (0.34.2): a condensed head over its length, sent back alone. */
+const shortening = (messages: Array<{ content: string }>) =>
+  messages[0]!.content.startsWith("Shorten only the supplied recollection");
 /** A repair turn's note (S/generation.ts): the reply before it was refused. */
 const repairNote = (messages: Array<{ content: string }>) =>
   messages.at(-1)!.content.startsWith("That reply did not match") ? messages.at(-1)!.content : null;
@@ -560,11 +564,12 @@ test("condensing the timeline has room for its 5000 words and a thinking model's
     assert.ok(call.options!.maxTokens! < 24_576 + 16_000, "chapter summaries keep their room");
 });
 
-test("a condensed head over its length goes back once with its length named, and a date's fold condenses nothing (0.34.0)", async () => {
+test("a condensed head over its length goes back alone, told how many words to cut, and a date's fold condenses nothing (0.34.2)", async () => {
   // A real story's condensing came back about 13,000 words, nearly the whole timeline copied, and four chapters at its
-  // end were gone; nothing checked it. Now a head over its length is refused once, with its length, and the shorter
-  // one is kept. Then a date is folded in: it adds no summary, so nothing is condensed, though the newest three entries
-  // alone are still past the ceiling.
+  // end were gone; nothing checked it (0.34.0). Sending the whole timeline again with the long reply was copied out a
+  // second time; now the long head goes back alone, with its length and the words to cut, and the shorter one is kept.
+  // Then a date is folded in: it adds no summary, so nothing is condensed, though the newest three entries alone are
+  // still past the ceiling.
   const sources: ForgeMemorySource[] = [
     ...mainChapters(4),
     {
@@ -583,15 +588,23 @@ test("a condensed head over its length goes back once with its length named, and
     replies: Array.from({ length: 12 }, () => (messages: Array<{ role?: string; content: string }>) => {
       const input = foldedInput(messages);
       if (input.source) return JSON.stringify({ summary: filler(`SUMMARY-${input.source.id}`, 3000) });
-      return JSON.stringify({ summary: repairNote(messages) ? "SHORT-HEAD" : filler("LONG-HEAD", 7000) });
+      return JSON.stringify({ summary: shortening(messages) ? "SHORT-HEAD" : filler("LONG-HEAD", 7000) });
     }),
   });
   assert.equal(await memory.maintain({ runId: RUN }), true);
   assert.equal((await settle(memory)).phase, "ready");
   const kinds = calls.map((call) => (foldedInput(call.messages).source ? "detail" : "timeline"));
   assert.deepEqual(kinds, ["detail", "detail", "detail", "detail", "detail", "timeline", "timeline"]);
-  const note = repairNote(calls[6]!.messages)!;
-  assert.match(note, /the condensed timeline is about [\d,]+ words, but it must be at most 5000 words/u);
+  assert.ok(!calls.some((call) => repairNote(call.messages)), "no repair turn sends the whole timeline again");
+  const shorten = calls[6]!.messages;
+  assert.ok(shortening(shorten));
+  assert.equal(foldedInput(shorten).timeline, filler("LONG-HEAD", 7000), "the long head alone");
+  assert.ok(!JSON.stringify(shorten).includes("SUMMARY-main-"), "none of the chapters it was condensed from");
+  const [, words, cut] = shorten[0]!.content.match(
+    /It is about (\d+) words\. Rewrite it in at most 5000 words: cut at least (\d+) words\./u,
+  )!;
+  assert.equal(Number(cut), Number(words) - 5000, "the words it is over");
+  assert.ok(shorten.at(-1)!.content.endsWith(`cut at least ${cut} words.`), "said again after it");
   const timeline = parseTimeline(
     (fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } }).overview.content,
   );
@@ -606,7 +619,7 @@ test("a condensed head over its length goes back once with its length named, and
   assert.equal(calls.length, 7);
 });
 
-test("a condensed head over its length twice fails with Otome's own words, and nothing of it is saved (0.34.0)", async () => {
+test("a condensed head still over its length after three shortenings fails with Otome's own words, and nothing of it is saved (0.34.2)", async () => {
   const { memory, calls, fake } = await setup(undefined, {
     maxContext: 131_072,
     maxOutputTokens: null,
@@ -622,9 +635,14 @@ test("a condensed head over its length twice fails with Otome's own words, and n
   assert.deepEqual([failed.phase, failed.retryable, failed.reason], ["error", true, "timeline-too-long"]);
   assert.match(
     failed.message!,
-    /^The Memory connection's model condensed the story's timeline to about [\d,]+ words, twice, past the 5,000 it may keep, so nothing was saved\./u,
+    /^The Memory connection's model condensed the story's timeline and shortened it 3 times, but it still came back at about [\d,]+ words, past the 5,000 it may keep, so nothing was saved\./u,
   );
-  assert.equal(calls.filter((call) => !foldedInput(call.messages).source).length, 2, "the condensing and its repair");
+  const timelineCalls = calls.filter((call) => !foldedInput(call.messages).source);
+  assert.deepEqual(
+    timelineCalls.map((call) => shortening(call.messages)),
+    [false, true, true, true],
+    "the condensing and three shortenings",
+  );
   const content = (fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } }).overview.content;
   assert.ok(!content.includes("LONG-HEAD"), "the long head is never saved");
   assert.deepEqual(
@@ -632,6 +650,35 @@ test("a condensed head over its length twice fails with Otome's own words, and n
     ["Night 1", "Night 2", "Night 3"],
     "the timeline stays as it was before the chapter that took it past",
   );
+});
+
+test("while a rebuild runs, prompts read the earlier timeline and what it covered, never the half-rebuilt one (0.34.2)", () => {
+  // A 94-chapter story's half-rebuilt timeline covered six chapters, so every later one went in as its own summary and
+  // a chapter plan reached 168,875 tokens. The maintainer's: the earlier timeline until the new one is ready.
+  const key = (n: number) => JSON.stringify(["chapter", `main-${n}`]);
+  const earlier = {
+    content: serializeTimeline({ head: "EARLIER HEAD", entries: [{ key: key(4), title: "Night 4", text: "N4" }] }),
+    sources: [1, 2, 3, 4].map((n) => [key(n), "f"]),
+  };
+  const half = {
+    content: serializeTimeline({ head: "", entries: [{ key: key(1), title: "Night 1", text: "HALF" }] }),
+    sources: [[key(1), "f"]],
+  };
+  // Before the rebuild's first fold (the overview of an earlier form), and during it (the earlier one kept beside).
+  for (const data of [
+    { overview: earlier, overviewStyle: 4 },
+    { overview: half, overviewStyle: OVERVIEW_STYLE, legacyOverview: earlier, status: { phase: "pending" } },
+  ]) {
+    const saved = savedStory(data);
+    assert.equal(saved.rebuilding, true, "a chapter's saved context is still not replaced meanwhile");
+    assert.equal(parseTimeline(saved.timeline).head, "EARLIER HEAD");
+    assert.deepEqual([...saved.covered], [1, 2, 3, 4].map(key), "no chapter it covered goes in by itself");
+  }
+  // An earlier one with no text leaves the half-rebuilt one in use; once ready, the new one alone.
+  const empty = savedStory({ overview: half, overviewStyle: OVERVIEW_STYLE, legacyOverview: { content: "" } });
+  assert.equal(parseTimeline(empty.timeline).entries[0]!.text, "HALF");
+  const ready = savedStory({ overview: half, overviewStyle: OVERVIEW_STYLE });
+  assert.deepEqual([ready.rebuilding, [...ready.covered]], [false, [key(1)]]);
 });
 
 test("a memory model that reports no context size writes every summary whole and condenses in one call", async () => {
@@ -781,9 +828,14 @@ test("an overview saved before the timeline is folded again from the records in 
   assert.equal(before.overview, "");
   assert.equal(before.lagging, true, "the rebuild is owed, so recall queues it");
   assert.ok(!before.text.includes("OLD-OVERVIEW"));
-  // What a story prompt reads meanwhile (S/story/canon.ts): no timeline, and every saved summary.
+  // What a story prompt reads meanwhile (S/story/canon.ts), 0.34.2 (the maintainer's): the earlier overview and what it
+  // covered, and every saved summary.
   const read = savedStory(saved());
-  assert.equal(read.timeline, "");
+  assert.equal(read.timeline, old.overview.content);
+  assert.deepEqual(
+    [...read.covered],
+    old.overview.sources.map(([key]) => key),
+  );
   assert.deepEqual(
     [main, route].map((source) => read.summaries.get(JSON.stringify([source.kind, source.id]))),
     [MAIN, ROUTE],
