@@ -4667,8 +4667,8 @@ export function datePlanMessages({
         ]
       : []),
     `- goesWrong: true when the evening should stumble somewhere real (an old wound brushed, a jealousy, an interruption, a misread), when the story so far gives it a reason; false for an evening that goes as hoped.`,
-    `- seed: only when goesWrong: the conflict the stumble plants. type from: ${ANGST_TYPES.join(", ")}${recent.length ? `, never one of ${name}'s last kinds of angst (${recent.join(", ")})` : ""}; text: one line on it. Omit it otherwise.`,
-    `- keepsake.brief: one to four plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what ${group ? "they are" : "the two of them are"} doing), never anyone's looks. ${BRIEF_STAGING}`,
+    `- seed: only when goesWrong: the conflict the stumble plants${group ? ` for ${name} (it becomes ${name}'s, whoever else it touches)` : ""}. type from: ${ANGST_TYPES.join(", ")}${recent.length ? `, never one of ${name}'s last kinds of angst (${recent.join(", ")})` : ""}; text: one line on it. Omit it otherwise.`,
+    `- keepsake.brief: one to four plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what ${group ? `the protagonist, ${name} and ${others[0]!.name} are` : "the two of them are"} doing), never anyone's looks.${group ? " It shows only those three." : ""} ${BRIEF_STAGING}`,
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. [] when none apply.`,
     "RULES",
     group
@@ -4724,7 +4724,7 @@ export function datePlanMessages({
     ...(group
       ? [
           "",
-          "A DATE FOR SEVERAL is not a group sex scene by default: it reads as all of them together, and what passes between the love interests is part of it. Under Explicit Heat it may turn intimate between them when the date and where they all stand call for it, as the content contract sets the Heat; below Explicit Heat it stays warm and non-sexual.",
+          "A DATE FOR SEVERAL is not a group sex scene by default: it reads as all of them together, and what passes between the love interests is part of it. When the date and where they all stand call for it, it may turn intimate between them, as far as the content contract's Heat allows.",
         ]
       : []),
     "",
@@ -6097,20 +6097,23 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
 
 // ── M5: a date's keepsake ──
 
-const KEEPSAKE_FRAMING = "two people, romantic date, candid moment, cinematic composition, detailed background";
+const KEEPSAKE_FRAMING = "romantic date, candid moment, cinematic composition, detailed background";
 
 /** A person in the keepsake: who they are and what they wear (English, visual only), drawn as an adult. */
 export type KeepsakePerson = CgPerson;
 export type KeepsakeInput = Omit<CgInput, "framing" | "use" | "explicit">;
 
 /**
- * A date's keepsake (S/minigames/date-night.ts): a CG of the two of them (the plan's English brief, each person's look,
- * then the rating and an adult tag for every person) with the keepsake's framing. A story CG whose brief never sets
- * `explicit` (the date planner writes no explicit brief), so it stays at most Suggestive. An edited prompt keeps its
- * wording with every safety tag put back.
+ * A date's keepsake (S/minigames/date-night.ts): a CG of her with the love interest, or with the first two on a date
+ * with several (#2303): the plan's English brief, each person's look, then the rating and an adult tag for every person,
+ * with the keepsake's framing led by how many are drawn. A story CG whose brief never sets `explicit` (the date planner
+ * writes no explicit brief), so it stays at most Suggestive. An edited prompt keeps its wording with every safety tag
+ * put back.
  */
 export function keepsakePrompt(input: KeepsakeInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
-  return cgPrompt({ ...input, use: "cg", framing: KEEPSAKE_FRAMING }, edited);
+  // #2303: a date with several draws her with two of them, so the count tag follows the people drawn.
+  const count = COUNT_WORDS[Math.min(input.people.length, CG_PEOPLE_MAX)] ?? "two people";
+  return cgPrompt({ ...input, use: "cg", framing: `${count}, ${KEEPSAKE_FRAMING}` }, edited);
 }
 
 export interface ExpressionInput {

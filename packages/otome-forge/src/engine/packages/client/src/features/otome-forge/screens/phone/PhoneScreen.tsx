@@ -110,8 +110,7 @@ interface PhoneScreenProps {
   /** The thread shown (Home's Reply opens one with the note quoted); null, or one not in the cast, shows the list. */
   open: PhoneOpen | null;
   onOpenChange: (open: PhoneOpen | null) => void;
-  /** #2156: she accepted his invitation to clear the air in his thread: Date Night with him. */
-  /** #2303: opens the scene to clear the air with him, once she accepts his invitation. */
+  /** #2156, #2303: opens the scene to clear the air with him, once she accepts his invitation in his thread. */
   onOpenScene?: (key: string) => void;
 }
 

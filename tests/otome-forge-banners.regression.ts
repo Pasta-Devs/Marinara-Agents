@@ -425,6 +425,27 @@ test("a Snapshot planned without a title is named by its first words, or its fir
   assert.equal(plan(unspaced), `${[...unspaced].slice(0, 12).join("")}…`, "a short label, not the whole text");
 });
 
+test("#2303: a date's scene count is held to its rarity's range, and one left out or null takes the middle", () => {
+  const kai = { id: KAI, name: "Kai" } as Unit;
+  const cast = [kai, { id: MIR, name: "Mireille" } as Unit, { id: SOL, name: "Sol" } as Unit];
+  const counts = (scenes: unknown) => {
+    const reply = bannerReply("dates");
+    const asked = {
+      ...reply,
+      featured: { ...reply.featured, scenes },
+      four: reply.four.map((entry) => ({ ...entry, scenes })),
+    };
+    const planned = normalizeBannerPlan(asked as never, { kind: "dates", units: cast, featured: kai });
+    assert.equal(typeof planned, "object", String(planned));
+    const plan = planned as BannerPlan;
+    return [plan.featured.scenes, ...plan.four.map((entry) => entry.scenes)];
+  };
+  assert.deepEqual(counts(null), [5, 2, 2, 2]);
+  assert.deepEqual(counts(undefined), [5, 2, 2, 2]);
+  assert.deepEqual(counts(0), [4, 1, 1, 1]);
+  assert.deepEqual(counts(9), [6, 3, 3, 3]);
+});
+
 test("P20 keeps the knowledge boundary, the contracts and only what the whole cast may know", async () => {
   const t = await wishWorld({ runKey: "r-m4bann02-bbbbbb", images: NO_IMAGES, replies: rotationReplies() });
   // A grievance from Kai's own route chapter (private) and one from a main chapter (shared).

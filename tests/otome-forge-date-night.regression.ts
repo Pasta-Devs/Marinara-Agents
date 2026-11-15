@@ -55,6 +55,7 @@ import {
   unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { placeKey } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/places.ts";
 import {
   beatMessages,
   datePlanMessages,
@@ -451,7 +452,18 @@ test("a date opens a grievance only when it was planned to go wrong, and then on
 });
 
 test("the outcome follows the total of the picks: 2 or more is great, 0 or 1 good, below 0 awkward", () => {
-  assert.deepEqual([3, 2, 1, 0, -1, -3].map(dateOutcome), ["great", "great", "good", "good", "awkward", "awkward"]);
+  assert.deepEqual(
+    [3, 2, 1, 0, -1, -3].map((total) => dateOutcome(total)),
+    ["great", "great", "good", "good", "awkward", "awkward"],
+  );
+  // #2303: a won date has 1 to 6 scenes; great takes the same share of its best total, so a one-scene date can be great.
+  const lowestGreat = [1, 2, 3, 4, 5, 6].map((scenes) => {
+    const great = [-1, 0, 1, 2, 3, 4, 5, 6].find((total) => dateOutcome(total, scenes) === "great")!;
+    assert.equal(dateOutcome(great - 1, scenes), great - 1 >= 0 ? "good" : "awkward");
+    return great;
+  });
+  assert.deepEqual(lowestGreat, [1, 2, 2, 3, 4, 4]);
+  assert.equal(dateOutcome(-1, 1), "awkward");
 });
 
 // ── A whole date ──
@@ -576,6 +588,15 @@ test("#2303: a date taken with several has them all in every scene, scores for t
   assert.deepEqual([stored.date!.newcomers, stored.title], [[KAI, MIR], "Jellyfish Hour"]);
   const plan = t.calls[0]!.messages;
   assert.ok(system(plan).includes("time the protagonist spends with Kai and Mireille, all of them love interests"));
+  const all = plan.map((message) => message.content).join("\n");
+  // The Heat is the content contract's alone: no softer rule for a date with several.
+  assert.ok(all.includes("it may turn intimate between them, as far as the content contract's Heat allows"));
+  assert.equal(all.includes("non-sexual"), false);
+  // The stumble's conflict is the lead's, and the keepsake stages the three people it draws.
+  assert.ok(all.includes("the conflict the stumble plants for Kai (it becomes Kai's, whoever else it touches)"));
+  assert.ok(
+    all.includes("what the protagonist, Kai and Mireille are doing), never anyone's looks. It shows only those three."),
+  );
   assert.ok(
     plan.at(-1)!.content.includes('THE DATE (won from Wish; plan it as written)\n"Jellyfish Hour": An evening'),
   );
@@ -824,6 +845,42 @@ test("#2303: a Make it right evening saved before still plays and mends; a pulle
   assert.equal(system(u.calls[0]!.messages).includes("MAKE IT RIGHT"), false);
 });
 
+test("#2303: dates won and played later never push Date Night's earlier evenings out of the list", async () => {
+  const t = await dateWorld("r-mg5date-cap001");
+  // One evening from before the update, then 24 playthroughs of won dates, every one of them finished.
+  await savedEvening(t, "date-1");
+  for (let n = 2; n <= 25; n += 1) await savedEvening(t, `date-${n}`, { item: DATE_ITEM, cast: [KAI] });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    chapters: Object.fromEntries(
+      Object.entries(state.chapters).map(([key, read]) => [key, { ...read, applied: ["3/finish"] }]),
+    ),
+  }));
+  const listed = (await t.call("GET", "/runs/:run/dates")).body.dates as Array<{ key: string; item?: string }>;
+  assert.equal(listed.filter((entry) => entry.item).length, 24);
+  assert.deepEqual(
+    listed.filter((entry) => !entry.item).map((entry) => entry.key),
+    ["date-1"],
+  );
+  assert.equal(listed[0]!.key, "date-25", "newest first");
+});
+
+test("#2303: an earlier Date Night double date is remembered by both who went on it, and keeps its keepsake of two", async () => {
+  const t = await dateWorld("r-mg5date-dbl001", { images: true });
+  await savedEvening(t, "date-1", { second: MIR });
+  await playDate(t, "date-1", [1, 1, 1]);
+  assert.equal((await finish(t, "date-1")).status, 200);
+  const source = (await readStorySources(t.store, t.runId, await t.state(), "Ines")).find(
+    (item) => item.id === "date-1",
+  )!;
+  assert.deepEqual(source.audience, [KAI, MIR]);
+  // Its keepsake brief was written for two, so the picture still draws its first love interest with her, as before.
+  const keepsake = (await t.call("POST", "/runs/:run/art/keepsake/prompt", { key: "date-1" })).body.prompt as string;
+  assert.match(keepsake, /two people, romantic date/);
+  assert.match(keepsake, /Kai: /);
+  assert.doesNotMatch(keepsake, /Mireille: /);
+});
+
 test("a date is his own memory: a Character Story source for its love interest, in no one else's prompt", async () => {
   const t = await dateWorld("r-mg5date-aa0004");
   const { date } = await startDate(t);
@@ -921,6 +978,38 @@ test("#2303: a pulled date goes to its own place, has its scenes, and a 5★ dat
     ],
   );
   assert.deepEqual([stored.date!.place, stored.date!.grand], ["pulled", true]);
+  // Its item's picture (the Dates banner's art, its place with nobody in it) is the story's place once it is planned, so
+  // the first scene opens on it and paints nothing; a 4★ date, which has no picture, leaves the place to its scene.
+  const places = async (u: DateWorld) => (await u.store.readDoc(worldId(u.runId), normalizeWorld))!.places;
+  assert.equal((await places(t))[placeKey("The Regatta Pier")], undefined, "no picture: nothing is kept");
+  const art = { state: "ready" as const, at, url: "/api/global-gallery/file/pier.png", ref: "global-gallery:pier" };
+  const w = await dateWorld("r-mg5date-place1", {
+    plan: () => datePlan({ beats: [1, 2, 3, 4, 5].map((n) => ({ guide: `G${n}.` })) }),
+  });
+  await giveDate(w, "dates-0-f", {
+    kind: "date5",
+    place: { name: "The Regatta Pier", tags: "harbour pier, paper lanterns, dusk, no people" },
+    scenes: 5,
+    art,
+  });
+  await startDate(w, { ...START, item: "dates-0-f" });
+  assert.deepEqual((await places(w))[placeKey("The Regatta Pier")], {
+    name: "The Regatta Pier",
+    tags: "harbour pier, paper lanterns, dusk, no people",
+    art,
+  });
+  // A place the story painted itself keeps its own picture.
+  const own = { ...art, url: "/api/global-gallery/file/own.png", ref: "global-gallery:own" };
+  const x = await dateWorld("r-mg5date-place2", {
+    plan: () => datePlan({ beats: [1, 2, 3, 4, 5].map((n) => ({ guide: `G${n}.` })) }),
+  });
+  await x.store.updateDoc(runDocTarget("world", worldId(x.runId)), normalizeWorld, (world) => ({
+    ...world,
+    places: { [placeKey("The Regatta Pier")]: { name: "The Regatta Pier", tags: "a pier", art: own } },
+  }));
+  await giveDate(x, "dates-0-f", { kind: "date5", place: { name: "The Regatta Pier", tags: "pier" }, scenes: 5, art });
+  await startDate(x, { ...START, item: "dates-0-f" });
+  assert.deepEqual((await places(x))[placeKey("The Regatta Pier")]?.art, own);
   // A reply with the wrong number of scenes is sent back.
   const v = await dateWorld("r-mg5date-aa0010");
   await giveDate(v, "dates-0-f", { kind: "date5", scenes: 5 });

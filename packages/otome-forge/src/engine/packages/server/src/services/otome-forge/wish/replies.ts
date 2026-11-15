@@ -115,7 +115,8 @@ function cleanDate(
   at: string,
 ): DatePlace | string {
   if (!entry.place?.name.trim() || !entry.place.tags.trim()) return `${at}.place needs a name and tags`;
-  const asked = Math.round(Number(entry.scenes));
+  // A count left out or null takes the middle (Number(null) would be 0, the minimum).
+  const asked = typeof entry.scenes === "number" ? Math.round(entry.scenes) : Number.NaN;
   const scenes = Number.isFinite(asked)
     ? Math.min(range.max, Math.max(range.min, asked))
     : Math.round((range.min + range.max) / 2);

@@ -628,6 +628,11 @@ test("non-explicit assets retain adult romance and lingerie without graphic poli
     }
     assert.match(look.prompt, /silk lingerie, sheer robe/);
     assert.match(images[2]!.prompt, /embrace romantically/);
+    // #2303: the keepsake's count tag counts the people drawn: two on a date for two, three on one with several.
+    assert.match(images[4]!.prompt, /two people, romantic date/);
+    const three = keepsakePrompt({ ...scene, people: [KAI_LOOK, { ...KAI_LOOK, name: "Sol" }, INES_LOOK] });
+    assert.match(three.prompt, /three people, romantic date/);
+    assert.doesNotMatch(three.prompt, /two people/);
   }
 });
 

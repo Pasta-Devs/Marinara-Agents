@@ -108,7 +108,8 @@ import { sameName } from "../../../../../client/src/features/otome-forge/shared/
 import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { cgReferences, cgSubjects } from "../art/cg.js";
 import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
-import { imagesOf, type ArtDeps } from "../art/paint.js";
+import { imagesOf, updateIfChanged, type ArtDeps } from "../art/paint.js";
+import { placeKey } from "../art/places.js";
 import {
   type ImagePrompt,
   type KeepsakePerson,
@@ -119,7 +120,8 @@ import {
 } from "../prompts.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { chapterId, runDocTarget, stateId } from "../ids.js";
+import { chapterId, runDocTarget, stateId, worldId } from "../ids.js";
+import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
 import { defaultLiState, keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
@@ -142,7 +144,10 @@ export type DateDeps = BeatDeps & {
 const FINISH_CHOICE = "finish";
 /** Beside it, what a Make it right finish found: it mended the rupture, or a rupture still stands with them. */
 const MEND_MARKS = { mended: "make-it-right-mended", standing: "make-it-right-standing" } as const;
-/** Finished dates GET /dates lists (each reads its beats for its outcome). */
+/**
+ * Finished dates GET /dates lists of each kind, won dates' playthroughs and Date Night's evenings (each reads its beats
+ * for its outcome). Apart, so won dates finished later never push the earlier evenings out of the Album (#2303).
+ */
 const DATES_LISTED = 24;
 const DATE_KEY = /^date-([1-9]\d{0,5})$/;
 const TEXT_MAX = 4000;
@@ -312,8 +317,12 @@ export function datePicks(beats: ReadonlyArray<Beat | null>): DatePick[] {
   );
 }
 
-const outcomeOf = (picks: readonly DatePick[]): DateOutcome =>
-  dateOutcome(picks.reduce((total, pick) => total + pick.score, 0));
+/** A date's outcome by its picks, against the number of its scenes. */
+const outcomeOf = (chapter: Pick<Chapter, "nodes">, picks: readonly DatePick[]): DateOutcome =>
+  dateOutcome(
+    picks.reduce((total, pick) => total + pick.score, 0),
+    chapter.nodes.length,
+  );
 
 /** Every scene of the date had its first-play choice made (a scene eased off before its choice has none). */
 const everyChoiceMade = (chapter: Pick<Chapter, "nodes">, beats: ReadonlyArray<Beat | null>) =>
@@ -358,12 +367,15 @@ export async function datesView(deps: Pick<DateDeps, "store">, runId: string): P
   const items = (
     await Promise.all([...run.state.owned.items].reverse().map((id) => readItem(deps.store, runId, id)))
   ).filter((item): item is Item => !!item && isDateKind(item.kind));
-  const finished = chapters.filter((chapter) => isFinished(run.state, chapter)).slice(0, DATES_LISTED);
-  // ponytail: reads each listed date's beats for its outcome; the ceiling is DATES_LISTED × 3 reads per visit, and
-  // the upgrade path is the outcome kept on the chapter when the date is finished.
+  const done = chapters.filter((chapter) => isFinished(run.state, chapter));
+  const won = done.filter((chapter) => chapter.date!.item).slice(0, DATES_LISTED);
+  const evenings = done.filter((chapter) => !chapter.date!.item).slice(0, DATES_LISTED);
+  const finished = done.filter((chapter) => won.includes(chapter) || evenings.includes(chapter));
+  // ponytail: reads each listed date's beats for its outcome; the ceiling is 2 × DATES_LISTED dates of up to 6 scenes
+  // per visit, and the upgrade path is the outcome kept on the chapter when the date is finished.
   const dates = await Promise.all(
     finished.map(async (chapter) =>
-      entryOf(runId, chapter, run.state, outcomeOf(datePicks(await readBeats(deps.store, runId, chapter)))),
+      entryOf(runId, chapter, run.state, outcomeOf(chapter, datePicks(await readBeats(deps.store, runId, chapter)))),
     ),
   );
   const pulled = items.map((item): PulledDate => {
@@ -612,8 +624,38 @@ export async function startPulledDate(
       await deps.store.removeDoc(chapterId(runId, key));
       throw runNotFound();
     }
+    await keepDatePlace(deps, runId, item);
     const planned = saved ?? chapter;
     return { chapter: planned, date: entryOf(runId, planned, state, null), resumed: false };
+  });
+}
+
+/**
+ * #2303: a 5★ date's picture is its place with nobody in it (the Dates banner's art), so the story takes it as that
+ * place's picture once the date is planned: the date's first scene opens on it and pays nothing more. A place the story
+ * has a ready picture for already keeps its own. Never thrown: the date is saved, and a failure only paints the place.
+ * The gallery image stays while the place holds it, even after a banner or item repaint (the Engine keeps an image a
+ * document refers to).
+ */
+async function keepDatePlace(deps: DateDeps, runId: string, item: Item): Promise<void> {
+  const place = item.place;
+  const art = item.art;
+  if (!place || art?.state !== "ready" || !art.url) return;
+  await updateIfChanged(deps.store, runDocTarget("world", worldId(runId)), normalizeWorld, (world) => {
+    const key = placeKey(place.name);
+    const current = world.places[key];
+    if (current?.art?.state === "ready") return undefined;
+    if (!current && Object.keys(world.places).length >= PLACES_MAX) return undefined;
+    const record = current
+      ? { ...current, tags: current.tags.trim() ? current.tags : place.tags }
+      : { name: place.name, tags: place.tags };
+    return { ...world, places: { ...world.places, [key]: { ...record, art } } };
+  }).catch((error: unknown) => {
+    deps.runtime.logger.warn(
+      "[otome-forge] keeping date %s's place failed: %s",
+      item.id,
+      error instanceof Error ? error.message : String(error),
+    );
   });
 }
 
@@ -680,7 +722,7 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
   // The canon is settled: a completed chapter's beats never change again.
   const beats = await readBeats(deps.store, runId, chapter);
   const picks = datePicks(beats);
-  const outcome = outcomeOf(picks);
+  const outcome = outcomeOf(chapter, picks);
   // The player's whole evening, well spent: what mends a rupture that still stands when the date is counted.
   const earned = !!plan.makeItRight && everyChoiceMade(chapter, beats) && outcome !== "awkward";
   const at = new Date().toISOString();
@@ -759,10 +801,11 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   if (!isFinished(run.state, chapter)) throw conflict("A keepsake is painted once the date is over.");
   const unit = partnerOf(run, chapter.date.li);
-  // #2303: on a date with several, the first two of them with her (a picture holds three people at most).
+  // #2303: on a won date with several, the first two of them with her (a picture holds three people at most). An
+  // earlier Date Night double date's brief was written for two, so it keeps drawing its first love interest with her.
   const company = [
     unit,
-    ...dateCast(chapter.date)
+    ...(chapter.date.cast ?? [])
       .slice(1, 2)
       .flatMap((li) => run.units.filter((candidate) => candidate.id === li && candidate.bible)),
   ];

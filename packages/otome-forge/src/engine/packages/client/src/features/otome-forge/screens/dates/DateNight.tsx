@@ -152,7 +152,11 @@ export function DateNight({ runKey, view, open, onExit, exitLabel, onHome = onEx
   const dates = useDates(runKey);
   const play = usePlay(runKey);
   const [step, setStep] = useState<Step | null>(null);
-  const [cast, setCast] = useState<LiId[]>([]);
+  const [picked, setPicked] = useState<LiId[]>([]);
+  const held = (li: LiId) => !!play.data?.lis[li]?.held;
+  // Who's coming: those picked, less anyone whose grievance shows only now (PlayView may arrive after the dates). They
+  // show unchecked, and nothing planned or sent holds them.
+  const cast = picked.filter((li) => !held(li));
   const [herLook, setHerLook] = useState(BASE_LOOK);
   // The looks she owns (the Wardrobe's list): the picker starts on what she wears now.
   const wardrobe = useWardrobe(runKey);
@@ -186,7 +190,6 @@ export function DateNight({ runKey, view, open, onExit, exitLabel, onHome = onEx
   ).flatMap((li) => view.lis.filter((item) => item.id === li));
   const lead = company[0] ?? null;
   const together = names(company.map((li) => li.name));
-  const held = (li: LiId) => !!play.data?.lis[li]?.held;
 
   // Opens once the dates are known. On a first visit that is after the loading state, which has no heading for the
   // router to focus, so focus goes to the step's heading as it would after a move. Only a list fetched since this
@@ -344,7 +347,7 @@ export function DateNight({ runKey, view, open, onExit, exitLabel, onHome = onEx
       {step.kind === "company" && pulled ? (
         <>
           <StepHead pulled={pulled} company={company} step={1} title={t("ui.otomeForge.dateNight.companyTitle")} />
-          <CompanyPicker view={view} playedBy={pulled.playedBy} held={held} value={cast} onChange={setCast} />
+          <CompanyPicker view={view} playedBy={pulled.playedBy} held={held} value={cast} onChange={setPicked} />
           <div className="of-dates-actions">
             {!cast.length || newcomers.length ? (
               <button
@@ -446,11 +449,23 @@ export function DateNight({ runKey, view, open, onExit, exitLabel, onHome = onEx
               <ChevronLeft className="of-back-icon" size={16} strokeWidth={2} aria-hidden="true" />
               {t("ui.otomeForge.dateNight.toCompany")}
             </button>
-            <button type="button" className="of-button of-button--primary" onClick={() => void plan()}>
+            <button
+              type="button"
+              className="of-button of-button--primary"
+              aria-disabled={!cast.length}
+              aria-describedby={cast.length ? undefined : "of-date-company-needed"}
+              onClick={() => void plan()}
+            >
               <Heart size={16} strokeWidth={2} fill="currentColor" aria-hidden="true" />
               {t("ui.otomeForge.dateNight.begin")}
             </button>
           </div>
+          {/* Everyone picked turned out to need space (PlayView came after the dates): back to who's coming. */}
+          {!cast.length ? (
+            <p id="of-date-company-needed" className="of-hint of-dates-pick-hint" role="status">
+              {t("ui.otomeForge.dateNight.companyNeeded")}
+            </p>
+          ) : null}
         </>
       ) : null}
 
@@ -987,7 +1002,15 @@ function DateEnding({ runKey, view, company, dateKey, exitLabel, onDone, onHome,
       </section>
 
       {result.keepsake.offer || date.keepsake ? (
-        <Keepsake runKey={runKey} view={view} who={together} entry={date} onPainted={onCounted} />
+        <Keepsake
+          runKey={runKey}
+          view={view}
+          // The picture draws her with the first two of a won date's company, or with the first love interest of an
+          // earlier evening (S/minigames/date-night.ts keepsakeSubject).
+          who={names(company.slice(0, date.cast ? 2 : 1).map((li) => li.name))}
+          entry={date}
+          onPainted={onCounted}
+        />
       ) : null}
 
       <div className="of-dates-actions">

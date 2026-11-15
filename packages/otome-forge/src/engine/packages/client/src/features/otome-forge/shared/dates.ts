@@ -74,12 +74,17 @@ export const BASE_LOOK = "base";
 /** How the love interest takes an option: 1 loves it, 0 lets it pass, −1 it grates. Hidden until the date ends. */
 export type DateScore = -1 | 0 | 1;
 export type DateOutcome = "great" | "good" | "awkward";
-/** The total over the first-play picks at which a date is great (0 and 1 are good; below 0 is awkward). */
+/** The total over a three-scene date's first-play picks at which it is great (0 and 1 are good; below 0 awkward). */
 export const GREAT_DATE_AT = 2;
 
-/** The outcome of a date whose picks scored `total` in all. */
-export function dateOutcome(total: number): DateOutcome {
-  return total >= GREAT_DATE_AT ? "great" : total >= 0 ? "good" : "awkward";
+/**
+ * The outcome of a date of `scenes` scenes whose picks scored `total` in all. #2303: a won date has 1 to 6 scenes, one
+ * scored choice each, so great takes the same share of its best total as two of three does: 1 of 1, 2 of 2 or 3, 3 of
+ * 4, 4 of 5 or 6.
+ */
+export function dateOutcome(total: number, scenes = DATE_BEATS): DateOutcome {
+  const great = Math.max(1, Math.ceil((scenes * GREAT_DATE_AT) / DATE_BEATS));
+  return total >= great ? "great" : total >= 0 ? "good" : "awkward";
 }
 
 /** The grievance a rupture with them stands on while it is unresolved (open or festering), or null. */

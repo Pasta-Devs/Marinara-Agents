@@ -4,7 +4,8 @@
 // in Dates shows that he needs space, with no Play. Her grievance: "I'm upset with her" beside each route (also at
 // stage 6) is a toggle (aria-pressed) that asks first (a dialog, Escape closes it and sends nothing) and is taken back
 // at once; his invitation in Messages offers Accept and Decline, and Accept opens the scene that clears the air with him
-// in the reader (#2303), which the accepted invitation offers again from the thread. Each test runs at phone width
+// in the reader (#2303), which the accepted invitation offers again from the thread. A love interest picked for a won
+// date before his grievance shows is dropped from it, shown as needing space, and never sent. Each test runs at phone width
 // (mobile-chromium, 390×844, touch) and on the desktop (desktop-chromium, mouse), with no horizontal scroll.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-grievances.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
@@ -26,6 +27,21 @@ const RUN = "r-e2e-griev1";
 const KAI = "li-kai-0001";
 const MIR = "li-mireille-0002";
 const INVITE = "m-invite-0002";
+/** A 4★ date won from Wish (#2303), planned from Album → Dates. */
+const WON_DATE = {
+  id: "dates-0-a1",
+  kind: "date4",
+  rarity: 4,
+  banner: "dates-0",
+  li: null,
+  title: "An Evening at the Aquarium",
+  premise: "Blue light and slow jellyfish.",
+  place: { name: "The Moonlit Aquarium" },
+  scenes: 2,
+  owned: true,
+  art: null,
+  story: null,
+};
 /** The scene accepting her invitation registers (SH/dates.ts clearAirSceneKey). */
 const SCENE = `story-clear-air-${MIR}-1`;
 
@@ -225,6 +241,33 @@ function createStub() {
       asked = true;
       messages[1]!.invite.scene = SCENE;
       return { status: 200, json: { status: "accepted", scene: SCENE } };
+    }
+    // The Album (empty but for its Dates tab) and the date won from Wish; planning one is refused here, as only its
+    // body is under test.
+    if (path === `${base}/album`) {
+      return {
+        status: 200,
+        json: {
+          cgs: [],
+          memories: [],
+          timeline: [],
+          favorites: [],
+          soundtrack: [],
+          tells: {},
+          stickers: [],
+          photos: [],
+          cards: [],
+        },
+      };
+    }
+    if (path === `${base}/dates` && call.method === "GET") {
+      return {
+        status: 200,
+        json: { dates: [], open: [], pulled: [{ item: WON_DATE, plays: [], playedBy: [] }] },
+      };
+    }
+    if (path === `${base}/dates/pulled`) {
+      return { status: 503, json: { error: "No connection.", code: "no-connection" } };
     }
     // The scene her acceptance registered (S/items/character-story.ts clearAirStoryChapter), saved under its English
     // title and written on its first read.
@@ -484,6 +527,68 @@ test("Otome Hearth grievances: his invitation to clear the air, accepted in Mess
   await press(accepted.getByRole("button", { name: "Clear the air with Mireille" }));
   await expect(root.getByRole("heading", { level: 1, name: /Clearing the Air with Mireille/u })).toBeVisible();
   expect(posts(stub, "/invite")).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth grievances: one picked for a date before his grievance shows is left out of it, never sent", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "light" : "dark", reducedMotion: "reduce" });
+  const stub = createStub();
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  // GET /play (who is held) answers only once both are picked: the date screen opens on the dates alone.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(
+    (url) => url.pathname === `/api/otome-forge/runs/${RUN}/play`,
+    async (route) => {
+      await held;
+      await route.fallback();
+    },
+  );
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+
+  await press(dock(root, "Album"));
+  await press(root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true }));
+  await press(root.getByRole("button", { name: "Plan a date: An Evening at the Aquarium" }));
+  await expect(root.getByRole("heading", { level: 1, name: "Who's coming?" })).toBeFocused();
+  const kai = root.getByRole("checkbox", { name: /Kai Ardent/u });
+  const mireille = root.getByRole("checkbox", { name: /Mireille/u });
+  await press(root.locator(".of-partner").filter({ hasText: "Kai Ardent" }));
+  await expect(kai).toBeChecked();
+  await press(root.getByRole("button", { name: "Next: what you wear" }));
+  await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
+
+  // His grievance shows on the looks step: nobody is left coming, so Begin waits and says why, and nothing is sent.
+  release();
+  const begin = root.getByRole("button", { name: "Begin the date" });
+  await expect(begin).toHaveAttribute("aria-disabled", "true");
+  await expect(root.getByRole("status").filter({ hasText: "Choose who's coming." })).toBeVisible();
+  // Forced, since Playwright never presses a button marked disabled; the player still can.
+  await (mobile ? begin.tap({ force: true }) : begin.click({ force: true }));
+  await page.waitForTimeout(300);
+  expect(posts(stub, "/dates/pulled")).toHaveLength(0);
+  await noWider(page);
+  await page.screenshot({ path: testInfo.outputPath("01-looks-empty.png") });
+
+  // Back on who's coming he is unticked, with his box saying why instead of holding him in.
+  await press(root.getByRole("button", { name: "Who's coming" }));
+  await expect(kai).not.toBeChecked();
+  await expect(kai).toBeDisabled();
+  await expect(root.locator(".of-partner").filter({ hasText: "Kai Ardent" })).toContainText("Needs space");
+  await press(root.locator(".of-partner").filter({ hasText: "Mireille" }));
+  await expect(mireille).toBeChecked();
+  await page.screenshot({ path: testInfo.outputPath("02-company.png") });
+  await press(root.getByRole("button", { name: "Next: what you wear" }));
+  await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
+  await press(begin);
+  await expect.poll(() => posts(stub, "/dates/pulled").length).toBe(1);
+  expect(posts(stub, "/dates/pulled")[0]!.body).toMatchObject({ item: WON_DATE.id, cast: [MIR] });
   expect(pageErrors).toEqual([]);
 });
 

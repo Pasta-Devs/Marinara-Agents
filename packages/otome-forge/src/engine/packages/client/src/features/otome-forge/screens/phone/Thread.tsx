@@ -92,8 +92,7 @@ interface ThreadProps {
   onBack: () => void;
   /** The quote still waiting for her next message, or null once it went with one or she removed it. */
   onQuoteChange: (quote: string | null) => void;
-  /** #2156: she accepted his invitation to clear the air: Date Night with him opens. */
-  /** #2303: opens the scene her acceptance of his invitation to clear the air registered. */
+  /** #2156, #2303: opens the scene her acceptance of his invitation to clear the air registered. */
   onOpenScene?: (key: string) => void;
 }
 

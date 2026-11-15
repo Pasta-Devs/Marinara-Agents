@@ -73,7 +73,7 @@ export function Dates({ runKey, view, onOpenDate }: DatesProps) {
                   <span className="of-date-memory-title">
                     <RarityStars rarity={item.rarity} /> {item.title}
                     {fresh ? (
-                      <span className="of-tab-dot">
+                      <span className="of-tab-dot of-new-dot">
                         <span className="of-visually-hidden">{t("ui.otomeForge.common.hasNew")}</span>
                       </span>
                     ) : null}
