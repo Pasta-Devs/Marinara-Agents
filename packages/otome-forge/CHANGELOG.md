@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.0 — 2026-11-15
+
+- **Emotion cues.** Turn on **Emotion cues** in **Settings → Audio → Voices**, and new scenes, Confrontations and Closers mark how each spoken line is said and the sounds made with it, like [hushed whisper] or [gasps]. The voice performs the cues, and the dialogue box shows only the words. Narration and thoughts get none. It costs no extra model calls. ElevenLabs v3 and v4 act on the cues; other voice models may read the brackets aloud. The switch starts off, and scenes written before you turn it on stay as they are.
+
 ## 0.33.3 — 2026-11-15
 
 - **Date cards that fit a phone.** In Album → Dates, each date's text now uses the card's full width, with **Plan a date**, **Read again** and an evening's outcome in one row below it.

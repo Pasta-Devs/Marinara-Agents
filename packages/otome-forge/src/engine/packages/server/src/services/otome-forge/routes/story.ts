@@ -22,7 +22,7 @@
 // POST /runs/:run/chapters/:key/beats/:i/ease-off {segment}    → {beat: BeatView, veilSuggestions} & ReadResult
 // POST /runs/:run/veil {limits}                                → {world: WorldView}; only ever lowers allow → veil
 // POST /runs/:run/cancel                                       → {ok}
-// POST /runs/:run/favorites {text, ref, li?, keep?}            → {favorites}; keeps the line (keep: false lets it go),
+// POST /runs/:run/favorites {text, ref, li?, voiced?, keep?}   → {favorites}; keeps the line (keep: false lets it go),
 //                                                                 so sending it twice changes nothing
 // GET  /runs/:run/who-said-what                                → WhoSaidWhatView (#2041, S/minigames/who-said-what.ts):
 //                                                                 no model call, no write
@@ -99,6 +99,8 @@ const FavoriteBody = z.object({
   text: z.string().min(1).max(2000),
   ref: z.string().min(1).max(200),
   li: z.string().max(80).optional(),
+  /** 0.34.0: the line with its Emotion cues (Segment.voiced), so the favourite replays the clip the reader voiced. */
+  voiced: z.string().min(1).max(4000).optional(),
   /** False lets the line go; absent or true keeps it. */
   keep: z.boolean().optional(),
 });
@@ -302,14 +304,14 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
   router.post(
     "/runs/:run/favorites",
     handle(async (request) => {
-      const { text, ref, li, keep = true } = parseBody(FavoriteBody, request.body);
+      const { text, ref, li, voiced, keep = true } = parseBody(FavoriteBody, request.body);
       const { runId } = runParam(request);
       const at = new Date().toISOString();
       const state = await store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
         if (li && !current.lis[li]) throw new OtomeForgeError(404, "No such love interest.", "not-found");
         const starred = current.favorites.some((favorite) => favorite.ref === ref);
         if (starred === keep) return current;
-        const favorite: Favorite = { at, text, ref, ...(li ? { li } : {}) };
+        const favorite: Favorite = { at, text, ref, ...(li ? { li } : {}), ...(voiced ? { voiced } : {}) };
         return {
           ...current,
           favorites: keep

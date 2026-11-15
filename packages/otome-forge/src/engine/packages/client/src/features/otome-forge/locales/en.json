@@ -153,6 +153,8 @@
   "ui.otomeForge.audio.connectionDefault": "The Engine’s default",
   "ui.otomeForge.audio.connectionHint": "This list shows only connections that make music.",
   "ui.otomeForge.audio.dialogueVolume": "Voices",
+  "ui.otomeForge.audio.emotionCues": "Emotion cues",
+  "ui.otomeForge.audio.emotionCuesHint": "New scenes mark how each line is said, like [hushed whisper] or [gasps]. The voice performs them and the dialogue box hides them. ElevenLabs v3 and v4 act on them; other voice models may read the brackets aloud.",
   "ui.otomeForge.audio.generate": "Generate music",
   "ui.otomeForge.audio.generateCostNote": "on your audio connection, never retried by itself",
   "ui.otomeForge.audio.generateCost_one": "Up to {{shown}} track, made once",

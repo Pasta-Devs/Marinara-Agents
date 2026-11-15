@@ -164,6 +164,7 @@ const FavoriteSchema: ZodType<Favorite> = z.object({
   li: z.string().optional(),
   text: short(2000),
   ref: short(200),
+  voiced: short(4000).optional(),
 });
 
 const AlbumCgSchema: ZodType<AlbumCg> = z.object({

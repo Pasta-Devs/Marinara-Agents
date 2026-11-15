@@ -162,6 +162,11 @@ export interface AudioSettings {
   chapterThemes: boolean;
   /** A Music asset folder (including its subfolders), or empty for Engine's mood library. */
   musicFolder: string;
+  /**
+   * 0.34.0: scenes write bracketed delivery cues ("[hushed whisper]", "[gasps]") into spoken lines for the voice model
+   * (Segment.voiced); the reader never shows them.
+   */
+  emotionCues: boolean;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;
@@ -903,6 +908,8 @@ export interface Favorite {
    * lines (C/hooks/use-reader.ts).
    */
   ref: string;
+  /** 0.34.0: the line with its Emotion cues, as the reader voiced it (Segment.voiced); absent when it had none. */
+  voiced?: string;
 }
 
 /** A story CG the player has seen (M2b: unlocked only by POST /runs/:run/art/cg/seen). `key` is `${chapterKey}/${i}`. */
@@ -1140,6 +1147,11 @@ export interface Segment {
    * stage stops showing them until they speak again.
    */
   exits?: LiId[];
+  /**
+   * 0.34.0: a spoken line as written with the world's Emotion cues on, its bracketed cues kept for the voice model;
+   * `text` is the same line without them. Absent when the line had no cue.
+   */
+  voiced?: string;
 }
 
 export interface ChoiceOption {

@@ -144,6 +144,7 @@ You can add an image connection later in **Settings → Images**. Saving it pain
 - **Story image descriptions:** the header's **Image description** panel stands in for a picture that isn't there. It shows the location's description only while no painted background (or painted key image) is on screen, and a key moment's brief only until that image shows. A painted picture that fails to load counts as missing, so its description shows. The panel is hidden while a character sprite is shown, and when every picture shows.
 - **Character nameplates:** story speaker names use the same rounded shape on every corner.
 - **Voices:** with **Voice the dialogue** on in **Settings → Audio**, a love interest from a card speaks with the voice assigned to that card, the others with a default voice, and you with your persona's voice. Narration and thoughts stay silent.
+- **Emotion cues:** turn on **Emotion cues** in **Settings → Audio → Voices**, and new scenes, Confrontations and Closers mark how each spoken line is said and the sounds made with it, like [hushed whisper] or [gasps]. The voice performs the cues, and the dialogue box shows only the words. Narration and thoughts get none, and it costs no extra model calls. ElevenLabs v3 and v4 act on the cues; other voice models may read the brackets aloud. The switch starts off, and scenes written before you turn it on stay as they are.
 
 ## Home
 

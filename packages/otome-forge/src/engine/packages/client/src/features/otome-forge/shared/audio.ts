@@ -1,11 +1,12 @@
 import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
 import type { AudioSettings } from "./api-types";
 
-/** Otome's optional chapter themes leave the other games' audio settings unchanged. */
+/** Otome's optional chapter themes and emotion cues leave the other games' audio settings unchanged. */
 export function normalizeOtomeAudio(value: unknown): AudioSettings {
   return {
     ...normalizeForgeAudio(value),
     chapterThemes: !!value && typeof value === "object" && "chapterThemes" in value && value.chapterThemes === true,
+    emotionCues: !!value && typeof value === "object" && "emotionCues" in value && value.emotionCues === true,
     musicFolder:
       value && typeof value === "object" && "musicFolder" in value && isMusicFolder(value.musicFolder)
         ? value.musicFolder

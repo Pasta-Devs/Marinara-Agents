@@ -1101,6 +1101,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         ref: entry.ref,
         keep: !starred.has(entry.ref),
         ...(li ? { li } : {}),
+        ...(entry.line.segment.voiced ? { voiced: entry.line.segment.voiced } : {}),
       });
       setStarred(new Set((Array.isArray(favorites) ? favorites : []).map((favorite) => favorite.ref)));
     },

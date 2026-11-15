@@ -211,6 +211,8 @@ export interface BeatContext {
   sideWith?: ReadonlyArray<Pick<Unit, "id" | "name">>;
   /** #2155: his side: told from this love interest's point of view, so only he has thoughts, and no choice is offered. */
   pov?: LiId;
+  /** 0.34.0: the world's Emotion cues are on: a spoken line keeps its bracketed cues in `voiced`, never in `text`. */
+  cues?: boolean;
 }
 
 interface NormalizeOptions {
@@ -295,9 +297,31 @@ const REPEAT_MIN = 12;
 /** How much of the longer line the shorter must be for it to count as a repeat: one of a few words added at its end. */
 const REPEAT_SHARE = 0.85;
 
-/** A line's letters and digits, lower case: what two lines are compared by (spaces and punctuation aside). */
+/**
+ * 0.34.0: one delivery cue in a spoken line ("[hushed whisper]", "[gasps]"), written when the world's Emotion cues are
+ * on, with the blanks before it and any punctuation right after it. The voice model performs it; the reader never shows
+ * it (withoutCues).
+ */
+const CUE = /[ \t]*\[[^\[\]\n]{1,80}\]([.!?,;:…]*)/gu;
+const HAS_CUE = /\[[^\[\]\n]{1,80}\]/u;
+
+/**
+ * The line as shown: its cues dropped. Punctuation right after a cue stays only when the words before it need it ("No
+ * [whispers]..." keeps its dots; "Dottore. [gasps]." loses the second full stop).
+ */
+export function withoutCues(text: string): string {
+  return text
+    .replace(CUE, (_cue: string, after: string, offset: number, whole: string) => {
+      const before = whole.slice(0, offset).trimEnd();
+      return before && !/[.!?,;:…—–-]$/u.test(before) ? after : "";
+    })
+    .replace(/ {2,}/gu, " ")
+    .trim();
+}
+
+/** A line's letters and digits, lower case: what two lines are compared by (spaces, punctuation and cues aside). */
 const lineKey = (value: unknown) =>
-  str(value, SEGMENT_TEXT_MAX)
+  withoutCues(str(value, SEGMENT_TEXT_MAX))
     .normalize("NFKC")
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "");
@@ -432,10 +456,15 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
   for (const entry of reply.segments) {
     if (!entry || typeof entry !== "object") continue;
     const source = entry as Record<string, unknown>;
-    const text = str(source.text, SEGMENT_TEXT_MAX);
-    if (!text) continue;
+    const written = str(source.text, SEGMENT_TEXT_MAX);
+    if (!written) continue;
+    // A line that is only a cue ("[gasps]") stays a line, shown as "…", so no choice's `at` moves.
+    const cued = !!options.context.cues && HAS_CUE.test(written);
+    const text = cued ? withoutCues(written) || "…" : written;
     const segment: Segment = { speaker: str(source.speaker, NAME_MAX), text };
     if (source.thought === true || source.thought === "true") segment.thought = true;
+    // Narration and thoughts are never voiced, so their cues are only dropped.
+    if (cued && segment.speaker && !segment.thought) segment.voiced = written;
     const expression = segment.speaker ? normalizeForgeStoryExpression(source.expression, FACES) : "";
     if (expression) segment.expression = expression as Segment["expression"];
     const exits = exitsOf(options.context, source.exits);
@@ -887,6 +916,7 @@ async function generateBeat(
     last,
     mustChoose,
     cgExplicit,
+    ...(run.world.audio.emotionCues ? { cues: true } : {}),
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
     ...(side ? { sideWith: side } : {}),
     ...(pov ? { pov } : {}),
