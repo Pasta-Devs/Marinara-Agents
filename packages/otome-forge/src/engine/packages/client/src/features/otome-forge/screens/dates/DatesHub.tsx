@@ -3,7 +3,7 @@
 // Tarot night (#2151), the Photo Shoot (#2087: only with an image connection, and it pays nothing) and the Claw
 // Machine, each with what it pays and what it costs; today's capped rewards; and the plush shelf. Play is never
 // limited, only the day's rewards are (plan M5, design: Mini-games). #2303: Date Night is gone; dates are won on Wish's
-// Dates banner, and a card here leads to them in Album → Dates.
+// Dates banner and planned from Album → Dates.
 // ──────────────────────────────────────────────
 // GET /runs/:run/play → PlayView (S/routes/claw.ts). Each activity is a screen of its own that OtomeForgeView opens
 // with ActivityScreenProps; one that has not arrived yet in this build shows its card without a Play button, and so
@@ -25,7 +25,6 @@ import {
   RotateCcw,
   Sparkles,
   Star,
-  Wine,
   type LucideIcon,
 } from "lucide-react";
 import { useOtomeApi } from "../../api";
@@ -151,8 +150,6 @@ interface DatesHubProps {
   /** The activities this build can open. */
   available: ReadonlySet<DateActivity>;
   onPlay: (activity: DateActivity, li: string) => void;
-  /** #2303: the dates won from Wish, in Album → Dates. */
-  onOpenDates?: () => void;
 }
 
 function Meter({ label, value, max }: { label: string; value: number; max: number }) {
@@ -179,7 +176,7 @@ function Meter({ label, value, max }: { label: string; value: number; max: numbe
   );
 }
 
-export function DatesHub({ runKey, view, li, onPickLi, available, onPlay, onOpenDates }: DatesHubProps) {
+export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: DatesHubProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const play = usePlay(runKey);
@@ -344,27 +341,6 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay, onOpen
               );
             })}
           </ul>
-
-          {onOpenDates ? (
-            <section className="of-activity of-glass" aria-labelledby={`${shelfId}-dates`}>
-              <span className="of-activity-icon" aria-hidden="true">
-                <Wine size={22} strokeWidth={1.8} />
-              </span>
-              <div className="of-activity-body">
-                <h2 id={`${shelfId}-dates`} className="of-activity-title">
-                  {t("ui.otomeForge.dates.pulledTitle")}
-                </h2>
-                <p className="of-activity-text">{t("ui.otomeForge.dates.pulledText")}</p>
-              </div>
-              <button
-                type="button"
-                className="of-button of-button--quiet of-glass of-button--small of-activity-play"
-                onClick={onOpenDates}
-              >
-                {t("ui.otomeForge.dates.pulledOpen")}
-              </button>
-            </section>
-          ) : null}
 
           <section className="of-section of-glass" aria-labelledby={`${shelfId}-shelf`}>
             <div className="of-shelf-head">

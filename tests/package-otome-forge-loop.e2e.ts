@@ -1544,10 +1544,12 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
   });
 
   await test.step("A date from Wish: who's coming, the looks, three scenes and how it went", async () => {
-    // #2303: no Date Night among the activities; the hub's card leads to the dates won from Wish, in Album → Dates.
+    // #2303: no Date Night among the activities; the dates won from Wish are in Album → Dates.
     await expect(root.getByRole("button", { name: /^Play: Date Night/u })).toHaveCount(0);
-    await root.getByRole("region", { name: "Your dates" }).getByRole("button", { name: "Open" }).click();
-    await expect(root.getByRole("tab", { name: "Dates", exact: true })).toHaveAttribute("aria-selected", "true");
+    await dock(root, "Album").click();
+    const albumDates = root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true });
+    await albumDates.click();
+    await expect(albumDates).toHaveAttribute("aria-selected", "true");
     await auditScreen(page, root, "album: dates");
     await root.getByRole("button", { name: "Plan a date: An Evening at the Aquarium" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Who's coming?" })).toBeFocused();

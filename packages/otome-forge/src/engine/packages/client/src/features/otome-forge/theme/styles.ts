@@ -3286,9 +3286,13 @@ ${R}[dir="rtl"] .of-gate-statement { border-radius: 14px 4px 4px 14px; }`;
 const DATES_RULES = `
 ${R} .of-partners { margin: 0; min-width: 0; }
 ${R} .of-partners > legend { float: inline-start; width: 100%; padding: 0; margin-bottom: 10px; }
-${R} .of-partner-list { clear: both; display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+/* Every love interest in rows that wrap, so the screen only ever scrolls down (a row that scrolled sideways also
+   widened the whole page on a phone). */
+${R} .of-partner-list {
+  clear: both; display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; padding: 2px 2px 6px;
+}
 ${R} .of-partner {
-  flex: 0 0 auto; min-width: 86px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 10px 8px 8px; border-radius: 18px; cursor: pointer; border: 1.5px solid transparent;
   background: var(--of-surface-hover);
   transition: border-color 360ms var(--of-ease), background-color 360ms var(--of-ease), box-shadow 360ms var(--of-ease);

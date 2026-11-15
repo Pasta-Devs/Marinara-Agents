@@ -101,7 +101,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // #2303: the date the date screen shows (a won date to plan, or an earlier one by its key), and where Back leads.
   const [dateOpen, setDateOpen] = useState<DateOpen | null>(null);
   const [dateReturn, setDateReturn] = useState<ScreenId>("album");
-  // The Album's tab when it opens: Dates from the Dates hub's card (#2303), else its own first.
+  // The Album's tab when it opens again after a date or a story it opened (#2303), else its own first.
   const [albumTab, setAlbumTab] = useState<AlbumTab | undefined>();
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -386,10 +386,6 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onPlay={(activity, li) => {
           setDatesLi(li);
           go(activity);
-        }}
-        onOpenDates={() => {
-          setAlbumTab("dates");
-          go("album");
         }}
       />
     ) : screen === "read-him" && activeRun && view && datesOf ? (
