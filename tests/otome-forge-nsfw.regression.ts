@@ -354,8 +354,8 @@ test("summaries keep an adult story as it was written: never SFW by themselves (
   );
   assert.ok(memory.includes(contract(open, "summary", [{ name: "Kai" }])));
   assert.match(memory, /Record what happened as it happened, without softening it\./);
-  // Only the period tracker's data stays out of memory (its privacy rule: today's state, never the history).
-  assert.match(memory, /Never record anything about anyone's period or cycle\./);
+  // 0.34.1: a story's own periods and pregnancies are remembered; the tracker's data never reaches memory at all.
+  assert.doesNotMatch(memory, /period or cycle/);
   assert.doesNotMatch(memory, /no sexual detail|health or body|SFW/);
 });
 

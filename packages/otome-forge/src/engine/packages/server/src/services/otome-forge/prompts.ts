@@ -3281,11 +3281,12 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
 
 /**
  * The `summary` wording every summary prompt carries besides its contract: memory summaries (M2a), chat memory (M3).
- * A summary keeps what happened; only the period tracker's data stays out of memory (design: Calendar and period
- * tracker, rule 2: prompts get today's state, never the history).
+ * A summary keeps what happened. 0.34.1 (the maintainer's): it no longer says never to record anyone's period or cycle,
+ * which dropped story content (a character's period, a pregnancy). The tracker's history still never reaches memory
+ * (design: Calendar and period tracker, rule 2): its line goes only to the Caring message (P27), and care data is never
+ * a memory source (S/phone/memory.ts).
  */
-export const SUMMARY_WORDING =
-  "Record what happened as it happened, without softening it. Never record anything about anyone's period or cycle.";
+export const SUMMARY_WORDING = "Record what happened as it happened, without softening it.";
 
 /**
  * How the condensed timeline reads (0.6.19; since #2066 only the condensing call carries it). Models kept persona

@@ -3,6 +3,7 @@
 ## 0.34.1 — 2026-11-15
 
 - **The timeline rebuild can finish.** The condensing prompt no longer also asks to keep every event, which fought its 5,000-word limit. Models kept bringing back about 7,400 words, so the rebuild stopped with **Retry the summary**. Until it finishes, each later chapter is sent on its own, which made chapter prompts very large.
+- **Summaries keep a story's periods and pregnancies.** Summaries no longer leave out anyone's period or cycle, so a character's period or a pregnancy in your story is remembered like anything else. The period tracker's data still never reaches memory.
 
 ## 0.34.0 — 2026-11-15
 
