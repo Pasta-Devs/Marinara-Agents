@@ -106,4 +106,19 @@ globalThis.__characterRoute = async (path) => {
   assert.ok(requests.every((path) => path.includes("includeBuiltIn=true")));
 }
 
+// ── A card restamped between two page reads shows up once ────────────────────────────────────────────────────────
+{
+  const pages = [
+    { items: [{ id: "bo" }, { id: "rin" }], limit: 2, offset: 0, hasMore: true },
+    { items: [{ id: "rin" }, { id: "kai" }], limit: 2, offset: 2, hasMore: false },
+  ];
+  globalThis.__characterRoute = async (path) =>
+    pages[Number(new URL(path, "http://engine.test").searchParams.get("offset")) / 2];
+  const characters = await useCharacters(true).queryFn();
+  assert.deepEqual(
+    characters.map((card) => card.id),
+    ["bo", "rin", "kai"],
+  );
+}
+
 console.log("character-list paging regression ok");

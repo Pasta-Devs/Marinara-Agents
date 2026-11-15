@@ -11,7 +11,7 @@
   "id": "blackjack",
   "name": "Blackjack",
   "version": "1.0.1",
-  "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Characters cannot start a game on their own yet.",
+  "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "4.0.0"
@@ -42,8 +42,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "0bab18126b37a8782f05a3b3d6983587dea55f0b12ebe6d0f9b84aa0a20b1216",
-      "bytes": 633
+      "sha256": "db88521aab88b2ad88733f0dbf0fd155be866fb2c3f5863224ba90abc78ee27a",
+      "bytes": 697
     },
     {
       "path": "server.mjs",
@@ -52,8 +52,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "11cc3ee95f72a110d0c80cc2c27bcc59212a04798e44214c34e539c9a2aa51be",
-      "bytes": 162773
+      "sha256": "5af460588bb33c9cb9e21ea35c01e1aa71789a02504aefca7414d7821dc5b628",
+      "bytes": 162828
     }
   ],
   "permissions": [

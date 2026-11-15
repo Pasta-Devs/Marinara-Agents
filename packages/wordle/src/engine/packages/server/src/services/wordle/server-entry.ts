@@ -91,20 +91,36 @@ export function wordleDayIn(timeZone: string | null, now: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** The game a character's [wordle] tag starts, or null when the player has had their go. See wordleTagStart. */
+async function tagStartFor(store: WordleStore, context: WordleTagStartContext): Promise<WordleTagStart | null> {
+  const now = Date.now();
+  const day = clampWordleDay(wordleDayIn(context.timeZone, now), now);
+  const daily = await store.getDaily(context.chatId, day);
+  if (daily.results[context.humanSeatId]) return null;
+  // /wordle goes by the browser's day. A chat whose own clock is set a day behind it can still be on yesterday here
+  // after the player played today's word, and starting yesterday's word then would be a second go.
+  const nextDay = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  if ((await store.getDaily(context.chatId, nextDay)).results[context.humanSeatId]) return null;
+  const players = context.botCharacterIds.filter((id) => !daily.results[id]).slice(0, WORDLE_MAX_PLAYERS - 1);
+  const streaks: Record<string, number> = {};
+  for (const seatId of [context.humanSeatId, ...players]) streaks[seatId] = daily.standings[seatId]?.before ?? 0;
+  return { config: { day, chatId: context.chatId, streaks, players }, botCharacterIds: players };
+}
+
 /**
  * The game a character's [wordle] tag starts (Capability API 1.827), built like the setup screen's: this chat, its
- * day, each seat's streak, and only the characters who haven't played today. Null when the player has had their go.
+ * day, each seat's streak, and only the characters who haven't played today. Null when the player has had their go,
+ * and null (logged) when the record cannot be read.
  */
-export function wordleTagStart(store: WordleStore) {
+export function wordleTagStart(store: WordleStore, logger: WordleLogger) {
   return async (context: WordleTagStartContext): Promise<WordleTagStart | null> => {
-    const now = Date.now();
-    const day = clampWordleDay(wordleDayIn(context.timeZone, now), now);
-    const daily = await store.getDaily(context.chatId, day);
-    if (daily.results[context.humanSeatId]) return null;
-    const players = context.botCharacterIds.filter((id) => !daily.results[id]).slice(0, WORDLE_MAX_PLAYERS - 1);
-    const streaks: Record<string, number> = {};
-    for (const seatId of [context.humanSeatId, ...players]) streaks[seatId] = daily.standings[seatId]?.before ?? 0;
-    return { config: { day, chatId: context.chatId, streaks, players }, botCharacterIds: players };
+    try {
+      return await tagStartFor(store, context);
+    } catch (error) {
+      // The Engine would also start nothing on a throw; this keeps the reason in the package's own log.
+      logger.error(error, "Wordle could not read the record to start a game for chat %s", context.chatId);
+      return null;
+    }
   };
 }
 
@@ -146,7 +162,11 @@ export async function activate({ api }: ActivationContext) {
   try {
     cleanups.push(api.registerTurnGameEngine(withDailyRecord(store, api.runtime.logger)));
     cleanups.push(
-      api.registerConversationCommand({ commandType: "wordle", tags: ["wordle"], startConfig: wordleTagStart(store) }),
+      api.registerConversationCommand({
+        commandType: "wordle",
+        tags: ["wordle"],
+        startConfig: wordleTagStart(store, api.runtime.logger),
+      }),
     );
     cleanups.push(
       await api.registerPrivilegedRoutes(

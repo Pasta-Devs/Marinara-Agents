@@ -13,6 +13,7 @@ const documents = new Map();
 const persistence = {
   documents: {
     async getById(packageId, id) {
+      if (id.endsWith("chat-broken")) throw new Error("storage is gone");
       return structuredClone(documents.get(`${packageId}/${id}`) ?? null);
     },
     async create(input) {
@@ -365,6 +366,19 @@ const daily = async (chatId, day) => {
   assert.deepEqual(Object.keys(start.config.streaks), ["persona-x", "mari"]);
   // You have had your go (one guess counts), so your tag starts nothing.
   assert.equal(await command.startConfig(context), null);
+  // A chat whose own clock runs a day behind your browser: you already played the next day's word from /wordle, so a
+  // tag on the chat's day starts nothing instead of a second game with the day before's word.
+  const ahead = fresh({ chatId: "chat-ahead", day: utcDay(1) }, SEATS.slice(0, 1));
+  guess(ahead, "you", ahead.answer === "slate" ? "crane" : "slate");
+  await settle();
+  assert.equal(await command.startConfig({ ...context, chatId: "chat-ahead" }), null, "no second go a day behind");
+  assert.notEqual(await command.startConfig({ ...context, chatId: "chat-ahead", humanSeatId: "persona-x" }), null);
+  // A record that cannot be read declines the start and logs why, instead of rejecting.
+  const loggedBefore = errors.length;
+  assert.equal(await command.startConfig({ ...context, chatId: "chat-broken" }), null);
+  assert.equal(errors.length, loggedBefore + 1);
+  assert.match(errors.at(-1)[0], /could not read the record to start a game/);
+  errors.length = loggedBefore;
   // The day follows the chat's time zone, and an unknown zone falls back to the server's local day.
   const kiritimati = await command.startConfig({ ...context, chatId: "chat-zone", timeZone: "Pacific/Kiritimati" });
   assert.equal(

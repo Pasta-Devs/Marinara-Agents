@@ -157,8 +157,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "b922d0c2cc140a882d1b02fe68cbba6f016c33576a33e19a304ab211a1ce76f4",
-            "bytes": 166742
+            "sha256": "8059b64370d25254f5fa69b567dcd43094cc13df330cebc7cee9164a221f2bb8",
+            "bytes": 166797
           }
         ],
         "permissions": [
@@ -174,8 +174,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/eightball.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.7.zip",
-        "sha256": "6b8187339837539f1375c3f33a981d75e815af1f9066762b32edb6f25acd26aa",
-        "bytes": 199644
+        "sha256": "6c3ad02a682c76bcfe9147b5cd7ad0d22df74bb07a5aad94f3c703a23b0faebe",
+        "bytes": 199699
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
     },
@@ -289,7 +289,7 @@
         "id": "blackjack",
         "name": "Blackjack",
         "version": "1.0.1",
-        "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Characters cannot start a game on their own yet.",
+        "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on.",
         "engine": {
           "min": "2.3.0",
           "maxExclusive": "4.0.0"
@@ -320,8 +320,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "0bab18126b37a8782f05a3b3d6983587dea55f0b12ebe6d0f9b84aa0a20b1216",
-            "bytes": 633
+            "sha256": "db88521aab88b2ad88733f0dbf0fd155be866fb2c3f5863224ba90abc78ee27a",
+            "bytes": 697
           },
           {
             "path": "server.mjs",
@@ -330,8 +330,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "11cc3ee95f72a110d0c80cc2c27bcc59212a04798e44214c34e539c9a2aa51be",
-            "bytes": 162773
+            "sha256": "5af460588bb33c9cb9e21ea35c01e1aa71789a02504aefca7414d7821dc5b628",
+            "bytes": 162828
           }
         ],
         "permissions": [
@@ -347,8 +347,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/blackjack.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/blackjack-1.0.1.zip",
-        "sha256": "0bcf80461bd8e502cb57f0c09931d0a2640128f70c320b3f563df5f0765ba42d",
-        "bytes": 182902
+        "sha256": "aa2a0cadeaff9410251ac35699923a64a0f334bcd43a9129e1ce5fd40cbdb203",
+        "bytes": 183085
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#blackjack"
     },
@@ -562,8 +562,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "7aee39d2bb02101ef469fb22173b05891ee76677a2d5eb00d13915558fe5975b",
-            "bytes": 160563
+            "sha256": "f66aea39e15f279088f61b67f83c38f0620d1d94b60a21bf69257fa82fe32c5c",
+            "bytes": 160618
           }
         ],
         "permissions": [
@@ -579,8 +579,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/chess.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.7.zip",
-        "sha256": "33323dbd98868046e01aac7c3313fc66d1d2f19bca9c0f052a3e97f141cbf0f7",
-        "bytes": 211325
+        "sha256": "706123c527598ff816a3681bc8dce833e96e3511a5bb39b11127c4f86247103d",
+        "bytes": 211380
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
     },
@@ -3269,8 +3269,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "8868d943b459cb1478a2bc044e2baa5ff432a92ae3256cd11a4213bbd81f62cb",
-            "bytes": 840931
+            "sha256": "aa858dbc33b8b848f65c191d444e0e95fa8a42f6969a22b4d02049c569cbc256",
+            "bytes": 840986
           },
           {
             "path": "noodle-klusek.png",
@@ -3292,8 +3292,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.18.zip",
-        "sha256": "0e841bea71523d3b74399ca4f3c55262a4ee422934c7b2f2e039737f6a8bd4b3",
-        "bytes": 1406937
+        "sha256": "adc79d16e77816c1359ad31137994120197a4db29578821d15986e8113a0868d",
+        "bytes": 1406992
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -3481,8 +3481,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "edcc4c2e63c5bbdfcedc1456036c440d88ac1aa47996883ed8cfd86d2672b1d8",
-            "bytes": 163317
+            "sha256": "cbdc2e79c26d13fb63ff63a02db00ca5373b5794641a5210929b4e46ca015b1b",
+            "bytes": 163372
           }
         ],
         "permissions": [
@@ -3498,8 +3498,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/poker.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.7.zip",
-        "sha256": "61e441d8fb561f26f2fec31966e9faab1712e09a18a4b339ea2bd300566ec1d6",
-        "bytes": 189758
+        "sha256": "44c520e277a3321a41ca4e2f9616b8431fab379481f6496d68155aee24541f04",
+        "bytes": 189813
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
     },
@@ -3937,8 +3937,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "115884de6b5660b1cb3dcb08c8add89b5c68662a791906fb7544d12dc9c44755",
-            "bytes": 159649
+            "sha256": "2948ac44bcdef943295273c1bc3b034b4d087d6bf1401c7da8c6e7b4f1fee9bf",
+            "bytes": 159704
           }
         ],
         "permissions": [
@@ -3954,8 +3954,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/rock-paper-scissors.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.7.zip",
-        "sha256": "632723d599d4afdd422e3694c81eed911befdb67d60912e7a3ff0380c46000bc",
-        "bytes": 169350
+        "sha256": "1b3f2888919164a0a982a61013b93f92e99590c105c1a23037d129fbc48d5ab0",
+        "bytes": 169405
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
     },
@@ -4703,8 +4703,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "0b059354b48f01882c180aa25c14a3b94911699a2c1297ac20020f7e46de88a2",
-            "bytes": 155549
+            "sha256": "11658a603cd305bb463df00012f37869c50123f7825602234b32f474850eac53",
+            "bytes": 155604
           }
         ],
         "permissions": [
@@ -4720,8 +4720,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/tic-tac-toe.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.7.zip",
-        "sha256": "7182f3146a73bdbb84d7f9ea1ca1bea9358eb1b6a54a68d6559e64d1b0beed7d",
-        "bytes": 165140
+        "sha256": "f8828f1ec82126fa31e9571ecfad1b66b600e88cf447a1a294d479f56ccc934b",
+        "bytes": 165195
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
     },
@@ -4778,8 +4778,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "b57efcb695cdc7c680991e5d67e4acd889f4c1feb371eca5c7ddde2a104ce1fd",
-            "bytes": 161835
+            "sha256": "680eb2fa1693543c7781b43434305d6523cd8b4728a5f2c6fc9bba34a5af7f46",
+            "bytes": 161890
           }
         ],
         "permissions": [
@@ -4795,8 +4795,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/uno.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.7.zip",
-        "sha256": "313de3f15680978a79f73b8c7aa91b4dba8d80194e3ae67221ab6b336ccc5aa5",
-        "bytes": 188340
+        "sha256": "61c5b93fab25c12cfa696661dab48154362bf4d4ad6fd85227bb8e8471ca75fa",
+        "bytes": 188395
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
     },
@@ -4814,7 +4814,7 @@
         "id": "wordle",
         "name": "Wordle",
         "version": "1.1.0",
-        "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Characters cannot start a game on their own yet.",
+        "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
         "engine": {
           "min": "2.5.1",
           "maxExclusive": "4.0.0"
@@ -4845,18 +4845,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "d9395b58809fdd7c120198aae10a8af411a57a3700307876a21c294930dac67c",
-            "bytes": 605
+            "sha256": "b75d7ab3ee9d433acc6decbdf2028839ede22dda2f060f6d6c31612232a046e9",
+            "bytes": 672
           },
           {
             "path": "server.mjs",
-            "sha256": "e21ea9cd7a9fead6b97a1eed1ba113bc70307991382b51d0465fbd667f956a32",
-            "bytes": 65322
+            "sha256": "9df6ad0d62b647e60cb82941c963d4c483daa87b875f16b48877cc9aa491dc9d",
+            "bytes": 65640
           },
           {
             "path": "client.js",
-            "sha256": "e4ec028306f2c42d804bf3fc209a8a8ed9c3ebd2d7ee2e0d4f7bfb395cd3810a",
-            "bytes": 160372
+            "sha256": "f160804de32769bc71fd29e258820a1075dfc99840c55991b7eae03274d09336",
+            "bytes": 160427
           }
         ],
         "permissions": [
@@ -4873,8 +4873,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/wordle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/wordle-1.1.0.zip",
-        "sha256": "861ccb5b99afd5639886cd1a1948b36c1c067bce6a0abf0a7ec1b7273b4dfe97",
-        "bytes": 228306
+        "sha256": "744a03705a5abf23f4d13e96a8e14ea8c8de9be9cb59e8d06b20f866bbfa6404",
+        "bytes": 228813
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#wordle"
     },

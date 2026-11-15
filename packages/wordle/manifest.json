@@ -11,7 +11,7 @@
   "id": "wordle",
   "name": "Wordle",
   "version": "1.1.0",
-  "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Characters cannot start a game on their own yet.",
+  "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
   "engine": {
     "min": "2.5.1",
     "maxExclusive": "4.0.0"
@@ -42,18 +42,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "d9395b58809fdd7c120198aae10a8af411a57a3700307876a21c294930dac67c",
-      "bytes": 605
+      "sha256": "b75d7ab3ee9d433acc6decbdf2028839ede22dda2f060f6d6c31612232a046e9",
+      "bytes": 672
     },
     {
       "path": "server.mjs",
-      "sha256": "e21ea9cd7a9fead6b97a1eed1ba113bc70307991382b51d0465fbd667f956a32",
-      "bytes": 65322
+      "sha256": "9df6ad0d62b647e60cb82941c963d4c483daa87b875f16b48877cc9aa491dc9d",
+      "bytes": 65640
     },
     {
       "path": "client.js",
-      "sha256": "e4ec028306f2c42d804bf3fc209a8a8ed9c3ebd2d7ee2e0d4f7bfb395cd3810a",
-      "bytes": 160372
+      "sha256": "f160804de32769bc71fd29e258820a1075dfc99840c55991b7eae03274d09336",
+      "bytes": 160427
     }
   ],
   "permissions": [
