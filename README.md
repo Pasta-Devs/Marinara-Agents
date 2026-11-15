@@ -44,7 +44,7 @@ Across its Engine compatibility lanes, the stable catalog currently contains **4
 | 2D Avatars | [`2d-avatars`](packages/2d-avatars/manifest.json) | Shows your characters and personas as animated 2D avatars that blink, talk, and change faces with each reply, from your sprites or a mesh avatar file. |
 | 3D Avatars | [`3d-avatars`](packages/3d-avatars/manifest.json) | Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply, from VRM model files, such as ones made in VRoid Studio. |
 | 8-Ball Pool | [`eightball`](packages/eightball/manifest.json) | Adds a complete Conversation-mode 8-Ball Pool table and `/8ball` command. |
-| Blackjack | [`blackjack`](packages/blackjack/manifest.json) | Adds a Conversation-mode blackjack table and the `/blackjack` command: you and up to six characters play against the house, with an optional character dealer who calls the rounds. Characters cannot start a game on their own until the Engine adds its command toggle. |
+| Blackjack | [`blackjack`](packages/blackjack/manifest.json) | Adds a Conversation-mode blackjack table and the `/blackjack` command: you and up to six characters play against the house, with an optional character dealer who calls the rounds. On an Engine with Capability API 1.827 or newer, characters can start a game while its switch under Chat Settings → Agents → Commands is on. |
 | Chess | [`chess`](packages/chess/manifest.json) | Adds a Conversation-mode chess board and `/chess` command. |
 | Combat | [`combat`](packages/combat/manifest.json) | Manages combat encounters, initiative, HP tracking, and turn-based actions. |
 | Calls | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
@@ -67,7 +67,7 @@ Across its Engine compatibility lanes, the stable catalog currently contains **4
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Turns Game and Roleplay scenes into storyboards of still images or short animations. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
-| Wordle | [`wordle`](packages/wordle/manifest.json) | Adds a daily Conversation-mode Wordle and the `/wordle` command: each chat has one word a day, and you and up to seven characters race for it on your own boards, seeing each other's colors but not the letters until the game is over. Results and daily streaks are kept per chat, and each seat gets one go a day. Characters cannot start a game on their own until the Engine adds its command toggle. Needs Capability API 1.386. |
+| Wordle | [`wordle`](packages/wordle/manifest.json) | Adds a daily Conversation-mode Wordle and the `/wordle` command: each chat has one word a day, and you and up to seven characters race for it on your own boards, seeing each other's colors but not the letters until the game is over. Results and daily streaks are kept per chat, and each seat gets one go a day. On an Engine with Capability API 1.827 or newer, characters can start today's game while its switch under Chat Settings → Agents → Commands is on. Needs Capability API 1.386. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
 
