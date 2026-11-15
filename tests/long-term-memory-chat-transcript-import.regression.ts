@@ -1195,6 +1195,26 @@ async function main() {
         Date.now = realNow;
       }
       assert.equal(prompts.length, 3 * attempts, "the failed selection is retried after the window");
+      // A piece that keeps failing is not read again alongside a newly closed piece; only Retry reads it again.
+      // The next piece's prompt quotes the failed piece as context, so a read is told apart by its source note.
+      const failedNoteId = prompts[0].sourceNote.id;
+      const readsFailedPiece = (prompt: any) => prompt.sourceNote.id === failedNoteId;
+      respond = (prompt) => {
+        if (readsFailedPiece(prompt)) throw new Error("fixture model is down");
+        return [];
+      };
+      messages
+        .get(failingChat.id)!
+        .push(
+          message(failingChat.id, "f5", "assistant", "z".repeat(23_990)),
+          message(failingChat.id, "f6", "user", "A new tail."),
+        );
+      prompts.length = 0;
+      await autoImport(failingChat.id);
+      assert.ok(prompts.length > 0, "the newly closed piece is read");
+      assert.ok(!prompts.some(readsFailedPiece), "and the piece that failed is not read again with it");
+      await retryOnce();
+      assert.ok(prompts.some(readsFailedPiece), "Retry reads the failed piece again");
       respond = () => [];
 
       // A branch imports its own message pieces, not the ones its siblings wrote after the split, and no summaries.
