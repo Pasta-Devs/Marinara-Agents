@@ -1,5 +1,14 @@
 # Otome Hearth release notes
 
+## 0.33.0 — 2026-11-15
+
+- **Dates come from Wish.** A Dates banner arrives every fortnight: a 5★ date scenario (4–6 scenes and a key image), three 4★ places to go (1–3 scenes) and six Snapshots. Dates follow your Heat.
+- **Take whoever you like.** Plan a won date from Wish or Album → Dates, with one love interest, several or everyone. Each choice is judged by what the group likes, and you can bring a gift.
+- **Each love interest goes on a date once.** After that it only replays for them; add someone new and a new date is written. A new date pays 120 Starlight, and its affection is shared by its first-timers.
+- **Date Night is gone from Dates.** Earlier evenings stay in Album → Dates.
+- **Clearing the air is its own scene,** opened when you accept the invitation.
+- **More looks.** His and My Wardrobe banners hold three 3★ everyday looks in place of three Snapshots.
+
 ## 0.32.0 — 2026-11-14
 
 - **Recall follows the lead.** When a main chapter is planned, the earlier chapters it brings back in detail now come only from chapters the love interest you picked to lead it led: main chapters they led, and their own route and repair chapters. A route or repair chapter comes back marked as private to them. The condensed timeline, the recent chapters' summaries and the last chapter in full are sent as before.
