@@ -519,7 +519,10 @@ test("a refused scene tells the repair turn which choice rule it broke (0.34.5)"
     shifted,
     /^choice 1's "at" is 2; .* 0 to 1 \(see the PLAYER CHOICES rules\)\. Before this check, 1 line/u,
   );
-  assert.match(shifted, /the numbers above count the lines without them: leave such lines out$/u);
+  assert.match(
+    shifted,
+    /the same words or the same start with a few words more, .* any segment number above counts the lines without them: leave such lines out$/u,
+  );
   // His side's prompt has no PLAYER CHOICES rules, so its note points to none.
   const pov = String(normalizeBeatReply({ segments: [{ speaker: "", text: "" }] }, { ...context, pov: KAI }));
   assert.ok(!pov.includes("PLAYER CHOICES"), pov);
