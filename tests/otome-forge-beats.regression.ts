@@ -526,6 +526,47 @@ test("a refused scene tells the repair turn which choice rule it broke (0.34.5)"
   // His side's prompt has no PLAYER CHOICES rules, so its note points to none.
   const pov = String(normalizeBeatReply({ segments: [{ speaker: "", text: "" }] }, { ...context, pov: KAI }));
   assert.ok(!pov.includes("PLAYER CHOICES"), pov);
+  // A near repeat (the same start, a few words more) is named for what it is, never "word for word" (Dottore, #2341).
+  const near = String(
+    normalizeBeatReply(
+      {
+        ...reply(3),
+        segments: [
+          { speaker: "", text: "She turned to the window and said nothing at all." },
+          { speaker: "", text: "She turned to the window and said nothing at all again." },
+          { speaker: "Kai", text: "You're late." },
+        ],
+      },
+      context,
+    ),
+  );
+  assert.match(near, /Before this check, 1 line\(s\) you wrote were removed/u);
+  assert.doesNotMatch(near, /word for word/u);
+  // His side never removes a masked thought, so its note names only the repeat (Dottore, #2341).
+  const povRepeat = String(
+    normalizeBeatReply(
+      {
+        // A repeat, then more lines than a scene may hold: refused after the repeat is removed.
+        segments: [
+          { speaker: "", text: "Rain on the glass." },
+          { speaker: "", text: "Rain on the glass." },
+          ...Array.from({ length: 81 }, (_, n) => ({ speaker: "", text: `Line ${n}.` })),
+        ],
+        choices: [],
+      },
+      { ...context, pov: KAI },
+    ),
+  );
+  assert.match(povRepeat, /Before this check, 1 line\(s\) you wrote were removed \(a line that repeats/u);
+  assert.doesNotMatch(povRepeat, /still masked/u);
+  // A mainline of masked thoughts alone: the format message quotes no number; the note says "any segment number".
+  const allMasked = String(
+    normalizeBeatReply(
+      { segments: [{ speaker: "Kai", text: "Stay.", thought: true }], choices: [] },
+      { ...context, state: normalizeState({ lis: { [KAI]: { stage: 1 } } }) },
+    ),
+  );
+  assert.doesNotMatch(allMasked, /the numbers above/u, allMasked);
 });
 
 test("a masked love interest's thought line is dropped, and each choice's and the CG's `at` moves with it", () => {

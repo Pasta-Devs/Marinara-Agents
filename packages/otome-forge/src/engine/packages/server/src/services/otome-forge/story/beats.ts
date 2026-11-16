@@ -630,7 +630,7 @@ export function normalizeBeatReply(written: BeatReply, context: BeatContext): No
       refused || "the segments or choices did not follow the format",
       context.pov ? "" : " (see the PLAYER CHOICES rules)",
       removed > 0
-        ? `. Before this check, ${removed} line(s) you wrote were removed (a line that repeats the one before it, the same words or the same start with a few words more, or a thought of a love interest who is still masked), and any segment number above counts the lines without them: leave such lines out`
+        ? `. Before this check, ${removed} line(s) you wrote were removed (a line that repeats the one before it, the same words or the same start with a few words more${context.pov ? "" : ", or a thought of a love interest who is still masked"}), and any segment number above counts the lines without them: leave such lines out`
         : "",
     ].join("");
   }
