@@ -1840,14 +1840,16 @@ for (const outcome of ["ready", "uncut", "load-error"] as const) {
     await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
     await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("home-expression-pending-neutral.png") });
-    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
     const reads = () => stub.calls.filter((call) => call.method === "GET" && call.path.endsWith("/home")).length;
     const before = reads();
     const completedResponse = page.waitForResponse(async (response) => {
       if (!new URL(response.url()).pathname.endsWith("/home") || response.status() !== 200) return false;
       return (await response.json()).faces.tender.cutoutState !== "pending";
     });
+    // The cut-out finishes before the clock moves on: jumping 60 s fires Home's waiting poll at once, and a poll answered
+    // "pending" before the change left the 10.5 s below too short for another, so the wait never ended (#2349 CI).
     phase = outcome === "uncut" ? "uncut" : "ready";
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
     await page.clock.runFor(10_500);
     await (await completedResponse).finished();
     let drained = 0;
