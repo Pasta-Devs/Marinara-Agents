@@ -403,6 +403,11 @@ export function createOtomeMemory({
   const again = new Map<string, boolean>();
   /** Why each run's summary failed this round (the call's own message, or tooSmall), for the kit's next error status. */
   const failures = new Map<string, { message: string; reason?: string }>();
+  /**
+   * 0.34.3 (the maintainer's): a condensing's last reply, kept by run and by what it was condensed from, so a Retry
+   * after a failed shortening goes on from that reply instead of condensing again. Kept only until the server restarts.
+   */
+  const condenseDrafts = new Map<string, { from: string; head: string }>();
   let disposed = false;
 
   const runExists = async (runId: string) => !!(await documents.getById(OTOME_FORGE_PACKAGE_ID, worldId(runId)));
@@ -633,13 +638,21 @@ export function createOtomeMemory({
           failures.set(request.runId, tooSmall(job.maxContext ?? 0, "condense the story's timeline"));
           throw new Error("summary-context-too-small");
         }
-        let condensed = cleanSummary(
-          (await call("timeline", condense({ head, entries: pending.slice(0, take) }), TIMELINE_OUTPUT_TOKENS)).summary,
-        );
+        const part = renderTimeline({ head, entries: pending.slice(0, take) });
+        // 0.34.3: a Retry goes on from the last reply for this same part (condenseDrafts), not from a new condensing.
+        const draft = condenseDrafts.get(request.runId);
+        let condensed =
+          draft?.from === part
+            ? draft.head
+            : cleanSummary(
+                (await call("timeline", condense({ head, entries: pending.slice(0, take) }), TIMELINE_OUTPUT_TOKENS))
+                  .summary,
+              );
         // 0.34.2 (the maintainer's): a head over its length goes back alone, told how many words to cut, up to
         // SHORTEN_PASSES times, each from the last one's reply. Still over, it fails the condensing, so a copied-out
         // timeline is never saved in place of a condensed one.
         for (let pass = 0; estimateTextTokens(condensed) > TIMELINE_HEAD_TOKENS; pass += 1) {
+          condenseDrafts.set(request.runId, { from: part, head: condensed });
           const tokens = estimateTextTokens(condensed);
           if (pass === SHORTEN_PASSES) {
             failures.set(request.runId, timelineTooLong(tokens));
@@ -654,6 +667,7 @@ export function createOtomeMemory({
             (await call("timeline-shorten", withRules(shorten, job), TIMELINE_OUTPUT_TOKENS)).summary,
           );
         }
+        condenseDrafts.delete(request.runId);
         head = condensed;
         pending = pending.slice(take);
       }

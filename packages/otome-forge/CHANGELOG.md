@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.3 — 2026-11-16
+
+- **Retry picks up where the summary stopped.** When condensing the timeline fails because it is still too long after three shortenings, **Retry the summary** now shortens the last result again. Before, it condensed the whole timeline again and ran all three shortenings from the start, which can take half an hour on a slow model. Restarting Marinara Engine forgets the last result, so a Retry after that condenses again.
+
 ## 0.34.2 — 2026-11-15
 
 - **A too-long timeline gets shortened.** When condensing the timeline comes back over 5,000 words, the result goes back on its own, told how long it is and how many words to cut, up to three times. Before, the whole timeline went back with it, and the model copied it out again, so the rebuild stopped.

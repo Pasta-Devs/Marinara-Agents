@@ -652,6 +652,41 @@ test("a condensed head still over its length after three shortenings fails with 
   );
 });
 
+test("a Retry after a failed shortening goes on from its last reply, with no second condensing (0.34.3)", async () => {
+  // The maintainer's (2026-11-16): a Retry seemed to start the whole process again. Its condensing and three shortenings
+  // ran from the start each time, about nine minutes a call on their model. Now it shortens the last reply again.
+  let round = 0;
+  const { memory, calls, fake } = await setup(undefined, {
+    maxContext: 131_072,
+    maxOutputTokens: null,
+    sources: mainChapters(4),
+    replies: Array.from({ length: 16 }, () => (messages: Array<{ role?: string; content: string }>) => {
+      const input = foldedInput(messages);
+      if (input.source) return JSON.stringify({ summary: filler(`SUMMARY-${input.source.id}`, 3000) });
+      if (!shortening(messages)) return JSON.stringify({ summary: filler("CONDENSED", 7000) });
+      round += 1;
+      // Each shortening cuts a little; the fourth, the first of the Retry, gets under the limit.
+      return JSON.stringify({ summary: round < 4 ? filler(`SHORTER-${round}`, 7000 - round) : "SHORT-ENOUGH" });
+    }),
+  });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).reason, "timeline-too-long");
+  const before = calls.length;
+  assert.equal(await memory.maintain({ runId: RUN, retry: true }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  const retried = calls.slice(before);
+  assert.deepEqual(
+    retried.map((call) =>
+      foldedInput(call.messages).source ? "detail" : shortening(call.messages) ? "shorten" : "condense",
+    ),
+    ["shorten"],
+    "nothing summarized or condensed again: one shortening",
+  );
+  assert.equal(foldedInput(retried[0]!.messages).timeline, filler("SHORTER-3", 6997), "from the last reply");
+  const content = (fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } }).overview.content;
+  assert.equal(parseTimeline(content).head, "SHORT-ENOUGH");
+});
+
 test("while a rebuild runs, prompts read the earlier timeline and what it covered, never the half-rebuilt one (0.34.2)", () => {
   // A 94-chapter story's half-rebuilt timeline covered six chapters, so every later one went in as its own summary and
   // a chapter plan reached 168,875 tokens. The maintainer's: the earlier timeline until the new one is ready.
