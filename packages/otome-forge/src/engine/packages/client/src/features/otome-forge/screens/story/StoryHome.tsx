@@ -204,8 +204,8 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             chapter: Math.min(story.data.arc.read + 1, story.data.arc.endsAt - story.data.arc.from + 1),
             total: story.data.arc.endsAt - story.data.arc.from + 1,
             label: story.data.arc.label,
-          })}
-          {/* #1983 M4: a breathing arc says what it is. */}
+          })}{" "}
+          {/* #1983 M4: a breathing arc says what it is (after a space, so the line wraps before it, centred). */}
           {story.data.arc.kind === "breathing" ? (
             <span className="of-badge of-badge--soft of-story-arc-kind">{t("ui.otomeForge.story.arcQuiet")}</span>
           ) : null}

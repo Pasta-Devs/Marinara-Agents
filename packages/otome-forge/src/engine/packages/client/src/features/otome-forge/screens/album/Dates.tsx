@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { BookOpen, Heart, MapPin, Paintbrush, RotateCcw, Wine } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
-import { CostHint } from "../../components/CostHint";
+import { CostHint, usePaintsByItself } from "../../components/CostHint";
 import { imagesOn, needsOpen, paintWaits, useMarkSeen, type ItemActions } from "../../hooks/use-items";
 import { accentOf } from "../../lib/accent";
 import type { RunView } from "../../shared/api-types";
@@ -207,6 +207,9 @@ function DatePlacePaint({ item, view, actions }: { item: ItemView; view: RunView
   const first = needsOpen(item, images);
   const again = images && datePlacePaintable(item) && paintWaits(item.art);
   const error = actions.errors[item.id];
+  // A first open paints at once only without Ask before painting or prompt review; with either it only holds the
+  // paint for the next tap, so nothing is painting yet (Dottore, #2349). A tap on a held or failed one always paints.
+  const paintsByItself = usePaintsByItself(view.world.images);
   if (item.art?.state === "pending")
     return (
       <span className="of-hint" role="status">
@@ -230,6 +233,12 @@ function DatePlacePaint({ item, view, actions }: { item: ItemView; view: RunView
         <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
         {t("ui.otomeForge.wish.paint")}
       </button>
+      {/* 0.34.8: painting from the tap on, not only once the dates are read again. */}
+      {busy && (!first || paintsByItself) ? (
+        <span className="of-hint" role="status">
+          {t("ui.otomeForge.wish.painting")}
+        </span>
+      ) : null}
       {error ? (
         <span className="of-notice of-notice--error of-album-date-error" role="alert">
           {error}

@@ -52,8 +52,16 @@ const LONG_DATE = {
 /** The scene accepting her invitation registers (SH/dates.ts clearAirSceneKey). */
 const SCENE = `story-clear-air-${MIR}-1`;
 
-function createStub() {
+function createStub({
+  images = false,
+  ask = false,
+  arc = null,
+}: { images?: boolean; ask?: boolean; arc?: Json | null } = {}) {
   const calls: Call[] = [];
+  // 0.34.8: with an image connection, a won 4★ date's first open paints its place in the background.
+  let placeArt: Json | null = null;
+  let releaseOpen: () => void = () => undefined;
+  const openHeld = new Promise<void>((resolve) => (releaseOpen = resolve));
   const now = () => new Date().toISOString();
   const they = { subject: "they", object: "them", possessive: "their" };
   const she = { subject: "she", object: "her", possessive: "her" };
@@ -71,7 +79,7 @@ function createStub() {
       openingSituation: "",
       places: {},
       content: { heat: "sfw", darkness: "angst", limits: {}, custom: [] },
-      images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
+      images: { connectionId: images ? "conn-image" : null, rating: "sfw", ask, expressions: true },
       connections: { narration: "conn-text" },
       // Voices off; the reader reads these settings when the clear-air scene opens.
       audio: { tts: false },
@@ -122,7 +130,8 @@ function createStub() {
     unopened: false,
   });
 
-  const answer = (call: Call): { status: number; json: unknown } => {
+  type Answer = { status: number; json: unknown };
+  const answer = (call: Call): Answer | Promise<Answer> => {
     calls.push(call);
     const path = call.path.replace(/^\/api\/otome-forge/u, "");
     const base = `/runs/${RUN}`;
@@ -175,7 +184,7 @@ function createStub() {
             { li: MIR, stage: 6, next: null, upset: upset[MIR] },
           ],
           repairs: [{ li: KAI, key: `repair-${KAI}-1`, space: { had: 1, needed: 2 } }],
-          arc: null,
+          arc,
           arcChoice: null,
           prestige: [],
         },
@@ -291,7 +300,7 @@ function createStub() {
           dates: eveningCounted ? [evening()] : [],
           open: eveningCounted ? [] : [evening()],
           pulled: [
-            { item: WON_DATE, plays: [], playedBy: [] },
+            { item: { ...WON_DATE, art: placeArt }, plays: [], playedBy: [] },
             { item: LONG_DATE, plays: [], playedBy: [] },
           ],
         },
@@ -315,6 +324,12 @@ function createStub() {
           keepsake: { offer: true },
         },
       };
+    }
+    // The first open marks the place pending and answers once released; its paint lands on a later read.
+    if (images && path === `${base}/items/${WON_DATE.id}/open`) {
+      // With Ask before painting the open only holds the paint for the next tap (S/art/outfits.ts queueItemArt).
+      placeArt = ask ? { state: "waiting-consent" } : { state: "pending", startedAt: now() };
+      return openHeld.then(() => ({ status: 200, json: { item: { ...WON_DATE, art: placeArt } } }));
     }
     if (path === `${base}/art/keepsake`) {
       return { status: 503, json: { error: "This world has no image connection.", code: "no-connection" } };
@@ -374,7 +389,10 @@ function createStub() {
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
-  return { calls, answer, upset };
+  const paintLands = () => {
+    placeArt = { state: "done", image: "/api/gallery/place-aquarium.webp" };
+  };
+  return { calls, answer, upset, releaseOpen, paintLands };
 }
 
 type Stub = ReturnType<typeof createStub>;
@@ -383,7 +401,7 @@ async function stubRoutes(page: Page, stub: Stub) {
   await page.route("**/api/otome-forge/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    const { status, json } = stub.answer({
+    const { status, json } = await stub.answer({
       method: request.method(),
       path: url.pathname,
       body: request.method() === "POST" ? request.postDataJSON() : undefined,
@@ -743,4 +761,141 @@ test("Otome Hearth grievances: declining his invitation keeps focus on it and sa
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("01-declined.png") });
   expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth 0.34.8: a date's Take them along card holds its icon and title inside, beside each other", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await stubRoutes(page, createStub());
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  await press(dock(root, "Album"));
+  await press(root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true }));
+  await press(root.getByRole("button", { name: "Plan a date: An Evening at the Aquarium" }));
+  await expect(root.getByRole("heading", { level: 1, name: "Who's coming?" })).toBeFocused();
+  // A group with a heading, not a fieldset whose legend Safari left on the card's top border (0.34.8).
+  const company = root.getByRole("group", { name: "Take them along" });
+  const title = company.getByRole("heading", { level: 2, name: "Take them along" });
+  await expect(title).toBeVisible();
+  const [card, heading, icon] = await Promise.all([
+    company.boundingBox(),
+    title.boundingBox(),
+    title.locator("svg").boundingBox(),
+  ]);
+  // Inside the card's padding, not across its top edge.
+  expect(heading!.y).toBeGreaterThanOrEqual(card!.y + 10);
+  // The icon sits beside the words, centred on them, not on a line above.
+  expect(Math.abs(icon!.y + icon!.height / 2 - (heading!.y + heading!.height / 2))).toBeLessThan(4);
+  expect(icon!.x + icon!.width).toBeLessThanOrEqual(heading!.x + heading!.width);
+  await page.screenshot({ path: testInfo.outputPath("date-take-them-along.png") });
+});
+
+test("Otome Hearth 0.34.8: the Story home's arc line is centred and never splits its chapter count", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  // The maintainer's own arc: its label and "chapter 3 of 5" wrapped as "... CHAPTER 3 OF" / "5" on an iPhone.
+  const arc = {
+    number: 6,
+    kind: "breathing",
+    label: "Days With Nothing Owed",
+    from: 52,
+    endsAt: 56,
+    read: 2,
+    done: false,
+  };
+  await stubRoutes(page, createStub({ arc }));
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  await press(dock(root, "Story"));
+  const line = root.locator(".of-story-arc");
+  await expect(line).toContainText("chapter 3 of 5");
+  await expect(line).toHaveCSS("text-align", "center");
+  // The count's words are joined by no-break spaces, so "chapter 3 of 5" always shares one line.
+  const split = await line.evaluate((element) => {
+    const text = element.firstChild as Text;
+    const at = text.data.search(/chapter\s3\sof\s5/u);
+    const range = document.createRange();
+    range.setStart(text, at);
+    range.setEnd(text, at + "chapter 3 of 5".length);
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  });
+  expect(split).toBe(1);
+  // Centred under the page head: the space on each side of its widest line is about the same.
+  const [box, page2] = await Promise.all([line.boundingBox(), root.locator(".of-page-head").boundingBox()]);
+  const lines = await line.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return [...range.getClientRects()].map((rect) => ({ left: rect.left, right: rect.right }));
+  });
+  const widest = lines.reduce((a, b) => (b.right - b.left > a.right - a.left ? b : a));
+  expect(Math.abs(widest.left - box!.x - (box!.x + box!.width - widest.right))).toBeLessThan(12);
+  expect(page2).not.toBeNull();
+  await line.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("story-arc-line.png") });
+});
+
+test("Otome Hearth 0.34.8: Album → Dates Paint it shows painting at once and the picture when it lands", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  const stub = createStub({ images: true });
+  await stubRoutes(page, stub);
+  await page.route("**/api/gallery/place-aquarium.webp", (route) =>
+    route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    }),
+  );
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  await press(dock(root, "Album"));
+  await press(root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true }));
+  const card = root.locator(".of-album-date").filter({ hasText: "An Evening at the Aquarium" });
+  const paint = card.getByRole("button", { name: "Paint the place of An Evening at the Aquarium" });
+  await press(paint);
+  // Painting from the tap on, while the open still waits.
+  await expect(card.getByRole("status")).toHaveText("Painting…");
+  // Once the open answers, the dates are read again: still painting, and Paint it does not come back.
+  stub.releaseOpen();
+  await expect(paint).toHaveCount(0);
+  await expect(card.getByRole("status")).toHaveText("Painting…");
+  // The picture lands on a later read, with no leaving the screen.
+  stub.paintLands();
+  await expect(card.getByRole("status")).toHaveCount(0, { timeout: 15_000 });
+  await expect(paint).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("album-date-painted.png") });
+});
+
+test("Otome Hearth 0.34.8: with Ask before painting, a date's first Paint it holds the paint and never says painting", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  const stub = createStub({ images: true, ask: true });
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  await press(dock(root, "Album"));
+  await press(root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true }));
+  const card = root.locator(".of-album-date").filter({ hasText: "An Evening at the Aquarium" });
+  const paint = card.getByRole("button", { name: "Paint the place of An Evening at the Aquarium" });
+  await press(paint);
+  // The open only holds the paint (Dottore, #2349): no Painting… while it waits, or after.
+  await expect(paint).toHaveAttribute("aria-disabled", "true");
+  await expect(card.getByText("Painting…")).toHaveCount(0);
+  stub.releaseOpen();
+  await expect(paint).toHaveAttribute("aria-disabled", "false");
+  await expect(card.getByText("Painting…")).toHaveCount(0);
 });
