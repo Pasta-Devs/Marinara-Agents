@@ -99,6 +99,8 @@ async function main() {
   assert.equal(slurpBondFromRelation("roommate, not friends")?.kind, "roommate");
   assert.equal(slurpBondFromRelation("coworker, not friends")?.kind, "coworker");
   assert.equal(slurpBondFromRelation("Not a lover, best friend")?.level, 3);
+  assert.equal(slurpBondFromRelation("not just a friend, my best friend")?.level, 3);
+  assert.equal(slurpBondFromRelation("not friends, but best friends")?.level, 3);
   assert.equal(slurpBondFromRelation("best friend, never apart")?.kind, "friend");
   assert.equal(slurpBondFromRelation("coworker, can't stand him")?.kind, "coworker");
   assert.equal(slurpBondFromRelation("sister she never sees")?.kind, "family");

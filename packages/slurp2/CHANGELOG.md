@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.24 — 2026-11-16
+
+- Fixed: cut-off post checks skip bracketed labels before the JSON object, schedule refresh rejects parsed non-object cards, and a relation denial no longer cancels an affirmed bond in a later clause.
+
 ## 0.4.23 — 2026-11-16
 
 - Fixed: a post no longer stops in the middle of a sentence when the model runs out of output tokens. Slurp now sees that the answer was cut off and asks the model once more for a shorter post, in place of publishing the cut text.

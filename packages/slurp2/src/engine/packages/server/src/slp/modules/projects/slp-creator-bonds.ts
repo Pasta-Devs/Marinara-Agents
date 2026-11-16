@@ -118,10 +118,12 @@ export function slurpBondFromRelation(relation: string): { kind: SlurpBondKind; 
   const detail = clampText(relation, 60);
   if (FAMILY.test(relation)) return { kind: "family", level: 1, detail };
   if (EX.test(relation)) return { kind: "ex", level: 1, detail };
-  if (BEST.test(relation) && !NOT_FRIEND.test(relation)) return { kind: "friend", level: 3, detail };
-  if (ROOMMATE.test(relation) && !NOT_ROOMMATE.test(relation)) return { kind: "roommate", level: 1, detail };
-  if (COWORKER.test(relation) && !NOT_COWORKER.test(relation)) return { kind: "coworker", level: 1, detail };
-  if (FRIEND.test(relation) && !NOT_FRIEND.test(relation)) return { kind: "friend", level: 1, detail };
+  for (const clause of relation.split(/[,;.!?]+/u)) {
+    if (BEST.test(clause) && !NOT_FRIEND.test(clause)) return { kind: "friend", level: 3, detail };
+    if (ROOMMATE.test(clause) && !NOT_ROOMMATE.test(clause)) return { kind: "roommate", level: 1, detail };
+    if (COWORKER.test(clause) && !NOT_COWORKER.test(clause)) return { kind: "coworker", level: 1, detail };
+    if (FRIEND.test(clause) && !NOT_FRIEND.test(clause)) return { kind: "friend", level: 1, detail };
+  }
   return null;
 }
 

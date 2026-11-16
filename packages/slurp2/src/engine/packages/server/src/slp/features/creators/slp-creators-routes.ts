@@ -219,6 +219,9 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     } catch {
       return reply.code(422).send({ error: "This character card could not be read." });
     }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return reply.code(422).send({ error: "This character card could not be read." });
+    }
     const extensions =
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)

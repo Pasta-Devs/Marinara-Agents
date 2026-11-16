@@ -467,7 +467,7 @@ export function parseCreatorPost(content: string) {
   // Failing here sends the answer through the one correction turn instead. Ignore embedded, unescaped quotes
   // such as `6" heels` when looking for the root closer; brackets inside content cannot finish the answer.
   if (jsonishLooksTruncated(answer)) {
-    const start = answer.search(/[\[{]/u);
+    const start = answer.search(/\{/u);
     const closers: string[] = [];
     let inString = false;
     let escaped = false;
