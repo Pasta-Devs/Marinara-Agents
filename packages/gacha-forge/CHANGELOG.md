@@ -1,3 +1,7 @@
+## 1.27.6 — 2026-11-16
+
+- Maintenance rebuild for the shared choice-check helper. Gacha Forge's player choices work exactly as before.
+
 ## 1.27.5 — 2026-10-29
 
 - Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.

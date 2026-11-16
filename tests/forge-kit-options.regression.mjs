@@ -323,6 +323,36 @@ test("(a) a refused choice beat names the rule it broke, and nothing changes wit
     refuse((raw) => (raw.choices[0].options[0].segments[0].choices = [])),
     /option 1 has a choice inside its branch; never nest choices/u,
   );
+  // 0.34.6: a null entry is not a nested choice; a quoted "at" is told it must be a number; the places are named.
+  assert.match(
+    refuse((raw) => raw.choices[0].options[0].segments.push(null)),
+    /option 1's branch has an entry that is not a segment/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0].at = "1")),
+    /"at" is "1"; it must be a whole JSON number, with no quotes, from 0 to 2/u,
+  );
+  const placed = (value) => ({
+    segments: value.segments.map((segment) => ({ ...segment })),
+    places: [...new Set(value.segments.map((segment) => segment.place).filter(Boolean))].map((name) => ({ name })),
+  });
+  let why = "";
+  const raw = base();
+  raw.segments = ["Cafe", "Park", "Pier", "Roof"].map((place) => ({ text: "Here.", place }));
+  raw.choices[0].options[0].segments = [{ text: "There.", place: "cafe" }];
+  assert.equal(
+    forgeNormalizeChoiceBeat(raw, {}, placed, {
+      enabled: true,
+      terminal: false,
+      label: forgeChoiceLabel,
+      reject: (r) => (why = r),
+    }),
+    null,
+  );
+  assert.match(
+    why,
+    /use 5 places together \(Cafe, Park, Pier, Roof, cafe\); use at most four .* spelled the same way/u,
+  );
 });
 
 test("(a) voice picking takes its voice list as plain ESM", async () => {

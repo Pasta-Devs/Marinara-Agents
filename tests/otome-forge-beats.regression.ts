@@ -505,6 +505,24 @@ test("a refused scene tells the repair turn which choice rule it broke (0.34.5)"
     /^choice 1's "at" is 2; it must be the zero-based index of a mainline segment, 0 to 1/u,
   );
   assert.match(String(refused), /\(see the PLAYER CHOICES rules\)$/u);
+  // 0.34.6: a repeated line is dropped before the check, so the note says its numbers count the lines without it.
+  const repeated = {
+    ...reply(3),
+    segments: [
+      { speaker: "", text: "Rain on the glass." },
+      { speaker: "", text: "Rain on the glass." },
+      { speaker: "Kai", text: "You're late." },
+    ],
+  };
+  const shifted = String(normalizeBeatReply(repeated, context));
+  assert.match(
+    shifted,
+    /^choice 1's "at" is 2; .* 0 to 1 \(see the PLAYER CHOICES rules\)\. Before this check, 1 line/u,
+  );
+  assert.match(shifted, /the numbers above count the lines without them: leave such lines out$/u);
+  // His side's prompt has no PLAYER CHOICES rules, so its note points to none.
+  const pov = String(normalizeBeatReply({ segments: [{ speaker: "", text: "" }] }, { ...context, pov: KAI }));
+  assert.ok(!pov.includes("PLAYER CHOICES"), pov);
 });
 
 test("a masked love interest's thought line is dropped, and each choice's and the CG's `at` moves with it", () => {
