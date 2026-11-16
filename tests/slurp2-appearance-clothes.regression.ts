@@ -14,6 +14,12 @@ assert.doesNotMatch(look, /sweater|fishing vest/u);
 // A long look keeps its last trait; the old 600-character cap cut it off.
 const long = `${"Freckles across the nose and cheeks. ".repeat(30)}A tattoo of a koi on the left forearm.`;
 assert.match(slurpImageLook(long), /koi on the left forearm/u);
+// A hairstyle "worn" or "wears" is not clothing (#175); the hoodie still goes.
+assert.match(slurpImageLook("Long black hair worn in a high ponytail, green eyes."), /hair worn in a high ponytail/u);
+const hairstyle = slurpImageLook("She wears her hair in a ponytail and likes hoodies. Blonde pigtails and a denim jacket.");
+assert.match(hairstyle, /wears her hair in a ponytail/u);
+assert.match(hairstyle, /Blonde pigtails/u);
+assert.doesNotMatch(hairstyle, /hoodies|jacket/u);
 
 const images = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-images-service.ts");
 // The filter runs for every source, not only when there is no Stage appearance.

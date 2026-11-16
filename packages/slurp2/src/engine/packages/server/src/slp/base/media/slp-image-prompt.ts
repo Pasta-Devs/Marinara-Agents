@@ -80,9 +80,11 @@ const TAG_LIST = /^[^.!?]*,[^.!?]*,[^.!?]*$/u;
 const CLAUSE_BREAK = /(,\s*|;\s*|\s+(?:and|but|while)\s+|\s+[—–]\s+)/u;
 /** What a kept clause of a clothing sentence must be about: the body, not a mood or a habit. */
 const BODY_TRAIT =
-  /\b(?:hair|eyes?|skin|face|figure|body|build|frame|legs?|arms?|hips?|waist|chest|breasts?|curves?|curvy|shoulders?|lips?|smile|teeth|nose|jaw|cheeks?|freckle[sd]?|scars?|tattoo(?:s|ed)?|piercings?|muscles?|muscular|abs|tall|short|petite|slim|slender|lean|thick|chubby|stocky|athletic|height|cm|feet|ft|ears?|tail|fur|horns?|wings?|scales?|complexion|tan(?:ned)?|pale)\b/iu;
+  /\b(?:hair|ponytails?|pigtails?|braids?|braided|plaits?|buns?|bangs|twintails|updo|eyes?|skin|face|figure|body|build|frame|legs?|arms?|hips?|waist|chest|breasts?|curves?|curvy|shoulders?|lips?|smile|teeth|nose|jaw|cheeks?|freckle[sd]?|scars?|tattoo(?:s|ed)?|piercings?|muscles?|muscular|abs|tall|short|petite|slim|slender|lean|thick|chubby|stocky|athletic|height|cm|feet|ft|ears?|tail|fur|horns?|wings?|scales?|complexion|tan(?:ned)?|pale)\b/iu;
 /** "… looks great in tight clothing": the clothes come in a phrase at the end. */
 const CLOTHES_PHRASE = /\s+(?:in|under|beneath)\s+(?:[\p{L}'-]+\s+){0,3}$/u;
+const HAIR = /\b(?:hair|ponytails?|pigtails?|braids?|braided|plaits?|buns?|bangs|twintails|updo)\b/iu;
+const WEAR_VERB = /\b(?:wear|wears|wearing|worn)\b/giu;
 
 /** A sentence without its clothing clauses: only its body traits, or "" when it has none. */
 function withoutClothes(sentence: string): string {
@@ -92,7 +94,8 @@ function withoutClothes(sentence: string): string {
   let kept = "";
   for (let index = 0; index < parts.length; index += 2) {
     let clause = parts[index]!.trim();
-    const hit = CLOTHING_SENTENCE.exec(clause);
+    // "Hair worn in a ponytail" is a hairstyle, not clothing (#175): blank the verb, keep the offsets.
+    const hit = CLOTHING_SENTENCE.exec(HAIR.test(clause) ? clause.replace(WEAR_VERB, (verb) => " ".repeat(verb.length)) : clause);
     if (hit) {
       const phrase = CLOTHES_PHRASE.exec(clause.slice(0, hit.index));
       const before = phrase ? clause.slice(0, phrase.index).trim() : "";
