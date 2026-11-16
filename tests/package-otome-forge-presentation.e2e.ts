@@ -1630,6 +1630,19 @@ test("Otome Hearth imageless play: full visual descriptions keep reading control
   await expect(descriptionText).toBeFocused();
   await page.keyboard.press("PageDown");
   await expect.poll(() => descriptionText.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  // Let PageDown's smooth scroll settle first: an End pressed while it still runs is dropped on a slow runner (#2341,
+  // CI stopped 310 px short). The same frame's scrollTop twice in a row means it has.
+  await expect
+    .poll(() =>
+      descriptionText.evaluate(
+        (element) =>
+          new Promise<boolean>((resolve) => {
+            const before = element.scrollTop;
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve(element.scrollTop === before)));
+          }),
+      ),
+    )
+    .toBe(true);
   await page.keyboard.press("End");
   await expect
     .poll(() => descriptionText.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))

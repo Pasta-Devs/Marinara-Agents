@@ -565,6 +565,24 @@ function unmasked(reply: BeatReply, context: BeatContext): BeatReply {
   };
 }
 
+/** Every line a reply holds: its mainline and each choice's branches (what unmasked may drop from). */
+function lineCount(reply: BeatReply): number {
+  const length = (value: unknown) => (Array.isArray(value) ? value.length : 0);
+  const options = (choice: unknown) => (choice as { options?: unknown } | null)?.options;
+  return (
+    length(reply.segments) +
+    (Array.isArray(reply.choices) ? reply.choices : []).reduce<number>(
+      (sum, choice) =>
+        sum +
+        (Array.isArray(options(choice)) ? (options(choice) as unknown[]) : []).reduce<number>(
+          (inner, option) => inner + length((option as { segments?: unknown } | null)?.segments),
+          0,
+        ),
+      0,
+    )
+  );
+}
+
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
 export function normalizeBeatReply(written: BeatReply, context: BeatContext): NormalizedBeat | string {
   const reply = unmasked(written, context);
@@ -605,7 +623,16 @@ export function normalizeBeatReply(written: BeatReply, context: BeatContext): No
     },
   );
   if (!beat) {
-    return `${refused || "the segments or choices did not follow the format"} (see the PLAYER CHOICES rules)`;
+    // 0.34.6 (review of #2339): the kit counts the lines kept, so after a dropped repeat or masked thought
+    // its numbers are not the model's own; the note says so. His side's prompt has no PLAYER CHOICES rules to point to.
+    const removed = lineCount(written) - lineCount(reply);
+    return [
+      refused || "the segments or choices did not follow the format",
+      context.pov ? "" : " (see the PLAYER CHOICES rules)",
+      removed > 0
+        ? `. Before this check, ${removed} line(s) you wrote were removed (a line that repeats the one before it, the same words or the same start with a few words more${context.pov ? "" : ", or a thought of a love interest who is still masked"}), and any segment number above counts the lines without them: leave such lines out`
+        : "",
+    ].join("");
   }
   const choices = (beat.choices ?? []) as ForgeChoice[];
   // The protagonist's own words are shown, never voiced: a cue there is only dropped (Dottore on #2325).

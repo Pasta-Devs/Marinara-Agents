@@ -149,6 +149,10 @@ export function forgeNormalizeChoiceBeat(
     const n = index + 1;
     if (!choice || !["small", "big"].includes(choice.kind))
       return fail(`choice ${n} has kind ${JSON.stringify(choice?.kind)}; use "small" or "big"`);
+    if (typeof choice.at !== "number")
+      return fail(
+        `choice ${n}'s "at" is ${JSON.stringify(choice.at)}; it must be a whole JSON number, with no quotes, from 0 to ${last}`,
+      );
     if (!Number.isInteger(choice.at) || choice.at < 0 || choice.at > last)
       return fail(
         `choice ${n}'s "at" is ${JSON.stringify(choice.at)}; it must be the zero-based index of a mainline segment, 0 to ${last}`,
@@ -204,7 +208,9 @@ export function forgeNormalizeChoiceBeat(
         return fail(
           `${where} has ${option.segments.length} branch segments; a small choice needs 1 to 8 in every option`,
         );
-      if (option.segments.some((segment) => !segment || segment.choices != null || segment.choice != null))
+      if (option.segments.some((segment) => !segment || typeof segment !== "object"))
+        return fail(`${where}'s branch has an entry that is not a segment; each is an object with a non-empty "text"`);
+      if (option.segments.some((segment) => segment.choices != null || segment.choice != null))
         return fail(`${where} has a choice inside its branch; never nest choices`);
       const branch =
         choice.kind === "small"
@@ -227,7 +233,7 @@ export function forgeNormalizeChoiceBeat(
   }
   if (places.size > 4)
     return fail(
-      `the mainline and all branches use ${places.size} places together; use at most four across all of them`,
+      `the mainline and all branches use ${places.size} places together (${[...places.keys()].join(", ")}); use at most four across all of them, each spelled the same way every time`,
     );
   choices.sort((left, right) => left.at - right.at);
   return { ...beat, places: [...places.values()], choices };
