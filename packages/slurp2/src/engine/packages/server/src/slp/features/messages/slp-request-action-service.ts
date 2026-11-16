@@ -9,6 +9,7 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 import { slurpRequestActionEffect, type SlurpRequestAction } from "../../modules/messages/slp-request-actions.js";
 import { normalizeSlurpDemandTopic } from "../../modules/feed/slp-demand.js";
 
+import { parseRecord } from "../../modules/creators/slp-public-support.js";
 import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpThreadRequest = {
   id: string;
@@ -23,14 +24,14 @@ export async function listSlurpThreadRequests(db: DB, threadId: string): Promise
   const actions = new Map<string, SlurpRequestAction>();
   for (const row of rows) {
     if (row.eventType !== "request_action") continue;
-    const payload = JSON.parse(String(row.payload ?? "{}")) as { requestId?: string; action?: SlurpRequestAction };
+    const payload = parseRecord(row.payload) as { requestId?: string; action?: SlurpRequestAction };
     if (payload.requestId && payload.action) actions.set(payload.requestId, payload.action);
   }
   return rows
     .filter((row) => row.eventType === "request_received" && row.status !== "retracted")
     .map((row) => ({
       id: String(row.id),
-      text: String((JSON.parse(String(row.payload ?? "{}")) as { text?: string }).text ?? ""),
+      text: String((parseRecord(row.payload) as { text?: string }).text ?? ""),
       occurredAt: String(row.occurredAt),
       action: actions.get(String(row.id)) ?? null,
     }))

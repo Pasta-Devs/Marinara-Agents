@@ -1,3 +1,4 @@
+import { parseRecord } from "../../modules/creators/slp-public-support.js";
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
@@ -268,7 +269,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                 createdAt: message.createdAt,
                 preserveReplyObligation: true,
                 scheduledFollowUpId: followUp.id,
-                metadata: JSON.parse(message.metadata),
+                metadata: parseRecord(message.metadata),
               });
               // The thread closed or the follow-up was cancelled while the model wrote. Nothing failed.
               if (!stored) {

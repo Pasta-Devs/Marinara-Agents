@@ -102,9 +102,14 @@ const COWORKER = /\b(co-?workers?|colleagues?|works? with|boss|employee|kolleg(e
 const FAMILY =
   /\b(mother|mom|mum|father|dad|daughter|son|sister|brother|sibling|twin|aunt|uncle|niece|nephew|cousin|grand(mother|father|ma|pa|daughter|son)|step-?\w+|(?<!co-)parent|child|mutter|vater|tochter|sohn|schwester|bruder)\b(?!['’]s\b| ?friend| ?flame)/iu;
 const FRIEND = /\b(friends?|buddy|pal|kumpel|childhood friend)\b/iu;
+// "not established friends", "aren't friends yet", "never roommates": a negation up to two words before the relation
+// word denies it. A negation elsewhere in the line ("best friend, never apart") keeps the bond.
+const DENIED =
+  /(?:\b(?:not|never|no longer|nicht|kein\w*|nie)|n['’]t)\s+(?:\S+\s+){0,2}?(?:best ?friends?|friends?|buddy|pal|kumpel|room ?mates?|flat ?mates?|house ?mates?|co-?workers?|colleagues?|freund\w*|mitbewohner\w*|kolleg\w*)\b/iu;
 
 /** What a card relation line means as a bond, or null (a partner is a couple, not a bond). */
 export function slurpBondFromRelation(relation: string): { kind: SlurpBondKind; level: number; detail: string } | null {
+  if (DENIED.test(relation)) return null;
   const detail = clampText(relation, 60);
   if (FAMILY.test(relation)) return { kind: "family", level: 1, detail };
   if (EX.test(relation)) return { kind: "ex", level: 1, detail };

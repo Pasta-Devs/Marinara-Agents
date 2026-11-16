@@ -91,6 +91,12 @@ async function main() {
   assert.equal(slurpBondFromRelation("coworker at the bar")?.kind, "coworker");
   assert.equal(slurpBondFromRelation("ex-girlfriend")?.kind, "ex");
   assert.equal(slurpBondFromRelation("girlfriend"), null);
+  assert.equal(slurpBondFromRelation("not established friends"), null);
+  assert.equal(slurpBondFromRelation("they aren't friends yet"), null);
+  assert.equal(slurpBondFromRelation("never roommates"), null);
+  assert.equal(slurpBondFromRelation("best friend, never apart")?.kind, "friend");
+  assert.equal(slurpBondFromRelation("coworker, can't stand him")?.kind, "coworker");
+  assert.equal(slurpBondFromRelation("sister she never sees")?.kind, "family");
   // R3: family is a bond of its own, never romance; a "mom friend" or a "family friend" is a friend.
   assert.equal(slurpBondFromRelation("sister")?.kind, "family");
   assert.equal(slurpBondFromRelation("her daughter")?.kind, "family");

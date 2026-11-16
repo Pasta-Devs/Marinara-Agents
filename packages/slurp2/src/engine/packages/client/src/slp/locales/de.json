@@ -415,6 +415,7 @@
   "ui.slurp.settings.creators.tabs.images": "Bilder",
   "ui.slurp.settings.creators.tabs.messages": "Nachrichten & Preise",
   "ui.slurp.settings.creators.tabs.danger": "Löschen",
+  "ui.slurp.settings.creators.tabs.tools": "Werkzeuge & Löschen",
   "ui.slurp.settings.creators.unsavedTitle": "Ungespeicherte Änderungen verwerfen?",
   "ui.slurp.settings.creators.unsavedDetail": "Deine Profiländerungen wurden nicht gespeichert.",
   "ui.slurp.settings.creators.discardChanges": "Änderungen verwerfen",

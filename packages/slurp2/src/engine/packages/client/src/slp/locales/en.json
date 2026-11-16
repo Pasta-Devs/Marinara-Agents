@@ -4319,7 +4319,7 @@
   "ui.slurp.settings.creators.tabs.posting": "Posting",
   "ui.slurp.settings.creators.tabs.fans": "Fans & messages",
   "ui.slurp.settings.creators.tabs.memory": "Memory",
-  "ui.slurp.settings.creators.tabs.tools": "Tools",
+  "ui.slurp.settings.creators.tabs.tools": "Tools & delete",
   "ui.slurp.settings.creators.overview.openLabel": "Open {{name}}",
   "ui.slurp.settings.creators.overview.autoPost": "Auto-post",
   "ui.slurp.settings.creators.overview.planned_one": "{{count}} post planned",

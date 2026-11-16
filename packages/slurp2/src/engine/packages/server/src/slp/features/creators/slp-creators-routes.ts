@@ -210,10 +210,15 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       scheduleSettings.modelBudget.connectionId ?? scheduleSettings.generationConnectionId,
     );
     if (!connection) return reply.code(409).send({ error: "Select a text generation connection first." });
-    const data = (typeof character.data === "string" ? JSON.parse(character.data) : character.data) as Record<
-      string,
-      unknown
-    >;
+    let data: Record<string, unknown>;
+    try {
+      data = (typeof character.data === "string" ? JSON.parse(character.data) : character.data) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      return reply.code(422).send({ error: "This character card could not be read." });
+    }
     const extensions =
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)

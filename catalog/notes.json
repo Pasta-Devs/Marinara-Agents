@@ -1098,6 +1098,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.23",
+          "date": "2026-11-16",
+          "notes": "- Fixed: a post no longer stops in the middle of a sentence when the model runs out of output tokens. Slurp now sees that the answer was cut off and asks the model once more for a shorter post, in place of publishing the cut text.\n- Fixed: a card line that denies a relation, such as \"not established friends\" or \"they aren't friends yet\", no longer makes the two Creators friends.\n- Changed: the Creator settings tab that holds Delete is now called \"Tools & delete\", so you can find it.\n- Fixed: a double tap on \"Resolve\" for a Support ticket writes one line and gets one Creator reply.\n- Fixed: two subscription prices saved at the same time both stay saved.\n- Fixed: one damaged stored row no longer stops a Creator's request list or a scheduled follow-up, and a damaged character card gives a clear error when you refresh a conversation schedule.\n- Fixed: \"Save to Slurp\" from a chat checks that the chat has that character.",
+          "highlight": false
+        },
+        {
           "version": "0.4.22",
           "date": "2026-11-13",
           "notes": "- Fixed: A collab or couple post now shows every partner in its picture. A nude picture no longer gets clothes from the Creator's card, the Stage appearance or a saved look. \"Completely naked\" counts as no clothes. (#2274)\n- Changed: A joint post draws its partners in only at a clothed level; a nude or explicit picture still needs the spice consent check. A viewpoint the written scene names now wins over the weighted camera pick. A rewritten prompt that kept a viewpoint phrase is not given a second one. The image connection's own instructions now win on style and format; Slurp keeps who is in the picture, nude or clothed, and the outfit.",
@@ -1209,12 +1215,6 @@
           "version": "0.4.4",
           "date": "2026-10-26",
           "notes": "- Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.\n- Live pictures about once per minute, and private shows at the Backstage price and length.\n- Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.\n- \"X is live\" notices, a thank-you post after each show, and a Backstage > Live shows page.\n- The cam is told in words on the stage, so a show works without pictures; pictures follow those words. A live Creator's Moments tile opens the show. Live is portrait on every screen, with a slim top bar.",
-          "highlight": false
-        },
-        {
-          "version": "0.4.3",
-          "date": "2026-10-26",
-          "notes": "- Slurp starts again on Engine builds with zod 4. The feed post and Creator generation routes no longer stop at load with \"Right-hand side of 'instanceof' is not an object\" (zod 4 has no `ZodEffects`); they extend the plain object schemas instead.",
           "highlight": false
         }
       ]

@@ -34,4 +34,17 @@ for (const path of [
   assert.match(read(path), /slpCreatorReserveFingerprintFor\(/u, path);
 }
 
+// A post answer cut off by the token limit goes to the correction turn, which asks for a shorter post; an answer
+// that still closes on `}` is kept even when a stray quote fools the scan.
+assert.match(prompt, /jsonishLooksTruncated\(answer\) && !\/\[\}\\\]\]/u);
+assert.match(prompt, /error\.message === SLURP_POST_CUT_OFF[\s\S]*Write a shorter post/u);
+
+// "Resolve" claims the Creator before it reads the desk, so a double tap gets one line and one reply.
+const desk = read("features/messages/desk/slp-desk-routes.ts");
+const resolve = desk.slice(desk.indexOf('"/slurp/desk/ticket/resolve"'), desk.indexOf('"/slurp/desk/offer/answer"'));
+assert.ok(
+  resolve.indexOf("resolving.add(") > 0 && resolve.indexOf("resolving.add(") < resolve.indexOf("readSlurpSupportDesk("),
+);
+assert.match(resolve, /finally \{\s*resolving\.delete\(/u);
+
 console.log("slurp2 review fixes regression checks passed");
