@@ -34,12 +34,16 @@ import {
   ltmRecallBudgetMemories,
   ltmRecallBudgetWithLegacyCount,
   type LtmChatMemoriesMode,
+  type LtmChatReadFrom,
 } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import {
   ChatMemoriesStatusLine,
   chatMemoriesDescriptionKey,
   chatMemoriesLabelKey,
   chatMemoriesModes,
+  chatReadFromDescriptionKey,
+  chatReadFromLabelKey,
+  chatReadFromOptions,
 } from "./chat-memories";
 
 // One compact look for every "Use the default" button here, so it sits level with the fields beside it.
@@ -51,6 +55,8 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
   const recallStyleDescriptionId = useId();
   const chatMemoriesDescriptionId = useId();
   const chatMemoriesLabelId = useId();
+  const readFromLabelId = useId();
+  const readFromDescriptionId = useId();
   const [pending, setPending] = useState(false);
   // A pending save keeps its controls focusable (aria-disabled, not `disabled`), so this guard ignores input meanwhile.
   const pendingRef = useRef(false);
@@ -109,6 +115,13 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
   const updateChatMemories = (mode: LtmChatMemoriesMode | null) =>
     void runUpdate(async () => {
       await props.onChatSettingsChange?.({ longTermMemoryChatMemories: mode });
+      await chatMemories.refetch();
+    });
+  // The server stores no value until the choice is changed, and an older server sends none: both read as Messages.
+  const readFrom: LtmChatReadFrom = chatMemories.data?.readFrom ?? "messages";
+  const updateReadFrom = (value: LtmChatReadFrom) =>
+    void runUpdate(async () => {
+      await props.onChatSettingsChange?.({ longTermMemoryChatReadFrom: value });
       await chatMemories.refetch();
     });
   const settings = props.chatSettings ?? {};
@@ -255,6 +268,38 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
               {localizeUi("ui.longTermMemory.chatsettings.useGlobalDefault")}
             </Button>
           ) : null}
+        </div>
+      ) : null}
+      {props.chatId && effectiveChatMemories && effectiveChatMemories !== "manual" ? (
+        <div data-ltm-chat-read-from-field className="space-y-1 text-[0.625rem] font-medium">
+          <span id={readFromLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
+            {localizeUi("ui.longTermMemory.chatsettings.readFrom")}
+          </span>
+          <select
+            aria-labelledby={readFromLabelId}
+            aria-describedby={readFromDescriptionId}
+            data-ltm-control="select"
+            data-ltm-chat-read-from="chat"
+            className={`${compactInputClass}${pending ? " opacity-50" : ""}`}
+            style={compactInputStyle}
+            disabled={readOnly || !chatMemories.data}
+            aria-disabled={pending || undefined}
+            value={readFrom}
+            onChange={(event) => updateReadFrom(event.target.value as LtmChatReadFrom)}
+          >
+            {chatReadFromOptions.map((option) => (
+              <option key={option} value={option}>
+                {localizeUi(chatReadFromLabelKey(option))}
+              </option>
+            ))}
+          </select>
+          <p
+            id={readFromDescriptionId}
+            data-ltm-chat-read-from-description
+            className="text-[0.6875rem] font-normal leading-snug text-[var(--muted-foreground)]"
+          >
+            {localizeUi(chatReadFromDescriptionKey(readFrom))}
+          </p>
         </div>
       ) : null}
       {props.chatId && effectiveChatMemories === "manual" ? (

@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.6.3 — 2026-11-16
+
+- A chat can read its summaries instead of its messages in the background. Set "Read from" to Summaries in Chat Settings under "Memories from this chat". A summary is read once it covers a finished stretch, and one that keeps changing stays in Sources. The default stays Messages, so no chat changes until you pick Summaries.
+
 ## 1.6.2 — 2026-11-16
 
 - Background import no longer reads a message piece that failed again each time a later piece closes; it is read again on Retry in Chat Settings, after a change of the extraction connection, or on the first reply after ten minutes.

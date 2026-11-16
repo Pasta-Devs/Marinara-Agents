@@ -746,17 +746,23 @@ async function main(routeScenario: RouteScenario) {
       );
       const chatMemoriesFor = async (chatId: string) =>
         app.inject({ method: "GET", url: `/api/long-term-memory/chat-memories/${chatId}`, headers });
-      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), { chatMemories: null, reading: false, hidden: null });
-      chats[1].metadata = { longTermMemoryChatMemories: "review" };
+      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), {
+        chatMemories: null,
+        readFrom: "messages",
+        reading: false,
+        hidden: null,
+      });
+      chats[1].metadata = { longTermMemoryChatMemories: "review", longTermMemoryChatReadFrom: "summaries" };
       assert.deepEqual((await chatMemoriesFor("chat-b")).json(), {
         chatMemories: "review",
+        readFrom: "summaries",
         reading: false,
         hidden: null,
       });
       chats[1].metadata = JSON.stringify({ longTermMemoryChatMemories: "everything" });
       assert.deepEqual(
         (await chatMemoriesFor("chat-b")).json(),
-        { chatMemories: null, reading: false, hidden: null },
+        { chatMemories: null, readFrom: "messages", reading: false, hidden: null },
         "an unknown stored choice reads as the global default",
       );
       chats[1].metadata = {};

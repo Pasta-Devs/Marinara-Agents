@@ -1512,6 +1512,11 @@
   "ui.longTermMemory.chatsettings.chatMemoriesAfterAReply": "답장 후",
   "ui.longTermMemory.chatsettings.chatMemoriesSampleManual": "저절로 추가되는 것은 없어요",
   "ui.longTermMemory.chatsettings.chatMemoriesSampleReview": "3개가 검토를 기다려요",
+  "ui.longTermMemory.chatsettings.readFrom": "읽을 곳",
+  "ui.longTermMemory.chatsettings.readFromMessages": "메시지",
+  "ui.longTermMemory.chatsettings.readFromSummaries": "요약",
+  "ui.longTermMemory.chatsettings.readFromMessagesDescription": "채팅이 길어지는 대로 조각 단위로 읽어요.",
+  "ui.longTermMemory.chatsettings.readFromSummariesDescription": "끝난 구간을 다룬 요약을 한 번씩 읽어요. 계속 바뀌는 요약은 소스에 남아요.",
   "ui.longTermMemory.chatsettings.memoriesFromThisChat": "이 채팅의 기억",
   "ui.longTermMemory.chatsettings.setUp": "설정",
   "ui.longTermMemory.chatsettings.setupHint": "캐릭터가 몇 주가 지나도 있었던 일을 기억해요.",
@@ -1696,6 +1701,7 @@
   "ui.longTermMemory.lastinjectionsummary.savedNewView": "보기",
   "ui.longTermMemory.lastinjectionsummary.hiddenRange": "{{from}}–{{to}}번 메시지를 기억으로 저장하고 숨겼어요",
   "ui.longTermMemory.lastinjectionsummary.hiddenOne": "{{from}}번 메시지를 기억으로 저장하고 숨겼어요",
+  "ui.longTermMemory.lastinjectionsummary.readingSummaries": "새 요약을 읽는 중…",
   "ui.longTermMemory.lastinjectionsummary.reading": "새 메시지를 읽는 중…",
   "ui.longTermMemory.lastinjectionsummary.raiseLimit": "한도 올리기"
 }

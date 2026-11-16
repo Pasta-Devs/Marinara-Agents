@@ -1512,6 +1512,11 @@
   "ui.longTermMemory.chatsettings.chatMemoriesAfterAReply": "After a reply",
   "ui.longTermMemory.chatsettings.chatMemoriesSampleManual": "Nothing is added on its own",
   "ui.longTermMemory.chatsettings.chatMemoriesSampleReview": "3 wait for you",
+  "ui.longTermMemory.chatsettings.readFrom": "Read from",
+  "ui.longTermMemory.chatsettings.readFromMessages": "Messages",
+  "ui.longTermMemory.chatsettings.readFromSummaries": "Summaries",
+  "ui.longTermMemory.chatsettings.readFromMessagesDescription": "Reads the chat in pieces as it grows.",
+  "ui.longTermMemory.chatsettings.readFromSummariesDescription": "Reads each summary once it covers a finished stretch. A summary that keeps changing stays in Sources.",
   "ui.longTermMemory.chatsettings.memoriesFromThisChat": "Memories from this chat",
   "ui.longTermMemory.chatsettings.setUp": "Set up",
   "ui.longTermMemory.chatsettings.setupHint": "Characters remember what happened, even weeks later.",
@@ -1696,6 +1701,7 @@
   "ui.longTermMemory.lastinjectionsummary.savedNewView": "View",
   "ui.longTermMemory.lastinjectionsummary.hiddenRange": "Messages {{from}}–{{to}} saved as memories and hidden",
   "ui.longTermMemory.lastinjectionsummary.hiddenOne": "Message {{from}} saved as a memory and hidden",
+  "ui.longTermMemory.lastinjectionsummary.readingSummaries": "Reading new summaries…",
   "ui.longTermMemory.lastinjectionsummary.reading": "Reading new messages…",
   "ui.longTermMemory.lastinjectionsummary.raiseLimit": "Raise limit"
 }

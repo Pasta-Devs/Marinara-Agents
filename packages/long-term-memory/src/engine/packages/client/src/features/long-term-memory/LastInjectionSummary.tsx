@@ -303,6 +303,7 @@ export function LastInjectionSummary({
   onViewSaved,
   hidden = null,
   reading = false,
+  readingSummaries = false,
   compact = false,
   // D27 uses initial-load state for the title, so a retry needs its own in-flight
   // guard: without it, a cached-data refetch could be restarted by repeated clicks.
@@ -334,6 +335,8 @@ export function LastInjectionSummary({
   onViewSaved?: () => void;
   hidden?: { from: number; to: number } | null;
   reading?: boolean;
+  /** The chat reads its summaries, not its messages, so the read in progress says so. */
+  readingSummaries?: boolean;
   compact?: boolean;
   retryPending?: boolean;
 }) {
@@ -542,7 +545,11 @@ export function LastInjectionSummary({
         ) : null}
         {reading ? (
           <CardRow busy compact={compact} data-ltm-card-saved="reading">
-            {localizeUi("ui.longTermMemory.lastinjectionsummary.reading")}
+            {localizeUi(
+              readingSummaries
+                ? "ui.longTermMemory.lastinjectionsummary.readingSummaries"
+                : "ui.longTermMemory.lastinjectionsummary.reading",
+            )}
           </CardRow>
         ) : null}
       </div>

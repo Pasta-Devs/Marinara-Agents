@@ -19,7 +19,8 @@ scoped context during pre-generation.
 Memories from chats (Memory Settings → Extraction) turns on background import:
 Collect them, I'll review imports new message pieces into the Review, and Save
 them for me also accepts the low-risk suggestions. Chat summaries are not read
-in the background: import them by hand from Sources. A chat can choose
+in the background unless a chat sets Read from to Summaries in its Chat Settings;
+then it reads its finished summaries instead of its messages, never both. A chat can choose
 differently in its Chat Settings, and Mari's setup asks the same question in its
 How step.
 
