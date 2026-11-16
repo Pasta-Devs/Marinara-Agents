@@ -1215,6 +1215,20 @@ async function main() {
       assert.ok(!prompts.some(readsFailedPiece), "and the piece that failed is not read again with it");
       await retryOnce();
       assert.ok(prompts.some(readsFailedPiece), "Retry reads the failed piece again");
+      // Choosing another connection, or the retry window passing, also reads the held piece again.
+      prompts.length = 0;
+      await updateLtmExtractionConfig({ connectionId: "fixture-connection-2" }, autoRoot);
+      await autoImport(failingChat.id);
+      assert.ok(prompts.some(readsFailedPiece), "another connection reads the failed piece again");
+      prompts.length = 0;
+      Date.now = () => realNow() + LTM_AUTO_IMPORT_RETRY_MS;
+      try {
+        await autoImport(failingChat.id);
+      } finally {
+        Date.now = realNow;
+      }
+      assert.ok(prompts.some(readsFailedPiece), "and so does the retry window");
+      await updateLtmExtractionConfig({ connectionId: null }, autoRoot);
       respond = () => [];
 
       // A branch imports its own message pieces, not the ones its siblings wrote after the split, and no summaries.
