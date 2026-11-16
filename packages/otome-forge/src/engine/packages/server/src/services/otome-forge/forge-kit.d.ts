@@ -190,7 +190,8 @@ declare module "@forge-kit/player-choices-server.mjs" {
   /**
    * Validates the reply's `choices` around `normalizeBeat` (called for the mainline and again for each branch, with
    * `{...options, start, cgOpen: false}`); ids are `choice-<n>`/`option-<n>` from their places in the reply, and unknown
-   * option fields are dropped. Null when anything is invalid.
+   * option fields are dropped. Null when anything is invalid; `reject`, when given, hears why first, in words a repair
+   * turn can send back to the model.
    */
   export function forgeNormalizeChoiceBeat<
     O extends object,
@@ -199,7 +200,12 @@ declare module "@forge-kit/player-choices-server.mjs" {
     raw: unknown,
     options: O,
     normalizeBeat: (raw: unknown, options: O) => B | null,
-    settings: { enabled: boolean; terminal: boolean; label?: (text: string) => string },
+    settings: {
+      enabled: boolean;
+      terminal: boolean;
+      label?: (text: string) => string;
+      reject?: (why: string) => void;
+    },
   ): (B & { choices?: KitChoice[] }) | null;
   /** Writes each speaker's `gender` from the reply's `voices` onto the segments (in place) and returns them. */
   export function forgeSpeakerGenders<S extends KitSegment>(raw: unknown, segments: S[]): S[];

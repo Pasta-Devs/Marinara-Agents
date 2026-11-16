@@ -475,6 +475,38 @@ test("a refusal is a 422 that writes nothing; a LI's thought before stage 2 is d
   );
 });
 
+test("a refused scene tells the repair turn which choice rule it broke (0.34.5)", () => {
+  // A Gemini scene kept failing with the same generic note: whatever it broke, it was never told, so the repair came
+  // back broken the same way (#2338).
+  const units = [{ id: KAI, name: "Kai Arden" }];
+  const context = {
+    node: { i: 0, kind: "beat", guide: "Rain.", cast: [KAI] } as ChapterNode,
+    units,
+    state: normalizeState({ lis: { [KAI]: {} } }),
+    last: false,
+  };
+  const option = (text: string) => ({
+    text,
+    selection: { kind: "action", text: `You ${text.toLowerCase()}.` },
+    segments: [{ speaker: "", text: "Rain." }],
+  });
+  const reply = (at: number) => ({
+    segments: [
+      { speaker: "", text: "Rain on the glass." },
+      { speaker: "Kai", text: "You're late." },
+    ],
+    choices: [{ kind: "small", at, options: [option("Wave"), option("Wait")] }],
+  });
+  assert.ok(typeof normalizeBeatReply(reply(1), context) === "object");
+  const refused = normalizeBeatReply(reply(2), context);
+  assert.equal(typeof refused, "string");
+  assert.match(
+    String(refused),
+    /^choice 1's "at" is 2; it must be the zero-based index of a mainline segment, 0 to 1/u,
+  );
+  assert.match(String(refused), /\(see the PLAYER CHOICES rules\)$/u);
+});
+
 test("a masked love interest's thought line is dropped, and each choice's and the CG's `at` moves with it", () => {
   const units = [{ id: KAI, name: "Kai Arden" }];
   const at = { i: 0, kind: "beat", guide: "Rain.", cast: [KAI] } as ChapterNode;

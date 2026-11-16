@@ -589,14 +589,23 @@ export function normalizeBeatReply(written: BeatReply, context: BeatContext): No
     }
     counts = most;
   }
+  // 0.34.5: the kit says which rule the reply broke, so the repair turn names it. A reply that broke a rule the old
+  // note did not list (an "at" past the last segment, a fifth place, a big choice before the last beat) came back
+  // broken the same way, and the scene failed.
+  let refused = "";
   const beat = forgeNormalizeChoiceBeat(
     reply,
     { start: context.node.place, cgOpen: !!context.node.cg, context } as NormalizeOptions,
     normalizeBeatBody,
-    { enabled: !context.pov, terminal: context.last && !context.date, label: forgeChoiceLabel },
+    {
+      enabled: !context.pov,
+      terminal: context.last && !context.date,
+      label: forgeChoiceLabel,
+      reject: (why) => (refused = why),
+    },
   );
   if (!beat) {
-    return "the segments or choices did not follow the format (check the PLAYER CHOICES rules: 2-4 options, a selection each, branches of 1-8 segments, distinct `at` indexes)";
+    return `${refused || "the segments or choices did not follow the format"} (see the PLAYER CHOICES rules)`;
   }
   const choices = (beat.choices ?? []) as ForgeChoice[];
   // The protagonist's own words are shown, never voiced: a cue there is only dropped (Dottore on #2325).

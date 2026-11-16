@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.5 — 2026-11-16
+
+- **A scene whose choices break a rule says which one.** When a scene's choices don't follow the format, the retry now tells the model exactly what to fix, such as "choice 2, option 3 has 10 branch segments; a small choice needs 1 to 8 in every option". Before, it always repeated the same four rules, so a scene that broke any other rule (a choice placed after the last line, a fifth place, a big choice before the chapter's last scene) failed the same way again and the chapter could not go on.
+
 ## 0.34.4 — 2026-11-16
 
 - **Condensing keeps only what matters most.** When the timeline is condensed or shortened, fitting 5,000 words now comes first: the model may leave details out entirely and keeps only the biggest choices, where each relationship stands, what changed for good, the open threads and the people who still matter. Before, it was asked to keep every choice, every relationship turn and every change, so long stories kept coming back too long.
