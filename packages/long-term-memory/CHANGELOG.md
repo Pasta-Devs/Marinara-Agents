@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.3 — 2026-11-16
 
 - A chat can read its summaries instead of its messages in the background. Set "Read from" to Summaries in Chat Settings under "Memories from this chat". A summary is read once it covers a finished stretch, and one that keeps changing stays in Sources. The default stays Messages, so no chat changes until you pick Summaries.
 
