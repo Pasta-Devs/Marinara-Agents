@@ -43,7 +43,8 @@ assert.equal(normalizeSlurpDemandTopic("   "), "");
 const service = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/messages/slp-request-action-service.ts",
 );
-assert.match(service, /if \(answered\?\.action\) return "already_answered";/u);
+assert.match(service, /row\.fingerprint === `request-action:\$\{input\.requestId\}`/u);
+assert.match(service, /parseRecord\(row\.payload\)\.requestId === input\.requestId/u);
 assert.match(service, /if \(input\.action === "aggregate" && !input\.topic\?\.trim\(\)\) return "topic_required";/u);
 // Every event this writes is thread-private.
 for (const call of service.match(/eventType: "[a-z_]+",[\s\S]{0,200}?audienceScope: "[a-z_]+"/gu) ?? []) {

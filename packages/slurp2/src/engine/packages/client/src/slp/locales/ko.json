@@ -1258,6 +1258,7 @@
   "ui.slurp.settings.creators.tabs.images": "이미지",
   "ui.slurp.settings.creators.tabs.messages": "메시지 및 가격",
   "ui.slurp.settings.creators.tabs.danger": "삭제",
+  "ui.slurp.settings.creators.tabs.tools": "도구 및 삭제",
   "ui.slurp.settings.creators.unsavedTitle": "저장하지 않은 변경 사항을 취소할까요?",
   "ui.slurp.settings.creators.unsavedDetail": "프로필 변경 사항을 저장하지 않았습니다.",
   "ui.slurp.settings.creators.discardChanges": "변경 사항 취소",
