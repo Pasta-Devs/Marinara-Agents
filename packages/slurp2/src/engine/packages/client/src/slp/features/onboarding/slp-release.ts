@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.24";
+export const SLURP2_VERSION = "0.4.25";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,15 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.25",
+    date: "2026-11-16",
+    notes: [
+      "A ponytail or braid stays in the picture, even when the card says the hair is worn that way.",
+      "Pictures can show the Creator alone: Images › One person per picture. With Storylines off, no collab partner joins a post.",
+      "Creators › Refresh looks from cards drafts the looks you tick again from their cards.",
+    ],
+  },
   {
     version: "0.4.24",
     date: "2026-11-16",

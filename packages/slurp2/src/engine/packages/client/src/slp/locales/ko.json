@@ -4084,5 +4084,19 @@
   "ui.slurp.worldClock.kind.safety": "안전",
   "ui.slurp.worldClock.counts": "크리에이터 {{creators}}명 · 게시물 {{posts}}개",
   "ui.slurp.worldClock.keep": "보관할 자동 체크포인트 수",
-  "ui.slurp.worldClock.keepDetail": "이보다 많아지면 Slurp가 가장 오래된 자동 체크포인트를 삭제합니다. 직접 저장한 체크포인트는 자동으로 삭제되지 않습니다."
+  "ui.slurp.worldClock.keepDetail": "이보다 많아지면 Slurp가 가장 오래된 자동 체크포인트를 삭제합니다. 직접 저장한 체크포인트는 자동으로 삭제되지 않습니다.",
+  "ui.slurp.settings.looks.open": "카드에서 외모 새로고침",
+  "ui.slurp.settings.looks.list": "카드가 있는 크리에이터",
+  "ui.slurp.settings.looks.task_other": "외모 {{count}}개 새로고침",
+  "ui.slurp.settings.looks.allFailed": "카드에서 외모를 만들지 못했습니다. AI 연결을 확인하고 다시 시도하세요.",
+  "ui.slurp.settings.looks.done_other": "외모 {{count}}개 새로고침됨",
+  "ui.slurp.settings.looks.partly_other": "{{count}}개 새로고침, {{failed}}개 실패",
+  "ui.slurp.settings.looks.source.override": "Stage 외모",
+  "ui.slurp.settings.looks.source.linked": "카드 외모",
+  "ui.slurp.settings.looks.source.derived": "카드에서 작성",
+  "ui.slurp.settings.looks.source.missing": "없음",
+  "ui.slurp.settings.looks.none": "아직 외모 없음",
+  "ui.slurp.settings.looks.detail": "Slurp가 체크한 크리에이터의 외모를 카드에서 다시 작성합니다. Stage 외모는 다시 Stage 외모로 저장됩니다. 체크하지 않은 크리에이터는 외모를 유지합니다.",
+  "ui.slurp.settings.looks.cost": "크리에이터당 AI 호출 1회.",
+  "ui.slurp.settings.looks.run_other": "외모 {{count}}개 새로고침"
 }

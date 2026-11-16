@@ -227,7 +227,8 @@ export function PulseClientTaskRow({
     .filter(Boolean)
     .slice(0, 2)
     .join(", ");
-  const detail = failed ? task.error : running ? who || null : [task.result, who].filter(Boolean).join(" · ");
+  // A running task may show its progress ("1/2") in `result` before it ends.
+  const detail = failed ? task.error : [task.result, who].filter(Boolean).join(" · ") || null;
   const openTask =
     task.open ??
     (task.target && onOpen

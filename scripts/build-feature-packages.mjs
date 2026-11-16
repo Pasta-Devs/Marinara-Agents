@@ -531,7 +531,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.24",
+    version: "0.4.25",
     minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
