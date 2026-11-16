@@ -1523,6 +1523,8 @@ const STORY_RULES = `
 ${R} .of-eyebrow {
   font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--of-champagne-text);
 }
+/* 0.34.8: the arc line sits under the centred page head, so it is centred too (its chapter count never splits). */
+${R} .of-story-arc { text-align: center; }
 ${R} .of-story-next {
   border-color: rgb(230 201 138 / 0.55);
   background: linear-gradient(150deg, var(--of-tint-strong), transparent 62%), var(--of-surface);
@@ -3306,12 +3308,10 @@ ${R}[dir="rtl"] .of-gate-statement { border-radius: 14px 4px 4px 14px; }`;
 
 // Dates (M5): pick who to spend time with, the activities, today's capped rewards, and the plush shelf.
 const DATES_RULES = `
-${R} .of-partners { margin: 0; min-width: 0; }
-${R} .of-partners > legend { float: inline-start; width: 100%; padding: 0; margin-bottom: 10px; }
 /* Every love interest in rows that wrap, so the screen only ever scrolls down (a row that scrolled sideways also
    widened the whole page on a phone). */
 ${R} .of-partner-list {
-  clear: both; display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; padding: 2px 2px 6px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; padding: 2px 2px 6px;
 }
 ${R} .of-partner {
   min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;

@@ -704,6 +704,18 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.8",
+          "date": "2026-11-16",
+          "notes": "- **Take them along sits in its card on an iPhone.** On a date's **Who's coming?**, the title and its icon sat on the card's top edge, with a second frame showing above it. They are now inside the card, side by side, and the Dates screen's **Who are you spending time with?** card is fixed the same way.\n- **The chapter count is centred.** On the Story home, the arc line is centred under the title, and \"chapter 3 of 5\" always stays on one line.\n- **Paint it shows painting at once.** In **Album → Dates**, tapping **Paint it** on a 4★ date shows **Painting…** right away, and the picture appears when it is ready. You no longer need to leave the screen and come back.",
+          "highlight": false
+        },
+        {
+          "version": "0.34.7",
+          "date": "2026-11-16",
+          "notes": "- **Explicit scenes engage the whole body.** Under NSFW: Explicit, sex scenes are now asked to engage the characters' entire bodies, every surface and orifice, with touch that carries the power dynamic between them. Fade and SFW stories are unchanged.",
+          "highlight": false
+        },
+        {
           "version": "0.34.6",
           "date": "2026-11-16",
           "notes": "- **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).",
@@ -809,18 +821,6 @@
           "version": "0.28.0",
           "date": "2026-11-13",
           "notes": "- **Scenes keep their shape.** The reply format a scene is written in is now stated again at the end of the request, so a model no longer drifts into prose, a code fence or stray commentary when the instructions sit far back in a long prompt. Nothing about the story changes; a malformed reply was already retried once, and this is what makes that retry unnecessary.",
-          "highlight": true
-        },
-        {
-          "version": "0.27.0",
-          "date": "2026-11-13",
-          "notes": "- **The protagonist is drawn as herself.** Image prompts now use the protagonist's presentation — man, woman, or person — derived from the pronouns chosen at run creation. Stories started with she/her pronouns painted the protagonist as a generic person before this fix.",
-          "highlight": true
-        },
-        {
-          "version": "0.26.0",
-          "date": "2026-11-13",
-          "notes": "- **Double dates.** Once a love interest has reached affection level 10, a date with him can invite a second love interest who has also reached level 10. The evening is written for the three of them: both are in every scene, and what passes between the two of them is part of it. Under Explicit Heat it can turn intimate between the three of them; below that it stays a warm evening for three.\n- **Shared affection.** A double date's affection is split evenly between the two love interests, the gift included, and each share counts against that love interest's own daily cap.\n- **Who can be invited.** Someone at level 10 with no grievance between you. A love interest whose own evening with you is still waiting cannot join until it is finished.\n- **Plainer prose, truer voices.** Everyday words, not ornate metaphors and stacked adjectives; dialogue in the register a character's own life taught them, so a common man sounds like one; and choices written plainly.",
           "highlight": true
         }
       ]

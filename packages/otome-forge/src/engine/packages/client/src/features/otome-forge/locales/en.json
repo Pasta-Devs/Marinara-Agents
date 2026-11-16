@@ -1652,7 +1652,7 @@
   "ui.otomeForge.story.arcContinueHint": "A new arc of eight to twelve chapters, with a new threat and a new question. Then you choose again.",
   "ui.otomeForge.story.arcHeading": "Arc {{number}}",
   "ui.otomeForge.story.arcHeadingBefore": "Before the arcs",
-  "ui.otomeForge.story.arcLine": "Arc {{label}} · chapter {{chapter}} of {{total}}",
+  "ui.otomeForge.story.arcLine": "Arc {{label}} · chapter\u00a0{{chapter}}\u00a0of\u00a0{{total}}",
   "ui.otomeForge.story.arcNewcomer": "Meet someone new",
   "ui.otomeForge.story.arcNewcomerHint": "A new arc that brings someone new into your life, and into everyone else's.",
   "ui.otomeForge.story.arcPlanning": "Planning the next arc…",

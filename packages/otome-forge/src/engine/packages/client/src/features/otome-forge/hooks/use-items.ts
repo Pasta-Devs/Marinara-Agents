@@ -37,10 +37,12 @@ export const albumQueryKey = (runKey: string) => ["otome-forge", "album", runKey
 export const shopQueryKey = (runKey: string) => ["otome-forge", "shop", runKey] as const;
 /** #2151: Tarot night's deck and open reading (C/screens/dates/TarotNight.tsx), one query per love interest under it. */
 export const tarotQueryKey = (runKey: string) => ["otome-forge", "tarot", runKey] as const;
+/** GET /runs/:run/dates (C/screens/dates/DateNight.tsx useDates): the dates won from Wish, with their place pictures. */
+export const datesQueryKey = (runKey: string) => ["otome-forge", "dates", runKey] as const;
 
 /**
- * Everything an item can change: what Wish (and its Shop), the Wardrobe, the Album, Home, Tarot night's deck and the run
- * view show.
+ * Everything an item can change: what Wish (and its Shop), the Wardrobe, the Album and its Dates, Home, Tarot night's
+ * deck and the run view show. 0.34.8: the dates too, so a date's Paint it shows the painting it started at once.
  * Resolves once the screens on show have read it again, so a button that waited on the change never shows the old item
  * in between.
  */
@@ -52,6 +54,7 @@ export async function invalidateCollection(queryClient: QueryClient, runKey: str
     albumQueryKey(runKey),
     homeQueryKey(runKey),
     tarotQueryKey(runKey),
+    datesQueryKey(runKey),
   ];
   await Promise.all([...keys, runQueryKey(runKey)].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }

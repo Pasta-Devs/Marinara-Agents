@@ -1,5 +1,15 @@
 # Otome Hearth release notes
 
+## 0.34.8 — 2026-11-16
+
+- **Take them along sits in its card on an iPhone.** On a date's **Who's coming?**, the title and its icon sat on the card's top edge, with a second frame showing above it. They are now inside the card, side by side, and the Dates screen's **Who are you spending time with?** card is fixed the same way.
+- **The chapter count is centred.** On the Story home, the arc line is centred under the title, and "chapter 3 of 5" always stays on one line.
+- **Paint it shows painting at once.** In **Album → Dates**, tapping **Paint it** on a 4★ date shows **Painting…** right away, and the picture appears when it is ready. You no longer need to leave the screen and come back.
+
+## 0.34.7 — 2026-11-16
+
+- **Explicit scenes engage the whole body.** Under NSFW: Explicit, sex scenes are now asked to engage the characters' entire bodies, every surface and orifice, with touch that carries the power dynamic between them. Fade and SFW stories are unchanged.
+
 ## 0.34.6 — 2026-11-16
 
 - **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).

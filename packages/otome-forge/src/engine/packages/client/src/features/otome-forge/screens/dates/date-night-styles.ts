@@ -114,8 +114,9 @@ ${R} .of-look-name svg { color: var(--of-champagne-text); }
 ${R} .of-looks-note { display: flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }
 
 /* #2128: Bring a gift: small cards in a row (No gift first), ringed like a look when picked. */
-${R} .of-date-gifts .of-section-title { display: flex; align-items: center; gap: 8px; }
-${R} .of-date-gifts .of-section-title svg { flex: none; color: var(--of-champagne-text); }
+/* 0.34.8: Take them along and the Dates hub's pick share the gifts' title row, icon beside the words. */
+${R} .of-date-gifts .of-section-title, ${R} .of-partners .of-section-title { display: flex; align-items: center; gap: 8px; }
+${R} .of-date-gifts .of-section-title svg, ${R} .of-partners .of-section-title svg { flex: none; color: var(--of-champagne-text); }
 ${R} .of-date-gift-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
 ${R} .of-date-gift {
   display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; cursor: pointer; text-align: center;

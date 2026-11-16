@@ -61,11 +61,9 @@ import { Reader } from "../reader/Reader";
 import { playQueryKey, usePlay } from "./DatesHub";
 import { LookPicker, wornDateLook } from "./LookPicker";
 import { useWardrobe } from "../wardrobe/Wardrobe";
-import { shopQueryKey, wardrobeQueryKey } from "../../hooks/use-items";
+import { datesQueryKey, shopQueryKey, wardrobeQueryKey } from "../../hooks/use-items";
 import { PLACE_NAME_KEYS } from "./PlacePicker";
 import { WaitQuiz } from "../story/PersonalityQuiz";
-
-export const datesQueryKey = (runKey: string) => ["otome-forge", "dates", runKey] as const;
 
 /** GET /runs/:run/dates: the dates won from Wish with their playthroughs, and every date not counted yet or counted. */
 export function useDates(runKey: string) {
@@ -75,6 +73,9 @@ export function useDates(runKey: string) {
     queryFn: () => otome.get<DatesView>(`${runPath(runKey)}/dates`),
     // A plan left mid-write can still finish on the server, so a list cached earlier may miss that date.
     refetchOnMount: "always",
+    // 0.34.8: a won date's place painting in the background (Album → Dates, Paint it) is read again until it lands.
+    refetchInterval: (query) =>
+      query.state.data?.pulled?.some(({ item }) => item.art?.state === "pending") ? 4_000 : false,
   });
 }
 
@@ -588,10 +589,18 @@ function CompanyPicker({ view, playedBy, held, value, onChange }: CompanyPickerP
   const { t } = useTranslation();
   const id = useId();
   return (
-    <fieldset className="of-section of-glass of-partners" aria-describedby={`${id}-hint`}>
-      <legend className="of-section-title">
-        <Users size={18} strokeWidth={1.9} aria-hidden="true" /> {t("ui.otomeForge.dateNight.companyLegend")}
-      </legend>
+    // A group with a heading, not a fieldset: Safari keeps a legend on the card's top border in a flex fieldset
+    // (.of-section), with the glass painted above it (0.34.8).
+    <div
+      role="group"
+      className="of-section of-glass of-partners"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-hint`}
+    >
+      <h2 id={`${id}-title`} className="of-section-title">
+        <Users size={18} strokeWidth={1.9} aria-hidden="true" />
+        {t("ui.otomeForge.dateNight.companyLegend")}
+      </h2>
       <p id={`${id}-hint`} className="of-hint">
         {t("ui.otomeForge.dateNight.companyHint")}
       </p>
@@ -640,7 +649,7 @@ function CompanyPicker({ view, playedBy, held, value, onChange }: CompanyPickerP
           );
         })}
       </div>
-    </fieldset>
+    </div>
   );
 }
 
