@@ -230,6 +230,12 @@ function DatePlacePaint({ item, view, actions }: { item: ItemView; view: RunView
         <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
         {t("ui.otomeForge.wish.paint")}
       </button>
+      {/* 0.34.8: painting from the tap on, not only once the dates are read again. */}
+      {busy ? (
+        <span className="of-hint" role="status">
+          {t("ui.otomeForge.wish.painting")}
+        </span>
+      ) : null}
       {error ? (
         <span className="of-notice of-notice--error of-album-date-error" role="alert">
           {error}

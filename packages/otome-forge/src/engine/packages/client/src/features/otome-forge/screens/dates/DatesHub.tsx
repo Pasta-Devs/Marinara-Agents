@@ -210,8 +210,10 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
       {view.lis.length === 0 ? (
         <p className="of-empty">{t("ui.otomeForge.dates.noCast")}</p>
       ) : (
-        <fieldset className="of-section of-glass of-partners">
-          <legend className="of-section-title">{t("ui.otomeForge.dates.pickTitle")}</legend>
+        <div role="radiogroup" className="of-section of-glass of-partners" aria-labelledby={`${shelfId}-pick`}>
+          <h2 id={`${shelfId}-pick`} className="of-section-title">
+            {t("ui.otomeForge.dates.pickTitle")}
+          </h2>
           <div className="of-partner-list">
             {view.lis.map((item) => {
               const accent = accentOf(item);
@@ -241,7 +243,7 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
               );
             })}
           </div>
-        </fieldset>
+        </div>
       )}
 
       {partner ? (
