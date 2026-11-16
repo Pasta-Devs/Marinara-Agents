@@ -1098,6 +1098,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.25",
+          "date": "2026-11-16",
+          "notes": "- Fixed: a hairstyle the card says is \"worn\" a certain way (\"hair worn in a high ponytail\") was read as clothing and left out of the picture. (#175)\n- Fixed: with Storylines off, explicit posts and occasions still brought in collab and couple partners from saved pairs and old collabs. (#151)\n- Added: Images › \"One person per picture\". Post pictures then show the Creator alone, with no partner, guest or collab partner drawn in. (#151)\n- Added: Backstage › Creators › \"Refresh looks from cards\". Slurp drafts each ticked Creator's look again from the card, as a Pulse task. One AI call per Creator. (#179)\n- Fixed: switching back to the Slurp tab no longer counts ad impressions again and rotates the ads.\n- Fixed: a fast second toggle in the events list no longer undoes the first one.\n- Fixed: a persona's Stir play can only be undone by that persona, also when no persona is sent.\n- Fixed: a double tap on a Life panel condition adds it once.",
+          "highlight": false
+        },
+        {
           "version": "0.4.24",
           "date": "2026-11-16",
           "notes": "- Fixed: cut-off post checks skip bracketed labels before the JSON object, schedule refresh rejects parsed non-object cards, and a relation denial no longer cancels an affirmed bond in a later clause.",
@@ -1209,12 +1215,6 @@
           "version": "0.4.6",
           "date": "2026-10-28",
           "notes": "- Niches: the card reading now names each Creator's page niche (main + up to two side niches, from a fixed list). The reading refreshes once for every Creator.\n- Post jobs: each ordinary post gets a kind (try-on haul, gym set, finished commission, stream setup, fan request, teaser, …). The niche weighs the jobs, the main niche keeps at most half of the last 8 posts, and a Creator never repeats one of their last 3 jobs. Spice is not changed.\n- Card notes edits keep the niche.\n- Jobs fit the post: a job with its own place (gym, kitchen, stage) only goes on a post with no place yet, intimate jobs need a card heat of at least flirty, and avoided topics drop the job.\n- The card reading refreshes once for every Creator; on a card you never edited, the heat range may shift a little with the new reading.",
-          "highlight": false
-        },
-        {
-          "version": "0.4.5",
-          "date": "2026-10-28",
-          "notes": "- Outfits change: a Creator who never had a wardrobe gets one filled from the card once (a closet you emptied stays empty), so pictures stop showing the same clothes.\n- Pictures follow your image style: a painted style no longer gets \"personal photograph\" words. In the story it is still a photo.\n- Automatic captions are short lines under the picture (about 40–160 characters, cut at a sentence end above 280).\n- Halloween costume contest in October (Settings › Stir › Drama): three Creators post costumes, you pick the winner, the winner posts a reward set.\n- Live recaps are built from the show (what you got, goals, coins, top tipper), so two shows never post the same text.\n- The daily world tick sees the recent themes, so the feed no longer gets \"Cozy\" trends day after day.\n- Fewer wasted slots: the planner stops adding post slots past posts per day, and one slot opens one campaign.",
           "highlight": false
         }
       ]

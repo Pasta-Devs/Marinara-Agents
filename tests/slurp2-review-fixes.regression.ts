@@ -270,3 +270,13 @@ assert.match(readFileSync(join(clientRoot, "features/ads/slp-ads-hooks.ts"), "ut
 const eventsPanel = readFileSync(join(clientRoot, "features/world/SlpPlatformEventsPanel.tsx"), "utf8");
 assert.match(eventsPanel, /const current = \(\) => pending\.current \?\? events;/u);
 assert.doesNotMatch(eventsPanel, /onSave\(events\./u);
+
+// Review: the Stir view offers Undo only to the persona that made the play; one person per picture also drops a stored cast.
+assert.match(
+  read("features/assist/slp-stir-service.ts"),
+  /play\.personaId && play\.personaId !== personaId \? \{ \.\.\.play, undoable: false \}/u,
+);
+assert.match(
+  read("features/media/slp-images-service.ts"),
+  /const companionIds = input\.settings\.imageOnePerson \? undefined : input\.companionIds;/u,
+);
