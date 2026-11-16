@@ -52,7 +52,11 @@ const LONG_DATE = {
 /** The scene accepting her invitation registers (SH/dates.ts clearAirSceneKey). */
 const SCENE = `story-clear-air-${MIR}-1`;
 
-function createStub({ images = false, arc = null }: { images?: boolean; arc?: Json | null } = {}) {
+function createStub({
+  images = false,
+  ask = false,
+  arc = null,
+}: { images?: boolean; ask?: boolean; arc?: Json | null } = {}) {
   const calls: Call[] = [];
   // 0.34.8: with an image connection, a won 4★ date's first open paints its place in the background.
   let placeArt: Json | null = null;
@@ -75,7 +79,7 @@ function createStub({ images = false, arc = null }: { images?: boolean; arc?: Js
       openingSituation: "",
       places: {},
       content: { heat: "sfw", darkness: "angst", limits: {}, custom: [] },
-      images: { connectionId: images ? "conn-image" : null, rating: "sfw", ask: false, expressions: true },
+      images: { connectionId: images ? "conn-image" : null, rating: "sfw", ask, expressions: true },
       connections: { narration: "conn-text" },
       // Voices off; the reader reads these settings when the clear-air scene opens.
       audio: { tts: false },
@@ -323,7 +327,8 @@ function createStub({ images = false, arc = null }: { images?: boolean; arc?: Js
     }
     // The first open marks the place pending and answers once released; its paint lands on a later read.
     if (images && path === `${base}/items/${WON_DATE.id}/open`) {
-      placeArt = { state: "pending", startedAt: now() };
+      // With Ask before painting the open only holds the paint for the next tap (S/art/outfits.ts queueItemArt).
+      placeArt = ask ? { state: "waiting-consent" } : { state: "pending", startedAt: now() };
       return openHeld.then(() => ({ status: 200, json: { item: { ...WON_DATE, art: placeArt } } }));
     }
     if (path === `${base}/art/keepsake`) {
@@ -870,4 +875,27 @@ test("Otome Hearth 0.34.8: Album → Dates Paint it shows painting at once and t
   await expect(card.getByRole("status")).toHaveCount(0, { timeout: 15_000 });
   await expect(paint).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("album-date-painted.png") });
+});
+
+test("Otome Hearth 0.34.8: with Ask before painting, a date's first Paint it holds the paint and never says painting", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  const stub = createStub({ images: true, ask: true });
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  await press(dock(root, "Album"));
+  await press(root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true }));
+  const card = root.locator(".of-album-date").filter({ hasText: "An Evening at the Aquarium" });
+  const paint = card.getByRole("button", { name: "Paint the place of An Evening at the Aquarium" });
+  await press(paint);
+  // The open only holds the paint (Dottore, #2349): no Painting… while it waits, or after.
+  await expect(paint).toHaveAttribute("aria-disabled", "true");
+  await expect(card.getByText("Painting…")).toHaveCount(0);
+  stub.releaseOpen();
+  await expect(paint).toHaveAttribute("aria-disabled", "false");
+  await expect(card.getByText("Painting…")).toHaveCount(0);
 });
