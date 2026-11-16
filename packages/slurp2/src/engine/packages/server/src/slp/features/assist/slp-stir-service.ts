@@ -312,7 +312,7 @@ export async function undoSlpStirPlay(
 ): Promise<SlpAssistOutcome<{ play: SlpStirPlay; kept: number }>> {
   const claimed = await mutateSlurpStirPlays<SlurpStoredStirPlay | "gone" | "cant">(db, (plays) => {
     const play = plays.find((entry) => entry.id === id);
-    if (!play || (personaId && play.personaId && play.personaId !== personaId))
+    if (!play || (play.personaId && play.personaId !== personaId))
       return { plays, result: "gone" as const };
     if (play.undone || !play.undoable) return { plays, result: "cant" as const };
     return {

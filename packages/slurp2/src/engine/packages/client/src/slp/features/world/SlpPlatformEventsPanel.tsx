@@ -1,6 +1,6 @@
 import { useSlpStoryTimeline } from "./slp-story-hooks";
 import { CalendarDays, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -67,6 +67,17 @@ export function SlurpPlatformEventsSettings({
   onStartInStir?: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  // A second toggle before the first save returns builds on the first, not on the old `events` prop.
+  const pending = useRef<SlurpPlatformEvent[] | null>(null);
+  const current = () => pending.current ?? events;
+  const commit = async (next: SlurpPlatformEvent[]) => {
+    pending.current = next;
+    try {
+      return await onSave(next);
+    } finally {
+      if (pending.current === next) pending.current = null;
+    }
+  };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SlurpPlatformEvent | null>(null);
   const timeline = useSlpStoryTimeline();
@@ -106,21 +117,21 @@ export function SlurpPlatformEventsSettings({
   const save = async () => {
     const parsed = draft && slurpPlatformEventSchema.safeParse(draft);
     if (!parsed?.success) return;
-    const exists = events.some((item) => item.id === parsed.data.id);
+    const exists = current().some((item) => item.id === parsed.data.id);
     const next = exists
-      ? events.map((item) => (item.id === parsed.data.id ? parsed.data : item))
-      : [...events, parsed.data];
-    if (await onSave(next)) setSelectedId(null);
+      ? current().map((item) => (item.id === parsed.data.id ? parsed.data : item))
+      : [...current(), parsed.data];
+    if (await commit(next)) setSelectedId(null);
   };
   const remove = async (item: SlurpPlatformEvent) => {
-    if (!events.some((entry) => entry.id === item.id)) {
+    if (!current().some((entry) => entry.id === item.id)) {
       setSelectedId(null);
       return;
     }
-    if (await onSave(events.filter((entry) => entry.id !== item.id))) setSelectedId(null);
+    if (await commit(current().filter((entry) => entry.id !== item.id))) setSelectedId(null);
   };
   const toggle = (item: SlurpPlatformEvent) =>
-    void onSave(events.map((entry) => (entry.id === item.id ? { ...entry, enabled: !entry.enabled } : entry)));
+    void commit(current().map((entry) => (entry.id === item.id ? { ...entry, enabled: !entry.enabled } : entry)));
   const restore = async () => {
     const confirmed = await showConfirmDialog({
       title: t("ui.slurp.settings.events.restore", { defaultValue: "Restore default events" }),
@@ -130,7 +141,7 @@ export function SlurpPlatformEventsSettings({
       confirmLabel: t("ui.slurp.settings.events.restore", { defaultValue: "Restore default events" }),
       cancelLabel: t("ui.slurp.actions.cancel"),
     });
-    if (confirmed && (await onSave(slurpPlatformEventsDefault()))) setSelectedId(null);
+    if (confirmed && (await commit(slurpPlatformEventsDefault()))) setSelectedId(null);
   };
 
   const editor = draft && (

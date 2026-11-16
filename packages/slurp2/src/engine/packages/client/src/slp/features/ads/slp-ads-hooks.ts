@@ -13,6 +13,9 @@ export function useSlurpInlineAds(personaId: string | null, creatorId?: string |
       ),
     enabled: Boolean(personaId),
     staleTime: 60_000,
+    // Each fetch records an impression and rotates the ads; a tab switch is not a new view.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 export function useHideSlurpAd() {
