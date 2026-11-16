@@ -212,6 +212,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.27.6",
+          "date": "2026-11-16",
+          "notes": "- Maintenance rebuild for the shared choice-check helper. Gacha Forge's player choices work exactly as before.",
+          "highlight": false
+        },
+        {
           "version": "1.27.5",
           "date": "2026-10-29",
           "notes": "- Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.",
@@ -323,12 +329,6 @@
           "version": "1.24.5",
           "date": "2026-10-26",
           "notes": "- When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat at once and acts from its next turn. This works for your team and for enemies, and a fight now ends only when one side has nobody left. Moving and retreating never pull a support forward. A fight started before this update is still scored by the rules it was played under.",
-          "highlight": false
-        },
-        {
-          "version": "1.24.4",
-          "date": "2026-10-26",
-          "notes": "- Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.",
           "highlight": false
         }
       ]
@@ -704,6 +704,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.6",
+          "date": "2026-11-16",
+          "notes": "- **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).",
+          "highlight": false
+        },
+        {
           "version": "0.34.5",
           "date": "2026-11-16",
           "notes": "- **A scene whose choices break a rule says which one.** When a scene's choices don't follow the format, the retry now tells the model exactly what to fix, such as \"choice 2, option 3 has 10 branch segments; a small choice needs 1 to 8 in every option\". Before, it always repeated the same four rules, so a scene that broke any other rule (a choice placed after the last line, a fifth place, a big choice before the chapter's last scene) failed the same way again and the chapter could not go on.",
@@ -815,12 +821,6 @@
           "version": "0.26.0",
           "date": "2026-11-13",
           "notes": "- **Double dates.** Once a love interest has reached affection level 10, a date with him can invite a second love interest who has also reached level 10. The evening is written for the three of them: both are in every scene, and what passes between the two of them is part of it. Under Explicit Heat it can turn intimate between the three of them; below that it stays a warm evening for three.\n- **Shared affection.** A double date's affection is split evenly between the two love interests, the gift included, and each share counts against that love interest's own daily cap.\n- **Who can be invited.** Someone at level 10 with no grievance between you. A love interest whose own evening with you is still waiting cannot join until it is finished.\n- **Plainer prose, truer voices.** Everyday words, not ornate metaphors and stacked adjectives; dialogue in the register a character's own life taught them, so a common man sounds like one; and choices written plainly.",
-          "highlight": true
-        },
-        {
-          "version": "0.25.0",
-          "date": "2026-11-13",
-          "notes": "- **Sex scenes go further.** Under Explicit Heat, the act is written like explicit erotic fanfiction: moment by moment, in graphic detail, on what each body does and feels, with the pleasure building before anyone climaxes. It no longer jumps from the first touch to the finish in a few lines.\n- **Affection by how it went.** The lead earns 150 for the truth or Opened up, 100 for a standoff, Almost or no climax, and 50 for a walkout or Shut out. Route chapters follow the same rule. The second love interest earns 50 (was 60).\n- **Dubious consent and non-consent actually happen.** When either is set to Allow, the story treats them as something that may happen, not just a warning label. Within the Lines and Veils, a love interest or villain may press on past a refusal. A notice in Settings → Content explains this while either limit is open. Raising Heat no longer silently resets a consent limit you set to Allow.",
           "highlight": true
         }
       ]

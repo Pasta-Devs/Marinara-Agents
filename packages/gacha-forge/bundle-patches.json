@@ -2304,6 +2304,20 @@
               "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.\"]},{version:\"1.27.4\",fixed:["
             }
           ]
+        },
+        {
+          "version": "1.27.6",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.5\"",
+              "replace": "ds=\"1.27.6\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared choice-check helper. Gacha Forge's player choices work exactly as before.\"]},{version:\"1.27.5\",fixed:["
+            }
+          ]
         }
       ]
     },

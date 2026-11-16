@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.6 — 2026-11-16
+
+- **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).
+
 ## 0.34.5 — 2026-11-16
 
 - **A scene whose choices break a rule says which one.** When a scene's choices don't follow the format, the retry now tells the model exactly what to fix, such as "choice 2, option 3 has 10 branch segments; a small choice needs 1 to 8 in every option". Before, it always repeated the same four rules, so a scene that broke any other rule (a choice placed after the last line, a fifth place, a big choice before the chapter's last scene) failed the same way again and the chapter could not go on.
