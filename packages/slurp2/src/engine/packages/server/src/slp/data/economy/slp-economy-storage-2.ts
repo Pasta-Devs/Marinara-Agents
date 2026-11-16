@@ -350,11 +350,14 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
     },
     /** Set a creator's own weekly price, or clear it back to the Slurp-wide default with `null`. */
     async setCreatorSubscriptionPrice(creatorAccountId: string, price: number | null): Promise<void> {
-      const prices = await readCreatorPrices();
-      if (price === null) delete prices[creatorAccountId];
-      else if (Number.isInteger(price) && price >= 0) prices[creatorAccountId] = price;
-      else return;
-      await settingsStore.set(CREATOR_PRICES_KEY, JSON.stringify(prices));
+      // One shared map: two prices saved at once must not write over each other.
+      return enqueueFinancial(async () => {
+        const prices = await readCreatorPrices();
+        if (price === null) delete prices[creatorAccountId];
+        else if (Number.isInteger(price) && price >= 0) prices[creatorAccountId] = price;
+        else return;
+        await settingsStore.set(CREATOR_PRICES_KEY, JSON.stringify(prices));
+      });
     },
     /** Credit capped earnings for acting on an ad or for the viewer's own engagement. */
     async earnCoins(viewerAccountId: string, kind: "ad" | "engagement", note?: string): Promise<SlurpWallet> {

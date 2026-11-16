@@ -421,6 +421,7 @@
   "ui.slurp.settings.creators.tabs.images": "Obrazy",
   "ui.slurp.settings.creators.tabs.messages": "Wiadomości i ceny",
   "ui.slurp.settings.creators.tabs.danger": "Usuń",
+  "ui.slurp.settings.creators.tabs.tools": "Narzędzia i usuwanie",
   "ui.slurp.settings.creators.unsavedTitle": "Odrzucić niezapisane zmiany?",
   "ui.slurp.settings.creators.unsavedDetail": "Zmiany profilu nie są zapisane.",
   "ui.slurp.settings.creators.discardChanges": "Odrzuć zmiany",

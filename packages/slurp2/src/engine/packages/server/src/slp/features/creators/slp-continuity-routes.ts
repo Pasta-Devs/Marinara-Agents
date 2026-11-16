@@ -13,6 +13,8 @@ import {
 } from "../../data/continuity/slp-continuity-storage.js";
 import { listSlurpOpportunities } from "../../data/feed/slp-opportunity-storage.js";
 import { listSlurpSignals } from "./slp-signals-service.js";
+import { createChatsStorage } from "../../../services/storage/chats.storage.js";
+import { parseStringArray } from "../../modules/creators/slp-public-support.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { retractSlurpFact, shareSlurpFact } from "../../data/creators/slp-ltm-intake.js";
 import {
@@ -144,6 +146,9 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
       .safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     const { characterId, chatId, messageId, text, factType, subject } = body.data;
+    const chat = await createChatsStorage(app.db).getById(chatId);
+    if (!chat || !parseStringArray(chat.characterIds).includes(characterId))
+      return reply.code(404).send({ error: "This chat does not have that character." });
     const accounts = (await createSlurpStorage(app.db).listNoodlerAccounts()).filter(
       (account) => account.sourceKind === "character" && account.sourceEntityId === characterId,
     );

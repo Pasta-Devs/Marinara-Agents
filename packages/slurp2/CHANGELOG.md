@@ -1,5 +1,19 @@
 # Slurp release notes
 
+## 0.4.24 — 2026-11-16
+
+- Fixed: cut-off post checks skip bracketed labels before the JSON object, schedule refresh rejects parsed non-object cards, and a relation denial no longer cancels an affirmed bond in a later clause.
+
+## 0.4.23 — 2026-11-16
+
+- Fixed: a post no longer stops in the middle of a sentence when the model runs out of output tokens. Slurp now sees that the answer was cut off and asks the model once more for a shorter post, in place of publishing the cut text.
+- Fixed: a card line that denies a relation, such as "not established friends" or "they aren't friends yet", no longer makes the two Creators friends.
+- Changed: the Creator settings tab that holds Delete is now called "Tools & delete", so you can find it.
+- Fixed: a double tap on "Resolve" for a Support ticket writes one line and gets one Creator reply.
+- Fixed: two subscription prices saved at the same time both stay saved.
+- Fixed: one damaged stored row no longer stops a Creator's request list or a scheduled follow-up, and a damaged character card gives a clear error when you refresh a conversation schedule.
+- Fixed: "Save to Slurp" from a chat checks that the chat has that character.
+
 ## 0.4.22 — 2026-11-13
 
 - Fixed: A collab or couple post now shows every partner in its picture. A nude picture no longer gets clothes from the Creator's card, the Stage appearance or a saved look. "Completely naked" counts as no clothes. (#2274)

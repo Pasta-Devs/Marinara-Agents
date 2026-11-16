@@ -91,6 +91,29 @@ async function main() {
   assert.equal(slurpBondFromRelation("coworker at the bar")?.kind, "coworker");
   assert.equal(slurpBondFromRelation("ex-girlfriend")?.kind, "ex");
   assert.equal(slurpBondFromRelation("girlfriend"), null);
+  assert.equal(slurpBondFromRelation("not established friends"), null);
+  assert.equal(slurpBondFromRelation("they aren't friends yet"), null);
+  assert.equal(slurpBondFromRelation("never roommates"), null);
+  for (const relation of [
+    "not her bff",
+    "she isn't his bestie",
+    "not her boss",
+    "not his employee",
+    "doesn't work with him",
+    "no longer works with him",
+    "never lives with her",
+  ])
+    assert.equal(slurpBondFromRelation(relation), null, relation);
+  assert.equal(slurpBondFromRelation("ex-girlfriend, not friends")?.kind, "ex");
+  assert.equal(slurpBondFromRelation("brother, not friends")?.kind, "family");
+  assert.equal(slurpBondFromRelation("roommate, not friends")?.kind, "roommate");
+  assert.equal(slurpBondFromRelation("coworker, not friends")?.kind, "coworker");
+  assert.equal(slurpBondFromRelation("Not a lover, best friend")?.level, 3);
+  assert.equal(slurpBondFromRelation("not just a friend, my best friend")?.level, 3);
+  assert.equal(slurpBondFromRelation("not friends, but best friends")?.level, 3);
+  assert.equal(slurpBondFromRelation("best friend, never apart")?.kind, "friend");
+  assert.equal(slurpBondFromRelation("coworker, can't stand him")?.kind, "coworker");
+  assert.equal(slurpBondFromRelation("sister she never sees")?.kind, "family");
   // R3: family is a bond of its own, never romance; a "mom friend" or a "family friend" is a friend.
   assert.equal(slurpBondFromRelation("sister")?.kind, "family");
   assert.equal(slurpBondFromRelation("her daughter")?.kind, "family");
