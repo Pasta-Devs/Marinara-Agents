@@ -101,7 +101,8 @@ export async function planSlurpPostSpice(
     /** This post's planned level and the Creator's ceiling, both under the Slurp-wide limit. */
     explicitLevel: SlurpExplicitLevel;
     dialLevel: SlurpExplicitLevel;
-    collabs: readonly SlurpCreatorCollab[];
+    /** `null` while Storylines is off: no collab or couple partner joins the post (#151). */
+    collabs: readonly SlurpCreatorCollab[] | null;
     recentPosts: readonly { metadata?: unknown }[];
     sequence: number;
     variation: SlurpPostVariation | null;
@@ -121,7 +122,7 @@ export async function planSlurpPostSpice(
   // A sponsored post, a rivalry post or a fight / breakup is about that; the spice stays for the other posts.
   const tie = input.beat?.tie;
   const partners =
-    postLevel === "explicit" && locked
+    postLevel === "explicit" && locked && input.collabs
       ? await spicePartners(db, input.account.id, input.collabs, tie).catch(() => ({
           collabs: [],
           ...(tie?.kind === "collab" || tie?.kind === "couple" ? { madeWith: null } : {}),

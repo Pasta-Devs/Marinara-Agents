@@ -208,6 +208,8 @@
   "ui.slurp.settings.images.loading": "Wczytywanie ustawień obrazów…",
   "ui.slurp.settings.images.keepOriginal": "Zachowaj oryginalne pliki obrazów",
   "ui.slurp.settings.images.keepOriginalDetail": "Zapisuje każdy obraz tak, jak wysłał go dostawca, więc ComfyUI zachowuje w pliku prompt i workflow. Pliki są kilka razy większe.",
+  "ui.slurp.settings.images.onePerson": "Jedna osoba na zdjęciu",
+  "ui.slurp.settings.images.onePersonDetail": "Zdjęcia postów pokazują samego Twórcę. Partner, gość ani partner współpracy nie trafia na obraz. Włącz, jeśli Twój model obrazów myli dwie osoby.",
   "ui.slurp.settings.images.loadError": "Nie udało się wczytać ustawień obrazów.",
   "ui.slurp.settings.prompts.generationGuidance": "Wskazówki generowania",
   "ui.slurp.settings.prompts.editGenerationGuidance": "Edytuj wskazówki generowania",

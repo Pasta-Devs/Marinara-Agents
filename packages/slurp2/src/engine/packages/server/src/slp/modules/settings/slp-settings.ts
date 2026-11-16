@@ -217,17 +217,16 @@ export const slurpSettingsSchema = z.object({
   pageConnectionId: z.string().nullable().default(null),
   /** The LLM connection that enhances picture prompts; null = Slurp's text connection. */
   imagePromptConnectionId: z.string().nullable(),
-  /**
-   * Engine image style profile for Slurp pictures. Null uses the connection's profile, then the
+  /** Engine image style profile for Slurp pictures. Null uses the connection's profile, then the
    * Engine default. When set, the connection's own prompt prefixes are left out: a chosen style
-   * replaces them rather than stacking on top of them.
-   */
+   * replaces them rather than stacking on top of them. */
   imageStyleProfileId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
   imagePromptInterpretation: z.string().max(20_000),
   enableImageInterpretation: z.boolean(),
   imageGenerationUseAvatarReferences: z.boolean(),
   imageKeepOriginalFiles: z.boolean(),
+  imageOnePerson: z.boolean(),
   imageGenerationIncludeDescriptions: z.boolean(),
   /** How the look reaches the picture prompt: `slurpApplyImageLook`. */
   imageAppearanceMode: z.enum(["writer", "insert", "both"]),
@@ -544,6 +543,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   // reference image simply ignores the references.
   imageGenerationUseAvatarReferences: true,
   imageKeepOriginalFiles: false,
+  imageOnePerson: false,
   imageGenerationIncludeDescriptions: true,
   imageAppearanceMode: "writer",
   appearanceProfileMode: "high_confidence",

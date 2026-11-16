@@ -1054,6 +1054,8 @@
   "ui.slurp.settings.images.loading": "이미지 설정 불러오는 중…",
   "ui.slurp.settings.images.keepOriginal": "원본 이미지 파일 유지",
   "ui.slurp.settings.images.keepOriginalDetail": "제공자가 보낸 그대로 이미지를 저장해 ComfyUI 프롬프트와 워크플로가 파일에 남습니다. 파일 크기가 몇 배 커집니다.",
+  "ui.slurp.settings.images.onePerson": "사진당 한 명",
+  "ui.slurp.settings.images.onePersonDetail": "게시물 사진에 크리에이터만 나옵니다. 파트너, 게스트, 콜라보 파트너는 그리지 않습니다. 이미지 모델이 두 사람을 섞으면 켜세요.",
   "ui.slurp.settings.images.loadError": "이미지 설정을 불러오지 못했습니다.",
   "ui.slurp.settings.prompts.generationGuidance": "생성 지침",
   "ui.slurp.settings.prompts.editGenerationGuidance": "생성 지침 편집",

@@ -208,6 +208,8 @@
   "ui.slurp.settings.images.loading": "Bildeinstellungen werden geladen…",
   "ui.slurp.settings.images.keepOriginal": "Originale Bilddateien behalten",
   "ui.slurp.settings.images.keepOriginalDetail": "Speichert jedes Bild so, wie der Anbieter es schickt. ComfyUI-Dateien behalten so Prompt und Workflow. Die Dateien sind mehrfach größer.",
+  "ui.slurp.settings.images.onePerson": "Eine Person pro Bild",
+  "ui.slurp.settings.images.onePersonDetail": "Post-Bilder zeigen den Creator allein. Kein Partner, Gast oder Collab-Partner wird mitgezeichnet. Schalte es ein, wenn dein Bildmodell zwei Personen vermischt.",
   "ui.slurp.settings.images.loadError": "Bildeinstellungen konnten nicht geladen werden.",
   "ui.slurp.settings.prompts.generationGuidance": "Generierungsanweisungen",
   "ui.slurp.settings.prompts.editGenerationGuidance": "Generierungsanweisungen bearbeiten",
