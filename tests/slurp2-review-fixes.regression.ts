@@ -69,6 +69,7 @@ for (const answer of [
 ])
   assert.equal(parsePost(answer).content, "Complete.");
 assert.throws(() => parsePost('[Post] {"title":"x","content":"The cat sat on the'), /cut off/u);
+assert.throws(() => parsePost('[example] {"complete":true} [{"title":"x","content":"Complete."}'), /cut off/u);
 for (const tail of ["", " More prose."])
   assert.equal(parsePost('{"title":"Post","content":"Wearing 6" heels."}' + tail).content, 'Wearing 6" heels.');
 assert.match(prompt, /error\.message === SLURP_POST_CUT_OFF[\s\S]*Write a shorter post/u);
