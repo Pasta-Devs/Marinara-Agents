@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Locator, type Page, type TestInfo } from "./fixtures/package-browser.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:http";
@@ -605,12 +605,14 @@ test("Combat has one working mute beside its fullscreen control without overlapp
     await expect.poll(() => saved.audio.muted).toBe(false);
     await forge.locator(".cbar .gf-fs-bar").click();
     await expect(page.locator(".mari-home-browser-chrome")).toBeHidden();
-    await expect(page.locator('[data-component="TopBar"]')).toBeVisible();
+    // Since Engine #9376 a package's fullscreen takes the whole screen: the Engine top bar hides too.
+    await expect(page.locator('[data-component="TopBar"]')).toBeHidden();
     await expect(forge.locator(".gf-arena")).toHaveAttribute("data-style", theme);
     await page.screenshot({ path: testInfo.outputPath(`combat-single-mute-${theme}.png`) });
     await expect(forge.locator(".gf-arena")).toHaveAttribute("data-style", theme);
     await forge.locator(".cbar .gf-fs-bar").click();
     await expect(page.locator(".mari-home-browser-chrome")).toBeVisible();
+    await expect(page.locator('[data-component="TopBar"]')).toBeVisible();
     await expect(forge.locator(".gf-arena")).toHaveAttribute("data-style", theme);
   }
 });
@@ -686,7 +688,9 @@ for (const orientation of ["landscape", "portrait"]) {
     const draft = `A ${orientation} letter that survives the keyboard resizing.`;
     await field.fill(draft);
     const phone = orientation === "portrait" ? { width: 390, height: 844 } : { width: 874, height: 402 };
-    const keyboardTop = orientation === "portrait" ? 300 : 190;
+    // The arena's short-screen layout starts at 280 px (@container gfarena). Since Engine #9376 the package's
+    // fullscreen hides the Engine's 48 px top bar too, so portrait's keyboard top is 252, the 300 it was less that bar.
+    const keyboardTop = orientation === "portrait" ? 252 : 190;
     if (iphone) {
       // Preserve the layout viewport, as iOS does; a portrait rotation happens with the letter open.
       await page.evaluate((top) => (window as any).__forgeKeyboardTop(top), keyboardTop);
@@ -709,18 +713,8 @@ for (const orientation of ["landscape", "portrait"]) {
         )
         .toBe(true);
     }
-    // The host intentionally hides its own bars for a focused package on a short touch
-    // landscape screen (globals.css); the package must respect that keyboard policy.
-    const hostHidesChrome = await page.evaluate(
-      () =>
-        matchMedia(
-          "(orientation: landscape) and (max-height: 500px) and (min-width: 640px) and (hover: none) and (any-pointer: coarse)",
-        ).matches &&
-        document.documentElement.matches(
-          "[data-mari-software-keyboard-open]:has([data-home-package-view] :focus-within)",
-        ),
-    );
-    await expect(page.locator('[data-component="TopBar"]')).toBeVisible({ visible: !hostHidesChrome });
+    // The letter is open in the package's fullscreen, which since Engine #9376 hides the Engine top bar too.
+    await expect(page.locator('[data-component="TopBar"]')).toBeHidden();
     await expect(forge.locator(".gf-bar")).toBeHidden();
     await field.fill(`${draft} Ready to send.`);
     await expect(forge.locator(".gf-arena")).toHaveAttribute("data-style", theme);
@@ -743,7 +737,8 @@ for (const orientation of ["landscape", "portrait"]) {
     if (iphone) await page.evaluate(() => (window as any).__forgeKeyboardTop(null));
     await page.setViewportSize({ width: 874, height: 402 });
     await field.blur();
-    await expect(page.locator('[data-component="TopBar"]')).toBeVisible();
+    // Still in the package's fullscreen once the keyboard closes: its own bar comes back, the Engine's stays hidden.
+    await expect(page.locator('[data-component="TopBar"]')).toBeHidden();
     await expect(forge.locator(".gf-bar")).toBeVisible();
     await expect(forge.locator(".gf-arena")).toHaveAttribute("data-style", theme);
     await expect(forge.locator(".ch-list")).toBeVisible();
