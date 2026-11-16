@@ -450,7 +450,10 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
       assert.ok(system.includes("at most 5000 words"), "half the 13–14k it condenses at");
       assert.ok(system.includes("far shorter than the timeline you are given: never copy it out"));
       assert.ok(system.includes("Compress the oldest parts the most"));
-      assert.ok(system.includes("the current state of anything that changed and stays changed"));
+      // 0.34.4 (the maintainer's): fitting comes first, and details may go; only what matters most is kept.
+      assert.ok(system.includes("Fitting the length comes first: to fit, leave details out entirely"));
+      assert.ok(system.includes("Keep only what still matters most"));
+      assert.doesNotMatch(system, /every big choice|the turns that brought it there/u, "no keep-everything list");
       // 0.34.1: nothing after the limit asks to keep every event, which brought heads back at ~7,400 words.
       assert.doesNotMatch(system, /keep every/iu, "no keep-everything line fights the 5000-word limit");
     }
@@ -600,6 +603,7 @@ test("a condensed head over its length goes back alone, told how many words to c
   assert.ok(shortening(shorten));
   assert.equal(foldedInput(shorten).timeline, filler("LONG-HEAD", 7000), "the long head alone");
   assert.ok(!JSON.stringify(shorten).includes("SUMMARY-main-"), "none of the chapters it was condensed from");
+  assert.ok(shorten[0]!.content.includes("leave details out entirely"), "a shortening may drop details too (0.34.4)");
   const [, words, cut] = shorten[0]!.content.match(
     /It is about (\d+) words\. Rewrite it in at most 5000 words: cut at least (\d+) words\./u,
   )!;

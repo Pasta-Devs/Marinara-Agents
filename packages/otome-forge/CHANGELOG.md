@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.4 — 2026-11-16
+
+- **Condensing keeps only what matters most.** When the timeline is condensed or shortened, fitting 5,000 words now comes first: the model may leave details out entirely and keeps only the biggest choices, where each relationship stands, what changed for good, the open threads and the people who still matter. Before, it was asked to keep every choice, every relationship turn and every change, so long stories kept coming back too long.
+
 ## 0.34.3 — 2026-11-16
 
 - **Retry picks up where the summary stopped.** When condensing the timeline fails because it is still too long after three shortenings, **Retry the summary** now shortens the last result again. Before, it condensed the whole timeline again and ran all three shortenings from the start, which can take half an hour on a slow model. Restarting Marinara Engine forgets the last result, so a Retry after that condenses again.
