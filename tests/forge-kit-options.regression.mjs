@@ -193,6 +193,138 @@ test("(a, c) a choice beat takes Otome's label as plain ESM", () => {
   );
 });
 
+test("(a) a refused choice beat names the rule it broke, and nothing changes without reject", () => {
+  // 0.34.5: a repair turn only said "2-4 options, a selection each, branches of 1-8 segments, distinct at indexes",
+  // so a reply that broke any other rule came back broken the same way and the scene failed (Gemini, #2338).
+  const normalizeBeat = (value) =>
+    value.segments.some((segment) => !segment.text)
+      ? { segments: value.segments.filter((segment) => segment.text).map((s) => ({ ...s })), places: [] }
+      : { segments: value.segments.map((segment) => ({ ...segment })), places: [] };
+  const option = (text, extra = {}) => ({
+    text,
+    selection: { kind: "action", text: `You ${text.toLowerCase()}.` },
+    segments: [{ text: "She nods." }],
+    ...extra,
+  });
+  const base = () => ({
+    segments: [{ text: "One." }, { text: "Two." }, { text: "Three." }],
+    choices: [{ kind: "small", at: 0, options: [option("Wave"), option("Bow")] }],
+  });
+  const refuse = (mutate, settings = {}) => {
+    const raw = base();
+    mutate(raw);
+    let why = "";
+    const beat = forgeNormalizeChoiceBeat(raw, {}, normalizeBeat, {
+      enabled: true,
+      terminal: false,
+      label: forgeChoiceLabel,
+      reject: (reason) => (why = reason),
+      ...settings,
+    });
+    assert.equal(beat, null, "the beat is still refused");
+    assert.equal(
+      forgeNormalizeChoiceBeat(raw, {}, normalizeBeat, {
+        enabled: true,
+        terminal: false,
+        label: forgeChoiceLabel,
+        ...settings,
+      }),
+      null,
+    );
+    return why;
+  };
+  assert.ok(
+    forgeNormalizeChoiceBeat(base(), {}, normalizeBeat, {
+      enabled: true,
+      terminal: false,
+      label: forgeChoiceLabel,
+      reject: assert.fail,
+    }),
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0].at = 3)),
+    /choice 1's "at" is 3; .* 0 to 2/u,
+  );
+  assert.match(
+    refuse((raw) => raw.choices.push({ ...raw.choices[0] })),
+    /choices 1 and 2 are both at 0/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0].kind = "minor")),
+    /choice 1 has kind "minor"; use "small" or "big"/u,
+  );
+  assert.match(
+    refuse((raw) => raw.choices[0].options.splice(1)),
+    /choice 1 has 1 options; give it 2, 3 or 4/u,
+  );
+  assert.match(
+    refuse(
+      (raw) => (raw.choices = [0, 1, 2, 2].map((at) => ({ kind: "small", at, options: [option("A"), option("B")] }))),
+    ),
+    /4 choice points; use at most three/u,
+  );
+  assert.match(
+    refuse(
+      (raw) =>
+        (raw.choices[0] = {
+          kind: "big",
+          at: 2,
+          options: [option("Stay", { segments: [] }), option("Go", { segments: [] })],
+        }),
+    ),
+    /choice 1 is big, but this is not the last story beat/u,
+  );
+  assert.match(
+    refuse(
+      (raw) =>
+        (raw.choices[0] = {
+          kind: "big",
+          at: 1,
+          options: [option("Stay", { segments: [] }), option("Go", { segments: [] })],
+        }),
+      { terminal: true },
+    ),
+    /the big choice is at 1; it must be at the very last mainline segment, 2/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0] = { kind: "big", at: 2, options: [option("Stay"), option("Go")] }), {
+      terminal: true,
+    }),
+    /choice 1, option 1 belongs to the big choice, so its "segments" must be EMPTY/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0].options[1].segments = Array.from({ length: 9 }, () => ({ text: "More." })))),
+    /choice 1, option 2 has 9 branch segments; a small choice needs 1 to 8/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0].options[1].text = "Wave")),
+    /two options labelled "Wave\."/u,
+  );
+  assert.match(
+    refuse((raw) => {
+      raw.choices[0].options[0].text = "Hello there.";
+      raw.choices[0].options[0].selection = { kind: "dialogue", text: "Hello there." };
+    }),
+    /option 1's label is the exact spoken line/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0].options[0].selection = { kind: "speech", text: "Hi" })),
+    /option 1 needs a "selection" of kind "dialogue" or "action"/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.segments[1].text = "")),
+    /1 mainline segment\(s\) have no "text"/u,
+  );
+  assert.match(
+    refuse((raw) => raw.choices[0].options[0].segments.push({ text: "" })),
+    /option 1's branch has a segment with no "text"/u,
+  );
+  assert.match(
+    refuse((raw) => (raw.choices[0].options[0].segments[0].choices = [])),
+    /option 1 has a choice inside its branch; never nest choices/u,
+  );
+});
+
 test("(a) voice picking takes its voice list as plain ESM", async () => {
   const empty = { enabled: true, npcDefaultMaleVoices: [], npcDefaultFemaleVoices: [] };
   const listVoices = async () => ["v1", "v2", "v3"];
