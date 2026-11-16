@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -48,11 +48,16 @@ test("Forge fills every screen, toggles inside the Engine and keeps world drafts
   const toggle = () => forge.locator(".gf-fs-bar:visible, .gf-fs-exit:visible, .gf-fs:visible").last();
   await toggle().click();
   await expect(page.locator(".mari-home-browser-chrome")).toBeHidden();
-  await expect(page.locator('[data-component="TopBar"]')).toBeVisible();
+  // Since Engine #9376 a package's fullscreen takes the whole screen: the Engine top bar hides too.
+  await expect(page.locator('[data-component="TopBar"]')).toBeHidden();
   await expect(toggle()).toHaveAttribute("aria-label", "Exit fullscreen");
   await expect(draft).toHaveValue("An unfinished world with moonlit gardens");
   await expect(draft).toHaveAttribute("data-identity", "original");
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
+  await toggle().click();
+  await expect(page.locator(".mari-home-browser-chrome")).toBeVisible();
+  // Back from fullscreen, the top bar returns, and no Forge overlay covers it.
+  await expect(page.locator('[data-component="TopBar"]')).toBeVisible();
   expect(
     await page.locator('[data-component="TopBar"]').evaluate((bar) => {
       const box = bar.getBoundingClientRect();
@@ -60,8 +65,6 @@ test("Forge fills every screen, toggles inside the Engine and keeps world drafts
     }),
     "Forge overlays cannot cover the Engine topbar",
   ).toBe(true);
-  await toggle().click();
-  await expect(page.locator(".mari-home-browser-chrome")).toBeVisible();
   await expect(draft).toHaveValue("An unfinished world with moonlit gardens");
 
   // The layout is shared by all screens, including combat's own toolbar and loading screens.
