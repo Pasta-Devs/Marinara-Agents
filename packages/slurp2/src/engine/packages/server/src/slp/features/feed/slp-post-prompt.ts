@@ -470,7 +470,8 @@ export function parseCreatorPost(content: string) {
     // Prefer a root array when one is present so its closing `]` is part of the scan. The object
     // inside an array can close while the root value is still cut off.
     const arrayStart = answer.search(/\[\s*\{/u);
-    const start = arrayStart >= 0 ? arrayStart : answer.search(/\{/u);
+    const objectStart = answer.search(/\{/u);
+    const start = arrayStart >= 0 && arrayStart < objectStart ? arrayStart : objectStart;
     const closers: string[] = [];
     let inString = false;
     let escaped = false;
