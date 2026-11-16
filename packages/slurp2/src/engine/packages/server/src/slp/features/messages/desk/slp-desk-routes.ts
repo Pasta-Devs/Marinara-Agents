@@ -102,7 +102,8 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     if (await ownsCreator(viewer.id, parsed.data.creatorAccountId))
       return reply.code(403).send({ error: "Support writes to Creators you do not run." });
-    if (resolving.has(parsed.data.creatorAccountId)) return reply.code(409).send({ error: "There is no open ticket." });
+    if (resolving.has(parsed.data.creatorAccountId))
+      return reply.code(409).send({ error: "This ticket is already being resolved." });
     resolving.add(parsed.data.creatorAccountId);
     try {
       const current = await readSlurpSupportDesk(app.db, parsed.data.creatorAccountId);

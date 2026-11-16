@@ -103,20 +103,25 @@ const FAMILY =
   /\b(mother|mom|mum|father|dad|daughter|son|sister|brother|sibling|twin|aunt|uncle|niece|nephew|cousin|grand(mother|father|ma|pa|daughter|son)|step-?\w+|(?<!co-)parent|child|mutter|vater|tochter|sohn|schwester|bruder)\b(?!['’]s\b| ?friend| ?flame)/iu;
 const FRIEND = /\b(friends?|buddy|pal|kumpel|childhood friend)\b/iu;
 // "not established friends", "aren't friends yet", "never roommates": a negation up to two words before the relation
-// word denies it. A negation elsewhere in the line ("best friend, never apart") keeps the bond.
-const DENIED =
-  /(?:\b(?:not|never|no longer|nicht|kein\w*|nie)|n['’]t)\s+(?:\S+\s+){0,2}?(?:best ?friends?|friends?|buddy|pal|kumpel|room ?mates?|flat ?mates?|house ?mates?|co-?workers?|colleagues?|freund\w*|mitbewohner\w*|kolleg\w*)\b/iu;
+// word denies that kind only, and a comma or stop ends the window. A negation elsewhere ("best friend, never apart") keeps the bond.
+const denies = (words: string) =>
+  new RegExp(
+    String.raw`(?:\b(?:not|never|no longer|nicht|kein\w*|nie)|n['’]t)\s+(?:[^\s,;.!?]+\s+){0,2}?(?:${words})\b`,
+    "iu",
+  );
+const NOT_FRIEND = denies("best ?friends?|friends?|buddy|pal|kumpel|freund\\w*");
+const NOT_ROOMMATE = denies("room ?mates?|flat ?mates?|house ?mates?|mitbewohner\\w*");
+const NOT_COWORKER = denies("co-?workers?|colleagues?|kolleg\\w*");
 
 /** What a card relation line means as a bond, or null (a partner is a couple, not a bond). */
 export function slurpBondFromRelation(relation: string): { kind: SlurpBondKind; level: number; detail: string } | null {
-  if (DENIED.test(relation)) return null;
   const detail = clampText(relation, 60);
   if (FAMILY.test(relation)) return { kind: "family", level: 1, detail };
   if (EX.test(relation)) return { kind: "ex", level: 1, detail };
-  if (BEST.test(relation)) return { kind: "friend", level: 3, detail };
-  if (ROOMMATE.test(relation)) return { kind: "roommate", level: 1, detail };
-  if (COWORKER.test(relation)) return { kind: "coworker", level: 1, detail };
-  if (FRIEND.test(relation)) return { kind: "friend", level: 1, detail };
+  if (BEST.test(relation) && !NOT_FRIEND.test(relation)) return { kind: "friend", level: 3, detail };
+  if (ROOMMATE.test(relation) && !NOT_ROOMMATE.test(relation)) return { kind: "roommate", level: 1, detail };
+  if (COWORKER.test(relation) && !NOT_COWORKER.test(relation)) return { kind: "coworker", level: 1, detail };
+  if (FRIEND.test(relation) && !NOT_FRIEND.test(relation)) return { kind: "friend", level: 1, detail };
   return null;
 }
 

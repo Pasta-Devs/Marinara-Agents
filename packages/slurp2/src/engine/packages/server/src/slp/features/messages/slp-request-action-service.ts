@@ -82,8 +82,21 @@ async function applyRequestActionOnce(
   if (!request || request.eventType !== "request_received" || request.creatorAccountId !== input.creatorAccountId) {
     return "not_found";
   }
-  const answered = (await listSlurpThreadRequests(db, input.threadId)).find((entry) => entry.id === input.requestId);
-  if (answered?.action) return "already_answered";
+  // The fingerprint survives damaged payload JSON and identifies exactly the request already answered.
+  const answers = await db
+    .select({ payload: slurpContinuityEvents.payload, fingerprint: slurpContinuityEvents.fingerprint })
+    .from(slurpContinuityEvents)
+    .where(
+      and(eq(slurpContinuityEvents.threadId, input.threadId), eq(slurpContinuityEvents.eventType, "request_action")),
+    );
+  if (
+    answers.some(
+      (row) =>
+        row.fingerprint === `request-action:${input.requestId}` ||
+        parseRecord(row.payload).requestId === input.requestId,
+    )
+  )
+    return "already_answered";
   if (input.action === "aggregate" && !input.topic?.trim()) return "topic_required";
   const creator = await createSlurpStorage(db).getNoodlerAccountById(input.creatorAccountId);
   const identity = creator ? slurpContinuityIdentityOf(creator) : null;

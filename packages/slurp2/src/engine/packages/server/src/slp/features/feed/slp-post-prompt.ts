@@ -462,12 +462,51 @@ export function slurpSceneShotsInstruction(count: number): string {
 const SLURP_POST_CUT_OFF = "The creator post answer was cut off before its JSON closed.";
 
 export function parseCreatorPost(content: string) {
-  const answer = requireModelAnswer(content, "a creator post");
+  let answer = requireModelAnswer(content, "a creator post");
   // The tolerant parser closes a JSON string the model ran out of tokens in, which published posts cut mid-sentence.
-  // Failing here sends the answer through the one correction turn instead. An answer that still ends on `}` or `]`
-  // is complete, even when a stray quote (`6" heels`) makes the scan think a string is open.
-  if (jsonishLooksTruncated(answer) && !/[}\]]\s*(?:```)?\s*$/u.test(answer)) throw new Error(SLURP_POST_CUT_OFF);
-  const parsed = parseGameJsonish(requireModelAnswer(content, "a creator post"));
+  // Failing here sends the answer through the one correction turn instead. Ignore embedded, unescaped quotes
+  // such as `6" heels` when looking for the root closer; brackets inside content cannot finish the answer.
+  if (jsonishLooksTruncated(answer)) {
+    const start = answer.search(/[\[{]/u);
+    const closers: string[] = [];
+    let inString = false;
+    let escaped = false;
+    let closed = false;
+    let repaired = "";
+    let copiedThrough = 0;
+    for (let index = start; index >= 0 && index < answer.length; index++) {
+      const char = answer[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (inString && char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        if (!inString || /^\s*(?:[:,}\]]|$)/u.test(answer.slice(index + 1))) inString = !inString;
+        else {
+          repaired += answer.slice(copiedThrough, index) + '\\"';
+          copiedThrough = index + 1;
+        }
+        continue;
+      }
+      if (inString) continue;
+      if (char === "{") closers.push("}");
+      else if (char === "[") closers.push("]");
+      else if (char === "}" || char === "]") {
+        if (closers.pop() !== char) break;
+        if (closers.length === 0) {
+          closed = true;
+          break;
+        }
+      }
+    }
+    if (!closed) throw new Error(SLURP_POST_CUT_OFF);
+    answer = repaired + answer.slice(copiedThrough);
+  }
+  const parsed = parseGameJsonish(requireModelAnswer(answer, "a creator post"));
   // Many LLMs (especially local models via Ollama/KoboldCPP) wrap the expected object
   // in an array ([{"title":...}]) regardless of the prompt instructing "one JSON object".
   // Unwrap the common single-item array response while preserving validation for other shapes.
