@@ -16,6 +16,7 @@ import { ltmModeForChatMode, parseLtmChatMetadata } from "../identity/chat-scope
 import { isLtmAutoImportReading, retryLtmAutoImport } from "../sources/auto-import-job.js";
 import {
   readLtmChatMemoriesMode,
+  readLtmChatReadFrom,
   resolveLtmChatMemories,
 } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import type { FastifyInstance } from "fastify";
@@ -96,6 +97,8 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
     if (!chat) return reply.status(404).send({ error: "Chat not found" });
     return {
       chatMemories: readLtmChatMemoriesMode(parseLtmChatMetadata(chat.metadata).longTermMemoryChatMemories) ?? null,
+      // What background import reads in this chat: its messages (the default) or its finished summaries.
+      readFrom: readLtmChatReadFrom(parseLtmChatMetadata(chat.metadata).longTermMemoryChatReadFrom),
       // A background read of this chat's messages is running, and the latest messages an import hid in it.
       reading: isLtmAutoImportReading(root, chat.id),
       hidden: readLtmMessagesJustHidden(root, chat.id),

@@ -186,15 +186,27 @@ export function ltmChatMemoriesModeOf(config: {
   return config.autoImportChatSources !== true ? "manual" : config.autoAcceptSafeChanges === true ? "save" : "review";
 }
 
+/** "Read from": what background import reads in one chat, its message pieces or its finished summaries, never both. */
+export const LTM_CHAT_READ_FROM = ["messages", "summaries"] as const;
+export type LtmChatReadFrom = (typeof LTM_CHAT_READ_FROM)[number];
+
+/** Anything but a stored "summaries" reads as the default, messages. */
+export function readLtmChatReadFrom(value: unknown): LtmChatReadFrom {
+  return value === "summaries" ? "summaries" : "messages";
+}
+
 /**
  * One chat's background import and safe-change acceptance: its `longTermMemoryChatMemories` override, else the global
  * extraction booleans as stored (so a manual import keeps today's global auto-accept until the choice is saved).
+ * `readFrom` is the chat's own `longTermMemoryChatReadFrom`; there is no global one.
  */
 export function resolveLtmChatMemories(
   chatMetadata: Record<string, unknown>,
   config: { autoImportChatSources: boolean; autoAcceptSafeChanges: boolean },
 ) {
   const override = readLtmChatMemoriesMode(chatMetadata.longTermMemoryChatMemories);
-  if (!override) return { autoImport: config.autoImportChatSources, autoAccept: config.autoAcceptSafeChanges };
-  return { autoImport: override !== "manual", autoAccept: override === "save" };
+  const readFrom = readLtmChatReadFrom(chatMetadata.longTermMemoryChatReadFrom);
+  if (!override)
+    return { autoImport: config.autoImportChatSources, autoAccept: config.autoAcceptSafeChanges, readFrom };
+  return { autoImport: override !== "manual", autoAccept: override === "save", readFrom };
 }

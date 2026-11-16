@@ -56,7 +56,14 @@ async function main() {
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
     { LongTermMemoryStorage },
     { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig },
-    { armLtmAutoImport, isLtmAutoImportArmed, retryLtmAutoImport, LTM_AUTO_IMPORT_QUIET_MS, LTM_AUTO_IMPORT_RETRY_MS },
+    {
+      armLtmAutoImport,
+      isFinishedSummary,
+      isLtmAutoImportArmed,
+      retryLtmAutoImport,
+      LTM_AUTO_IMPORT_QUIET_MS,
+      LTM_AUTO_IMPORT_RETRY_MS,
+    },
     { readLtmDebugLog },
     { LongTermMemoryDraftStore },
   ] = await Promise.all([
@@ -1079,6 +1086,28 @@ async function main() {
           await new Promise((resolveWait) => setTimeout(resolveWait, 10));
         assert.equal(isLtmAutoImportArmed(autoRoot, chatId), false, "the background run finishes");
       };
+      // Which summaries count as finished: a fixed range, a Game session, and a Conversation day or week once it has ended.
+      const day = (offset: number) => {
+        const now = new Date();
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+        const two = (value: number) => String(value).padStart(2, "0");
+        return `${two(date.getDate())}.${two(date.getMonth() + 1)}.${date.getFullYear()}`;
+      };
+      const finished = (sourceId: string, messageRange?: { first: number; last: number }) =>
+        isFinishedSummary({ sourceId, messageRange } as Parameters<typeof isFinishedSummary>[0]);
+      assert.deepEqual(
+        [
+          finished("c:sum-1", { first: 1, last: 2 }),
+          finished("c:game-session-2"),
+          finished("c:summary"),
+          finished(`c:day:${day(-1)}`),
+          finished(`c:day:${day(0)}`),
+          finished(`c:week:${day(-8)}`),
+          finished(`c:week:${day(-3)}`),
+        ],
+        [true, true, false, true, false, true, false],
+        "a changing summary and a day or week still running stay manual",
+      );
       prompts.length = 0;
       await autoImport(autoChat.id);
       assert.deepEqual(
@@ -1325,6 +1354,87 @@ async function main() {
       assert.equal(prompts.length, 2, "the finished edit is not extracted again");
       respond = () => [];
       prompts.length = 0;
+
+      // "Read from: Summaries": the chat reads its finished summaries instead of its message pieces, never both. A
+      // summary with no fixed range is rewritten as the chat grows, so it stays a manual import from Sources.
+      // A sibling branch of the same group has a ranged summary of its own, which this branch must not read.
+      const summariesSibling = {
+        ...roleplayChat,
+        id: "chat-auto-summaries-sibling",
+        name: "Summaries sibling",
+        groupId: "group-summaries",
+        metadata: {
+          summaryEntries: [{ id: "sum-x", content: "The sibling's story.", rangeStartIndex: 1, rangeEndIndex: 1 }],
+        },
+      };
+      const summariesChat = {
+        ...roleplayChat,
+        id: "chat-auto-summaries",
+        name: "Summaries",
+        groupId: "group-summaries",
+        metadata: {
+          longTermMemoryChatReadFrom: "summaries",
+          summaryEntries: [
+            { id: "sum-a", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 1 },
+            { id: "sum-b", content: "The guard fled.", rangeStartIndex: 2, rangeEndIndex: 2 },
+            { id: "sum-c", content: "A rolling recap that keeps changing." },
+          ],
+        },
+      };
+      chats.push(summariesChat, summariesSibling);
+      messages.set(summariesSibling.id, []);
+      messages.set(summariesChat.id, [
+        message(summariesChat.id, "s1", "user", "x".repeat(23_990)),
+        message(summariesChat.id, "s2", "assistant", "y".repeat(23_990)),
+        message(summariesChat.id, "s3", "user", "The tail is still being written."),
+      ]);
+      const summaryStatuses = async () =>
+        (await previewPackageInterop({ source: "chats", chatId: summariesChat.id, limit: 100 }, autoRoot)).samples.map(
+          ({ sourceId, status }) => ({ sourceId, status }),
+        );
+      prompts.length = 0;
+      await autoImport(summariesChat.id);
+      assert.equal(prompts.length, 2, "each finished summary is extracted once, and no message piece is");
+      assert.deepEqual(
+        (await autoEvents(summariesChat.id)).map(({ source, status, counts }) => ({
+          source,
+          status,
+          imported: counts?.imported,
+        })),
+        [{ source: "chats", status: "ok", imported: 2 }],
+        "the run reads the chats source and is logged in Activity",
+      );
+      assert.deepEqual(
+        await summaryStatuses(),
+        [
+          { sourceId: "chat-auto-summaries:sum-a", status: "imported" },
+          { sourceId: "chat-auto-summaries:sum-b", status: "imported" },
+          { sourceId: "chat-auto-summaries:sum-c", status: "pending" },
+        ],
+        "the unranged summary waits for a manual import",
+      );
+      assert.deepEqual(
+        (await previewPackageInterop({ source: "chats", chatId: summariesSibling.id, limit: 100 }, autoRoot)).samples
+          .filter(({ sourceId }) => sourceId.startsWith(`${summariesSibling.id}:`))
+          .map(({ sourceId, status }) => ({ sourceId, status })),
+        [{ sourceId: "chat-auto-summaries-sibling:sum-x", status: "pending" }],
+        "a sibling branch's summary is left to its own chat",
+      );
+      assert.deepEqual(
+        (
+          await previewPackageInterop({ source: "messages", chatId: summariesChat.id, limit: 100 }, autoRoot)
+        ).samples.map(({ status }) => status),
+        ["pending", "pending", "pending"],
+        "the chat's message pieces stay unread while it reads summaries",
+      );
+      await autoImport(summariesChat.id);
+      assert.equal(prompts.length, 2, "a reply with nothing new makes no model call");
+      chats[chats.indexOf(summariesChat)] = {
+        ...summariesChat,
+        metadata: { ...summariesChat.metadata, longTermMemoryChatReadFrom: "messages" },
+      };
+      await autoImport(summariesChat.id);
+      assert.equal(prompts.length, 4, "switched back to Messages, the chat reads its two closed pieces as before");
 
       // "Memories from this chat": the chat's choice beats the global one for the run's re-check and its accept step.
       const memoriesChat = (id: string, choice?: string) => {

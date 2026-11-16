@@ -10,11 +10,16 @@ import type {
   LtmStatusResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import type { ScopeTargets } from "./scope-targets";
-import type { LtmChatMemoriesMode } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import type {
+  LtmChatMemoriesMode,
+  LtmChatReadFrom,
+} from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 
 /** GET /chat-memories/:chatId. `reading` and `hidden` are absent on a server older than the activity card. */
 export type LtmChatMemoriesResponse = {
   chatMemories: LtmChatMemoriesMode | null;
+  /** What background import reads in this chat; absent on a server older than the option. */
+  readFrom?: LtmChatReadFrom;
   /** A background read of this chat's messages is running. */
   reading?: boolean;
   /** The latest messages an import hid in this chat: 1-based first and last position, and when. */

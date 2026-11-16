@@ -63,6 +63,7 @@ export function useActivityCore(
   importOnRef.current = autoImportOn;
   const autoImportEvents = useAutoImportEvents(autoImportOn);
   const reading = autoImportOn && chatMemories.data?.reading === true;
+  const readingSummaries = chatMemories.data?.readFrom === "summaries";
   const queryClient = useQueryClient();
   const readSeen = useRef<string | null>(null);
   const readKnown = chatMemories.data !== undefined;
@@ -90,6 +91,7 @@ export function useActivityCore(
     autoImportOn,
     autoImportEvents,
     reading,
+    readingSummaries,
     saveFailed,
   };
 }
@@ -306,6 +308,7 @@ export function ActivityCardView({
       onViewSaved={open ? openChatInVault : undefined}
       hidden={card.hidden}
       reading={card.reading}
+      readingSummaries={card.readingSummaries}
       compact
     />
   );

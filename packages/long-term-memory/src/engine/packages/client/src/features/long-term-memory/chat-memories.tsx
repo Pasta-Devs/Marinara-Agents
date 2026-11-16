@@ -1,6 +1,8 @@
 import {
   LTM_CHAT_MEMORIES_MODES,
+  LTM_CHAT_READ_FROM,
   type LtmChatMemoriesMode,
+  type LtmChatReadFrom,
 } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { Check, Clock } from "lucide-react";
 import type { ReactNode } from "react";
@@ -19,6 +21,18 @@ const descriptionKeys = {
   review: "ui.longTermMemory.chatsettings.chatMemoriesReviewDescription",
   save: "ui.longTermMemory.chatsettings.chatMemoriesSaveDescription",
 } as const;
+
+export const chatReadFromOptions = LTM_CHAT_READ_FROM;
+const readFromLabelKeys = {
+  messages: "ui.longTermMemory.chatsettings.readFromMessages",
+  summaries: "ui.longTermMemory.chatsettings.readFromSummaries",
+} as const;
+const readFromDescriptionKeys = {
+  messages: "ui.longTermMemory.chatsettings.readFromMessagesDescription",
+  summaries: "ui.longTermMemory.chatsettings.readFromSummariesDescription",
+} as const;
+export const chatReadFromLabelKey = (readFrom: LtmChatReadFrom) => readFromLabelKeys[readFrom];
+export const chatReadFromDescriptionKey = (readFrom: LtmChatReadFrom) => readFromDescriptionKeys[readFrom];
 
 export const chatMemoriesLabelKey = (mode: LtmChatMemoriesMode) => labelKeys[mode];
 export const chatMemoriesDescriptionKey = (mode: LtmChatMemoriesMode) => descriptionKeys[mode];
