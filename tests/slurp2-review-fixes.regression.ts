@@ -9,6 +9,7 @@ import {
 } from "../sources/engine/packages/server/src/services/game/jsonish.ts";
 import { slpGeneratedCreatorPostSchema } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-social-generation.schema.ts";
 import { z } from "zod";
+import { parseRecord } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-public-support.ts";
 
 const read = (path: string) =>
   readFileSync(join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/slp", path), "utf8");
@@ -69,6 +70,14 @@ for (const answer of [
 ])
   assert.equal(parsePost(answer).content, "Complete.");
 assert.throws(() => parsePost('[Post] {"title":"x","content":"The cat sat on the'), /cut off/u);
+for (const prefix of ["{draft} ", "{draft ", "[draft] ", '{"draft":true} '])
+  for (const root of ["{", "[{"]) {
+    assert.throws(() => parsePost(`${prefix}${root}"title":"x","content":"The cat sat on the`), /cut off/u);
+    assert.equal(
+      parsePost(`${prefix}${root}"title":"x","content":"Complete."}${root === "[{" ? "]" : ""}`).content,
+      "Complete.",
+    );
+  }
 assert.throws(() => parsePost('[Post] [{"title":"x","content":"Complete."}'), /cut off/u);
 assert.throws(() => parsePost('{"title":"x","content":"The marker [{}] is inside cut-off text'), /cut off/u);
 for (const tail of ["", " More prose."])
@@ -97,13 +106,7 @@ const loadActions = () =>
         (...filters: Array<(row: Record<string, unknown>) => boolean>) =>
         (row: Record<string, unknown>) =>
           filters.every((filter) => filter(row)),
-      parseRecord: (raw: string) => {
-        try {
-          return JSON.parse(raw);
-        } catch {
-          return {};
-        }
-      },
+      parseRecord,
       slurpWorldNow: () => new Date(),
     },
   );

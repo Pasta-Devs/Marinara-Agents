@@ -104,14 +104,14 @@ const FAMILY =
 const FRIEND = /\b(friends?|buddy|pal|kumpel|childhood friend)\b/iu;
 // "not established friends", "aren't friends yet", "never roommates": a negation up to two words before the relation
 // word denies that kind only, and a comma or stop ends the window. A negation elsewhere ("best friend, never apart") keeps the bond.
-const denies = (words: string) =>
+const denies = (...patterns: RegExp[]) =>
   new RegExp(
-    String.raw`(?:\b(?:not|never|no longer|nicht|kein\w*|nie)|n['’]t)\s+(?:[^\s,;.!?]+\s+){0,2}?(?:${words})\b`,
+    String.raw`(?:\b(?:not|never|no longer|nicht|kein\w*|nie)|n['’]t)\s+(?:[^\s,;.!?]+\s+){0,2}?(?:${patterns.map((pattern) => pattern.source).join("|")})`,
     "iu",
   );
-const NOT_FRIEND = denies("best ?friends?|friends?|buddy|pal|kumpel|freund\\w*");
-const NOT_ROOMMATE = denies("room ?mates?|flat ?mates?|house ?mates?|mitbewohner\\w*");
-const NOT_COWORKER = denies("co-?workers?|colleagues?|kolleg\\w*");
+const NOT_FRIEND = denies(BEST, FRIEND);
+const NOT_ROOMMATE = denies(ROOMMATE);
+const NOT_COWORKER = denies(COWORKER);
 
 /** What a card relation line means as a bond, or null (a partner is a couple, not a bond). */
 export function slurpBondFromRelation(relation: string): { kind: SlurpBondKind; level: number; detail: string } | null {

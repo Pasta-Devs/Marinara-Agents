@@ -469,15 +469,15 @@ export function parseCreatorPost(content: string) {
   if (jsonishLooksTruncated(answer)) {
     // Prefer a root array when one is present so its closing `]` is part of the scan. The object
     // inside an array can close while the root value is still cut off.
-    const arrayStart = answer.search(/\[\s*\{/u);
-    const objectStart = answer.search(/\{/u);
-    const start = arrayStart >= 0 && arrayStart < objectStart ? arrayStart : objectStart;
+    // Skip prose asides before the object that holds the post title. Keep an
+    // array wrapper so closing only its object cannot finish the answer.
+    const start = answer.search(/(?:\[\s*)?\{(?=[^{}]*"title"\s*:)/u);
     const closers: string[] = [];
     let inString = false;
     let escaped = false;
     let closed = false;
     let repaired = "";
-    let copiedThrough = 0;
+    let copiedThrough = Math.max(0, start);
     for (let index = start; index >= 0 && index < answer.length; index++) {
       const char = answer[index];
       if (escaped) {
