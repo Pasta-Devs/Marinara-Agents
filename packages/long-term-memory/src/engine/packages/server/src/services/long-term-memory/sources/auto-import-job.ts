@@ -17,7 +17,7 @@ import { importPackageInterop, previewPackageInterop } from "./interop.js";
 export const LTM_AUTO_IMPORT_QUIET_MS = 2_000;
 /** ...but never longer than this after the first waiting reply, so a busy chat still imports. */
 export const LTM_AUTO_IMPORT_MAX_WAIT_MS = 10_000;
-/** A selection whose import failed is tried again on the first reply after this, so a passing provider error heals. */
+/** A message piece whose import failed is tried again on the first reply after this, so a passing provider error heals. */
 export const LTM_AUTO_IMPORT_RETRY_MS = 10 * 60_000;
 /** The import request's own limit. */
 const BATCH = 100;
@@ -42,13 +42,15 @@ const jobs = new Map<string, Job>();
 /** Roots whose package was deactivated: nothing schedules there until it is activated again. */
 const stopped = new Set<string>();
 /**
- * Per chat and source, the selection whose last import failed or came back incomplete. The same selection is not
- * retried on every reply; a new or changed source, a manual import, Retry in Chat Settings or LTM_AUTO_IMPORT_RETRY_MS
- * moves it on.
- * ponytail: in-process only, so a restart retries once. Persist it if a failing model costs too much.
+ * Per chat, source and message piece, the reading that last failed, came back incomplete or waits in Review. The same
+ * piece is not read again on every reply, and a newly closed piece does not drag it along; a changed piece or
+ * connection, Retry in Chat Settings or LTM_AUTO_IMPORT_RETRY_MS moves it on.
+ * ponytail: in-process only, so a restart retries once. Persist it if a failing model costs too much. An entry is
+ * deleted only when its piece is read again and finishes, so one for a piece that became current another way (a manual
+ * import, an accepted draft) stays until Retry or a restart; prune entries whose piece is no longer pending if that grows.
  */
 const blocked = new Map<string, { signature: string; at: number }>();
-const block = (blockKey: string, signature: string) => blocked.set(blockKey, { signature, at: Date.now() });
+const block = (pieceKey: string, signature: string) => blocked.set(pieceKey, { signature, at: Date.now() });
 
 const jobKey = (root: string, chatId: string) => `${resolve(root)}\u0000${chatId}`;
 
@@ -120,16 +122,14 @@ async function pendingSources(
   // vault even when nothing is pending; upgrade to a per-chat "last imported" marker if that shows up in profiles.
   // The open piece ends at the chat's newest readable message.
   const newest = open?.messageRange?.last ?? 0;
-  return samples
-    .filter(
-      (sample) =>
-        sample !== open &&
-        (sample.messageRange?.last ?? 0) <= newest - leave &&
-        (sample.status === "pending" ||
-          sample.freshness === "source_updated" ||
-          sample.freshness === "extraction_incomplete"),
-    )
-    .slice(0, BATCH);
+  return samples.filter(
+    (sample) =>
+      sample !== open &&
+      (sample.messageRange?.last ?? 0) <= newest - leave &&
+      (sample.status === "pending" ||
+        sample.freshness === "source_updated" ||
+        sample.freshness === "extraction_incomplete"),
+  );
 }
 
 async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
@@ -144,19 +144,20 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
   const sourceScope = resolveChatLtmScope(chat);
   for (const source of SOURCES) {
     signal.throwIfAborted();
-    const selected = await pendingSources(job, sourceScope, source, config.autoImportLeaveMessages);
-    if (!selected.length) continue;
-    const blockKey = `${key}\u0000${source}`;
+    const blockPrefix = `${key}\u0000${source}\u0000`;
     // Not freshness: a failed import writes its source note, which turns "new" into "extraction_incomplete". The
     // connection is part of it so choosing one after "needs an extraction connection" retries.
-    // ponytail: an edit past the snippet that keeps the summary and range stays blocked until a source changes or a
-    // manual import; a content hash on preview samples would close that.
-    const signature = JSON.stringify([
-      config.connectionId,
-      selected.map((sample) => [sample.sourceId, sample.snippet, sample.summary, sample.messageRange?.last]),
-    ]);
-    const previous = blocked.get(blockKey);
-    if (previous?.signature === signature && Date.now() - previous.at < LTM_AUTO_IMPORT_RETRY_MS) continue;
+    // ponytail: an edit past the snippet that keeps the summary and range stays blocked until Retry, a manual import or
+    // LTM_AUTO_IMPORT_RETRY_MS; a content hash on preview samples would close that.
+    const signatureOf = (sample: LtmInteropPreviewResponse["samples"][number]) =>
+      JSON.stringify([config.connectionId, sample.snippet, sample.summary, sample.messageRange?.last]);
+    const selected = (await pendingSources(job, sourceScope, source, config.autoImportLeaveMessages))
+      .filter((sample) => {
+        const previous = blocked.get(blockPrefix + sample.sourceId);
+        return !(previous?.signature === signatureOf(sample) && Date.now() - previous.at < LTM_AUTO_IMPORT_RETRY_MS);
+      })
+      .slice(0, BATCH);
+    if (!selected.length) continue;
     // ponytail: nothing excludes a manual import of the same sources running alongside; the deterministic source note
     // id keeps one note, and the loser reports a retryable write failure, as with two manual imports.
     try {
@@ -179,6 +180,19 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
       );
       // Deactivation returns the batch as cancelled instead of throwing; that is neither a failure nor a block.
       signal.throwIfAborted();
+      // A piece that was not read (its draft waits in Review), failed or was not marked current rests; one that
+      // finished is forgotten. A piece the import did not report keeps whatever it had.
+      const writeFailed = new Set(result.writeFailures.map((failure) => failure.sourceId));
+      const results = new Map(result.imported.map((item) => [item.sourceId, item]));
+      for (const sample of selected) {
+        const item = results.get(sample.sourceId);
+        if (
+          writeFailed.has(sample.sourceId) ||
+          (item && (item.extractionStatus !== "succeeded" || !item.markedCurrent))
+        )
+          block(blockPrefix + sample.sourceId, signatureOf(sample));
+        else if (item) blocked.delete(blockPrefix + sample.sourceId);
+      }
       // An extraction that stopped early, failed or kept nothing does not save the source's fingerprint: a new source
       // stays pending and an edited one keeps its old fingerprint, so both still show in the preview. A source whose
       // draft still waits in Review is not extracted again (not_started) and is not a failure.
@@ -192,10 +206,9 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
       // Sources whose draft still waits in Review were written but not read.
       const written = result.imported.filter((item) => item.extractionStatus !== "not_started").length;
       const waiting = result.imported.length - written;
-      // Only sources waiting in Review: the selection rests until it changes, Retry or LTM_AUTO_IMPORT_RETRY_MS
-      // instead of being written again on every reply. The ok event replaces an earlier error in Chat Settings.
+      // Only sources waiting in Review: they rest until they change, Retry or LTM_AUTO_IMPORT_RETRY_MS instead of
+      // being written again on every reply. The ok event replaces an earlier error in Chat Settings.
       if (!failed && !written && waiting) {
-        block(blockKey, signature);
         await recordLtmDebugEvent({
           root,
           phase: "import",
@@ -209,8 +222,6 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
         continue;
       }
       const complete = failed === 0;
-      if (complete) blocked.delete(blockKey);
-      else block(blockKey, signature);
       // The first failed piece's reason, so Chat Settings can say why reading stopped.
       const reason = result.imported.find((item) => item.extractionStatus === "failed")?.error;
       await recordLtmDebugEvent({
@@ -222,7 +233,7 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
         source,
         uiSummary: complete
           ? `Imported ${written} ${noun[written === 1 ? 0 : 1]} in the background.`
-          : `Background import of ${failed} ${noun[failed === 1 ? 0 : 1]} did not finish; it retries after a later reply.`,
+          : `Background import of ${failed} ${noun[failed === 1 ? 0 : 1]} did not finish; it is tried again on Retry or after ten minutes.`,
         counts: {
           imported: written,
           failed,
@@ -233,7 +244,7 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
       });
     } catch (error) {
       if (signal.aborted) throw error;
-      block(blockKey, signature);
+      for (const sample of selected) block(blockPrefix + sample.sourceId, signatureOf(sample));
       logger.warn(error, "[ltm] Background import of %s failed for chat %s", source, chatId);
       await recordLtmDebugEvent({
         root,
@@ -263,10 +274,13 @@ export function armLtmAutoImport(root: string, chatId: string, mode: LtmMode) {
   else arm(key, job);
 }
 
-/** Retry in Chat Settings: forget this chat's failed selections and import again after the quiet period. */
+/** Retry in Chat Settings: forget this chat's failed pieces and import again after the quiet period. */
 export function retryLtmAutoImport(root: string, chatId: string, mode: LtmMode) {
   const key = jobKey(root, chatId);
-  for (const source of SOURCES) blocked.delete(`${key}\u0000${source}`);
+  for (const source of SOURCES) {
+    const prefix = `${key}\u0000${source}\u0000`;
+    for (const pieceKey of blocked.keys()) if (pieceKey.startsWith(prefix)) blocked.delete(pieceKey);
+  }
   armLtmAutoImport(root, chatId, mode);
 }
 

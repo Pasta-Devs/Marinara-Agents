@@ -416,6 +416,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.2",
+          "date": "2026-11-16",
+          "notes": "- Background import no longer reads a message piece that failed again each time a later piece closes; it is read again on Retry in Chat Settings, after a change of the extraction connection, or on the first reply after ten minutes.",
+          "highlight": false
+        },
+        {
           "version": "1.6.1",
           "date": "2026-11-14",
           "notes": "- \"Checked N of M\" in the three AI checks counts only memories the model actually reviewed, and a check that stops at its limit has a \"Check the next batch\" button, so every memory can be reviewed.",
@@ -527,12 +533,6 @@
           "version": "1.5.13",
           "date": "2026-10-30",
           "notes": "- When a chat calls one of Long-Term Memory's own characters by part of their name (\"Preston\" for \"Preston Farraday\", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.12",
-          "date": "2026-10-30",
-          "notes": "- Sources → Chat Summaries keeps the range visible when a chat has a long name: the name is cut, and the message range, day, week or game session stays whole beside it.",
           "highlight": false
         }
       ]
