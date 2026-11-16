@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.7 — 2026-11-16
+
+- **Explicit scenes engage the whole body.** Under NSFW: Explicit, sex scenes are now asked to engage the characters' entire bodies, every surface and orifice, with touch that carries the power dynamic between them. Fade and SFW stories are unchanged.
+
 ## 0.34.6 — 2026-11-16
 
 - **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).

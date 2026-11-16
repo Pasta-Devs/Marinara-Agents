@@ -86,6 +86,8 @@ const NSFW_WORDING = {
   language: /Language is not sanitized/,
   fade: /cut at the threshold and pick up in the aftermath/,
   explicit: /explicit, anatomically grounded, emotionally reactive and detailed/,
+  // 0.34.7, the maintainer's wording, only under Explicit Heat.
+  body: /Add holistic body engagement and tactile degradation\. Treat the characters' entire bodies as a canvas for sensory overload\. Actively incorporate primary and secondary body surfaces and orifices into the scene\. Ensure the contact reinforces the power dynamic and serves as a physical conduit\./,
   dark: /Villains disregard boundaries and play dirty/,
   angst: /Villains play dirty and are a genuine threat to the world/,
   darkAddition: /options always include refusing/,
@@ -126,6 +128,7 @@ test("each Heat and Darkness adds only its own wording, and only in NSFW mode (N
         has(NSFW_WORDING.win, nsfw);
         has(NSFW_WORDING.fade, heat === "fade");
         has(NSFW_WORDING.explicit, heat === "explicit");
+        has(NSFW_WORDING.body, heat === "explicit");
         has(NSFW_WORDING.dark, darkness === "dark");
         has(NSFW_WORDING.darkAddition, darkness === "dark");
         has(NSFW_WORDING.angst, darkness === "angst" && heat !== "sfw");
