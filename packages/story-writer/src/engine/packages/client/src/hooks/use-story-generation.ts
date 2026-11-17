@@ -375,7 +375,8 @@ async function writeChapter(
   // A stopped, failed or cut-off chapter stays a draft, so Write continues it instead of starting the next one.
   const finished = result.finished && !result.aborted && !failure && !endsMidSentence(finalText);
   await doc.saveChapter(chapterId, { text: finalText, status: finished ? "complete" : "draft" }, { immediate: true });
-  onWritten(recordGeneration(story, { requested, override, chapterId, after: finalText }));
+  const record = recordGeneration(story, { requested, override, chapterId, after: finalText });
+  onWritten(record);
 
   const banned = findBannedPhrases(addition, settings.bannedPhrases);
   if (banned.length) toast.warning(t("generation.bannedPhrases", { phrases: banned.join(", ") }));
@@ -392,6 +393,7 @@ async function writeChapter(
   // Clear only the note this chapter was written with; a note typed during the stream is meant for the next one.
   if (now.clearNoteAfterChapter && now.authorNote && now.authorNote === settings.authorNote) {
     doc.updateSettings({ authorNote: "" }, { immediate: true });
+    onWritten({ ...record, clearedNote: settings.authorNote });
   }
   context.setLive(null, 0);
   if (now.autoSummarize) {
@@ -496,7 +498,7 @@ export function useStoryGeneration(args: {
         const record = latestGeneration;
         // The story as it is now, with every edit saved: one made since Redo was shown withdraws it.
         if (!record || redoOffer(record, context.readStory()) === null) return;
-        const { chapterId, before, requested, override } = record;
+        const { chapterId, before, requested, override, clearedNote } = record;
         const runDoc = context.run.doc;
         // Put the chapter back as it was before that generation. A restore that fails has been reported; nothing
         // is written over it.
@@ -508,6 +510,10 @@ export function useStoryGeneration(args: {
           }
         } else if (!(await runDoc.deleteChapter(chapterId))) {
           return;
+        }
+        // The note that generation cleared comes back too, so it is sent again, unless the author has written another.
+        if (clearedNote && !context.readStory()?.story.settings.authorNote) {
+          runDoc.updateSettings({ authorNote: clearedNote }, { immediate: true });
         }
         await writeChapter(context, requested, override, setLatestGeneration);
       }),

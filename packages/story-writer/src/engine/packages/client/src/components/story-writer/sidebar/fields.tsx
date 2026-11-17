@@ -7,8 +7,9 @@ import { ChevronDown, Search } from "lucide-react";
 
 /**
  * Local text over a cached value. The cache notifies React asynchronously, so a field controlled by it straight away
- * would drop keystrokes; an outside change (another story, a cleared note) still replaces the draft. `normalize` is
- * what the store does to a value (e.g. trimming), so the stored form of the draft does not count as an outside change.
+ * would drop keystrokes; an outside change (another story, a cleared note, a note Redo puts back) still replaces the
+ * draft. `normalize` is what the store does to a value (e.g. trimming), so the stored form of the draft does not count
+ * as an outside change.
  */
 export function useDraftText(
   value: string,
@@ -20,7 +21,11 @@ export function useDraftText(
   const [emitted, setEmitted] = useState(value);
   if (value !== seen) {
     setSeen(value);
-    if (value !== emitted && value !== normalize(emitted)) setDraft(value);
+    if (value !== emitted && value !== normalize(emitted)) {
+      setDraft(value);
+      // The draft follows the outside value now, so that value coming back later is not taken for our own echo.
+      setEmitted(value);
+    }
   }
   const update = (next: string) => {
     setDraft(next);

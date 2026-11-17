@@ -409,6 +409,12 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await expect
     .poll(async () => (await engineRequest(request, base, "GET", "/story-writer/preferences")).quickReplies)
     .toEqual([expect.objectContaining({ label: "Pour", text: "Make it pour." })]);
+  // The quick reply's chapter then clears the note, which Redo has to put back.
+  await tools.click();
+  const clearNote = root.getByRole("button", { name: /^Clear after the next chapter/ });
+  await clearNote.click();
+  await expect(clearNote).toHaveAttribute("aria-pressed", "true");
+  await tools.click();
   await root.getByRole("button", { name: "Hide story settings" }).click();
 
   const quickBar = root.getByRole("toolbar", { name: "Quick replies" });
@@ -475,16 +481,23 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   expect(await requests()).toEqual(["", "Make it pour."]);
   const poured = await engineRequest(request, base, "GET", `/story-writer/stories/${fresh.story.id}`);
   expect(poured.story.settings.continueMessage).toBe("Continue.");
+  await expect(root.getByRole("button", { name: "Open the author's note", exact: true })).toBeVisible();
 
-  // Redo after a new chapter writes that chapter again in its place, with the quick reply it was written from. The
-  // bar still fits, now with a four-digit word count.
+  // Redo after a new chapter writes that chapter again in its place, with the quick reply it was written from and
+  // the note that chapter cleared, shown on the note again. The bar still fits, now with a four-digit word count.
   expect(await actionBarFits(root.locator(".sw-actionbar"))).toBe(true);
   await redo.click();
   await expect(
     page.getByText("Story Writer removes what it last wrote in chapter 2 and writes it again."),
   ).toBeVisible();
+  hold = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect.poll(() => generations.length).toBe(4);
+  await expect(root.getByRole("button", { name: "Open the author's note: Make it rain." })).toBeVisible();
+  release();
+  hold = null;
   await expect(writeNext).toBeEnabled({ timeout: 30_000 });
   expect(generations[3]!.messages).toEqual(generations[2]!.messages);
   expect(await requests()).toEqual(["", "Make it pour."]);

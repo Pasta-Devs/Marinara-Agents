@@ -58,7 +58,11 @@ test("a continued chapter is remembered as it was, and Redo is offered for it", 
   assert.equal(record.storyId, "story-1");
   assert.equal(record.requested, "next");
   assert.deepEqual(record.before, fields(draft));
+  // Continuing leaves the summary alone.
+  assert.equal(record.afterSummary, "Night.");
   assert.equal(redoOffer(record, written), 1);
+  // A summary the author changes afterwards would be overwritten: Redo goes.
+  assert.equal(redoOffer(record, changed(written, draft.id, { summary: "A stormy night." })), null);
   // Putting `before` back leaves the chapter exactly as the run found it.
   assert.deepEqual(changed(written, draft.id, record.before!).chapters, found.chapters);
 });
@@ -74,7 +78,9 @@ test("a rewritten chapter is remembered with its old text, summary and request, 
 
   assert.equal(record.requested, "rewrite");
   assert.deepEqual(record.before, fields(original));
+  assert.equal(record.afterSummary, "");
   assert.equal(redoOffer(record, written), 2);
+  assert.equal(redoOffer(record, changed(written, original.id, { summary: "New." })), null);
 });
 
 test("a created chapter is remembered with nothing to put back, and the quick reply it was sent with", () => {
@@ -90,10 +96,11 @@ test("a created chapter is remembered with nothing to put back, and the quick re
 
   assert.equal(record.before, null);
   assert.equal(record.override, "Make it pour.");
+  assert.equal(record.afterSummary, "");
   assert.equal(redoOffer(record, written), 2);
 });
 
-test("Redo is withdrawn once the chapter is edited, deleted or no longer last, and in another story", () => {
+test("Redo is withdrawn once the chapter or its summary is edited, it is deleted or no longer last, and in another story", () => {
   const found = story([chapter(1)]);
   const created = chapter(2, { id: "chapter-new-0000", text: "A new chapter." });
   const written = story([...found.chapters, created]);
@@ -106,8 +113,8 @@ test("Redo is withdrawn once the chapter is edited, deleted or no longer last, a
   assert.equal(redoOffer(record, found), null);
   assert.equal(redoOffer(record, story([...written.chapters, chapter(3)])), null);
   assert.equal(redoOffer(record, story(written.chapters, "story-2")), null);
-  // A summary written afterwards changes no text: Redo stays.
-  assert.equal(redoOffer(record, changed(written, created.id, { summary: "Summary." })), 2);
+  // A summary written afterwards is the author's too, and Redo would delete it with the chapter.
+  assert.equal(redoOffer(record, changed(written, created.id, { summary: "Summary." })), null);
 
   // A continued chapter the author has started a chapter after: Write would now write that one, not this one.
   const continued = recordGeneration(found, {

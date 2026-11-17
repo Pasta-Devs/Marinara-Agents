@@ -2,7 +2,7 @@
 
 ## 0.4.0 — 2026-11-17
 
-- **Redo** appears next to **Rewrite the last chapter** after the model writes something. It takes back only what the model just wrote and writes it again with the same instruction, so you no longer have to select and delete a refusal or a cut-off answer by hand. It works after **Write**, **Continue**, a quick reply and **Rewrite**. Story Writer asks first. If you change that chapter, the button goes away and your changes are kept.
+- **Redo** appears next to **Rewrite the last chapter** after the model writes something. It takes back only what the model just wrote and writes it again with the same instruction, so you no longer have to select and delete a refusal or a cut-off answer by hand. It works after **Write**, **Continue**, a quick reply and **Rewrite**. If **Clear after the next chapter** emptied your author's note, Redo puts it back. Story Writer asks first. If you change that chapter or its summary, the button goes away and your changes are kept.
 
 ## 0.3.0 — 2026-11-17
 
