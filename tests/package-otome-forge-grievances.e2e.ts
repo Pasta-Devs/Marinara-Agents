@@ -544,8 +544,8 @@ test("Otome Hearth grievances: his space, paused affection and waiting dates; I'
   await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
   await expect(root.locator(".of-notice").filter({ hasText: "Kai Ardent needs space." })).toBeVisible();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
-  await expect(activities.locator(".of-activity")).toHaveCount(5);
-  await expect(activities.locator(".of-badge", { hasText: "Kai Ardent needs space" })).toHaveCount(5);
+  await expect(activities.locator(".of-activity")).toHaveCount(6);
+  await expect(activities.locator(".of-badge", { hasText: "Kai Ardent needs space" })).toHaveCount(6);
   await expect(activities.getByRole("button", { name: /^Play:/u })).toHaveCount(0);
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("05-dates.png"), fullPage: true });

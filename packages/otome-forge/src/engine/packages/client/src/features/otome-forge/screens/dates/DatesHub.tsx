@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Dates. Pick who to spend time with, then one of the five activities: Read {{name}}, Read Me (#1945),
-// Tarot night (#2151), the Photo Shoot (#2087: only with an image connection, and it pays nothing) and the Claw
-// Machine, each with what it pays and what it costs; today's capped rewards; and the plush shelf. Play is never
+// Otome Forge: Dates. Pick who to spend time with, then one of the six activities: Read {{name}}, Read Me (#1945),
+// Tarot night (#2151), the Photo Shoot (#2087: only with an image connection, and it pays nothing), the Claw Machine and
+// (0.35.0) Kitty Cards, each with what it pays and what it costs; today's capped rewards; and the plush shelf. Play is never
 // limited, only the day's rewards are (plan M5, design: Mini-games). #2303: Date Night is gone; dates are won on Wish's
 // Dates banner and planned from Album → Dates.
 // ──────────────────────────────────────────────
@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   CalendarHeart,
   Camera,
+  Cat,
   Eye,
   Feather,
   Heart,
@@ -37,7 +38,7 @@ import type { RunLiView, RunView } from "../../shared/api-types";
 import { PLUSH_SERIES, liPlushId, type PlayView } from "../../shared/claw";
 import { AFFECTION_EARNINGS, STARLIGHT_EARNINGS } from "../../shared/economy";
 
-export const DATE_ACTIVITIES = ["read-him", "read-me", "tarot", "photo-shoot", "claw"] as const;
+export const DATE_ACTIVITIES = ["read-him", "read-me", "tarot", "photo-shoot", "claw", "kitty"] as const;
 export type DateActivity = (typeof DATE_ACTIVITIES)[number];
 
 /** What OtomeForgeView gives each activity's screen: the run, the love interest it is played with, and the way back. */
@@ -50,12 +51,18 @@ export interface ActivityScreenProps {
 
 export const playQueryKey = (runKey: string) => ["otome-forge", "play", runKey] as const;
 
-/** GET /runs/:run/play: today's capped earnings, the shelf, and how each love interest plays. */
-export function usePlay(runKey: string) {
+const KITTEN_POLL_MS = 3_000;
+
+/**
+ * GET /runs/:run/play: today's capped earnings, the shelf, and how each love interest plays. `kittens` (Kitty Cards,
+ * 0.35.0): read again every few seconds while a painted kitten may still land by itself (`kittensPending`).
+ */
+export function usePlay(runKey: string, { kittens = false } = {}) {
   const otome = useOtomeApi();
   return useQuery({
     queryKey: playQueryKey(runKey),
     queryFn: () => otome.get<PlayView>(`${runPath(runKey)}/play`),
+    refetchInterval: (query) => (kittens && query.state.data?.kittensPending ? KITTEN_POLL_MS : false),
   });
 }
 
@@ -107,6 +114,13 @@ const ACTIVITY_COPY: Record<DateActivity, ActivityCopy> = {
     cost: "ui.otomeForge.dates.clawCost",
     CostIcon: Sparkles,
   },
+  kitty: {
+    Icon: Cat,
+    title: "ui.otomeForge.kitty.hubTitle",
+    text: "ui.otomeForge.kitty.hubText",
+    cost: "ui.otomeForge.kitty.cost",
+    CostIcon: Sparkles,
+  },
 };
 
 /** What each activity pays (SH/economy.ts), within the day's caps. */
@@ -137,6 +151,14 @@ const REWARDS: Record<DateActivity, { key: string; values: Record<string, number
       starlight: STARLIGHT_EARNINGS.clawRound,
       plush: STARLIGHT_EARNINGS.clawPlush,
       affection: AFFECTION_EARNINGS.clawRound,
+    },
+  },
+  kitty: {
+    key: "ui.otomeForge.kitty.reward",
+    values: {
+      starlight: STARLIGHT_EARNINGS.kittyGame,
+      win: STARLIGHT_EARNINGS.kittyWin,
+      affection: AFFECTION_EARNINGS.kittyGame,
     },
   },
 };
