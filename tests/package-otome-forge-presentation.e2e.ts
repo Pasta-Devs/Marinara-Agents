@@ -3803,7 +3803,14 @@ test("Otome Hearth shows prestige at the last bond rank and writes an unlocked e
     }
     const reply = fixture.answer(call);
     if (call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}/story` && reply?.json) {
-      return { ...reply, json: { ...(reply.json as Json), prestige: [{ li: MARIN, key }] } };
+      return {
+        ...reply,
+        json: {
+          ...(reply.json as Json),
+          prestige: [{ li: MARIN, key }],
+          bond: [{ li: "li-mid-0006", key: "bond-li-mid-0006-11", rank: 11, name: "named" }],
+        },
+      };
     }
     return reply;
   };
@@ -3830,6 +3837,22 @@ test("Otome Hearth shows prestige at the last bond rank and writes an unlocked e
   await expect(mid.locator(".of-prestige")).toHaveCount(0);
   await expect(mid.getByRole("meter", { name: "Ren: affection progress", exact: true })).toHaveText("0 / 650");
   await expect(mid.locator(".of-affection-level")).toHaveText("Level 10 · named");
+  // His "Open named" sits in a row of its own under his hearts and leaves the row lined up with the others: his name
+  // where theirs starts, his hearts as wide and as many lines as Marin's, who also has a counter and no button
+  // (2026-11-17: the button took the picture's column and squeezed the hearts into three rows).
+  const open = mid.getByRole("button", { name: "Open named", exact: true });
+  await expect(open).toBeVisible();
+  const [openBox, midHearts, midName, marinHearts, marinName] = await Promise.all([
+    open.boundingBox(),
+    mid.locator(".of-hearts").boundingBox(),
+    mid.locator(".of-affection-name").boundingBox(),
+    row.locator(".of-hearts").boundingBox(),
+    row.locator(".of-affection-name").boundingBox(),
+  ]);
+  expect(openBox!.y).toBeGreaterThanOrEqual(midHearts!.y + midHearts!.height);
+  expect(Math.abs(openBox!.x - midHearts!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(midName!.x - marinName!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(midHearts!.height - marinHearts!.height)).toBeLessThanOrEqual(1);
   await expect(
     mid.getByRole("img", { name: "Ren: affection level 10 of 10, bond rank 1 of 10", exact: true }),
   ).toBeVisible();

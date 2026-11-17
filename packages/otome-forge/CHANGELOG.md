@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.11 — 2026-11-17
+
+- **Open named sits under the hearts.** On the Story screen's **Between you**, a love interest with a bond story waiting showed its **Open** button beside his picture, which pushed his name to the middle and wrapped his hearts into three short rows. His row now lines up with the others: his name where theirs is, his ten hearts on one line, and the button on a row of its own under them.
+
 ## 0.34.10 — 2026-11-17
 
 - **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with "401: Android local authentication required", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.
