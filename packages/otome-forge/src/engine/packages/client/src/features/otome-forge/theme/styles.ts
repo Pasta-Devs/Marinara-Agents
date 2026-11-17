@@ -1573,16 +1573,22 @@ ${R} .of-path-node[data-kind="confrontation"]:not([data-state="read"]) { border-
 /* Affection: ten hearts in his colour. */
 ${R} .of-affection-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-affection {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "avatar name level" "avatar hearts hearts";
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "avatar name name" "avatar hearts hearts";
   align-items: center; column-gap: 10px; row-gap: 3px;
 }
-${R} .of-affection:has(.of-affection-progress) { grid-template-areas: "avatar name level" "avatar hearts progress"; }
+${R} .of-affection:has(.of-affection-progress) { grid-template-areas: "avatar name name" "avatar hearts progress"; }
 ${R} .of-affection > .of-avatar { grid-area: avatar; }
+/* The name and the level on one line across both columns: the level sizes only its own line, so a long one ("Level 10
+   · named") no longer widens the counter's column and wraps the hearts under it (2026-11-17). */
+${R} .of-affection-head { grid-area: name; display: flex; align-items: center; gap: 8px; min-width: 0; }
 ${R} .of-affection-name {
-  grid-area: name; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.12rem; line-height: 1.1;
 }
-${R} .of-affection-level { grid-area: level; justify-self: end; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text); }
+${R} .of-affection-level {
+  flex: none; margin-inline-start: auto; white-space: nowrap; font-size: 0.74rem; font-weight: 800;
+  color: var(--of-accent-text);
+}
 ${R} .of-affection-progress {
   grid-area: progress; justify-self: end; font-size: 0.7rem; line-height: 1.2; font-weight: 600;
   font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--of-text-soft);
@@ -1601,9 +1607,12 @@ ${R} .of-heart[data-on="true"] { color: var(--of-li-accent, var(--of-rose)); }
 ${R} .of-heart-inner { position: absolute; inset-inline-start: 50%; top: 50%; translate: -50% -54%; color: var(--of-on-accent); opacity: 0.85; }
 ${R} .of-heart-inner[data-inner-on="true"] { opacity: 1; }
 ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
+/* A bond rank's "Open {{rank}}" button takes a row of its own under the hearts. With no place in the row's grid it fell
+   into the avatar column, which grew to the button's width and squeezed the name and hearts (2026-11-17). */
+${R} .of-bond-open { grid-column: 2 / -1; justify-self: start; margin-top: 4px; }
 /* Prestige past level 10 (#2025): three pips, and the extra story they unlock. */
 ${R} .of-affection:has(.of-prestige) {
-  grid-template-areas: "avatar name level" "avatar hearts progress" "avatar prestige prestige";
+  grid-template-areas: "avatar name name" "avatar hearts progress" "avatar prestige prestige";
 }
 ${R} .of-prestige {
   grid-area: prestige; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-top: 2px;

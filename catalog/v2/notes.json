@@ -710,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.11",
+          "date": "2026-11-17",
+          "notes": "- **Open named sits under the hearts.** On the Story screen's **Between you**, a love interest with a bond story waiting showed its **Open** button beside his picture, which pushed his name to the middle and wrapped his hearts into three short rows. His row now lines up with the others: his name where theirs is, his ten hearts on one line, and the button on a row of its own under them.",
+          "highlight": false
+        },
+        {
           "version": "0.34.10",
           "date": "2026-11-17",
           "notes": "- **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with \"401: Android local authentication required\", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.",
@@ -821,12 +827,6 @@
           "version": "0.31.0",
           "date": "2026-11-14",
           "notes": "- **Repaint a couple set's portrait.** In the Wardrobe, a painted pair portrait now offers **Repaint the pair portrait**, for 1 image. The old portrait stays on screen while the new one paints, and stays if the paint fails. The new one replaces it in the Album too.\n- **Repaint a sticker.** In the Album's **Stickers** tab, a painted sticker offers **Repaint**, for 1 image. Chats keep showing the old sticker until the new one is ready. After that, every message that sent it shows the new one.",
-          "highlight": true
-        },
-        {
-          "version": "0.30.0",
-          "date": "2026-11-14",
-          "notes": "- **The story knows what happened when.** Every chapter's summary now reaches the model with its place in the story: \"[Chapter 3]\" for a main chapter, \"[Character Story 2, after chapter 3]\" for a Character Story, and \"[After chapter 3]\" for route, repair, date and his-side chapters. The condensed part of the timeline says which chapters it covers (\"[Chapters 1–4]\"), and a chapter recalled by meaning goes as \"Chapter 3 in detail\".\n- **Stories in progress get it too.** The tags are added when each prompt is built, so a saved story has them on its next scene or message, with nothing summarized again. A chapter you are partway through keeps the story it was planned with, so its tags start with the next chapter.",
           "highlight": true
         }
       ]
