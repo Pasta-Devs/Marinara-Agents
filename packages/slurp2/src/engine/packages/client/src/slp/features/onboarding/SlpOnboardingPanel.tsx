@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ChevronRight, Loader2, MessagesSquare } from "lucide-react";
+import { ChevronRight, MessagesSquare } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import type { SlpCreatorOnboardingCompletion } from "../../../../../shared/src/slp/slp-creator-onboarding.js";
 import type { SlpCreatorStageProfile, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -16,6 +16,7 @@ import { SLP_SETUP_STEPS, slpOnboardingProgress } from "./slp-onboarding-progres
 import { SlpOnboardingSteps } from "./SlpOnboardingSteps";
 import { SlpSceneOnboarding } from "./SlpSceneOnboarding";
 import { SlpBasicSetup } from "./SlpBasicSetup";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export type Step = 1 | 2 | 3 | 4 | 5;
 /** "scene" is the role-play sign-up; "easy" is the Creator picker. */
@@ -162,7 +163,7 @@ export function SlurpOnboardingWizard(props: WizardProps) {
           else setStep(4);
         }}
       >
-        {pending && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
+        {pending && <Spinner size="md" />}
         {step === 4
           ? t("ui.noodle.noodlerwizard.createCount", {
               count: selected.size,

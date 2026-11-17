@@ -3,7 +3,7 @@ import { slpErrorText } from "../../base/ui/slp-error-text";
 import type { SlpCreatorContentFormat } from "../../features/feed/slp-feed-contract";
 import type { SlurpContentDelivery, SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { AnimatePresence } from "framer-motion";
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -254,6 +254,7 @@ import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Modal, ModalPortalContext } from "../../../components/ui/Modal";
 import type { SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
 import { SlpPostCard } from "../../modules/post/SlpPostCard";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /** Keeps a feed slot mounted while its locked and revealed card shapes trade places. */
 export function SlurpAccessTransition({
@@ -476,10 +477,10 @@ export function LoadMoreFeedButton({
       className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent-foreground)] hover:bg-[var(--noodle-accent)]/10"
     >
       {loading ? (
-        <Loader2
-          size={16}
-          className="mx-auto animate-spin motion-reduce:animate-none"
-          aria-label={localizeUi("ui.slurp.feed.loading", { defaultValue: "Loading" })}
+        <Spinner
+          size="md"
+          className="mx-auto"
+          label={localizeUi("ui.slurp.feed.loading", { defaultValue: "Loading" })}
         />
       ) : (
         localizeUi("ui.noodle.noodlehome.loadMore", { visible, total })

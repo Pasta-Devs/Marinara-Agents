@@ -3,7 +3,7 @@
 // A profile picture or cover is used through the action layer; a post or Story picture goes to the
 // composer that opened it (`onUse`), which keeps its own Undo.
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2, RotateCcw, Undo2 } from "lucide-react";
+import { Check, RotateCcw, Undo2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
@@ -15,6 +15,8 @@ import { noteSlpAiUseOnce, SlpUsesAiMark } from "../../modules/chrome/SlpAiMark"
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { SLP_ASSIST_REQUEST_MAX, type SlpPictureTarget } from "../../../../../shared/src/slp/slp-actions.js";
 import { runSlpAction } from "./slp-assist-hooks";
+import { Checkbox } from "../../../components/ui/Checkbox";
+import { Spinner } from "../../../components/ui/Spinner";
 
 type Options = { creatorDetails: boolean; appearance: boolean; sourceReferences: boolean; composition: boolean };
 
@@ -173,8 +175,7 @@ export function SlpPictureAssist({
               ] as const
             ).map(([key, label]) => (
               <label key={key} className={cn(SLP_TYPE.body, "flex min-h-11 cursor-pointer items-center gap-3")}>
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={options[key]}
                   disabled={pending}
                   onChange={(event) => setOptions((current) => ({ ...current, [key]: event.target.checked }))}
@@ -209,7 +210,7 @@ export function SlpPictureAssist({
               className="absolute inset-0 grid place-items-center animate-pulse bg-[color-mix(in_srgb,var(--slurp-text)_9%,transparent)] motion-reduce:animate-none"
             >
               <span className={cn(SLP_TYPE.meta, "inline-flex items-center gap-1.5 text-[var(--slurp-muted)]")}>
-                <Loader2 size={14} aria-hidden="true" className="animate-spin" />
+                <Spinner size="sm" />
                 {t("ui.slurp.assist.drawing", { defaultValue: "Drawing…" })}
               </span>
             </span>
@@ -231,11 +232,7 @@ export function SlpPictureAssist({
         )}
         {!result ? (
           <SlpButton disabled={pending} onClick={() => void draw()} className="min-h-10 px-4 text-xs">
-            {busy === "draw" ? (
-              <Loader2 size={14} aria-hidden="true" className="animate-spin" />
-            ) : (
-              <SlpSparkleGlyph size={14} aria-hidden="true" />
-            )}
+            {busy === "draw" ? <Spinner size="sm" /> : <SlpSparkleGlyph size={14} aria-hidden="true" />}
             {error
               ? t("capabilities.actions.tryAgain", { defaultValue: "Try again" })
               : t("ui.slurp.assist.drawIt", { defaultValue: "Draw it" })}
@@ -248,11 +245,7 @@ export function SlpPictureAssist({
               {t("ui.slurp.assist.used", { defaultValue: "In use" })}
             </p>
             <SlpButton variant="tertiary" disabled={pending} onClick={() => void undo()} className="min-h-10 text-xs">
-              {busy === "undo" ? (
-                <Loader2 size={14} aria-hidden="true" className="animate-spin" />
-              ) : (
-                <Undo2 size={14} aria-hidden="true" />
-              )}
+              {busy === "undo" ? <Spinner size="sm" /> : <Undo2 size={14} aria-hidden="true" />}
               {t("ui.slurp.assist.undo", { defaultValue: "Undo" })}
             </SlpButton>
             {onDone && (
@@ -269,11 +262,7 @@ export function SlpPictureAssist({
               <SlpUsesAiMark />
             </SlpButton>
             <SlpPrimaryButton disabled={pending} onClick={() => void use()} className="min-h-10 px-5 text-xs">
-              {busy === "use" ? (
-                <Loader2 size={14} aria-hidden="true" className="animate-spin" />
-              ) : (
-                <Check size={14} aria-hidden="true" />
-              )}
+              {busy === "use" ? <Spinner size="sm" /> : <Check size={14} aria-hidden="true" />}
               {t("ui.slurp.assist.use", { defaultValue: "Use" })}
             </SlpPrimaryButton>
           </>

@@ -1,4 +1,4 @@
-import { FastForward, History, Loader2, Save, Trash2 } from "lucide-react";
+import { FastForward, History, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
@@ -19,6 +19,7 @@ import {
   useSkipSlpWorldDays,
   useSlpWorldClock,
 } from "./slp-timeline";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /**
  * A failed timeline job is a plain Error carrying the server's reason. `errorMessage` only reads API errors
@@ -138,7 +139,7 @@ export function SlpWorldClockPanel(page: SlpBackstagePageProps) {
           aria-live="polite"
           className="flex items-center gap-2 rounded-lg bg-[var(--slurp-canvas)] px-3 py-2 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]"
         >
-          <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          <Spinner size="sm" />
           <span>{job?.detail || t("ui.slurp.worldClock.working")}</span>
         </div>
       )}

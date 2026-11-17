@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Download, RefreshCw, Trash2, Upload } from "lucide-react";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -16,6 +16,8 @@ import { showConfirmDialog, showPromptDialog } from "../../../lib/app-dialogs";
 import { MaintenanceTask, focusRing, quietButton } from "./SlpMaintenanceTask";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { errorMessage, formatBytes } from "../../modules/settings/slp-backstage-format";
+import { Checkbox } from "../../../components/ui/Checkbox";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /** Backup and data: export, restore and the destructive delete actions. */
 export function SlpBackupPanel(page: SlpBackstagePageProps) {
@@ -72,11 +74,7 @@ export function SlpBackupPanel(page: SlpBackstagePageProps) {
             }}
             className={quietButton}
           >
-            {backupPending ? (
-              <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            ) : (
-              <Download size={14} aria-hidden="true" />
-            )}
+            {backupPending ? <Spinner size="sm" /> : <Download size={14} aria-hidden="true" />}
             {t("ui.slurp.settings.advanced.backupButton")}
           </button>
           <button
@@ -85,19 +83,14 @@ export function SlpBackupPanel(page: SlpBackstagePageProps) {
             onClick={() => restoreInputRef.current?.click()}
             className={quietButton}
           >
-            {restorePending ? (
-              <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            ) : (
-              <Upload size={14} aria-hidden="true" />
-            )}
+            {restorePending ? <Spinner size="sm" /> : <Upload size={14} aria-hidden="true" />}
             {t("ui.slurp.settings.advanced.restoreButton")}
           </button>
           <p className="basis-full text-xs leading-5 text-[var(--slurp-muted)]">
             {t("ui.slurp.settings.advanced.restoreDetail")}
           </p>
           <label className="flex basis-full items-start gap-2 text-xs leading-5">
-            <input
-              type="checkbox"
+            <Checkbox
               className="mt-1"
               checked={restoreImportSettings}
               disabled={restorePending}

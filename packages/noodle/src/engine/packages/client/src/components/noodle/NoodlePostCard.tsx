@@ -7,7 +7,6 @@ import {
   ImagePlus,
   Languages,
   ListChecks,
-  Loader2,
   MessageCircle,
   MoreHorizontal,
   Pencil,
@@ -61,6 +60,7 @@ import { NoodlePollComposer } from "./NoodlePollComposer";
 import { useNoodleTranslations, type NoodleTranslation } from "./noodle-translation";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { Spinner } from "../ui/Spinner";
 
 export const fieldClass =
   "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
@@ -997,7 +997,7 @@ export function PostImageEditControls({
           aria-busy={editing.loading}
           className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
         >
-          {editing.loading ? <Loader2 size={15} className="animate-spin" /> : <Crop size={15} />}
+          {editing.loading ? <Spinner size="md" /> : <Crop size={15} />}
         </button>
         <button
           type="button"

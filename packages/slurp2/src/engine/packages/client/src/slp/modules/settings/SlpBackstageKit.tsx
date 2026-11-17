@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   ChevronRight,
   FileText,
-  Loader2,
   Megaphone,
   Pencil,
   RefreshCw,
@@ -27,6 +26,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { slpLocalDay, slpLocalTime, slpScheduleDays, slpSlotAtTime, slpSlotOnDay } from "./slp-schedule-agenda";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /**
  * The posting schedule as a day list. Each row edits only the time; "Another day" moves the slot
@@ -137,7 +137,7 @@ function ScheduleAgendaRow({
           {t("ui.slurp.settings.creators.anotherDay")}
         </button>
       )}
-      {pending && <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+      {pending && <Spinner size="md" />}
     </li>
   );
 }
@@ -272,13 +272,7 @@ export function OverviewActivity({
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <ActivityRow
-          icon={
-            refreshPending ? (
-              <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <CheckCircle2 size={15} />
-            )
-          }
+          icon={refreshPending ? <Spinner size="md" /> : <CheckCircle2 size={15} />}
           label={t("ui.slurp.settings.overview.activity.current")}
           value={
             refreshPending
@@ -495,7 +489,7 @@ export function PromptEditor({
               disabled={!value.trim() || pending}
               className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-[var(--slurp-on-accent)] [&_svg]:!text-[var(--slurp-on-accent)] disabled:opacity-45"
             >
-              {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              {pending ? <Spinner size="sm" /> : <Save size={13} />}
               {saveLabel ?? t("ui.slurp.settings.prompts.save")}
             </button>
           </div>

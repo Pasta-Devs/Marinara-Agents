@@ -144,6 +144,9 @@ for (const path of [
   "lib/api-client.ts",
   "lib/emoji-catalog.generated.ts",
   "components/ui/Modal.tsx",
+  "components/ui/Switch.tsx",
+  "components/ui/Checkbox.tsx",
+  "components/ui/Spinner.tsx",
 ]) {
   bundles[path] = await bundle(path);
 }
@@ -418,6 +421,18 @@ for (const [label, options] of [
   );
   assert.match(modalWithI18n.type.name, /^I18nextProvider/u, "the Engine's Modal renders with the Engine's i18n");
   assert.equal(modalWithI18n.props.i18n, globalThis.__engineI18n);
+
+  // Switch, Checkbox and Spinner (capability API 1.830): the Engine's, or the package does not load.
+  for (const name of ["Switch", "Checkbox", "Spinner"]) {
+    function HostComponent() {}
+    const file = `components/ui/${name}.tsx`;
+    const { module } = await load(file, { host: hostWith({ components: { [name]: HostComponent } }) });
+    assert.equal(module[name], HostComponent, `the package's ${name} is the Engine's`);
+    await assert.rejects(
+      load(file, { host: hostWith({ components: {} }) }),
+      new RegExp(`does not provide the ${name} component`, "u"),
+    );
+  }
   assert.equal(modalWithI18n.props.children.type, HostModal);
   const packageProvider = modalWithI18n.props.children.props.children;
   assert.equal(packageProvider.props.value, packageTranslation, "its content keeps the package's own i18n");

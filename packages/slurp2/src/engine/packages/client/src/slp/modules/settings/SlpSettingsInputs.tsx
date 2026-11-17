@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { focusSettingAnchor, SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
+import { Switch } from "../../../components/ui/Switch";
 
 export type ChoiceOption<T extends string> = {
   value: T;
@@ -196,18 +197,11 @@ export function OverrideField({
           className={`inline-flex min-h-11 shrink-0 items-center gap-2 text-xs font-semibold ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
         >
           <span>{t("ui.slurp.settings.override.own")}</span>
-          <input
-            type="checkbox"
-            role="switch"
+          <Switch
             aria-labelledby={labelId}
             disabled={disabled}
             checked={overridden}
-            onChange={(event) => (event.target.checked ? onOverride() : onReset())}
-            className="peer sr-only"
-          />
-          <span
-            aria-hidden="true"
-            className="relative h-6 w-10 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
+            onCheckedChange={(checked) => (checked ? onOverride() : onReset())}
           />
         </label>
       </div>

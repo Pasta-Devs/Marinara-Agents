@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, ChevronDown, CircleAlert, Clock3, Loader2, RotateCcw } from "lucide-react";
+import { Activity, CheckCircle2, ChevronDown, CircleAlert, Clock3, RotateCcw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -34,6 +34,7 @@ import {
 } from "./SlpPulseRows";
 import { SlpSheet } from "./SlpSheet";
 import { SlpButton, SlpPrimaryButton } from "./SlpButton";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export type SlpPulseBudgetNote = { onOpenBudget: () => void; onDismiss: () => void };
 
@@ -514,7 +515,7 @@ function PulseTaskRow({
       ) : (
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent-foreground)]">
           {running ? (
-            <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+            <Spinner size="md" />
           ) : task.status === "error" || task.status === "failed" ? (
             <CircleAlert size={15} aria-hidden="true" />
           ) : (
@@ -646,7 +647,7 @@ function PulseGroupCard({
             {attention ? (
               <CircleAlert size={16} aria-hidden="true" />
             ) : running ? (
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+              <Spinner size="md" />
             ) : group.queued ? (
               <Clock3 size={16} aria-hidden="true" />
             ) : (

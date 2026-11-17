@@ -1,7 +1,7 @@
 // Take a DM thread out of Slurp (docs/FEEDBACK-2026-10.md R10): copy the whole conversation, or a
 // short summary for a lorebook or the Long-Term Memory agent. Props in.
 import { useMutation } from "@tanstack/react-query";
-import { Copy, Loader2 } from "lucide-react";
+import { Copy } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import { api, getApiErrorMessage } from "../../../lib/api-client";
 import { SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { SlpUsesAiMark } from "../../modules/chrome/SlpAiMark";
+import { Spinner } from "../../../components/ui/Spinner";
 
 type Localize = ReturnType<typeof useUiTranslation>["t"];
 
@@ -85,7 +86,7 @@ export function SlpThreadSummarySheet({
         </p>
         {summary.isPending ? (
           <p className="flex items-center gap-2 py-6 text-sm text-[var(--slurp-muted)]">
-            <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            <Spinner size="md" />
             {localizeUi("ui.slurp.messages.summaryWriting")}
           </p>
         ) : summary.isError ? (

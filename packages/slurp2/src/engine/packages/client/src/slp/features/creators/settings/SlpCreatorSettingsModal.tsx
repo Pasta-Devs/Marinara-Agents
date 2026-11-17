@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, ChevronDown, Loader2, RefreshCw, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { showConfirmDialog } from "../../../../lib/app-dialogs";
@@ -13,6 +13,7 @@ import { SLP_CREATOR_SETTINGS_SECTIONS } from "./slp-creator-settings-sections";
 import { SlpCreatorSettingsTab } from "./SlpCreatorSettingsTab";
 import type { SlpCreatorSettingsCreator } from "./slp-creator-settings-contract";
 import { useSlpCreatorSettingsStore } from "./slp-creator-settings-store";
+import { Spinner } from "../../../../components/ui/Spinner";
 
 /**
  * Everything about one Creator, in one place.
@@ -211,7 +212,7 @@ export function SlpCreatorSettingsModal({
           className="flex min-h-32 items-center justify-center gap-2 text-sm text-[var(--slurp-muted)]"
           role="status"
         >
-          <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          <Spinner size="md" />
           {t("ui.slurp.settings.loading", { defaultValue: "Loading…" })}
         </div>
       ) : (
@@ -414,11 +415,7 @@ export function SlpCreatorSettingsModal({
                   onClick={profileSaveState.save}
                   className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--slurp-on-accent)] disabled:opacity-50"
                 >
-                  {profileSaveState.isPending ? (
-                    <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  ) : (
-                    <Check size={15} aria-hidden="true" />
-                  )}
+                  {profileSaveState.isPending ? <Spinner size="md" /> : <Check size={15} aria-hidden="true" />}
                   {profileSaveState.isPending
                     ? t("ui.noodle.stageprofileform.saving")
                     : t("ui.noodle.stageprofileform.saveChanges")}

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type {
@@ -10,6 +9,7 @@ import type {
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { useSuggestCreatorPageStyle, useUpdateCreatorStrategy } from "./slp-creators-hooks";
 import { accentButton, noteClass, quietButton } from "./slp-creator-classes";
+import { Spinner } from "../../../components/ui/Spinner";
 
 type T = ReturnType<typeof useTranslation>["t"];
 
@@ -156,9 +156,7 @@ export function SlpPageStyleSuggest({
             onClick={run}
             aria-busy={suggest.isPending}
           >
-            {suggest.isPending && (
-              <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            )}
+            {suggest.isPending && <Spinner size="sm" />}
             {suggest.isPending
               ? t("ui.slurp.settings.creators.pageStyle.loading", { defaultValue: "Reading the card…" })
               : t("ui.slurp.settings.creators.pageStyle.action", { defaultValue: "Suggest from card" })}
@@ -226,9 +224,7 @@ export function SlpPageStyleSuggest({
           <div className="flex flex-wrap gap-2">
             {view.apply && (
               <button type="button" className={accentButton} disabled={busy} onClick={apply}>
-                {update.isPending && (
-                  <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                )}
+                {update.isPending && <Spinner size="sm" />}
                 {t("ui.slurp.settings.creators.pageStyle.apply", { defaultValue: "Use this page style" })}
               </button>
             )}

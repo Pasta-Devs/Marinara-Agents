@@ -37,7 +37,7 @@ interface MarinaraHostNamespace {
   services?: { tts?: unknown; dialogs?: unknown };
   modules?: Record<string, unknown>;
   queryClient?: unknown;
-  components?: { Modal?: unknown };
+  components?: { Modal?: unknown; Switch?: unknown; Checkbox?: unknown; Spinner?: unknown };
   data?: { emojiCatalog?: unknown };
   api?: unknown;
 }
