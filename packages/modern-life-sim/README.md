@@ -34,6 +34,8 @@ This is an **alpha** and the package is **staging only**: Engine `staging` teste
 
 0.3.2 fixes plans landing on a party, dating more than one person, dragging the phone button on a phone, and pictures while a new season's outfits are painted.
 
+0.3.3 fixes pictures, personas, cards and connections on a Marinara installed with its Android app.
+
 All generation — cast readings, scene lines, backgrounds and outfit pictures — runs through the Engine profile's own configured model and image connections. The package adds no external services and sends nothing anywhere else. The numbers (bonds, money, time, outcomes) are always decided by the package's code; the model only writes the words.
 
 ## Requirements

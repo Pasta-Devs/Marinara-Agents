@@ -151,6 +151,9 @@ jobs:
           node tests/gacha-forge-story-presentation.regression.mjs
           node tests/gacha-forge-time-zone.regression.mjs
 
+          # Modern Life Sim's Android local secret, and its server.mjs as the replay of its bundle patches.
+          node tests/modern-life-sim-engine-local-auth.regression.mjs
+
           # Prints how much of the reference extension's interface the Beholder package actually
           # renders. It is here so the number is read from a run rather than asserted from
           # memory — three separate claims of parity were wrong before this test existed.

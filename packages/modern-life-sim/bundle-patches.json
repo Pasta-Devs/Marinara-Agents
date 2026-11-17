@@ -1,0 +1,32 @@
+{
+  "note": "server.mjs is a pre-built esbuild bundle whose source tree lives outside this repository. base is the bundle last contributed from that tree (by the commit named); patches are the hand edits made here on top of it, in order, replayed by scripts/build-modern-life-sim-package.mjs through Gacha Forge's scripts/gacha-forge-bundle-patches.mjs. Each find occurs exactly once when its edit is applied, and each replace exactly once right after. Mirror these edits into the package source; once a new bundle carrying them is contributed, make it the base and empty its patches.",
+  "files": {
+    "server.mjs": {
+      "base": {
+        "version": "0.3.2",
+        "commit": "7d6979c2f8577060b3311ecc1d106e1e2b3c4ebf",
+        "sha256": "d5672272a8267f205537f524a3ab2d52cc0531f4567ea624c06de1e67f95c890",
+        "bytes": 1285097
+      },
+      "patches": [
+        {
+          "version": "0.3.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "function aP(e={}){",
+              "sourceId": "engine-local-auth",
+              "replaceFrom": "../../sources/forge-kit/engine-local-auth.mjs",
+              "reason": "Paste the shared Android local secret helper beside the loopback client's headers"
+            },
+            {
+              "find": "a=(y,m)=>{if(!y.startsWith(\"https:\"))return t(y,m);",
+              "replace": "a=(y,m)=>{let forgeSecretHeaders=forgeEngineLocalHeaders(y,m?.headers);forgeSecretHeaders!==m?.headers&&(m={...m,headers:forgeSecretHeaders});if(!y.startsWith(\"https:\"))return t(y,m);",
+              "reason": "Every loopback Engine request carries the Android local secret; HOST can name another address, which gets none (#2358)"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

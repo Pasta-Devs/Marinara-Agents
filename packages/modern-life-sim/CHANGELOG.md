@@ -1,3 +1,6 @@
+## 0.3.3 — 2026-11-17
+- If you installed Marinara with its Android app, pictures paint and your personas, cards and connections load again. The Engine there refused Modern Life Sim's requests with "401: Android local authentication required". They now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.
+
 ## 0.3.2 — 2026-10-02
 - If someone is throwing a party or going to one, they won't make plans with you for those hours, even if you said you can't come. When you invite someone out, you can see the hours they have a party.
 - If someone starts dating you knowing you already have a partner, they're okay with it. This also fixes the lives you're already playing.
