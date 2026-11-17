@@ -710,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.10",
+          "date": "2026-11-17",
+          "notes": "- **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with \"401: Android local authentication required\", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.",
+          "highlight": false
+        },
+        {
           "version": "0.34.9",
           "date": "2026-11-17",
           "notes": "- **New looks don't copy your avatar's hood.** A look is painted with your persona avatar (or his card picture) as the likeness, and when that picture wore a hood or a hat, every new look wore it too. The picture is now used only for the face, hair and build: a look wears just the outfit it was written with, and a hood or hat only when that outfit has one. Looks you already have keep their pictures; tap **Repaint** to paint one again.\n- **No more stray pixels at a look's edges.** A look is painted on a flat backdrop that its cut-out then removes, and a plum cardigan was painted on magenta, so the cut-out ate its edges. The backdrop is now chosen from more colour names (plum, burgundy, wine, lilac, sage, moss, denim and others) and mostly from the clothes, which are what touch it. Repaint a look that shows the specks.",
@@ -821,12 +827,6 @@
           "version": "0.30.0",
           "date": "2026-11-14",
           "notes": "- **The story knows what happened when.** Every chapter's summary now reaches the model with its place in the story: \"[Chapter 3]\" for a main chapter, \"[Character Story 2, after chapter 3]\" for a Character Story, and \"[After chapter 3]\" for route, repair, date and his-side chapters. The condensed part of the timeline says which chapters it covers (\"[Chapters 1–4]\"), and a chapter recalled by meaning goes as \"Chapter 3 in detail\".\n- **Stories in progress get it too.** The tags are added when each prompt is built, so a saved story has them on its next scene or message, with nothing summarized again. A chapter you are partway through keeps the story it was planned with, so its tags start with the next chapter.",
-          "highlight": true
-        },
-        {
-          "version": "0.29.0",
-          "date": "2026-11-14",
-          "notes": "- **Messages read like people texting.** Love interests write in plain, everyday words, the way a real person types, with no ornate metaphors or lines that belong in a novel. This holds in private threads and in the group chat.\n- **No more echoing.** A love interest no longer repeats your words back, quotes them or restates what you said; they answer in their own words.",
           "highlight": true
         }
       ]
