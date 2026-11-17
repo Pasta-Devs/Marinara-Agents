@@ -3852,7 +3852,21 @@ test("Otome Hearth shows prestige at the last bond rank and writes an unlocked e
   expect(openBox!.y).toBeGreaterThanOrEqual(midHearts!.y + midHearts!.height);
   expect(Math.abs(openBox!.x - midHearts!.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(midName!.x - marinName!.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(midHearts!.height - marinHearts!.height)).toBeLessThanOrEqual(1);
+  // One line each; a narrow column may draw them a little smaller than 16px, so the heights match within 2px.
+  expect(Math.abs(midHearts!.height - marinHearts!.height)).toBeLessThanOrEqual(2);
+  // Ten hearts stay on one line, at any text size and in a narrow column (2026-11-17: the last one wrapped).
+  const heartLines = (li: Locator) =>
+    li
+      .locator(".of-heart")
+      .evaluateAll((hearts) => new Set(hearts.map((heart) => Math.round(heart.getBoundingClientRect().top))).size);
+  for (const size of ["17px", "26px"]) {
+    await page.evaluate((px) => (document.documentElement.style.fontSize = px), size);
+    for (const li of [mid, row]) await expect.poll(() => heartLines(li)).toBe(1);
+  }
+  await mid.evaluate((li) => ((li as HTMLElement).style.width = "240px"));
+  await expect.poll(() => heartLines(mid)).toBe(1);
+  await mid.evaluate((li) => ((li as HTMLElement).style.width = ""));
+  await page.evaluate(() => (document.documentElement.style.fontSize = "17px"));
   await expect(
     mid.getByRole("img", { name: "Ren: affection level 10 of 10, bond rank 1 of 10", exact: true }),
   ).toBeVisible();

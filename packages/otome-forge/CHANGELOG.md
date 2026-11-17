@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.13 — 2026-11-17
+
+- **Ten hearts on one line.** On the Story screen's **Between you**, a love interest's ten hearts could wrap the last one onto a line of its own on a phone, with a larger text size or a long level and counter. They now always stay on one line. Where there is no room for them at full size, they get a little smaller.
+
 ## 0.34.12 — 2026-11-17
 
 - **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as "Modern AU version") under its name, so you can tell them apart. Searching the pickers finds a title too.
