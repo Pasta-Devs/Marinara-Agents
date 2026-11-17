@@ -12,6 +12,7 @@ import {
 import { api } from "../../../lib/api-client";
 import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { SlpTextAssist, type SlpTextAssistRun } from "../assist/slp-assist-contract";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
 
 type RebalancePreview = { changed: number; counts: Record<string, { before: number; after: number }> };
 
@@ -107,12 +108,16 @@ export function SlurpFanTypesSettings({
   const remove = async () => {
     if (!selected || fanTypes.length <= 1) return;
     if (
-      !window.confirm(
-        t("ui.slurp.settings.fanTypes.deleteConfirm", {
+      !(await showConfirmDialog({
+        title: t("ui.slurp.settings.fanTypes.delete", { defaultValue: "Delete type" }),
+        message: t("ui.slurp.settings.fanTypes.deleteConfirm", {
           defaultValue: "Delete {{name}}? Existing fans will use a compatible type until you rebalance the audience.",
           name: selected.name,
         }),
-      )
+        confirmLabel: t("ui.slurp.settings.fanTypes.delete", { defaultValue: "Delete type" }),
+        cancelLabel: t("ui.slurp.actions.cancel"),
+        tone: "destructive",
+      }))
     )
       return;
     const next = fanTypes.filter((type) => type.id !== selected.id);

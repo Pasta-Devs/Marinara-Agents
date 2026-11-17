@@ -1,4 +1,4 @@
-import { Check, Download, Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Check, Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +19,8 @@ import {
   useSlurpWardrobeMutations,
 } from "./slp-wardrobe-hooks";
 import { buildSlpWardrobeJson, downloadSlpWardrobeJson, parseSlpWardrobeJson } from "./slp-wardrobe-json";
+import { Checkbox } from "../../../components/ui/Checkbox";
+import { Spinner } from "../../../components/ui/Spinner";
 
 type ImportKind = "character" | "lorebook" | "text" | "legacy";
 type ReviewLook = SlpWardrobeImportDraft & { selected: boolean };
@@ -121,8 +123,7 @@ function LookFields({
         />
       </label>
       <label className="flex min-h-11 items-center gap-2 self-end text-sm font-semibold">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={value.enabled}
           disabled={disabled}
           onChange={(event) => patch({ enabled: event.target.checked })}
@@ -305,7 +306,7 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
           role="status"
           aria-label={t("ui.slurp.wardrobe.loading", { defaultValue: "Loading wardrobe" })}
         >
-          <Loader2 className="animate-spin motion-reduce:animate-none" size={20} />
+          <Spinner size="lg" />
         </div>
       ) : looks.length === 0 ? (
         <p className="rounded-lg border border-dashed border-[var(--slurp-outline)] p-4 text-sm text-[var(--muted-foreground)]">
@@ -403,7 +404,7 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
               disabled={pending || !editor.name.trim() || !editor.summary.trim() || !editor.description.trim()}
               onClick={saveEditor}
             >
-              {pending && <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />}
+              {pending && <Spinner size="sm" />}
               {t("ui.slurp.wardrobe.save", { defaultValue: "Save" })}
             </button>
           </div>
@@ -544,11 +545,7 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
             }
             onClick={runPreview}
           >
-            {previewImport.isPending ? (
-              <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <SlpSparkleGlyph size={15} />
-            )}
+            {previewImport.isPending ? <Spinner size="md" /> : <SlpSparkleGlyph size={15} />}
             {t("ui.slurp.wardrobe.preview", { defaultValue: "Extract review draft" })}
           </button>
 
@@ -563,8 +560,7 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
                   className="space-y-3 rounded-lg bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
                 >
                   <label className="flex min-h-11 items-center gap-2 text-sm font-bold">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={look.selected}
                       onChange={(event) =>
                         setReview((current) =>
@@ -599,11 +595,7 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
                 disabled={selectedCount === 0 || mutations.saveImport.isPending || looks.length + selectedCount > 64}
                 onClick={saveReview}
               >
-                {mutations.saveImport.isPending ? (
-                  <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Check size={15} />
-                )}
+                {mutations.saveImport.isPending ? <Spinner size="md" /> : <Check size={15} />}
                 {t("ui.slurp.wardrobe.saveSelected", {
                   defaultValue: "Save {{count}} selected",
                   count: selectedCount,

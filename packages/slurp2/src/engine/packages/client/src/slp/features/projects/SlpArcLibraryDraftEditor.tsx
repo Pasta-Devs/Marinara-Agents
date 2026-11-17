@@ -3,6 +3,7 @@ import { ARC_MOODS } from "../../modules/settings/slp-backstage-format";
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SlurpArcType } from "./slp-projects-contract";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 export function ArcLibraryDraftEditor({
   draft,
@@ -136,8 +137,7 @@ export function ArcLibraryDraftEditor({
                 key={`${chapter.label}-${index}`}
                 className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selectedChapters.has(index)}
                   onChange={(event) =>
                     setSelectedChapters((current) => {
@@ -470,8 +470,7 @@ export function ArcLibraryDraftEditor({
       )}
       {draft.chapters.length > 0 && (
         <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={draft.revertProfileAtEnd === true}
             onChange={(event) => setDraft({ ...draft, revertProfileAtEnd: event.target.checked })}
           />
@@ -500,8 +499,7 @@ export function ArcLibraryDraftEditor({
       <div className="flex flex-wrap gap-x-4">
         {[...new Set([...tags, ...draft.tags])].map((tag) => (
           <label key={tag} className="inline-flex min-h-11 items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={draft.tags.includes(tag)}
               onChange={(event) =>
                 setDraft({

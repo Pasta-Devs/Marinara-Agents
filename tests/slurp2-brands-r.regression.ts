@@ -326,7 +326,7 @@ async function main() {
   assert.match(panel, /settingKey="brandDealsPace"/u);
   const brandsPanel = slurp2Source(`${CLIENT}/features/ads/SlpBrandsPanel.tsx`);
   assert.match(brandsPanel, /runSlpAction\("draw-brand-picture"/u);
-  assert.match(brandsPanel, /role="switch"/u);
+  assert.match(brandsPanel, /<Switch\b/u);
   const assist = slurp2Source(`${CLIENT}/features/assist/SlpPictureAssist.tsx`);
   assert.match(assist, /const profileSlot = !onUse && \(target === "avatar" \|\| target === "cover"\)/u);
 

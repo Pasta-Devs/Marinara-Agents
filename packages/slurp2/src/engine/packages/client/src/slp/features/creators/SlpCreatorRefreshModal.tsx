@@ -7,6 +7,7 @@ import { startSlpTask } from "../../base/state/slp-task-store";
 import { countSlurpRefreshOutcomes } from "./slp-refresh-batch";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 /** Create posts now: pick Creators and access; the run goes on in Pulse (task B). */
 export function SlpCreatorRefreshModal(page: SlpBackstagePageProps) {
@@ -63,8 +64,7 @@ export function SlpCreatorRefreshModal(page: SlpBackstagePageProps) {
                 key={creator.id}
                 className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[var(--accent)]/40"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={refreshAccountIds.has(creator.id)}
                   onChange={(event) =>
                     setRefreshAccountIds((current) => {

@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, Check, Loader2 } from "lucide-react";
+import { BriefcaseBusiness, Check } from "lucide-react";
 import { SlpTextAssist } from "../../assist/slp-assist-contract";
 import { SlpSparkleGlyph } from "../../../base/chrome/SlpGlyphs";
 import { useEffect, useState } from "react";
@@ -23,6 +23,8 @@ import { getApiErrorMessage } from "../../../../lib/api-client";
 import type { SlurpCommission, SlurpMessage } from "../slp-messages-contract";
 
 import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
+import { Checkbox } from "../../../../components/ui/Checkbox";
+import { Spinner } from "../../../../components/ui/Spinner";
 const AMOUNT_FIELD =
   "flex h-11 items-center gap-1.5 rounded-xl bg-[var(--slurp-surface)] px-3 ring-1 ring-inset ring-[var(--noodle-divider)] focus-within:ring-2 focus-within:ring-[var(--slurp-focus)]";
 
@@ -196,7 +198,7 @@ export function CommissionRow({
       }}
       className={compact ? "h-10 min-h-10 shrink-0 gap-1.5 px-3.5 text-[13px]" : "w-full"}
     >
-      {accept.isPending && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
+      {accept.isPending && <Spinner size="md" />}
       {accept.isPending
         ? localizeUi("ui.slurp.messages.commissionAcceptPending", { defaultValue: "Processing payment…" })
         : localizeUi("ui.slurp.messages.commissionAccept", { defaultValue: "Accept and pay" })}
@@ -500,7 +502,7 @@ export function CommissionRow({
 
       {commission.state === "accepted" && commission.deliverAt && (
         <p className="mt-3 flex items-center gap-1.5 font-semibold text-[var(--slurp-ink)]">
-          <Loader2 size={13} className="animate-spin motion-reduce:hidden" aria-hidden="true" />
+          <Spinner size="sm" />
           {localizeUi("ui.slurp.messages.commissionArriving", {
             defaultValue: "Being made. Arriving around {{time}}.",
             time: formatTime(commission.deliverAt, i18n.language),
@@ -525,8 +527,7 @@ export function CommissionRow({
             className="w-full resize-y rounded-xl bg-[var(--slurp-surface)] px-3 py-2.5 text-sm outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--slurp-focus)]"
           />
           <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl px-2 text-[var(--slurp-muted)] hover:bg-[var(--accent)]">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={generateImage}
               onChange={(event) => setGenerateImage(event.target.checked)}
               className="size-4 accent-[var(--noodle-accent)]"

@@ -8,6 +8,7 @@ import { noteClass, selectClass } from "./slp-creator-classes";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
 import type { SlurpCreatorMetrics } from "./slp-creators-contract";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 type Translate = SlpBackstagePageProps["t"];
 const METRIC_KEYS = ["posts", "followers", "subscribers", "likes", "replies", "earnings", "unread", "arcs"] as const;
@@ -114,8 +115,7 @@ export function CreatorCollabsEditor({
         return (
           <div key={partner.id} className="space-y-2 rounded-lg p-2 ring-1 ring-inset ring-[var(--slurp-outline)]">
             <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={Boolean(collab)}
                 onChange={() => toggle(partner.id)}
                 className="size-4 accent-[var(--noodle-accent)]"

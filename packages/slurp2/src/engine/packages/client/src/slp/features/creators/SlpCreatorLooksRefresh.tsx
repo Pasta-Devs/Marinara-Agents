@@ -7,6 +7,7 @@ import { Avatar, getSlpAccentStyle, SLP_PINK } from "../../base/chrome/SlpChrome
 import { startSlpTask } from "../../base/state/slp-task-store";
 import { quietButton } from "./slp-creator-classes";
 import { useCreatorAppearanceAction } from "./slp-creator-profile-hooks";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 /**
  * Refresh looks from cards: the player ticks Creators, Slurp drafts each look again from the
@@ -108,8 +109,7 @@ export function SlpCreatorLooksRefresh({ creators }: { creators: readonly SlpCre
                   key={creator.id}
                   className="flex min-h-12 cursor-pointer items-start gap-3 px-3 py-2 hover:bg-[var(--accent)]/40"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={picked.has(creator.id)}
                     onChange={(event) =>
                       setPicked((current) => {

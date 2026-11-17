@@ -11,6 +11,7 @@ import { getSlpAccentStyle, SLP_PINK, SLP_TYPE } from "../../base/chrome/SlpChro
 import { SlpButton, SlpPrimaryButton, SlpSquareCheck } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { getSlurp2UnseenReleases, SLURP2_VERSION, slurp2SplashKind, type Slurp2ReleaseEntry } from "./slp-release";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 // Per browser, not per Engine: the splash is a notice, not a setting, and a localStorage key keeps
 // it off the server and off the migration path.
@@ -216,12 +217,7 @@ function SlurpWelcome({ open, onDismiss, onLeave }: { open: boolean; onDismiss: 
             "flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl bg-[var(--slurp-surface-raised)] px-4 py-3 shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--slurp-focus)]",
           )}
         >
-          <input
-            type="checkbox"
-            checked={approved}
-            onChange={(event) => setApproved(event.target.checked)}
-            className="sr-only"
-          />
+          <Checkbox checked={approved} onChange={(event) => setApproved(event.target.checked)} className="sr-only" />
           <SlpSquareCheck checked={approved} />
           <span className="text-pretty">I understand this is alpha software and I use it at my own risk.</span>
         </label>

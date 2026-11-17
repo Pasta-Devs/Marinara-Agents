@@ -98,13 +98,12 @@ const HOST_CHARACTERS_BUILT_AGAINST = Object.freeze({
   engineVersion: "2.5.2",
   engineCommit: "c18c1af639cd2c253c13f8ca392ac450065025d3",
 });
-// The Engine moved a character's selfie instructions from the Convo tab into the Images tab's `image-instructions`
-// section (Pasta-Devs/Marinara-Engine#9193). 1.826 is the first capability API with that tab, so Noodle's "Edit image
-// instructions" link opens it, and an older Engine keeps the Noodle that opens Convo (Pasta-Devs/Marinara-Agents#2296).
-const NOODLE_CAPABILITY_API = Object.freeze({ major: 1, minor: 826 });
-const NOODLE_BUILT_AGAINST = Object.freeze({
+// Capability API 1.830 hands packages the Engine's Switch, Checkbox and Spinner (Pasta-Devs/Marinara-Engine#9383), so
+// Noodle and Slurp draw the same controls as the Engine. An older Engine refuses the manifest.
+const HOST_COMPONENTS_CAPABILITY_API = Object.freeze({ major: 1, minor: 830 });
+const HOST_COMPONENTS_BUILT_AGAINST = Object.freeze({
   engineVersion: "2.5.2",
-  engineCommit: "a690a029df73c9e68db4c2f746529a555a091b1e",
+  engineCommit: "611557bc28a57e63dc634742f59f1769cc1c261c",
 });
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
@@ -451,10 +450,10 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.18",
-    minEngineVersion: NOODLE_BUILT_AGAINST.engineVersion,
-    capabilityApi: NOODLE_CAPABILITY_API,
-    builtAgainst: NOODLE_BUILT_AGAINST,
+    version: "1.5.19",
+    minEngineVersion: HOST_COMPONENTS_BUILT_AGAINST.engineVersion,
+    capabilityApi: HOST_COMPONENTS_CAPABILITY_API,
+    builtAgainst: HOST_COMPONENTS_BUILT_AGAINST,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "A pretend social network where your characters post, share photos, and talk about your chats.",
@@ -531,8 +530,8 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.25",
-    minEngineVersion: HOST_CHARACTERS_BUILT_AGAINST.engineVersion,
+    version: "0.4.26",
+    minEngineVersion: HOST_COMPONENTS_BUILT_AGAINST.engineVersion,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
     description:
@@ -586,8 +585,8 @@ const features = [
     clientImport: "packages/client/src/slp/slp-client-entry.tsx",
     packageSourceRoot: slurp2SourceRoot,
     ownedSourcePaths: slurp2OwnedSourcePaths,
-    capabilityApi: HOST_CHARACTERS_CAPABILITY_API,
-    builtAgainst: HOST_CHARACTERS_BUILT_AGAINST,
+    capabilityApi: HOST_COMPONENTS_CAPABILITY_API,
+    builtAgainst: HOST_COMPONENTS_BUILT_AGAINST,
     libraryHidden: true,
     // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
     // package-asset content types, so the route 404s it whatever the manifest declares. The coin

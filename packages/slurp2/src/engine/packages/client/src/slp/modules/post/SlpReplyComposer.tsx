@@ -16,6 +16,7 @@ import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { labelClass } from "../../base/chrome/SlpChrome";
 import { ConversationMediaPickerPanel } from "../../../components/chat/ConversationMediaPickerPanel";
 import { ImageIcon, Smile, X } from "lucide-react";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 export interface SlpReplyComposerProps {
   /** "Ask for a reply" from the Creator; absent on the Creator's own posts (R1-027). */
@@ -185,8 +186,7 @@ export function SlpReplyComposer({
         <div className="flex items-center gap-2">
           {askForReply && (
             <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={askForReply.asked}
                 onChange={(event) => askForReply.setAsked(event.target.checked)}
                 className="h-3.5 w-3.5 accent-[var(--noodle-accent)]"

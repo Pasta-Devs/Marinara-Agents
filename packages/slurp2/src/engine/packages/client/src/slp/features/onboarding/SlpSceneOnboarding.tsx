@@ -4,7 +4,7 @@
 // wizard stays one tap away as "Quick setup".
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { ChevronRight, Headphones, Heart, Loader2, MessageCircle, Smartphone, Users, Zap } from "lucide-react";
+import { ChevronRight, Headphones, Heart, MessageCircle, Smartphone, Users, Zap } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlpScenePreset } from "../../../../../shared/src/slp/slp-scene.js";
 import type { SlpAccount, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -28,6 +28,7 @@ import { SLP_SCENE_MOMENT_CHAPTER, slpSceneMissing, slpSceneProgress } from "./s
 import { useSlpSceneModel, type SlpSceneModel, type SlpSceneSetup } from "./slp-scene-model";
 import { SlpSceneChapterRail, SlpScenePhone, SlpScenePreview, type SlpSceneFirstPost } from "./SlpScenePreview";
 import { SlpSceneShoot } from "./SlpSceneShoot";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /** The presets a player can pick today. */
 export const SLP_SCENE_OFFERED: readonly SlpScenePreset[] = ["friend", "support", "seat"];
@@ -489,7 +490,7 @@ function SceneStage({
             }));
   const finishLabel = (
     <>
-      {model.registering && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
+      {model.registering && <Spinner size="md" />}
       {t("ui.slurp.scene.finish")}
     </>
   );
@@ -652,7 +653,7 @@ function SceneLive({
       id: "post",
       icon:
         firstPost === "writing" ? (
-          <Loader2 size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+          <Spinner size="md" />
         ) : (
           <Heart size={16} aria-hidden="true" className={cn(firstPost === "posted" && "fill-current")} />
         ),
