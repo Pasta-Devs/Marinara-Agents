@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Story Writer: the full-page view (stage, book, chapter bar, sticky note, action and quick bars, settings drawer)
+// Story Writer: the full-page view (stage, book, chapter bar, sticky note, action and quick bars, settings drawer,
+// prompt peek)
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -25,6 +26,7 @@ import { countWords, storyDisplayTitle, type StoryChapter, type StorySummary } f
 import { storyThemeVariables, type ResolvedColorMode } from "../../lib/story-writer/styles-shell";
 import { generateClientId } from "../../lib/utils";
 import { ActionBar, QuickReplyBar, type FullscreenControl } from "./ActionBar";
+import { PromptPeekDialog } from "./PromptPeek";
 import { StickyNote } from "./StickyNote";
 import { StoryReader, type StoryReaderHandle } from "./StoryReader";
 import { StorySidebar, type SidebarSectionId } from "./StorySidebar";
@@ -133,6 +135,8 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sectionRequest, setSectionRequest] = useState<{ id: SidebarSectionId; nonce: number } | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [peekOpen, setPeekOpen] = useState(false);
+  const peekOpener = useRef<HTMLElement | null>(null);
   const [chapterBarHost, setChapterBarHost] = useState<HTMLDivElement | null>(null);
   const [ghostChapterId, setGhostChapterId] = useState(generateClientId);
   const [firstStoryFailed, setFirstStoryFailed] = useState(false);
@@ -346,6 +350,20 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     });
     if (confirmed) await doc.deleteChapter(chapterId);
   };
+  const hideNote = () => {
+    setNoteOpen(false);
+    updatePreferences({ showAuthorNote: false });
+    toast.info(t("note.hidden"));
+  };
+  const openPeek = () => {
+    peekOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPeekOpen(true);
+  };
+  const closePeek = () => {
+    setPeekOpen(false);
+    // The view behind the dialog is inert until this render lands; focus goes back to the button after it.
+    requestAnimationFrame(() => peekOpener.current?.focus({ preventScroll: true }));
+  };
   const jumpToChapter = (chapterId: string) => {
     readerRef.current?.scrollToChapter(chapterId);
     // The drawer covers the book on phones.
@@ -377,10 +395,11 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
       data-sw-note={preferences.noteSide}
       data-sw-sidebar-open={sidebarOpen ? "true" : "false"}
       data-sw-quick={showQuickReplies ? "true" : "false"}
+      data-sw-note-shown={preferences.showAuthorNote ? "true" : "false"}
       style={themeStyle}
       onKeyDown={onKeyDown}
     >
-      <div className="sw-frame">
+      <div className="sw-frame" inert={peekOpen}>
         <div className="sw-stage" />
         <div className="sw-reader-slot">
           {data && settings ? (
@@ -416,17 +435,20 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         {data && settings ? (
           <>
             <div ref={setChapterBarHost} className="sw-chapterbar" />
-            <StickyNote
-              key={data.story.id}
-              side={preferences.noteSide}
-              text={settings.authorNote}
-              clearAfterChapter={settings.clearNoteAfterChapter}
-              depth={settings.authorNoteDepth}
-              open={noteOpen}
-              onOpenChange={setNoteOpen}
-              onChange={(authorNote) => doc.updateSettings({ authorNote })}
-              onDepthChange={(authorNoteDepth) => doc.updateSettings({ authorNoteDepth })}
-            />
+            {preferences.showAuthorNote ? (
+              <StickyNote
+                key={data.story.id}
+                side={preferences.noteSide}
+                text={settings.authorNote}
+                clearAfterChapter={settings.clearNoteAfterChapter}
+                depth={settings.authorNoteDepth}
+                open={noteOpen}
+                onOpenChange={setNoteOpen}
+                onChange={(authorNote) => doc.updateSettings({ authorNote })}
+                onDepthChange={(authorNoteDepth) => doc.updateSettings({ authorNoteDepth })}
+                onHide={hideNote}
+              />
+            ) : null}
             <div className="sw-dock">
               <ActionBar
                 status={generation.status}
@@ -483,9 +505,11 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
           onManageConnections={manageConnections}
           onJumpToChapter={jumpToChapter}
           onDeleteChapter={(chapterId) => void deleteChapter(chapterId)}
+          onPeekPrompt={openPeek}
           totalWords={totalWords}
         />
       </div>
+      {peekOpen ? <PromptPeekDialog load={generation.peekPrompt} onClose={closePeek} /> : null}
     </div>
   );
 }

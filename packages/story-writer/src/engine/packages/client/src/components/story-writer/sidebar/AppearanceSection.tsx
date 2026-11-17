@@ -146,6 +146,12 @@ export function AppearanceSection(props: {
         onChange={(noteSide) => onChange({ noteSide })}
       />
       <Toggle
+        label={t("appearance.showNote")}
+        hint={t("appearance.showNoteHint")}
+        checked={preferences.showAuthorNote}
+        onChange={(showAuthorNote) => onChange({ showAuthorNote })}
+      />
+      <Toggle
         label={t("appearance.pageAnimation")}
         hint={t("appearance.pageAnimationHint")}
         checked={preferences.pageAnimation}

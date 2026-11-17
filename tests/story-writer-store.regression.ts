@@ -169,6 +169,28 @@ test("quick replies are kept for every story, normalized, and old preference doc
   assert.deepEqual(await store.getPreferences(), later);
 });
 
+test("the author's note is shown by default, old preference documents show it, and a non-boolean keeps the saved value", async () => {
+  const { store, row, setData } = setup();
+  assert.equal((await store.getPreferences()).showAuthorNote, true);
+
+  // A document saved by 0.2.0 has no showAuthorNote.
+  await store.patchPreferences({ noteSide: "left" });
+  const { showAuthorNote: _shown, ...legacy } = row(PREFERENCES_DOCUMENT_ID)!.data as Record<string, unknown>;
+  setData(PREFERENCES_DOCUMENT_ID, legacy);
+  const upgraded = await store.getPreferences();
+  assert.equal(upgraded.noteSide, "left");
+  assert.equal(upgraded.showAuthorNote, true);
+
+  const hidden = await store.patchPreferences({ showAuthorNote: false });
+  assert.equal(hidden.showAuthorNote, false);
+  assert.equal(hidden.noteSide, "left");
+  const kept = await store.patchPreferences({ showAuthorNote: "yes", fontSize: 20 });
+  assert.equal(kept.showAuthorNote, false, "a non-boolean keeps the saved value");
+  assert.equal(kept.fontSize, 20);
+  assert.deepEqual(await store.getPreferences(), kept);
+  assert.equal((await store.patchPreferences({ showAuthorNote: true })).showAuthorNote, true);
+});
+
 test("stories are created normalized, listed newest first and patched without losing settings", async () => {
   const { store } = setup();
   const first = await store.createStory({ title: "First", chapterWords: 5, unknown: true });

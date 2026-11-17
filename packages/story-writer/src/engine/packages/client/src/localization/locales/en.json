@@ -28,6 +28,8 @@
     "title": "Author's note",
     "open": "Open the author's note",
     "close": "Roll up the author's note",
+    "hide": "Hide the author's note",
+    "hidden": "The author's note is hidden. Show it again from Appearance in the story settings.",
     "empty": "Leave instructions for the next chapter",
     "explanation": "These are your instructions for writing the next chapter. They are sent with every chapter until you change them.",
     "clearedAfter": "This note is cleared after the next chapter.",
@@ -203,7 +205,29 @@
     "autoTimeline": "Update automatically after each chapter",
     "authorNote": "Author's note",
     "clearNote": "Clear after the next chapter",
-    "clearNoteHint": "Empty the sticky note once the model has written the chapter."
+    "clearNoteHint": "Empty the sticky note once the model has written the chapter.",
+    "prompt": "Prompt",
+    "peek": "Peek at the prompt",
+    "peekHint": "See what Write would send to the model right now, without writing anything."
+  },
+  "peek": {
+    "title": "Peek at the prompt",
+    "close": "Close the prompt",
+    "loading": "Building the prompt…",
+    "failed": "The prompt could not be built.",
+    "next": "What Write would send for chapter {{number}}.",
+    "continue": "What Write would send to continue chapter {{number}}.",
+    "model": "Model",
+    "maxTokens": "Max tokens",
+    "notSet": "Not set",
+    "messages": "Messages",
+    "characters_one": "{{formatted}} character",
+    "characters_other": "{{formatted}} characters",
+    "roles": {
+      "system": "System",
+      "user": "User",
+      "assistant": "Assistant"
+    }
   },
   "quickReplies": {
     "label": "Quick replies",
@@ -242,6 +266,8 @@
     "fontSizeValue": "{{size}} px",
     "sidebarSide": "Sidebar side",
     "noteSide": "Sticky note corner",
+    "showNote": "Show the author's note",
+    "showNoteHint": "A hidden note is still sent to the model with every chapter.",
     "left": "Left",
     "right": "Right",
     "pageAnimation": "Page-turn animation",

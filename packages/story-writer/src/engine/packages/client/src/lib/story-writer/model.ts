@@ -56,6 +56,8 @@ export interface StoryWriterPreferences {
   fontSize: number;
   sidebarSide: StorySide;
   noteSide: StorySide;
+  /** Hiding the sticky note only hides it: its text is still sent with every chapter. */
+  showAuthorNote: boolean;
   streaming: boolean;
   pageAnimation: boolean;
   lastStoryId: string | null;
@@ -207,6 +209,7 @@ export function defaultPreferences(): StoryWriterPreferences {
     fontSize: 18,
     sidebarSide: "left",
     noteSide: "right",
+    showAuthorNote: true,
     streaming: true,
     pageAnimation: true,
     lastStoryId: null,
@@ -290,6 +293,7 @@ export function normalizePreferences(patch: unknown, base: StoryWriterPreference
     fontSize: integer(input.fontSize, LIMITS.fontSize, base.fontSize),
     sidebarSide: oneOf(input.sidebarSide, ["left", "right"], base.sidebarSide),
     noteSide: oneOf(input.noteSide, ["left", "right"], base.noteSide),
+    showAuthorNote: typeof input.showAuthorNote === "boolean" ? input.showAuthorNote : base.showAuthorNote,
     streaming: typeof input.streaming === "boolean" ? input.streaming : base.streaming,
     pageAnimation: typeof input.pageAnimation === "boolean" ? input.pageAnimation : base.pageAnimation,
     lastStoryId: typeof lastStoryId === "string" && lastStoryId.length <= 200 ? lastStoryId : null,

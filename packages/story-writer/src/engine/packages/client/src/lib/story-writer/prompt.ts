@@ -343,6 +343,59 @@ export function injectAuthorNote(messages: ChatMessage[], note: string, depth: n
   return messages;
 }
 
+/** Where a chapter run reads the cast and the lore (the Engine, at generation time). */
+export interface PromptSources {
+  characters(ids: string[]): Promise<PromptCharacter[]>;
+  personas(ids: string[]): Promise<PromptCharacter[]>;
+  lore(lorebookIds: string[], scanText: string): Promise<PromptLoreEntry[]>;
+}
+
+export interface ChapterPlan {
+  mode: "next" | "continue";
+  /** The chapter a rewrite replaces. */
+  original: StoryChapter | null;
+  chapterNumber: number;
+  request: string;
+  messages: ChatMessage[];
+  maxTokens: number;
+}
+
+/**
+ * Everything a chapter run sends, built before the story changes. Write and Peek both call this, so a peek shows
+ * exactly what Write would send.
+ */
+export async function planChapter(input: {
+  settings: StorySettings;
+  chapters: StoryChapter[];
+  requested: "next" | "continue" | "rewrite";
+  /** A quick reply, sent in place of the continue message. */
+  quickReply?: string;
+  savedMaxTokens: number | null;
+  sources: PromptSources;
+}): Promise<ChapterPlan> {
+  const { settings, chapters, requested } = input;
+  const last = chapters[chapters.length - 1];
+  const original = requested === "rewrite" ? (last ?? null) : null;
+  const mode: "next" | "continue" = !last || (requested === "next" && last.status !== "draft") ? "next" : "continue";
+  // A rewrite is written from an emptied last chapter, so the prompt treats it as a new chapter.
+  const promptChapters = original ? [...chapters.slice(0, -1), { ...original, text: "", summary: "" }] : chapters;
+  // Continuing a draft sends a quick reply once: the draft keeps the request it was started with.
+  const request = chapterRequest(settings, input.quickReply, original);
+  const [characters, personas, lore] = await Promise.all([
+    input.sources.characters(settings.characterIds),
+    input.sources.personas(settings.personaIds),
+    input.sources.lore(settings.lorebookIds, loreScanText(settings, promptChapters, request)),
+  ]);
+  return {
+    mode,
+    original,
+    chapterNumber: mode === "next" ? chapters.length + 1 : chapters.length,
+    request,
+    messages: buildChapterMessages({ settings, chapters: promptChapters, mode, characters, personas, lore, request }),
+    maxTokens: chapterTokenBudget(settings.chapterWords, input.savedMaxTokens),
+  };
+}
+
 // ── Summaries ──
 
 export function buildSummaryMessages(input: {

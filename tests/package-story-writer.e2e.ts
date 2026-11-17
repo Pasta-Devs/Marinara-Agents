@@ -115,10 +115,23 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await engineRequest(request, base, "PATCH", "/story-writer/preferences", { lastStoryId: fresh.story.id });
 
   const generations: Array<Record<string, unknown>> = [];
+  const peeks: Array<Record<string, unknown>> = [];
   // Set to hold the mocked reply back, so a step can look at the page while the chapter is being written.
   let hold: Promise<void> | null = null;
   await page.route("**/api/generate/raw", async (route) => {
-    generations.push(route.request().postDataJSON());
+    const requestBody = route.request().postDataJSON();
+    if (requestBody.returnPrompt === true) {
+      // The Engine answers returnPrompt with the final messages and parameters, before any provider call.
+      peeks.push(requestBody);
+      await route.fulfill({
+        json: {
+          prompt: { messages: requestBody.messages },
+          parameters: { provider: "openai", model: "e2e-model", maxTokens: requestBody.parameters.maxTokens },
+        },
+      });
+      return;
+    }
+    generations.push(requestBody);
     await hold;
     await route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseBody(CHAPTER) });
   });
@@ -166,6 +179,37 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await page.screenshot({ path: testInfo.outputPath("02-note-open.png") });
   await page.keyboard.press("Escape");
 
+  // Peek at the prompt shows what Write is about to send, as the Engine would send it, and writes nothing.
+  await root.getByRole("button", { name: "Show story settings" }).click();
+  const tools = root.getByRole("button", { name: /^Author tools/ });
+  await tools.click();
+  const peekButton = root.getByRole("button", { name: "Peek at the prompt" });
+  await peekButton.click();
+  const peek = root.getByRole("dialog", { name: "Peek at the prompt" });
+  await expect(peek).toBeVisible();
+  await expect(peek).toContainText("What Write would send to continue chapter 1.");
+  const meta = peek.locator(".sw-peek-meta");
+  await expect(meta).toContainText("e2e-model");
+  await expect(meta).toContainText((peeks[0]!.parameters as { maxTokens: number }).maxTokens.toLocaleString("en-US"));
+  const peeked = peek.locator(".sw-peek-message");
+  await expect(peeked).toHaveCount(5);
+  // The long system message starts folded; the short ones are open.
+  await expect(peeked.first()).not.toHaveAttribute("open");
+  await expect(peeked.first().locator(".sw-peek-text")).toHaveCount(0);
+  await peeked.first().locator("summary").click();
+  await expect(peeked.first().locator(".sw-peek-text")).toContainText("You are an excellent writer for the user.");
+  await expect(peeked.nth(3)).toHaveAttribute("open", "");
+  await expect(peeked.nth(3)).toContainText("Make it rain.");
+  await page.screenshot({ path: testInfo.outputPath("02a-peek.png") });
+  await page.keyboard.press("Escape");
+  await expect(peek).toHaveCount(0);
+  await expect(peekButton).toBeFocused();
+  await tools.click();
+  await root.getByRole("button", { name: "Hide story settings" }).click();
+  expect(peeks).toHaveLength(1);
+  expect(generations).toHaveLength(0);
+  await expect.poll(storyChapters).toEqual([expect.objectContaining({ status: "draft", text: OPENING })]);
+
   const write = root.getByRole("button", { name: "Continue chapter 1" });
   await expect(write).toBeEnabled();
   await write.click();
@@ -184,6 +228,13 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     { role: "user", content: "Make it rain." },
     { role: "user", content: "Continue." },
   ]);
+  // The peek asked for exactly this, with returnPrompt in place of a stream.
+  expect(peeks[0]).toEqual({
+    connectionId: connection.id,
+    messages: body.messages,
+    parameters: body.parameters,
+    returnPrompt: true,
+  });
 
   const saved = await engineRequest(request, base, "GET", `/story-writer/stories/${fresh.story.id}`);
   expect(saved.chapters).toHaveLength(1);
@@ -217,9 +268,33 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   // On a phone it moves to the side away from the note (on the right here).
   if (mobile) expect(barBox.x + barBox.width).toBeLessThan(noteBox.x);
 
+  // Hiding the author's note gives its band to the book; Appearance shows it again.
+  const wide = (await root.boundingBox())!.width >= 1100;
+  const slotHeight = async () => (await root.locator(".sw-reader-slot").boundingBox())!.height;
+  const withNote = await slotHeight();
+  await root.getByRole("button", { name: /^Open the author's note/ }).click();
+  await root.getByRole("button", { name: "Hide the author's note" }).click();
+  await expect(root.locator(".sw-note-anchor")).toHaveCount(0);
+  await expect(root).toHaveAttribute("data-sw-note-shown", "false");
+  await expect
+    .poll(async () => (await engineRequest(request, base, "GET", "/story-writer/preferences")).showAuthorNote)
+    .toBe(false);
+  // A wide screen reserves no band for the note: it sits beside the book.
+  if (wide) expect(await slotHeight()).toBe(withNote);
+  else await expect.poll(slotHeight).toBeGreaterThan(withNote);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: testInfo.outputPath("03-book-note-hidden.png") });
+  await root.getByRole("button", { name: "Show story settings" }).click();
+  const appearance = root.getByRole("button", { name: "Appearance" });
+  await appearance.click();
+  await root.getByRole("button", { name: /^Show the author's note/ }).click();
+  await appearance.click();
+  await root.getByRole("button", { name: "Hide story settings" }).click();
+  await expect(root.locator(".sw-note-collapsed")).toBeVisible();
+  await expect.poll(slotHeight).toBe(withNote);
+
   // Quick replies: no bar until there is one to show.
   await expect(root.locator(".sw-quickbar")).toHaveCount(0);
-  const wide = (await root.boundingBox())!.width >= 1100;
   const slotBefore = (await root.locator(".sw-reader-slot").boundingBox())!;
   await root.getByRole("button", { name: "Show story settings" }).click();
   await root.getByRole("button", { name: /^Quick replies/ }).click();

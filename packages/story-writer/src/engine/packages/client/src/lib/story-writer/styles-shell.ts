@@ -2,9 +2,9 @@
 // Story Writer: theme tokens and the shell's stylesheet (stage, sidebar, sticky note, action bar)
 // ──────────────────────────────────────────────
 // Plain CSS, scoped under the package's element. The root carries data-sw-theme / data-sw-mode / data-sw-sidebar /
-// data-sw-note; the reading tokens (--sw-ink, --sw-page-bg, ...) are set inline by storyThemeVariables because the
-// texture URLs carry the package version. Layout follows the root's own size (container queries), not the window:
-// the Engine may show its sidebar next to the tab.
+// data-sw-note / data-sw-note-shown / data-sw-quick; the reading tokens (--sw-ink, --sw-page-bg, ...) are set inline
+// by storyThemeVariables because the texture URLs carry the package version. Layout follows the root's own size
+// (container queries), not the window: the Engine may show its sidebar next to the tab.
 import { STORY_WRITER_ASSETS, type StoryWriterAsset } from "./assets";
 import type { StoryTheme } from "./model";
 
@@ -358,7 +358,7 @@ ${R} .sw-slot-message {
 ${R} .sw-slot-message p { margin: 0; max-width: 34ch; }
 ${R} .sw-spin { animation: sw-spin 1s linear infinite; }
 @keyframes sw-spin { to { transform: rotate(360deg); } }
-${R} :is(.sw-drawer, .sw-note-anchor, .sw-dock, .sw-chapterbar, .sw-slot-message) :focus-visible {
+${R} :is(.sw-drawer, .sw-note-anchor, .sw-dock, .sw-chapterbar, .sw-slot-message, .sw-peek) :focus-visible {
   outline: 2px solid var(--sw-accent); outline-offset: 2px;
 }
 ${R} .sw-visually-hidden {
@@ -635,6 +635,41 @@ ${R} .sw-quick-item .sw-textarea { grid-column: 1 / -1; min-height: 60px; }
 ${R} .sw-quick-add { display: grid; gap: 6px; }
 ${R} .sw-quick-add .sw-button-row { margin-top: 4px; }`;
 
+// Peek at the prompt: a dialog over everything, drawer included, on the drawer's scrim.
+const PEEK_RULES = `
+${R} .sw-peek-scrim { display: block; z-index: 50; }
+${R} .sw-peek {
+  position: absolute; top: 50%; left: 50%; z-index: 51; translate: -50% -50%;
+  display: flex; flex-direction: column; width: min(760px, calc(100% - 32px));
+  max-height: calc(100% - 32px - ${SAFE_BOTTOM}); min-height: 0; overflow: hidden; border-radius: 14px;
+  background: var(--sw-panel-texture), var(--sw-panel-bg); color: var(--sw-panel-fg);
+  box-shadow: 0 0 0 1px var(--sw-panel-border), 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+${R} .sw-peek-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 6px 18px; }
+${R} .sw-peek-head h2 {
+  flex: 1; min-width: 0; margin: 0; font-family: var(--sw-heading-font); font-size: 18px; color: var(--sw-heading-fg);
+}
+${R} .sw-peek-body {
+  display: grid; flex: 1; min-height: 0; align-content: start; gap: 12px; padding: 0 18px 18px;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+${R} .sw-peek-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; line-height: 1.45; }
+${R} .sw-peek-status[data-variant="danger"] { color: var(--sw-danger); }
+${R} .sw-peek-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 13px; }
+${R} .sw-peek-meta dt { font-weight: 600; color: var(--sw-panel-muted); }
+${R} .sw-peek-meta dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+${R} .sw-peek-messages { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+${R} .sw-peek-message { border: 1px solid var(--sw-field-border); border-radius: 10px; background: var(--sw-field-bg); color: var(--sw-field-fg); }
+${R} .sw-peek-message summary {
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; cursor: pointer; font-size: 13px;
+}
+${R} .sw-peek-role { font-weight: 700; }
+${R} .sw-peek-size { margin-inline-start: auto; color: var(--sw-panel-muted); font-variant-numeric: tabular-nums; }
+${R} .sw-peek-text {
+  margin: 0; padding: 0 12px 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5;
+}`;
+
 const NOTE_RULES = `
 ${R} .sw-note-anchor { position: absolute; top: 14px; z-index: 25; width: 0; height: 0; }
 ${R} .sw-note-anchor[data-side="left"] { left: 16px; }
@@ -814,6 +849,9 @@ const LAYOUT_RULES = `
   ${R} .sw-note-collapsed .sw-note-title { font-size: 15px; }
   /* The e-book note's colored strip needs less room than the paper note's tape. */
   ${R} .sw-root[data-sw-theme="ebook"] .sw-note-collapsed { height: auto; min-height: 54px; padding-top: 12px; }
+  /* A hidden note gives its band back to the book. */
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-frame { --sw-slot-top: calc(10px + var(--sw-chapterbar-h)); }
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-chapterbar { top: 8px; }
 }
 @container sw-root (max-width: 640px) {
   ${R} .sw-frame {
@@ -827,6 +865,7 @@ const LAYOUT_RULES = `
   ${R} .sw-chapterbar { top: 12px; translate: none; max-width: calc(100% - 190px); }
   ${R} .sw-root[data-sw-note="right"] .sw-chapterbar { left: 12px; }
   ${R} .sw-root[data-sw-note="left"] .sw-chapterbar { left: auto; right: 12px; }
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-chapterbar { left: 50%; right: auto; translate: -50% 0; max-width: calc(100% - 24px); }
   ${R} .sw-indicator-long {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
   }
@@ -856,6 +895,8 @@ const LAYOUT_RULES = `
     --sw-slot-right: 78px;
   }
   ${R} .sw-root[data-sw-quick="true"] .sw-frame { --sw-slot-bottom: calc(14px + var(--sw-quickbar-h) + ${SAFE_BOTTOM}); }
+  /* No note band here to give back: keep the landscape top over the narrower widths' hidden-note rule. */
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-frame { --sw-slot-top: calc(6px + var(--sw-chapterbar-h)); }
   ${R} .sw-root[data-sw-note] .sw-chapterbar {
     top: 6px; left: 50%; right: auto; translate: -50% 0; max-width: calc(100% - 300px);
   }
@@ -916,6 +957,7 @@ export const SHELL_STYLES = [
   THEME_RULES,
   CONTROL_RULES,
   DRAWER_RULES,
+  PEEK_RULES,
   NOTE_RULES,
   ACTION_RULES,
   LAYOUT_RULES,

@@ -4,7 +4,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { StickyNote as StickyNoteIcon, X } from "lucide-react";
+import { EyeOff, StickyNote as StickyNoteIcon, X } from "lucide-react";
 import { LIMITS, type StorySide } from "../../lib/story-writer/model";
 import { useDraftText } from "./sidebar/fields";
 
@@ -20,6 +20,8 @@ export function StickyNote(props: {
   onOpenChange(open: boolean): void;
   onChange(text: string): void;
   onDepthChange(depth: number): void;
+  /** Takes the note off the page; its text is still sent. */
+  onHide(): void;
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -77,6 +79,15 @@ export function StickyNote(props: {
             <span className="sw-note-tape" aria-hidden="true" />
             <div className="sw-note-head">
               <h2 id={`${id}-title`}>{t("note.title")}</h2>
+              <button
+                type="button"
+                className="sw-icon-button"
+                aria-label={t("note.hide")}
+                title={t("note.hide")}
+                onClick={props.onHide}
+              >
+                <EyeOff size={18} aria-hidden="true" />
+              </button>
               <button
                 type="button"
                 className="sw-icon-button"
