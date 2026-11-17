@@ -447,7 +447,11 @@ test("the Lead earns by the chapter's climax: 150 won, 100 tied or none, 50 lost
 test("Tarot night (#2151) is an activity: its pay shares the day's caps with every other activity", () => {
   let state = fresh();
   // Read Me and a claw round have used up today's affection with Kai, and all but 30 of today's Starlight.
-  state = grant(state, { source: "read-me", li: KAI, starlight: 340, affection: 100 }, DAY).state;
+  state = grant(
+    state,
+    { source: "read-me", li: KAI, starlight: economy.ACTIVITY_STARLIGHT_DAILY_CAP - 60, affection: 100 },
+    DAY,
+  ).state;
   state = grant(state, { source: "claw", li: KAI, starlight: 30, affection: 50 }, DAY).state;
   const reading = {
     id: "tr-abc123-aaaaaa",
