@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.34.10 — 2026-11-17
+
+- **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with "401: Android local authentication required", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.
+
 ## 0.34.9 — 2026-11-17
 
 - **New looks don't copy your avatar's hood.** A look is painted with your persona avatar (or his card picture) as the likeness, and when that picture wore a hood or a hat, every new look wore it too. The picture is now used only for the face, hair and build: a look wears just the outfit it was written with, and a hood or hat only when that outfit has one. Looks you already have keep their pictures; tap **Repaint** to paint one again.

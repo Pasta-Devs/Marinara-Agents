@@ -26,7 +26,7 @@ import { normalizeSideCast } from "../schemas/side-cast.js";
 import { readyCutout } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
-import { galleryRef, loopbackBaseUrl, type PaintedImage } from "./image-client.js";
+import { galleryRef, loopbackBaseUrl, withEngineLocalAuth, type PaintedImage } from "./image-client.js";
 
 /** The Engine's own cleanup settings for a sprite sheet (sprites.routes.ts uses 35 for its cells). */
 export const CUTOUT_STRENGTH = 35;
@@ -57,9 +57,10 @@ function pngSize(bytes: Buffer): { width?: number; height?: number } {
 /** The loopback client: read, clean up, upload. */
 export function createCutoutClient({
   baseUrl = loopbackBaseUrl(),
-  fetch: fetchImpl = globalThis.fetch,
+  fetch: injectedFetch = globalThis.fetch,
   timeoutMs = CUTOUT_TIMEOUT_MS,
 }: { baseUrl?: string; fetch?: Fetch; timeoutMs?: number } = {}): CutoutClient {
+  const fetchImpl = withEngineLocalAuth(injectedFetch);
   // A timeout throws inside cutOut, which records the cut-out as failed (Home pans over the uncut look instead).
   const timeout = () => AbortSignal.timeout(timeoutMs);
   async function json(path: string, init: RequestInit): Promise<unknown> {
