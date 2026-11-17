@@ -21,6 +21,7 @@ const SOURCE_KEYS: Record<AlbumImage["source"], string> = {
   photo: "ui.otomeForge.album.sourcePhoto",
   card: "ui.otomeForge.album.sourceCard",
   keepsake: "ui.otomeForge.album.sourceKeepsake",
+  kitten: "ui.otomeForge.album.sourceKitten",
 };
 
 interface CgViewerProps {

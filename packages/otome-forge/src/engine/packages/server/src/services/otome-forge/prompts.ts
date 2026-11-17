@@ -198,6 +198,7 @@ import {
   LIMIT_IDS,
   LIMIT_PROMPT_TEXT,
   type LimitId,
+  type LimitLevel,
   type McRole,
   contentNeedsAgeGate,
   consentAllowedIds,
@@ -556,11 +557,12 @@ function names(lis: readonly ContractPerson[]): string {
 function limitLines(content: ContentSettings) {
   // A limit the rules hold at Line is a Line whatever the document says (the gate is taken as confirmed: see above).
   const level = (id: LimitId) => (limitIsFixed(id, content, true) ? "line" : content.limits[id]);
-  const at = (wanted: string) => LIMIT_IDS.filter((id) => level(id) === wanted).map((id) => LIMIT_PROMPT_TEXT[id]);
-  const lines = at("line");
-  const veils = at("veil");
-  for (const custom of content.custom) (custom.level === "line" ? lines : veils).push(custom.text);
-  return { lines, veils, allowed: at("allow") };
+  // The player's own limits follow the built-in ones at their level, in their own words.
+  const at = (wanted: LimitLevel) => [
+    ...LIMIT_IDS.filter((id) => level(id) === wanted).map((id) => LIMIT_PROMPT_TEXT[id]),
+    ...content.custom.filter((limit) => limit.level === wanted).map((limit) => limit.text),
+  ];
+  return { lines: at("line"), veils: at("veil"), allowed: at("allow") };
 }
 
 function fixedRules(lis: readonly ContractPerson[]): string[] {

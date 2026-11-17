@@ -35,6 +35,7 @@ import {
   dateOutcome,
   type DatePlan,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/dates.ts";
+import { ACTIVITY_STARLIGHT_DAILY_CAP } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 import type { GiftId } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/shop.ts";
 import type { Item } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import type {
@@ -644,7 +645,8 @@ test("the day's caps limit what a date pays, never whether it is played and coun
   const t = await dateWorld("r-mg5date-aa0002");
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    daily: { dayKey: forgeDayKey(Date.now()), starlight: 350, affection: { [KAI]: 300 } },
+    // 50 short of the day's activity Starlight: the date pays only that.
+    daily: { dayKey: forgeDayKey(Date.now()), starlight: ACTIVITY_STARLIGHT_DAILY_CAP - 50, affection: { [KAI]: 300 } },
   }));
   const { date } = await startDate(t);
   await playDate(t, date.key, [2, 2, 2]);

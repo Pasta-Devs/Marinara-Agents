@@ -13,6 +13,10 @@
 // shows each only once cut out, leaves them waiting for a tap under Ask or review (which paints once), rests after a
 // failure, reads a restart's paint as stopped and paints nothing with images off; the kitten prompt keeps its rating
 // and adult tags on an edit; and the kittens take rose 5 (hers), sky 5 (his) and lemon and mint 5 (the next two).
+// 0.36.0: the Album lists the play view's painted, cut-out kittens (hers, then the cast's) and queues nothing; its
+// Repaint paints one again in the low lane, one at a time, with the tap as the consent and a reviewed prompt kept, shows
+// the old one (cut out) in the Album and Kitty Cards until the new one is cut out, keeps it on a failure, deletes the
+// replaced original, and pays nothing with images off; Kitty Cards' own tap still never repaints a painted kitten.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
@@ -98,6 +102,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { playView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/claw.ts";
+import { registerAlbumRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/album.ts";
 import { registerArtRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/art.ts";
 import { registerClawRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/claw.ts";
 import { registerKittyRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/kitty.ts";
@@ -1194,32 +1199,53 @@ test("the kitten prompt: a chibi kitten on the look's matte, with her colours an
   assert.doesNotMatch(kittenPrompt({ ...input, identityLine: "", outfitLine: "" }).prompt, /Kai's look:/);
 });
 
-/** A free cut-out that lands at once, or (held) once `release()` is called. */
+/** A free cut-out that lands at once, or (held, or from `hold()` on) once `release()` is called. */
 function freeCutouts(held: boolean) {
   let release = () => {};
-  const gate = held ? new Promise<void>((resolve) => (release = resolve)) : Promise.resolve();
+  let gate = Promise.resolve();
+  const hold = () => {
+    gate = new Promise<void>((resolve) => (release = resolve));
+  };
+  if (held) hold();
+  const calls: string[] = [];
   const client: CutoutClient = {
     async cutOut(url) {
+      calls.push(url);
       await gate;
       return { url: `${url}.cut.png`, id: `cut-${url.length}` };
     },
     deleteGalleryImage: async () => true,
   };
-  return { client, release: () => release() };
+  return { client, calls, hold, release: () => release() };
 }
 
-/** The art world with GET /play and the art routes, the art service and free cut-outs. */
-async function kittenWorld(runKey: string, { ask = false, held = false } = {}) {
-  const t = await artWorld({ runKey, images: { ask } });
+/** The art world with GET /play, the art routes and the Album, the art service and free cut-outs. */
+async function kittenWorld(
+  runKey: string,
+  {
+    ask = false,
+    held = false,
+    before,
+    engineDeletes,
+  }: Pick<Parameters<typeof artWorld>[0], "before" | "engineDeletes"> & { ask?: boolean; held?: boolean } = {},
+) {
+  const t = await artWorld({ runKey, images: { ask }, before, engineDeletes });
   const cut = freeCutouts(held);
   const deps = { ...t.deps, cutouts: cut.client };
   const full = { ...deps, art: createOtomeArt(deps) };
   const play = routesOf(registerClawRoutes, full, runKey);
   const arts = routesOf(registerArtRoutes, full, runKey);
+  const albumRoutes = routesOf(registerAlbumRoutes, full, runKey);
   const view = async (query: object = {}) => {
     const result = await play("GET", "/runs/:run/play", query);
     assert.equal(result.status, 200, JSON.stringify(result.body));
     return result.body as PlayView;
+  };
+  /** GET /runs/:run/album's kittens (0.36.0). */
+  const album = async () => {
+    const result = await albumRoutes("GET", "/runs/:run/album");
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body.kittens as KittenView[];
   };
   /** Reads the play view until no kitten may land without a tap (each read starts what is owed). */
   const settle = async () => {
@@ -1238,7 +1264,7 @@ async function kittenWorld(runKey: string, { ask = false, held = false } = {}) {
       : (await t.store.readDoc(unitId(t.runId, owner), normalizeUnit))!.kitten;
   const states = async () =>
     Promise.all(["player", KAI, MIR, SOL].map(async (owner) => (await record(owner))?.state ?? null));
-  return { ...t, cut, arts, view, settle, kittenPaints, record, states };
+  return { ...t, cut, arts, view, album, settle, kittenPaints, record, states };
 }
 
 test("images on: GET /play paints her kitten and each of theirs, one at a time in the low lane, shown once cut out", async () => {
@@ -1424,4 +1450,217 @@ test("a kitten claim that does not stay ends the chain instead of claiming that 
   on = false;
   await chain;
   assert.deepEqual([ended, claims, t.paid.length], [true, 1, 0], "claimed once, and nothing paid");
+});
+
+// ── 0.36.0: the Album's Kittens and their Repaint ──
+
+/** A kitten as a view lists it: [url, its paint's state], or null when it is not listed. */
+const listed = (kittens: readonly KittenView[] | undefined, owner: string) => {
+  const kitten = kittens?.find((entry) => entry.owner === owner);
+  return kitten ? [kitten.url ?? null, kitten.art?.state ?? null] : null;
+};
+const settleTicks = async () => {
+  for (let round = 0; round < 50; round += 1) await new Promise((resolve) => setImmediate(resolve));
+};
+
+test("the Album's kittens are the play view's painted, cut-out ones, hers then the cast's; reading it queues nothing", async () => {
+  const t = await kittenWorld("r-kitalbum-aaaaaa", { held: true });
+  // Before Kitty Cards was ever opened: none, and reading the Album claims, paints and cuts out nothing.
+  assert.deepEqual(await Promise.all([t.album(), t.album(), t.album()]), [[], [], []]);
+  await settleTicks();
+  assert.deepEqual([await t.states(), t.paid.length, t.cut.calls.length], [[null, null, null, null], 0, 0]);
+  try {
+    await t.view();
+    await until(async () => (await t.states()).every((state) => state === "ready"), "every kitten is painted");
+    assert.deepEqual(await t.album(), [], "painted, not cut out yet: not listed");
+  } finally {
+    t.cut.release();
+  }
+  await t.settle();
+  const shown = (await t.view()).kittens!;
+  const kittens = await t.album();
+  assert.deepEqual(
+    kittens.map((kitten) => kitten.owner),
+    ["player", KAI, MIR, SOL],
+    "hers, then the cast in order",
+  );
+  assert.deepEqual(kittens, shown, "the play view's own kittens, with the same urls");
+  assert.ok(
+    kittens.every((kitten) => kitten.url?.endsWith(".cut.png") && !kitten.art),
+    JSON.stringify(kittens),
+  );
+
+  // A newly painted kitten whose cut-out nothing has queued: the Album neither lists it nor queues its cut-out.
+  const calls = t.cut.calls.length;
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, SOL)), normalizeUnit, (unit) => ({
+    ...unit,
+    kitten: { state: "ready", at, url: "/api/global-gallery/file/sol-kitten-new.png" },
+  }));
+  assert.deepEqual(
+    (await t.album()).map((kitten) => kitten.owner),
+    ["player", KAI, MIR],
+  );
+  await settleTicks();
+  assert.equal(t.cut.calls.length, calls, "the Album queued no cut-out");
+  assert.equal(t.paid.length, 4, "nor any paint");
+
+  // With images off there are none.
+  await setImages(t.store, t.runId, { connectionId: null });
+  assert.deepEqual(await t.album(), []);
+});
+
+test("the Album's Repaint paints a painted kitten again: the old one shows until the new one is cut out, and stays on a failure", async () => {
+  let fails = false;
+  let hold: Promise<void> | undefined;
+  const t = await kittenWorld("r-kitrepaint-aaaaaa", {
+    engineDeletes: true,
+    before: async () => {
+      await hold;
+      if (fails) throw new Error("provider down");
+    },
+  });
+  await t.settle();
+  const first = (await t.record(KAI))!;
+  assert.equal(first.state, "ready");
+  const old = `${first.url}.cut.png`;
+  const inPlay = async () => listed((await t.view()).kittens, KAI);
+  const inAlbum = async () => listed(await t.album(), KAI);
+  assert.deepEqual(
+    [await inPlay(), await inAlbum()],
+    [
+      [old, null],
+      [old, null],
+    ],
+  );
+  const paid = t.kittenPaints().length;
+  const deleted = t.deleted.length;
+
+  // In the low lane: a scene paint queued while the connection is busy goes first.
+  const order: string[] = [];
+  const paint = t.images.generatePortrait;
+  t.images.generatePortrait = async (request) => (order.push("kitten"), paint(request));
+  let free!: () => void;
+  const busy = paintSlot("conn-image", () => new Promise<void>((resolve) => (free = resolve)), "high");
+  let release = () => {};
+  hold = new Promise<void>((resolve) => (release = resolve));
+  let tap: ReturnType<typeof t.arts> | undefined;
+  let scene: Promise<void> | undefined;
+  // Released however this ends: a lane left busy would hold back every later paint in this file.
+  try {
+    tap = t.arts("POST", "/runs/:run/art/kitten", { owner: KAI, repaint: true });
+    await until(async () => (await t.record(KAI))?.state === "pending", "the repaint is claimed");
+    // Claimed in its document before the paid call, keeping the picture it paints over.
+    assert.equal((await t.record(KAI))!.url, first.url);
+    // Its paint is in its lane before the scene's is queued.
+    await settleTicks();
+    scene = paintSlot("conn-image", async () => void order.push("scene"), "high");
+    free();
+    await until(() => order.length === 2, "the scene and the kitten start");
+    assert.deepEqual(order, ["scene", "kitten"]);
+    await until(() => t.kittenPaints().length > paid, "the repaint is paid for");
+    assert.deepEqual(await inPlay(), [old, "pending"], "Kitty Cards' card keeps the old kitten while it paints");
+    assert.deepEqual(await inAlbum(), [old, "pending"]);
+  } finally {
+    free();
+    hold = undefined;
+    release();
+  }
+  await Promise.all([busy, scene]);
+  // Its new picture is cut out after it is saved (queued by the tap itself): held here, so the old one still shows.
+  t.cut.hold();
+  let repainted: { state: string; url: string };
+  try {
+    repainted = (await tap!).body.art;
+    assert.equal(repainted.state, "ready", JSON.stringify(repainted));
+    assert.notEqual(repainted.url, first.url);
+    assert.equal(t.kittenPaints().length, paid + 1, "a repaint is one more image");
+    assert.deepEqual(await inAlbum(), [old, "pending"], "the Album shows it painting over the old one");
+    assert.deepEqual(await inPlay(), [old, "pending"]);
+    assert.deepEqual(
+      t.deleted.slice(deleted),
+      [first.ref!.slice("global-gallery:".length)],
+      "the old original goes; its cut-out stays",
+    );
+  } finally {
+    t.cut.release();
+  }
+  await cutoutsSettled();
+  // The Album alone (it queues nothing) shows the new one once cut out.
+  assert.deepEqual(await inAlbum(), [`${repainted.url}.cut.png`, null]);
+  assert.deepEqual(await inPlay(), [`${repainted.url}.cut.png`, null]);
+
+  // A failed repaint keeps the kitten it painted over, shown as painted everywhere (Repaint again), deleting nothing.
+  fails = true;
+  const failed = (await t.arts("POST", "/runs/:run/art/kitten", { owner: KAI, repaint: true })).body.art;
+  assert.deepEqual([failed.state, failed.url], ["failed", repainted.url]);
+  assert.deepEqual(
+    [await inAlbum(), await inPlay()],
+    [
+      [`${repainted.url}.cut.png`, null],
+      [`${repainted.url}.cut.png`, null],
+    ],
+  );
+  assert.equal(t.deleted.length, deleted + 1);
+  // Kitty Cards' own tap (Paint our kittens, Try again) never repaints one, not even after a failed repaint.
+  fails = false;
+  const count = t.paid.length;
+  const asIs = (await t.arts("POST", "/runs/:run/art/kitten", { owner: KAI })).body.art;
+  assert.deepEqual([asIs.state, asIs.url, t.paid.length], ["failed", repainted.url, count]);
+  const her = (await t.arts("POST", "/runs/:run/art/kitten", { owner: "player" })).body.art;
+  assert.deepEqual([her.state, t.paid.length], ["ready", count], "a painted kitten is answered as it is");
+  // The Album's Repaint again: the new one replaces it.
+  const again = (await t.arts("POST", "/runs/:run/art/kitten", { owner: KAI, repaint: true })).body.art;
+  assert.equal(again.state, "ready");
+  assert.equal(t.paid.length, count + 1);
+  await cutoutsSettled();
+  assert.deepEqual(await inAlbum(), [`${again.url}.cut.png`, null]);
+
+  // Without images nothing repaints, and the Album lists none.
+  await setImages(t.store, t.runId, { connectionId: null });
+  const off = await t.arts("POST", "/runs/:run/art/kitten", { owner: KAI, repaint: true });
+  assert.deepEqual([off.status, (await t.record(KAI))!.url, t.paid.length], [503, again.url, count + 1]);
+  assert.deepEqual(await t.album(), []);
+});
+
+test("the Album's Repaint is its own consent, keeps a reviewed prompt, and paints one kitten at a time, once per tap", async () => {
+  const t = await kittenWorld("r-kitrepaint2-aaaaaa");
+  await t.settle();
+  // Under Ask before painting the tap is the consent.
+  await setImages(t.store, t.runId, { ask: true });
+  let live = 0;
+  let most = 0;
+  const original = t.images.generatePortrait;
+  t.images.generatePortrait = async (request) => {
+    live += 1;
+    most = Math.max(most, live);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    live -= 1;
+    return original(request);
+  };
+  const before = (await t.record(KAI))!.url;
+  const paid = t.paid.length;
+  const [kai, again, mir] = await Promise.all([
+    t.arts("POST", "/runs/:run/art/kitten", { owner: KAI, repaint: true }),
+    t.arts("POST", "/runs/:run/art/kitten", { owner: KAI, repaint: true }),
+    t.arts("POST", "/runs/:run/art/kitten", { owner: MIR, repaint: true }),
+  ]);
+  assert.deepEqual([kai.body.art.state, again.body.art.state, mir.body.art.state], ["ready", "ready", "ready"]);
+  assert.equal(again.body.art.url, kai.body.art.url, "a second tap while it paints takes that same paint");
+  assert.notEqual(kai.body.art.url, before);
+  assert.equal(t.paid.length, paid + 2, "two kittens, two images");
+  assert.equal(most, 1, "one at a time");
+  // Prompt review: the prompt shown for the review, and the edited one sent, keeping the kitten's required tags.
+  const prompt = await t.arts("POST", "/runs/:run/art/kitten/prompt", { owner: KAI });
+  assert.ok(prompt.body.prompt.includes(KITTEN_FRAMING), JSON.stringify(prompt.body));
+  const edited = await t.arts("POST", "/runs/:run/art/kitten", {
+    owner: KAI,
+    repaint: true,
+    prompt: "a kitten in a navy coat",
+    negativePrompt: "text",
+  });
+  assert.equal(edited.body.art.state, "ready");
+  const sent = t.paid.at(-1)!.request;
+  assert.match(sent.prompt, /^a kitten in a navy coat, safe for work, fully clothed, adults only$/);
+  assert.match(sent.negativePrompt ?? "", /^text, child, childlike, minor/);
+  assert.equal(t.paid.length, paid + 3);
 });

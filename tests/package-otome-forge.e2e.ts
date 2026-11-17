@@ -2,6 +2,7 @@
 // and cards), the 18+ gate when Explicit is picked, forging with Retry and paint consent, the stage at desktop and phone
 // sizes, and one visit to the real package server (beside Gacha Forge when MARINARA_PACKAGE_IDS installs it).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge.e2e.ts
+import { expectCustomLimitFits } from "./fixtures/otome-forge-limits.ts";
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -282,6 +283,17 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
   await expect(gate).toBeHidden();
   await expect(root.getByRole("radio", { name: /NSFW: Explicit/ })).toBeChecked();
   expect(stub.index.ageGate?.confirmedAt).toEqual(expect.any(String));
+  // Your own limits take Allow, Veil or Line, as the built-in ones do; a new one starts at Line.
+  await root.getByRole("button", { name: "Add your own", exact: true }).click();
+  const ownText = root.getByRole("textbox", { name: "Your limit 1", exact: true });
+  await expect(ownText).toHaveAttribute("placeholder", "Name a theme…");
+  await ownText.fill("Infidelity");
+  const own = root.getByRole("group", { name: "Level of your limit 1", exact: true });
+  await expect(own.locator(".of-pill")).toHaveText(["Allow", "Veil", "Line"]);
+  await expect(own.getByRole("radio", { name: "Line", exact: true })).toBeChecked();
+  await pick(own, "Allow");
+  await expect(own.getByRole("radio", { name: "Allow", exact: true })).toBeChecked();
+  await expectCustomLimitFits(page, root.locator(".of-custom-limit"), (name) => testInfo.outputPath(name));
   await root.getByRole("button", { name: "Next" }).click();
 
   // 5. Connections: the Engine default; images optional. Ask before painting holds the looks for the tap below.
@@ -303,7 +315,7 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
       { source: "card", cardId: "card-ilvar", pronouns: { subject: "he", object: "him", possessive: "his" } },
       { source: "card", cardId: "card-dottore", pronouns: { subject: "he", object: "him", possessive: "his" } },
     ],
-    content: { heat: "explicit", darkness: "angst" },
+    content: { heat: "explicit", darkness: "angst", custom: [{ text: "Infidelity", level: "allow" }] },
     images: { connectionId: "conn-image", rating: "sfw", ask: true },
     connections: { narration: "conn-text" },
   });

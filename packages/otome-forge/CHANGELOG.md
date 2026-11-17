@@ -1,5 +1,14 @@
 # Otome Hearth release notes
 
+## 0.36.0 — 2026-11-17
+
+- **Kittens in the Album.** A **Kittens** tab keeps the kittens painted of you and your love interests, to see large, save, or **Repaint** (1 image). The old one stays until the new one is ready.
+- The Album's tabs now start with **Memories**, **Dates** and **CGs**, and it opens on **Memories**.
+- Kitty Cards: **How {name} plays** describes how they cheat at Kitty Cards, not the Claw Machine, and every painted kitten shows above the first move.
+- The Claw Machine no longer moves down when a love interest's line appears.
+- Starlight from dates is capped at 300 a day, was 400.
+- In **Lines & Veils**, your own limits can be **Allow** as well as **Veil** or **Line**, and their row fits a phone.
+
 ## 0.35.0 — 2026-11-17
 
 - **Kitty Cards.** A new date in Dates, our version of Love and Deep Space's kitty card game. Take turns putting kittens into eight cups: a kitten in a cup of its own colour scores twice its number, and in a white cup its number. In some games your love interest cheats once, in their own way: they swap two cups, doze off, look away while you sneak a card, offer a trade face down, or let you take a card back. You can catch some of these. A game makes no model call and pays 20 Starlight and 30 affection, and a win 20 Starlight more, within the day's limits. Their lines are written ahead with their other lines, and a story from before this version gets them in the background.

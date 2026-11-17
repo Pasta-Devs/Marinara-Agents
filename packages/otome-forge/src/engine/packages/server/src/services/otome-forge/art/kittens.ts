@@ -11,8 +11,12 @@
 // behind taps and scene art; under Ask before painting or prompt review it is claimed `waiting-consent`, so only a tap
 // pays (POST /runs/:run/art/kitten, the Kitty Cards screen's Paint our kittens); a failed or stopped one waits for a tap
 // (Try again), and a failure rests the chain for STICKER_SET_RETRY_MS. A restart leaves at most one kitten `stopped`.
-// Each is painted on the look's chroma matte and cut out by the free cut-out queue (art/cutout.ts, queued by GET /play)
-// before it is shown. A tap on a painted kitten answers with it: nothing repaints one.
+// Each is painted on the look's chroma matte and cut out by the free cut-out queue (art/cutout.ts, queued by GET /play
+// and by a tap's paint) before it is shown. A tap on a painted kitten answers with it: Kitty Cards never repaints one.
+// 0.36.0: the Album lists the painted ones (albumKittens) and its Repaint (POST /runs/:run/art/kitten with `repaint`)
+// paints one again, as a sticker's (#2299, art/stickers.ts): the tap is the consent, the record keeps the old picture
+// while the new one paints in the `low` lane and after a failure, the old one (cut out) is shown everywhere until the
+// new one is cut out, and the replaced original leaves the gallery once the new one is saved.
 // ponytail: the chain lives in this process, as the stickers' does; a restart stops it and the next GET /play starts it
 // again (a stopped kitten waits for a tap). Upgrade path: a job document.
 import type { Paint, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -23,7 +27,7 @@ import { type ImagePrompt, STICKER_SIZE, kittenPrompt } from "../prompts.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
-import { cutoutView, queueCutouts, type CutoutDeps } from "./cutout.js";
+import { queueCutouts, type CutoutDeps } from "./cutout.js";
 import { worldStyle } from "./image-client.js";
 import {
   imagesOf,
@@ -31,14 +35,18 @@ import {
   paintRecord,
   paintView,
   readSubject,
+  releaseReplacedImage,
+  repainting,
+  samePicture,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
 } from "./paint.js";
-import { STICKER_SET_RETRY_MS } from "./stickers.js";
+import { STICKER_SET_RETRY_MS, keepReplaced, shownPicture } from "./stickers.js";
 
 type Run = Pick<RunDocuments, "world" | "player" | "units" | "state">;
 
@@ -104,6 +112,8 @@ interface PaintKittenOptions {
   debugMode: boolean;
   /** A tap: paints under Ask before painting, in the `high` lane. */
   consent: boolean;
+  /** 0.36.0: the Album's Repaint, a tap that waits in the `low` lane. */
+  repaint?: boolean;
   edited?: Partial<ImagePrompt>;
   active?: () => boolean;
 }
@@ -122,7 +132,7 @@ function paintKitten(
     connectionId,
     label: `kitten ${owner}`,
     active: options.active,
-    lane: options.consent ? "high" : "low",
+    lane: options.consent && !options.repaint ? "high" : "low",
     async check(): Promise<PaintCheck> {
       const run = await readRun(deps.store, runId);
       if (!run || !ours(owedKittens(run).find((kitten) => kitten.owner === owner)?.art)) return "gone";
@@ -144,7 +154,21 @@ function paintKitten(
         debugMode: options.debugMode,
       });
     },
-    save: (art) => saveArt(deps, runId, owner, (current) => (ours(current) ? art : undefined)),
+    save: async (art) => {
+      let replaced: Paint | undefined;
+      const saved = await saveArt(deps, runId, owner, (current) => {
+        if (!ours(current)) return undefined;
+        replaced = current;
+        return withKeptPicture(art, current);
+      });
+      if (saved && art.state === "ready") {
+        // 0.36.0: a repaint's new picture is cut out after this; until then kittensView shows the replaced one's
+        // cut-out (which stays in the gallery), and only the replaced original, a gallery image of ours, is deleted.
+        if (replaced?.url && art.url && replaced.url !== art.url) keepReplaced(runId, replaced.url, art.url);
+        await releaseReplacedImage(deps, replaced, art);
+      }
+      return saved;
+    },
   });
 }
 
@@ -233,8 +257,10 @@ export async function queueKittenCutouts(deps: CutoutDeps, runId: string, run: R
 /**
  * The play view's kittens (with images on): each owed one, shown once its cut-out settled (its cut-out, or the painted
  * picture when the cut-out failed), else its paint as the client should see it; a painted one still being cut out reads
- * as painting. `kittensPending` while one may land without a tap: one with no record yet (unless the chain rests),
- * one painting in this process, or one being cut out. `painting`: an art service runs the chain.
+ * as painting. 0.36.0: a repainted one (the Album's Repaint) keeps showing the picture it paints over, cut out, and reads
+ * as painting until the new one is cut out (stickers' rule, art/stickers.ts shownPicture); a failed or stopped repaint
+ * shows that picture as painted. `kittensPending` while one may land without a tap: one with no record yet (unless the
+ * chain rests), one painting in this process, or one being cut out. `painting`: an art service runs the chain.
  */
 export function kittensView(
   runId: string,
@@ -245,28 +271,47 @@ export function kittensView(
   let pending = false;
   const kittens = owedKittens(run).map(({ owner, art, doc }): KittenView => {
     const shown = paintView(runId, ownerOf(owner), art);
-    if (shown?.state === "ready" && shown.url) {
-      const cut = cutoutView(runId, doc, shown.url);
-      if (cut.state !== "pending") return { owner, url: cut.cutout ?? shown.url };
+    const picture = shown?.url ? shownPicture(runId, doc, shown.url) : null;
+    if (shown?.state === "ready" && picture) {
+      const url = picture.url ? { url: picture.url } : {};
+      if (!picture.cutting) return { owner, ...url };
       pending = true;
-      return { owner, art: { state: "pending", at: shown.at } };
+      return { owner, ...url, art: { state: "pending", at: shown.at } };
     }
     if (painting && (shown ? shown.state === "pending" && paintIsLive(runId, ownerOf(owner)) : !resting(runId)))
       pending = true;
+    // A repaint: the picture it paints over, and its paint only while it paints (Kitty Cards never repaints one).
+    if (picture?.url) return { owner, url: picture.url, ...(shown?.state === "pending" ? { art: shown } : {}) };
     return { owner, ...(shown ? { art: shown } : {}) };
   });
   return { kittens, ...(pending ? { kittensPending: true as const } : {}) };
 }
 
 /**
+ * 0.36.0: the Album's kittens (S/routes/album.ts): the play view's own (kittensView), hers then the cast's, only those
+ * painted and cut out, each with its repaint's paint while it paints. Reading them queues nothing, painted or cut out.
+ */
+export const albumKittens = (runId: string, run: Run): KittenView[] =>
+  (kittensView(runId, run, false).kittens ?? []).filter((kitten) => kitten.url);
+
+/**
  * POST /runs/:run/art/kitten: the tap that paints a kitten now (its consent, or Try again). Resolves its paint as left;
  * a painted one is answered as it is, and a tap while it is painting waits for that same paint, so no tap pays twice.
+ * 0.36.0: `repaint` (the Album's Repaint) paints a painted one again, as a sticker's (art/stickers.ts paintStickerNow):
+ * only the picture shown when its tap began, so one that lands while it waits is its answer, and a failed or stopped
+ * repaint again. Without it a kitten with a picture, a repaint's kept one too, is answered as it is. Once a picture is
+ * saved its free cut-out is queued, as GET /play queues it, so the Album, which queues nothing, shows it once cut out.
  */
 export async function paintKittenNow(
-  deps: ArtDeps,
+  deps: ArtDeps & Pick<CutoutDeps, "cutouts">,
   runId: string,
   owner: KittenOwner,
-  { debugMode, edited, active }: { debugMode: boolean; edited?: Partial<ImagePrompt>; active?: () => boolean },
+  {
+    debugMode,
+    edited,
+    active,
+    repaint = false,
+  }: { debugMode: boolean; edited?: Partial<ImagePrompt>; active?: () => boolean; repaint?: boolean },
 ): Promise<Paint | null> {
   const read = async () => {
     const run = await readRun(deps.store, runId);
@@ -275,29 +320,47 @@ export async function paintKittenNow(
     if (!kitten) throw notFound();
     return { run, art: kitten.art ? paintView(runId, ownerOf(owner), kitten.art) : undefined };
   };
+  const first = repaint ? (await read()).art : undefined;
+  const painted = first?.state === "ready";
   return tapPaint(
     runId,
     async () => ownerOf(owner),
-    async () => {
+    async ({ threw }) => {
       const { art } = await read();
-      return { value: art ?? null, ...(art ? { art } : {}) };
+      // A paint that was refused (it threw) left the kitten as this repaint found it, which is no answer to it.
+      const untouched = threw && repaint && art?.state === first?.state && art?.at === first?.at;
+      return { value: art ?? null, ...(art && !untouched ? { art } : {}) };
     },
     async () => {
       const { run } = await read();
       const connectionId = run.world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
-      // A painted kitten is answered as it is: nothing repaints one.
-      const claimed = await saveArt(deps, runId, owner, (current) =>
-        current?.state === "ready" ? undefined : { state: "pending", at },
-      );
+      const claimed = await saveArt(deps, runId, owner, (current) => {
+        if (current?.state === "ready")
+          return repaint && painted && samePicture(current, first) ? repainting(current, at) : undefined;
+        if (current?.url) return repaint ? repainting(current, at) : undefined;
+        return { state: "pending", at };
+      });
       if (!claimed) return (await read()).art ?? null;
       const left = await paintKitten(deps, runId, owner, at, connectionId, {
         debugMode,
         consent: true,
+        repaint,
         edited,
         active,
       });
+      // Its free cut-out now, as GET /play would queue it. Once its picture is saved this paint never throws, so a tap
+      // waiting on it takes that picture (tapPaint `threw`).
+      if (left?.state === "ready")
+        await readRun(deps.store, runId)
+          .then((now) => (now ? queueKittenCutouts(deps, runId, now) : null))
+          .catch((error: unknown) =>
+            deps.runtime.logger.warn(
+              "[otome-forge] kitten cut-out not queued: %s",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
       return (await read().catch(() => null))?.art ?? left;
     },
   );

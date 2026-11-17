@@ -1,11 +1,13 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Album. CGs (newest first: story CGs once seen, Memories' CGs once painted, pair portraits), chat
-// stickers (#2044: the protagonist's five and each love interest's unlocked ones, cut out), Photo Shoot photos (#2087:
+// stickers (#2044: the protagonist's five and each love interest's unlocked ones, cut out), Kitty Cards' kittens (0.36.0:
+// hers and each love interest's once painted and cut out, each to save or repaint), Photo Shoot photos (#2087:
 // newest first, square, each one viewed, saved or deleted), Tarot night's cards (#2151: each one drawn, on its own card
 // face, Cards.tsx), Memories (each one's Character Story or Moment to read, and Snapshots), the Love Timeline,
 // favourite lines, the soundtrack (the moods, then each begun chapter's theme), and the Tells journal. Only what is
 // unlocked is listed; every image saves to the device through the Engine. Everything reads without images or audio: a
 // Memory without art shows a quiet card in their colour, and a Tarot card without its picture our own emblem.
+// 0.36.0: the tabs start from Memories, Dates and CGs, and it opens on Memories.
 // ──────────────────────────────────────────────
 // Route (S/routes/album.ts): GET /runs/:run/album → AlbumView. An unopened Memory is opened here as anywhere else.
 // 0.21.0: a Memory, Moment or Snapshot won from Wish and not looked at yet has a dot, and so does the Memories tab; opening
@@ -18,6 +20,7 @@ import {
   BookOpen,
   CalendarHeart,
   Camera,
+  Cat,
   Eye,
   Heart,
   Images,
@@ -51,6 +54,7 @@ import { useDates, type DateOpen } from "../dates/DateNight";
 import { Dates } from "./Dates";
 import { albumKeepsakes } from "../../lib/album-keepsakes";
 import { PLAYER_STICKER_OWNER } from "../../shared/stickers";
+import type { KittenView } from "../../shared/kitty";
 import type { AlbumImage, AlbumMemory, AlbumSticker, AlbumView } from "../../shared/wardrobe";
 import { useStickers } from "../phone/StickerPicker";
 import { TabList } from "../wish/BannerTabs";
@@ -65,14 +69,17 @@ import { Timeline } from "./Timeline";
 
 const POLL_MS = 3_000;
 
+// 0.36.0: Memories, Dates and CGs first; the Album opens on the first.
 const ALBUM_TABS = [
-  "cgs",
-  "stickers",
-  "photos",
-  "cards",
+  "memories",
   // #2303: the dates won from Wish, and Date Night's earlier evenings.
   "dates",
-  "memories",
+  "cgs",
+  "stickers",
+  // 0.36.0: Kitty Cards' painted kittens, beside the other cut-out art.
+  "kittens",
+  "photos",
+  "cards",
   "timeline",
   "favorites",
   "soundtrack",
@@ -83,6 +90,7 @@ export type AlbumTab = (typeof ALBUM_TABS)[number];
 const TAB_META: Record<AlbumTab, { labelKey: string; Icon: LucideIcon }> = {
   cgs: { labelKey: "ui.otomeForge.album.tabCgs", Icon: Images },
   stickers: { labelKey: "ui.otomeForge.album.tabStickers", Icon: StickerIcon },
+  kittens: { labelKey: "ui.otomeForge.album.tabKittens", Icon: Cat },
   photos: { labelKey: "ui.otomeForge.album.tabPhotos", Icon: Camera },
   cards: { labelKey: "ui.otomeForge.album.tabCards", Icon: MoonStar },
   dates: { labelKey: "ui.otomeForge.album.tabDates", Icon: Wine },
@@ -116,6 +124,7 @@ export function useAlbum(runKey: string) {
     refetchInterval: (query) =>
       query.state.data?.memories.some((memory) => memory.art?.state === "pending") ||
       query.state.data?.stickers?.some((sticker) => sticker.art?.state === "pending") ||
+      query.state.data?.kittens?.some((kitten) => kitten.art?.state === "pending") ||
       query.state.data?.cards?.some((card) => card.art.state === "pending")
         ? POLL_MS
         : false,
@@ -129,12 +138,12 @@ interface AlbumProps {
   onOpenStory: (key: string) => void;
   /** #2303: opens a won date to plan, or an earlier evening, in the date screen. */
   onOpenDate: (open: DateOpen) => void;
-  /** The tab it opens on (#2303: Dates, from the Dates hub, or the one left for a date); CGs by default. */
+  /** The tab it opens on (#2303: the one left for a date); the first, Memories, by default (0.36.0). */
   initialTab?: AlbumTab;
   onTabChange?: (tab: AlbumTab) => void;
 }
 
-export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs", onTabChange }: AlbumProps) {
+export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = ALBUM_TABS[0], onTabChange }: AlbumProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const id = useId();
@@ -152,6 +161,8 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   // A card too: one painted meanwhile takes its place in Arcana order, so the indexes move.
   const [viewingCard, setViewingCard] = useState<string | null>(null);
+  // A kitten too: one cut out meanwhile takes its place in cast order.
+  const [viewingKitten, setViewingKitten] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   // A deleted photo's tile goes with it: once the viewer has closed (and handed focus back), focus moves to the panel.
   const focusPanel = useRef(false);
@@ -163,6 +174,8 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs
   const stickers = useStickerImages(view, album.data?.stickers ?? []);
   // Stubs and servers older than #2151's Album send no cards.
   const cards = useCardImages(view, album.data?.cards ?? []);
+  // Nor (0.36.0) kittens.
+  const kittens = useKittenImages(view, album.data?.kittens ?? []);
   const [memory, setMemory] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   // The soundtrack's chosen row plays while the Album is open; none lets the story's own music go on. A chapter's theme
@@ -215,6 +228,7 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs
   const photoIndex = viewingPhoto === null ? -1 : photos.findIndex((image) => image.key === viewingPhoto);
   const rereadDate = photos[photoIndex]?.source === "keepsake" ? photos[photoIndex]?.ref : undefined;
   const cardIndex = viewingCard === null ? -1 : cards.images.findIndex((image) => image.key === viewingCard);
+  const kittenIndex = viewingKitten === null ? -1 : kittens.images.findIndex((image) => image.key === viewingKitten);
   const shownMemory = data.memories.find((item) => item.id === memory) ?? null;
   /** Opens a Memory's page; a new one is new no more. */
   const show = (itemId: string) => {
@@ -240,6 +254,8 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs
       />
     ) : tab === "stickers" ? (
       <StickerGrid runKey={runKey} view={view} stickers={stickers} actions={actions} onView={setViewingSticker} />
+    ) : tab === "kittens" ? (
+      <KittenGrid runKey={runKey} view={view} kittens={kittens} actions={actions} onView={setViewingKitten} />
     ) : tab === "photos" ? (
       <>
         {keepsakes.length ? <p className="of-hint">{t("ui.otomeForge.album.keepsakesHint")}</p> : null}
@@ -333,6 +349,15 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = "cgs
           index={cardIndex}
           onIndex={(index) => setViewingCard(cards.images[index]?.key ?? null)}
           onClose={() => setViewingCard(null)}
+        />
+      ) : null}
+      {kittenIndex >= 0 ? (
+        <CgViewer
+          view={view}
+          images={kittens.images}
+          index={kittenIndex}
+          onIndex={(index) => setViewingKitten(kittens.images[index]?.key ?? null)}
+          onClose={() => setViewingKitten(null)}
         />
       ) : null}
       {/* The prompt review takes the place of the Memory's page while it shows (one dialog over the stage at a time). */}
@@ -592,6 +617,117 @@ function StickerGrid({
         );
       })}
     </div>
+  );
+}
+
+/** 0.36.0: the Album's kittens titled "Ines as a kitten" (Kitty Cards' own words), each a viewer image (`kitten:<owner>`). */
+function useKittenImages(view: RunView, kittens: readonly KittenView[]) {
+  const { t } = useTranslation();
+  const tiles = kittens.flatMap((kitten) => {
+    const who =
+      kitten.owner === "player" ? view.player.name : (view.lis.find((li) => li.id === kitten.owner)?.name ?? "");
+    return kitten.url ? [{ kitten, url: kitten.url, title: t("ui.otomeForge.kitty.asKitten", { name: who }) }] : [];
+  });
+  const images = tiles.map(({ kitten, url, title }): AlbumImage => ({
+    key: `kitten:${kitten.owner}`,
+    url,
+    at: "",
+    source: "kitten",
+    title,
+    ...(kitten.owner === "player" ? {} : { li: kitten.owner }),
+  }));
+  return { tiles, images };
+}
+
+/**
+ * 0.36.0: Kitty Cards' kittens, hers then the cast's, cut out as stickers are: each opens the viewer to save it and
+ * offers Repaint (1 image, through the prompt review when it is on). It stays shown while the new one paints and is cut
+ * out, and after a failure, with its Repaint in place, disabled while it paints, so a refetch never takes the focus.
+ * One waiting for its first paint is painted from Kitty Cards' Paint our kittens, not here.
+ */
+function KittenGrid({
+  runKey,
+  view,
+  kittens,
+  actions,
+  onView,
+}: {
+  runKey: string;
+  view: RunView;
+  kittens: ReturnType<typeof useKittenImages>;
+  actions: ItemActions;
+  onView: (key: string) => void;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  if (!kittens.tiles.length) {
+    return (
+      <p className="of-empty of-glass">
+        <Cat size={20} strokeWidth={1.8} aria-hidden="true" />
+        {imagesOn(view) ? t("ui.otomeForge.album.kittensEmpty") : t("ui.otomeForge.album.kittensNoImages")}
+      </p>
+    );
+  }
+  return (
+    <ul className="of-album-cgs of-album-cgs--sticker">
+      {kittens.tiles.map(({ kitten, url, title }) => {
+        const target = {
+          id: `kitten:${kitten.owner}`,
+          subject: title,
+          paintPath: `${runPath(runKey)}/art/kitten`,
+          promptPath: `${runPath(runKey)}/art/kitten/prompt`,
+          body: { owner: kitten.owner, repaint: true },
+        };
+        const painting = actions.busy.has(target.id) || kitten.art?.state === "pending";
+        const error = actions.errors[target.id];
+        const titleId = `${id}-${kitten.owner}`;
+        return (
+          <li key={kitten.owner}>
+            <button
+              type="button"
+              className="of-album-cg of-album-sticker"
+              aria-label={t("ui.otomeForge.album.viewCg", { title })}
+              onClick={() => onView(`kitten:${kitten.owner}`)}
+            >
+              <img src={url} alt="" loading="lazy" decoding="async" />
+              <span className="of-album-cg-caption" aria-hidden="true">
+                <span id={titleId} className="of-album-cg-title">
+                  {title}
+                </span>
+              </span>
+            </button>
+            {painting ? (
+              <span className="of-hint" role="status">
+                {t("ui.otomeForge.wish.painting")}
+              </span>
+            ) : null}
+            {imagesOn(view) ? (
+              <>
+                <button
+                  type="button"
+                  className="of-button of-button--quiet of-button--small of-glass"
+                  aria-describedby={titleId}
+                  aria-label={t("ui.otomeForge.album.repaintKitten", { title })}
+                  aria-disabled={painting}
+                  onClick={() => {
+                    if (!painting) void actions.paint(target);
+                  }}
+                >
+                  <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
+                  {t("ui.otomeForge.album.repaintKittenShort")}
+                </button>
+                <CostHint images={1} />
+              </>
+            ) : null}
+            {error ? (
+              <span className="of-error" role="alert">
+                {error}
+              </span>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

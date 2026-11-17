@@ -5,7 +5,9 @@
 // rules are SH/kitty.ts (pure, seeded per game), his lines are his own pack's written ahead or the catalog's, and the
 // cards are the package's own kittens. With images on, the value-5 cards show the protagonist's and the love
 // interests' painted kittens (GET /play's `kittens`, SH/kitty.ts kittenCards); Paint our kittens is the tap that pays
-// for them while Ask before painting or prompt review holds them, and Try again repaints a failed one.
+// for them while Ask before painting or prompt review holds them, and Try again repaints a failed one (the Album's
+// Repaint, 0.36.0, paints a painted one again). The intro's "How {name} plays" says what his cheat does in this game
+// (0.36.0; his bible's style sentence is the Claw Machine's).
 // ──────────────────────────────────────────────
 // Play: pick a card in her hand, then a cup (the cups it would score in light up), or Draw. His turn plays after a
 // short pause. His cheat moment comes before his move (SH/kitty.ts cheatDue) and changes only the game. Every control
@@ -82,6 +84,7 @@ import {
   tradeOffer,
   turnSeed,
   type KittenOwner,
+  type KittenView,
   type KittyCard,
   type KittyCheat,
   type KittyCupColour,
@@ -160,6 +163,18 @@ const MOMENT_COPY: Record<ClawCheat, { title: string; hint: string; Icon: Lucide
   steady: { title: "ui.otomeForge.kitty.steadyTitle", hint: "ui.otomeForge.kitty.steadyHint", Icon: Undo2 },
 };
 
+/**
+ * "How {name} plays" on the intro: his cheat in this game (his bible's `play.style` is a Claw Machine sentence, which
+ * the Claw shows).
+ */
+const STYLE_KEYS: Record<ClawCheat, string> = {
+  nudge: "ui.otomeForge.kitty.style.nudge",
+  freeze: "ui.otomeForge.kitty.style.freeze",
+  extra: "ui.otomeForge.kitty.style.extra",
+  calculate: "ui.otomeForge.kitty.style.calculate",
+  steady: "ui.otomeForge.kitty.style.steady",
+};
+
 /** The end screen's line about his moment: [not found out, found out]. */
 const CHEAT_NOTES: Record<ClawCheat, readonly [string, string]> = {
   nudge: ["ui.otomeForge.kitty.noteNudge", "ui.otomeForge.kitty.noteNudgeCaught"],
@@ -195,6 +210,30 @@ function useFaces(play: PlayView | undefined, li: RunLiView, view: RunView): Fac
         : { url: kittyCardUrl(card, packageVersion), name: t(KITTY_BREED_KEYS[card]), painted: false };
     };
   }, [kittens, li.id, packageVersion, t, view.lis, view.player.name]);
+}
+
+/**
+ * The intro's row: the four value-5 cards as a game with `li` deals them (the painted kittens on the ones they take,
+ * else their breeds), then every other painted kitten, so all of hers and the cast's show. An extra kitten wears the
+ * next value-5 colour in turn; it is named only as itself, since it plays on no card in this game.
+ */
+function heroCards(
+  kittens: readonly KittenView[],
+  li: RunLiView["id"],
+  faces: Faces,
+  nameOf: (owner: KittenOwner) => string,
+) {
+  const inGame = new Set(Object.values(kittenCards(kittens, li)).map((kitten) => kitten!.owner));
+  const extra = kittens.filter((kitten) => kitten.url && !inGame.has(kitten.owner));
+  return [
+    ...KITTEN_CARDS.map((card) => ({ key: card, card, face: faces(card), inGame: true })),
+    ...extra.map((kitten, index) => ({
+      key: `kitten:${kitten.owner}`,
+      card: KITTEN_CARDS[index % KITTEN_CARDS.length]!,
+      face: { url: kitten.url!, name: nameOf(kitten.owner), painted: true },
+      inGame: false,
+    })),
+  ];
 }
 
 /** A card's accessible name: its kitten, then its colour and value ("Siamese, sky 2"). */
@@ -956,7 +995,6 @@ export function KittyCards({ runKey, view, li, onExit }: ActivityScreenProps) {
   const info = play.data?.lis[li.id] ?? null;
   const cheat: ClawCheat = info?.cheat ?? "steady";
   const rupture = !!info?.rupture;
-  const styleText = info?.style.trim() ?? "";
 
   const send = useCallback(
     (game: KittyGame, cheatMoment: KittyCheat | null, id: string, first: ClawPlayer) => {
@@ -1150,6 +1188,9 @@ export function KittyCards({ runKey, view, li, onExit }: ActivityScreenProps) {
   const kittens = play.data?.kittens ?? [];
   const ownerName = (owner: KittenOwner) =>
     owner === "player" ? view.player.name : (view.lis.find((entry) => entry.id === owner)?.name ?? "");
+  const hero = heroCards(kittens, li.id, faces, (owner) =>
+    t("ui.otomeForge.kitty.asKitten", { name: ownerName(owner) }),
+  );
   const target = (owner: KittenOwner): PaintTarget => ({
     id: `kitten:${owner}`,
     subject: t("ui.otomeForge.kitty.asKitten", { name: ownerName(owner) }),
@@ -1169,14 +1210,29 @@ export function KittyCards({ runKey, view, li, onExit }: ActivityScreenProps) {
   const inProgress = painting || !!play.data?.kittensPending;
   return page(
     <>
-      <ul className="of-kitty-hero" aria-label={t("ui.otomeForge.kitty.heroLabel")}>
-        {KITTEN_CARDS.map((card, index) => (
-          <li key={card} style={{ "--rot": `${(index - 1.5) * 7}deg` } as CSSProperties}>
-            <span role="img" aria-label={cardLabel(t, card, faces(card))} className="of-kitty-hero-card">
-              <CardArt card={card} face={faces(card)} />
-            </span>
-          </li>
-        ))}
+      <ul
+        className="of-kitty-hero"
+        aria-label={t("ui.otomeForge.kitty.heroLabel")}
+        data-many={hero.length > KITTEN_CARDS.length || undefined}
+        style={{ "--of-hero-count": hero.length } as CSSProperties}
+      >
+        {hero.map(({ key, card, face, inGame }, index) => {
+          // The fan spreads over at most 28 degrees, and its middle cards sit a little higher.
+          const middle = (hero.length - 1) / 2;
+          const step = hero.length > 1 ? Math.min(7, 28 / (hero.length - 1)) : 0;
+          const lift = middle > 0 ? Math.min(1, 1.5 * (1 - Math.abs(index - middle) / middle)) : 0;
+          return (
+            <li key={key} style={{ "--rot": `${(index - middle) * step}deg`, "--lift": lift } as CSSProperties}>
+              <span
+                role="img"
+                aria-label={inGame ? cardLabel(t, card, face) : face.name}
+                className="of-kitty-hero-card"
+              >
+                <CardArt card={card} face={face} />
+              </span>
+            </li>
+          );
+        })}
       </ul>
       {waiting.length || retry.length || inProgress || errors.length ? (
         <div className="of-kitty-paint" role="group" aria-label={t("ui.otomeForge.kitty.paintLabel")}>
@@ -1215,10 +1271,10 @@ export function KittyCards({ runKey, view, li, onExit }: ActivityScreenProps) {
         </div>
       ) : null}
       <section className="of-section of-glass of-claw-intro" aria-labelledby="of-kitty-first">
-        {styleText ? (
+        {info ? (
           <p className="of-claw-style">
             <span className="of-eyebrow">{t("ui.otomeForge.claw.styleTitle", { name: li.name })}</span>
-            <span className="of-claw-style-text">{styleText}</span>
+            <span className="of-claw-style-text">{t(STYLE_KEYS[cheat], { name: li.name })}</span>
           </p>
         ) : null}
         <h2 id="of-kitty-first" className="of-section-title">
@@ -1403,10 +1459,13 @@ ${R} .of-kitty-hand-card[aria-pressed="true"] .of-kitty-card { box-shadow: 0 0 0
 ${R} .of-kitty-hand-card:hover:not([aria-disabled="true"]) { position: relative; z-index: 1; }
 ${R} .of-kitty-hand-card[aria-disabled="true"] { cursor: default; }
 ${R} .of-kitty-final { font-weight: 800; font-size: 1.15rem; font-variant-numeric: lining-nums; }
-/* The intro's four value-5 cards (their painted kittens, with images on) and the paint controls. */
+/* The intro's value-5 cards and every painted kitten (with images on), and the paint controls. More than four cards
+   overlap like a fanned hand so the row always fits its column. */
 ${R} .of-kitty-hero { display: flex; justify-content: center; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
-${R} .of-kitty-hero > li { width: min(22%, 92px); rotate: var(--rot); }
-${R} .of-kitty-hero > li:nth-child(2), ${R} .of-kitty-hero > li:nth-child(3) { translate: 0 -6px; }
+${R} .of-kitty-hero > li { width: min(22%, 92px); rotate: var(--rot); translate: 0 calc(var(--lift, 0) * -6px); }
+${R} .of-kitty-hero[data-many] { gap: 0; }
+${R} .of-kitty-hero[data-many] > li { width: min(calc(140% / var(--of-hero-count)), 92px); }
+${R} .of-kitty-hero[data-many] > li + li { margin-inline-start: calc(-50% / var(--of-hero-count)); }
 ${R} .of-kitty-hero-card { display: block; }
 ${R} .of-kitty-paint { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
 @keyframes of-kitty-wiggle { 25% { transform: rotate(-4deg); } 50% { transform: rotate(3deg); } 75% { transform: rotate(-2deg); } }

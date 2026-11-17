@@ -18,8 +18,10 @@
 //                                                            protagonist's five stickers start (#2044, once)
 // POST /runs/:run/art/sticker {sticker, prompt?, negativePrompt?} → {art}; paints that sticker now (the tap)
 // POST /runs/:run/art/sticker/prompt {sticker}             → {prompt, negativePrompt}
-// POST /runs/:run/art/kitten {owner, prompt?, negativePrompt?} → {art}; 0.35.0: paints that Kitty Cards kitten now
-//                                                            (`player` or a love interest's id, S/art/kittens.ts)
+// POST /runs/:run/art/kitten {owner, repaint?, prompt?, negativePrompt?} → {art}; 0.35.0: paints that Kitty Cards
+//                                                            kitten now (`player` or a love interest's id,
+//                                                            S/art/kittens.ts); 0.36.0: `repaint`, the Album's
+//                                                            Repaint, paints a painted one again
 // POST /runs/:run/art/kitten/prompt {owner}                → {prompt, negativePrompt}
 // POST /runs/:run/art/side {key, prompt?, negativePrompt?}  → {art}; 0.20.0: paints that side character's sprite now
 // POST /runs/:run/art/side/prompt {key}                    → {prompt, negativePrompt} (S/art/side-sprites.ts)
@@ -75,7 +77,7 @@ const StickerBody = z.object({ ...StickerRef, ...Edited });
 const StickerRefBody = z.object(StickerRef);
 // A love interest's id is at most 80 characters, as every other route reads it; one owed no kitten is a 404.
 const KittenRef = { owner: z.string().min(1).max(80) };
-const KittenBody = z.object({ ...KittenRef, ...Edited });
+const KittenBody = z.object({ ...KittenRef, repaint: z.boolean().optional(), ...Edited });
 const KittenRefBody = z.object(KittenRef);
 const SideRef = { key: z.string().min(1).max(SIDE_NAME_MAX) };
 const SideBody = z.object({ ...SideRef, ...Edited });
@@ -263,6 +265,7 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
         debugMode: debugModeOf(request),
         edited: { prompt: body.prompt, negativePrompt: body.negativePrompt },
         active: deps.art?.active,
+        repaint: body.repaint === true,
       });
       return { art };
     }),

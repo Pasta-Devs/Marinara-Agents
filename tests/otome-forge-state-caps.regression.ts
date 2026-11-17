@@ -88,7 +88,7 @@ test("the economy's numbers are pinned", () => {
         kittyGame: 20,
         kittyWin: 20,
       },
-      activityCap: 400,
+      activityCap: 300,
       perLevel: 300,
       levels: [1, 10],
       affection: {
@@ -447,7 +447,11 @@ test("the Lead earns by the chapter's climax: 150 won, 100 tied or none, 50 lost
 test("Tarot night (#2151) is an activity: its pay shares the day's caps with every other activity", () => {
   let state = fresh();
   // Read Me and a claw round have used up today's affection with Kai, and all but 30 of today's Starlight.
-  state = grant(state, { source: "read-me", li: KAI, starlight: 340, affection: 100 }, DAY).state;
+  state = grant(
+    state,
+    { source: "read-me", li: KAI, starlight: economy.ACTIVITY_STARLIGHT_DAILY_CAP - 60, affection: 100 },
+    DAY,
+  ).state;
   state = grant(state, { source: "claw", li: KAI, starlight: 30, affection: 50 }, DAY).state;
   const reading = {
     id: "tr-abc123-aaaaaa",
@@ -602,12 +606,12 @@ test("daily caps follow the player's own midnight in each time zone", (t) => {
         return result.granted;
       });
     const dates = [1, 2, 3, 4].map(() => earn({ source: "date", starlight: 120, li: KAI, affection: 100 }));
-    // Affection stops at the day's 150 (#2133), Starlight at its 400.
+    // Affection stops at the day's 150 (#2133), Starlight at its 300.
     assert.deepEqual(dates, [
       { starlight: 120, affection: 100 },
       { starlight: 120, affection: 50 },
-      { starlight: 120, affection: 0 },
-      { starlight: 40, affection: 0 },
+      { starlight: 60, affection: 0 },
+      { starlight: 0, affection: 0 },
     ]);
     assert.deepEqual(earn({ source: "read-him", starlight: 40, li: MIR, affection: 40 }), {
       starlight: 0,
@@ -618,7 +622,7 @@ test("daily caps follow the player's own midnight in each time zone", (t) => {
       starlight: 160,
       affection: 150,
     });
-    assert.equal(state.wallet.starlight, 2000 + 400 + 160);
+    assert.equal(state.wallet.starlight, 2000 + 300 + 160);
     assert.equal(state.lis[KAI]!.points, 300);
     assert.equal(state.daily.dayKey, zone === "America/New_York" ? "2026-10-27" : "2026-10-28");
 

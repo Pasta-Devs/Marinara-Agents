@@ -6,7 +6,9 @@
 // toggle moves between a love interest's looks and mine, wears a look at home (his line about it replaces the
 // "noticing" hint in one live region) and shows one of mine; the Album opens a CG large and saves it through the
 // Engine, and its Cards tab (#2151) lists Tarot night's drawn cards on their faces, opens a painted one large to save
-// and paints a waiting one, or says how to get cards. With the Engine's prompt review on, an open on the 5★ reveal
+// and paints a waiting one, or says how to get cards. 0.36.0: the Album opens on Memories, its tabs start from Memories,
+// Dates and CGs, and its Kittens tab lists Kitty Cards' painted kittens, saves one and repaints one in place, or says
+// how kittens are painted, with images on and off. With the Engine's prompt review on, an open on the 5★ reveal
 // hands focus to Continue, and the review a wish's results open is the dialog on top, and it paints. The Shop tab
 // (#2128) sells a gift once per tap, and a figurine whose scene it then offers; one it cannot afford says how much
 // Starlight is missing. A figurine's Buy says it paints 1 image (#2138), after a tap of Paint it under prompt review;
@@ -53,6 +55,20 @@ const PNG = Buffer.from(
   "base64",
 );
 const GALLERY_CG = "/api/gallery/file/otome-forge-cg-observation-room.png";
+/** The Album's tabs, from the left (0.36.0: Memories, Dates and CGs first). */
+const ALBUM_TABS = [
+  "Memories",
+  "Dates",
+  "CGs",
+  "Stickers",
+  "Kittens",
+  "Photos",
+  "Cards",
+  "Love Timeline",
+  "Favourite lines",
+  "Soundtrack",
+  "Tells",
+];
 
 /** A meaningful full-body silhouette, with the same retained pixels on a green matte or transparent background. */
 function lookPng(clean: boolean): Buffer {
@@ -1528,6 +1544,8 @@ test("Otome Forge Album: a CG opens large and saves through the Engine; the Time
   );
   const root = await openOtome(page);
   await openDock(root, "Album");
+  const tabs = root.getByRole("tablist", { name: "Album" });
+  await tabs.getByRole("tab", { name: "CGs" }).click();
   await root.getByRole("button", { name: "View: Ink and Rain" }).click();
   const viewer = page.getByRole("dialog", { name: "Ink and Rain" });
   await expect(viewer).toBeVisible();
@@ -1540,7 +1558,6 @@ test("Otome Forge Album: a CG opens large and saves through the Engine; the Time
   expect((await download).suggestedFilename()).toBe("otome-forge-cg-observation-room.png");
   await page.keyboard.press("Escape");
 
-  const tabs = root.getByRole("tablist", { name: "Album" });
   await tabs.getByRole("tab", { name: "Love Timeline" }).click();
   await expect(root.getByText("The first time Ilvar said your name.")).toBeVisible();
   // A Memory won is on the timeline with what it is, and opens in the Album.
@@ -1640,9 +1657,9 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
   });
   const root = await openOtome(page);
   await openDock(root, "Album");
-  // By keyboard: the Stickers tab comes right after CGs.
+  // By keyboard: the Stickers tab comes right after CGs (0.36.0: the Album opens on Memories, so CGs is picked first).
   const tabs = root.getByRole("tablist", { name: "Album" });
-  await tabs.getByRole("tab", { name: "CGs" }).focus();
+  await tabs.getByRole("tab", { name: "CGs" }).click();
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { name: "Stickers" })).toHaveAttribute("aria-selected", "true");
   const panel = root.getByRole("tabpanel");
@@ -1821,7 +1838,146 @@ test("Otome Hearth Album: an empty Cards tab says how to get cards", async ({ pa
   );
 });
 
-// With a mouse the Album's nine tabs wrap inside the strip, whose scrollbar is hidden; a phone keeps one native swipe
+test("Otome Hearth Album: the Kittens tab lists her kitten and theirs, saves one, and repaints one in place", async ({
+  page,
+}, testInfo) => {
+  // 0.36.0: Kitty Cards' painted kittens, cut out, hers then the cast's. Ilvar's repaints: the server lists it painting
+  // over its old picture until the new one is cut out.
+  const calls: Call[] = [];
+  const view = runView(2000);
+  const MIRA = "/api/global-gallery/file/kitten-player.cut.png";
+  const ILVAR_KITTEN = "/api/global-gallery/file/kitten-ilvar.cut.png";
+  const ILVAR_AGAIN = "/api/global-gallery/file/kitten-ilvar-2.cut.png";
+  const CASSIAN_KITTEN = "/api/global-gallery/file/kitten-cassian.cut.png";
+  for (const url of [MIRA, ILVAR_KITTEN, ILVAR_AGAIN, CASSIAN_KITTEN]) {
+    await page.route(`**${url}`, (route) => route.fulfill({ body: PNG, contentType: "image/png" }));
+  }
+  let painting = false;
+  let repainted = false;
+  const album = () => ({
+    ...albumView(),
+    kittens: [
+      { owner: "player", url: MIRA },
+      {
+        owner: ILVAR,
+        url: repainted ? ILVAR_AGAIN : ILVAR_KITTEN,
+        ...(painting ? { art: { state: "pending", at: "2026-11-17T10:00:30.000Z" } } : {}),
+      },
+      { owner: CASSIAN, url: CASSIAN_KITTEN },
+    ],
+  });
+  await stubRoutes(
+    page,
+    (call) => {
+      const path = call.path.replace("/api/otome-forge", "");
+      if (path === "/index" || path === "/index/opened") return { status: 200, json: { index: index() } };
+      if (path === `/runs/${RUN}`) return { status: 200, json: { view } };
+      if (path === `/runs/${RUN}/album`) return { status: 200, json: album() };
+      if (path === `/runs/${RUN}/art/kitten`) {
+        painting = true;
+        setTimeout(() => {
+          painting = false;
+          repainted = true;
+        }, 2_400);
+        return {
+          status: 200,
+          json: { art: { state: "ready", at: "2026-11-17T10:01:00.000Z", url: ILVAR_AGAIN } },
+          delay: 2_500,
+        };
+      }
+      return undefined;
+    },
+    calls,
+  );
+  const reduced = testInfo.project.name.startsWith("mobile");
+  await page.emulateMedia({
+    colorScheme: reduced ? "light" : "dark",
+    reducedMotion: reduced ? "reduce" : "no-preference",
+  });
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  // It opens on Memories; by keyboard, Kittens comes right after Stickers.
+  const tabs = root.getByRole("tablist", { name: "Album" });
+  await expect(tabs.getByRole("tab")).toHaveText(ALBUM_TABS);
+  await expect(tabs.getByRole("tab", { name: "Memories" })).toHaveAttribute("aria-selected", "true");
+  await tabs.getByRole("tab", { name: "Stickers" }).click();
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.getByRole("tab", { name: "Kittens" })).toHaveAttribute("aria-selected", "true");
+  const panel = root.getByRole("tabpanel");
+  await expect(panel.locator(".of-album-cg-title")).toHaveText([
+    "Mira Vale as a kitten",
+    "Ilvar Thorne as a kitten",
+    "Cassian as a kitten",
+  ]);
+  await expect(panel.locator(".of-album-cg img")).toHaveCount(3);
+  await page.screenshot({ path: testInfo.outputPath("album-kittens.png") });
+  // One opens large and saves through the Engine's image saving.
+  await panel.getByRole("button", { name: "View: Ilvar Thorne as a kitten" }).click();
+  const viewer = page.getByRole("dialog", { name: "Ilvar Thorne as a kitten" });
+  await expect(viewer).toContainText("A Kitty Cards kitten");
+  await expect(viewer.getByText("2 of 3")).toBeVisible();
+  const download = page.waitForEvent("download");
+  await viewer.getByRole("button", { name: "Save image" }).click();
+  expect((await download).suggestedFilename()).toBe("kitten-ilvar.cut.png");
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+
+  // Each offers Repaint (1 image); the kitten stays shown while the new one paints.
+  const repaint = panel.getByRole("button", { name: "Paint Ilvar Thorne as a kitten again" });
+  const tile = panel.getByRole("listitem").filter({ hasText: "Ilvar Thorne as a kitten" });
+  const image = panel.getByRole("button", { name: "View: Ilvar Thorne as a kitten" }).locator("img");
+  await expect(panel.getByRole("button", { name: /as a kitten again$/u })).toHaveCount(3);
+  await expect(repaint).toHaveText("Repaint");
+  await expect(repaint).toHaveAccessibleDescription("Ilvar Thorne as a kitten");
+  await expect(tile.getByText("Paints 1 image")).toBeVisible();
+  expect((await repaint.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await repaint.click();
+  await expect(tile.getByRole("status")).toHaveText("Painting…");
+  await expect(repaint).toHaveAttribute("aria-disabled", "true");
+  // The Album reads itself again while it paints: the kitten comes back painting, and its Repaint keeps focus.
+  await page.evaluate(() =>
+    (globalThis as any).__MARINARA_HOST__.queryClient.invalidateQueries({ queryKey: ["otome-forge", "album"] }),
+  );
+  await expect(image).toHaveAttribute("src", ILVAR_KITTEN);
+  await expect(repaint).toBeFocused();
+  await expect(repaint).toHaveAttribute("aria-disabled", "true");
+  await expect(image).toHaveAttribute("src", ILVAR_AGAIN);
+  await expect(tile.getByRole("status")).toHaveCount(0);
+  await expect(repaint).toHaveAttribute("aria-disabled", "false");
+  await expect(repaint).toBeFocused();
+  expect(posts(calls, "/art/kitten").map((call) => [call.body?.owner, call.body?.repaint])).toEqual([[ILVAR, true]]);
+  const width = page.viewportSize()!.width;
+  const overflow = await root.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(overflow, `no sideways scroll at ${width} px`).toBeLessThanOrEqual(0);
+});
+
+for (const images of [true, false]) {
+  test(`Otome Hearth Album: an empty Kittens tab says how kittens are painted (images ${images ? "on" : "off"})`, async ({
+    page,
+  }) => {
+    const calls: Call[] = [];
+    const { stub, answer } = wishStub();
+    if (!images) stub.view.world.images = { ...stub.view.world.images, connectionId: null };
+    // A kitten waiting for consent is painted from Kitty Cards' Paint our kittens, not here.
+    const kittens = images ? [{ owner: "player", art: { state: "waiting-consent", at: now() } }] : [];
+    await stubRoutes(
+      page,
+      (call) => (call.path.endsWith("/album") ? { status: 200, json: { ...albumView(), kittens } } : answer(call)),
+      calls,
+    );
+    const root = await openOtome(page);
+    await openDock(root, "Album");
+    await root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Kittens", exact: true }).click();
+    await expect(root.getByRole("tabpanel")).toHaveText(
+      images
+        ? "No kittens yet. Kitty Cards in Dates paints you and each love interest as a kitten, and they’re kept here."
+        : "You play this story without images, so no kittens are painted. With an image connection, Kitty Cards paints you and each love interest as a kitten.",
+    );
+    await expect(root.getByRole("tabpanel").getByRole("button")).toHaveCount(0);
+  });
+}
+
+// With a mouse the Album's eleven tabs wrap inside the strip, whose scrollbar is hidden; a phone keeps one native swipe
 // strip. Measured before any click: Playwright would otherwise scroll an off-screen tab into view for the test.
 test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps one swipeable strip", async ({
   page,
@@ -1837,18 +1993,11 @@ test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps 
   const root = await openOtome(page);
   await openDock(root, "Album");
   const tabs = root.getByRole("tablist", { name: "Album" });
-  const names = [
-    "CGs",
-    "Stickers",
-    "Photos",
-    "Cards",
-    "Dates",
-    "Memories",
-    "Love Timeline",
-    "Favourite lines",
-    "Soundtrack",
-    "Tells",
-  ];
+  const names = ALBUM_TABS;
+  // 0.36.0: from the left, Memories, Dates and CGs, then the rest, and it opens on Memories.
+  await expect(tabs.getByRole("tab")).toHaveText(names);
+  await expect(tabs.getByRole("tab", { name: "Memories" })).toHaveAttribute("aria-selected", "true");
+  await expect(root.getByRole("tabpanel").getByRole("group", { name: "Memory rarity" })).toBeVisible();
   for (const [colorScheme, look] of [
     ["dark", "midnight"],
     ["light", "pearl"],
@@ -1902,7 +2051,7 @@ test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps 
   }
   // The arrow keys still move along the row, wrapped or not.
   await page.keyboard.press("ArrowRight");
-  await expect(tabs.getByRole("tab", { name: "CGs" })).toBeFocused();
+  await expect(tabs.getByRole("tab", { name: "Memories" })).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(tabs.getByRole("tab", { name: "Tells" })).toHaveAttribute("aria-selected", "true");
   const overflow = await root.evaluate((element) => element.scrollWidth - element.clientWidth);

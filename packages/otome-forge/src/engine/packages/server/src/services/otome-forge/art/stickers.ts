@@ -173,6 +173,7 @@ const ownerDoc = (run: Pick<Run, "player" | "units">, owner: Owner) =>
 /**
  * #2299: the pictures each saved repaint replaced, newest first, by run and new picture, so a cut-out of one of them
  * shows until the new one's is ready (a second repaint before the first new picture is cut out keeps the older one).
+ * 0.36.0: a Kitty Cards kitten's repaint (S/art/kittens.ts) keeps its own here too.
  * ponytail: kept in this process; a restart before the new picture is cut out shows the sticker as painting for that
  * wait, as a first paint does. Upgrade path: keep the replaced urls on the sticker's record.
  */
@@ -180,6 +181,14 @@ const replacedPictures = new Map<string, string[]>();
 /** How many replaced pictures a sticker keeps to fall back on. */
 const REPLACED_KEPT = 3;
 const replacedKey = (runId: string, url: string) => `${runId}|${url}`;
+
+/** A repaint saved the picture at `url` over the one at `old`: `old` (and what it replaced) shows until it is cut out. */
+export function keepReplaced(runId: string, old: string, url: string): void {
+  const before = replacedKey(runId, old);
+  const chain = [old, ...(replacedPictures.get(before) ?? [])].slice(0, REPLACED_KEPT);
+  replacedPictures.delete(before);
+  replacedPictures.set(replacedKey(runId, url), chain);
+}
 
 /**
  * A painted sticker as shown: its cut-out (the old one while a refresh is cut, as stage art keeps it), the original
@@ -196,6 +205,15 @@ function shownSticker(
   const doc = ownerDoc(run, sticker.owner);
   const url = sticker.art?.url;
   if (!doc || !url) return { url: null, cutting: false };
+  return shownPicture(runId, doc, url);
+}
+
+/** shownSticker's rule for the picture at `url`, kept in `doc`'s cut-outs (0.36.0: a kitten's too). */
+export function shownPicture(
+  runId: string,
+  doc: Parameters<typeof cutoutView>[1],
+  url: string,
+): { url: string | null; cutting: boolean } {
   const cut = cutoutView(runId, doc, url);
   const key = replacedKey(runId, url);
   if (cut.cutout || cut.state !== "pending") {
@@ -551,12 +569,7 @@ function paintSticker(
       if (saved && art.state === "ready") {
         // #2299: the new picture is cut out after this; until then shownSticker shows the replaced one's cut-out (which
         // stays in the gallery), and only the replaced original, a gallery image of ours, is deleted.
-        if (replaced?.url && art.url && replaced.url !== art.url) {
-          const before = replacedKey(runId, replaced.url);
-          const chain = [replaced.url, ...(replacedPictures.get(before) ?? [])].slice(0, REPLACED_KEPT);
-          replacedPictures.delete(before);
-          replacedPictures.set(replacedKey(runId, art.url), chain);
-        }
+        if (replaced?.url && art.url && replaced.url !== art.url) keepReplaced(runId, replaced.url, art.url);
         await releaseReplacedImage(deps, replaced, art);
       }
       return saved;

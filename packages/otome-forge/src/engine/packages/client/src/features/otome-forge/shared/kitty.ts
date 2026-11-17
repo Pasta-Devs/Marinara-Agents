@@ -400,7 +400,9 @@ export type KittenOwner = "player" | LiId;
  * One painted kitten as GET /runs/:run/play shows it (S/art/kittens.ts), with images on only. `url`: the kitten once it
  * is painted and cut out (the painted picture when its cut-out failed). Until then `art` is its paint as the client
  * should see it: `waiting-consent` (Paint our kittens), `pending` (painting, or being cut out), `failed` or `stopped`
- * (Try again); neither while it waits for its turn to be claimed.
+ * (Try again); neither while it waits for its turn to be claimed. 0.36.0: while the Album's Repaint paints one again,
+ * `url` stays the picture it paints over and `art` is `pending` until the new one is cut out. The Album lists those with
+ * a `url` (AlbumView.kittens).
  */
 export interface KittenView {
   owner: KittenOwner;

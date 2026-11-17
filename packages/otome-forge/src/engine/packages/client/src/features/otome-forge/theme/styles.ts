@@ -713,9 +713,12 @@ ${R} .of-limit-fixed {
   display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 600; color: var(--of-text-soft);
 }
 ${R} .of-custom-limits { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 4px; }
-${R} .of-custom-limit {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; width: 100%;
-}
+/* One of your own: the text box takes the room its Allow | Veil | Line pills and small remove button leave. They go
+   under it together, at the end of the row, only when one line cannot hold them all (a large text size on a phone). */
+${R} .of-custom-limit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+${R} .of-custom-limit > .of-input { flex: 1 1 4.5rem; min-width: 4.5rem; padding-inline: 10px; }
+${R} .of-custom-limit-level { display: flex; align-items: center; gap: 6px; min-width: 0; margin-inline-start: auto; }
+${R} .of-custom-limit-level .of-icon-button { width: 28px; height: 28px; }
 /* Review. */
 ${R} .of-review { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 20px; }
 ${R} .of-review-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -3448,11 +3451,16 @@ ${R} .of-claw-pip[data-state="missed"] { opacity: 0.45; }
 ${R} .of-claw-toggles { display: flex; gap: 6px; }
 ${R} .of-claw-toggles .of-icon-button { width: 34px; height: 34px; }
 ${R} .of-claw-toggles .of-icon-button[aria-pressed="false"] { color: var(--of-text-faint); }
-${R} .of-claw-partner { display: flex; align-items: center; gap: 10px; min-height: 54px; }
+/* One height whatever the row shows (the status, a one- or two-line line, or the swap between them), so a line never
+   pushes the machine down: room for two lines of the bubble with its padding and border; a longer line is cut. */
+${R} .of-claw-partner {
+  display: flex; flex: none; align-items: center; gap: 10px; height: max(54px, calc(2 * 1.22 * 1.04rem + 18px));
+}
 ${R} .of-claw-bubble {
   flex: 1; min-width: 0; padding: 8px 13px; border-radius: 16px 16px 16px 4px;
   border-color: color-mix(in srgb, var(--of-li-accent) 55%, transparent);
   font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.04rem; line-height: 1.22;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
 ${R}[dir="rtl"] .of-claw-bubble { border-radius: 16px 16px 4px 16px; }
 ${R} .of-claw-status {

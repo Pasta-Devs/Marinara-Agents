@@ -34,8 +34,11 @@ export const STARLIGHT_EARNINGS = {
   /** More for a Kitty Cards game she won. */
   kittyWin: 20,
 } as const;
-/** Starlight from activities (dates, Read Him, Read Me, Tarot night, Claw, Kitty Cards, Show him) per local day. */
-export const ACTIVITY_STARLIGHT_DAILY_CAP = 400;
+/**
+ * Starlight from activities (dates, Read Him, Read Me, Tarot night, Claw, Kitty Cards, Show him) per local day (the
+ * maintainer's, 2026-11-17: 300, was 400).
+ */
+export const ACTIVITY_STARLIGHT_DAILY_CAP = 300;
 
 /** Affection points for each prestige point past level 10 (the maintainer's, 2026-11-04: kept at 300). */
 export const POINTS_PER_LEVEL = 300;
