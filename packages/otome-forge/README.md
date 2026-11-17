@@ -220,7 +220,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 
   It saves an image through the Engine's own image saving.
 
-## Dates: Read Them, Read Me, Tarot night, the Photo Shoot and the Claw Machine
+## Dates: Read Them, Read Me, Tarot night, the Photo Shoot, the Claw Machine and Kitty Cards
 
 Dates is where you spend time with one love interest at a time. Dates themselves are won in Wish and planned from Album → Dates (see [Dates from Wish](#dates-from-wish)). Every activity but the Photo Shoot pays, even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 150 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
 
@@ -297,6 +297,26 @@ A round makes no model calls and paints no images. You get six drops, and you ta
 - **Controls:** it plays by keyboard (arrows to move; Space to drop, or held down to cheer). Under reduced motion it resolves each drop at once. Its sounds and vibration can be turned off, and **Mute everything** in **Settings → Audio** silences them too.
 
 Each love interest alone remembers the games you played together, as they remember an exchange of messages. These memories are never in the shared story summary, and no love interest is told what another one's own chapters left behind.
+
+### Kitty Cards
+
+Our version of Love and Deep Space's kitty card game. A game makes no model calls and paints no images.
+
+- **The cards:** 20 kittens, each a different breed, in four colours (rose, sky, lemon and mint) and numbered 1 to 5. There are eight cups: two white, and six coloured with every colour at least once.
+- **Taking turns:** pick who goes first. The first player draws 2 cards and the second 3. On your turn, play one card into an empty cup, or draw one from the pile. You can hold 10 cards, and a card drawn into a full hand is lost.
+- **Points:** a kitten in a cup of its own colour scores twice its number, in a white cup its number, and in any other cup nothing. The game ends when every cup is filled, and more points wins.
+- **Their cheat:** in some games, your love interest cheats once, in their own way:
+  - swapping the kittens of two cups, which **Gotcha!** puts back if you press it within 3 seconds;
+  - dozing off for 5 seconds, so you can swap two cups yourself, though they may notice when they wake;
+  - looking away, so you can hold **Sneak a card** to draw one more, unless they turn back first;
+  - offering a trade, one of their cards for one of yours, face down;
+  - or letting you take back the card you just played.
+- **Rewards:** a game pays 20 Starlight and 30 affection, and a win 20 Starlight more.
+- **Their lines:** written ahead with their other lines. In a story from before 0.35.0, opening Dates writes them in the background, 1 call per love interest; until then they say stock lines.
+- **Your kittens:** with an image connection, you and each love interest are painted once as a kitten, its fur and small accessories taken from your look, then cut out. Each is 1 image, painted in the background the first time you open Dates. In a game, rose 5 shows your kitten, sky 5 theirs, and lemon 5 and mint 5 the next two love interests'. **Ask before painting** and prompt review hold them for **Paint our kittens**, and one that fails offers **Try again**.
+- **Controls:** every control is a button, so it plays by keyboard. Under reduced motion nothing moves, but the cheats' timers still run.
+
+Each love interest alone remembers the Kitty Cards games you played together, as with the Claw Machine.
 
 ## Remind Me and the period tracker
 
@@ -410,8 +430,10 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | **Generate music** on                                       | 1 call per mood, for its brief                                                                                                                                                      | —                                                                                                                                             | 1 track per mood (up to 6), made once | —                                                          |
 | **Chapter themes** on                                       | 1 call per chapter, for its thematic brief                                                                                                                                          | —                                                                                                                                             | 1 track per chapter, reused on replay | —                                                          |
 | Home's message of the day                                   | 1 call per love interest you see, per day (again when a rift opens or closes)                                                                                                       | —                                                                                                                                             | —                                     | **Play**: once                                             |
-| Home's lines written ahead                                  | in the background: 1 call per love interest per stage (the first adds comfort and Claw Machine lines), once more after 0.14.0 or new NSFW settings, and 10 min after a failed try   | —                                                                                                                                             | —                                     | each tap line once; comfort lines every time, never cached |
+| Home's lines written ahead                                  | in the background: 1 call per love interest per stage (the first adds comfort and mini-game lines), once more after 0.14.0 or new NSFW settings, and 10 min after a failed try      | —                                                                                                                                             | —                                     | each tap line once; comfort lines every time, never cached |
 | A love interest's plush                                     | in the background: 1 call per love interest, once (again 10+ minutes after a failure)                                                                                               | —                                                                                                                                             | —                                     | —                                                          |
+| Kitty Cards lines, in a story from before 0.35.0            | in the background: 1 call per love interest, once, when you open Dates (again 10 min after a failed try)                                                                            | —                                                                                                                                             | —                                     | —                                                          |
+| Kitty Cards kittens (images on)                             | —                                                                                                                                                                                   | 1 for you and 1 per love interest, once, in the background when you open Dates (with **Ask before painting** or prompt review, on your tap)   | —                                     | —                                                          |
 | **Celebrate** a birthday                                    | none; its scene: 1 call as you read it                                                                                                                                              | as any scene                                                                                                                                  | —                                     | as any scene                                               |
 | A love interest's figurine                                  | —                                                                                                                                                                                   | 1, once, in the background right after you buy it (with **Ask before painting** or prompt review, on your tap)                                | —                                     | —                                                          |
 | **Side character sprites** on                               | in the background: 1 call per recurring side character, once, for their look (none for a character card)                                                                            | 1 per recurring side character, once (with **Ask before painting** or prompt review, on your tap)                                             | —                                     | —                                                          |
@@ -438,10 +460,11 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | **Photo Shoot**                                             | —                                                                                                                                                                                   | 1, on your tap                                                                                                                                | —                                     | —                                                          |
 | **Caring message**                                          | 1 call, or none with **Keep it off the model** or a debug condition on                                                                                                              | —                                                                                                                                             | —                                     | **Play**: every time, never cached                         |
 
-These never call a model or paint anything. With voices on, their lines are voiced: Claw Machine lines once each, comfort lines every time.
+These never call a model or paint anything. With voices on, their lines are voiced: Claw Machine and Kitty Cards lines once each, comfort lines every time.
 
 - a wish, single or ten;
 - a Claw Machine round;
+- a Kitty Cards game;
 - a touch on Home and **Rough day?** (they speak lines already written);
 - Remind Me and the period tracker;
 - **Keep it off the model**;
@@ -459,7 +482,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 
 ### Where your stories live
 
-- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, message threads (the group chat's too), lines written ahead, banners, the items you win, the plush shelf, your latest Claw Machine rounds and each love interest's plush, the gifts and figurines you bought in the Shop, your Read Me games, your Tarot night readings and the story's Tarot deck, your personality quiz answers and each love interest's, each love interest's notebook of what they know about you, your own words included, the side characters who spoke in your scenes with their chapters, looks and sprites, **Your thoughts…** (waiting in the story's progress until the next main chapter is planned, then kept with that chapter), and long-term recall's index of your chapter summaries (numbers only, never sent in a prompt).
+- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, message threads (the group chat's too), lines written ahead, banners, the items you win, the plush shelf, your latest Claw Machine rounds and Kitty Cards games, each love interest's plush, the gifts and figurines you bought in the Shop, your Read Me games, your Tarot night readings and the story's Tarot deck, your personality quiz answers and each love interest's, each love interest's notebook of what they know about you, your own words included, the side characters who spoke in your scenes with their chapters, looks and sprites, **Your thoughts…** (waiting in the story's progress until the next main chapter is planned, then kept with that chapter), and long-term recall's index of your chapter summaries (numbers only, never sent in a prompt).
   - They travel with Engine backups and profile exports.
   - Package documents aren't isolated per package, so other installed packages could read them.
 - **The Global Gallery:** painted looks, places, faces, CGs, banner art, figurines, Tarot cards, side character sprites and Home cut-outs are saved there, and deleting a story deletes them too.

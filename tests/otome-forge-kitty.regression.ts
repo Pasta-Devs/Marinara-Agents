@@ -1110,6 +1110,17 @@ test("the cards: twenty transparent kittens in the package, one per card, each n
     "/api/capability-packages/otome-forge/assets/kitty/rose-5.webp?v=0.35.0",
   );
   assert.equal(kittyCardUrl("mint-1", null), "/api/capability-packages/otome-forge/assets/kitty/mint-1.webp");
+  // The committed manifest serves each one (else the Engine answers 404) and pins its bytes.
+  const manifest = JSON.parse(readFileSync(new URL("../packages/otome-forge/manifest.json", import.meta.url), "utf8"));
+  const served = new Set<string>(manifest.contributions?.assets?.paths ?? []);
+  const pinned = new Map<string, number>(
+    manifest.files.map((file: { path: string; bytes: number }) => [file.path, file.bytes]),
+  );
+  for (const card of KITTY_DECK) {
+    const path = `kitty/${card}.webp`;
+    assert.ok(served.has(path), `${path} is served (manifest contributions.assets.paths)`);
+    assert.equal(pinned.get(path), readFileSync(new URL(`${card}.webp`, dir)).length, `${path} is pinned in files[]`);
+  }
 });
 
 test("the kittens take rose 5 (hers), sky 5 (his), lemon and mint 5 (the next two after him who have one)", () => {
