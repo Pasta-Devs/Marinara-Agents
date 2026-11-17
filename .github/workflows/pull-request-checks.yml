@@ -79,8 +79,10 @@ jobs:
           npx tsx tests/beholder-client-contract.regression.ts
           npx tsx tests/beholder-host-release.regression.ts
 
-          # Quartermaster dialogs and inventory export; Gacha Forge layout, canonical choices and reproducible bundles.
+          # Quartermaster dialogs, inventory export and the Android local secret; Gacha Forge layout, canonical choices
+          # and reproducible bundles.
           node tests/quartermaster-modal-lifecycle.regression.mjs
+          node tests/quartermaster-engine-local-auth.regression.mjs
           node tests/gacha-forge-location-ids.regression.mjs
           node tests/gacha-forge-unit-art.regression.mjs
           node tests/gacha-forge-player-choices.regression.mjs

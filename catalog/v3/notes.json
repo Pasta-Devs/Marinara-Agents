@@ -828,6 +828,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.34",
+          "date": "2026-11-17",
+          "notes": "- Item and outfit pictures paint when Marinara was installed with its Android app. The Engine\n  there refused Quartermaster's requests with \"401: Android local authentication required\"; they\n  now carry the app's local secret, as the `mari` command's do.",
+          "highlight": false
+        },
+        {
           "version": "0.1.33",
           "date": "2026-11-01",
           "notes": "- The item editor's Delete file / Unlink choice closes if the item's image changes while it's\n  open, so Delete never removes a different file than the one it names.\n- A failed Unlink in the item editor can be tried again.\n- The [i] details on bag cards stay inside the dock after they load.",
@@ -939,12 +945,6 @@
           "version": "0.1.15",
           "date": "2026-09-15",
           "notes": "- Fixed the Recent Agent Update box leak for real this time — 0.1.13 and 0.1.14 were both\n  attempted fixes that didn't fully resolve it.\n- Widened the info tooltip box so long macro tokens read on one line.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.14",
-          "date": "2026-09-15",
-          "notes": "- Attempted fix for the Recent Agent Update collapsed-box leak (0.1.13's attempt didn't fully\n  resolve it either).\n- Fixed tooltip text overflowing outside its own box.",
           "highlight": false
         }
       ]
