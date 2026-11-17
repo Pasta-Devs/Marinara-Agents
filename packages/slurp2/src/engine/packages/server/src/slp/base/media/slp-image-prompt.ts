@@ -85,7 +85,9 @@ const BODY_TRAIT =
 /** "… looks great in tight clothing": the clothes come in a phrase at the end. */
 const CLOTHES_PHRASE = /\s+(?:in|under|beneath)\s+(?:[\p{L}'-]+\s+){0,3}$/u;
 const HAIR = /\b(?:hair|ponytails?|pigtails?|braids?|braided|plaits?|buns?|bangs|twintails|updo)\b/iu;
-const WEAR_VERB = /\b(?:wear|wears|wearing|worn)\b/giu;
+// Only the verb that governs the hair ("wears her hair", "hair worn in"), not one that carries a garment ("hair wearing a cap").
+const WEAR_VERB =
+  /\b(?:wear|wears|wearing|worn)\b(?=\s+(?:(?:her|his|their|the)\s+)?(?:hair|ponytails?|pigtails?|braids?|buns?|bangs|twintails|updo)\b|\s+(?:in|up|down|back|loose|tied)\b)/giu;
 
 /** A sentence without its clothing clauses: only its body traits, or "" when it has none. */
 function withoutClothes(sentence: string): string {
