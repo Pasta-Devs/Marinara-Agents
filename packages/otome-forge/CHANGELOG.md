@@ -8,6 +8,7 @@
 - The Claw Machine no longer moves down when a love interest's line appears.
 - Starlight from dates is capped at 300 a day, was 400.
 - In **Lines & Veils**, your own limits can be **Allow** as well as **Veil** or **Line**, and their row fits a phone.
+- On **Between you**, the small hearts for ranks 11 to 20 now show the ranks you've reached in their colour, and the ones still to come empty.
 
 ## 0.35.0 — 2026-11-17
 

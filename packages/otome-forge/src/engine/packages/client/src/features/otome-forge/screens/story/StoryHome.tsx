@@ -457,7 +457,8 @@ function Affection({
                         className="of-heart-inner"
                         size={7}
                         strokeWidth={2.4}
-                        fill={index < inner ? "currentColor" : "none"}
+                        // A reached rank shows the accent through its outline; one still to come is solid ink.
+                        fill={index < inner ? "none" : "currentColor"}
                         data-inner-on={index < inner}
                       />
                     ) : null}

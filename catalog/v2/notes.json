@@ -712,7 +712,7 @@
         {
           "version": "0.36.0",
           "date": "2026-11-17",
-          "notes": "- **Kittens in the Album.** A **Kittens** tab keeps the kittens painted of you and your love interests, to see large, save, or **Repaint** (1 image). The old one stays until the new one is ready.\n- The Album's tabs now start with **Memories**, **Dates** and **CGs**, and it opens on **Memories**.\n- Kitty Cards: **How {name} plays** describes how they cheat at Kitty Cards, not the Claw Machine, and every painted kitten shows above the first move.\n- The Claw Machine no longer moves down when a love interest's line appears.\n- Starlight from dates is capped at 300 a day, was 400.\n- In **Lines & Veils**, your own limits can be **Allow** as well as **Veil** or **Line**, and their row fits a phone.",
+          "notes": "- **Kittens in the Album.** A **Kittens** tab keeps the kittens painted of you and your love interests, to see large, save, or **Repaint** (1 image). The old one stays until the new one is ready.\n- The Album's tabs now start with **Memories**, **Dates** and **CGs**, and it opens on **Memories**.\n- Kitty Cards: **How {name} plays** describes how they cheat at Kitty Cards, not the Claw Machine, and every painted kitten shows above the first move.\n- The Claw Machine no longer moves down when a love interest's line appears.\n- Starlight from dates is capped at 300 a day, was 400.\n- In **Lines & Veils**, your own limits can be **Allow** as well as **Veil** or **Line**, and their row fits a phone.\n- On **Between you**, the small hearts for ranks 11 to 20 now show the ranks you've reached in their colour, and the ones still to come empty.",
           "highlight": true
         },
         {
