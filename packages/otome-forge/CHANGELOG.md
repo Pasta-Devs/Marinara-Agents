@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.34.9 — 2026-11-17
+
+- **New looks don't copy your avatar's hood.** A look is painted with your persona avatar (or his card picture) as the likeness, and when that picture wore a hood or a hat, every new look wore it too. The picture is now used only for the face, hair and build: a look wears just the outfit it was written with, and a hood or hat only when that outfit has one. Looks you already have keep their pictures; tap **Repaint** to paint one again.
+- **No more stray pixels at a look's edges.** A look is painted on a flat backdrop that its cut-out then removes, and a plum cardigan was painted on magenta, so the cut-out ate its edges. The backdrop is now chosen from more colour names (plum, burgundy, wine, lilac, sage, moss, denim and others) and mostly from the clothes, which are what touch it. Repaint a look that shows the specks.
+
 ## 0.34.8 — 2026-11-16
 
 - **Take them along sits in its card on an iPhone.** On a date's **Who's coming?**, the title and its icon sat on the card's top edge, with a second frame showing above it. They are now inside the card, side by side, and the Dates screen's **Who are you spending time with?** card is fixed the same way.
