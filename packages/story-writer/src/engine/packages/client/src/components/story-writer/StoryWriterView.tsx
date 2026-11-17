@@ -138,6 +138,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const [noteOpen, setNoteOpen] = useState(false);
   const [peekOpen, setPeekOpen] = useState(false);
   const peekOpener = useRef<HTMLElement | null>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   const [chapterBarHost, setChapterBarHost] = useState<HTMLDivElement | null>(null);
   const [ghostChapterId, setGhostChapterId] = useState(generateClientId);
   const [firstStoryFailed, setFirstStoryFailed] = useState(false);
@@ -352,9 +353,16 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     if (confirmed) await doc.deleteChapter(chapterId);
   };
   const hideNote = () => {
+    // The note unmounts with its hide button: focus held there goes to the action bar, which stays.
+    const hadFocus =
+      document.activeElement instanceof HTMLElement && !!document.activeElement.closest(".sw-note-anchor");
     setNoteOpen(false);
     updatePreferences({ showAuthorNote: false });
     toast.info(t("note.hidden"));
+    if (hadFocus)
+      requestAnimationFrame(() =>
+        dockRef.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus({ preventScroll: true }),
+      );
   };
   const openPeek = () => {
     peekOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -452,7 +460,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 onHide={hideNote}
               />
             ) : null}
-            <div className="sw-dock">
+            <div ref={dockRef} className="sw-dock">
               <ActionBar
                 status={generation.status}
                 canWrite={generation.canWrite}

@@ -292,8 +292,11 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   const slotHeight = async () => (await root.locator(".sw-reader-slot").boundingBox())!.height;
   const withNote = await slotHeight();
   await root.getByRole("button", { name: /^Open the author's note/ }).click();
-  await root.getByRole("button", { name: "Hide the author's note" }).click();
+  // From the keyboard: the note unmounts with its hide button, and focus moves to the action bar (Dottore, #2364).
+  await root.getByRole("button", { name: "Hide the author's note" }).focus();
+  await page.keyboard.press("Enter");
   await expect(root.locator(".sw-note-anchor")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest(".sw-dock"))).toBe(true);
   await expect(root).toHaveAttribute("data-sw-note-shown", "false");
   await expect
     .poll(async () => (await engineRequest(request, base, "GET", "/story-writer/preferences")).showAuthorNote)
