@@ -255,6 +255,25 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await page.waitForTimeout(800);
   await page.screenshot({ path: testInfo.outputPath("03-book-written.png") });
 
+  // A click on the peek's text keeps the keys in the dialog: they scroll the prompt, the book behind it keeps its
+  // page, and Escape still closes it.
+  await root.getByRole("button", { name: "Show story settings" }).click();
+  await tools.click();
+  await peekButton.click();
+  await expect(peek.locator(".sw-peek-message")).not.toHaveCount(0);
+  const folded = peek.locator(".sw-peek-message:not([open]) summary");
+  while (await folded.count()) await folded.first().click();
+  const onPage = await indicator.textContent();
+  await peek.locator(".sw-peek-text").first().click();
+  await page.keyboard.press("PageDown");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => peek.locator(".sw-peek-body").evaluate((body) => body.scrollTop)).toBeGreaterThan(0);
+  await expect(indicator).toHaveText(onPage ?? "");
+  await page.keyboard.press("Escape");
+  await expect(peek).toHaveCount(0);
+  await tools.click();
+  await root.getByRole("button", { name: "Hide story settings" }).click();
+
   // The chapter bar sits above the book, outside the reader, clear of the sticky note.
   const chapterBar = root.getByRole("navigation", { name: "Chapters" });
   await expect(chapterBar).toBeVisible();
@@ -432,6 +451,12 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   const documentView = root.locator(".sw-document");
   await expect(documentView).toBeVisible();
   await expect(root.locator(".sw-page, .sw-viewport, .sw-columns, .sw-nav-arrow, .sw-page-number")).toHaveCount(0);
+  // The shown note sits beside the column or above it, never over the text or the scrollbar.
+  await expect
+    .poll(async () =>
+      overlaps((await root.locator(".sw-note-collapsed").boundingBox())!, (await documentView.boundingBox())!),
+    )
+    .toBe(false);
   const scroll = () =>
     documentView.evaluate((element) => ({
       top: element.scrollTop,
@@ -527,6 +552,28 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await expect(indicator).toContainText("Chapter 1 of 2");
   await expect.poll(async () => Math.abs((await blockSpan(0)).top)).toBeLessThan(1);
 
+  // A click on the bar's label is not a click in the margin: no caret, no scroll.
+  const atChapterOne = (await scroll()).top;
+  await indicator.click();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => !!document.activeElement?.closest(".sw-document"))).toBe(false);
+  expect((await scroll()).top).toBe(atChapterOne);
+
+  // At either end, the button that has nowhere to go is off, and the label says where the reader is.
+  const previousChapter = chapterBar.getByRole("button", { name: "Previous chapter" });
+  const nextChapter = chapterBar.getByRole("button", { name: "Next chapter" });
+  await previousChapter.click();
+  await expect(indicator).toContainText("Title page");
+  await expect(previousChapter).toBeDisabled();
+  await expect(nextChapter).toBeEnabled();
+  await documentView.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect(indicator).toContainText("Chapter 3 · Not started yet");
+  await expect(nextChapter).toBeDisabled();
+  await expect(previousChapter).toBeEnabled();
+  await previousChapter.click();
+  await expect(indicator).toContainText("Chapter 2 of 2");
+  await expect(nextChapter).toBeEnabled();
+
   // A new chapter is followed down the column as it is written.
   await writeNext.click();
   await expect(writeNext).toBeEnabled({ timeout: 30_000 });
@@ -617,5 +664,16 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
       .toBe(false);
     await page.waitForTimeout(600);
     await page.screenshot({ path: testInfo.outputPath("08-landscape.png") });
+
+    // In the Document theme the column, which scrolls under the note's corner, starts below that note.
+    await host.getByRole("button", { name: "Show story settings" }).click();
+    const appearanceSection = host.getByRole("button", { name: "Appearance" });
+    if ((await appearanceSection.getAttribute("aria-expanded")) !== "true") await appearanceSection.click();
+    await host.getByRole("button", { name: "Document", exact: true }).click();
+    await host.getByRole("button", { name: "Hide story settings" }).click();
+    await expect(host.locator(".sw-document")).toBeVisible();
+    await expect.poll(async () => overlaps(await box(".sw-note-collapsed"), await box(".sw-document"))).toBe(false);
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: testInfo.outputPath("09-landscape-document.png") });
   }
 });

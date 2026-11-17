@@ -4,12 +4,12 @@
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -30,6 +30,11 @@ import {
 const EDGE = 24;
 const NO_PAGES: Record<string, number> = {};
 function ignoreContentChange() {}
+
+/** The chapter bar is portalled out of the document, but React still bubbles its events through it. */
+function fromDocument(event: SyntheticEvent) {
+  return event.currentTarget.contains(event.target as Node);
+}
 
 /**
  * The paperless reader: no pages, columns, page numbers or page turns, so text selects across what were pages and a
@@ -52,7 +57,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
   });
   // The block whose end stays in view: the last chapter when the story opens, then the chapter being written.
   const pinRef = useRef<string | null>(chapters[chapters.length - 1]?.id ?? null);
-  const [currentKey, setCurrentKey] = useState(TITLE_KEY);
+  const [bar, setBar] = useState({ key: TITLE_KEY, canPrevious: false, canNext: false });
   const structureKey = blocks.map((block) => block.key).join("|");
 
   const blockElement = useCallback(
@@ -88,6 +93,47 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
     else if (caret.bottom > bottom) root.scrollTop += caret.bottom - bottom;
   }, []);
 
+  /**
+   * Where the chapter bar's buttons go: the last chapter head above the top edge (this chapter's own from inside it),
+   * and the first one below it while the document can still scroll down. The bar's state comes from the same reading.
+   */
+  const chapterHeads = useCallback(() => {
+    const root = rootRef.current;
+    if (!root) return null;
+    const heads = Array.from(columnRef.current?.querySelectorAll<HTMLElement>("[data-sw-block]") ?? []);
+    const top = root.scrollTop;
+    const atEnd = top >= root.scrollHeight - root.clientHeight - 1;
+    return {
+      heads,
+      line: top + root.clientHeight / 3,
+      previous: heads.findLast((head) => head.offsetTop < top - 1),
+      next: atEnd ? undefined : heads.find((head) => head.offsetTop > top + 1),
+    };
+  }, []);
+
+  // Read on scroll (at most once a frame, before the streamed text is written) and after a resize, so it never forces
+  // a layout of its own.
+  const measureBar = useCallback(() => {
+    const at = chapterHeads();
+    if (!at) return;
+    const { heads, line, previous, next } = at;
+    // At the top the title, at the end the last block; between them the chapter crossing a line a third of the way down.
+    const current =
+      previous && !next
+        ? heads[heads.length - 1]
+        : next && !previous
+          ? heads[0]
+          : (heads.findLast((head) => head.offsetTop <= line) ?? heads[0]);
+    const key = current?.dataset.swBlock ?? TITLE_KEY;
+    const canPrevious = !!previous;
+    const canNext = !!next;
+    setBar((shown) =>
+      shown.key === key && shown.canPrevious === canPrevious && shown.canNext === canNext
+        ? shown
+        : { key, canPrevious, canNext },
+    );
+  }, [chapterHeads]);
+
   // ResizeObserver reports after the browser's own layout, so following a streamed chapter never forces one.
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -97,11 +143,12 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
       if (pinRef.current) keepPinnedInView();
       // A new size (the on-screen keyboard, a bar coming or going) keeps the caret in view.
       else if (isEditingHere()) revealCaret();
+      measureBar();
     });
     observer.observe(root);
     observer.observe(column);
     return () => observer.disconnect();
-  }, [keepPinnedInView, revealCaret, isEditingHere]);
+  }, [keepPinnedInView, revealCaret, isEditingHere, measureBar]);
 
   // Every new run is followed, wherever the reader was.
   useLayoutEffect(() => {
@@ -110,27 +157,8 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
     keepPinnedInView();
   }, [generatingChapterId, keepPinnedInView]);
 
-  // The chapter being read is the one crossing a line a third of the way down.
-  useEffect(() => {
-    const root = rootRef.current;
-    const column = columnRef.current;
-    if (!root || !column) return;
-    const crossing = new Set<string>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const key = (entry.target as HTMLElement).dataset.swBlock ?? "";
-          if (entry.isIntersecting) crossing.add(key);
-          else crossing.delete(key);
-        }
-        const first = blocksRef.current.find((block) => crossing.has(block.key));
-        if (first) setCurrentKey(first.key);
-      },
-      { root, rootMargin: "-33% 0px -66% 0px" },
-    );
-    for (const element of column.querySelectorAll("[data-sw-block]")) observer.observe(element);
-    return () => observer.disconnect();
-  }, [structureKey]);
+  // A block added, removed or renamed (the ghost page becoming a chapter) can leave the height as it was.
+  useLayoutEffect(() => measureBar(), [structureKey, measureBar]);
 
   const scrollToBlock = useCallback(
     (key: string) => {
@@ -145,14 +173,9 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
 
   useImperativeHandle(ref, () => ({ scrollToChapter: scrollToBlock }), [scrollToBlock]);
 
-  /** The previous chapter head above the top edge (this chapter's own from inside it), or the next one below it. */
   const scrollToChapterHead = (direction: -1 | 1) => {
-    const root = rootRef.current;
-    if (!root) return;
-    const top = root.scrollTop;
-    const heads = Array.from(columnRef.current?.querySelectorAll<HTMLElement>("[data-sw-block]") ?? []);
-    const above = heads.filter((element) => element.offsetTop < top - 1);
-    const target = direction < 0 ? above[above.length - 1] : heads.find((element) => element.offsetTop > top + 1);
+    const at = chapterHeads();
+    const target = direction < 0 ? at?.previous : at?.next;
     if (target?.dataset.swBlock) scrollToBlock(target.dataset.swBlock);
   };
 
@@ -165,14 +188,15 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
   }, [blockElement, revealCaret]);
 
   // Scrolling, clicking or typing in the document lets go of the end it was keeping in view.
-  const letGo = () => {
-    pinRef.current = null;
+  const letGo = (event: SyntheticEvent) => {
+    if (fromDocument(event)) pinRef.current = null;
   };
 
   /** A click beside the text, on a chapter heading or below its last line puts the caret in that chapter. */
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target as Element;
-    if (!editable || event.button !== 0 || target.closest("button, a, input, textarea, select")) return;
+    if (!editable || event.button !== 0 || !fromDocument(event)) return;
+    if (target.closest("button, a, input, textarea, select")) return;
     if ((target.closest(".sw-body") as HTMLElement | null)?.isContentEditable) return;
     // A selection dragged out of the text stays selected.
     if (!(document.getSelection()?.isCollapsed ?? true)) return;
@@ -193,11 +217,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
     revealCaret();
   };
 
-  const currentIndex = Math.max(
-    0,
-    blocks.findIndex((block) => block.key === currentKey),
-  );
-  const shown = blocks[currentIndex]!;
+  const shown = blocks.find((block) => block.key === bar.key) ?? blocks[0]!;
   const total = blocks.filter((block) => block.kind === "chapter").length;
   const [indicator, indicatorShort] =
     shown.kind === "chapter"
@@ -225,6 +245,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
       onWheel={letGo}
       onKeyDown={letGo}
       onClick={handleClick}
+      onScroll={measureBar}
     >
       <div ref={columnRef} className="sw-document-column">
         {blocks.map((block) =>
@@ -262,7 +283,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
             <nav className="sw-chapterbar-pill" aria-label={t("tools.chapters")}>
               <button
                 type="button"
-                disabled={currentIndex === 0}
+                disabled={!bar.canPrevious}
                 aria-label={t("reader.previousChapter")}
                 title={t("reader.previousChapter")}
                 onClick={() => scrollToChapterHead(-1)}
@@ -277,7 +298,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
               </span>
               <button
                 type="button"
-                disabled={currentIndex === blocks.length - 1}
+                disabled={!bar.canNext}
                 aria-label={t("reader.nextChapter")}
                 title={t("reader.nextChapter")}
                 onClick={() => scrollToChapterHead(1)}

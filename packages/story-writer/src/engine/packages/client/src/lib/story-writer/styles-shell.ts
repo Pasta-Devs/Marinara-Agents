@@ -655,6 +655,8 @@ ${R} .sw-peek {
   background: var(--sw-panel-texture), var(--sw-panel-bg); color: var(--sw-panel-fg);
   box-shadow: 0 0 0 1px var(--sw-panel-border), 0 24px 64px rgba(0, 0, 0, 0.45);
 }
+/* They take focus only from a click, to keep it in the dialog; neither is a tab stop. */
+${R} :is(.sw-peek, .sw-peek-body):focus { outline: none; }
 ${R} .sw-peek-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 6px 18px; }
 ${R} .sw-peek-head h2 {
   flex: 1; min-width: 0; margin: 0; font-family: var(--sw-heading-font); font-size: 18px; color: var(--sw-heading-fg);
@@ -847,6 +849,12 @@ ${R} .sw-action-hint { max-width: 230px; padding: 0 12px 0 4px; font-size: 12.5p
 
 // Size-driven layout. Order matters: the short landscape rules come last and win on phones turned sideways.
 const LAYOUT_RULES = `
+/* Wide screens reserve no band for the note: it sits beside the book, up to about 170px in from its side with its
+   tilt and hover. The Document column scrolls under that corner, so the slot keeps clear of it on both sides, which
+   keeps the column centred and its scrollbar uncovered. (A height of 520px or less is the short landscape below.) */
+@container sw-root (min-width: 1100px) and (height > 520px) {
+  ${R} .sw-root[data-sw-theme="document"][data-sw-note-shown="true"] .sw-frame { --sw-slot-left: 172px; --sw-slot-right: 172px; }
+}
 @container sw-root (max-width: 1099px) {
   ${R} .sw-frame { --sw-slot-top: 72px; }
   ${R} .sw-root[data-sw-quick="true"] .sw-frame { --sw-slot-bottom: calc(90px + var(--sw-quickbar-h) + ${SAFE_BOTTOM}); }
@@ -938,6 +946,11 @@ const LAYOUT_RULES = `
   /* The upright bar sits on the side away from the drawer; a note on that side moves in beside it, not over it. */
   ${R} .sw-root[data-sw-sidebar="left"] .sw-note-anchor[data-side="right"] { right: 84px; }
   ${R} .sw-root[data-sw-sidebar="right"] .sw-note-anchor[data-side="left"] { left: 84px; }
+  /* That note reaches below the chapter bar's band, over the slot's top corner (to 66px, about 70 tilted or hovered).
+     The book's pages keep a margin clear of it; the Document column, which scrolls under it, starts below it. */
+  ${R} .sw-root[data-sw-theme="document"][data-sw-note-shown="true"]:is([data-sw-sidebar="left"][data-sw-note="right"], [data-sw-sidebar="right"][data-sw-note="left"]) .sw-frame {
+    --sw-slot-top: 74px;
+  }
 }`;
 
 const DEVICE_RULES = `

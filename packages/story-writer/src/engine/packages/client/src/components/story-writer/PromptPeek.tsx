@@ -101,7 +101,16 @@ export function PromptPeekDialog(props: { load(signal: AbortSignal): Promise<Pro
   return (
     <>
       <div className="sw-scrim sw-peek-scrim" data-open="true" aria-hidden="true" onClick={onClose} />
-      <div className="sw-peek" role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={onKeyDown}>
+      {/* A click on the text keeps focus in the dialog (on its body, which the keys then scroll), never on the page,
+          where Escape would not reach this handler and the book behind would turn its pages. */}
+      <div
+        className="sw-peek"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={onKeyDown}
+      >
         <header className="sw-peek-head">
           <h2 id={titleId}>{t("peek.title")}</h2>
           <button
@@ -115,7 +124,9 @@ export function PromptPeekDialog(props: { load(signal: AbortSignal): Promise<Pro
             <X size={18} aria-hidden="true" />
           </button>
         </header>
-        <div className="sw-peek-body">{body}</div>
+        <div className="sw-peek-body" tabIndex={-1}>
+          {body}
+        </div>
       </div>
     </>
   );
