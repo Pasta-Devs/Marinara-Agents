@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.36.1 — 2026-11-18
+
+- On **Between you**, the small hearts for ranks 11 to 20 now show the ranks you've reached in their colour, and the ones still to come empty. They were the other way round.
+
 ## 0.36.0 — 2026-11-17
 
 - **Kittens in the Album.** A **Kittens** tab keeps the kittens painted of you and your love interests, to see large, save, or **Repaint** (1 image). The old one stays until the new one is ready.
