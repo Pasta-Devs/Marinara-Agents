@@ -10,6 +10,7 @@ import type {
   SlurpCoupleMomentKind,
   SlurpCoupleStage,
 } from "./slp-creator-couples.js";
+import { slpRecord as record, slpDate as date } from "../../../../../shared/src/slp/slp-coerce.js";
 
 const STAGES: readonly SlurpCoupleStage[] = ["sparks", "dating", "together", "rocky", "split"];
 const AFTERMATHS = ["moveOn", "forget"] as const;
@@ -29,9 +30,6 @@ const KINDS: readonly SlurpCoupleMomentKind[] = [
   "movingOn",
   "joined",
 ];
-const record = (value: unknown) =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 /** Joined partners (polyamory): up to two more, never the pair themselves. */
 const slurpReadMoreIds = (value: unknown, aId: string, bId: string) => {
   const more = [...new Set(strings(value, 2).filter((id) => id !== aId && id !== bId))];

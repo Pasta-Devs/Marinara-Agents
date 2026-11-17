@@ -20,6 +20,7 @@ import { slpFilledDefault } from "./slp-schema-defaults.js";
 
 import type { SlpCreatorFanArchetype } from "./slp-social.types.js";
 import type { SlurpSpendTier } from "./slp-population.js";
+import { slpHashFmix as hash } from "./slp-hash.js";
 
 const num = (min: number, max: number, fallback: number) =>
   z
@@ -281,21 +282,6 @@ export function slurpResolveFanType(
   const direct = member.fanTypeId ? types.find((type) => type.id === member.fanTypeId) : undefined;
   if (direct?.enabled) return direct;
   return slurpFallbackFanType(types, member.archetype);
-}
-
-/** FNV-1a with the murmur3 finalizer, as the other Slurp rule modules use. */
-function hash(value: string): number {
-  let out = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 0x01000193);
-  }
-  out ^= out >>> 16;
-  out = Math.imul(out, 0x85ebca6b);
-  out ^= out >>> 13;
-  out = Math.imul(out, 0xc2b2ae35);
-  out ^= out >>> 16;
-  return out >>> 0;
 }
 
 const unit = (seed: string, salt: string): number => hash(`${salt}:${seed}`) / 0x100000000;

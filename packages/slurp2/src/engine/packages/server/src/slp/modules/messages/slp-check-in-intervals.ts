@@ -11,6 +11,7 @@
 import type { SlurpRapport } from "./slp-rapport.js";
 
 import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { slpStringHash as simpleHash } from "../../../../../shared/src/slp/slp-hash.js";
 /**
  * Calculate next check-in interval in minutes.
  *
@@ -84,21 +85,6 @@ export function checkInReplyDecision(
  */
 export function checkInDelayMinutes(): number {
   return Math.round(10 + Math.random() * 10); // 10-20 minutes
-}
-
-/**
- * Simple string hash for deterministic randomness.
- *
- * Not cryptographic, just needs to be consistent per input.
- */
-function simpleHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash);
 }
 
 /**

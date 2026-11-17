@@ -26,6 +26,7 @@ import { SLURP_BUILTIN_DRAMAS, SLURP_BUILTIN_SITUATIONS } from "./slp-drama-pack
 import { slurpPackTopicOff } from "../../feed/slp-occasion-beats.js";
 import { SLURP_CONTENT_PACK_LIBRARY } from "./slp-content-pack-library.js";
 import { slurpContentPackOn } from "./slp-content-packs.js";
+import { slpRecord as record } from "../../../../../../shared/src/slp/slp-coerce.js";
 
 export const SLP_DRAMA_LIBRARY_KEY = "slurp2.drama.library";
 
@@ -48,9 +49,6 @@ export type SlpPackRecord = {
   importedAt: string;
 };
 export const SLP_EMPTY_DRAMA_LIBRARY: SlpDramaLibrary = { situations: [], dramas: [], storylines: [], packs: [] };
-
-const record = (value: unknown) =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 /** Lenient: an entry that no longer passes the schema is dropped, the rest reads back. */
 export function readSlpDramaLibrary(raw: unknown): SlpDramaLibrary {

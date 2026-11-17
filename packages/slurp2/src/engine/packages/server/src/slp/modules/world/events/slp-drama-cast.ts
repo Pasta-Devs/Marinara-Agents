@@ -18,7 +18,7 @@ import type { SlpDramaCreator, SlpDramaWorld } from "./slp-drama-runtime.js";
 
 const DAY = 86_400_000;
 const NEWCOMER_DAYS = 14;
-const pairKey = (kind: string, a: string, b: string) => `${kind}:${[a, b].sort().join("|")}`;
+export const pairKey = (kind: string, a: string, b: string) => `${kind}:${[a, b].sort().join("|")}`;
 
 export const couplePairs = (storyline: SlpStoryline) =>
   [

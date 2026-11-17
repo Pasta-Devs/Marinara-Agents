@@ -5,6 +5,7 @@ import {
   type SlpWardrobeImportDraft,
   type SlpWardrobeLook,
 } from "../../../../../shared/src/slp/slp-wardrobe.js";
+import { slpRecord as record } from "../../../../../shared/src/slp/slp-coerce.js";
 
 export const SLP_WARDROBE_IMPORT_SOURCE_LIMIT = 24_000;
 
@@ -70,9 +71,6 @@ const key = (value: string) =>
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
-
-const record = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 /** The looks list under any name a model picks, or one bare look. */
 function importCandidates(parsed: unknown): unknown[] {
