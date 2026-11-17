@@ -42,6 +42,15 @@ ${R} {
   transition: background-color var(--of-fade) var(--of-ease), color var(--of-fade) var(--of-ease);
 }
 ${R} *, ${R} *::before, ${R} *::after { box-sizing: border-box; }
+/* Every scrollbar in Otome Hearth takes its look's colours (2026-11-18): the Engine paints every scrollbar, the reader's
+   narration and dialogue boxes included, in its own accent through \`*\` and ::-webkit-scrollbar-thumb (Safari). A box
+   that sets its own scrollbar colours keeps them. */
+${R} * { scrollbar-color: var(--of-border-strong) transparent; }
+:root ${R} ::-webkit-scrollbar-track { background: transparent; }
+:root ${R} ::-webkit-scrollbar-thumb {
+  background: var(--of-border-strong); background-clip: padding-box; border: 2px solid transparent; border-radius: 999px;
+}
+:root ${R} ::-webkit-scrollbar-thumb:hover { background-color: var(--of-text-faint); }
 ${R} :is(h1, h2, h3, p) { margin: 0; }
 ${R} button { font: inherit; color: inherit; letter-spacing: inherit; }
 ${R} :focus-visible { outline: 2px solid var(--of-focus); outline-offset: 3px; }

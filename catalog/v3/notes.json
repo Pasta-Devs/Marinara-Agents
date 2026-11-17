@@ -710,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.36.2",
+          "date": "2026-11-18",
+          "notes": "- Scrollbars in Otome Hearth, such as the one in a scene's narration and dialogue box, now use your Midnight or Pearl look's colours instead of Marinara Engine's accent.",
+          "highlight": false
+        },
+        {
           "version": "0.36.1",
           "date": "2026-11-18",
           "notes": "- On **Between you**, the small hearts for ranks 11 to 20 now show the ranks you've reached in their colour, and the ones still to come empty. They were the other way round.",
@@ -821,12 +827,6 @@
           "version": "0.33.2",
           "date": "2026-11-15",
           "notes": "- **A date opens where you left it.** Going to Settings from a date's scenes or its ending and coming back opens it there again, where it used to start over at its first step. A trip to Settings no longer resets the Album to its first tab either.\n- **A failed keepsake can switch connections.** When a keepsake fails to paint, **Change the image connection** opens Settings → Images. Back returns to the date's ending, where you can paint the keepsake again. One still painting when you left shows as painting until it lands.",
-          "highlight": false
-        },
-        {
-          "version": "0.33.1",
-          "date": "2026-11-15",
-          "notes": "- **Dates sits next to Memories in Wish.** Wish's tabs now read Memories, Dates, the love interest's wardrobe, My Wardrobe, Echoes and Shop.\n- **No dates card on the Dates screen.** Dates shows only its activities, today's rewards and the plush shelf. Plan your won dates from Album → Dates.\n- **Dates no longer slides sideways on a phone.** The love interests to pick from, on Dates and on a date's **Who's coming?**, wrap onto rows, so the screen only scrolls down.",
           "highlight": false
         }
       ]
