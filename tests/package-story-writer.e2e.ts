@@ -261,6 +261,14 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await tools.click();
   await peekButton.click();
   await expect(peek.locator(".sw-peek-message")).not.toHaveCount(0);
+  // aria-modal: Tab and Shift+Tab go round inside the dialog, never out to the Engine's tabs (where Escape would no
+  // longer close it).
+  const closePrompt = peek.getByRole("button", { name: "Close the prompt", exact: true });
+  await closePrompt.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(peek.locator("summary").last()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(closePrompt).toBeFocused();
   const folded = peek.locator(".sw-peek-message:not([open]) summary");
   while (await folded.count()) await folded.first().click();
   const onPage = await indicator.textContent();
@@ -549,6 +557,18 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await page.waitForTimeout(300);
   expect(Math.abs((await scroll()).top - typingAt)).toBeLessThanOrEqual(2);
   await page.keyboard.press("Escape");
+  // Escape leaves the chapter for the document itself, whose keys then scroll it (not the page, which can't).
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.classList.contains("sw-document") ?? false))
+    .toBe(true);
+  const escapedAt = (await scroll()).top;
+  await page.keyboard.press("Home");
+  await expect.poll(async () => (await scroll()).top).toBe(0);
+  await page.keyboard.press("PageDown");
+  await expect.poll(async () => (await scroll()).top).toBeGreaterThan(0);
+  await page.waitForTimeout(800);
+  await documentView.evaluate((element, top) => element.scrollTo({ top, behavior: "instant" }), escapedAt);
+  await expect.poll(async () => Math.abs((await scroll()).top - escapedAt)).toBeLessThanOrEqual(1);
 
   // The chapter bar moves between chapter headings.
   await chapterBar.getByRole("button", { name: "Next chapter" }).click();
@@ -572,6 +592,12 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await expect(indicator).toContainText("Title page");
   await expect(previousChapter).toBeDisabled();
   await expect(nextChapter).toBeEnabled();
+  // From the very top too, the first Next goes to Chapter 1, not to the title block below the column's padding.
+  await documentView.evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect.poll(async () => (await scroll()).top).toBe(0);
+  await nextChapter.click();
+  await expect(indicator).toContainText("Chapter 1 of 2");
+  await expect.poll(async () => Math.abs((await blockSpan(0)).top)).toBeLessThan(1);
   await documentView.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
   await expect(indicator).toContainText("Chapter 3 · Not started yet");
   await expect(nextChapter).toBeDisabled();

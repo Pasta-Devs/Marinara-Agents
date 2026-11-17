@@ -48,7 +48,27 @@ export function PromptPeekDialog(props: { load(signal: AbortSignal): Promise<Pro
   }, [load, t]);
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
+    if (event.defaultPrevented) return;
+    // aria-modal: Tab and Shift+Tab wrap inside the dialog. Only Story Writer behind it is inert, so without this focus
+    // would leave for the Engine's tabs, where Escape no longer reaches the dialog. Its stops change as the prompt loads.
+    if (event.key === "Tab") {
+      const stops = Array.from(
+        (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("button, summary, [href], [tabindex='0']"),
+      );
+      const active = document.activeElement;
+      if (!active || !stops.length) return;
+      const order = (stop: HTMLElement) => active.compareDocumentPosition(stop);
+      // Past the last stop (or before the first), go round; anywhere else the browser moves on as usual.
+      const more = event.shiftKey
+        ? stops.some((stop) => order(stop) & Node.DOCUMENT_POSITION_PRECEDING)
+        : stops.some((stop) => order(stop) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (!more) {
+        event.preventDefault();
+        (event.shiftKey ? stops[stops.length - 1] : stops[0])?.focus();
+      }
+      return;
+    }
+    if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
     onClose();

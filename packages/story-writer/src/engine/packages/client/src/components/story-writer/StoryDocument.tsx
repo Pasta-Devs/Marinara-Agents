@@ -8,6 +8,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type SyntheticEvent,
 } from "react";
@@ -107,7 +108,9 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
       heads,
       line: top + root.clientHeight / 3,
       previous: heads.findLast((head) => head.offsetTop < top - 1),
-      next: atEnd ? undefined : heads.find((head) => head.offsetTop > top + 1),
+      // The title block sits below the column's top padding: never a Next target, or Next from the very top would
+      // only move that padding.
+      next: atEnd ? undefined : heads.find((head, index) => index > 0 && head.offsetTop > top + 1),
     };
   }, []);
 
@@ -166,7 +169,10 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
       const element = blockElement(key);
       if (!root || !element) return;
       pinRef.current = null;
-      root.scrollTo({ top: element.offsetTop, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      root.scrollTo({
+        top: key === TITLE_KEY ? 0 : element.offsetTop,
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+      });
     },
     [blockElement],
   );
@@ -190,6 +196,13 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
   // Scrolling, clicking or typing in the document lets go of the end it was keeping in view.
   const letGo = (event: SyntheticEvent) => {
     if (fromDocument(event)) pinRef.current = null;
+  };
+  // ChapterBlock blurs its body on Escape, which in the paged reader hands the keys back to page turning. Here focus
+  // goes to the document itself, so PageDown, Space and the arrows scroll it instead of falling to the page.
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    letGo(event);
+    if (event.key === "Escape" && (event.target as HTMLElement).isContentEditable)
+      rootRef.current?.focus({ preventScroll: true });
   };
 
   /** A click beside the text, on a chapter heading or below its last line puts the caret in that chapter. */
@@ -243,7 +256,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
       tabIndex={0}
       onPointerDown={letGo}
       onWheel={letGo}
-      onKeyDown={letGo}
+      onKeyDown={handleKeyDown}
       onClick={handleClick}
       onScroll={measureBar}
     >
