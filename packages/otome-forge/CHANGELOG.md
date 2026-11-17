@@ -3,6 +3,7 @@
 ## 0.36.1 — 2026-11-18
 
 - On **Between you**, the small hearts for ranks 11 to 20 now show the ranks you've reached in their colour, and the ones still to come empty. They were the other way round.
+- Scrollbars in Otome Hearth, such as the one in a scene's narration and dialogue box, now use your Midnight or Pearl look's colours instead of Marinara Engine's accent.
 
 ## 0.36.0 — 2026-11-17
 
