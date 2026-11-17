@@ -389,7 +389,7 @@ function CardLink({ runKey, li, lis }: BibleViewProps) {
               value={card.id}
               disabled={lis.some((other) => other.id !== li.id && other.cardId === card.id)}
             >
-              {card.name}
+              {card.title ? t("ui.otomeForge.common.nameWithTitle", { name: card.name, title: card.title }) : card.name}
             </option>
           ))}
         </select>

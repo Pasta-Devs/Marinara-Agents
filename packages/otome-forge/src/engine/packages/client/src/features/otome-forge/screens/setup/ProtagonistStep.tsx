@@ -5,7 +5,7 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, UserRound, X } from "lucide-react";
-import { usePersonaOptions, type PickerItem } from "../../hooks/use-engine-resources";
+import { pickerMatches, usePersonaOptions, type PickerItem } from "../../hooks/use-engine-resources";
 import { Avatar } from "../../components/Avatar";
 import { CheckAgain, RetryNotice } from "../../components/RetryNotice";
 import { GOAL_MAX, TRAIT_MAX, TRAITS_MAX, type SetupDraft } from "./draft";
@@ -31,7 +31,7 @@ function PersonaGrid({
   const name = useId();
   const [search, setSearch] = useState("");
   const query = search.trim().toLocaleLowerCase();
-  const shown = query ? items.filter((item) => item.name.toLocaleLowerCase().includes(query)) : items;
+  const shown = query ? items.filter((item) => pickerMatches(item, query)) : items;
   return (
     <fieldset className="of-fieldset">
       <legend className="of-legend">{t("ui.otomeForge.setup.personaLegend")}</legend>
@@ -63,6 +63,7 @@ function PersonaGrid({
             />
             <Avatar name={item.name} url={item.avatarUrl} crop={item.avatarCrop} />
             <span className="of-tile-name">{item.name}</span>
+            {item.title ? <span className="of-tile-title">{item.title}</span> : null}
           </label>
         ))}
       </div>

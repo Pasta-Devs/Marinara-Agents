@@ -1032,6 +1032,7 @@ function NewcomerDialog({
                         accent={nameAccent(card.name)}
                       />
                       <span className="of-tile-name">{card.name}</span>
+                      {card.title ? <span className="of-tile-title">{card.title}</span> : null}
                       {picked ? (
                         <span className="of-tile-check" aria-hidden="true">
                           <Check size={12} strokeWidth={3} />
