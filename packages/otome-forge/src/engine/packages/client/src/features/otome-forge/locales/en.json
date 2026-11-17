@@ -361,6 +361,7 @@
   "ui.otomeForge.common.lookMidnight": "Midnight",
   "ui.otomeForge.common.lookPearl": "Pearl",
   "ui.otomeForge.common.lookSystem": "Follow system",
+  "ui.otomeForge.common.nameWithTitle": "{{name}} ({{title}})",
   "ui.otomeForge.common.newItem": "New",
   "ui.otomeForge.common.newItems_one": "{{count}} new item",
   "ui.otomeForge.common.newItems_other": "{{count}} new items",

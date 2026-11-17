@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { RetryNotice } from "../../components/RetryNotice";
-import { useCharacterOptions, type PickerItem } from "../../hooks/use-engine-resources";
+import { pickerMatches, useCharacterOptions, type PickerItem } from "../../hooks/use-engine-resources";
 import { nameAccent } from "../../lib/accent";
 import { ARCHETYPE_IDS, type ArchetypeId } from "../../shared/archetypes";
 import { LI_NAME_MAX, LIS_MAX, LIS_MIN, NOTES_MAX, newLiKey, type DraftLi, type SetupDraft } from "./draft";
@@ -147,9 +147,7 @@ function CardPicker({
   const characters = useCharacterOptions();
   const [search, setSearch] = useState("");
   const query = search.trim().toLocaleLowerCase();
-  const shown = query
-    ? characters.items.filter((item) => item.name.toLocaleLowerCase().includes(query))
-    : characters.items;
+  const shown = query ? characters.items.filter((item) => pickerMatches(item, query)) : characters.items;
   if (characters.isLoading) {
     return (
       <p className="of-hint" role="status">
@@ -197,6 +195,7 @@ function CardPicker({
               >
                 <Avatar name={item.name} url={item.avatarUrl} crop={item.avatarCrop} accent={nameAccent(item.name)} />
                 <span className="of-tile-name">{item.name}</span>
+                {item.title ? <span className="of-tile-title">{item.title}</span> : null}
                 {picked ? (
                   <span className="of-tile-check" aria-hidden="true">
                     <Check size={12} strokeWidth={3} />
