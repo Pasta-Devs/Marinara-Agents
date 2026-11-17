@@ -137,10 +137,10 @@
 // - Text built inside non-prompt code, which moving would mean rewriting that code: S/story/canon.ts (EASE_OFF_MARKER,
 //   whose start C/lib/reader-state.ts matches; a climax pick's canon marker; titleOf, a private chapter's title;
 //   DECISIONS_HEADING and the decision lines; the recall block headings), the private titles and texts of memory
-//   records in S/phone/memory.ts, S/minigames/read-him.ts (readHimMemoryText), S/minigames/claw.ts (clawMemoryText)
-//   and S/wish/banners.ts, S/memory/memory.ts summaryJob (each summary's rules: the summary contract and
-//   SUMMARY_WORDING), S/items/character-story.ts singleStoryChapter (a Moment's and a first-wear beat's node guide)
-//   and figurineStoryChapter (a figurine scene's, #2128),
+//   records in S/phone/memory.ts, S/minigames/read-him.ts (readHimMemoryText), S/minigames/claw.ts (clawMemoryText),
+//   S/minigames/kitty.ts (kittyMemoryText) and S/wish/banners.ts, S/memory/memory.ts summaryJob (each summary's rules:
+//   the summary contract and SUMMARY_WORDING), S/items/character-story.ts singleStoryChapter (a Moment's and a
+//   first-wear beat's node guide) and figurineStoryChapter (a figurine scene's, #2128),
 //   S/home/note.ts noteDay (the special-day lines), S/audio/music.ts chapterMusicBrief (the chapter theme's scene),
 //   S/art/outfits.ts (an older Snapshot's or Moment's fallback brief, and the pair portrait's brief) and
 //   S/story/introduce.ts (a newcomer's first web row).

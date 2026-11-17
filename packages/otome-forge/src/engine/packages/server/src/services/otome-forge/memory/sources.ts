@@ -11,6 +11,7 @@
 //   M5   Read Him sets (S/minigames/read-him.ts readHimMemorySources) and Claw Machine rounds (S/minigames/claw.ts
 //        clawMemorySources), each `chat` with audience [their id] and titled private, as a phone session is
 //   #2151 Tarot night readings (S/minigames/tarot.ts tarotMemorySources: `chat`, audience [their id], titled private)
+//   0.35.0 Kitty Cards games (S/minigames/kitty.ts kittyMemorySources), each `chat` as a Claw round is
 // Audience entries are plain LI ids (and the group chat's "group"). A `chat` is a short record kept as written, never in the shared overview; it and a
 // love interest's own chapter reach a prompt beyond the overview only for that LI's own readers and scenes whose cast
 // includes them (S/memory/memory.ts). Read Me is never a source: its notebook joins the recall pool live on each recall
@@ -19,6 +20,7 @@ import { orderForgeStorySources } from "@forge-kit/story-memory-integration.mjs"
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { playerId, stateId } from "../ids.js";
 import { clawMemorySources } from "../minigames/claw.js";
+import { kittyMemorySources } from "../minigames/kitty.js";
 import { readHimMemorySources } from "../minigames/read-him.js";
 import { tarotMemorySources } from "../minigames/tarot.js";
 import { normalizePlayer } from "../schemas/player.js";
@@ -46,6 +48,14 @@ export async function readMemorySources(
     readHimMemorySources(store, runId, state),
     tarotMemorySources(store, runId, state),
   ]);
-  const sources = [...story, ...phone, ...items, ...readHim, ...tarot, ...clawMemorySources(state, protagonist)];
+  const sources = [
+    ...story,
+    ...phone,
+    ...items,
+    ...readHim,
+    ...tarot,
+    ...clawMemorySources(state, protagonist),
+    ...kittyMemorySources(state, protagonist),
+  ];
   return orderForgeStorySources(sources.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)));
 }

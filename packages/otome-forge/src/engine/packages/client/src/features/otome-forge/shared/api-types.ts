@@ -9,10 +9,11 @@ import type { DatePlan, DateScore } from "./dates";
 import type { Prestige, PrestigeKind } from "./economy";
 import type { Face, MusicMood } from "./faces";
 import type { ClawRound } from "./claw";
+import type { KittyRound } from "./kitty";
 import type { ReadHimPaid } from "./read-him";
 import type { NotebookEntry, ReadMePaid } from "./read-me";
 import type { TarotPaid } from "./tarot";
-import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
+import type { ClawLineKind, KittyLineKind, TapZone, TimeOfDay } from "./home";
 import type { FigurinePicture, GiftId } from "./shop";
 import type { PlayerSticker } from "./stickers";
 import type { BannerKind, PityCounter, Rarity, UnseenCounts } from "./wish";
@@ -496,11 +497,14 @@ export interface StageLines {
 }
 
 export type ClawLines = Record<ClawLineKind, string[]>;
+export type KittyLines = Record<KittyLineKind, string[]>;
 
-/** Lines written with his first stage pack: generic rough-day comfort, and the Claw Machine's. */
+/** Lines written with his first stage pack: generic rough-day comfort, the Claw Machine's and Kitty Cards'. */
 export interface FixedLines {
   comfort: string[];
   claw: ClawLines;
+  /** 0.35.0: absent in a pack written before Kitty Cards (the client plays the catalog's fallback lines). */
+  kitty?: KittyLines;
   at: string;
   /** #2152: the content it was written under, as StageLines.contract; its claw lines serve by the same rule. */
   contract?: string;
@@ -969,6 +973,8 @@ export interface RunState {
   purchases: ShopPurchaseRecord[];
   /** Each LI's newest finished Claw Machine rounds (M5): a repeated finish is answered from here; each is his memory. */
   claw: { rounds: ClawRound[] };
+  /** 0.35.0: each LI's newest finished Kitty Cards games, kept as the Claw's rounds are. */
+  kitty: { rounds: KittyRound[] };
   /** The newest paid Read Him sets (M5): the finish's once-only mark, in the same write as its pay. */
   readHim: { paid: ReadHimPaid[] };
   /** The newest paid Read Me sets (#1945): the once-only mark of the write that paid them and filled the notebook. */
@@ -1565,11 +1571,12 @@ export interface Grant {
 }
 
 /**
- * What an activity (Read Him, a date, a Claw round) earned, within the day's caps. #2128: `gift` is the affection a
- * gift given on a date earns beside the date's own, never capped (the gift was paid for in Starlight).
+ * What an activity (Read Him, a date, a Claw round, a Kitty Cards game) earned, within the day's caps. #2128:
+ * `gift` is the affection a gift given on a date earns beside the date's own, never capped (the gift was paid for in
+ * Starlight).
  */
 export interface ActivityGrant {
-  source: "read-him" | "read-me" | "tarot" | "date" | "claw" | "gift";
+  source: "read-him" | "read-me" | "tarot" | "date" | "claw" | "kitty" | "gift";
   starlight?: number;
   li?: LiId;
   affection?: number;

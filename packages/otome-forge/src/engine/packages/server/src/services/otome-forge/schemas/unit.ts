@@ -243,6 +243,10 @@ export const StageLinesSchema: ZodType<StageLines> = z.object({
 export const FixedLinesSchema: ZodType<FixedLines> = z.object({
   comfort: LineList,
   claw: z.object({ cheer: LineList, cheat: LineList, win: LineList, miss: LineList, plush: LineList }),
+  // 0.35.0: optional, so a pack written before Kitty Cards still reads.
+  kitty: z
+    .object({ start: LineList, good: LineList, cheat: LineList, caught: LineList, win: LineList, lose: LineList })
+    .optional(),
   at: z.string(),
   contract: z.string().max(40).optional(),
 });
