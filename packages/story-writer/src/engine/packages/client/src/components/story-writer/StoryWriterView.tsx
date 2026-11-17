@@ -342,6 +342,17 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     });
     if (confirmed) void generation.write("rewrite");
   };
+  const redoLatest = async () => {
+    const number = generation.redoChapter;
+    if (number === null) return;
+    const confirmed = await confirmAction({
+      title: t("actions.redoTitle"),
+      message: t("actions.redoMessage", { number }),
+      confirmLabel: t("actions.redoConfirm"),
+      tone: "destructive",
+    });
+    if (confirmed) void generation.redo();
+  };
   const deleteChapter = async (chapterId: string) => {
     const number = chapters.findIndex((chapter) => chapter.id === chapterId) + 1;
     const confirmed = await confirmAction({
@@ -469,6 +480,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 hasConnection={hasConnection || connectionsLoading}
                 chapterCount={chapters.length}
                 lastChapterDraft={lastChapter?.status === "draft"}
+                canRedo={generation.redoChapter !== null}
                 generatingChapterNumber={generatingIndex >= 0 ? generatingIndex + 1 : null}
                 liveWords={generation.liveWords}
                 totalWords={totalWords}
@@ -477,6 +489,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 onWrite={() => void generation.write("next")}
                 onContinue={() => void generation.write("continue")}
                 onRewrite={() => void rewriteLastChapter()}
+                onRedo={() => void redoLatest()}
                 onStop={generation.stop}
                 onOpenLibrary={() => openSection("stories")}
                 onFinishChapter={() => void finishChapter()}

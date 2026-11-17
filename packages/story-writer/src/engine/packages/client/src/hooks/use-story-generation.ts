@@ -29,6 +29,7 @@ import {
   type ChatMessage,
   type PromptSources,
 } from "../lib/story-writer/prompt";
+import { recordGeneration, redoOffer, type LatestGeneration } from "../lib/story-writer/redo";
 import {
   loadPromptCharacters,
   loadPromptLore,
@@ -58,6 +59,10 @@ export interface StoryGenerationApi {
   canWrite: boolean;
   /** `request` (a quick reply) is sent in place of the continue message; a new chapter stores it as its request. */
   write(mode: "next" | "continue" | "rewrite", request?: string): Promise<void>;
+  /** The chapter Redo would write again, or null when Redo is not offered (see redoOffer). */
+  redoChapter: number | null;
+  /** Takes back what the latest generation wrote and writes it again with the same instruction. */
+  redo(): Promise<void>;
   /**
    * What the primary Write button would send right now, without writing: no run, no status, no chapter change.
    * Null when there is no story or no connection.
@@ -275,7 +280,9 @@ async function refreshTimeline(context: OperationContext): Promise<number | null
 async function writeChapter(
   context: OperationContext,
   requested: "next" | "continue" | "rewrite",
-  override?: string,
+  override: string | undefined,
+  /** Called once the run has saved what it wrote, before any follow-up. */
+  onWritten: (record: LatestGeneration) => void,
 ): Promise<void> {
   const { run, connection, t } = context;
   const doc = run.doc;
@@ -368,6 +375,8 @@ async function writeChapter(
   // A stopped, failed or cut-off chapter stays a draft, so Write continues it instead of starting the next one.
   const finished = result.finished && !result.aborted && !failure && !endsMidSentence(finalText);
   await doc.saveChapter(chapterId, { text: finalText, status: finished ? "complete" : "draft" }, { immediate: true });
+  const record = recordGeneration(story, { requested, override, chapterId, after: finalText });
+  onWritten(record);
 
   const banned = findBannedPhrases(addition, settings.bannedPhrases);
   if (banned.length) toast.warning(t("generation.bannedPhrases", { phrases: banned.join(", ") }));
@@ -384,6 +393,7 @@ async function writeChapter(
   // Clear only the note this chapter was written with; a note typed during the stream is meant for the next one.
   if (now.clearNoteAfterChapter && now.authorNote && now.authorNote === settings.authorNote) {
     doc.updateSettings({ authorNote: "" }, { immediate: true });
+    onWritten({ ...record, clearedNote: settings.authorNote });
   }
   context.setLive(null, 0);
   if (now.autoSummarize) {
@@ -405,6 +415,11 @@ export function useStoryGeneration(args: {
   const [status, setStatus] = useState<GenerationStatus>("idle");
   const [generatingChapterId, setGeneratingChapterId] = useState<string | null>(null);
   const [liveWords, setLiveWords] = useState(0);
+  // ponytail: one record per mounted Story Writer, for the open story, in memory: a reload or opening another story
+  // forgets it. Upgrade path: keep it on the story document.
+  const [latestGeneration, setLatestGeneration] = useState<LatestGeneration | null>(null);
+  const activeStoryId = doc.data?.story.id ?? null;
+  if (latestGeneration && latestGeneration.storyId !== activeStoryId) setLatestGeneration(null);
   const latest = useRef({ doc, streaming, debugMode, connections, t });
   const runRef = useRef<Run | null>(null);
 
@@ -473,8 +488,36 @@ export function useStoryGeneration(args: {
 
   const write = useCallback(
     (mode: "next" | "continue" | "rewrite", request?: string) =>
-      operate("writing", (context) => writeChapter(context, mode, request)),
+      operate("writing", (context) => writeChapter(context, mode, request, setLatestGeneration)),
     [operate],
+  );
+
+  const redo = useCallback(
+    () =>
+      operate("writing", async (context) => {
+        const record = latestGeneration;
+        // The story as it is now, with every edit saved: one made since Redo was shown withdraws it.
+        if (!record || redoOffer(record, context.readStory()) === null) return;
+        const { chapterId, before, requested, override, clearedNote } = record;
+        const runDoc = context.run.doc;
+        // Put the chapter back as it was before that generation. A restore that fails has been reported; nothing
+        // is written over it.
+        if (before) {
+          await runDoc.saveChapter(chapterId, before, { immediate: true });
+          if (!(await runDoc.flush())) {
+            toast.warning(context.t("stories.saveFailed"));
+            return;
+          }
+        } else if (!(await runDoc.deleteChapter(chapterId))) {
+          return;
+        }
+        // The note that generation cleared comes back too, so it is sent again, unless the author has written another.
+        if (clearedNote && !context.readStory()?.story.settings.authorNote) {
+          runDoc.updateSettings({ authorNote: clearedNote }, { immediate: true });
+        }
+        await writeChapter(context, requested, override, setLatestGeneration);
+      }),
+    [operate, latestGeneration],
   );
 
   // Outside operate(): a peek takes no run, sets no status and never touches a chapter.
@@ -551,13 +594,13 @@ export function useStoryGeneration(args: {
   );
 
   // A run belongs to the story it started on: switching or deleting that story, or leaving the page, stops it.
-  const activeStoryId = doc.data?.story.id ?? null;
   useEffect(() => {
     if (runRef.current && runRef.current.storyId !== activeStoryId) stop();
   }, [activeStoryId, stop]);
   useEffect(() => stop, [stop]);
 
   const canWrite = status === "idle" && !!doc.data && !!pickConnection(connections, doc.data.story.settings);
+  const redoChapter = canWrite ? redoOffer(latestGeneration, doc.data) : null;
 
   return {
     status,
@@ -565,6 +608,8 @@ export function useStoryGeneration(args: {
     liveWords,
     canWrite,
     write,
+    redoChapter,
+    redo,
     peekPrompt,
     stop,
     summarizeChapter,

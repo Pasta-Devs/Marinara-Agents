@@ -549,7 +549,8 @@ export interface StoryDocumentApi {
   setChapterTextLocal(chapterId: string, text: string): void;
   saveChapter(chapterId: string, patch: ChapterPatch, options?: { immediate?: boolean }): Promise<void>;
   createChapter(create: ChapterCreate): Promise<StoryChapter>;
-  deleteChapter(chapterId: string): Promise<void>;
+  /** Resolves to false when the delete failed (it has been reported, and the chapter loads again). */
+  deleteChapter(chapterId: string): Promise<boolean>;
   /** Sends every pending save now; resolves to false while a save is failing (it keeps retrying). */
   flush(): Promise<boolean>;
 }
@@ -682,7 +683,7 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
   const deleteChapter = useCallback(
     async (chapterId: string) => {
       const owner = chapterStoryId(qc, chapterId) ?? storyId;
-      if (!owner) return;
+      if (!owner) return true;
       const key = chapterKey(chapterId);
       dropSaves((saveKey) => saveKey === key);
       const uncreated = creatingChapters.delete(key);
@@ -698,12 +699,14 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
         deletingChapters.delete(chapterId);
         qc.setQueryData<StoryWithChapters>(storyWriterKeys.story(owner), (current) => mergeDocument(current, result));
         syncStorySummary(qc, owner);
+        return true;
       } catch (error) {
         deletingChapters.delete(chapterId);
         // Its create never got through, so there is nothing to delete.
-        if (uncreated && errorStatus(error) === 404) return;
+        if (uncreated && errorStatus(error) === 404) return true;
         reportError(error, "errors.deleteChapter");
         void qc.invalidateQueries({ queryKey: storyWriterKeys.story(owner) });
+        return false;
       }
     },
     [qc, storyId],

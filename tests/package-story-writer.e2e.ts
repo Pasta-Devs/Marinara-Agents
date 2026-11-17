@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -36,6 +36,23 @@ type Box = { x: number; y: number; width: number; height: number };
 
 function overlaps(a: Box, b: Box) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/** Everything shown in the action bar lies inside it without spilling over, and the bar inside Story Writer. */
+function actionBarFits(bar: Locator) {
+  return bar.evaluate((element) => {
+    const inside = (inner: DOMRect, outer: DOMRect) =>
+      inner.left >= outer.left - 0.5 &&
+      inner.right <= outer.right + 0.5 &&
+      inner.top >= outer.top - 0.5 &&
+      inner.bottom <= outer.bottom + 0.5;
+    const box = element.getBoundingClientRect();
+    const shown = [...element.children].filter((child) => child.getClientRects().length > 0);
+    return (
+      inside(box, element.closest(".sw-root")!.getBoundingClientRect()) &&
+      shown.every((child) => inside(child.getBoundingClientRect(), box) && child.scrollWidth <= child.clientWidth + 1)
+    );
+  });
 }
 
 async function engineRequest(
@@ -118,6 +135,8 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   const peeks: Array<Record<string, unknown>> = [];
   // Set to hold the mocked reply back, so a step can look at the page while the chapter is being written.
   let hold: Promise<void> | null = null;
+  // What the mocked model writes next.
+  let reply = CHAPTER;
   await page.route("**/api/generate/raw", async (route) => {
     const requestBody = route.request().postDataJSON();
     if (requestBody.returnPrompt === true) {
@@ -133,7 +152,7 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     }
     generations.push(requestBody);
     await hold;
-    await route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseBody(CHAPTER) });
+    await route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseBody(reply) });
   });
 
   const root = await openStoryWriter(page);
@@ -212,6 +231,9 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
 
   const write = root.getByRole("button", { name: "Continue chapter 1" });
   await expect(write).toBeEnabled();
+  // Nothing has been generated yet, so there is nothing to redo.
+  const redo = root.getByRole("button", { name: "Redo the latest generation" });
+  await expect(redo).toHaveCount(0);
   await write.click();
   await expect(root.getByRole("button", { name: "Write next chapter" })).toBeEnabled({ timeout: 30_000 });
   expect(generations).toHaveLength(1);
@@ -241,6 +263,49 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   expect(saved.chapters[0].status).toBe("complete");
   expect(saved.chapters[0].text.startsWith(`${OPENING} Thunder rolled over the rooftops.`)).toBe(true);
   await expect(root.locator(".sw-body").first()).toContainText("Morning came");
+
+  // Redo takes back only what Continue wrote, after asking, and asks the model for the same thing again (#2375).
+  await expect(redo).toBeVisible();
+  expect(await actionBarFits(root.locator(".sw-actionbar"))).toBe(true);
+  // A full-size tap target on a phone too: there the word count makes room for it.
+  expect((await redo.boundingBox())!.width).toBeGreaterThanOrEqual(43.5);
+  reply = CHAPTER.replace("Thunder rolled over the rooftops.", "Lightning split the sky.");
+  await redo.click();
+  await expect(
+    page.getByText("Story Writer removes what it last wrote in chapter 1 and writes it again."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await expect.poll(() => generations.length).toBe(2);
+  await expect(root.getByRole("button", { name: "Write next chapter" })).toBeEnabled({ timeout: 30_000 });
+  // The chapter was back at the author's opening when the request was made.
+  expect(generations[1]!.messages).toEqual(generations[0]!.messages);
+  const redone = (await storyChapters()) as Array<{ text: string; status: string }>;
+  expect(redone).toHaveLength(1);
+  expect(redone[0]!.text.startsWith(`${OPENING} Lightning split the sky.`)).toBe(true);
+  expect(redone[0]!.text).not.toContain("Thunder rolled");
+  expect(redone[0]!.status).toBe("complete");
+  await expect(root.locator(".sw-body").first()).toContainText("Lightning split the sky.");
+  reply = CHAPTER;
+  // Any edit to that chapter withdraws Redo, so it never throws away the author's own writing.
+  await expect(redo).toBeVisible();
+  await root
+    .locator(".sw-block--chapter .sw-body")
+    .first()
+    .evaluate((body) => {
+      body.focus();
+      const range = document.createRange();
+      range.selectNodeContents(body.lastElementChild!);
+      range.collapse(false);
+      const selection = document.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+  await page.keyboard.type(" Fin.");
+  await expect(redo).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect
+    .poll(async () => ((await storyChapters()) as Array<{ text: string }>)[0]!.text)
+    .toMatch(/grudging\.\s+Fin\.$/);
 
   // The chapter fills several pages; the arrows turn them.
   const indicator = root.locator(".sw-indicator");
@@ -344,6 +409,12 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await expect
     .poll(async () => (await engineRequest(request, base, "GET", "/story-writer/preferences")).quickReplies)
     .toEqual([expect.objectContaining({ label: "Pour", text: "Make it pour." })]);
+  // The quick reply's chapter then clears the note, which Redo has to put back.
+  await tools.click();
+  const clearNote = root.getByRole("button", { name: /^Clear after the next chapter/ });
+  await clearNote.click();
+  await expect(clearNote).toHaveAttribute("aria-pressed", "true");
+  await tools.click();
   await root.getByRole("button", { name: "Hide story settings" }).click();
 
   const quickBar = root.getByRole("toolbar", { name: "Quick replies" });
@@ -402,7 +473,7 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   hold = null;
   const writeNext = root.getByRole("button", { name: "Write next chapter" });
   await expect(writeNext).toBeEnabled({ timeout: 30_000 });
-  expect((generations[1]!.messages as unknown[]).slice(-2)).toEqual([
+  expect((generations[2]!.messages as unknown[]).slice(-2)).toEqual([
     { role: "user", content: "Make it rain." },
     { role: "user", content: "Make it pour." },
   ]);
@@ -410,13 +481,34 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   expect(await requests()).toEqual(["", "Make it pour."]);
   const poured = await engineRequest(request, base, "GET", `/story-writer/stories/${fresh.story.id}`);
   expect(poured.story.settings.continueMessage).toBe("Continue.");
+  await expect(root.getByRole("button", { name: "Open the author's note", exact: true })).toBeVisible();
+
+  // Redo after a new chapter writes that chapter again in its place, with the quick reply it was written from and
+  // the note that chapter cleared, shown on the note again. The bar still fits, now with a four-digit word count.
+  expect(await actionBarFits(root.locator(".sw-actionbar"))).toBe(true);
+  await redo.click();
+  await expect(
+    page.getByText("Story Writer removes what it last wrote in chapter 2 and writes it again."),
+  ).toBeVisible();
+  hold = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await expect.poll(() => generations.length).toBe(4);
+  await expect(root.getByRole("button", { name: "Open the author's note: Make it rain." })).toBeVisible();
+  release();
+  hold = null;
+  await expect(writeNext).toBeEnabled({ timeout: 30_000 });
+  expect(generations[3]!.messages).toEqual(generations[2]!.messages);
+  expect(await requests()).toEqual(["", "Make it pour."]);
+  expect((await storyChapters())[1].id).not.toBe(poured.chapters[1].id);
 
   // Rewriting that chapter asks for the same thing again.
   await root.getByRole("button", { name: "Rewrite the last chapter" }).click();
   await page.getByRole("button", { name: "Rewrite", exact: true }).click();
-  await expect.poll(() => generations.length).toBe(3);
+  await expect.poll(() => generations.length).toBe(5);
   await expect(writeNext).toBeEnabled({ timeout: 30_000 });
-  expect((generations[2]!.messages as unknown[]).at(-1)).toEqual({ role: "user", content: "Make it pour." });
+  expect((generations[4]!.messages as unknown[]).at(-1)).toEqual({ role: "user", content: "Make it pour." });
   expect(await requests()).toEqual(["", "Make it pour."]);
 
   // "Edit quick replies" opens the section; "Show quick replies" hides the bar and gives the room back.
@@ -638,13 +730,17 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   expect(download.suggestedFilename()).toMatch(/\.md$/);
   expect(readFileSync((await download.path())!, "utf8")).toContain(OPENING);
 
+  // Redo belongs to the story it was written in, and opening another story forgets it.
+  await expect(redo).toBeVisible();
   await root.getByRole("button", { name: "New story" }).click();
   await expect(root.locator(".sw-title-text")).toContainText("Untitled");
   await expect(root.getByRole("button", { name: "Write next chapter" })).toBeVisible();
+  await expect(redo).toHaveCount(0);
   await root.getByRole("button", { name: "Your stories" }).click();
   await list.getByRole("button", { name: /The Long Walk Home/ }).click();
   await expect(root.locator(".sw-title-text")).toContainText("The Long Walk Home");
   await expect(root.locator(".sw-body").first()).toContainText(OPENING);
+  await expect(redo).toHaveCount(0);
 
   // Edit connection opens the Engine's editor and comes back to this tab when it closes.
   const show = root.getByRole("button", { name: "Show story settings" });
@@ -681,6 +777,10 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     await expect
       .poll(() => host.locator(".sw-drawer-panel").evaluate((panel) => getComputedStyle(panel).boxShadow))
       .toBe("none");
+    // With Redo shown too, the upright action bar holds every button.
+    await host.getByRole("button", { name: "Write next chapter" }).click();
+    await expect(host.getByRole("button", { name: "Redo the latest generation" })).toBeVisible({ timeout: 30_000 });
+    expect(await actionBarFits(host.locator(".sw-actionbar"))).toBe(true);
     const note = (await host.locator(".sw-note-collapsed").boundingBox())!;
     const writeButton = (await host.locator(".sw-action-primary").boundingBox())!;
     expect(overlaps(note, writeButton)).toBe(false);

@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Story Writer: the floating bars under the book (write, stop, continue, rewrite, fullscreen, word count; quick replies)
+// Story Writer: the floating bars under the book (write, stop, continue, rewrite, redo, fullscreen, word count; quick
+// replies)
 // ──────────────────────────────────────────────
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,6 +12,7 @@ import {
   Maximize2,
   Minimize2,
   Pencil,
+  RefreshCw,
   RotateCcw,
   Square,
   StepForward,
@@ -33,6 +35,8 @@ export function ActionBar(props: {
   chapterCount: number;
   /** The last chapter is a draft, so Write continues it. */
   lastChapterDraft: boolean;
+  /** Redo is offered: the latest generation is unchanged since it was written. */
+  canRedo: boolean;
   generatingChapterNumber: number | null;
   liveWords: number;
   totalWords: number;
@@ -41,6 +45,7 @@ export function ActionBar(props: {
   onWrite(): void;
   onContinue(): void;
   onRewrite(): void;
+  onRedo(): void;
   onStop(): void;
   onOpenLibrary(): void;
   /** Marks the draft last chapter finished and writes the next one. */
@@ -66,7 +71,13 @@ export function ActionBar(props: {
   const fullscreen = props.fullscreen;
 
   return (
-    <div className="sw-actionbar" role="toolbar" aria-label={t("actions.label")} tabIndex={-1}>
+    <div
+      className="sw-actionbar"
+      role="toolbar"
+      aria-label={t("actions.label")}
+      tabIndex={-1}
+      data-redo={props.canRedo ? "true" : undefined}
+    >
       {busy ? (
         <>
           <button
@@ -162,6 +173,18 @@ export function ActionBar(props: {
               <RotateCcw size={18} aria-hidden="true" />
             </button>
           ) : null}
+          {props.canRedo ? (
+            <button
+              type="button"
+              className="sw-action-icon sw-action-labelled"
+              aria-label={t("actions.redoLatest")}
+              title={t("actions.redoLatest")}
+              onClick={props.onRedo}
+            >
+              <RefreshCw size={18} aria-hidden="true" />
+              <span className="sw-action-label-long">{t("actions.redoShort")}</span>
+            </button>
+          ) : null}
         </>
       )}
       <span className="sw-action-divider" aria-hidden="true" />
@@ -187,7 +210,7 @@ export function ActionBar(props: {
           {fullscreen.active ? <Minimize2 size={18} aria-hidden="true" /> : <Maximize2 size={18} aria-hidden="true" />}
         </button>
       ) : null}
-      <span className="sw-action-divider" aria-hidden="true" />
+      <span className="sw-action-divider sw-wordcount-divider" aria-hidden="true" />
       <div className="sw-wordcount">
         <span>
           {target

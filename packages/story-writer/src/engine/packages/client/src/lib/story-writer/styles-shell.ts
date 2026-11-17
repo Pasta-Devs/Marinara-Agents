@@ -838,6 +838,15 @@ ${R} .sw-action-icon {
 ${R} .sw-action-icon:hover:not(:disabled) { background: var(--sw-bar-hover); }
 ${R} .sw-action-icon:disabled { opacity: 0.4; cursor: not-allowed; }
 ${R} .sw-action-icon[aria-pressed="true"] { background: var(--sw-bar-hover); color: var(--sw-accent-on-bar); }
+/* An icon button that also shows its short name on wide screens (Redo); narrower bars show the icon alone. */
+${R} .sw-action-labelled {
+  display: inline-flex; align-items: center; gap: 7px; width: auto; padding: 0 16px 0 13px;
+  font: inherit; font-size: 14px; font-weight: 700; white-space: nowrap;
+}
+/* Redo makes the bar one button longer. When the screen cannot hold that, the icons get narrower (or shorter, in the
+   upright bar) instead of the bar or the word count spilling over. */
+${R} .sw-actionbar[data-redo="true"] .sw-action-icon { flex-shrink: 1; }
+${R} .sw-actionbar[data-redo="true"] .sw-wordcount { flex-shrink: 0; }
 ${R} .sw-action-divider { flex: none; align-self: stretch; width: 1px; margin: 8px 3px; background: var(--sw-bar-border); }
 ${R} .sw-wordcount {
   display: grid; gap: 4px; min-width: 0; padding: 0 14px 0 6px; font-size: 12.5px; font-weight: 600;
@@ -861,6 +870,8 @@ const LAYOUT_RULES = `
   /* The chapter bar sits between the note and the edge of the band the note already takes. */
   ${R} .sw-chapterbar { top: calc((72px - var(--sw-chapterbar-h)) / 2); }
   ${R} .sw-dock { flex-direction: column-reverse; }
+  ${R} .sw-action-labelled { display: grid; width: 44px; padding: 0; }
+  ${R} .sw-action-labelled .sw-action-label-long { display: none; }
   ${R} .sw-note-collapsed { width: 156px; height: 54px; gap: 2px; padding: 9px 12px 8px 14px; justify-content: center; }
   ${R} .sw-note-collapsed .sw-note-tape { top: -9px; width: 46px; height: 18px; margin-left: -23px; }
   ${R} .sw-note-collapsed .sw-note-preview { -webkit-line-clamp: 1; font-size: 12px; }
@@ -902,6 +913,8 @@ const LAYOUT_RULES = `
   ${R} .sw-action-label-long, ${R} .sw-action-status .sw-status-long { display: none; }
   ${R} .sw-action-label-short, ${R} .sw-action-status .sw-status-short { display: inline; }
   ${R} .sw-action-hint { display: none; }
+  /* A phone bar has no room for Redo and the word count together: the count gives way while Redo shows. */
+  ${R} .sw-actionbar[data-redo="true"] :is(.sw-wordcount, .sw-wordcount-divider) { display: none; }
   ${R} .sw-wordcount { padding: 0 10px 0 4px; font-size: 12px; }
   ${R} .sw-grid-2 { grid-template-columns: minmax(0, 1fr); }
 }
@@ -940,7 +953,8 @@ const LAYOUT_RULES = `
   ${R} .sw-root[data-sw-sidebar="left"] .sw-actionbar { left: auto; right: 10px; }
   ${R} .sw-root[data-sw-sidebar="right"] .sw-actionbar { left: 10px; }
   ${R} .sw-action-primary { justify-content: center; width: 48px; height: 48px; min-height: 0; padding: 0; }
-  ${R} .sw-action-primary :is(.sw-action-label-long, .sw-action-label-short) { display: none; }
+  ${R} :is(.sw-action-primary, .sw-action-labelled) :is(.sw-action-label-long, .sw-action-label-short) { display: none; }
+  ${R} .sw-action-labelled { display: grid; width: 44px; padding: 0; }
   ${R} .sw-action-divider { align-self: auto; width: auto; height: 1px; margin: 2px 8px; }
   ${R} .sw-action-status, ${R} .sw-wordcount, ${R} .sw-action-hint { display: none; }
   /* The upright bar sits on the side away from the drawer; a note on that side moves in beside it, not over it. */
