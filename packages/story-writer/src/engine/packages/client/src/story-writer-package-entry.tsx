@@ -7,6 +7,7 @@ import { queryClient } from "marinara:host";
 import english from "./localization/locales/en.json";
 import { StoryWriterView } from "./components/story-writer/StoryWriterView";
 import { useKeepFocusedFieldAboveKeyboard } from "./hooks/use-keep-focused-field-above-keyboard";
+import { followEngineLibrary } from "./lib/story-writer/engine-library";
 import { READER_STYLES } from "./lib/story-writer/styles-reader";
 import { SHELL_STYLES } from "./lib/story-writer/styles-shell";
 
@@ -59,6 +60,8 @@ function readLocale(props: Record<string, unknown>): string {
 function StoryWriterPackageRoot({ element }: { element: CapabilityElement }) {
   const focusRoot = useRef<HTMLElement>(element);
   useKeepFocusedFieldAboveKeyboard(focusRoot);
+  // Characters, personas and lorebooks made or changed in the Engine reach the Cast while Story Writer stays open.
+  useEffect(() => followEngineLibrary(queryClient), []);
   // The host fires this often and with unchanged values: redraw with the new props, never reset state.
   const [, redraw] = useState(0);
   useEffect(() => {
