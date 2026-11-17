@@ -141,7 +141,13 @@ async function stubEngine(page: Page, stub: ReturnType<typeof createOtomeStub>) 
       : route.continue(),
   );
   await page.route("**/api/characters/personas/list**", (route) =>
-    route.fulfill({ json: [{ id: "persona-mira", name: "Mira Vale", avatarPath: null }] }),
+    // #2365: two personas share a name; the second's title / comment tells them apart.
+    route.fulfill({
+      json: [
+        { id: "persona-mira", name: "Mira Vale", avatarPath: null },
+        { id: "persona-mira-au", name: "Mira Vale", comment: "Modern AU", avatarPath: null },
+      ],
+    }),
   );
   // Two pages, so the picker has to follow hasMore.
   await page.route("**/api/characters/catalog**", (route) => {
@@ -150,7 +156,13 @@ async function stubEngine(page: Page, stub: ReturnType<typeof createOtomeStub>) 
       json:
         offset === 0
           ? { items: [{ id: "card-ilvar", name: "Ilvar Thorne", avatarPath: null }], hasMore: true }
-          : { items: [{ id: "card-dottore", name: "Dottore", avatarPath: null }], hasMore: false },
+          : {
+              items: [
+                { id: "card-dottore", name: "Dottore", avatarPath: null },
+                { id: "card-dottore-au", name: "Dottore", comment: "Doctor AU", avatarPath: null },
+              ],
+              hasMore: false,
+            },
     });
   });
   await page.route("**/api/otome-forge/**", async (route) => {
@@ -231,6 +243,12 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
 
   // 2. You: a persona and pronouns the player chooses.
   await expect(root.getByRole("heading", { name: "Who are you here?" })).toBeFocused();
+  // #2365: a persona's title shows under its name, so two of the same name can be told apart.
+  const miraTiles = root.locator("label.of-tile").filter({ hasText: "Mira Vale" });
+  await expect(miraTiles).toHaveCount(2);
+  await expect(miraTiles.nth(0).locator(".of-tile-title")).toHaveCount(0);
+  await expect(miraTiles.nth(1).locator(".of-tile-name")).toHaveText("Mira Vale");
+  await expect(miraTiles.nth(1).locator(".of-tile-title")).toHaveText("Modern AU");
   await pick(root, "Mira Vale");
   await pick(root.getByRole("group", { name: "Your pronouns" }), "she/her");
   await root.getByRole("button", { name: "Next" }).click();
@@ -238,7 +256,11 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
   // 3. Cast: the card picker pages until hasMore clears; Next needs two LIs with pronouns.
   await expect(root.getByRole("heading", { name: "Who waits for you?" })).toBeVisible();
   await root.getByRole("button", { name: "Ilvar Thorne" }).click();
-  await root.getByRole("button", { name: "Dottore" }).click();
+  // #2365: the card's title shows under its name, and picks the card it names.
+  const dottoreAu = root.locator("button.of-tile").filter({ hasText: "Doctor AU" });
+  await expect(dottoreAu.locator(".of-tile-name")).toHaveText("Dottore");
+  await expect(dottoreAu.locator(".of-tile-title")).toHaveText("Doctor AU");
+  await root.locator("button.of-tile").filter({ hasText: "Dottore" }).filter({ hasNotText: "Doctor AU" }).click();
   for (const name of ["Ilvar Thorne", "Dottore"]) {
     await pick(root.getByRole("group", { name: `Pronouns for ${name}` }), "he/him");
   }

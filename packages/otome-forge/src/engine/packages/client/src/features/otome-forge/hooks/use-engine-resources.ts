@@ -25,6 +25,11 @@ export interface PickerItem {
   /** The crop chosen for the avatar in the Engine, when it has one. */
   avatarCrop: AvatarCrop | null;
   detail: string;
+  /**
+   * The card's or persona's title / comment in the Engine ("Modern AU version"), "" without one (#2365): it tells
+   * apart two cards with the same name.
+   */
+  title: string;
 }
 
 type Row = Record<string, unknown>;
@@ -78,8 +83,14 @@ function toItem(row: Row): PickerItem[] {
       avatarUrl: text(row.avatarPath).trim() || null,
       avatarCrop: avatarCropOf(row.avatarCrop),
       detail: detailOf(row.summary, row.description),
+      title: text(row.comment).replace(/\s+/g, " ").trim(),
     },
   ];
+}
+
+/** Whether a picker item's name or title contains `query` (already lower-cased). */
+export function pickerMatches(item: Pick<PickerItem, "name" | "title">, query: string): boolean {
+  return item.name.toLocaleLowerCase().includes(query) || item.title.toLocaleLowerCase().includes(query);
 }
 
 /**
