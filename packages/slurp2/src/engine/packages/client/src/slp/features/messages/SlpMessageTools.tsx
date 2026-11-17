@@ -1,4 +1,4 @@
-import { ImagePlus, Loader2, Megaphone, Send } from "lucide-react";
+import { ImagePlus, Megaphone, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpAutoGrowTextarea } from "../../base/ui/SlpAutoGrowTextarea";
@@ -21,6 +21,8 @@ import {
   useSendSlurpViewerImage,
   type SlurpPhotoSendResult,
 } from "../../features/messages/slp-message-action-hooks";
+import { Switch } from "../../../components/ui/Switch";
+import { Spinner } from "../../../components/ui/Spinner";
 
 // Creator-side tools: broadcast, the message toolbar and the fan image picker.
 
@@ -98,11 +100,7 @@ export function BroadcastPanel({
               onClick={() => void submit()}
               className="px-6"
             >
-              {broadcast.isPending ? (
-                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Send size={16} aria-hidden="true" />
-              )}
+              {broadcast.isPending ? <Spinner size="md" /> : <Send size={16} aria-hidden="true" />}
               {localizeUi("ui.slurp.messages.broadcastSend", { defaultValue: "Send broadcast" })}
             </SlpPrimaryButton>
           </div>
@@ -655,17 +653,7 @@ export function SlurpTipPanel({
               })}
             </span>
           </span>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={attach}
-            onChange={(event) => setAttach(event.target.checked)}
-            className="peer sr-only"
-          />
-          <span
-            aria-hidden="true"
-            className="relative h-6 w-11 shrink-0 rounded-full bg-[var(--noodle-divider)] transition-colors peer-checked:bg-[var(--noodle-accent)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--slurp-focus)] after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5 motion-reduce:after:transition-none"
-          />
+          <Switch checked={attach} onCheckedChange={(checked) => setAttach(checked)} />
         </label>
       )}
 

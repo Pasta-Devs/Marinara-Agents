@@ -3173,15 +3173,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 826
+          "minor": 830
         },
         "builtAgainst": {
           "engineVersion": "2.5.2",
-          "engineCommit": "a690a029df73c9e68db4c2f746529a555a091b1e"
+          "engineCommit": "611557bc28a57e63dc634742f59f1769cc1c261c"
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.5.18",
+        "version": "1.5.19",
         "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -3269,8 +3269,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "aa858dbc33b8b848f65c191d444e0e95fa8a42f6969a22b4d02049c569cbc256",
-            "bytes": 840986
+            "sha256": "f395d52456b5e19af4fcd50949449ab775e165e7150082118bc925e8402fede1",
+            "bytes": 733953
           },
           {
             "path": "noodle-klusek.png",
@@ -3291,9 +3291,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.18.zip",
-        "sha256": "adc79d16e77816c1359ad31137994120197a4db29578821d15986e8113a0868d",
-        "bytes": 1406992
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.19.zip",
+        "sha256": "c4745727126d1014f0b74f7d4f27debd5bd84b2deca4427ffb194be59352e9f1",
+        "bytes": 1299959
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -3373,8 +3373,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "116fe98ed50a725447118f1ba57420bcb0ec3209ab97848aa42bffd3e2ffa430",
-            "bytes": 1469603
+            "sha256": "7403734e8c345096a2bc051ed2f852ed89d835f02acfa876a6a7d92ce577ec19",
+            "bytes": 1471207
           },
           {
             "path": "otome-hearth-icon.png",
@@ -3504,8 +3504,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.35.0.zip",
-        "sha256": "dab2eba37d85537f7775dc13016b21979bb7781eeffe48b816ec27bf4ebd3afe",
-        "bytes": 3292631
+        "sha256": "d75964723e8f701a8c8ef74e0bfa9f754760535a30da8145ede575e1b3d77d07",
+        "bytes": 3294235
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },
@@ -4482,15 +4482,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 819
+          "minor": 830
         },
         "builtAgainst": {
           "engineVersion": "2.5.2",
-          "engineCommit": "c18c1af639cd2c253c13f8ca392ac450065025d3"
+          "engineCommit": "611557bc28a57e63dc634742f59f1769cc1c261c"
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.25",
+        "version": "0.4.26",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -4564,8 +4564,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "5d332c79fffbc1ea1cd22c4138b97c663858b249157ba1ba3e5328d6af993ca1",
-            "bytes": 2930518
+            "sha256": "d67d4d71d941a73580b006e2e2d01a5501a64cdb0c63284bacc5018624fad905",
+            "bytes": 2921043
           },
           {
             "path": "slurp2-logo.png",
@@ -4619,9 +4619,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.25.zip",
-        "sha256": "657eb7f347a7fcd86a8c2b4967f4dbe7f9f663ef1be021230706363fb59b33cb",
-        "bytes": 6168562
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.26.zip",
+        "sha256": "8b6fca615663ade9d80856417cf07738b7f8db7c223eb53179e9a7147ce24716",
+        "bytes": 6159087
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },
@@ -4638,7 +4638,7 @@
         },
         "id": "story-writer",
         "name": "Story Writer",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "description": "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
         "engine": {
           "min": "2.5.1",
@@ -4680,13 +4680,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "51b0d291c248e9f0eca322233ad1a57de6a2fe69e592b4a1fbfbda053eb05d98",
-            "bytes": 14027
+            "sha256": "b8df69c5523aa01bcccb70e9f9c47a5734d05ec35cad362f11b86b68c8a3afd9",
+            "bytes": 14140
           },
           {
             "path": "client.js",
-            "sha256": "c16ce04d42c33c3aa28ff58e78a4a4ea4f451d395a92b960dac87ba76656353a",
-            "bytes": 219920
+            "sha256": "c007de3893d80df9043d75d0980ca24e1129664ced2f98f3afe9a130266e30d0",
+            "bytes": 238884
           },
           {
             "path": "story-writer-icon.png",
@@ -4724,9 +4724,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/story-writer.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.2.0.zip",
-        "sha256": "af14d99ff9780d9d344fc83c7d73b304c355e9125df4fa7e3f73b4c68ed821ba",
-        "bytes": 624271
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.3.0.zip",
+        "sha256": "0558ad088977d67995cfb764a2dd27fdee096ec83ac610b1cc73a531deb7fdce",
+        "bytes": 643348
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/story-writer/README.md"
     },

@@ -5,6 +5,14 @@
 - **Kitty Cards.** A new date in Dates, our version of Love and Deep Space's kitty card game. Take turns putting kittens into eight cups: a kitten in a cup of its own colour scores twice its number, and in a white cup its number. In some games your love interest cheats once, in their own way: they swap two cups, doze off, look away while you sneak a card, offer a trade face down, or let you take a card back. You can catch some of these. A game makes no model call and pays 20 Starlight and 30 affection, and a win 20 Starlight more, within the day's limits. Their lines are written ahead with their other lines, and a story from before this version gets them in the background.
 - **Your own kittens.** With an image connection, you and each love interest are painted once as a kitten, which shows on one of the value-5 cards. **Ask before painting** and prompt review hold them for **Paint our kittens**.
 
+## 0.34.12 — 2026-11-17
+
+- **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as "Modern AU version") under its name, so you can tell them apart. Searching the pickers finds a title too.
+
+## 0.34.11 — 2026-11-17
+
+- **Open named sits under the hearts.** On the Story screen's **Between you**, a love interest with a bond story waiting showed its **Open** button beside his picture, which pushed his name to the middle and wrapped his hearts into three short rows. His row now lines up with the others: his name where theirs is, his ten hearts on one line, and the button on a row of its own under them.
+
 ## 0.34.10 — 2026-11-17
 
 - **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with "401: Android local authentication required", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.

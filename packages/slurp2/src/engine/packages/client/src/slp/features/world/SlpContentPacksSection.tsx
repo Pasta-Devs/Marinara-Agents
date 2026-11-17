@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { useRemoveStoryPack, useSlpBundledStoryPacks, type SlpContentPackSummary } from "./slp-story-hooks.js";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
 
 const ICONS: Record<string, LucideIcon> = {
   "slurp-pack-slurpcon": PartyPopper,
@@ -141,8 +142,17 @@ export function SlpContentPacksSection({
                 <button
                   type="button"
                   disabled={remove.isPending}
-                  onClick={() => {
-                    if (!window.confirm(t("ui.slurp.packs.content.removeConfirm", { name: pack.name }))) return;
+                  onClick={async () => {
+                    if (
+                      !(await showConfirmDialog({
+                        title: t("ui.slurp.packs.content.remove"),
+                        message: t("ui.slurp.packs.content.removeConfirm", { name: pack.name }),
+                        confirmLabel: t("ui.slurp.packs.content.remove"),
+                        cancelLabel: t("ui.slurp.actions.cancel"),
+                        tone: "destructive",
+                      }))
+                    )
+                      return;
                     remove.mutate(pack.id);
                   }}
                   className="ml-auto inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-bold text-[var(--noodle-accent-foreground)] hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"

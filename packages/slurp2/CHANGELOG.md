@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.26 — 2026-11-17
+
+- Changed: Slurp's switches, checkboxes and loading rings are now the ones Marinara Engine hands to packages (capability API 1.830), so they look and work like the Engine's own. The setting rows keep their name and note.
+- Changed: deleting an audience profile, a fan type, a storyline type or a content pack asks in Marinara's own dialog in place of the browser's.
+- Needs a Marinara Engine with capability API 1.830 or newer; an older Engine does not load this version.
+
 ## 0.4.25 — 2026-11-16
 
 - Fixed: a hairstyle the card says is "worn" a certain way ("hair worn in a high ponytail") was read as clothing and left out of the picture.

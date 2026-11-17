@@ -2,7 +2,7 @@ import { createPortal } from "react-dom";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ModalPortalContext } from "../../../components/ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Link, Loader2, Trash2, Upload, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Link, Trash2, Upload, UserRound } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { SLP_MOTION } from "../../base/chrome/slp-motion";
 import type { SlpCreatorStageProfile, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -12,6 +12,7 @@ import { SlpAssistedField, SlurpStageFactsFields } from "./SlpStageFactsFields";
 import { isSlurpDiscoveryProfileIncomplete, SlurpDiscoveryProfileEditor } from "../discovery/slp-discovery-contract";
 import { fieldClass, textareaClass } from "../../modules/post/SlpPostHelpers";
 import { cn } from "../../../lib/utils";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /**
  * The Creator profile form lives here, not in the home screen, so the full-page editor and the
@@ -745,7 +746,7 @@ export function StageProfileForm({
                     disabled={isGenerating || isPending || connections.length === 0}
                     className="inline-flex min-h-11 w-40 shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--slurp-on-accent)] [&_svg]:!text-[var(--slurp-on-accent)] hover:opacity-90 disabled:opacity-50"
                   >
-                    {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <SlpSparkleGlyph size={16} />}{" "}
+                    {isGenerating ? <Spinner size="md" /> : <SlpSparkleGlyph size={16} />}{" "}
                     {isGenerating
                       ? localizeUi("ui.noodle.stageprofileform.generatingDraft")
                       : previousDraft
@@ -781,7 +782,7 @@ export function StageProfileForm({
               disabled={!canSave}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-5 text-sm font-bold text-[var(--slurp-on-accent)] [&_svg]:!text-[var(--slurp-on-accent)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+              {isPending ? <Spinner size="md" /> : <Check size={16} />}
               {isPending
                 ? localizeUi("ui.noodle.stageprofileform.saving")
                 : isEditing

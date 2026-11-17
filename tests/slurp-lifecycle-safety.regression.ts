@@ -332,7 +332,7 @@ assert.doesNotMatch(settings, /max-w-\[1096px\]/u, "settings must fill the share
 assert.match(creatorPublishingSection, /import \{[^}]*Toggle \} from "[./]*modules\/settings\/SlpSettingsControls"/u);
 assert.match(creatorPublishingSection, /<Toggle/u, "Settings panels must use the extracted shared toggle");
 assert.match(settingsControls, /data-slurp-setting-toggle/u);
-assert.match(settingsControls, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
+assert.match(settingsControls, /<Switch\b/u, "settings toggles use the Engine switch");
 // The Creators list's own fixed-height scroll box (0.0.17) is gone after "settings round 2: rows,
 // one hub, phone settings list" (01a648ade): the list itself is a plain flow, and `xl:sticky
 // xl:top-4` below is what keeps it browsable beside its detail on wide screens now.

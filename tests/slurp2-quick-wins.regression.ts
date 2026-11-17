@@ -33,7 +33,7 @@ assert.match(placement, /SLP_BACKSTAGE_PAGE_PLACEMENT[\s\S]*spice: slurp\("spice
 assert.match(nav, /\.\.\.SLP_BACKSTAGE_PAGE_PLACEMENT/u);
 
 // 5. Accessibility: names that say what the control is.
-assert.match(inputs, /role="switch"\s+aria-labelledby=\{labelId\}/u, "Own value switch is named by its field");
+assert.match(inputs, /<Switch\s+aria-labelledby=\{labelId\}/u, "Own value switch is named by its field");
 assert.match(controls, /aria-label=\{label \? `\$\{label\}: −1` : "−1"\}/u, "stepper buttons name their field");
 assert.match(
   controls,

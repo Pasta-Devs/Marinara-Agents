@@ -2,9 +2,9 @@
 // Story Writer: theme tokens and the shell's stylesheet (stage, sidebar, sticky note, action bar)
 // ──────────────────────────────────────────────
 // Plain CSS, scoped under the package's element. The root carries data-sw-theme / data-sw-mode / data-sw-sidebar /
-// data-sw-note; the reading tokens (--sw-ink, --sw-page-bg, ...) are set inline by storyThemeVariables because the
-// texture URLs carry the package version. Layout follows the root's own size (container queries), not the window:
-// the Engine may show its sidebar next to the tab.
+// data-sw-note / data-sw-note-shown / data-sw-quick; the reading tokens (--sw-ink, --sw-page-bg, ...) are set inline
+// by storyThemeVariables because the texture URLs carry the package version. Layout follows the root's own size
+// (container queries), not the window: the Engine may show its sidebar next to the tab.
 import { STORY_WRITER_ASSETS, type StoryWriterAsset } from "./assets";
 import type { StoryTheme } from "./model";
 
@@ -32,6 +32,35 @@ interface ThemeTokens {
   panelBorder: string;
   stage(wood: string): string;
 }
+
+const EBOOK_TOKENS: Record<ResolvedColorMode, ThemeTokens> = {
+  light: {
+    ink: "#1f1f1f",
+    inkMuted: "#6a6a6a",
+    accent: "#2f5fc4",
+    pageColor: "#f5f2ea",
+    paper: null,
+    pageEdge: "#1d1d20",
+    bezel: "#1d1d20",
+    panelBg: "rgba(248, 248, 250, 0.95)",
+    panelFg: "#1f1f22",
+    panelBorder: "rgba(17, 17, 20, 0.1)",
+    stage: () => "radial-gradient(120% 90% at 50% 0%, #f7f7f9 0%, #e2e3e7 55%, #cbccd2 100%)",
+  },
+  dark: {
+    ink: "#d8d4cb",
+    inkMuted: "#8e8a82",
+    accent: "#8ab4f8",
+    pageColor: "#16171a",
+    paper: null,
+    pageEdge: "#050506",
+    bezel: "#050506",
+    panelBg: "rgba(22, 23, 27, 0.96)",
+    panelFg: "#ece9e2",
+    panelBorder: "rgba(255, 255, 255, 0.08)",
+    stage: () => "radial-gradient(120% 90% at 50% 0%, #1d1e22 0%, #0e0e11 60%, #050506 100%)",
+  },
+};
 
 const THEME_TOKENS: Record<StoryTheme, Record<ResolvedColorMode, ThemeTokens>> = {
   book: {
@@ -64,33 +93,11 @@ const THEME_TOKENS: Record<StoryTheme, Record<ResolvedColorMode, ThemeTokens>> =
         `radial-gradient(ellipse 60% 50% at 50% 42%, rgba(255, 190, 110, 0.07), transparent 70%), linear-gradient(rgba(6, 4, 2, 0.58), rgba(6, 4, 2, 0.58)), radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.6) 100%), url("${wood}") center / cover no-repeat, #120c08`,
     },
   },
-  ebook: {
-    light: {
-      ink: "#1f1f1f",
-      inkMuted: "#6a6a6a",
-      accent: "#2f5fc4",
-      pageColor: "#f5f2ea",
-      paper: null,
-      pageEdge: "#1d1d20",
-      bezel: "#1d1d20",
-      panelBg: "rgba(248, 248, 250, 0.95)",
-      panelFg: "#1f1f22",
-      panelBorder: "rgba(17, 17, 20, 0.1)",
-      stage: () => "radial-gradient(120% 90% at 50% 0%, #f7f7f9 0%, #e2e3e7 55%, #cbccd2 100%)",
-    },
-    dark: {
-      ink: "#d8d4cb",
-      inkMuted: "#8e8a82",
-      accent: "#8ab4f8",
-      pageColor: "#16171a",
-      paper: null,
-      pageEdge: "#050506",
-      bezel: "#050506",
-      panelBg: "rgba(22, 23, 27, 0.96)",
-      panelFg: "#ece9e2",
-      panelBorder: "rgba(255, 255, 255, 0.08)",
-      stage: () => "radial-gradient(120% 90% at 50% 0%, #1d1e22 0%, #0e0e11 60%, #050506 100%)",
-    },
+  ebook: EBOOK_TOKENS,
+  // Paperless: the e-book's colors, with its screen color under the whole stage instead of a device on a desk.
+  document: {
+    light: { ...EBOOK_TOKENS.light, stage: () => EBOOK_TOKENS.light.pageColor },
+    dark: { ...EBOOK_TOKENS.dark, stage: () => EBOOK_TOKENS.dark.pageColor },
   },
 };
 
@@ -148,12 +155,15 @@ const MOBILE_QUERY = "(max-width: 767px), (max-width: 1440px) and (hover: none) 
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const HAND_FONT = `"Bradley Hand", "Segoe Print", "Chalkboard SE", "Comic Sans MS", cursive`;
 
+// The shell's flat look (no leather, paper or tape) is the e-book's; the Document theme shares it.
+const FLAT = ':is([data-sw-theme="ebook"], [data-sw-theme="document"])';
+
 // Control colors per theme and mode. The reading tokens above are inline; these only style the shell.
 const THEME_RULES = `
 ${R} .sw-root[data-sw-theme="book"] {
   --sw-heading-font: ${BOOK_FONT_STACK};
 }
-${R} .sw-root[data-sw-theme="ebook"] {
+${R} .sw-root${FLAT} {
   --sw-heading-font: var(--sw-ui-font);
   --sw-panel-texture: linear-gradient(transparent, transparent);
   --sw-header-bg: transparent;
@@ -248,7 +258,7 @@ ${R} .sw-root[data-sw-theme="book"][data-sw-mode="dark"] {
   --sw-message-fg: #e9dcc3;
   --sw-danger: #f08a7a;
 }
-${R} .sw-root[data-sw-theme="ebook"][data-sw-mode="light"] {
+${R} .sw-root${FLAT}[data-sw-mode="light"] {
   --sw-panel-muted: #6b6b70;
   --sw-header-fg: #1f1f22;
   --sw-heading-fg: #1f1f22;
@@ -287,7 +297,7 @@ ${R} .sw-root[data-sw-theme="ebook"][data-sw-mode="light"] {
   --sw-message-fg: #3a3a40;
   --sw-danger: #c0392b;
 }
-${R} .sw-root[data-sw-theme="ebook"][data-sw-mode="dark"] {
+${R} .sw-root${FLAT}[data-sw-mode="dark"] {
   --sw-panel-muted: #9a978f;
   --sw-header-fg: #ece9e2;
   --sw-heading-fg: #ece9e2;
@@ -358,7 +368,7 @@ ${R} .sw-slot-message {
 ${R} .sw-slot-message p { margin: 0; max-width: 34ch; }
 ${R} .sw-spin { animation: sw-spin 1s linear infinite; }
 @keyframes sw-spin { to { transform: rotate(360deg); } }
-${R} :is(.sw-drawer, .sw-note-anchor, .sw-dock, .sw-chapterbar, .sw-slot-message) :focus-visible {
+${R} :is(.sw-drawer, .sw-note-anchor, .sw-dock, .sw-chapterbar, .sw-slot-message, .sw-peek) :focus-visible {
   outline: 2px solid var(--sw-accent); outline-offset: 2px;
 }
 ${R} .sw-visually-hidden {
@@ -484,7 +494,7 @@ ${R} .sw-drawer-panel {
 ${R} .sw-drawer[data-open="true"] .sw-drawer-panel { box-shadow: 0 0 0 1px var(--sw-panel-border), 0 24px 64px rgba(0, 0, 0, 0.45); }
 /* Closed, the outline would spill 1px past the edge as a line beside the handle. */
 ${R} .sw-drawer:not([data-open="true"]) .sw-drawer-panel { box-shadow: none; }
-${R} .sw-root[data-sw-theme="ebook"] .sw-drawer-panel { -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
+${R} .sw-root${FLAT} .sw-drawer-panel { -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
 /* Book: a leather spine with stitching along the edge that faces the stage. */
 ${R} .sw-root[data-sw-theme="book"] .sw-drawer[data-side="left"] .sw-drawer-panel { padding-right: 12px; }
 ${R} .sw-root[data-sw-theme="book"] .sw-drawer[data-side="right"] .sw-drawer-panel { padding-left: 12px; }
@@ -533,7 +543,7 @@ ${R} .sw-section-toggle {
   font-size: 16px; font-weight: 600; text-align: start; cursor: pointer;
 }
 ${R} .sw-root[data-sw-theme="book"] .sw-section-toggle { font-size: 17px; font-variant: small-caps; letter-spacing: 0.04em; }
-${R} .sw-root[data-sw-theme="ebook"] .sw-section-toggle { font-size: 15px; }
+${R} .sw-root${FLAT} .sw-section-toggle { font-size: 15px; }
 ${R} .sw-section-icon { display: inline-grid; flex: none; place-items: center; color: var(--sw-accent); }
 ${R} .sw-section-badge {
   padding: 1px 8px; border-radius: 999px; font-family: var(--sw-ui-font); font-size: 12px; font-weight: 600;
@@ -564,7 +574,7 @@ ${R} .sw-root[data-sw-theme="book"] .sw-handle::after {
 }
 ${R} .sw-root[data-sw-theme="book"] .sw-drawer[data-side="left"] .sw-handle::after { left: -1px; border-left: 0; }
 ${R} .sw-root[data-sw-theme="book"] .sw-drawer[data-side="right"] .sw-handle::after { right: -1px; border-right: 0; }
-${R} .sw-root[data-sw-theme="ebook"] .sw-handle { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+${R} .sw-root${FLAT} .sw-handle { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 ${R} .sw-scrim {
   display: none; position: absolute; inset: 0; z-index: 35; padding: 0; border: 0; background: var(--sw-scrim);
   opacity: 0; pointer-events: none; transition: opacity 300ms ease;
@@ -635,6 +645,43 @@ ${R} .sw-quick-item .sw-textarea { grid-column: 1 / -1; min-height: 60px; }
 ${R} .sw-quick-add { display: grid; gap: 6px; }
 ${R} .sw-quick-add .sw-button-row { margin-top: 4px; }`;
 
+// Peek at the prompt: a dialog over everything, drawer included, on the drawer's scrim.
+const PEEK_RULES = `
+${R} .sw-peek-scrim { display: block; z-index: 50; }
+${R} .sw-peek {
+  position: absolute; top: 50%; left: 50%; z-index: 51; translate: -50% -50%;
+  display: flex; flex-direction: column; width: min(760px, calc(100% - 32px));
+  max-height: calc(100% - 32px - ${SAFE_BOTTOM}); min-height: 0; overflow: hidden; border-radius: 14px;
+  background: var(--sw-panel-texture), var(--sw-panel-bg); color: var(--sw-panel-fg);
+  box-shadow: 0 0 0 1px var(--sw-panel-border), 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+/* They take focus only from a click, to keep it in the dialog; neither is a tab stop. */
+${R} :is(.sw-peek, .sw-peek-body):focus { outline: none; }
+${R} .sw-peek-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 6px 18px; }
+${R} .sw-peek-head h2 {
+  flex: 1; min-width: 0; margin: 0; font-family: var(--sw-heading-font); font-size: 18px; color: var(--sw-heading-fg);
+}
+${R} .sw-peek-body {
+  display: grid; flex: 1; min-height: 0; align-content: start; gap: 12px; padding: 0 18px 18px;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+${R} .sw-peek-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; line-height: 1.45; }
+${R} .sw-peek-status[data-variant="danger"] { color: var(--sw-danger); }
+${R} .sw-peek-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 13px; }
+${R} .sw-peek-meta dt { font-weight: 600; color: var(--sw-panel-muted); }
+${R} .sw-peek-meta dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+${R} .sw-peek-messages { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+${R} .sw-peek-message { border: 1px solid var(--sw-field-border); border-radius: 10px; background: var(--sw-field-bg); color: var(--sw-field-fg); }
+${R} .sw-peek-message summary {
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; cursor: pointer; font-size: 13px;
+}
+${R} .sw-peek-role { font-weight: 700; }
+${R} .sw-peek-size { margin-inline-start: auto; color: var(--sw-panel-muted); font-variant-numeric: tabular-nums; }
+${R} .sw-peek-text {
+  margin: 0; padding: 0 12px 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5;
+}`;
+
 const NOTE_RULES = `
 ${R} .sw-note-anchor { position: absolute; top: 14px; z-index: 25; width: 0; height: 0; }
 ${R} .sw-note-anchor[data-side="left"] { left: 16px; }
@@ -673,7 +720,7 @@ ${R} .sw-note-open .sw-note-tape { width: 84px; margin-left: -42px; }
 ${R} .sw-note-head { display: flex; align-items: center; gap: 8px; }
 ${R} .sw-note-head h2 { flex: 1; margin: 0; font-family: ${HAND_FONT}; font-size: 21px; font-weight: 700; line-height: 1.15; }
 ${R} .sw-note-head .sw-icon-button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.08); border-color: transparent; }
-${R} .sw-root[data-sw-theme="ebook"][data-sw-mode="dark"] .sw-note-head .sw-icon-button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
+${R} .sw-root${FLAT}[data-sw-mode="dark"] .sw-note-head .sw-icon-button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
 ${R} .sw-note-explain { margin: 0; font-size: 12.5px; line-height: 1.45; opacity: 0.85; }
 ${R} .sw-note-text {
   flex: 1 1 auto; width: 100%; height: 208px; min-height: 96px; margin: 0; padding: 0 2px; resize: none;
@@ -697,16 +744,16 @@ ${R} .sw-note-depth input:focus-visible { outline: 2px solid color-mix(in srgb, 
 ${R} .sw-note-depth span { grid-column: 1 / -1; font-size: 11.5px; line-height: 1.35; opacity: 0.7; }
 @media (pointer: coarse) { ${R} .sw-note-depth input { font-size: 16px; min-height: 40px; } }
 /* E-book: a flat, rounded note with a colored strip instead of paper and tape. */
-${R} .sw-root[data-sw-theme="ebook"] .sw-note { border-radius: 12px; }
-${R} .sw-root[data-sw-theme="ebook"] .sw-note-collapsed { --sw-note-tilt: 0deg; padding-top: 18px; box-shadow: 0 10px 26px -12px var(--sw-note-shadow), 0 0 0 1px rgba(0, 0, 0, 0.06); }
-${R} .sw-root[data-sw-theme="ebook"] .sw-note-open { padding-top: 22px; box-shadow: 0 24px 48px -16px var(--sw-note-shadow), 0 0 0 1px rgba(0, 0, 0, 0.06); }
-${R} .sw-root[data-sw-theme="ebook"] .sw-note-tape {
+${R} .sw-root${FLAT} .sw-note { border-radius: 12px; }
+${R} .sw-root${FLAT} .sw-note-collapsed { --sw-note-tilt: 0deg; padding-top: 18px; box-shadow: 0 10px 26px -12px var(--sw-note-shadow), 0 0 0 1px rgba(0, 0, 0, 0.06); }
+${R} .sw-root${FLAT} .sw-note-open { padding-top: 22px; box-shadow: 0 24px 48px -16px var(--sw-note-shadow), 0 0 0 1px rgba(0, 0, 0, 0.06); }
+${R} .sw-root${FLAT} .sw-note-tape {
   top: 0; left: 0; width: 100%; height: 6px; margin: 0; rotate: none; clip-path: none; box-shadow: none;
   border-radius: 12px 12px 0 0; background: var(--sw-note-strip);
 }
-${R} .sw-root[data-sw-theme="ebook"] :is(.sw-note-title, .sw-note-head h2) { font-family: var(--sw-ui-font); letter-spacing: 0.01em; }
-${R} .sw-root[data-sw-theme="ebook"] .sw-note-title { font-size: 14px; }
-${R} .sw-root[data-sw-theme="ebook"] .sw-note-head h2 { font-size: 17px; }`;
+${R} .sw-root${FLAT} :is(.sw-note-title, .sw-note-head h2) { font-family: var(--sw-ui-font); letter-spacing: 0.01em; }
+${R} .sw-root${FLAT} .sw-note-title { font-size: 14px; }
+${R} .sw-root${FLAT} .sw-note-head h2 { font-size: 17px; }`;
 
 // The chapter bar above the book, and the dock under it: the action bar and the quick replies, side by side on wide
 // screens and stacked (quick replies on top) on narrower ones.
@@ -802,6 +849,12 @@ ${R} .sw-action-hint { max-width: 230px; padding: 0 12px 0 4px; font-size: 12.5p
 
 // Size-driven layout. Order matters: the short landscape rules come last and win on phones turned sideways.
 const LAYOUT_RULES = `
+/* Wide screens reserve no band for the note: it sits beside the book, up to about 170px in from its side with its
+   tilt and hover. The Document column scrolls under that corner, so the slot keeps clear of it on both sides, which
+   keeps the column centred and its scrollbar uncovered. (A height of 520px or less is the short landscape below.) */
+@container sw-root (min-width: 1100px) and (height > 520px) {
+  ${R} .sw-root[data-sw-theme="document"][data-sw-note-shown="true"] .sw-frame { --sw-slot-left: 172px; --sw-slot-right: 172px; }
+}
 @container sw-root (max-width: 1099px) {
   ${R} .sw-frame { --sw-slot-top: 72px; }
   ${R} .sw-root[data-sw-quick="true"] .sw-frame { --sw-slot-bottom: calc(90px + var(--sw-quickbar-h) + ${SAFE_BOTTOM}); }
@@ -813,7 +866,10 @@ const LAYOUT_RULES = `
   ${R} .sw-note-collapsed .sw-note-preview { -webkit-line-clamp: 1; font-size: 12px; }
   ${R} .sw-note-collapsed .sw-note-title { font-size: 15px; }
   /* The e-book note's colored strip needs less room than the paper note's tape. */
-  ${R} .sw-root[data-sw-theme="ebook"] .sw-note-collapsed { height: auto; min-height: 54px; padding-top: 12px; }
+  ${R} .sw-root${FLAT} .sw-note-collapsed { height: auto; min-height: 54px; padding-top: 12px; }
+  /* A hidden note gives its band back to the book. */
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-frame { --sw-slot-top: calc(10px + var(--sw-chapterbar-h)); }
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-chapterbar { top: 8px; }
 }
 @container sw-root (max-width: 640px) {
   ${R} .sw-frame {
@@ -827,6 +883,7 @@ const LAYOUT_RULES = `
   ${R} .sw-chapterbar { top: 12px; translate: none; max-width: calc(100% - 190px); }
   ${R} .sw-root[data-sw-note="right"] .sw-chapterbar { left: 12px; }
   ${R} .sw-root[data-sw-note="left"] .sw-chapterbar { left: auto; right: 12px; }
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-chapterbar { left: 50%; right: auto; translate: -50% 0; max-width: calc(100% - 24px); }
   ${R} .sw-indicator-long {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
   }
@@ -856,6 +913,8 @@ const LAYOUT_RULES = `
     --sw-slot-right: 78px;
   }
   ${R} .sw-root[data-sw-quick="true"] .sw-frame { --sw-slot-bottom: calc(14px + var(--sw-quickbar-h) + ${SAFE_BOTTOM}); }
+  /* No note band here to give back: keep the landscape top over the narrower widths' hidden-note rule. */
+  ${R} .sw-root[data-sw-note-shown="false"] .sw-frame { --sw-slot-top: calc(6px + var(--sw-chapterbar-h)); }
   ${R} .sw-root[data-sw-note] .sw-chapterbar {
     top: 6px; left: 50%; right: auto; translate: -50% 0; max-width: calc(100% - 300px);
   }
@@ -887,6 +946,11 @@ const LAYOUT_RULES = `
   /* The upright bar sits on the side away from the drawer; a note on that side moves in beside it, not over it. */
   ${R} .sw-root[data-sw-sidebar="left"] .sw-note-anchor[data-side="right"] { right: 84px; }
   ${R} .sw-root[data-sw-sidebar="right"] .sw-note-anchor[data-side="left"] { left: 84px; }
+  /* That note reaches below the chapter bar's band, over the slot's top corner (to 66px, about 70 tilted or hovered).
+     The book's pages keep a margin clear of it; the Document column, which scrolls under it, starts below it. */
+  ${R} .sw-root[data-sw-theme="document"][data-sw-note-shown="true"]:is([data-sw-sidebar="left"][data-sw-note="right"], [data-sw-sidebar="right"][data-sw-note="left"]) .sw-frame {
+    --sw-slot-top: 74px;
+  }
 }`;
 
 const DEVICE_RULES = `
@@ -916,6 +980,7 @@ export const SHELL_STYLES = [
   THEME_RULES,
   CONTROL_RULES,
   DRAWER_RULES,
+  PEEK_RULES,
   NOTE_RULES,
   ACTION_RULES,
   LAYOUT_RULES,

@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from "react";
-import { Loader2 } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpCoin } from "../coin/SlpCoin";
+import { Spinner } from "../../../components/ui/Spinner";
 
 // The price rows of the unlock sheet (moved out of SlpLockedPostCard.tsx to keep it under the size limit).
 
@@ -53,7 +53,7 @@ export function SlpDiscountOfferButton({
       onClick={onClick}
       className="relative flex min-h-[4.75rem] w-full items-center gap-3 overflow-visible rounded-xl bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-success)_16%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface-raised)))] px-4 py-3 text-left shadow-[0_14px_32px_-26px_var(--slurp-success)] ring-1 ring-inset ring-[var(--slurp-success)]/35 transition-[filter,transform,box-shadow] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none"
     >
-      {busy ? <Loader2 size={20} className="animate-spin motion-reduce:animate-none" /> : icon}
+      {busy ? <Spinner size="lg" /> : icon}
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-[15px] font-bold leading-5 text-[var(--slurp-text)]">{actionLabel}</span>

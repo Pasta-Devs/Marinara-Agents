@@ -50,6 +50,7 @@ export interface StorySidebarProps {
   onManageConnections(): void;
   onJumpToChapter(chapterId: string): void;
   onDeleteChapter(chapterId: string): void;
+  onPeekPrompt(): void;
   totalWords: number;
 }
 
@@ -223,6 +224,7 @@ export function StorySidebar(props: StorySidebarProps) {
                     onSaveSummary={(chapterId, summary) => void doc.saveChapter(chapterId, { summary })}
                     onDeleteChapter={props.onDeleteChapter}
                     onJump={props.onJumpToChapter}
+                    onPeekPrompt={props.onPeekPrompt}
                   />
                 </Section>
               </Fragment>

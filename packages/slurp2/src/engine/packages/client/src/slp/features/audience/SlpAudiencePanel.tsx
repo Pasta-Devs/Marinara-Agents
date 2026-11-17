@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw, UsersRound } from "lucide-react";
+import { RefreshCw, UsersRound } from "lucide-react";
 import { BackstagePageHeader, BackstageWizard } from "../../modules/settings/SlpSettingsKit";
 
 import { Field, NumberSetting, SlpLazyFold, Toggle } from "../../modules/settings/SlpSettingsControls";
@@ -17,6 +17,8 @@ import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract"
 import { ChoiceSetting, StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 import { AmbientProfilesPanel } from "./SlpAmbientProfilesPanel";
 import { openSlpCreatorSettings } from "../creators/slp-creators-contract";
+import { Checkbox } from "../../../components/ui/Checkbox";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /** Audience: crowd scale, tone, fan types, the reaction bank and simulation tuning. */
 export function SlpAudiencePanel(page: SlpBackstagePageProps) {
@@ -274,8 +276,7 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
                         key={group.id}
                         className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-sm"
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selected}
                           onChange={() =>
                             void update(
@@ -317,8 +318,7 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
                         key={character.id}
                         className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--accent)]/30"
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           aria-label={character.name}
                           checked={enabled}
                           disabled={Boolean(creatorId) && !enabled}
@@ -376,7 +376,7 @@ export function SlpAudiencePanel(page: SlpBackstagePageProps) {
                     onClick={() => void audienceCharactersQuery.fetchNextPage()}
                     className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] text-sm font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
                   >
-                    {audienceCharactersQuery.isFetchingNextPage && <Loader2 size={15} className="animate-spin" />}
+                    {audienceCharactersQuery.isFetchingNextPage && <Spinner size="md" />}
                     {audienceCharactersQuery.isFetchingNextPage
                       ? t("ui.slurp.settings.audience.characterLoadingMore", { defaultValue: "Loading more…" })
                       : t("ui.slurp.settings.audience.characterLoadMore", { defaultValue: "Load more characters" })}

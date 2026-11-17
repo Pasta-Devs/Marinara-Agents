@@ -586,6 +586,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.19",
+          "date": "2026-11-17",
+          "notes": "- Changed: Noodle's switches, checkboxes and loading rings are now the ones Marinara Engine hands to packages, so they look and work like the Engine's own. Needs a Marinara Engine with capability API 1.830 or newer.",
+          "highlight": false
+        },
+        {
           "version": "1.5.18",
           "date": "2026-11-15",
           "notes": "- Fixed: on Marinara Engine versions that load the character list one page at a time, Noodle found none of your characters, so there was nobody to invite. (#2318)",
@@ -698,12 +704,6 @@
           "date": "2026-10-03",
           "notes": "- Noodle can now translate posts and comments for you. Turn on Translate posts automatically in Settings → General. It uses the translator defaults you saved in a chat's Translation settings and leaves what your personas wrote alone. Posts already in your language get no extra copy, and turning the switch off stops the translations still waiting.\n- Translations now stay after you refresh the timeline, leave Noodle or reload the page, and a translation you hide stays hidden. This browser keeps them, so another device translates again.",
           "highlight": true
-        },
-        {
-          "version": "1.4.1",
-          "date": "2026-10-02",
-          "notes": "- Fixed timeline refreshes on local models that failed after a short, empty-looking answer. When the prompt plus the room Noodle keeps for its answer did not fit the connection's context window, Noodle cut your characters, chats and timeline out of the prompt before sending. It now keeps the whole prompt and lowers the answer limit instead. If too little room is left for an answer, the refresh stops and says what to turn down.",
-          "highlight": true
         }
       ]
     },
@@ -714,6 +714,18 @@
           "date": "2026-11-17",
           "notes": "- **Kitty Cards.** A new date in Dates, our version of Love and Deep Space's kitty card game. Take turns putting kittens into eight cups: a kitten in a cup of its own colour scores twice its number, and in a white cup its number. In some games your love interest cheats once, in their own way: they swap two cups, doze off, look away while you sneak a card, offer a trade face down, or let you take a card back. You can catch some of these. A game makes no model call and pays 20 Starlight and 30 affection, and a win 20 Starlight more, within the day's limits. Their lines are written ahead with their other lines, and a story from before this version gets them in the background.\n- **Your own kittens.** With an image connection, you and each love interest are painted once as a kitten, which shows on one of the value-5 cards. **Ask before painting** and prompt review hold them for **Paint our kittens**.",
           "highlight": true
+        },
+        {
+          "version": "0.34.12",
+          "date": "2026-11-17",
+          "notes": "- **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as \"Modern AU version\") under its name, so you can tell them apart. Searching the pickers finds a title too.",
+          "highlight": false
+        },
+        {
+          "version": "0.34.11",
+          "date": "2026-11-17",
+          "notes": "- **Open named sits under the hearts.** On the Story screen's **Between you**, a love interest with a bond story waiting showed its **Open** button beside his picture, which pushed his name to the middle and wrapped his hearts into three short rows. His row now lines up with the others: his name where theirs is, his ten hearts on one line, and the button on a row of its own under them.",
+          "highlight": false
         },
         {
           "version": "0.34.10",
@@ -816,18 +828,6 @@
           "date": "2026-11-14",
           "notes": "- **A line written twice shows once.** When the model writes a scene line twice in a row, the same or with a word or two more at its end, only the first stays. That includes a line right after a choice that repeats what you chose. Scenes written before this update are not changed.",
           "highlight": false
-        },
-        {
-          "version": "0.32.0",
-          "date": "2026-11-14",
-          "notes": "- **Recall follows the lead.** When a main chapter is planned, the earlier chapters it brings back in detail now come only from chapters the love interest you picked to lead it led: main chapters they led, and their own route and repair chapters. A route or repair chapter comes back marked as private to them. The condensed timeline, the recent chapters' summaries and the last chapter in full are sent as before.",
-          "highlight": true
-        },
-        {
-          "version": "0.31.0",
-          "date": "2026-11-14",
-          "notes": "- **Repaint a couple set's portrait.** In the Wardrobe, a painted pair portrait now offers **Repaint the pair portrait**, for 1 image. The old portrait stays on screen while the new one paints, and stays if the paint fails. The new one replaces it in the Album too.\n- **Repaint a sticker.** In the Album's **Stickers** tab, a painted sticker offers **Repaint**, for 1 image. Chats keep showing the old sticker until the new one is ready. After that, every message that sent it shows the new one.",
-          "highlight": true
         }
       ]
     },
@@ -1104,6 +1104,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.26",
+          "date": "2026-11-17",
+          "notes": "- Changed: Slurp's switches, checkboxes and loading rings are now the ones Marinara Engine hands to packages (capability API 1.830), so they look and work like the Engine's own. The setting rows keep their name and note.\n- Changed: deleting an audience profile, a fan type, a storyline type or a content pack asks in Marinara's own dialog in place of the browser's.\n- Needs a Marinara Engine with capability API 1.830 or newer; an older Engine does not load this version.",
+          "highlight": false
+        },
+        {
           "version": "0.4.25",
           "date": "2026-11-16",
           "notes": "- Fixed: a hairstyle the card says is \"worn\" a certain way (\"hair worn in a high ponytail\") was read as clothing and left out of the picture.\n- Fixed: with Storylines off, explicit posts and occasions still brought in collab and couple partners from saved pairs and old collabs.\n- Added: Images › \"One person per picture\". Post pictures then show the Creator alone, with no partner, guest or collab partner drawn in.\n- Added: Backstage › Creators › \"Refresh looks from cards\". Slurp drafts each ticked Creator's look again from the card, as a Pulse task. One AI call per Creator.\n- Fixed: switching back to the Slurp tab no longer counts ad impressions again and rotates the ads.\n- Fixed: a fast second toggle in the events list no longer undoes the first one.\n- Fixed: a persona's Stir play can only be undone by that persona, also when no persona is sent.\n- Fixed: a double tap on a Life panel condition adds it once.",
@@ -1216,17 +1222,17 @@
           "date": "2026-10-28",
           "notes": "- Fan comments see the post: a short title (40 characters or fewer) gets quoted in some questions and reactions, the question bank has 16 more lines, and a fan line is skipped when the same text is already under the post.\n- Fan questions as callbacks: a top-level fan question under the Creator's recent posts (1–30 days old) is a new callback kind, `question`, so a later post may answer it.\n- Five business arcs join the built-in arc library: sale week, burnout and comeback, new gear, leak scare and page anniversary. Saved libraries get them through the existing normalize step.",
           "highlight": false
-        },
-        {
-          "version": "0.4.6",
-          "date": "2026-10-28",
-          "notes": "- Niches: the card reading now names each Creator's page niche (main + up to two side niches, from a fixed list). The reading refreshes once for every Creator.\n- Post jobs: each ordinary post gets a kind (try-on haul, gym set, finished commission, stream setup, fan request, teaser, …). The niche weighs the jobs, the main niche keeps at most half of the last 8 posts, and a Creator never repeats one of their last 3 jobs. Spice is not changed.\n- Card notes edits keep the niche.\n- Jobs fit the post: a job with its own place (gym, kitchen, stage) only goes on a post with no place yet, intimate jobs need a card heat of at least flirty, and avoided topics drop the job.\n- The card reading refreshes once for every Creator; on a card you never edited, the heat range may shift a little with the new reading.",
-          "highlight": false
         }
       ]
     },
     "story-writer": {
       "versions": [
+        {
+          "version": "0.3.0",
+          "date": "2026-11-17",
+          "notes": "- A third theme, **Document**: no pages, just your chapters one under another in a column you scroll, with a line between chapters. You can select text across what used to be a page break, and on a phone you read by scrolling. The chapter bar reads \"Chapter 2 of 5\", and its buttons move from chapter to chapter.\n- **Author tools → Peek at the prompt** shows what **Write** would send next: every message, the model and the token limit. It writes nothing.\n- The sticky note can be hidden, with the hide button on the open note or **Appearance → Show the author's note**. A hidden note is still sent with every chapter, and on smaller screens the book takes its place.\n- Characters, personas and lorebooks you add or change elsewhere in Marinara Engine now show up in **Cast & world** while Story Writer is open.",
+          "highlight": true
+        },
         {
           "version": "0.2.0",
           "date": "2026-11-07",

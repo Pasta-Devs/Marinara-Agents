@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptDefinition } from "./slp-settings-contract";
 import { blockDefinition, blockName, blockPurpose } from "./slp-prompt-studio-model";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 export function SlpPromptPipeline({
   prompt,
@@ -124,8 +125,7 @@ function SlpPromptPipelineBlock({
           </p>
         </div>
         <label className="flex min-h-10 shrink-0 items-center gap-2 text-xs font-semibold">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={enabled}
             onChange={(event) => onUpdate({ ...entry, enabled: event.target.checked })}
             className="size-4 accent-[var(--noodle-accent)]"

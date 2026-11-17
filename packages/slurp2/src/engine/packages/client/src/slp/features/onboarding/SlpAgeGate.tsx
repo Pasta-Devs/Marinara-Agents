@@ -1,13 +1,15 @@
 // Slurp opt-in surface: explain the feature, then require an explicit adult confirmation.
 // The explainer runs first because this modal is the opt-in — the user has to be able to learn
 // what NoodleR is, and back out, before Creator setup starts.
-import { Check, CreditCard, Loader2, Users } from "lucide-react";
+import { Check, CreditCard, Users } from "lucide-react";
 import { SlpLockGlyph, SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { SLP_GROUP_CLASS, SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpButton, SlpPrimaryButton, SlpSquareCheck } from "../../modules/chrome/SlpButton";
+import { Checkbox } from "../../../components/ui/Checkbox";
+import { Spinner } from "../../../components/ui/Spinner";
 
 interface Props {
   personaName: string;
@@ -209,7 +211,7 @@ export function SlurpAgeGate({ personaName, onComplete, onCelebrate, onLeave, is
           </>
         ) : (
           <>
-            <Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+            <Spinner size="sm" />
             {t("ui.noodle.agegate.cardCharging", {
               amount: chargeAmount,
               defaultValue: "Charging ${{amount}}...",
@@ -224,8 +226,7 @@ export function SlurpAgeGate({ personaName, onComplete, onCelebrate, onLeave, is
           "flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl bg-[var(--slurp-surface-raised)] px-4 py-3 shadow-[var(--slurp-shadow-raised),var(--slurp-highlight)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--slurp-focus)]",
         )}
       >
-        <input
-          type="checkbox"
+        <Checkbox
           checked={confirmedAdult}
           onChange={(event) => setConfirmedAdult(event.target.checked)}
           className="sr-only"
@@ -240,7 +241,7 @@ export function SlurpAgeGate({ personaName, onComplete, onCelebrate, onLeave, is
           disabled={!charged || !confirmedAdult || isPending}
           className="h-12 text-[15px]"
         >
-          {isPending ? <Loader2 size={18} className="mx-auto animate-spin" /> : tt("enter", "Enter Slurp")}
+          {isPending ? <Spinner size="md" className="mx-auto" /> : tt("enter", "Enter Slurp")}
         </SlpPrimaryButton>
         {onLeave && (
           <SlpButton

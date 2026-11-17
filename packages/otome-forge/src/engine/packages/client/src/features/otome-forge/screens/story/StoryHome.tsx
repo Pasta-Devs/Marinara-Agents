@@ -425,7 +425,15 @@ function Affection({
           return (
             <li key={li.id} className="of-affection" style={{ "--of-li-accent": accent } as CSSProperties}>
               <Avatar name={li.name} url={li.portrait} accent={accent} size={38} />
-              <span className="of-affection-name">{li.name}</span>
+              {/* Name and level share one line, so a long level ("Level 10 · named") never narrows the hearts. */}
+              <span className="of-affection-head">
+                <span className="of-affection-name">{li.name}</span>
+                <span className="of-affection-level" aria-hidden="true">
+                  {bond
+                    ? t("ui.otomeForge.story.levelBond", { level: outer, rank: bond.name })
+                    : t("ui.otomeForge.story.level", { level: outer })}
+                </span>
+              </span>
               <span
                 className="of-hearts"
                 role="img"
@@ -455,11 +463,6 @@ function Affection({
                     ) : null}
                   </span>
                 ))}
-              </span>
-              <span className="of-affection-level" aria-hidden="true">
-                {bond
-                  ? t("ui.otomeForge.story.levelBond", { level: outer, rank: bond.name })
-                  : t("ui.otomeForge.story.level", { level: outer })}
               </span>
               {level === BOND_MAX_LEVEL && li.prestige ? (
                 <span
@@ -1029,6 +1032,7 @@ function NewcomerDialog({
                         accent={nameAccent(card.name)}
                       />
                       <span className="of-tile-name">{card.name}</span>
+                      {card.title ? <span className="of-tile-title">{card.title}</span> : null}
                       {picked ? (
                         <span className="of-tile-check" aria-hidden="true">
                           <Check size={12} strokeWidth={3} />

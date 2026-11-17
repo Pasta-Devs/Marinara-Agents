@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
+import { engineResourceKeys } from "../lib/story-writer/engine-library";
 import type { PromptCharacter, PromptLoreEntry } from "../lib/story-writer/prompt";
 
 export interface ConnectionOption {
@@ -34,15 +35,6 @@ const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "aud
 const EMPTY_CONNECTIONS: ConnectionOption[] = [];
 const EMPTY_ITEMS: PickerItem[] = [];
 const EMPTY_FONTS: string[] = [];
-
-export const engineResourceKeys = {
-  connections: ["story-writer", "engine", "connections"] as const,
-  characters: ["story-writer", "engine", "characters"] as const,
-  character: (id: string) => ["story-writer", "engine", "character", id] as const,
-  personas: ["story-writer", "engine", "personas"] as const,
-  lorebooks: ["story-writer", "engine", "lorebooks"] as const,
-  fonts: ["story-writer", "engine", "fonts"] as const,
-};
 
 function isRecord(value: unknown): value is Row {
   return !!value && typeof value === "object" && !Array.isArray(value);

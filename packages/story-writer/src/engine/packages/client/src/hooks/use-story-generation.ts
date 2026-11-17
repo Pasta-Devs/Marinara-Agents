@@ -16,20 +16,18 @@ import {
   type StoryWithChapters,
 } from "../lib/story-writer/model";
 import {
-  buildChapterMessages,
   buildSummaryMessages,
   buildTimelineMessages,
-  chapterRequest,
-  chapterTokenBudget,
   createClientId,
   endsMidSentence,
   findBannedPhrases,
   joinContinuation,
-  loreScanText,
   parseTimelineResponse,
+  planChapter,
   tokenBudget,
   visibleStreamingText,
   type ChatMessage,
+  type PromptSources,
 } from "../lib/story-writer/prompt";
 import {
   loadPromptCharacters,
@@ -42,6 +40,15 @@ import { storyWriterKeys, type StoryDocumentApi } from "./use-story-writer";
 
 export type GenerationStatus = "idle" | "writing" | "summarizing" | "timeline";
 
+/** The prompt the Engine would send for the primary Write button, as its raw route answers `returnPrompt`. */
+export interface PromptPeek {
+  mode: "next" | "continue";
+  chapterNumber: number;
+  model: string;
+  maxTokens: number | null;
+  messages: Array<{ role: string; content: string }>;
+}
+
 export interface StoryGenerationApi {
   status: GenerationStatus;
   generatingChapterId: string | null;
@@ -51,6 +58,11 @@ export interface StoryGenerationApi {
   canWrite: boolean;
   /** `request` (a quick reply) is sent in place of the continue message; a new chapter stores it as its request. */
   write(mode: "next" | "continue" | "rewrite", request?: string): Promise<void>;
+  /**
+   * What the primary Write button would send right now, without writing: no run, no status, no chapter change.
+   * Null when there is no story or no connection.
+   */
+  peekPrompt(signal: AbortSignal): Promise<PromptPeek | null>;
   stop(): void;
   summarizeChapter(chapterId: string): Promise<void>;
   summarizeOlderChapters(): Promise<void>;
@@ -106,6 +118,32 @@ function scheduleFrame(callback: () => void): () => void {
 function pickConnection(connections: ConnectionOption[], settings: StorySettings): ConnectionOption | null {
   const id = resolveDefaultConnectionId(connections, settings.connectionId);
   return connections.find((connection) => connection.id === id) ?? null;
+}
+
+function promptSources(queryClient: QueryClient): PromptSources {
+  return {
+    characters: (ids) => loadPromptCharacters(queryClient, ids),
+    personas: (ids) => loadPromptPersonas(queryClient, ids),
+    lore: loadPromptLore,
+  };
+}
+
+function rowOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+/** The raw route's `returnPrompt` answer: `{ prompt: { messages }, parameters: { model, maxTokens, ... } }`. */
+function readPromptPeek(value: unknown): Pick<PromptPeek, "model" | "maxTokens" | "messages"> {
+  const parameters = rowOf(rowOf(value).parameters);
+  const list = rowOf(rowOf(value).prompt).messages;
+  return {
+    model: typeof parameters.model === "string" ? parameters.model : "",
+    maxTokens: typeof parameters.maxTokens === "number" ? parameters.maxTokens : null,
+    messages: (Array.isArray(list) ? list : []).flatMap((item) => {
+      const { role, content } = rowOf(item);
+      return typeof role === "string" && typeof content === "string" ? [{ role, content }] : [];
+    }),
+  };
 }
 
 /** Older chapters (outside the last N the next chapter sees in full) that have text but no summary yet. */
@@ -244,32 +282,17 @@ async function writeChapter(
   const story = context.readStory();
   if (!story) return;
   const settings = story.story.settings;
-  const chapters = story.chapters;
-  const last = chapters[chapters.length - 1];
-  const original = requested === "rewrite" ? (last ?? null) : null;
-  const mode: "next" | "continue" = !last || (requested === "next" && last.status !== "draft") ? "next" : "continue";
-  // A rewrite is written from an emptied last chapter, so the prompt treats it as a new chapter.
-  const promptChapters = original ? [...chapters.slice(0, -1), { ...original, text: "", summary: "" }] : chapters;
-  const chapterNumber = mode === "next" ? chapters.length + 1 : chapters.length;
-  // Continuing a draft sends a quick reply once: the draft keeps the request it was started with.
-  const request = chapterRequest(settings, override, original);
-
+  const last = story.chapters[story.chapters.length - 1];
   // Cast and lore load before the story changes, so a failure here leaves it as it was.
-  const [characters, personas, lore] = await Promise.all([
-    loadPromptCharacters(context.queryClient, settings.characterIds),
-    loadPromptPersonas(context.queryClient, settings.personaIds),
-    loadPromptLore(settings.lorebookIds, loreScanText(settings, promptChapters, request)),
-  ]);
-  if (run.controller.signal.aborted) return;
-  const messages = buildChapterMessages({
+  const { mode, original, chapterNumber, request, messages, maxTokens } = await planChapter({
     settings,
-    chapters: promptChapters,
-    mode,
-    characters,
-    personas,
-    lore,
-    request,
+    chapters: story.chapters,
+    requested,
+    quickReply: override,
+    savedMaxTokens: connection.savedMaxTokens,
+    sources: promptSources(context.queryClient),
   });
+  if (run.controller.signal.aborted) return;
 
   let target: StoryChapter;
   if (mode === "next") {
@@ -313,12 +336,7 @@ async function writeChapter(
   let result: Completion;
   let failure: unknown = null;
   try {
-    result = await complete(
-      context,
-      messages,
-      chapterTokenBudget(settings.chapterWords, connection.savedMaxTokens),
-      context.streaming ? onText : undefined,
-    );
+    result = await complete(context, messages, maxTokens, context.streaming ? onText : undefined);
   } catch (error) {
     failure = error;
     const partial = (error as { partial?: unknown } | null)?.partial;
@@ -459,6 +477,41 @@ export function useStoryGeneration(args: {
     [operate],
   );
 
+  // Outside operate(): a peek takes no run, sets no status and never touches a chapter.
+  const peekPrompt = useCallback(
+    async (signal: AbortSignal): Promise<PromptPeek | null> => {
+      const { doc: current, connections: options } = latest.current;
+      const storyId = current.data?.story.id;
+      const story = storyId
+        ? (queryClient.getQueryData<StoryWithChapters>(storyWriterKeys.story(storyId)) ?? current.data)
+        : null;
+      if (!story) return null;
+      const connection = pickConnection(options, story.story.settings);
+      if (!connection) return null;
+      // The primary Write button: the next chapter, or the draft it continues.
+      const plan = await planChapter({
+        settings: story.story.settings,
+        chapters: story.chapters,
+        requested: "next",
+        savedMaxTokens: connection.savedMaxTokens,
+        sources: promptSources(queryClient),
+      });
+      // returnPrompt (Engine 2.2.0+) answers with the merged, context-fitted messages before any provider call.
+      const result = await api.post<unknown>(
+        "/generate/raw",
+        {
+          connectionId: connection.id,
+          messages: plan.messages,
+          parameters: { maxTokens: plan.maxTokens },
+          returnPrompt: true,
+        },
+        { signal },
+      );
+      return { mode: plan.mode, chapterNumber: plan.chapterNumber, ...readPromptPeek(result) };
+    },
+    [queryClient],
+  );
+
   const summarizeChapter = useCallback(
     (chapterId: string) =>
       operate("summarizing", async (context) => {
@@ -512,6 +565,7 @@ export function useStoryGeneration(args: {
     liveWords,
     canWrite,
     write,
+    peekPrompt,
     stop,
     summarizeChapter,
     summarizeOlderChapters,

@@ -19,6 +19,7 @@ import {
   useSlurpProjects,
   useUpdateSlurpProject,
 } from "./slp-projects-hooks";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 export type Draft = {
   title: string;
@@ -482,8 +483,7 @@ export function SlurpProjectsPanel({
                   const checked = picked.includes(other.id);
                   return (
                     <label key={other.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={checked}
                         disabled={busy || (!checked && picked.length >= 2)}
                         onChange={() =>
