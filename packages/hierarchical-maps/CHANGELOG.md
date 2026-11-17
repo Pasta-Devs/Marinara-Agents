@@ -1,6 +1,5 @@
 ## 1.8.1 — 2026-11-17
 - World Maps reads and saves its agent settings again when Marinara was installed with its Android app. Before, the Engine there refused those requests with "401: Android local authentication required", so map building could not find its connection and its settings were not saved. They now carry the app's local secret, as the `mari` command's do.
-- World Maps starts again on Marinara Engine 2.5.2. On that Engine, 1.8.0 stopped while loading with "At.innerType is not a function", because its map schema was written for the older zod library the Engine replaced. The fix was already in World Maps' source; this release is the first build that carries it.
 
 ## 1.8.0 — 2026-11-01
 - **The Story Location bar always shows where you are.** In a deep map the bar used to show the path from the top, so the place you are actually in was cut off. It now shows as much of the path as fits, ending with your current place and starting with "…" when places above are left out. Open the bar to see the full path, and choose what the bar shows: as much as fits, your current place only, your place and the two above it, or the full path as before. The choice is kept on this device; hovering the bar still shows the full path.
