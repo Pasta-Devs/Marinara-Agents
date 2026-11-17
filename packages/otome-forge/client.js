@@ -2191,7 +2191,14 @@ ${i} .of-affection-progress {
   grid-area: progress; justify-self: end; font-size: 0.7rem; line-height: 1.2; font-weight: 600;
   font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--of-text-soft);
 }
-${i} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; color: var(--of-li-accent, var(--of-rose)); }
+/* Ten hearts on one line, always (2026-11-17): the line shrinks its hearts to fit a narrow column (a phone with large
+   text, a long counter) rather than wrapping the last one under the others, and never grows them past 16px. */
+${i} .of-hearts {
+  grid-area: hearts; display: flex; flex-wrap: nowrap; gap: 3px; min-width: 0;
+  color: var(--of-li-accent, var(--of-rose));
+}
+${i} .of-hearts > .of-heart { flex: 0 1 16px; min-width: 0; }
+${i} .of-hearts > .of-heart > svg:not(.of-heart-inner) { width: 100%; height: auto; max-width: 16px; }
 /* 0.23.0: ten outer hearts (levels 1-10) with a bond rank's inner heart inside each; the wrapper owns the "off" colour
    so it reaches both hearts, and the inner one sits a little high, in the outer heart's hollow. */
 ${i} .of-heart { position: relative; display: inline-flex; color: var(--of-border-strong); }

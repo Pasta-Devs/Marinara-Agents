@@ -716,6 +716,12 @@
           "highlight": true
         },
         {
+          "version": "0.34.13",
+          "date": "2026-11-17",
+          "notes": "- **Ten hearts on one line.** On the Story screen's **Between you**, a love interest's ten hearts could wrap the last one onto a line of its own on a phone, with a larger text size or a long level and counter. They now always stay on one line. Where there is no room for them at full size, they get a little smaller.",
+          "highlight": false
+        },
+        {
           "version": "0.34.12",
           "date": "2026-11-17",
           "notes": "- **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as \"Modern AU version\") under its name, so you can tell them apart. Searching the pickers finds a title too.",
@@ -821,12 +827,6 @@
           "version": "0.32.2",
           "date": "2026-11-15",
           "notes": "- **Characters outside the cast keep the voice you gave them.** With **Voice everyone else** on, a character outside the cast who has an Engine character card now speaks with the voice assigned to that card in the Engine's voice settings, matched by name as the Engine's own chats do. Before, they got one of the Engine's default voices. Anyone with no assigned voice still gets a default voice.",
-          "highlight": false
-        },
-        {
-          "version": "0.32.1",
-          "date": "2026-11-14",
-          "notes": "- **A line written twice shows once.** When the model writes a scene line twice in a row, the same or with a word or two more at its end, only the first stays. That includes a line right after a choice that repeats what you chose. Scenes written before this update are not changed.",
           "highlight": false
         }
       ]

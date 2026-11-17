@@ -5,6 +5,10 @@
 - **Kitty Cards.** A new date in Dates, our version of Love and Deep Space's kitty card game. Take turns putting kittens into eight cups: a kitten in a cup of its own colour scores twice its number, and in a white cup its number. In some games your love interest cheats once, in their own way: they swap two cups, doze off, look away while you sneak a card, offer a trade face down, or let you take a card back. You can catch some of these. A game makes no model call and pays 20 Starlight and 30 affection, and a win 20 Starlight more, within the day's limits. Their lines are written ahead with their other lines, and a story from before this version gets them in the background.
 - **Your own kittens.** With an image connection, you and each love interest are painted once as a kitten, which shows on one of the value-5 cards. **Ask before painting** and prompt review hold them for **Paint our kittens**.
 
+## 0.34.13 — 2026-11-17
+
+- **Ten hearts on one line.** On the Story screen's **Between you**, a love interest's ten hearts could wrap the last one onto a line of its own on a phone, with a larger text size or a long level and counter. They now always stay on one line. Where there is no room for them at full size, they get a little smaller.
+
 ## 0.34.12 — 2026-11-17
 
 - **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as "Modern AU version") under its name, so you can tell them apart. Searching the pickers finds a title too.
