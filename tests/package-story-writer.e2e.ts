@@ -296,9 +296,9 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await root.getByRole("button", { name: "Hide the author's note" }).focus();
   await page.keyboard.press("Enter");
   await expect(root.locator(".sw-note-anchor")).toHaveCount(0);
-  // The dock itself, never one of its buttons: the next Enter must not write or stop a chapter.
+  // The action bar's toolbar, never one of its buttons: the next Enter must not write or stop a chapter.
   await expect
-    .poll(() => page.evaluate(() => document.activeElement?.classList.contains("sw-dock") ?? false))
+    .poll(() => page.evaluate(() => document.activeElement?.classList.contains("sw-actionbar") ?? false))
     .toBe(true);
   await expect(root).toHaveAttribute("data-sw-note-shown", "false");
   await expect
@@ -670,6 +670,21 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
       .toBe(false);
     await page.waitForTimeout(600);
     await page.screenshot({ path: testInfo.outputPath("08-landscape.png") });
+    // Short landscape lays the dock out as display: contents. Hiding the note from the keyboard still leaves focus
+    // on the toolbar, not on the page or on Write (Dottore, #2364).
+    await host.locator(".sw-note-collapsed").click();
+    await host.getByRole("button", { name: "Hide the author's note" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(host.locator(".sw-note-anchor")).toHaveCount(0);
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.classList.contains("sw-actionbar") ?? false))
+      .toBe(true);
+    await host.getByRole("button", { name: "Show story settings" }).click();
+    const appearance = host.getByRole("button", { name: "Appearance" });
+    if ((await appearance.getAttribute("aria-expanded")) !== "true") await appearance.click();
+    await host.getByRole("button", { name: /^Show the author's note/ }).click();
+    await host.getByRole("button", { name: "Hide story settings" }).click();
+    await expect(host.locator(".sw-note-collapsed")).toBeVisible();
 
     // In the Document theme the column, which scrolls under the note's corner, starts below that note.
     await host.getByRole("button", { name: "Show story settings" }).click();

@@ -66,7 +66,7 @@ export function ActionBar(props: {
   const fullscreen = props.fullscreen;
 
   return (
-    <div className="sw-actionbar" role="toolbar" aria-label={t("actions.label")}>
+    <div className="sw-actionbar" role="toolbar" aria-label={t("actions.label")} tabIndex={-1}>
       {busy ? (
         <>
           <button

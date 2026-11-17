@@ -353,14 +353,18 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     if (confirmed) await doc.deleteChapter(chapterId);
   };
   const hideNote = () => {
-    // The note unmounts with its hide button: focus held there goes to the dock that holds the action bar, never to
-    // one of its buttons, where the next Enter would write or stop a chapter (Dottore, #2364).
+    // The note unmounts with its hide button: focus held there goes to the action bar's toolbar, never to one of its
+    // buttons, where the next Enter would write or stop a chapter. The toolbar, not the dock: in short landscape the
+    // dock is display: contents and has no box to focus (Dottore, #2364).
     const hadFocus =
       document.activeElement instanceof HTMLElement && !!document.activeElement.closest(".sw-note-anchor");
     setNoteOpen(false);
     updatePreferences({ showAuthorNote: false });
     toast.info(t("note.hidden"));
-    if (hadFocus) requestAnimationFrame(() => dockRef.current?.focus({ preventScroll: true }));
+    if (hadFocus)
+      requestAnimationFrame(() =>
+        dockRef.current?.querySelector<HTMLElement>(".sw-actionbar")?.focus({ preventScroll: true }),
+      );
   };
   const openPeek = () => {
     peekOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -458,7 +462,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 onHide={hideNote}
               />
             ) : null}
-            <div ref={dockRef} className="sw-dock" tabIndex={-1}>
+            <div ref={dockRef} className="sw-dock">
               <ActionBar
                 status={generation.status}
                 canWrite={generation.canWrite}
