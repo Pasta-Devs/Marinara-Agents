@@ -25,7 +25,6 @@ export type ImageRating = (typeof IMAGE_RATINGS)[number];
 /** allow: may be written; veil: happens off the page only; line: never written, not even implied. */
 export const LIMIT_LEVELS = ["allow", "veil", "line"] as const;
 export type LimitLevel = (typeof LIMIT_LEVELS)[number];
-export type CustomLimitLevel = Exclude<LimitLevel, "allow">;
 
 export const LIMIT_IDS = [
   "violence-others",
@@ -43,9 +42,10 @@ export const LIMIT_IDS = [
 ] as const;
 export type LimitId = (typeof LIMIT_IDS)[number];
 
+/** One of the player's own limits: their words, at Allow, Veil or Line like a built-in limit. */
 export interface CustomLimit {
   text: string;
-  level: CustomLimitLevel;
+  level: LimitLevel;
 }
 
 export interface ContentSettings {
@@ -287,7 +287,7 @@ export function normalizeContent(data: unknown): ContentSettings {
   for (const raw of Array.isArray(rawCustom) ? rawCustom : []) {
     const text = field(raw, "text");
     const level = field(raw, "level");
-    if (typeof text === "string" && (level === "veil" || level === "line")) custom.push({ text, level });
+    if (typeof text === "string" && isOneOf(LIMIT_LEVELS, level)) custom.push({ text, level });
   }
   const mcRole = field(data, "mcRole");
   return {

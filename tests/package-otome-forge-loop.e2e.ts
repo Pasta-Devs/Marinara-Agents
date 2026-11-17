@@ -1512,7 +1512,8 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(memory).toBeFocused();
-    await tabs.getByRole("tab", { name: "Memories" }).focus();
+    // 0.36.0: the Love Timeline comes right after Cards.
+    await tabs.getByRole("tab", { name: "Cards", exact: true }).click();
     await page.keyboard.press("ArrowRight");
     await expect(tabs.getByRole("tab", { name: "Love Timeline" })).toHaveAttribute("aria-selected", "true");
     await expect(root.getByText("The night Ilvar first said your name.")).toBeVisible();

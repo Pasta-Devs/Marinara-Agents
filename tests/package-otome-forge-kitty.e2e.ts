@@ -6,7 +6,8 @@
 // caught by Gotcha!, a lost answer retried with the same game and paid once; then a freeze, an extra, a calculate and a
 // steady moment, one game each, every one sent in the finish; with images on, the painted kittens on the value-5
 // cards and Paint our kittens, the tap that pays for one held by Ask before painting; and at phone width, her hand
-// drawn up to 10 cards stays inside the page, and one paint failure shared by every kitten shows once.
+// drawn up to 10 cards stays inside the page, and one paint failure shared by every kitten shows once. 0.36.0: the
+// intro's "How Kai Ardent plays" says what his cheat does in Kitty Cards, never his bible's Claw Machine sentence.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-kitty.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -38,6 +39,17 @@ const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
 const appVersion = JSON.parse(readFileSync(resolve(engineRoot, "package.json"), "utf8")).version;
 const packageVersion = JSON.parse(readFileSync(resolve("packages/otome-forge/manifest.json"), "utf8")).version;
+/** The intro's "How Kai Ardent plays" for each cheat (0.36.0). */
+const STYLE: Record<ClawCheat, string> = {
+  nudge: "Kai Ardent might swap two cups while you look away. Tap Gotcha! in time to catch it.",
+  freeze:
+    "Kai Ardent might doze off mid-game. Swap the kittens of two filled cups before Kai Ardent wakes, and hope it goes unnoticed.",
+  extra: "Kai Ardent might look away so you can sneak an extra card. Hold Sneak a card before Kai Ardent turns back.",
+  calculate: "Kai Ardent might offer to trade one card from each hand, face down. Take the trade or keep your cards.",
+  steady: "Kai Ardent might let you take back the card you just played and play again.",
+};
+/** His bible's `play.style`, which is how he plays the Claw Machine. */
+const CLAW_STYLE = "Plays to an audience, all flourish and a wink.";
 
 type Json = Record<string, any>;
 interface Call {
@@ -242,7 +254,7 @@ function createKittyStub({ images = false, finishFailures = 0, paintFails = fals
           lis: {
             [KAI]: {
               cheat: state.cheat,
-              style: "Plays to an audience, all flourish and a wink.",
+              style: CLAW_STYLE,
               rupture: false,
               lines: { claw: null, cold: [], ...(state.kitty ? { kitty: state.kitty } : {}) },
             },
@@ -476,11 +488,14 @@ test("Otome Hearth Kitty Cards from Dates: a whole game, his nudge caught, the l
   await card.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("01-dates.png") });
 
-  // The intro: how they play, the value-5 cards (the package's own kittens), who goes first.
+  // The intro: how they play (his cheat in this game, not his Claw Machine style), the value-5 cards (the package's own
+  // kittens), who goes first.
   const before = stub.calls.length;
   await root.getByRole("button", { name: "Play: Kitty Cards with Kai Ardent" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Kitty Cards" })).toBeFocused();
-  await expect(root).toContainText("Plays to an audience, all flourish and a wink.");
+  await expect(root.locator(".of-claw-style .of-eyebrow")).toHaveText("How Kai Ardent plays");
+  await expect(root.locator(".of-claw-style-text")).toHaveText(STYLE.nudge);
+  await expect(root).not.toContainText(CLAW_STYLE);
   await expect(root.getByRole("img", { name: "Turkish Angora, rose 5" })).toBeVisible();
   const art = root.getByRole("img", { name: "Devon Rex, sky 5" }).locator("img");
   await expect(art).toHaveAttribute(
@@ -662,6 +677,8 @@ test("Otome Hearth Kitty Cards' other cheats: a freeze, an extra, a calculate an
     const plan = seedFor(game.first, game.cheat, (each) =>
       game.cheat === "freeze" || game.cheat === "extra" ? each.cheat?.caught === false : true,
     );
+    // The intro says what his cheat does in this game.
+    await expect(root.locator(".of-claw-style-text")).toHaveText(STYLE[game.cheat]);
     await startGame(page, root, plan, game.first);
     await playOut(page, root, plan, async (event) => {
       await game.play(event);

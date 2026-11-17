@@ -1,7 +1,8 @@
 // Otome Forge's content contract and content rules (M1): every prompt kind gets the wording it may use (Home and
 // care stay SFW under any Heat and still list the Lines), the Dark romance addition appears only under Dark, image
 // prompts carry the rating and an adult tag for every person, and the 18+ gate and fixed Lines are enforced by the
-// same pure rules on the client and the server.
+// same pure rules on the client and the server. The player's own limits take Allow, Veil or Line, as the built-in
+// ones do, and an Allow of theirs is stated where the built-in ones are.
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -30,6 +31,11 @@ import {
   toSetupInput,
   type SetupDraft,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/setup/draft.ts";
+import { worldId } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { routesOf } from "./fixtures/otome-forge-art.ts";
+import { storyWorld } from "./fixtures/otome-forge-story.ts";
 import {
   COMFORT_RULE,
   CONTRACT_KINDS,
@@ -172,13 +178,18 @@ test("content defaults: Heat SFW, Darkness Angst, images SFW, pregnancy a Line, 
     custom: [
       { text: "x", level: "allow" },
       { text: "y", level: "veil" },
+      { text: "z", level: "nope" },
+      { level: "line" },
     ],
   });
   assert.equal(stored.heat, "sfw");
   assert.equal(stored.darkness, "dark");
   assert.equal(stored.limits.gore, "allow");
   assert.equal(stored.limits.torture, "allow");
-  assert.deepEqual(stored.custom, [{ text: "y", level: "veil" }]);
+  assert.deepEqual(stored.custom, [
+    { text: "x", level: "allow" },
+    { text: "y", level: "veil" },
+  ]);
   assert.deepEqual(normalizeContent(undefined), defaultContent());
 });
 
@@ -302,4 +313,77 @@ test("the wizard sends gated content as chosen (the server's 403 asks for the ga
   assert.equal(isBlankDraft(opened), true, "the default story connection alone is not the player's work");
   assert.equal(isBlankDraft({ ...opened, premise: "A" }), false);
   assert.equal(isBlankDraft({ ...opened, connections: { ...opened.connections, chat: "c2" } }), false);
+});
+
+test("your own limits take Allow, Veil or Line: an Allow is stated as a built-in one is, Lines and Veils as before", async () => {
+  const custom: ContentSettings["custom"] = [
+    { text: "infidelity", level: "allow" },
+    { text: "spiders", level: "line" },
+    { text: "drowning", level: "veil" },
+  ];
+  const withoutAllow = custom.slice(1);
+  const rule = (text: string, start: string) => text.split("\n").find((row) => row.startsWith(start)) ?? "";
+  for (const kind of ["planner", "scene", "chat"] as const) {
+    const text = contract(kind, { heat: "explicit", darkness: "dark", custom });
+    assert.equal(
+      rule(text, "- Allowed on the page"),
+      "- Allowed on the page (the player opted in): violence toward other people; gore; threats; captivity; manipulation; stalking; infidelity.",
+      kind,
+    );
+    assert.match(rule(text, "- Lines ("), /^- Lines \(never written, not even implied\): [^\n]*; spiders\.$/, kind);
+    assert.match(rule(text, "- Veils ("), /^- Veils \(may happen only off the page[^\n]*; drowning\.$/, kind);
+    assert.ok(text.includes("- The Lines and Veils win over everything above in this contract."), kind);
+    // The Allow adds its words to that list and nothing else: no rule or caveat of its own.
+    const before = contract(kind, { heat: "explicit", darkness: "dark", custom: withoutAllow });
+    assert.equal(text.replace("; infidelity.", "."), before, kind);
+    // With no built-in limit at Allow, the player's own is the list.
+    assert.equal(
+      rule(contract(kind, { heat: "fade", darkness: "gentle", custom }), "- Allowed on the page"),
+      "- Allowed on the page (the player opted in): infidelity.",
+      kind,
+    );
+  }
+  // The player's own Allow is named exactly where the built-in ones are (not in SFW mode, Home, care or summaries),
+  // and it is never one of the things kept out.
+  for (const kind of TEXT_KINDS) {
+    for (const heat of HEATS) {
+      for (const darkness of ["angst", "dark"] as const) {
+        const text = contract(kind, { heat, darkness, custom });
+        assert.match(text, /spiders/, `${kind} ${heat} ${darkness}`);
+        assert.equal(
+          /infidelity/.test(text),
+          /Allowed on the page[^\n]*threats/.test(text),
+          `${kind} ${heat} ${darkness}`,
+        );
+      }
+    }
+  }
+  assert.match(contract("scene", { heat: "fade", custom }), /Allowed on the page[^\n]*infidelity/);
+
+  // Kept as chosen by the normalizer, by enforceContent with or without the 18+ gate, and by the wizard's request.
+  assert.deepEqual(normalizeContent({ ...defaultContent(), custom }).custom, custom);
+  for (const ageGate of [false, true]) {
+    assert.deepEqual(enforceContent({ ...defaultContent(), custom }, ageGate).custom, custom, String(ageGate));
+  }
+  const draft = { ...emptyDraft(), content: { ...defaultContent(), custom } };
+  assert.deepEqual(toSetupInput(draft).content.custom, custom);
+  // A story saved before keeps its own limits as they were; one saved with an Allow keeps it.
+  const stored = (limits: ContentSettings["custom"]) =>
+    normalizeWorld({ content: { ...defaultContent(), custom: limits } }).content.custom;
+  assert.deepEqual(stored(withoutAllow), withoutAllow);
+  assert.deepEqual(stored(custom), custom);
+
+  // Settings → Content saves an Allow (POST /runs creates with the same ContentSchema) and still refuses a bad level.
+  const t = await storyWorld({ runKey: "r-ownallow-aaaaaa" });
+  const runs = routesOf(registerRunRoutes, t.deps, "r-ownallow-aaaaaa");
+  const saved = await runs("POST", "/runs/:run/settings", { content: { ...defaultContent(), custom } });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body.world.content.custom, custom);
+  const world = async () => (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.content.custom;
+  assert.deepEqual(await world(), custom);
+  const refused = await runs("POST", "/runs/:run/settings", {
+    content: { ...defaultContent(), custom: [{ text: "infidelity", level: "maybe" }] },
+  });
+  assert.equal(refused.status, 400);
+  assert.deepEqual(await world(), custom, "a refused level changes nothing");
 });

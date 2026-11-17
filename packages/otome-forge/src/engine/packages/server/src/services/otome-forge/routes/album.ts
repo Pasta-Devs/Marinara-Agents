@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Album (plan M4 "Album"): only what is unlocked
 // ──────────────────────────────────────────────
-// GET /runs/:run/album → AlbumView {cgs, memories, timeline, favorites, soundtrack, tells, stickers, photos, cards}
+// GET /runs/:run/album → AlbumView {cgs, memories, timeline, favorites, soundtrack, tells, stickers, photos, cards,
+//                                   kittens}
 // - cgs: story CGs once seen (M2b: POST .../art/cg/seen), each owned Memory's CG once painted, and couple sets' pair
 //   portraits, newest first (the oldest at the bottom). The client saves an image through the Engine's
 //   services.imageDownloads.
@@ -22,6 +23,9 @@
 //   paint as the client should see it (S/art/tarot-deck.ts albumCards): painted, painting, or waiting for a tap. Only
 //   drawn cards are listed, as the deck has an entry only for a card drawn and claimed for painting; nothing else
 //   exists to show. Reading them paints nothing.
+// - kittens (0.36.0): Kitty Cards' painted kittens, hers then each love interest's in cast order, only those painted
+//   and cut out, with images on: the play view's own (S/art/kittens.ts albumKittens), each with its repaint's paint
+//   while the Album's Repaint paints it again. Reading them paints and queues nothing.
 // Nothing the player has not won, seen, drawn or learned is listed: no banner item not owned, no CG not seen, no card
 // not drawn, no tell of a secret still hidden, no theme of a chapter not begun.
 import { chapterMusicCue } from "../../../../../client/src/features/otome-forge/shared/audio.js";
@@ -48,6 +52,7 @@ import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { byStoryOrder } from "../story/chapters.js";
 import { albumStickers } from "../art/stickers.js";
+import { albumKittens } from "../art/kittens.js";
 import { albumCards, readDeck } from "../art/tarot-deck.js";
 import { albumPhotos, listPhotos } from "../minigames/photo-shoot.js";
 
@@ -176,6 +181,7 @@ export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): 
       await readDeck(deps.store, runId),
       run.units.map((unit) => unit.id),
     ),
+    kittens: albumKittens(runId, run),
   };
 }
 

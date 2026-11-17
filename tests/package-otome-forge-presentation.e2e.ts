@@ -11,6 +11,7 @@
 // only saved audio settings generate music (an unsaved Mute or music level never does), an unsaved Mute stays silent
 // when a cue's track lands, and a recorded track the Engine no longer lists is made again while stock music plays.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-presentation.e2e.ts
+import { expectCustomLimitFits } from "./fixtures/otome-forge-limits.ts";
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -666,6 +667,41 @@ for (const theme of ["dark", "light"] as const) {
     await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
     await expect(root.getByRole("button", { name: /intimacy preferences$/u })).toHaveCount(0);
     expect(posts(calls, "/intimacy")).toEqual([]);
+  });
+
+  test(`Otome Hearth Settings → Content: your own limits take Allow, Veil or Line on one row (${theme})`, async ({
+    page,
+  }, testInfo) => {
+    const fixture = intimacyFixture();
+    // A story saved by an earlier version: its own limit loads as it was.
+    fixture.view.world.content.custom = [{ text: "spiders", level: "veil" }];
+    const calls: Call[] = [];
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+    await stubRoutes(page, fixture.answer, calls);
+    const root = await openRepaintCast(page);
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tab", { name: "Content", exact: true }).click();
+    await expect(root).toHaveAttribute("data-look", theme === "dark" ? "midnight" : "pearl");
+    await expect(root.getByRole("textbox", { name: "Your limit 1", exact: true })).toHaveValue("spiders");
+    const first = root.getByRole("group", { name: "Level of your limit 1", exact: true });
+    await expect(first.locator(".of-pill")).toHaveText(["Allow", "Veil", "Line"]);
+    await expect(first.getByRole("radio", { name: "Veil", exact: true })).toBeChecked();
+    await root.getByRole("button", { name: "Add your own", exact: true }).click();
+    await root.getByRole("textbox", { name: "Your limit 2", exact: true }).fill("Infidelity");
+    const second = root.getByRole("group", { name: "Level of your limit 2", exact: true });
+    await expect(second.getByRole("radio", { name: "Line", exact: true })).toBeChecked();
+    await second.getByText("Allow", { exact: true }).click();
+    await expect(second.getByRole("radio", { name: "Allow", exact: true })).toBeChecked();
+    const save = root.getByRole("button", { name: "Save changes", exact: true });
+    await save.click();
+    await expect(save).toBeDisabled();
+    expect(posts(calls, "/settings").at(-1)!.body!.content.custom).toEqual([
+      { text: "spiders", level: "veil" },
+      { text: "Infidelity", level: "allow" },
+    ]);
+    await expectCustomLimitFits(page, root.locator(".of-custom-limit").nth(1), (name) =>
+      testInfo.outputPath(`settings-${theme}-${name}`),
+    );
   });
 
   test(`Otome Hearth intimacy: an older bible gains its block from the cast, retried after a failure (${theme})`, async ({

@@ -8,6 +8,7 @@
 // within the day's activity cap). A love interest may be any gender: the client names them or uses their pronouns.
 import type { Favorite, LiId, Noticed, Outfit, Paint, SoundtrackTrack, TimelineEntry } from "./api-types";
 import type { Face, MusicMood } from "./faces";
+import type { KittenView } from "./kitty";
 import type { GiftId, OwnedFigurineView } from "./shop";
 import type { Arcana } from "./tarot";
 import type { ItemKind, ItemView, Rarity } from "./wish";
@@ -135,7 +136,7 @@ export interface ShowResult {
 
 /**
  * An image the Album keeps: a story CG once seen, a Memory's CG once painted, a couple set's pair portrait, a sticker,
- * (#2087) a Photo Shoot photo or (#2151) a Tarot card's painted picture.
+ * (#2087) a Photo Shoot photo, (#2151) a Tarot card's painted picture or (0.36.0) a Kitty Cards kitten.
  */
 export interface AlbumImage {
   key: string;
@@ -143,7 +144,7 @@ export interface AlbumImage {
   ref?: string;
   at: string;
   li?: LiId;
-  source: "story" | "memory" | "pair" | "sticker" | "photo" | "card" | "keepsake";
+  source: "story" | "memory" | "pair" | "sticker" | "photo" | "card" | "keepsake" | "kitten";
   /** A Memory's title, the couple set's look names, or a photo's place. */
   title?: string;
   /** A sticker's prompt name (mari_laugh), which its saved file is named after. */
@@ -207,6 +208,11 @@ export interface AlbumView {
   photos: AlbumImage[];
   /** #2151: the Tarot deck's drawn cards in Arcana order, then by love interest in cast order. */
   cards: AlbumCard[];
+  /**
+   * 0.36.0: Kitty Cards' painted kittens, hers then the cast's, only those painted and cut out (GET /play's own, each
+   * with a `url`); `art` is `pending` while the Album's Repaint paints one again. None with images off.
+   */
+  kittens: KittenView[];
 }
 
 /** POST /runs/:run/items/:item/open */

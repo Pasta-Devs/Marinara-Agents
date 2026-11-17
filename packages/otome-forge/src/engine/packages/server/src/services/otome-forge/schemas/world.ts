@@ -54,7 +54,7 @@ export const ContentSchema: ZodType<ContentSettings> = z.object({
   darkness: z.enum(DARKNESSES),
   limits: z.object(limitsShape),
   custom: z
-    .array(z.object({ text: z.string().max(CUSTOM_LIMIT_TEXT_MAX), level: z.enum(["veil", "line"]) }))
+    .array(z.object({ text: z.string().max(CUSTOM_LIMIT_TEXT_MAX), level: LimitLevelSchema }))
     .max(CUSTOM_LIMITS_MAX),
   mcRole: z.enum(MC_ROLES).optional(),
 });
