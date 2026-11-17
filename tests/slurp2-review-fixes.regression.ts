@@ -248,7 +248,7 @@ Promise.all([proveDamagedAction(), proveResolve()])
     process.exitCode = 1;
   });
 
-// #151: Storylines off keeps collab and couple partners out of posts and occasions; one person per picture drops the cast.
+// Storylines off keeps collab and couple partners out of posts and occasions; one person per picture drops the cast.
 const generation = read("features/feed/slp-generation-service.ts");
 assert.match(generation, /collabs: slpExtensionOn\(settings, "storylines"\) \? settings\.creatorCollabs : null/u);
 assert.match(generation, /const pictureIds = settings\.imageOnePerson \? \[\] :/u);

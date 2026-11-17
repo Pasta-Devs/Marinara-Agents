@@ -94,7 +94,7 @@ function withoutClothes(sentence: string): string {
   let kept = "";
   for (let index = 0; index < parts.length; index += 2) {
     let clause = parts[index]!.trim();
-    // "Hair worn in a ponytail" is a hairstyle, not clothing (#175): blank the verb, keep the offsets.
+    // "Hair worn in a ponytail" is a hairstyle, not clothing: blank the verb, keep the offsets.
     const hit = CLOTHING_SENTENCE.exec(
       HAIR.test(clause) ? clause.replace(WEAR_VERB, (verb) => " ".repeat(verb.length)) : clause,
     );

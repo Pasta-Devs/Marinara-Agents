@@ -101,7 +101,7 @@ export async function planSlurpPostSpice(
     /** This post's planned level and the Creator's ceiling, both under the Slurp-wide limit. */
     explicitLevel: SlurpExplicitLevel;
     dialLevel: SlurpExplicitLevel;
-    /** `null` while Storylines is off: no collab or couple partner joins the post (#151). */
+    /** `null` while Storylines is off: no collab or couple partner joins the post. */
     collabs: readonly SlurpCreatorCollab[] | null;
     recentPosts: readonly { metadata?: unknown }[];
     sequence: number;

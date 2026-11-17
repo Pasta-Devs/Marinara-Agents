@@ -9,7 +9,7 @@ import { quietButton } from "./slp-creator-classes";
 import { useCreatorAppearanceAction } from "./slp-creator-profile-hooks";
 
 /**
- * Refresh looks from cards (#179): the player ticks Creators, Slurp drafts each look again from the
+ * Refresh looks from cards: the player ticks Creators, Slurp drafts each look again from the
  * card. A Stage look is saved again as the Stage look; a drafted look only gets a fresh draft. Slurp
  * cannot tell a copied Stage look from an edited one, so nothing is ticked at first.
  */

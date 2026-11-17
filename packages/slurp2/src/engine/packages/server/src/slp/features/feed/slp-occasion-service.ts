@@ -72,7 +72,7 @@ export async function planSlurpOccasionBeat(
       readSlurpCouplePartner(db, account.id).catch(() => ({ inCouple: false, partnerId: null })),
       listSlurpOpportunities(db, account.id, 40),
     ]);
-    // Storylines off: no partner or collab joins an occasion (#151).
+    // Storylines off: no partner or collab joins an occasion.
     const ties = slpExtensionOn(settings, "storylines");
     const nameOf = async (id: string | null | undefined) =>
       ties && id

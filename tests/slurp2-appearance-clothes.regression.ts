@@ -14,7 +14,7 @@ assert.doesNotMatch(look, /sweater|fishing vest/u);
 // A long look keeps its last trait; the old 600-character cap cut it off.
 const long = `${"Freckles across the nose and cheeks. ".repeat(30)}A tattoo of a koi on the left forearm.`;
 assert.match(slurpImageLook(long), /koi on the left forearm/u);
-// A hairstyle "worn" or "wears" is not clothing (#175); the hoodie still goes.
+// A hairstyle "worn" or "wears" is not clothing; the hoodie still goes.
 assert.match(slurpImageLook("Long black hair worn in a high ponytail, green eyes."), /hair worn in a high ponytail/u);
 const hairstyle = slurpImageLook(
   "She wears her hair in a ponytail and likes hoodies. Blonde pigtails and a denim jacket.",
