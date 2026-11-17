@@ -65,6 +65,10 @@ for (const card of [
 // A wear verb that carries a garment is not the hair's own verb, so that phrase is still dropped.
 assert.doesNotMatch(slurpImageLook("Tall, with hair wearing a cap with a sweater. Green eyes."), /cap|sweater/u);
 
+for (const card of ["Black hair worn long. Green eyes.", "Hair worn to one side. Green eyes."]) {
+  assert.match(slurpImageLook(card), /hair worn/iu);
+}
+
 // A regenerate with no text connection must fail (the route answers 422), not return the old card text as a refresh.
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-appearance-service.ts"),
