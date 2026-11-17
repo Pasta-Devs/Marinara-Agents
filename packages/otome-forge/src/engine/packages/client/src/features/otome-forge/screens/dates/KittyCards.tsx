@@ -637,6 +637,10 @@ function KittyTable({ li, accent, seed, first, cheat, lines, rupture, faces, onD
         ? t("ui.otomeForge.kitty.yourTurn")
         : t("ui.otomeForge.kitty.theirTurn", { name: li.name });
   const mid = (game.hands.me.length - 1) / 2;
+  // Her fan turns each card 5° from the middle, and its outer cards 8° at most. A card turns about a point below it,
+  // so an outer card's top corner swings out about 15px at 8°: inside the page's 16px gutter and the hand's 4px
+  // padding on a phone. At 5° a card, a hand of 6 or more went past the page's edge.
+  const fan = Math.min(5, 8 / Math.max(mid, 1));
 
   const holdKeys = {
     onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -898,7 +902,7 @@ function KittyTable({ li, accent, seed, first, cheat, lines, rupture, faces, onD
               aria-describedby={hintId}
               style={
                 {
-                  "--rot": `${((index - mid) * 5).toFixed(1)}deg`,
+                  "--rot": `${((index - mid) * fan).toFixed(1)}deg`,
                   "--lift": `${(Math.abs(index - mid) * 3).toFixed(1)}px`,
                 } as CSSProperties
               }
@@ -1160,7 +1164,8 @@ export function KittyCards({ runKey, view, li, onExit }: ActivityScreenProps) {
     const targets = list.map((kitten) => target(kitten.owner)).filter((each) => !actions.busy.has(each.id));
     for (const each of reviewImagePromptsBeforeSend ? targets.slice(0, 1) : targets) void actions.paint(each);
   };
-  const errors = kittens.flatMap((kitten) => actions.errors[`kitten:${kitten.owner}`] ?? []);
+  // A failure every kitten shares (no connection, say) shows once.
+  const errors = [...new Set(kittens.flatMap((kitten) => actions.errors[`kitten:${kitten.owner}`] ?? []))];
   const inProgress = painting || !!play.data?.kittensPending;
   return page(
     <>

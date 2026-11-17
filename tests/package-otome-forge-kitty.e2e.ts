@@ -4,8 +4,9 @@
 // in Node with the shared rules (SH/kitty.ts) and knows every move, his cheat moment and the final score before the
 // page shows them. Desktop and phone (the two projects) each play: from the Dates hub, a whole game with his nudge
 // caught by Gotcha!, a lost answer retried with the same game and paid once; then a freeze, an extra, a calculate and a
-// steady moment, one game each, every one sent in the finish; and with images on, the painted kittens on the value-5
-// cards and Paint our kittens, the tap that pays for one held by Ask before painting.
+// steady moment, one game each, every one sent in the finish; with images on, the painted kittens on the value-5
+// cards and Paint our kittens, the tap that pays for one held by Ask before painting; and at phone width, her hand
+// drawn up to 10 cards stays inside the page, and one paint failure shared by every kitten shows once.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-kitty.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -167,7 +168,7 @@ function seedFor(first: "me" | "partner", cheat: ClawCheat, also: (plan: Plan) =
 
 // ── The stub ──
 
-function createKittyStub({ images = false, finishFailures = 0 } = {}) {
+function createKittyStub({ images = false, finishFailures = 0, paintFails = false } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
   const they = { subject: "they", object: "them", possessive: "their" };
@@ -260,6 +261,7 @@ function createKittyStub({ images = false, finishFailures = 0 } = {}) {
       };
     }
     if (path === `${base}/art/kitten`) {
+      if (paintFails) return { status: 503, json: { error: "No image connection.", code: "no-connection" } };
       const owner = call.body!.owner as string;
       state.kittens[owner] = KITTEN(owner);
       return { status: 200, json: { art: { state: "ready", url: KITTEN(owner), at: now() } } };
@@ -386,7 +388,7 @@ const noWider = async (page: Page) =>
   );
 
 /** Starts the game `plan` was dealt from: its seed for the page's next random number, then who goes first. */
-async function startGame(page: Page, root: Locator, plan: Plan, first: "me" | "partner") {
+async function startGame(page: Page, root: Locator, plan: Pick<Plan, "seed">, first: "me" | "partner") {
   await page.evaluate((seed) => ((window as { __kittySeed?: number }).__kittySeed = seed), plan.seed);
   await root.getByRole("button", { name: first === "me" ? "I’ll go first" : "Kai Ardent goes first" }).click();
   await expect(root.locator(".of-kitty-game")).toBeVisible();
@@ -732,5 +734,53 @@ test("Otome Hearth Kitty Cards with images on: the painted kittens take the valu
   await expect(rose.locator("img")).toHaveAttribute("src", KITTEN("player"));
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("09-painted-in-hand.png"), fullPage: true });
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Kitty Cards at phone width: her hand drawn to 10 cards stays on the page, a shared paint failure shows once", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "dark" : "light", reducedMotion: "reduce" });
+  if (mobile) await page.setViewportSize({ width: 360, height: 800 });
+  // All three kittens wait for a tap, and every paint fails the same way.
+  const stub = createKittyStub({ images: true, paintFails: true });
+  stub.state.kittens = {};
+  // Steady: his moment needs her last move to be a play, so a game where she only draws has none.
+  stub.state.cheat = "steady";
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const root = await openOtome(page, stub);
+  await openKitty(root);
+
+  // One message for the three failed kittens, not one each.
+  await root.getByRole("button", { name: "Paint our kittens (3 images)" }).click();
+  await expect.poll(() => stub.calls.filter((call) => call.path.endsWith("/art/kitten")).length).toBe(3);
+  await expect(root.getByRole("status").filter({ hasText: "Painting your kittens" })).toHaveCount(0);
+  await expect(root.getByRole("alert")).toHaveText(["No connection is set for this. Choose one in Settings."]);
+
+  // Her fanned hand, at every size up to 10 cards: no sideways scroll, and no card past the page's edges.
+  const table = root.locator(".of-kitty-game");
+  /** How far the page scrolls sideways, and how far any card of her hand reaches past the page's left or right edge. */
+  const overflow = () =>
+    root.locator(".of-page.of-kitty").evaluate((scroller) => {
+      const box = scroller.getBoundingClientRect();
+      const cards = [...scroller.querySelectorAll(".of-kitty-hand-card")].map((card) => card.getBoundingClientRect());
+      return {
+        sideways: scroller.scrollWidth - scroller.clientWidth,
+        left: Math.max(0, ...cards.map((card) => Math.ceil(box.left - card.left))),
+        right: Math.max(0, ...cards.map((card) => Math.ceil(card.right - box.right))),
+      };
+    });
+  await startGame(page, root, { seed: 1 }, "me");
+  for (let hand = 3; hand <= 10; hand += 1) {
+    await expect(table).toHaveAttribute("data-turn", "me", { timeout: 20_000 });
+    await root.getByRole("button", { name: /^Draw a card/u }).click();
+    await expect(root.locator(".of-kitty-hand-card")).toHaveCount(hand);
+    await expect.poll(overflow, { message: `her hand of ${hand}` }).toEqual({ sideways: 0, left: 0, right: 0 });
+  }
+  await noWider(page);
+  await page.screenshot({ path: testInfo.outputPath("10-full-hand.png"), fullPage: true });
   expect(pageErrors).toEqual([]);
 });
