@@ -23,6 +23,10 @@
 // never serves an NSFW pack under settings it was not written for: it falls back to an SFW pack, or the catalog's lines.
 // The fixed pack carries the same stamp: its claw lines follow the rule (comfort keeps the care rule's warmth in any
 // world, so it always serves), and a fixed pack Home may not serve is written again in the call that rewrites the stage.
+//
+// Kitty Cards (0.35.0): a new fixed pack holds his kitty lines too. A fixed pack written before them is kept, and a
+// small job of its own (ensureKittyLines, queued by GET /play) writes only the kitty lines into it, under the content
+// its stamp stands for, so the pack's one stamp stays true of every line in it. It never touches comfort or claw.
 import { createHash } from "node:crypto";
 import type {
   ArcStageKey,
@@ -36,7 +40,6 @@ import type {
 import { intimacyOpen, type ContentSettings } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { isFace } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import {
-  CLAW_LINE_KINDS,
   LINE_COUNTS,
   LINE_WORDS_MAX,
   TIMES_OF_DAY,
@@ -51,9 +54,18 @@ import { readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
 import { linePackMessages } from "../prompts.js";
-import { LinePackReplySchema, QUESTION_MARK, mentionsAbsence, type LinePackReply } from "./replies.js";
+import {
+  KittyLinesReplySchema,
+  LinePackReplySchema,
+  QUESTION_MARK,
+  mentionsAbsence,
+  type LinePackReply,
+} from "./replies.js";
 
-/** What the reply itself needs: up to about eighty lines of fourteen words (an NSFW first pack), and the faces. */
+/**
+ * What the reply itself needs: up to about ninety-five lines of fourteen words (an NSFW first pack), and the faces.
+ * The kitty-only job asks the same: generation.ts raises any need to its OUTPUT_FLOOR anyway.
+ */
 export const LINE_PACK_MAX_TOKENS = 4500;
 /** How long a love interest whose pack failed is left alone before another attempt. */
 export const LINE_RETRY_MS = 10 * 60_000;
@@ -86,6 +98,21 @@ function pick(raw: readonly string[], count: number, label: string, { rhetorical
   return kept.length >= count
     ? kept.slice(0, count)
     : `${label} needs ${count} distinct lines of ${LINE_WORDS_MAX} words or fewer that never mention the protagonist being away${rhetorical ? "" : " and never ask a question"} (got ${kept.length})`;
+}
+
+/** Each kind's lines, `counts[kind]` of them (claw and kitty lines), or the first kind's problem. */
+function pickKinds<K extends string>(
+  raw: { readonly [P in K]?: readonly string[] } | null | undefined,
+  counts: { readonly [P in K]: number },
+  label: string,
+): Record<K, string[]> | string {
+  const picked = {} as Record<K, string[]>;
+  for (const kind of Object.keys(counts) as K[]) {
+    const lines = pick(raw?.[kind] ?? [], counts[kind], `${label}.${kind}`);
+    if (typeof lines === "string") return lines;
+    picked[kind] = lines;
+  }
+  return picked;
 }
 
 export interface NormalizedLinePack {
@@ -143,13 +170,11 @@ export function normalizeLinePack(
 
   const comfort = pick(reply.comfort ?? [], LINE_COUNTS.comfort, "comfort");
   if (typeof comfort === "string") return comfort;
-  const claw = {} as FixedLines["claw"];
-  for (const kind of CLAW_LINE_KINDS) {
-    const lines = pick(reply.claw?.[kind] ?? [], LINE_COUNTS.claw[kind], `claw.${kind}`);
-    if (typeof lines === "string") return lines;
-    claw[kind] = lines;
-  }
-  return { stage: pack, fixed: { comfort, claw, at, contract } };
+  const claw = pickKinds(reply.claw, LINE_COUNTS.claw, "claw");
+  if (typeof claw === "string") return claw;
+  const kitty = pickKinds(reply.kitty, LINE_COUNTS.kitty, "kitty");
+  if (typeof kitty === "string") return kitty;
+  return { stage: pack, fixed: { comfort, claw, kitty, at, contract } };
 }
 
 /** An SFW stamp (or none, from before 0.14.0) serves in any world; an NSFW one only under its own settings (#2152). */
@@ -223,7 +248,41 @@ export interface LineDeps extends GenerationDeps {
 const failed = new Map<string, number>();
 /** Jobs a debug-mode request asked for again while they waited: they log their prompt when they run. */
 const debugWanted = new Set<string>();
-const jobKey = (runId: string, li: LiId) => `${unitId(runId, li)}#lines`;
+const jobKey = (runId: string, li: LiId, job: "lines" | "kitty") => `${unitId(runId, li)}#${job}`;
+
+/**
+ * Queues one job on the background lane; true when it was queued now. Skipped within LINE_RETRY_MS of its failure; a
+ * debug request that finds it already waiting folds its debugMode into it.
+ */
+function queueJob(
+  background: Pick<BackgroundQueue, "ensure">,
+  key: string,
+  connectionId: string,
+  debugMode: boolean,
+  write: (debugMode: boolean) => Promise<void>,
+): boolean {
+  if (Date.now() - (failed.get(key) ?? -Infinity) < LINE_RETRY_MS) return false;
+  const fresh = background.ensure({
+    key,
+    connectionId,
+    run: async () => {
+      const debug = debugMode || debugWanted.has(key);
+      debugWanted.delete(key);
+      try {
+        await write(debug);
+        failed.delete(key);
+      } catch (error) {
+        failed.set(key, Date.now());
+        throw error;
+      } finally {
+        // A request folded in after the prompt was sent has nothing left to log.
+        debugWanted.delete(key);
+      }
+    },
+  });
+  if (!fresh && debugMode) debugWanted.add(key);
+  return fresh;
+}
 
 /**
  * Queues the write of each listed love interest's missing packs on the background lane; returns the ones queued. A
@@ -241,35 +300,14 @@ export async function ensureLinePacks(
   const run = await readRun(deps.store, runId);
   const connectionId = resolveConnectionId(run?.world ?? null, "structured");
   if (!run || !connectionId) return [];
-  const queued: LiId[] = [];
-  for (const li of lis) {
+  return lis.filter((li) => {
     const unit = run.units.find((entry) => entry.id === li);
     const liState = run.state.lis[li];
-    const key = jobKey(runId, li);
-    if (!unit?.bible || !liState || !needsLines(unit, liState.stage, run.world.content)) continue;
-    if (Date.now() - (failed.get(key) ?? -Infinity) < LINE_RETRY_MS) continue;
-    const fresh = background.ensure({
-      key,
-      connectionId,
-      run: async () => {
-        const debug = debugMode || debugWanted.has(key);
-        debugWanted.delete(key);
-        try {
-          await writeLinePacks(deps, runId, li, { connectionId, debugMode: debug });
-          failed.delete(key);
-        } catch (error) {
-          failed.set(key, Date.now());
-          throw error;
-        } finally {
-          // A request folded in after the prompt was sent has nothing left to log.
-          debugWanted.delete(key);
-        }
-      },
-    });
-    if (fresh) queued.push(li);
-    else if (debugMode) debugWanted.add(key);
-  }
-  return queued;
+    if (!unit?.bible || !liState || !needsLines(unit, liState.stage, run.world.content)) return false;
+    return queueJob(background, jobKey(runId, li, "lines"), connectionId, debugMode, (debug) =>
+      writeLinePacks(deps, runId, li, { connectionId, debugMode: debug }),
+    );
+  });
 }
 
 /**
@@ -317,5 +355,89 @@ export async function writeLinePacks(
     // Another job may have written this stage for these settings meanwhile: that pack stays.
     if (writeStage && !isCurrent(stages[key], content)) stages[key] = pack.stage;
     return { ...current, lines: { stages, fixed } };
+  });
+}
+
+// ── Kitty Cards' lines for a fixed pack written before them (0.35.0) ──
+
+/** True while his fixed pack may be served under these settings but holds no kitty lines (written before 0.35.0). */
+function needsKittyLines(unit: Pick<Unit, "lines">, content: ContentSettings): boolean {
+  const fixed = servableFixed(unit, content);
+  return !!fixed && !fixed.kitty;
+}
+
+/**
+ * Queues, as ensureLinePacks does and with the same cool-down, the write of each listed love interest's kitty lines
+ * where his fixed pack lacks them; returns the ones queued. A love interest with no fixed pack Home may serve is left
+ * to his line-pack job, which writes the kitty lines with the rest.
+ */
+export async function ensureKittyLines(
+  deps: LineDeps,
+  runId: string,
+  lis: readonly LiId[],
+  { debugMode }: { debugMode: boolean },
+): Promise<LiId[]> {
+  const { background } = deps;
+  if (!background || !lis.length) return [];
+  const run = await readRun(deps.store, runId);
+  const connectionId = resolveConnectionId(run?.world ?? null, "structured");
+  if (!run || !connectionId) return [];
+  return lis.filter((li) => {
+    const unit = run.units.find((entry) => entry.id === li);
+    if (!unit?.bible || !run.state.lis[li] || !needsKittyLines(unit, run.world.content)) return false;
+    return queueJob(background, jobKey(runId, li, "kitty"), connectionId, debugMode, (debug) =>
+      writeKittyLines(deps, runId, li, { connectionId, debugMode: debug }),
+    );
+  });
+}
+
+/**
+ * The job: reads the run again and writes his kitty lines in one call, under the content his fixed pack's stamp
+ * stands for (an SFW pack's are SFW in any world, #2152), then adds them to it, leaving comfort and claw as they are.
+ * Does nothing when the run, the love interest or his bible is gone, or the pack has kitty lines or may not be served.
+ */
+export async function writeKittyLines(
+  deps: LineDeps,
+  runId: string,
+  li: LiId,
+  { connectionId, debugMode }: { connectionId: string; debugMode: boolean },
+): Promise<void> {
+  const run = await readRun(deps.store, runId);
+  const unit = run?.units.find((entry) => entry.id === li);
+  const liState = run?.state.lis[li];
+  const fixed = unit && run ? servableFixed(unit, run.world.content) : null;
+  if (!run || !unit?.bible || !liState || !fixed || fixed.kitty) return;
+  // A pack that may be served is stamped "home" or for the world's own settings: "home" writes under the SFW contract.
+  const content =
+    (fixed.contract ?? "home") === "home" ? { ...run.world.content, heat: "sfw" as const } : run.world.content;
+  const { value } = await generateJson(deps, {
+    runId,
+    job: "structured",
+    label: "kitty-lines",
+    messages: linePackMessages({
+      world: { ...run.world, content },
+      player: run.player,
+      unit,
+      stage: liState.stage,
+      withFixed: false,
+      kittyOnly: true,
+    }),
+    schema: KittyLinesReplySchema,
+    normalize: (reply) => {
+      const kitty = pickKinds(reply.kitty, LINE_COUNTS.kitty, "kitty");
+      return typeof kitty === "string" ? kitty : reply;
+    },
+    maxTokens: LINE_PACK_MAX_TOKENS,
+    debugMode,
+    lane: "background",
+    connectionId,
+  });
+  const kitty = pickKinds(value.kitty, LINE_COUNTS.kitty, "kitty");
+  if (typeof kitty === "string") return;
+  await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
+    const now = current.lines?.fixed;
+    // A pack that has kitty lines by now (a new P15 pack holds them) keeps its own.
+    if (!current.lines || !now || now.kitty) return current;
+    return { ...current, lines: { ...current.lines, fixed: { ...now, kitty } } };
   });
 }

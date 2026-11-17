@@ -5,6 +5,7 @@
 // S/home/note.ts, and the care note's S/care/care-note.ts): English wording about the protagonist's absence, and a
 // question mark in any script.
 import { z, type ZodType } from "zod";
+import type { KittyLines } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { NOTE_TEXT_MAX, type TimeOfDay } from "../../../../../client/src/features/otome-forge/shared/home.js";
 
 /**
@@ -27,6 +28,7 @@ const line = z.string().max(400);
 const lines = z.array(line).max(16);
 const times = z.object({ morning: lines, day: lines, night: lines });
 const claw = z.object({ cheer: lines, cheat: lines, win: lines, miss: lines, plush: lines });
+const kitty = z.object({ start: lines, good: lines, cheat: lines, caught: lines, win: lines, lose: lines });
 
 type Times = Record<TimeOfDay, string[]>;
 
@@ -42,6 +44,8 @@ export interface LinePackReply {
   cold: string[];
   comfort?: string[] | null;
   claw?: { cheer: string[]; cheat: string[]; win: string[]; miss: string[]; plush: string[] } | null;
+  /** 0.35.0: Kitty Cards' lines, written with the claw lines. */
+  kitty?: KittyLines | null;
 }
 
 export const LinePackReplySchema: ZodType<LinePackReply> = z.object({
@@ -51,7 +55,15 @@ export const LinePackReplySchema: ZodType<LinePackReply> = z.object({
   cold: lines,
   comfort: lines.nullable().optional(),
   claw: claw.nullable().optional(),
+  kitty: kitty.nullable().optional(),
 });
+
+/** 0.35.0: the Kitty Cards lines alone, for a fixed pack written before them (S/home/lines.ts writeKittyLines). */
+export interface KittyLinesReply {
+  kitty: KittyLines;
+}
+
+export const KittyLinesReplySchema: ZodType<KittyLinesReply> = z.object({ kitty });
 
 // ── P16's reply: the message of the day (the prompt: S/prompts.ts noteMessages) ──
 

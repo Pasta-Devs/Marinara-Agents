@@ -5,15 +5,26 @@
 // the day's caps, once per game id (a replay, a 409 with another love interest), nothing while his grievance with her
 // stands, and refuses a body these rules could not end in; it costs no model call. Each game is his private memory, in
 // plain words; the state keeps each love interest's newest games; the play view brings his kitty lines by the claw
-// lines' content rule, and none during a rupture.
+// lines' content rule, and none during a rupture. His lines: a new fixed pack (P15) holds the six kitty kinds by their
+// counts and rules; a pack written before them gains only kitty lines from a background job GET /play queues (once, under
+// the pack's own content stamp, with the line packs' cool-down), never touching comfort or claw; the catalog has a
+// fallback line for every kind and every cheat style.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type { ClawCheat } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { CLAW_ROUNDS_KEPT } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/claw.ts";
 import {
   ACTIVITY_STARLIGHT_DAILY_CAP,
   OUTSIDE_AFFECTION_DAILY_CAP,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
+import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import {
+  LINE_COUNTS,
+  LINE_WORDS_MAX,
+  wordCount,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import {
   KITTY_COLOURS,
   KITTY_DECK,
@@ -44,6 +55,14 @@ import {
   type KittyRound,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/kitty.ts";
 import { mulberry32 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/claw-physics.ts";
+import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
+import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
+import {
+  LINE_RETRY_MS,
+  contentStamp,
+  ensureKittyLines,
+  normalizeLinePack,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/lines.ts";
 import {
   createHandle,
   type OtomeReply,
@@ -53,16 +72,21 @@ import {
   runDocTarget,
   stateId,
   unitId,
+  worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { playView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/claw.ts";
+import { registerClawRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/claw.ts";
 import { registerKittyRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/kitty.ts";
 import {
   normalizeState,
   readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { LinePackReplySchema } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/replies.ts";
+import { linePackMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
-import { KAI, MIR, bible, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { HE, KAI, MIR, SOL, bible, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 // ── The rules ──
 
@@ -707,4 +731,308 @@ test("the play view brings his kitty lines by the claw lines' rule: none from an
   assert.equal(cold.lis[KAI]!.rupture, true);
   assert.equal("kitty" in cold.lis[KAI]!.lines, false);
   assert.equal(t.calls.length, 0);
+});
+
+// ── His lines ──
+
+type Messages = CapabilityLanguageModelMessage[];
+const systemOf = (messages: Messages) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
+const isKittyOnly = (messages: Messages) => systemOf(messages).includes("pre-written Kitty Cards lines of");
+const nameOf = (messages: Messages) => /Kitty Cards lines of ([^,]+),/.exec(systemOf(messages))?.[1] ?? "Kai";
+const some = (prefix: string, count: number) => Array.from({ length: count }, (_, index) => `${prefix} ${index + 1}.`);
+const kittyReply = (name: string) =>
+  Object.fromEntries(
+    Object.entries(LINE_COUNTS.kitty).map(([kind, count]) => [kind, some(`${name} kitty ${kind}`, count)]),
+  );
+const times = (prefix: string) => ({ morning: some(prefix, 3), day: some(prefix, 3), night: some(prefix, 3) });
+const packReply = () => ({
+  tap: { head: times("head"), cheek: times("cheek"), heart: times("heart"), hand: times("hand") },
+  annoyed: some("Enough", 4),
+  cold: some("Cold", 6),
+  comfort: some("Rest", 8),
+  claw: {
+    cheer: some("Go", 4),
+    cheat: some("Tilt", 3),
+    win: some("Won", 3),
+    miss: some("Miss", 3),
+    plush: some("Plush", 3),
+  },
+  kitty: kittyReply("Kai"),
+});
+
+test("a new fixed pack holds his kitty lines: six kinds by their counts, the pick rules, and a repair when one is short", () => {
+  // P15 asks for them with the claw lines, in his cheat's words; a later stage's pack asks for none.
+  const world = { ...normalizeWorld({}), language: "English", setting: "A harbour city." };
+  const unit = { name: "Kai", pronouns: HE, bible: bible({ play: { style: "Careful.", cheat: "extra" } }) };
+  const prompt = (withFixed: boolean) =>
+    systemOf(
+      linePackMessages({ world, player: { name: "Ines", pronouns: HE }, unit, stage: 1, withFixed }) as Messages,
+    );
+  assert.ok(prompt(true).includes("pre-written Home lines"), "still the Home pack the fakes detect");
+  assert.match(
+    prompt(true),
+    /"plush": \["\.\.\."\]\}, "kitty": \{"start": \["\.\.\."\], "good": \["\.\.\."\], "cheat": \["\.\.\."\], "caught": \["\.\.\."\], "win": \["\.\.\."\], "lose": \["\.\.\."\]\}\}/,
+  );
+  assert.match(
+    prompt(true),
+    /- kitty: lines for Kitty Cards, [^\n]*start \(2, as a game begins\), good \(3, when the protagonist puts a kitten into a cup of its own colour\), cheat \(3, when Kai cheats by looking away so the protagonist can sneak an extra card\), caught \(2, when Kai turns back and catches the protagonist sneaking a card\), win \(3, when the protagonist wins\), lose \(3, when Kai wins\)\./,
+  );
+  assert.ok(!prompt(false).includes("kitty"), "a later stage's pack writes none");
+  // The reply schema keeps them (an unknown key would be stripped before the check).
+  assert.deepEqual(LinePackReplySchema.parse(packReply()).kitty, kittyReply("Kai"));
+
+  const at = "2026-10-28T10:00:00.000Z";
+  const content = defaultContent();
+  const pack = normalizeLinePack(packReply(), { stage: 1, withFixed: true, at, content });
+  assert.ok(typeof pack !== "string", String(pack));
+  assert.deepEqual(LINE_COUNTS.kitty, { start: 2, good: 3, cheat: 3, caught: 2, win: 3, lose: 3 });
+  for (const [kind, count] of Object.entries(LINE_COUNTS.kitty)) {
+    assert.equal(pack.fixed!.kitty![kind as keyof typeof LINE_COUNTS.kitty].length, count, kind);
+  }
+  assert.equal(pack.fixed!.kitty!.lose[0], "Kai kitty lose 1.");
+  const asks = packReply();
+  asks.kitty.good = ["Nice cup?", "Good match.", "Double points.", "Clever."];
+  assert.ok(
+    typeof normalizeLinePack(asks, { stage: 1, withFixed: true, at, content }) !== "string",
+    "one extra covers it",
+  );
+  asks.kitty.good = ["Nice cup?", "Good match.", "Double points."];
+  assert.match(
+    String(normalizeLinePack(asks, { stage: 1, withFixed: true, at, content })),
+    /kitty\.good needs 3 distinct lines .* never ask a question \(got 2\)/,
+  );
+  const long = packReply();
+  long.kitty.start[1] = "This line keeps going on and on far past the fourteen word limit that every line keeps.";
+  assert.match(String(normalizeLinePack(long, { stage: 1, withFixed: true, at, content })), /kitty\.start needs 2/);
+  assert.match(
+    String(normalizeLinePack({ ...packReply(), kitty: null }, { stage: 1, withFixed: true, at, content })),
+    /kitty\.start needs 2/,
+    "a new pack without them gets the repair turn",
+  );
+});
+
+/**
+ * A forged world with the Claw routes (GET /play) and a background lane; Kai and Mireille hold pre-0.35.0 packs. The
+ * kitty-lines calls take `kitty`'s replies in turn (then a fresh pack for whoever it is for); GET /play's plush calls get
+ * a reply that is never kept.
+ */
+async function linesWorld(runKey: string, kitty: string[] = []) {
+  const answer = (messages: Messages) => {
+    if (!isKittyOnly(messages)) return "{}";
+    return kitty.shift() ?? json({ kitty: kittyReply(nameOf(messages)) });
+  };
+  const t = await storyWorld({ runKey, replies: Array.from({ length: 80 }, () => answer) });
+  const old = (name: string) => ({
+    stages: {},
+    fixed: {
+      comfort: some(`${name} comfort`, 8),
+      claw: { cheer: some("c", 4), cheat: some("x", 3), win: some("w", 3), miss: some("m", 3), plush: some("p", 3) },
+      at: "2026-10-28T09:00:00.000Z",
+    },
+  });
+  for (const [li, name, cheat] of [
+    [KAI, "Kai", "nudge"],
+    [MIR, "Mireille", "freeze"],
+  ] as const) {
+    await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, li)), normalizeUnit, (unit) => ({
+      ...unit,
+      bible: bible({ play: { style: "Careful.", cheat } }),
+      lines: old(name),
+    }));
+  }
+  const background = createBackgroundQueue(t.runtime);
+  const routes = new Map<string, RouteHandler>();
+  registerClawRoutes(
+    { get: (path: string, handler: RouteHandler) => routes.set(path, handler), post: () => undefined } as never,
+    { ...t.deps, background },
+  );
+  const play = async () => {
+    let payload: unknown;
+    const reply: OtomeReply = { status: () => reply, send: (value) => ((payload = value), reply) };
+    const result = await routes.get("/runs/:run/play")!(
+      { method: "GET", url: "", params: { run: runKey }, query: { timeZone: "UTC", debugMode: true } },
+      reply,
+    );
+    return (result === reply ? payload : result) as { lis: Record<string, { lines: Record<string, unknown> }> };
+  };
+  const settle = async () => {
+    for (let round = 0; round < 200; round += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+      await runForeground(t.runId, async () => undefined);
+    }
+  };
+  const unit = async (li: string) => (await t.store.readDoc(unitId(t.runId, li), normalizeUnit))!;
+  const kittyCalls = () => t.calls.filter((entry) => isKittyOnly(entry.messages as Messages));
+  return { ...t, background, play, settle, unit, kittyCalls, old };
+}
+
+test("GET /play writes only the kitty lines of a love interest whose fixed pack predates them, once, in the background", async () => {
+  const t = await linesWorld("r-kittyl-aaaaaa");
+  const before = await t.unit(KAI);
+  // Sol has no fixed pack at all: his line-pack job (Home) writes the kitty lines with the rest, so none is queued here.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  t.background.ensure({ key: "blocker", connectionId: "conn-text", run: () => gate });
+  const first = await t.play();
+  assert.equal("kitty" in first.lis[KAI]!.lines, false, "GET /play never waits for them");
+  await t.play();
+  release();
+  await t.settle();
+  assert.equal(t.kittyCalls().length, 2, "one call each for Kai and Mireille, though GET /play was read twice");
+  assert.ok(
+    t.kittyCalls().every((entry) => entry.connectionId === "conn-text"),
+    "on the structured job's connection (narration here)",
+  );
+
+  const kai = await t.unit(KAI);
+  assert.deepEqual(kai.lines!.fixed!.kitty, kittyReply("Kai"));
+  assert.deepEqual(kai.lines!.fixed!.comfort, before.lines!.fixed!.comfort, "comfort is untouched");
+  assert.deepEqual(kai.lines!.fixed!.claw, before.lines!.fixed!.claw, "claw is untouched");
+  assert.equal(kai.lines!.fixed!.at, before.lines!.fixed!.at);
+  assert.equal((await t.unit(MIR)).lines!.fixed!.kitty!.start[0], "Mireille kitty start 1.");
+  assert.equal((await t.unit(SOL)).lines, undefined, "Sol's pack is the line-pack job's to write");
+  assert.deepEqual((await t.play()).lis[KAI]!.lines.kitty, kittyReply("Kai"), "served once kept");
+  await t.settle();
+  assert.equal(t.kittyCalls().length, 2, "lines already kept are never written again");
+
+  // The prompt: his cheat, the six kinds and their counts, the rules, the SFW home contract, and no Home taps.
+  const prompt = t.kittyCalls().find((entry) => nameOf(entry.messages as Messages) === "Kai")!.messages as Messages;
+  const sent = systemOf(prompt);
+  assert.match(
+    sent,
+    /\{"kitty": \{"start": \["\.\.\."\], "good": \["\.\.\."\], "cheat": \["\.\.\."\], "caught": \["\.\.\."\], "win": \["\.\.\."\], "lose": \["\.\.\."\]\}\}/,
+  );
+  assert.match(
+    sent,
+    /start \(2, as a game begins\), good \(3, [^)]*\), cheat \(3, when Kai cheats by secretly swapping the kittens of two filled cups/,
+  );
+  assert.match(sent, /caught \(2, when the protagonist catches Kai's swap/);
+  assert.match(sent, /win \(3, when the protagonist wins\), lose \(3, when Kai wins\)/);
+  assert.match(
+    systemOf(t.kittyCalls().find((entry) => nameOf(entry.messages as Messages) === "Mireille")!.messages as Messages),
+    /cheats by dozing off mid-game/,
+  );
+  assert.match(sent, new RegExp(`Every line is ${LINE_WORDS_MAX} words or fewer`));
+  assert.match(sent, /no line has a question mark\./);
+  assert.match(sent, /CONTENT CONTRACT[\s\S]*Heat: SFW\./);
+  assert.ok(!/"tap"|- tap:|- comfort:|- claw:|touches/.test(sent), "nothing but the kitty lines");
+  assert.match(prompt.at(-1)!.content, /Write Kai's Kitty Cards lines for stage 1 now\./);
+  assert.ok(
+    t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === "kitty-lines"),
+    "logged in debug mode",
+  );
+});
+
+test("the kitty job keeps a pack's stamp true, waits out a failure, and never overwrites lines kept meanwhile", async (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-28T10:00:00.000Z") });
+  // Kai's first reply asks a question in every good line: the repair turn is declined too, and nothing is kept.
+  const bad = json({ kitty: { ...kittyReply("Kai"), good: ["Nice?", "Again?", "Really?"] } });
+  const t = await linesWorld("r-kittyf-aaaaaa", [bad, bad]);
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, MIR)), normalizeUnit, (unit) => ({
+    ...unit,
+    lines: { stages: {}, fixed: null },
+  }));
+  await t.play();
+  await t.settle();
+  assert.equal(t.kittyCalls().length, 2, "the call and its repair turn");
+  assert.match(t.kittyCalls()[1]!.messages.at(-1)!.content, /kitty\.good needs 3 distinct lines/);
+  assert.equal((await t.unit(KAI)).lines!.fixed!.kitty, undefined);
+  await t.play();
+  await t.settle();
+  assert.equal(t.kittyCalls().length, 2, "left alone within the cool-down");
+  context.mock.timers.setTime(Date.parse("2026-10-28T10:00:00.000Z") + LINE_RETRY_MS + 1);
+  await t.play();
+  await t.settle();
+  assert.equal(t.kittyCalls().length, 3, "tried again after it");
+  assert.equal((await t.unit(KAI)).lines!.fixed!.kitty!.win[0], "Kai kitty win 1.");
+
+  // Under NSFW Heat: an SFW pack's kitty lines are written SFW (its stamp says home), an NSFW pack's under its own.
+  const explicit = { ...defaultContent(), heat: "explicit" as const };
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    content: explicit,
+  }));
+  const reset = async (li: string, contract?: string) =>
+    t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, li)), normalizeUnit, (unit) => ({
+      ...unit,
+      lines: {
+        stages: {},
+        fixed: { ...t.old(li === KAI ? "Kai" : "Mireille").fixed, ...(contract ? { contract } : {}) },
+      },
+    }));
+  await reset(KAI);
+  await reset(MIR, contentStamp(explicit));
+  await t.play();
+  await t.settle();
+  const calls = t.kittyCalls().slice(3);
+  assert.equal(calls.length, 2);
+  const forName = (name: string) =>
+    systemOf(calls.find((entry) => nameOf(entry.messages as Messages) === name)!.messages as Messages);
+  assert.match(forName("Kai"), /CONTENT CONTRACT[\s\S]*Heat: SFW\./, "an SFW pack stays SFW in every line");
+  assert.match(forName("Mireille"), /Heat: NSFW/, "an NSFW pack's lines follow its own settings");
+  assert.equal((await t.unit(KAI)).lines!.fixed!.contract, undefined, "the stamp is unchanged");
+  assert.equal((await t.unit(MIR)).lines!.fixed!.contract, contentStamp(explicit));
+
+  // A pack the world's settings no longer serve is the line-pack job's to replace: no kitty job for it.
+  await reset(KAI, "nsfw:0123456789ab");
+  const deps = { ...t.deps, background: t.background };
+  assert.deepEqual(await ensureKittyLines(deps, t.runId, [KAI, MIR], { debugMode: false }), [], "none queued");
+  await t.play();
+  await t.settle();
+  assert.equal(t.kittyCalls().length, 5, "nothing written for a pack that may not be served");
+
+  // Lines kept between the job's reply and its write (a new P15 pack, say) are never overwritten.
+  await reset(KAI);
+  const ours = { ...kittyReply("Kai"), start: ["Ours 1.", "Ours 2."] };
+  const updateDoc = t.store.updateDoc;
+  t.store.updateDoc = (async (...args: Parameters<typeof updateDoc>) => {
+    t.store.updateDoc = updateDoc;
+    await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+      ...unit,
+      lines: { ...unit.lines!, fixed: { ...unit.lines!.fixed!, kitty: ours } },
+    }));
+    return updateDoc(...args);
+  }) as typeof updateDoc;
+  await t.play();
+  await t.settle();
+  assert.equal(t.kittyCalls().length, 6);
+  assert.equal(t.store.updateDoc, updateDoc, "the job's write came after ours");
+  assert.deepEqual((await t.unit(KAI)).lines!.fixed!.kitty, ours);
+});
+
+test("the catalog has a fallback for every kitty line kind and every cheat style, each a line a pack could hold", () => {
+  const catalog: Record<string, string> = JSON.parse(
+    readFileSync(
+      new URL(
+        "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/locales/en.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const prefix = "ui.otomeForge.fallback.kitty";
+  const keys = Object.keys(catalog).filter((key) => key.startsWith(prefix));
+  const styles: ClawCheat[] = ["steady", "nudge", "extra", "freeze", "calculate"];
+  const cap = (word: string) => word[0]!.toUpperCase() + word.slice(1);
+  const expected = [
+    ...(["start", "good", "win", "lose"] as const).flatMap((kind) =>
+      Array.from({ length: LINE_COUNTS.kitty[kind] }, (_, index) => `${prefix}${cap(kind)}${index + 1}`),
+    ),
+    ...styles.flatMap((style) => [1, 2].map((index) => `${prefix}Cheat${cap(style)}${index}`)),
+    // Only these three can be caught (SH/kitty.ts); steady and calculate never show a caught line.
+    ...(["nudge", "freeze", "extra"] as const).flatMap((style) =>
+      [1, 2].map((index) => `${prefix}Caught${cap(style)}${index}`),
+    ),
+  ];
+  assert.deepEqual([...keys].sort(), [...expected].sort());
+  for (const key of keys) {
+    const text = catalog[key]!;
+    assert.ok(text.trim() && wordCount(text) <= LINE_WORDS_MAX, `${key}: ${LINE_WORDS_MAX} words or fewer`);
+    assert.ok(!/[?？¿؟]/u.test(text), `${key}: no question`);
+    assert.ok(!/\b(?:he|him|his|she|her|hers|they|them|their)\b/i.test(text), `${key}: no pronoun for anyone`);
+  }
 });

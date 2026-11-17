@@ -72,7 +72,8 @@
 //   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts)
 // (g) Home and care
 //   NO_ABSENCE_RULE: Home never mentions the player's absence (P15, P16, P27, Read Me, Read Him)
-//   linePackMessages: P15 Home line pack (S/home/lines.ts)
+//   linePackMessages: P15 Home line pack (S/home/lines.ts); 0.35.0: with `kittyOnly`, Kitty Cards' lines alone, for a
+//     fixed pack written before them (S/home/lines.ts writeKittyLines)
 //   noteMessages: P16 message of the day (S/home/note.ts)
 //   careCard, careNoteMessages: P27 Caring message (S/care/care-note.ts); its TOLD TODAY line is one of the three
 //     S/care/care-line.ts careLineFor templates (Elsewhere)
@@ -3902,16 +3903,52 @@ const CHEAT_TEXT: Record<ClawCheat, string> = {
   calculate: "working out the angle and saying exactly when to drop",
 };
 
+/**
+ * Kitty Cards (0.35.0): his cheat moment for each play style (bible.play.cheat), and the moment a cheat is caught,
+ * without a pronoun. Steady and calculate are never caught in the game; their caught lines are written all the same.
+ */
+const KITTY_CHEAT_TEXT: Record<ClawCheat, (name: string) => { cheat: string; caught: string }> = {
+  steady: () => ({
+    cheat: "letting the protagonist take back the card just played and play again",
+    caught: "one of them is caught cheating",
+  }),
+  nudge: (name) => ({
+    cheat: `secretly swapping the kittens of two filled cups so ${name} scores more`,
+    caught: `the protagonist catches ${name}'s swap and the kittens go back`,
+  }),
+  extra: (name) => ({
+    cheat: "looking away so the protagonist can sneak an extra card",
+    caught: `${name} turns back and catches the protagonist sneaking a card`,
+  }),
+  freeze: (name) => ({
+    cheat: "dozing off mid-game, so the protagonist is free to swap the kittens of two cups",
+    caught: `${name} wakes and catches the protagonist's swap`,
+  }),
+  calculate: () => ({
+    cheat: "offering a trade of one card from each hand, face down",
+    caught: "one of them is caught cheating",
+  }),
+};
+
 export interface LinePackInput {
   world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   stage: number;
-  /** Write the lines written once as well: comfort and the Claw Machine's. */
+  /** Write the lines written once as well: comfort, the Claw Machine's and Kitty Cards'. */
   withFixed: boolean;
+  /** 0.35.0: write Kitty Cards' lines and nothing else, for a fixed pack written before them. */
+  kittyOnly?: boolean;
 }
 
-export function linePackMessages({ world, player, unit, stage, withFixed }: LinePackInput): OtomeMessage[] {
+export function linePackMessages({
+  world,
+  player,
+  unit,
+  stage,
+  withFixed,
+  kittyOnly = false,
+}: LinePackInput): OtomeMessage[] {
   const name = unit.name;
   const counts = LINE_COUNTS;
   // #2152: NSFW Heat writes the pack under the full contract and opens the intimate zones; any other world keeps the
@@ -3925,37 +3962,56 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     )
     .join(", ");
   const facesShape = zones.map((zone) => `"${zone}": "..."`).join(", ");
+  const kittyShape =
+    '"kitty": {"start": ["..."], "good": ["..."], "cheat": ["..."], "caught": ["..."], "win": ["..."], "lose": ["..."]}';
   const fixedShape = withFixed
-    ? ', "comfort": ["..."], "claw": {"cheer": ["..."], "cheat": ["..."], "win": ["..."], "miss": ["..."], "plush": ["..."]}'
+    ? `, "comfort": ["..."], "claw": {"cheer": ["..."], "cheat": ["..."], "win": ["..."], "miss": ["..."], "plush": ["..."]}, ${kittyShape}`
     : "";
-  const shape = `{"tap": {${tapShape}}, "faces": {${facesShape}}, "annoyed": ["..."], "cold": ["..."]${fixedShape}}`;
+  const shape = kittyOnly
+    ? `{${kittyShape}}`
+    : `{"tap": {${tapShape}}, "faces": {${facesShape}}, "annoyed": ["..."], "cold": ["..."]${fixedShape}}`;
   const places = zones.map((zone) => `${zone}: ${ZONE_GLOSS[zone]}`).join("; ");
-  const cheat = CHEAT_TEXT[unit.bible?.play.cheat ?? "steady"];
+  const style = unit.bible?.play.cheat ?? "steady";
+  const cheat = CHEAT_TEXT[style];
+  const kittyCheat = KITTY_CHEAT_TEXT[style](name);
+  const kittyField = `- kitty: lines for Kitty Cards, a card game the two of them play together, taking turns to put kitten cards into coloured cups: start (${counts.kitty.start}, as a game begins), good (${counts.kitty.good}, when the protagonist puts a kitten into a cup of its own colour), cheat (${counts.kitty.cheat}, when ${name} cheats by ${kittyCheat.cheat}), caught (${counts.kitty.caught}, when ${kittyCheat.caught}), win (${counts.kitty.win}, when the protagonist wins), lose (${counts.kitty.lose}, when ${name} wins).`;
+  const fields = kittyOnly
+    ? [kittyField]
+    : [
+        `- tap: for each place the protagonist touches (${places}), ${counts.tap} lines for the morning, ${counts.tap} for the day and ${counts.tap} for the night, each fitting that time.`,
+        `- faces: for each place, the one face ${name} shows when touched there at this stage: ${FACES.join(", ")}. Every line for that place fits it.`,
+        `- annoyed: ${counts.annoyed} lines for when the protagonist pokes ${name} too many times in a row: exasperated and still in character, never cruel.`,
+        `- cold: ${counts.cold} lines for while a rupture stands between them: distant and clipped, but within ${name}'s red lines; never cruel, threatening or contemptuous of the protagonist.`,
+        ...(withFixed
+          ? [
+              `- comfort: ${counts.comfort} lines of generic comfort for a rough day, said in ${name}'s own register. ${COMFORT_RULE} Never guess why the day was hard. These lines are warmth only, whatever the stage${intimate ? ", the Heat" : ""} and the rules below: no darkness, possessiveness, jealousy, sharpness, menace or cost.`,
+              `- claw: lines for a claw machine the two of them play together: cheer (${counts.claw.cheer}, while the protagonist plays), cheat (${counts.claw.cheat}, when ${name} cheats for them by ${cheat}), win (${counts.claw.win}, when they win), miss (${counts.claw.miss}, when the claw misses), plush (${counts.claw.plush}, when a plush joins their shelf).`,
+              kittyField,
+            ]
+          : []),
+      ];
   const system = [
-    `You write the pre-written Home lines of ${name}, a love interest in an otome visual novel. On the Home screen the protagonist touches ${name} in one of the places below and hears one of these lines at once, so each line must stand on its own.`,
+    kittyOnly
+      ? `You write the pre-written Kitty Cards lines of ${name}, a love interest in an otome visual novel. The protagonist and ${name} play Kitty Cards together, and at each moment below ${name} says one of these lines at once, so each line must stand on its own.`
+      : `You write the pre-written Home lines of ${name}, a love interest in an otome visual novel. On the Home screen the protagonist touches ${name} in one of the places below and hears one of these lines at once, so each line must stand on its own.`,
     "Reply with ONLY a JSON object of this shape:",
     shape,
     "FIELDS",
-    `- tap: for each place the protagonist touches (${places}), ${counts.tap} lines for the morning, ${counts.tap} for the day and ${counts.tap} for the night, each fitting that time.`,
-    `- faces: for each place, the one face ${name} shows when touched there at this stage: ${FACES.join(", ")}. Every line for that place fits it.`,
-    `- annoyed: ${counts.annoyed} lines for when the protagonist pokes ${name} too many times in a row: exasperated and still in character, never cruel.`,
-    `- cold: ${counts.cold} lines for while a rupture stands between them: distant and clipped, but within ${name}'s red lines; never cruel, threatening or contemptuous of the protagonist.`,
-    ...(withFixed
-      ? [
-          `- comfort: ${counts.comfort} lines of generic comfort for a rough day, said in ${name}'s own register. ${COMFORT_RULE} Never guess why the day was hard. These lines are warmth only, whatever the stage${intimate ? ", the Heat" : ""} and the rules below: no darkness, possessiveness, jealousy, sharpness, menace or cost.`,
-          `- claw: lines for a claw machine the two of them play together: cheer (${counts.claw.cheer}, while the protagonist plays), cheat (${counts.claw.cheat}, when ${name} cheats for them by ${cheat}), win (${counts.claw.win}, when they win), miss (${counts.claw.miss}, when the claw misses), plush (${counts.claw.plush}, when a plush joins their shelf).`,
-        ]
-      : []),
+    ...fields,
     "RULES",
     `- Every line is ${LINE_WORDS_MAX} words or fewer, spoken by ${name} to the protagonist, in ${name}'s own voice: the register, tics and never-list on the scene card.`,
     `- Fit stage ${stage}: only what ${name} lets show at this stage.`,
-    `- Touch draws a bolder answer as they grow closer: at stage 1 it meets ${name}'s mask; by stage 6 ${name} answers it as someone who is theirs. Through stage ${SLOW_BURN_LAST_STAGE} ${name} never says what they feel outright.`,
-    ...(intimate
+    kittyOnly
+      ? `- Through stage ${SLOW_BURN_LAST_STAGE} ${name} never says what they feel outright.`
+      : `- Touch draws a bolder answer as they grow closer: at stage 1 it meets ${name}'s mask; by stage 6 ${name} answers it as someone who is theirs. Through stage ${SLOW_BURN_LAST_STAGE} ${name} never says what they feel outright.`,
+    ...(intimate && !kittyOnly
       ? [
           `- A touch to the chest or the crotch is an intimate one, and ${name} answers it as the content contract allows.`,
         ]
       : []),
-    "- No question that demands an answer: no line has a question mark, except an annoyed line's rhetorical one.",
+    kittyOnly
+      ? "- No question that demands an answer: no line has a question mark."
+      : "- No question that demands an answer: no line has a question mark, except an annoyed line's rhetorical one.",
     `- ${NO_ABSENCE_RULE}`,
     "- No spoilers: never state a hidden secret; it may show only as a tell.",
     "- No two lines alike.",
@@ -3988,7 +4044,7 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     // His tastes (#1936) under NSFW Heat only; "" otherwise.
     intimacyLine(world, unit),
     "",
-    `Write ${name}'s Home lines for stage ${stage} now.`,
+    `Write ${name}'s ${kittyOnly ? "Kitty Cards" : "Home"} lines for stage ${stage} now.`,
     otomeContractReminder(kind),
   ]
     .filter((text, index, all) => text !== "" || all[index - 1] !== "")

@@ -8,7 +8,8 @@
 // POST /runs/:run/claw/finish {li, round, first, caught, cheered} → ClawFinishResult {grants, newPlush, firstPlush,
 //                                                             line?, capped, replay, plush, starlight}
 // A finish never calls a model or paints an image (S/minigames/claw.ts). GET /play only queues, in the background, the
-// drawing of a love interest's own plush when they have none yet (#1954, S/minigames/plush.ts); it never waits for one.
+// drawing of a love interest's own plush when they have none yet (#1954, S/minigames/plush.ts), and 0.35.0 his Kitty
+// Cards lines when his fixed pack was written before them (S/home/lines.ts ensureKittyLines); it never waits for either.
 // A finish is answered once per round id: the same body sent again (a lost answer, a double tap) is a replay that pays
 // nothing.
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
@@ -18,6 +19,7 @@ import {
   CLAW_ROUND_ID,
   type ClawFinishResult,
 } from "../../../../../client/src/features/otome-forge/shared/claw.js";
+import { ensureKittyLines } from "../home/lines.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRouter, type RouteDeps } from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { finishClawRound, playView } from "../minigames/claw.js";
@@ -50,13 +52,21 @@ export function registerClawRoutes(
       const { runId } = runParam(request);
       const run = await readRun(store, runId);
       if (!run) throw runNotFound();
+      const lis = Object.keys(run.state.lis);
+      const debugMode = debugModeOf(request);
       // Each love interest's own plush is drawn once, in the background; until then theirs wears their look.
-      void ensurePlushArt(deps, runId, Object.keys(run.state.lis), { debugMode: debugModeOf(request) }).catch(
-        (error: unknown) =>
-          runtime.logger.warn(
-            "[otome-forge] Plushies not queued: %s",
-            error instanceof Error ? error.message : String(error),
-          ),
+      void ensurePlushArt(deps, runId, lis, { debugMode }).catch((error: unknown) =>
+        runtime.logger.warn(
+          "[otome-forge] Plushies not queued: %s",
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+      // A fixed pack from before Kitty Cards gains his kitty lines; until then the client plays the catalog's.
+      void ensureKittyLines(deps, runId, lis, { debugMode }).catch((error: unknown) =>
+        runtime.logger.warn(
+          "[otome-forge] Kitty lines not queued: %s",
+          error instanceof Error ? error.message : String(error),
+        ),
       );
       return playView(run.state, run.units, run.world.content, forgeDayKey(Date.now()));
     }),
