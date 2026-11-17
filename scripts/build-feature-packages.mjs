@@ -751,7 +751,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.8.0",
+    version: "1.8.1",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -1088,12 +1088,14 @@ import * as ownerTurn from ${JSON.stringify(resolve(prepared.buildRoot, "package
 import * as gameMapBinding from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/game-map-binding.ts"))};
 import { configurePackageRuntime } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/spatial-context/package-runtime.ts"))};
 import { createSpatialContextStorage } from ${JSON.stringify(resolve(prepared.buildRoot, "packages/server/src/services/storage/spatial-context.storage.ts"))};
+import { forgeEngineInjectHeaders } from "@forge-kit/engine-local-auth.mjs";
 let readinessStorage = null;
 export async function activate({ app, api }) {
+  // app.inject arrives from 127.0.0.1, so on an Android app install it carries the app's local secret (#2358).
   const cleanupRuntime = configurePackageRuntime(
     api.runtime,
     async (agentType) => {
-      const response = await app.inject({ method: "GET", url: "/api/agents" });
+      const response = await app.inject({ method: "GET", url: "/api/agents", headers: forgeEngineInjectHeaders() });
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw new Error("Could not read global agent settings (" + response.statusCode + ")");
       }
@@ -1107,7 +1109,7 @@ export async function activate({ app, api }) {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/agents/type/" + encodeURIComponent(agentType),
-        headers: { "x-marinara-csrf": "1" },
+        headers: { "x-marinara-csrf": "1", ...forgeEngineInjectHeaders() },
         payload: patch,
       });
       if (response.statusCode < 200 || response.statusCode >= 300) {

@@ -4892,7 +4892,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.8.0",
+        "version": "1.8.1",
         "description": "Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.5.1",
@@ -4928,13 +4928,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "08bad852d9b2193d0106305330e2c92475f854c9ffd0bf11e74bc8abdaeb4646",
-            "bytes": 137268
+            "sha256": "860570476f48f0909b99b21ad6ddcfa7fff483c28f3f30a17b10b22cb3470f9d",
+            "bytes": 137844
           },
           {
             "path": "client.js",
-            "sha256": "94f946e904c6e6570a9f6a0cdf852d132ba1b878079352dc441c883ea9b9e09b",
-            "bytes": 444643
+            "sha256": "141aeb26d447f08de9d7d8ff2fc4c1975dffcc577346f60890de51537fa6cc53",
+            "bytes": 444651
           }
         ],
         "permissions": [
@@ -4952,9 +4952,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.8.0.zip",
-        "sha256": "20a4f7304221ef895ce98997200b3f0e411b085d3fd3ebdf3704da305a797a78",
-        "bytes": 584427
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.8.1.zip",
+        "sha256": "0d8a90631ec3daf98d480245215dbf67919bca982e5ccef67307b3d372c3cc12",
+        "bytes": 585011
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },
