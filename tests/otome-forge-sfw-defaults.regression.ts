@@ -415,15 +415,16 @@ test("SFW images keep their safety prompts and negatives, and tagged faces retai
       faceTagged: expressionPrompt({ unit, base: "/kai.png", face: "tender", world, style: tagged }),
     },
     {
+      // A written outfit keeps the likeness reference's own clothes and hood out (2026-11-17).
       look: {
         prompt:
-          "tall man, grey eyes, keeper's coat, full body, standing, neutral pose, plain flat mid-grey background, safe for work, fully clothed, adult man",
-        negativePrompt: `${LOOK_NEGATIVE}, ${SAFE}`,
+          "tall man, grey eyes, keeper's coat, full body, standing, neutral pose, plain flat mid-grey background, safe for work, fully clothed, adult man. If a reference picture of Kai is attached, use it only for Kai's face, hair and build: Kai wears only the outfit written here, never the clothes, hood, hat or accessories in that picture, and never its pose, framing or background.",
+        negativePrompt: `${LOOK_NEGATIVE}, hood up, hooded, hat, ${SAFE}`,
       },
       lookTagged: {
         prompt:
           "anime screencap, tall man, grey eyes, keeper's coat, full body, standing, neutral pose, plain flat mid-grey background, safe for work, fully clothed, adult man, masterpiece",
-        negativePrompt: `${LOOK_NEGATIVE}, ${SAFE}, lowres`,
+        negativePrompt: `${LOOK_NEGATIVE}, hood up, hooded, hat, ${SAFE}, lowres`,
       },
       lookEdited: { prompt: "red coat, safe for work, fully clothed, adult man", negativePrompt: `blurry, ${SAFE}` },
       place: {

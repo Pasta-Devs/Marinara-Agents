@@ -10,6 +10,7 @@ import { cutoutsSettled } from "../packages/otome-forge/src/engine/packages/serv
 import {
   careNoteMessages,
   lookMatte,
+  lookPrompt,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   playerId,
@@ -87,6 +88,38 @@ test("the persona's whole description and the player's writing style reach the s
   );
   assert.match(care, /How the player wants it written \(follow it; these rules still hold\): STYLE-MARK/);
   assert.ok(care.includes(`Who they are (their persona): ${LONG}`));
+});
+
+test("a look's clothes choose its matte, so a plum cardigan is never keyed on magenta (2026-11-17)", () => {
+  // The maintainer's pinafore look: a plum cardigan and green tights border the backdrop, the blue is her eyes.
+  const outfit = "ochre corduroy pinafore dress, plum knit cardigan, dark green wool tights";
+  assert.equal(lookMatte(outfit, "pale skin, blue eyes, shoulder-length blonde hair"), "chroma cyan #00FFFF");
+  assert.equal(lookMatte("burgundy wool knee socks, sage linen shirt"), "chroma cyan #00FFFF");
+  assert.equal(lookMatte("navy coat, denim skirt", "green eyes"), "chroma magenta #FF00FF");
+});
+
+test("a look keeps only its likeness from the reference, never the reference's hood (2026-11-17)", () => {
+  const world = normalizeWorld(undefined);
+  const plain = { styleText: "anime style", positiveTags: "", negativeTags: "" };
+  const mari = { name: "Mari", identityLine: "blue eyes, blonde hair", presentation: "woman" as const, world };
+  const look = lookPrompt({ ...mari, outfitLine: "plum knit cardigan, ochre pinafore", style: plain, matte: true });
+  assert.match(
+    look.prompt,
+    /\. If a reference picture of Mari is attached, use it only for Mari's face, hair and build: Mari wears only the outfit written here, never the clothes, hood, hat or accessories in that picture/,
+  );
+  assert.match(
+    look.negativePrompt,
+    /\bhood up, hooded, hat\b/,
+    "an outfit naming no headwear keeps the reference's hood out",
+  );
+  const hooded = lookPrompt({ ...mari, outfitLine: "hooded wool cloak, brown boots", style: plain, matte: true });
+  assert.doesNotMatch(hooded.negativePrompt, /hood up/, "an outfit with a hood keeps it");
+  const tagged = lookPrompt({ ...mari, outfitLine: "plum cardigan", style: { ...plain, tagged: true }, matte: true });
+  assert.doesNotMatch(tagged.prompt, /reference picture/, "a tag prompt gets no sentence");
+  assert.match(tagged.negativePrompt, /hood up/);
+  const base = lookPrompt({ ...mari, outfitLine: "", style: plain });
+  assert.doesNotMatch(base.prompt, /reference picture/, "a look with no outfit written keeps the reference's clothes");
+  assert.doesNotMatch(base.negativePrompt, /hood up/);
 });
 
 test("a love interest is painted on the matte his colours name least; the run view shows his cut-outs", async () => {

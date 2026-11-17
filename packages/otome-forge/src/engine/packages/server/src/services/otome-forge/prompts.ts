@@ -5882,19 +5882,37 @@ export const LOOK_FRAMING = `${LOOK_POSE}, plain flat mid-grey background`;
 /**
  * The Engine's sprite mattes (sprite-background.service.ts selectSpriteChromaMatte): the one whose colour the look
  * names least, so the cut-out keys it out without eating the look; a tie keeps green.
- * ponytail: mirrors the Engine's list; the upgrade path is the Engine giving packages its matte choice.
+ * Each list also names the shades the Engine's misses (2026-11-17: a plum cardigan was painted on magenta and the
+ * cut-out ate its edges). ponytail: an English word list; the upgrade path is the Engine giving packages its matte
+ * choice.
  */
 const MATTES = [
-  { name: "chroma green #00FF00", colours: /\b(?:green|lime|emerald|olive|mint|chartreuse|teal|turquoise)\b/giu },
-  { name: "chroma magenta #FF00FF", colours: /\b(?:pink|magenta|fuchsia|purple|violet|lavender|rose|mauve)\b/giu },
-  { name: "chroma cyan #00FFFF", colours: /\b(?:blue|cyan|aqua|turquoise|teal|navy|azure|cobalt|indigo)\b/giu },
+  {
+    name: "chroma green #00FF00",
+    colours: /\b(?:green|lime|emerald|olive|mint|chartreuse|teal|turquoise|sage|moss|jade|pistachio)\b/giu,
+  },
+  {
+    name: "chroma magenta #FF00FF",
+    colours:
+      /\b(?:pink|magenta|fuchsia|purple|violet|lavender|rose|mauve|plum|lilac|orchid|amethyst|aubergine|eggplant|grape|mulberry|heather|raspberry|cerise|wine|burgundy|maroon)\b/giu,
+  },
+  {
+    name: "chroma cyan #00FFFF",
+    colours: /\b(?:blue|cyan|aqua|turquoise|teal|navy|azure|cobalt|indigo|cerulean|sapphire|denim|periwinkle)\b/giu,
+  },
 ];
 
-export function lookMatte(look: string): string {
+const coloursNamed = (text: string, colours: RegExp) => text.toLowerCase().match(colours)?.length ?? 0;
+
+/**
+ * The matte for a look. Its clothes count twice: they are what borders the backdrop, where the cut-out clears colours
+ * leaning towards the matte, while the appearance also names colours inside the silhouette, such as the eyes'.
+ */
+export function lookMatte(outfit: string, identity = ""): string {
   let best = MATTES[0]!;
   let fewest = Infinity;
   for (const matte of MATTES) {
-    const named = look.toLowerCase().match(matte.colours)?.length ?? 0;
+    const named = 2 * coloursNamed(outfit, matte.colours) + coloursNamed(identity, matte.colours);
     if (named < fewest) [best, fewest] = [matte, named];
   }
   return best.name;
@@ -5903,8 +5921,27 @@ export function lookMatte(look: string): string {
 /** A generated look on its selected chroma matte; callers can retain legacy mid-grey framing by omitting matte. */
 export function lookFraming(input: Pick<LookInput, "identityLine" | "outfitLine" | "matte">): string {
   if (!input.matte) return LOOK_FRAMING;
-  const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
+  const matte = lookMatte(input.outfitLine, input.identityLine);
   return `${LOOK_POSE}, plain flat solid ${matte} background`;
+}
+
+/** Headwear an outfit line can name. */
+const HEADWEAR =
+  /\b(?:hoods?|hooded|hoodies?|hats?|caps?|beanies?|berets?|helmets?|bonnets?|veils?|headscarf|headscarves|kerchiefs?|turbans?|crowns?|tiaras?|circlets?|cowls?|wimples?|balaclavas?)\b/iu;
+/** A hood or hat in the likeness reference that a look naming no headwear must not copy. */
+const REFERENCE_HEADWEAR_NEGATIVE = "hood up, hooded, hat";
+
+/**
+ * What a look's likeness reference is for (the persona avatar or card picture, art/image-client.ts likeness). Its
+ * own clothes are not the look's (2026-11-17: a hooded avatar put the hood on every look). Only for an outfit the
+ * prompt writes out; a look without one keeps the reference's clothes. Sentence prompts only, as cgPrompt's line.
+ */
+function lookReferenceNote(input: Pick<LookInput, "name" | "outfitLine" | "style">): string {
+  if (!input.outfitLine.trim() || input.style.tagged === true) return "";
+  const name = input.name.trim() || "this person";
+  return sentence(
+    `If a reference picture of ${name} is attached, use it only for ${name}'s face, hair and build: ${name} wears only the outfit written here, never the clothes, hood, hat or accessories in that picture, and never its pose, framing or background`,
+  );
 }
 
 /** What would spoil a matte's key: kept out through the negative prompt. */
@@ -6006,19 +6043,26 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
     tagged: style.tagged === true,
   });
   const negative = requiredNegative(world, "clothed");
+  const note = lookReferenceNote(input);
   const prompt = edited.prompt?.trim()
     ? withTags(edited.prompt, required)
     : [
-        style.styleText,
-        // Appearance may be the player's own prose: keep it whole, including repeated details, instead of tag deduplication.
-        input.identityLine.trim(),
-        mergeTags(input.outfitLine, lookFraming(input), required, style.positiveTags),
+        [
+          style.styleText,
+          // Appearance may be the player's own prose: keep it whole, including repeated details, instead of tag deduplication.
+          input.identityLine.trim(),
+          mergeTags(input.outfitLine, lookFraming(input), required, style.positiveTags),
+        ]
+          .filter(Boolean)
+          .join(", "),
+        note,
       ]
         .filter(Boolean)
-        .join(", ");
+        .join(". ");
+  const bareHead = input.outfitLine.trim() && !HEADWEAR.test(input.outfitLine) ? REFERENCE_HEADWEAR_NEGATIVE : "";
   const negativePrompt = edited.negativePrompt?.trim()
     ? withTags(edited.negativePrompt, negative)
-    : mergeTags(LOOK_NEGATIVE, input.matte ? MATTE_NEGATIVE : "", negative, style.negativeTags);
+    : mergeTags(LOOK_NEGATIVE, input.matte ? MATTE_NEGATIVE : "", bareHead, negative, style.negativeTags);
   return { prompt: adultsOnly(world, prompt), negativePrompt };
 }
 
@@ -6301,7 +6345,7 @@ export function stickerPrompt(input: StickerInput, edited: Partial<ImagePrompt> 
     tagged: style.tagged === true,
   });
   const negative = requiredNegative(world, "clothed");
-  const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
+  const matte = lookMatte(input.outfitLine, input.identityLine);
   return finish(
     world,
     () => ({
@@ -6348,7 +6392,7 @@ export function figurinePrompt(input: Omit<LookInput, "matte">, edited: Partial<
     tagged: style.tagged === true,
   });
   const negative = requiredNegative(world, "clothed");
-  const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
+  const matte = lookMatte(input.outfitLine, input.identityLine);
   return finish(
     world,
     () => ({
