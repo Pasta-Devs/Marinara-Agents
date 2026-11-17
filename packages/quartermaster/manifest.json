@@ -10,7 +10,7 @@
   },
   "id": "quartermaster",
   "name": "Quartermaster",
-  "version": "0.1.33",
+  "version": "0.1.34",
   "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.6",
@@ -38,13 +38,13 @@
     },
     {
       "path": "client.js",
-      "sha256": "bb328e5d0887e067d2a2b554be19149875453b944aadc7ed5e7b761575a227fc",
+      "sha256": "e9347282a5d298ef8d5bb105602e0527d2e51e6bfc92f65e11dadfce82efab04",
       "bytes": 356554
     },
     {
       "path": "server.mjs",
-      "sha256": "8bbb7bc59705d9f0a57095920548c6d7a000aa7ecd6d8dcac06e8dd4f0be9ec0",
-      "bytes": 163277
+      "sha256": "a3ccf6fbf1e330c0b37be9ec42504ca71240612c8fb2dcb234db479bfef2feab",
+      "bytes": 164995
     },
     {
       "path": "icons/armor_legs.webp",

@@ -1,5 +1,10 @@
 # Quartermaster changelog
 
+## 0.1.34 — 2026-11-17
+- Item and outfit pictures paint when Marinara was installed with its Android app. The Engine
+  there refused Quartermaster's requests with "401: Android local authentication required"; they
+  now carry the app's local secret, as the `mari` command's do.
+
 ## 0.1.33 — 2026-11-01
 - The item editor's Delete file / Unlink choice closes if the item's image changes while it's
   open, so Delete never removes a different file than the one it names.

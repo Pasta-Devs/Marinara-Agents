@@ -212,6 +212,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.27.7",
+          "date": "2026-11-17",
+          "notes": "- Pictures paint, and the Engine's connections, characters and lorebooks load, when Marinara was installed with its Android app. The Engine there refused Gacha Forge's own requests with \"401: Android local authentication required\". They now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.",
+          "highlight": false
+        },
+        {
           "version": "1.27.6",
           "date": "2026-11-16",
           "notes": "- Maintenance rebuild for the shared choice-check helper. Gacha Forge's player choices work exactly as before.",
@@ -324,17 +330,17 @@
           "date": "2026-10-27",
           "notes": "- New **Voice other characters** toggle next to Read character dialogue. NPCs and units without an assigned voice speak with a voice from the Engine's Random NPC Voices lists (Connections → Text to Speech), matched to male or female when known. With both lists empty, any voice of the current connection is used. Each name keeps the same voice. Assigned voices still win, and your persona uses only its own.\n- Combat voice lines now play in Classic and Formation fights, start preparing when the battle screen opens, and include your persona's assigned voice. A short notice says when nobody in the team can be voiced.",
           "highlight": false
-        },
-        {
-          "version": "1.24.5",
-          "date": "2026-10-26",
-          "notes": "- When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat at once and acts from its next turn. This works for your team and for enemies, and a fight now ends only when one side has nobody left. Moving and retreating never pull a support forward. A fight started before this update is still scored by the rules it was played under.",
-          "highlight": false
         }
       ]
     },
     "hierarchical-maps": {
       "versions": [
+        {
+          "version": "1.8.1",
+          "date": "2026-11-17",
+          "notes": "- World Maps reads and saves its agent settings again when Marinara was installed with its Android app. Before, the Engine there refused those requests with \"401: Android local authentication required\", so map building could not find its connection and its settings were not saved. They now carry the app's local secret, as the `mari` command's do.",
+          "highlight": false
+        },
         {
           "version": "1.8.0",
           "date": "2026-11-01",
@@ -704,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.34.10",
+          "date": "2026-11-17",
+          "notes": "- **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with \"401: Android local authentication required\", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.",
+          "highlight": false
+        },
+        {
           "version": "0.34.9",
           "date": "2026-11-17",
           "notes": "- **New looks don't copy your avatar's hood.** A look is painted with your persona avatar (or his card picture) as the likeness, and when that picture wore a hood or a hat, every new look wore it too. The picture is now used only for the face, hair and build: a look wears just the outfit it was written with, and a hood or hat only when that outfit has one. Looks you already have keep their pictures; tap **Repaint** to paint one again.\n- **No more stray pixels at a look's edges.** A look is painted on a flat backdrop that its cut-out then removes, and a plum cardigan was painted on magenta, so the cut-out ate its edges. The backdrop is now chosen from more colour names (plum, burgundy, wine, lilac, sage, moss, denim and others) and mostly from the clothes, which are what touch it. Repaint a look that shows the specks.",
@@ -816,17 +828,17 @@
           "date": "2026-11-14",
           "notes": "- **The story knows what happened when.** Every chapter's summary now reaches the model with its place in the story: \"[Chapter 3]\" for a main chapter, \"[Character Story 2, after chapter 3]\" for a Character Story, and \"[After chapter 3]\" for route, repair, date and his-side chapters. The condensed part of the timeline says which chapters it covers (\"[Chapters 1–4]\"), and a chapter recalled by meaning goes as \"Chapter 3 in detail\".\n- **Stories in progress get it too.** The tags are added when each prompt is built, so a saved story has them on its next scene or message, with nothing summarized again. A chapter you are partway through keeps the story it was planned with, so its tags start with the next chapter.",
           "highlight": true
-        },
-        {
-          "version": "0.29.0",
-          "date": "2026-11-14",
-          "notes": "- **Messages read like people texting.** Love interests write in plain, everyday words, the way a real person types, with no ornate metaphors or lines that belong in a novel. This holds in private threads and in the group chat.\n- **No more echoing.** A love interest no longer repeats your words back, quotes them or restates what you said; they answer in their own words.",
-          "highlight": true
         }
       ]
     },
     "quartermaster": {
       "versions": [
+        {
+          "version": "0.1.34",
+          "date": "2026-11-17",
+          "notes": "- Item and outfit pictures paint when Marinara was installed with its Android app. The Engine\n  there refused Quartermaster's requests with \"401: Android local authentication required\"; they\n  now carry the app's local secret, as the `mari` command's do.",
+          "highlight": false
+        },
         {
           "version": "0.1.33",
           "date": "2026-11-01",
@@ -939,12 +951,6 @@
           "version": "0.1.15",
           "date": "2026-09-15",
           "notes": "- Fixed the Recent Agent Update box leak for real this time — 0.1.13 and 0.1.14 were both\n  attempted fixes that didn't fully resolve it.\n- Widened the info tooltip box so long macro tokens read on one line.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.14",
-          "date": "2026-09-15",
-          "notes": "- Attempted fix for the Recent Agent Update collapsed-box leak (0.1.13's attempt didn't fully\n  resolve it either).\n- Fixed tooltip text overflowing outside its own box.",
           "highlight": false
         }
       ]

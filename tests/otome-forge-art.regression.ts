@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { queueScenePaints } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
+import { createCutoutClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import {
@@ -954,6 +955,70 @@ test("Settings → Images lists the Engine's image style profiles, and the one p
     fetch: (async () => new Response("{}", { status: 500 })) as typeof globalThis.fetch,
   });
   assert.deepEqual(await broken.styleProfiles!(), { defaultProfileId: "", profiles: [] });
+});
+
+test("on an Android app install every loopback request to the Engine carries its local secret (#2357)", async () => {
+  // The Engine there refuses the device's own requests without it, so style profiles and portraits failed with 401.
+  const secret = "c3".repeat(32);
+  const saved = process.env.MARINARA_ANDROID_SECRET;
+  process.env.MARINARA_ANDROID_SECRET = secret;
+  try {
+    const seen: Array<{ path: string; headers: Record<string, string>; body: unknown }> = [];
+    const fetch = (async (url: string | URL, init?: RequestInit) => {
+      const path = String(url).replace("http://127.0.0.1:7860", "");
+      seen.push({ path, headers: { ...(init?.headers as Record<string, string>) }, body: init?.body });
+      if (path === "/api/app-settings/ui") return Response.json({ value: {} });
+      if (path === "/api/characters/avatar-generation")
+        return Response.json({ image: `data:image/png;base64,${PNG}`, prompt: "portrait" });
+      if (path === "/api/global-gallery/upload") return Response.json({ id: "g1", url: "/api/global-gallery/file/g1" });
+      if (path === "/api/sprites/cleanup/status") return Response.json({ cleanupRevision: 2 });
+      if (path === "/original.png")
+        return new Response(Buffer.from(PNG, "base64"), { headers: { "content-type": "image/png" } });
+      if (path === "/api/sprites/cleanup") return Response.json({ cells: [{ base64: PNG }] });
+      return Response.json({}, { status: path.startsWith("/api/global-gallery/") ? 200 : 404 });
+    }) as typeof globalThis.fetch;
+    const images = createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+    await images.styleProfiles!();
+    await images.generatePortrait({ connectionId: "c1", name: "Kai", prompt: "portrait", width: 832, height: 1216 });
+    await images.deleteGalleryImage("g1");
+    const cutouts = createCutoutClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+    await cutouts.cutOut("/original.png");
+    await cutouts.deleteGalleryImage("g2");
+    assert.deepEqual(
+      seen.map(({ path }) => path),
+      [
+        "/api/app-settings/ui",
+        "/api/characters/avatar-generation",
+        "/api/global-gallery/upload",
+        "/api/global-gallery/g1",
+        "/api/sprites/cleanup/status",
+        "/original.png",
+        "/api/sprites/cleanup",
+        "/api/global-gallery/upload",
+        "/api/global-gallery/g2",
+      ],
+    );
+    for (const { path, headers } of seen) assert.equal(headers["x-marinara-android-secret"], secret, path);
+    // The caller's own headers stay, and an upload sets no content type, so fetch still writes the multipart boundary.
+    assert.equal(seen[1]!.headers["Content-Type"], "application/json");
+    for (const upload of seen.filter(({ path }) => path === "/api/global-gallery/upload")) {
+      assert.ok(upload.body instanceof FormData);
+      assert.deepEqual(Object.keys(upload.headers), ["x-marinara-android-secret"]);
+    }
+    // Another address never gets it.
+    const elsewhere: unknown[] = [];
+    await createImageClient({
+      baseUrl: "http://192.168.1.20:7860",
+      fetch: (async (_url: string | URL, init?: RequestInit) => {
+        elsewhere.push(init?.headers);
+        return Response.json({ value: {} });
+      }) as typeof globalThis.fetch,
+    }).styleProfiles!();
+    assert.deepEqual(elsewhere, [undefined]);
+  } finally {
+    if (saved === undefined) delete process.env.MARINARA_ANDROID_SECRET;
+    else process.env.MARINARA_ANDROID_SECRET = saved;
+  }
 });
 
 test("a paid image that never answers ends at its deadline, frees its connection's queue, and its late image is deleted", async () => {

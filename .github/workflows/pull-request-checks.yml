@@ -79,8 +79,10 @@ jobs:
           npx tsx tests/beholder-client-contract.regression.ts
           npx tsx tests/beholder-host-release.regression.ts
 
-          # Quartermaster dialogs and inventory export; Gacha Forge layout, canonical choices and reproducible bundles.
+          # Quartermaster dialogs, inventory export and the Android local secret; Gacha Forge layout, canonical choices
+          # and reproducible bundles.
           node tests/quartermaster-modal-lifecycle.regression.mjs
+          node tests/quartermaster-engine-local-auth.regression.mjs
           node tests/gacha-forge-location-ids.regression.mjs
           node tests/gacha-forge-unit-art.regression.mjs
           node tests/gacha-forge-player-choices.regression.mjs
@@ -101,6 +103,7 @@ jobs:
           node tests/gacha-forge-bundle-rebuild.regression.mjs
           node tests/forge-kit-options.regression.mjs
           node tests/forge-kit-image-references.regression.mjs
+          node tests/forge-kit-engine-local-auth.regression.mjs
           node tests/gacha-forge-story-memory.regression.mjs
           node tests/gacha-forge-story-memory-integration.regression.mjs
           node tests/gacha-forge-story-reset-barrier.regression.mjs
@@ -147,6 +150,9 @@ jobs:
           node tests/gacha-forge-story-expressions-safety.regression.mjs
           node tests/gacha-forge-story-presentation.regression.mjs
           node tests/gacha-forge-time-zone.regression.mjs
+
+          # Modern Life Sim's Android local secret, and its server.mjs as the replay of its bundle patches.
+          node tests/modern-life-sim-engine-local-auth.regression.mjs
 
           # Prints how much of the reference extension's interface the Beholder package actually
           # renders. It is here so the number is read from a run rather than asserted from

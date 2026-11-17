@@ -56,6 +56,7 @@ try {
     ["unit-notifications", ["client.js"]],
     ["unit-art-client", ["client.js"]],
     ["image-avatar-references", ["server.mjs"]],
+    ["engine-local-auth", ["server.mjs"]],
     ["story-memory", ["server.mjs"]],
     ["story-memory-integration", ["server.mjs"]],
     ["story-memory-fit", ["server.mjs"]],

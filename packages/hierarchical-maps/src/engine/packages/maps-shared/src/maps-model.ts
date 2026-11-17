@@ -46,12 +46,21 @@ export function validateSpatialMapDefinition(definition: SpatialContextDefinitio
   return { valid: issues.length === 0, issues };
 }
 
-// The vendored schema caps locations at 500; this one replaces that cap with the package ceiling, as `.innerType()`
-// did under zod 3 (zod 4 keeps a refined object's checks through both `.extend` and `.safeExtend`, and refuses the
-// former outright). Every other base check is re-applied by the superRefine below, through validateSpatialMapDefinition.
+// The vendored schema caps locations at 500; this one rebuilds the object from its fields with the package ceiling.
+// Every other base check is re-applied by the superRefine below, through validateSpatialMapDefinition.
+// The fields are read under both zod majors. An installed package runs on zod 3: the Engine gives API-1 packages its
+// `zod-v3` dependency on 2.5.2 and later, and 2.5.1 runs zod 3 itself. There the refined schema is a ZodEffects with
+// no `.shape`, and the object is behind `.innerType()`. This repository's tests run zod 4, where a refined object
+// keeps `.shape` and has no `.innerType()`. tests/hierarchical-maps-engine-runtime.regression.ts runs the built
+// bundle on the Engine's package zod.
+const spatialContextDefinitionShape =
+  spatialContextDefinitionSchema.shape ??
+  (spatialContextDefinitionSchema as unknown as { innerType(): typeof spatialContextDefinitionSchema }).innerType()
+    .shape;
+
 export const spatialMapDefinitionSchema = z
   .object({
-    ...spatialContextDefinitionSchema.shape,
+    ...spatialContextDefinitionShape,
     locations: z.array(spatialLocationSchema).max(SPATIAL_MAP_LOCATION_LIMIT),
   })
   .strict()

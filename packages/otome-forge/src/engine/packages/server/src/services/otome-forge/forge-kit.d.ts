@@ -19,6 +19,16 @@ declare module "@forge-kit/time-zone-server.mjs" {
   export function forgeResetIn(value?: number, period?: "day" | "week" | "month"): number;
 }
 
+declare module "@forge-kit/engine-local-auth.mjs" {
+  /** `headers` plus the Android local secret when `url` is this device's Engine and a secret is set; else `headers`. */
+  export function forgeEngineLocalHeaders<H extends Record<string, string> | undefined>(
+    url: string | URL,
+    headers?: H,
+  ): H | Record<string, string>;
+  /** The Android local secret header for an app.inject, or none. */
+  export function forgeEngineInjectHeaders(): Record<string, string>;
+}
+
 declare module "@forge-kit/character-card-context.mjs" {
   export interface ForgeCardCanon {
     description: string;

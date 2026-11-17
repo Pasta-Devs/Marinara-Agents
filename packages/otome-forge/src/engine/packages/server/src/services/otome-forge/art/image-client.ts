@@ -10,6 +10,7 @@
 // wrapper also needs characterCard, personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the
 // references it is given (a place has none; an expression edit has its base) and saves nothing: uploadToGallery keeps
 // it, in the shape the kit's expressions module calls.
+import { forgeEngineLocalHeaders } from "@forge-kit/engine-local-auth.mjs";
 import {
   forgeLocalAvatarPath,
   forgeSubjectReference,
@@ -263,6 +264,18 @@ export function loopbackBaseUrl(env: Record<string, string | undefined> = proces
   return `${scheme}://127.0.0.1:${Number.isFinite(port) ? port : 7860}`;
 }
 
+/**
+ * `fetchImpl` with the Android local secret added to each request for this device's Engine (#2357): an Android app
+ * install refuses the device's own requests without it. The caller's headers are plain objects and are kept; a
+ * request that gets no secret is passed on as it was.
+ */
+export function withEngineLocalAuth(fetchImpl: Fetch): Fetch {
+  return (url, init) => {
+    const headers = forgeEngineLocalHeaders(String(url), init?.headers as Record<string, string> | undefined);
+    return fetchImpl(url, headers === init?.headers ? init : { ...init, headers });
+  };
+}
+
 /** The avatar-generation override id the Engine matches for `name` (characters.routes.ts avatarGenerationPromptId). */
 export function avatarOverrideId(name: string): string {
   const slug = name
@@ -295,9 +308,10 @@ function parseJson(value: string): unknown {
 /** The loopback client, wrapped so portraits and scenes carry their subjects' avatars as references. */
 export function createImageClient({
   baseUrl = loopbackBaseUrl(),
-  fetch: fetchImpl = globalThis.fetch,
+  fetch: injectedFetch = globalThis.fetch,
   logger,
 }: { baseUrl?: string; fetch?: Fetch; logger?: Logger } = {}): ImageClient {
+  const fetchImpl = withEngineLocalAuth(injectedFetch);
   async function request(path: string, init?: RequestInit): Promise<unknown> {
     const response = await fetchImpl(`${baseUrl}${path}`, init);
     if (!response.ok) {
