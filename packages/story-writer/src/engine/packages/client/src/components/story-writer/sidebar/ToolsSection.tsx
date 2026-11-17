@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
-// Story Writer sidebar: chapters and summaries, the timeline, and the author's note option
+// Story Writer sidebar: chapters and summaries, the timeline, the author's note option and the prompt peek
 // ──────────────────────────────────────────────
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDown, ArrowUp, ChevronDown, Layers, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Layers, Plus, ScanEye, Sparkles, Trash2, X } from "lucide-react";
 import { chaptersToSummarize, type StoryGenerationApi } from "../../../hooks/use-story-generation";
 import { generateClientId } from "../../../lib/utils";
 import {
@@ -28,6 +28,7 @@ export function ToolsSection(props: {
   onSaveSummary(chapterId: string, summary: string): void;
   onDeleteChapter(chapterId: string): void;
   onJump(chapterId: string): void;
+  onPeekPrompt(): void;
 }) {
   const { t } = useTranslation();
   const { settings, onChange, chapters, generation, canGenerate } = props;
@@ -105,6 +106,17 @@ export function ToolsSection(props: {
         checked={settings.clearNoteAfterChapter}
         onChange={(clearNoteAfterChapter) => onChange({ clearNoteAfterChapter }, { immediate: true })}
       />
+
+      <h4 className="sw-subheading">{t("tools.prompt")}</h4>
+      <div className="sw-field">
+        <div className="sw-button-row">
+          <button type="button" className="sw-button" onClick={props.onPeekPrompt}>
+            <ScanEye size={15} aria-hidden="true" />
+            {t("tools.peek")}
+          </button>
+        </div>
+        <p className="sw-hint">{t("tools.peekHint")}</p>
+      </div>
     </>
   );
 }

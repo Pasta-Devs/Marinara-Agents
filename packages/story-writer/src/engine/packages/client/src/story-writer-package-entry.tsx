@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
@@ -7,6 +7,7 @@ import { queryClient } from "marinara:host";
 import english from "./localization/locales/en.json";
 import { StoryWriterView } from "./components/story-writer/StoryWriterView";
 import { useKeepFocusedFieldAboveKeyboard } from "./hooks/use-keep-focused-field-above-keyboard";
+import { followEngineLibrary } from "./lib/story-writer/engine-library";
 import { READER_STYLES } from "./lib/story-writer/styles-reader";
 import { SHELL_STYLES } from "./lib/story-writer/styles-shell";
 
@@ -57,8 +58,20 @@ function readLocale(props: Record<string, unknown>): string {
 }
 
 function StoryWriterPackageRoot({ element }: { element: CapabilityElement }) {
-  const focusRoot = useRef<HTMLElement>(element);
+  // The Engine's hook shows a focused field taller than the screen from its top, which jumps a long chapter of the
+  // Document theme away from its caret; StoryDocument keeps that caret in view itself. The drawer's and the note's
+  // fields keep the hook.
+  const focusRoot = useMemo(
+    () => ({
+      get current() {
+        return document.activeElement?.closest(".sw-document") ? null : element;
+      },
+    }),
+    [element],
+  );
   useKeepFocusedFieldAboveKeyboard(focusRoot);
+  // Characters, personas and lorebooks made or changed in the Engine reach the Cast while Story Writer stays open.
+  useEffect(() => followEngineLibrary(queryClient), []);
   // The host fires this often and with unchanged values: redraw with the new props, never reset state.
   const [, redraw] = useState(0);
   useEffect(() => {

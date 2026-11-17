@@ -1228,6 +1228,12 @@
     "story-writer": {
       "versions": [
         {
+          "version": "0.3.0",
+          "date": "2026-11-17",
+          "notes": "- A third theme, **Document**: no pages, just your chapters one under another in a column you scroll, with a line between chapters. You can select text across what used to be a page break, and on a phone you read by scrolling. The chapter bar reads \"Chapter 2 of 5\", and its buttons move from chapter to chapter.\n- **Author tools → Peek at the prompt** shows what **Write** would send next: every message, the model and the token limit. It writes nothing.\n- The sticky note can be hidden, with the hide button on the open note or **Appearance → Show the author's note**. A hidden note is still sent with every chapter, and on smaller screens the book takes its place.\n- Characters, personas and lorebooks you add or change elsewhere in Marinara Engine now show up in **Cast & world** while Story Writer is open.",
+          "highlight": true
+        },
+        {
           "version": "0.2.0",
           "date": "2026-11-07",
           "notes": "- Quick replies: save instructions such as \"More dialogue\" or \"Slow down\" as buttons next to Write. Click one to write the next chapter (or continue a draft) with that instruction instead of your continue message. Add and edit them under **Quick replies** in the sidebar; **Show quick replies** hides the row. Every story shares the same list.\n- A quick reply's words also pick lorebook entries, like the author's note's do.\n- The chapter bar (\"Chapter 2 · Page 5 of 18\") moved above the book and got smaller, so the book itself is bigger.\n- Rewriting the last chapter now sends the request it was written from: the quick reply, or your continue message as it was then, even if you have changed it since. A chapter written from a quick reply keeps that instruction; to steer a rewrite, change the author's note.",

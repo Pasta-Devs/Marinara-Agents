@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Story Writer: reader styles (the open book, the e-reader, pagination and the page turn)
+// Story Writer: reader styles (the open book, the e-reader, pagination, the page turn and the paperless document)
 // ──────────────────────────────────────────────
 // Colors and fonts come from the shell's custom properties on the Story Writer root (--sw-ink, --sw-page-bg, ...); the
 // values after them are only fallbacks. Geometry comes from the reader's own properties (--sw-text-w, --sw-gap, ...),
@@ -7,7 +7,10 @@
 
 const R = "marinara-capability-story-writer .sw-reader";
 const BOOK = `${R}[data-theme="book"]`;
-const EBOOK = `${R}[data-theme="ebook"]`;
+// The Document theme (StoryDocument) takes the e-book's type and colors; it has none of its device, pages or bar.
+const FLAT = ':is([data-theme="ebook"], [data-theme="document"])';
+const EBOOK = `${R}${FLAT}`;
+const DOC = `${R}[data-theme="document"]`;
 const DARK = 'marinara-capability-story-writer [data-sw-mode="dark"] .sw-reader';
 
 export const READER_STYLES = `
@@ -47,7 +50,7 @@ ${DARK}[data-theme="book"] {
   --sw-r-fold-3: rgba(0, 0, 0, 0.08);
   color: var(--sw-ink, #e9dcc3);
 }
-${DARK}[data-theme="ebook"] {
+${DARK}${FLAT} {
   --sw-r-accent: var(--sw-accent, #c9b48f);
   --sw-r-muted: var(--sw-ink-muted, color-mix(in srgb, var(--sw-ink, #d8d4cb) 55%, transparent));
   color: var(--sw-ink, #d8d4cb);
@@ -233,7 +236,7 @@ ${R} .sw-columns {
   font-kerning: normal;
   font-variant-ligatures: common-ligatures;
 }
-${R} .sw-columns ::selection {
+${R} :is(.sw-columns, .sw-document-column) ::selection {
   background: color-mix(in srgb, var(--sw-r-accent) 26%, transparent);
 }
 
@@ -500,7 +503,7 @@ ${EBOOK} .sw-book {
     0 2px 4px rgba(0, 0, 0, 0.3),
     0 24px 60px -18px rgba(0, 0, 0, 0.6);
 }
-${DARK}[data-theme="ebook"] .sw-book {
+${DARK}${FLAT} .sw-book {
   background:
     linear-gradient(150deg, rgba(255, 255, 255, 0.06), transparent 35%, transparent 70%, rgba(0, 0, 0, 0.3)),
     var(--sw-bezel, #050506);
@@ -522,8 +525,8 @@ ${EBOOK} .sw-pages::after {
 ${EBOOK} .sw-page {
   background: var(--sw-page-bg, #f5f2ea);
 }
-${DARK}[data-theme="ebook"] .sw-page,
-${DARK}[data-theme="ebook"] .sw-pages {
+${DARK}${FLAT} .sw-page,
+${DARK}${FLAT} .sw-pages {
   background: var(--sw-page-bg, #16171a);
 }
 ${EBOOK} :is(.sw-page--left, .sw-page--single) {
@@ -583,6 +586,50 @@ ${EBOOK} .sw-body h1 {
   font-size: 1.45em;
   font-style: normal;
   font-weight: 600;
+}
+
+/* ── The Document theme: one column of chapters that scrolls down, a rule between them ── */
+${DOC} {
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, currentColor 28%, transparent) transparent;
+}
+${DOC}:focus-visible {
+  outline: 2px solid var(--sw-r-accent);
+  outline-offset: -2px;
+}
+${DOC} .sw-document-column {
+  box-sizing: border-box;
+  max-width: 36em;
+  margin: 0 auto;
+  padding: 1em 0.25em 3em;
+  overflow-wrap: break-word;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+}
+${DOC}[data-editable="true"] .sw-document-column {
+  cursor: text;
+}
+${DOC} .sw-block {
+  height: auto;
+}
+${DOC} .sw-block + .sw-block {
+  margin-top: 2.5em;
+  padding-top: 2.5em;
+  border-top: 1px solid color-mix(in srgb, var(--sw-r-muted) 40%, transparent);
+}
+${DOC} .sw-chapter-head {
+  padding-top: 0;
+}
+${DOC} .sw-title-page {
+  width: auto;
+  height: auto;
+  padding: 1.5em 0 0.5em;
+  overflow: visible;
+}
+${DOC} .sw-title-start > .sw-title-mari {
+  max-height: 12em;
 }
 
 /* ── The page arrows (the chapter bar is the shell's, in styles-shell.ts) ── */

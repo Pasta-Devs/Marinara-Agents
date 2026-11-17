@@ -120,6 +120,16 @@ test("preferences start at the defaults and every patch is normalized over the s
   await assert.rejects(store.patchPreferences("dark"), { statusCode: 400 });
 });
 
+test("the Document theme is saved like Book and E-book, and an unknown theme keeps the saved one", async () => {
+  const { store } = setup();
+  assert.equal((await store.patchPreferences({ theme: "document" })).theme, "document");
+  const kept = await store.patchPreferences({ theme: "scroll", fontSize: 20 });
+  assert.equal(kept.theme, "document");
+  assert.equal(kept.fontSize, 20);
+  assert.deepEqual(await store.getPreferences(), kept);
+  assert.equal((await store.patchPreferences({ theme: "book" })).theme, "book");
+});
+
 test("quick replies are kept for every story, normalized, and old preference documents get the defaults", async () => {
   const { store, row, setData } = setup();
   const fresh = await store.getPreferences();
@@ -167,6 +177,28 @@ test("quick replies are kept for every story, normalized, and old preference doc
   assert.equal(later.showQuickReplies, false);
   assert.deepEqual(later.quickReplies, saved.quickReplies, "a patch without the list keeps it");
   assert.deepEqual(await store.getPreferences(), later);
+});
+
+test("the author's note is shown by default, old preference documents show it, and a non-boolean keeps the saved value", async () => {
+  const { store, row, setData } = setup();
+  assert.equal((await store.getPreferences()).showAuthorNote, true);
+
+  // A document saved by 0.2.0 has no showAuthorNote.
+  await store.patchPreferences({ noteSide: "left" });
+  const { showAuthorNote: _shown, ...legacy } = row(PREFERENCES_DOCUMENT_ID)!.data as Record<string, unknown>;
+  setData(PREFERENCES_DOCUMENT_ID, legacy);
+  const upgraded = await store.getPreferences();
+  assert.equal(upgraded.noteSide, "left");
+  assert.equal(upgraded.showAuthorNote, true);
+
+  const hidden = await store.patchPreferences({ showAuthorNote: false });
+  assert.equal(hidden.showAuthorNote, false);
+  assert.equal(hidden.noteSide, "left");
+  const kept = await store.patchPreferences({ showAuthorNote: "yes", fontSize: 20 });
+  assert.equal(kept.showAuthorNote, false, "a non-boolean keeps the saved value");
+  assert.equal(kept.fontSize, 20);
+  assert.deepEqual(await store.getPreferences(), kept);
+  assert.equal((await store.patchPreferences({ showAuthorNote: true })).showAuthorNote, true);
 });
 
 test("stories are created normalized, listed newest first and patched without losing settings", async () => {

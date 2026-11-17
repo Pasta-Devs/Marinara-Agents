@@ -18,9 +18,12 @@ import {
   joinContinuation,
   loreScanText,
   parseTimelineResponse,
+  planChapter,
   stripLeadingThinking,
   visibleStreamingText,
   type PromptCharacter,
+  type PromptLoreEntry,
+  type PromptSources,
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/prompt.ts";
 
 function settings(patch: Partial<StorySettings> = {}): StorySettings {
@@ -306,6 +309,106 @@ test("a run asks for the quick reply, else what a rewrite was written from, and 
   const scanned = loreScanText(lore, long, "Bring in the Librarian.");
   assert.equal(scanned.length, 150_000);
   assert.ok(scanned.endsWith("\n\nBring in the Librarian."));
+});
+
+// Engine stand-ins that record what they were asked for; the lorebook activates its entry on a keyword, as the
+// Engine's scanner does, so a different scan text gives a different prompt.
+const DRAGON: PromptLoreEntry = { name: "Dragon", content: "Errol is a swamp dragon.", order: 0, position: 0 };
+
+function recordingSources() {
+  const calls: unknown[] = [];
+  const sources: PromptSources = {
+    characters: async (ids) => {
+      calls.push(["characters", ids]);
+      return ids.map((id) => character(`Card ${id}`, { description: `About ${id}.` }));
+    },
+    personas: async (ids) => {
+      calls.push(["personas", ids]);
+      return ids.map((id) => character(`Persona ${id}`, { personality: "Dry." }));
+    },
+    lore: async (ids, scanText) => {
+      calls.push(["lore", ids, scanText]);
+      return /dragon/i.test(scanText) ? [DRAGON] : [];
+    },
+  };
+  return { calls, sources };
+}
+
+test("Peek and Write build one plan: the next chapter, and the draft the Write button continues", async () => {
+  const story = settings({
+    characterIds: ["vimes"],
+    personaIds: ["sybil"],
+    lorebookIds: ["city"],
+    authorNote: "Bring in the dragon.",
+    chapterWords: 1_500,
+  });
+  const plan = async (chapters: StoryChapter[], requested: "next" | "continue" | "rewrite", quickReply?: string) => {
+    const recorded = recordingSources();
+    const result = await planChapter({
+      settings: story,
+      chapters,
+      requested,
+      quickReply,
+      savedMaxTokens: null,
+      sources: recorded.sources,
+    });
+    return { result, calls: recorded.calls };
+  };
+  const cast = {
+    characters: [character("Card vimes", { description: "About vimes." })],
+    personas: [character("Persona sybil", { personality: "Dry." })],
+  };
+
+  // The next chapter: what the Peek asks for is what Write sends.
+  const complete = [chapter(1), chapter(2)];
+  const peek = await plan(complete, "next");
+  const write = await plan(complete, "next");
+  assert.deepEqual(peek, write);
+  assert.equal(peek.result.mode, "next");
+  assert.equal(peek.result.chapterNumber, 3);
+  assert.equal(peek.result.original, null);
+  assert.equal(peek.result.maxTokens, chapterTokenBudget(1_500, null));
+  assert.deepEqual(
+    peek.result.messages,
+    build({ settings: story, chapters: complete, mode: "next", ...cast, lore: [DRAGON], request: "Continue." }),
+  );
+  assert.deepEqual(peek.calls, [
+    ["characters", ["vimes"]],
+    ["personas", ["sybil"]],
+    ["lore", ["city"], loreScanText(story, complete, "Continue.")],
+  ]);
+  assert.match(peek.result.messages[0]!.content, /<world_info>[\s\S]*Errol is a swamp dragon\./);
+
+  // A draft: the primary button continues it, exactly as the Continue button does.
+  const drafted = [chapter(1), chapter(2, { status: "draft", text: "Half a chapter." })];
+  const peekDraft = await plan(drafted, "next");
+  const continueDraft = await plan(drafted, "continue");
+  assert.deepEqual(peekDraft, continueDraft);
+  assert.equal(peekDraft.result.mode, "continue");
+  assert.equal(peekDraft.result.chapterNumber, 2);
+  assert.deepEqual(
+    peekDraft.result.messages,
+    build({ settings: story, chapters: drafted, mode: "continue", ...cast, lore: [DRAGON], request: "Continue." }),
+  );
+  assert.deepEqual(peekDraft.result.messages.slice(-3), [
+    { role: "assistant", content: "Half a chapter." },
+    { role: "user", content: "Bring in the dragon." },
+    { role: "user", content: "Continue." },
+  ]);
+
+  // Write's other runs keep their rules: a rewrite starts from the emptied chapter and asks for what it was written
+  // from; a quick reply is the request and is scanned for lore.
+  const poured = [chapter(1), chapter(2, { request: "Make it pour." })];
+  const rewrite = (await plan(poured, "rewrite")).result;
+  assert.equal(rewrite.mode, "continue");
+  assert.equal(rewrite.original, poured[1]);
+  assert.equal(rewrite.request, "Make it pour.");
+  assert.ok(!rewrite.messages.some((message) => message.content === poured[1]!.text));
+  assert.equal(rewrite.messages.at(-1)?.content, "Make it pour.");
+  const reply = await plan(complete, "next", "Wake the dragon.");
+  assert.equal(reply.result.request, "Wake the dragon.");
+  assert.equal(reply.result.messages.at(-1)?.content, "Wake the dragon.");
+  assert.deepEqual(reply.calls.at(-1), ["lore", ["city"], loreScanText(story, complete, "Wake the dragon.")]);
 });
 
 test("the length section reports progress against the target and asks for an ending near it", () => {
