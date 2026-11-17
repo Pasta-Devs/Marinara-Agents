@@ -649,6 +649,11 @@ ${R} .of-tile-name {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   font-size: 0.78rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere;
 }
+/* A card's or persona's title / comment under its name, as the Engine's lists show it (#2365). */
+${R} .of-tile-title {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-top: -3px;
+  font-size: 0.68rem; font-style: italic; line-height: 1.2; overflow-wrap: anywhere; color: var(--of-text-soft);
+}
 ${R} .of-tile-check {
   position: absolute; top: 6px; inset-inline-end: 6px; display: grid; place-items: center; width: 18px; height: 18px;
   border-radius: 50%; background: ${PALETTE.champagne}; color: ${PALETTE.ink};
