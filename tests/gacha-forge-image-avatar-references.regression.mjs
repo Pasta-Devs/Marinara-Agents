@@ -14,7 +14,10 @@ const source = await readFile(
   "utf8",
 );
 const modulePath = join(directory, "server.mjs");
-await writeFile(modulePath, `${source}\nexport { Rg as imageClient };\n`);
+await writeFile(
+  modulePath,
+  `${source}\nexport { Rg as imageClient, _f as forgeLorebooks, eS as forgeConnectionParameters };\n`,
+);
 const bundled = await import(pathToFileURL(modulePath).href);
 const originalFetch = globalThis.fetch;
 after(async () => {
@@ -46,9 +49,10 @@ function engine({ cards = {}, personas = {}, missing = [] } = {}) {
     const url = new URL(input);
     const path = url.pathname;
     assert.equal(url.hostname, "127.0.0.1", "Never fetch an external avatar or provider");
-    requests.push({ path, method: init.method ?? "GET" });
+    requests.push({ path, method: init.method ?? "GET", secret: init.headers?.["x-marinara-android-secret"] });
     if (path === "/api/connections")
       return Response.json([{ id: "fixture-images", provider: "image_generation", model: "fixture-only" }]);
+    if (path === "/api/lorebooks") return Response.json([]);
     if (path === "/api/app-settings/ui")
       return Response.json({
         imageStyleProfiles: {
@@ -565,4 +569,39 @@ test("with Outfits off, banner and Bond art paint the default clothes and send t
     assert.doesNotMatch(prompt(body), /winter coat/u);
   }
   assert.ok(!host.requests.some(({ path }) => path.includes("old-winter-ann")));
+});
+
+test("on an Android app install the Engine requests carry its local secret, and only to this device (#2358)", async () => {
+  // The Engine there refuses the device's own requests without it, so pictures, connections and lorebooks failed (401).
+  const secret = "d4".repeat(32);
+  const saved = process.env.MARINARA_ANDROID_SECRET;
+  process.env.MARINARA_ANDROID_SECRET = secret;
+  try {
+    const host = await routes();
+    const result = await host.post("/cg-art", { chapter: 1, storyIndex: 0 });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(await bundled.forgeLorebooks({}), []);
+    await bundled.forgeConnectionParameters("fixture-images", host.logger);
+    const paths = host.requests.map(({ path }) => path);
+    for (const path of ["/api/characters/avatar-generation", "/api/global-gallery/upload", "/api/lorebooks"])
+      assert.ok(paths.includes(path), `${path} was requested`);
+    assert.ok(paths.filter((path) => path === "/api/connections").length >= 1);
+    for (const { path, secret: sent } of host.requests) assert.equal(sent, secret, path);
+    // The image client never sends it to another address.
+    const elsewhere = [];
+    await bundled
+      .imageClient({
+        baseUrl: "http://192.168.1.20:7849",
+        fetch: async (_input, init = {}) => {
+          elsewhere.push(init.headers?.["x-marinara-android-secret"]);
+          return Response.json({}, { status: 404 });
+        },
+        logger: host.logger,
+      })
+      .personaAvatar("mari");
+    assert.deepEqual(elsewhere, [undefined]);
+  } finally {
+    if (saved === undefined) delete process.env.MARINARA_ANDROID_SECRET;
+    else process.env.MARINARA_ANDROID_SECRET = saved;
+  }
 });
