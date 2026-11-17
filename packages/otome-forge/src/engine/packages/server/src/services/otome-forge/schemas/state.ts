@@ -17,6 +17,7 @@
 // S/story/chapters.ts lets them go); a damaged or too long one reads as none.
 // 0.21.0: the items won from Wish not looked at yet (`owned.unseen`, S/wish/pull.ts adds them in the pull's write,
 // S/routes/items.ts `seen` lets one go); the RunView counts them by where they are kept, for the dock's dots.
+// 0.35.0: each love interest's newest Kitty Cards games (`kitty.rounds`), kept as the Claw's rounds are.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -48,6 +49,11 @@ import {
   plushLi,
   type ClawRound,
 } from "../../../../../client/src/features/otome-forge/shared/claw.js";
+import {
+  KITTY_POINTS_MAX,
+  KITTY_ROUND_ID,
+  type KittyRound,
+} from "../../../../../client/src/features/otome-forge/shared/kitty.js";
 import {
   READ_HIM_PAID_KEPT,
   READ_HIM_SET_ID,
@@ -176,6 +182,7 @@ const AlbumCgSchema: ZodType<AlbumCg> = z.object({
 });
 
 const ClawPlayerSchema = z.enum(["me", "partner"]);
+const ClawCheatSchema = z.enum(["steady", "nudge", "extra", "freeze", "calculate"]);
 const ClawRoundSchema: ZodType<ClawRound> = z.object({
   id: z.string().regex(CLAW_ROUND_ID),
   li: z.string(),
@@ -183,12 +190,28 @@ const ClawRoundSchema: ZodType<ClawRound> = z.object({
   at: z.string(),
   first: ClawPlayerSchema,
   caught: z.array(z.object({ prize: short(100), by: ClawPlayerSchema })).max(CLAW_MAX_CATCHES),
-  cheat: z.enum(["steady", "nudge", "extra", "freeze", "calculate"]).nullable(),
+  cheat: ClawCheatSchema.nullable(),
   paid: z.object({ starlight: z.number().int().min(0), affection: z.number().int().min(0) }),
   capped: z.boolean(),
   newPlush: z.array(short(100)).max(CLAW_MAX_CATCHES),
   firstPlush: z.boolean(),
   line: short(300).optional(),
+});
+const KittyPointsSchema = z.number().int().min(0).max(KITTY_POINTS_MAX);
+/** His cheat moment in a finished Kitty Cards game (SH/kitty.ts KittyCheat); the finish route checks the same shape. */
+export const KittyCheatSchema = z.object({ kind: ClawCheatSchema, caught: z.boolean() });
+const KittyRoundSchema: ZodType<KittyRound> = z.object({
+  id: z.string().regex(KITTY_ROUND_ID),
+  li: z.string(),
+  name: short(200),
+  at: z.string(),
+  first: ClawPlayerSchema,
+  result: z.enum(["win", "lose", "draw"]),
+  me: KittyPointsSchema,
+  partner: KittyPointsSchema,
+  cheat: KittyCheatSchema.nullable(),
+  paid: z.object({ starlight: z.number().int().min(0), affection: z.number().int().min(0) }),
+  capped: z.boolean(),
 });
 const ReadHimPaidSchema: ZodType<ReadHimPaid> = z.object({
   setId: z.string().regex(READ_HIM_SET_ID),
@@ -475,6 +498,7 @@ export function normalizeState(data: unknown): RunState {
     pulls: validItems(PullRecordSchema, field(data, "pulls"), PULLS_MAX),
     purchases: keepNewest(validItems(PurchaseRecordSchema, field(data, "purchases")), PURCHASES_MAX),
     claw: { rounds: keepClawRounds(validItems(ClawRoundSchema, field(field(data, "claw"), "rounds"))) },
+    kitty: { rounds: keepClawRounds(validItems(KittyRoundSchema, field(field(data, "kitty"), "rounds"))) },
     readHim: {
       paid: keepNewest(validItems(ReadHimPaidSchema, field(field(data, "readHim"), "paid")), READ_HIM_PAID_KEPT),
     },
@@ -597,13 +621,17 @@ export function facesComing(world: Pick<World, "images">, unit: Unit): boolean {
 /**
  * The Claw Machine rounds the state keeps, in the order they were played: each love interest's newest
  * CLAW_ROUNDS_KEPT, and each one's first-plush round as well, so one love interest's play never evicts another's.
+ * Kitty Cards' games (0.35.0) are kept the same way; they have no first plush.
  * ponytail: a love interest's rounds older than his newest CLAW_ROUNDS_KEPT leave his memory and the replay guard (a
  * finish of one sent again by hand would pay again, within the day's cap); the upgrade path is rounds kept as their own
  * documents, as Read Him sets are, or a digest of each love interest's older rounds.
  */
-export function keepClawRounds(rounds: readonly ClawRound[], max = CLAW_ROUNDS_KEPT): ClawRound[] {
+export function keepClawRounds<T extends Pick<ClawRound, "li"> & { firstPlush?: boolean }>(
+  rounds: readonly T[],
+  max = CLAW_ROUNDS_KEPT,
+): T[] {
   const room = new Map<string, number>();
-  const kept: ClawRound[] = [];
+  const kept: T[] = [];
   for (let index = rounds.length - 1; index >= 0; index -= 1) {
     const round = rounds[index]!;
     const left = room.get(round.li) ?? max;

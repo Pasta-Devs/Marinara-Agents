@@ -7,6 +7,7 @@
 // stops under prefers-reduced-motion or the Engine's "Reduce Ambient Animations & Effects" (reducedRules).
 import { REDUCED_EFFECTS, reducedRules } from "../lib/reduced-motion";
 import { DATE_NIGHT_RULES } from "../screens/dates/date-night-styles";
+import { KITTY_RULES } from "../screens/dates/KittyCards";
 import { READ_HIM_RULES } from "../screens/dates/ReadHim";
 import { READ_ME_RULES } from "../screens/dates/ReadMe";
 import { TAROT_RULES } from "../screens/dates/TarotNight";
@@ -3767,6 +3768,7 @@ export function otomeForgeStyles(): string {
     READ_ME_RULES,
     TAROT_RULES,
     CLAW_RULES,
+    KITTY_RULES,
     DIALOG_RULES,
     MOTION_RULES,
   ].join("\n");

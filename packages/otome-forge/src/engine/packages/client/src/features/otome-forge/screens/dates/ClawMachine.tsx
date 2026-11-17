@@ -260,7 +260,14 @@ const FAIL_KEYS: Record<NonNullable<DropOutcome["fail"]>, string> = {
   rim: "ui.otomeForge.claw.announceRim",
 };
 
-const usable = (pool: readonly string[] | undefined) => (pool ?? []).filter((line) => line.trim());
+/** A pool's lines that say something. Kitty Cards (0.35.0) picks its lines the same way. */
+export const usable = (pool: readonly string[] | undefined) => (pool ?? []).filter((line) => line.trim());
+
+/** His cold lines during a rupture (Home's), else the catalog's; Kitty Cards says one of them instead of its lines. */
+export function coldPool(t: (key: string) => string, lines: Pick<LinesView, "cold"> | null): string[] {
+  const cold = usable(lines?.cold);
+  return cold.length ? cold : fallbackTapKeys("head", "cold").map((key) => t(key));
+}
 
 /** His claw and cold lines (GET /play's `lines`). */
 type ClawLinePacks = Pick<LinesView, "claw" | "cold">;
@@ -273,10 +280,7 @@ function linePool(
   cheat: ClawCheat,
   rupture: boolean,
 ): string[] {
-  if (rupture) {
-    const cold = usable(lines?.cold);
-    return cold.length ? cold : fallbackTapKeys("head", "cold").map((key) => t(key));
-  }
+  if (rupture) return coldPool(t, lines);
   const own = usable(lines?.claw?.[kind]);
   if (own.length) return own;
   const keys = kind === "cheat" ? FALLBACK_CHEAT_LINES[cheat] : FALLBACK_LINES[kind];
@@ -1478,18 +1482,18 @@ type Phase =
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-/** `c-<time base36>-<6 [a-z0-9]>` (SH/claw.ts CLAW_ROUND_ID). */
-function newRoundId(): string {
+/** `<prefix>-<time base36>-<6 [a-z0-9]>`: a Claw round's "c" (SH/claw.ts CLAW_ROUND_ID), a Kitty Cards game's "k". */
+export function newRoundId(prefix: "c" | "k" = "c"): string {
   const bytes = new Uint8Array(6);
   try {
     crypto.getRandomValues(bytes);
   } catch {
     for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
   }
-  return `c-${Date.now().toString(36)}-${Array.from(bytes, (byte) => ALPHABET[byte % ALPHABET.length]).join("")}`;
+  return `${prefix}-${Date.now().toString(36)}-${Array.from(bytes, (byte) => ALPHABET[byte % ALPHABET.length]).join("")}`;
 }
 
-function newSeed(): number {
+export function newSeed(): number {
   try {
     return crypto.getRandomValues(new Uint32Array(1))[0]!;
   } catch {
@@ -1498,7 +1502,18 @@ function newSeed(): number {
 }
 
 /** One finish request per round on this page: coming back to a round that is being saved never sends it twice. */
-const finishes = new Map<string, Promise<ClawFinishResult>>();
+const finishes = new Map<string, Promise<unknown>>();
+
+/** The finish of round `id`, sent once: a failure may be sent again with the same round; an answer stays. */
+export function finishOnce<T>(id: string, send: () => Promise<T>): Promise<T> {
+  let request = finishes.get(id) as Promise<T> | undefined;
+  if (!request) {
+    request = send();
+    finishes.set(id, request);
+    request.catch(() => finishes.delete(id));
+  }
+  return request;
+}
 
 export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
   const { t } = useTranslation();
@@ -1536,14 +1551,7 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
     (round: ClawRoundState, id: string, first: ClawPlayer) => {
       const body: ClawFinishInput = { li: li.id, round: id, first, caught: round.caught, cheered: round.cheated };
       setFinish({ id });
-      let request = finishes.get(id);
-      if (!request) {
-        request = otome.post<ClawFinishResult>(`${runPath(runKey)}/claw/finish`, { ...body });
-        finishes.set(id, request);
-        // A failure may be sent again with the same round; an answer stays.
-        request.catch(() => finishes.delete(id));
-      }
-      request.then(
+      finishOnce(id, () => otome.post<ClawFinishResult>(`${runPath(runKey)}/claw/finish`, { ...body })).then(
         (result) => {
           setFinish((current) => (current?.id === id ? { id, result } : current));
           patchRun(queryClient, runKey, (current) => ({ ...current, starlight: result.starlight }));

@@ -110,6 +110,14 @@ function packReply(name = "Kai") {
       miss: lines(`${name} miss`, 3),
       plush: lines(`${name} plush`, 3),
     },
+    kitty: {
+      start: lines(`${name} kitty start`, 2),
+      good: lines(`${name} kitty good`, 3),
+      cheat: lines(`${name} kitty cheat`, 3),
+      caught: lines(`${name} kitty caught`, 2),
+      win: lines(`${name} kitty win`, 3),
+      lose: lines(`${name} kitty lose`, 3),
+    },
   };
 }
 const packName = (messages: Messages) => /Home lines of ([^,]+),/.exec(system(messages))?.[1] ?? "Kai";

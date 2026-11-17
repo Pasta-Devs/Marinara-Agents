@@ -30,6 +30,8 @@ export interface OtomeProps {
   openCharacter: OpenCharacter | null;
   openConnection: OpenConnection | null;
   localization: OtomeLocalization;
+  /** The installed package's version (Capability API 1.10), which keys its asset URLs (C/lib/kitty-cards.ts). */
+  packageVersion: string | null;
 }
 
 type RawProps = Record<string, unknown>;
@@ -88,6 +90,10 @@ export function readLocalization(props: RawProps): OtomeLocalization {
   };
 }
 
+export function readPackageVersion(props: RawProps): string | null {
+  return typeof props.packageVersion === "string" && props.packageVersion ? props.packageVersion : null;
+}
+
 export function readOtomeProps(props: RawProps): OtomeProps {
   return {
     browserFullscreen: readFullscreen(props),
@@ -97,6 +103,7 @@ export function readOtomeProps(props: RawProps): OtomeProps {
     openCharacter: readOpenCharacter(props),
     openConnection: readOpenConnection(props),
     localization: readLocalization(props),
+    packageVersion: readPackageVersion(props),
   };
 }
 

@@ -71,7 +71,7 @@ function lineFor(lines: readonly string[] | undefined, round: string): string | 
 }
 
 /** How he cheats: his bible's, else the steady hand the play view shows for a love interest with no bible yet. */
-const cheatOf = (unit: Pick<Unit, "bible"> | undefined): ClawCheat => unit?.bible?.play.cheat ?? "steady";
+export const cheatOf = (unit: Pick<Unit, "bible"> | undefined): ClawCheat => unit?.bible?.play.cheat ?? "steady";
 
 /** The catch list, checked: known prizes of this machine only, each at most once (the length is the body's check). */
 export function checkCatches(input: Pick<ClawFinishInput, "li" | "caught">): void {
@@ -193,7 +193,8 @@ export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts" | "outfits" |
 /**
  * GET /runs/:run/play: today's capped earnings (zero on a new local day), the shelf, and how each LI plays (the
  * picture their plush wears, and their claw and cold lines, from a pack the world's `content` allows: #2152), and
- * #2156: whether his grievance with her holds every date with him.
+ * #2156: whether his grievance with her holds every date with him. 0.35.0: his Kitty Cards lines by the same rule, none
+ * during a rupture (the client says the cold line instead).
  */
 export function playView(
   state: RunState,
@@ -212,6 +213,7 @@ export function playView(
     const plush = unit ? plushArtOf(unit) : undefined;
     const animal = plushSvgUrl(unit?.plushArt?.svg);
     const { claw, cold } = unit ? linesView(unit, state.lis[id]!, content) : { claw: null, cold: [] };
+    const kitty = unit && !rupture ? servableFixed(unit, content)?.kitty : undefined;
     lis[id] = {
       cheat: cheatOf(unit),
       style: play?.style ?? "",
@@ -219,7 +221,7 @@ export function playView(
       held: heldAgainst(state.lis[id]),
       ...(plush ? { plush } : {}),
       ...(animal ? { animal } : {}),
-      lines: { claw, cold },
+      lines: { claw, cold, ...(kitty ? { kitty } : {}) },
     };
   }
   return {
@@ -279,10 +281,10 @@ export function clawMemoryText(round: ClawRound, protagonist: string): string {
 }
 
 /**
- * Where a round sits in story order: after the main chapters completed before it, among the side stories by time
- * (the order S/phone/memory.ts gives phone sessions).
+ * Where a round (a Claw round, a Kitty Cards game) sits in story order: after the main chapters completed before it,
+ * among the side stories by time (the order S/phone/memory.ts gives phone sessions).
  */
-function orderOf(state: RunState, at: string): number {
+export function orderOf(state: RunState, at: string): number {
   const mainDone = Object.entries(state.chapters).filter(
     ([key, progress]) => key.startsWith("main-") && progress.completed && progress.completed < at,
   ).length;

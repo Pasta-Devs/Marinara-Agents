@@ -482,10 +482,10 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
   await expect(activities.getByRole("heading", { name: "Read Kai Ardent" })).toBeVisible();
   await expect(activities.getByRole("heading", { name: "Claw Machine with Kai Ardent" })).toBeVisible();
-  // #2303: no Date Night among them (four to play; the Photo Shoot needs an image connection), and nothing else about
-  // dates: they are won in Wish and planned from Album → Dates.
+  // #2303: no Date Night among them (five to play with Kitty Cards; the Photo Shoot needs an image connection), and
+  // nothing else about dates: they are won in Wish and planned from Album → Dates.
   await expect(activities.getByRole("heading", { name: /Date Night/ })).toHaveCount(0);
-  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(4);
+  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(5);
   await expect(activities).toContainText("No model calls");
   await expect(root.getByRole("region", { name: "Your dates" })).toHaveCount(0);
   await expect(activities).toContainText("+20 Starlight a round, +30 for each plush · +30 affection");

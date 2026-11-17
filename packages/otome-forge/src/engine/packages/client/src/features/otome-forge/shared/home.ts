@@ -31,9 +31,15 @@ export const LINE_COUNTS = {
   cold: 6,
   comfort: 8,
   claw: { cheer: 4, cheat: 3, win: 3, miss: 3, plush: 3 },
+  /**
+   * Kitty Cards (0.35.0): start (as a game begins), good (she fills a cup of its own colour), cheat (his cheat moment),
+   * caught (a cheat found out, either way), win (she wins), lose (he wins).
+   */
+  kitty: { start: 2, good: 3, cheat: 3, caught: 2, win: 3, lose: 3 },
 } as const;
 export type ClawLineKind = keyof (typeof LINE_COUNTS)["claw"];
 export const CLAW_LINE_KINDS = Object.keys(LINE_COUNTS.claw) as ClawLineKind[];
+export type KittyLineKind = keyof (typeof LINE_COUNTS)["kitty"];
 
 /** A pre-written line is this many words or fewer. */
 export const LINE_WORDS_MAX = 14;
