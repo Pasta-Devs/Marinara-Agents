@@ -24,13 +24,13 @@ The settings live in a sidebar that slides out from the edge of the screen. Clic
 
 The chapter appears on the page as the model writes it (or all at once if **Stream text** is off). When it is done, read it, change what you like, and press **Write next chapter** again. **Stop** ends a chapter early; whatever was written so far stays on the page as a draft you can continue later.
 
-## Book or e-book, light or dark
+## Book, e-book or document, light or dark
 
-Under **Appearance → Theme**, choose **Book** for an old open book on a wooden desk, or **E-book** for a clean reader screen. **Mode** follows the app's light or dark theme by default, or you can pick **Light** or **Dark** for Story Writer alone.
+Under **Appearance → Theme**, choose **Book** for an old open book on a wooden desk, **E-book** for a clean reader screen, or **Document** for text you scroll, with no pages at all. **Mode** follows the app's light or dark theme by default, or you can pick **Light** or **Dark** for Story Writer alone. Your choice applies to every story, on every device you use with this Engine.
 
 In the book, text fills the pages and the page turns when it runs out of room. In the e-book, the pages slide sideways. Every chapter starts on a new page.
 
-To move around:
+To move around the book and the e-book:
 
 - the ‹ and › arrows beside the book,
 - the ← and → keys (or Page Up and Page Down) when you are not typing,
@@ -39,6 +39,16 @@ To move around:
 - or a chapter's name in **Author tools → Chapters**, which jumps straight to it.
 
 While the model writes, the book follows along and turns pages for you, unless you have moved somewhere else in the meantime.
+
+### Document
+
+**Document** shows the story as one column you scroll down, like a web page: no pages, page numbers or page turns. Each chapter keeps its "Chapter N" heading, with a line above it that separates it from the chapter before. Nothing splits the text into pages, so you can select a long passage in one go, and on a phone you read by scrolling.
+
+- Scroll with the mouse wheel, the scroll bar, the keyboard or a swipe.
+- The bar above the text names the chapter you are reading, "Chapter 2 of 5" (on a phone, "Ch. 2/5"), and its buttons go to the previous or next chapter's heading.
+- A chapter's name in **Author tools → Chapters** scrolls to its heading.
+
+A story opens at the end of its last chapter. While the model writes, the text scrolls along with the new chapter until you scroll yourself. Each chapter is edited separately, so while the story can be edited, a selection may not reach from one chapter into the next. **Page-turn animation** is not shown, because there are no pages to turn.
 
 ## Edit anything, or start a chapter yourself
 
@@ -55,6 +65,8 @@ The page can't be edited while the model is writing.
 The sticky note in the top corner holds your instructions for the next chapter, such as "Mira finally tells Jon the truth" or "slow down, more dialogue". Click it to unroll it and type. These instructions are sent with every chapter until you change them. Turn on **Author tools → Clear after the next chapter** if you want the note to empty itself once a chapter is written.
 
 The note works like **Author's Notes** in Roleplay: it is sent as one of your messages, at the **Depth** you set on the note. Depth **0** (the default) puts it right before your continue message, so the model reads it last. Depth **1** puts it before the latest chapter, **2** one message further back, and so on; it never goes above the system prompt.
+
+To get the note out of the way, press the hide button on the open note, or turn off **Appearance → Show the author's note**. A hidden note is still sent with every chapter; turn the setting back on to see or change it. On narrower screens the book grows into the space the note took.
 
 ## Quick replies
 
@@ -110,6 +122,8 @@ The same list as **Your stories**: open, start, duplicate, delete and download s
 
 **Characters**, **Personas** and **Lorebooks**, each a searchable list you tick. Nothing is selected in a new story.
 
+The lists follow Marinara Engine: a character, persona or lorebook you create or change there shows up here while Story Writer is open.
+
 For each character and persona the model gets its description, personality, backstory, appearance, scenario and example dialogue. From lorebooks it gets only the entries that matter right now: the Engine's own keyword scanner checks your overview, author's note, the last few chapters, and the quick reply you clicked (or the older request a rewrite sends again), and always-on entries are always included.
 
 ### Writing
@@ -142,6 +156,7 @@ After each chapter, Story Writer tells you if any of your banned words or phrase
 | Update automatically after each chapter | Refreshes the timeline after every chapter the model writes. | off |
 | Clear after the next chapter | Empties the author's note once the next chapter is written. | off |
 | Depth (on the sticky note) | Where the author's note goes among the messages: 0 = right before your continue message. | 0 |
+| Peek at the prompt | Shows what **Write** would send next, without writing anything. See [What the model reads](#what-the-model-reads). | |
 
 ### Quick replies
 
@@ -154,14 +169,15 @@ After each chapter, Story Writer tells you if any of your banned words or phrase
 
 | Setting | Choices | Default |
 | --- | --- | --- |
-| Theme | Book or E-book | Book |
+| Theme | Book, E-book or Document | Book |
 | Mode | Match the app, Light or Dark | Match the app |
 | Font | The theme's own font, Serif, Sans, Monospace, the app's font, or any custom font added to Marinara Engine | the theme's font |
 | Font color | Any color; **Reset** goes back to the theme's ink | the theme's ink |
 | Font size | 12 to 36 | 18 |
 | Sidebar side | Left or Right | Left |
 | Sticky note corner | Left or Right | Right |
-| Page-turn animation | On or off. It is skipped when your device asks for reduced motion. | on |
+| Show the author's note | On or off. A hidden note is still sent to the model with every chapter. | on |
+| Page-turn animation | On or off. It is skipped when your device asks for reduced motion, and not shown for Document. | on |
 
 ## What the model reads
 
@@ -175,6 +191,8 @@ Each time you ask for a chapter, Story Writer puts together the same kind of con
 When the model continues an unfinished chapter, that chapter is the last assistant message and the model is asked to pick up exactly where it stops, without repeating anything or adding a heading.
 
 If a model writes its thinking inside `<think>` tags, Story Writer leaves that out of the chapter.
+
+To see it for yourself, open **Author tools → Peek at the prompt**. It shows the messages as the Engine would send them for the next **Write next chapter** (or **Continue chapter N**), with the model and the token limit, and writes nothing. Long messages start folded; click one to open it.
 
 ## Summaries: long stories without running out of room
 
@@ -200,7 +218,7 @@ Stories, chapters and settings are saved on your Marinara Engine server with its
 
 ## On a phone or tablet
 
-Story Writer works in portrait and landscape. In portrait, the book shows a single page at a time; turn the device sideways for a two-page spread. Sideways, the buttons stand upright at the side and your quick replies sit at the bottom of the screen. Swipe sideways to turn pages, and tap the text when you want to edit it. The sidebar covers most of the screen while it is open; close it with its arrow. **Fullscreen** gives the book the whole screen.
+Story Writer works in portrait and landscape. In portrait, the book shows a single page at a time; turn the device sideways for a two-page spread. Sideways, the buttons stand upright at the side and your quick replies sit at the bottom of the screen. Swipe sideways to turn pages, and tap the text when you want to edit it. If you would rather scroll, or want to select long passages with your finger, choose **Document** under **Appearance → Theme**. The sidebar covers most of the screen while it is open; close it with its arrow. **Fullscreen** gives the book the whole screen.
 
 ## Privacy
 

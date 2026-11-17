@@ -248,6 +248,7 @@
     "theme": "Theme",
     "themeBook": "Book",
     "themeEbook": "E-book",
+    "themeDocument": "Document",
     "mode": "Mode",
     "modeApp": "Match the app",
     "modeLight": "Light",
@@ -306,7 +307,11 @@
     "indicatorTitle": "Title page",
     "indicatorNext": "Chapter {{chapter}} · A blank page",
     "indicatorShort": "Ch. {{chapter}} · {{page}}/{{total}}",
-    "indicatorNextShort": "Ch. {{chapter}} · Blank page"
+    "indicatorNextShort": "Ch. {{chapter}} · Blank page",
+    "indicatorChapter": "Chapter {{chapter}} of {{total}}",
+    "indicatorChapterShort": "Ch. {{chapter}}/{{total}}",
+    "indicatorNextChapter": "Chapter {{chapter}} · Not started yet",
+    "indicatorNextChapterShort": "Ch. {{chapter}} · New"
   },
   "generation": {
     "bannedPhrases": "The new text uses banned words or phrases: {{phrases}}",

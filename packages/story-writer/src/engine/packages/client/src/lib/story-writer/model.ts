@@ -32,7 +32,8 @@ export const LIMITS = {
   chaptersPerStory: 2_000,
 } as const;
 
-export type StoryTheme = "book" | "ebook";
+/** "document": no pages, one column of chapters that scrolls down. A package before 0.3.0 reads it as "book". */
+export type StoryTheme = "book" | "ebook" | "document";
 export type StoryColorMode = "app" | "light" | "dark";
 export type StorySide = "left" | "right";
 
@@ -286,7 +287,7 @@ export function normalizePreferences(patch: unknown, base: StoryWriterPreference
   const fontColor = "fontColor" in input ? input.fontColor : base.fontColor;
   const lastStoryId = "lastStoryId" in input ? input.lastStoryId : base.lastStoryId;
   const preferences: StoryWriterPreferences = {
-    theme: oneOf(input.theme, ["book", "ebook"], base.theme),
+    theme: oneOf(input.theme, ["book", "ebook", "document"], base.theme),
     colorMode: oneOf(input.colorMode, ["app", "light", "dark"], base.colorMode),
     fontFamily: text(input.fontFamily, 200, base.fontFamily).trim(),
     fontColor: typeof fontColor === "string" && (fontColor === "" || HEX_COLOR.test(fontColor)) ? fontColor : "",

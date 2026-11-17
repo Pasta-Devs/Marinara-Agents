@@ -10,7 +10,7 @@
   },
   "id": "story-writer",
   "name": "Story Writer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
   "engine": {
     "min": "2.5.1",
@@ -52,13 +52,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "51b0d291c248e9f0eca322233ad1a57de6a2fe69e592b4a1fbfbda053eb05d98",
-      "bytes": 14027
+      "sha256": "b8df69c5523aa01bcccb70e9f9c47a5734d05ec35cad362f11b86b68c8a3afd9",
+      "bytes": 14140
     },
     {
       "path": "client.js",
-      "sha256": "c16ce04d42c33c3aa28ff58e78a4a4ea4f451d395a92b960dac87ba76656353a",
-      "bytes": 219920
+      "sha256": "676785fb9897f38c0e1a9c3186f938266aa05866b418a71f1fe42f65c393f8fd",
+      "bytes": 236705
     },
     {
       "path": "story-writer-icon.png",

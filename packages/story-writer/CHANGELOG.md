@@ -1,5 +1,12 @@
 # Story Writer release notes
 
+## 0.3.0 — 2026-11-17
+
+- A third theme, **Document**: no pages, just your chapters one under another in a column you scroll, with a line between chapters. You can select text across what used to be a page break, and on a phone you read by scrolling. The chapter bar reads "Chapter 2 of 5", and its buttons move from chapter to chapter.
+- **Author tools → Peek at the prompt** shows what **Write** would send next: every message, the model and the token limit. It writes nothing.
+- The sticky note can be hidden, with the hide button on the open note or **Appearance → Show the author's note**. A hidden note is still sent with every chapter, and on smaller screens the book takes its place.
+- Characters, personas and lorebooks you add or change elsewhere in Marinara Engine now show up in **Cast & world** while Story Writer is open.
+
 ## 0.2.0 — 2026-11-07
 
 - Quick replies: save instructions such as "More dialogue" or "Slow down" as buttons next to Write. Click one to write the next chapter (or continue a draft) with that instruction instead of your continue message. Add and edit them under **Quick replies** in the sidebar; **Show quick replies** hides the row. Every story shares the same list.

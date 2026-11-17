@@ -46,6 +46,7 @@ export function AppearanceSection(props: {
         options={[
           { value: "book", label: t("appearance.themeBook") },
           { value: "ebook", label: t("appearance.themeEbook") },
+          { value: "document", label: t("appearance.themeDocument") },
         ]}
         onChange={(theme) => onChange({ theme })}
       />
@@ -151,12 +152,15 @@ export function AppearanceSection(props: {
         checked={preferences.showAuthorNote}
         onChange={(showAuthorNote) => onChange({ showAuthorNote })}
       />
-      <Toggle
-        label={t("appearance.pageAnimation")}
-        hint={t("appearance.pageAnimationHint")}
-        checked={preferences.pageAnimation}
-        onChange={(pageAnimation) => onChange({ pageAnimation })}
-      />
+      {/* The Document theme has no pages to turn. */}
+      {preferences.theme === "document" ? null : (
+        <Toggle
+          label={t("appearance.pageAnimation")}
+          hint={t("appearance.pageAnimationHint")}
+          checked={preferences.pageAnimation}
+          onChange={(pageAnimation) => onChange({ pageAnimation })}
+        />
+      )}
     </>
   );
 }

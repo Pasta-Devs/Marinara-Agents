@@ -28,6 +28,7 @@ import { generateClientId } from "../../lib/utils";
 import { ActionBar, QuickReplyBar, type FullscreenControl } from "./ActionBar";
 import { PromptPeekDialog } from "./PromptPeek";
 import { StickyNote } from "./StickyNote";
+import { StoryDocument } from "./StoryDocument";
 import { StoryReader, type StoryReaderHandle } from "./StoryReader";
 import { StorySidebar, type SidebarSectionId } from "./StorySidebar";
 
@@ -364,6 +365,8 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     // The view behind the dialog is inert until this render lands; focus goes back to the button after it.
     requestAnimationFrame(() => peekOpener.current?.focus({ preventScroll: true }));
   };
+  // Book and E-book paginate; the Document theme scrolls, with its own component in the same place.
+  const Reader = preferences.theme === "document" ? StoryDocument : StoryReader;
   const jumpToChapter = (chapterId: string) => {
     readerRef.current?.scrollToChapter(chapterId);
     // The drawer covers the book on phones.
@@ -403,7 +406,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         <div className="sw-stage" />
         <div className="sw-reader-slot">
           {data && settings ? (
-            <StoryReader
+            <Reader
               key={data.story.id}
               ref={readerRef}
               theme={preferences.theme}

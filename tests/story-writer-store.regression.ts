@@ -120,6 +120,16 @@ test("preferences start at the defaults and every patch is normalized over the s
   await assert.rejects(store.patchPreferences("dark"), { statusCode: 400 });
 });
 
+test("the Document theme is saved like Book and E-book, and an unknown theme keeps the saved one", async () => {
+  const { store } = setup();
+  assert.equal((await store.patchPreferences({ theme: "document" })).theme, "document");
+  const kept = await store.patchPreferences({ theme: "scroll", fontSize: 20 });
+  assert.equal(kept.theme, "document");
+  assert.equal(kept.fontSize, 20);
+  assert.deepEqual(await store.getPreferences(), kept);
+  assert.equal((await store.patchPreferences({ theme: "book" })).theme, "book");
+});
+
 test("quick replies are kept for every story, normalized, and old preference documents get the defaults", async () => {
   const { store, row, setData } = setup();
   const fresh = await store.getPreferences();

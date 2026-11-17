@@ -18,8 +18,8 @@ export interface ChapterBlockProps {
   bodyLabel: string;
   placeholder: string;
   markdown: string;
-  /** The block's pages, so the next block starts on a new page. */
-  width: number;
+  /** The block's pages, so the next block starts on a new page. None in the Document theme, which has no pages. */
+  width?: number;
   editable: boolean;
   generating: boolean;
   onEdit(blockKey: string, markdown: string, start: boolean): void;
@@ -157,7 +157,7 @@ export const ChapterBlock = memo(function ChapterBlock({
 
   return (
     <div className={`sw-block sw-block--${kind}`} data-sw-block={blockKey} style={{ width }}>
-      <div className="sw-columns sw-block-inner">
+      <div className={width === undefined ? "sw-block-inner" : "sw-columns sw-block-inner"}>
         <div className="sw-chapter-head">
           <div className="sw-chapter-label">{label}</div>
           <div className="sw-ornament" aria-hidden="true">

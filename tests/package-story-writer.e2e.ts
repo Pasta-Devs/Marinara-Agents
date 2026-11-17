@@ -417,6 +417,134 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await root.getByRole("button", { name: "Book", exact: true }).click();
   await root.getByRole("button", { name: "Hide story settings" }).click();
 
+  // Document: no pages, the chapters one under another in a column that scrolls down, so a selection runs on past
+  // where a page used to end (#2356).
+  await root.getByRole("button", { name: "Show story settings" }).click();
+  const pageTurn = root.getByRole("button", { name: /^Page-turn animation/ });
+  await expect(pageTurn).toBeVisible();
+  await root.getByRole("button", { name: "Document", exact: true }).click();
+  await expect(root).toHaveAttribute("data-sw-theme", "document");
+  await expect(pageTurn).toHaveCount(0);
+  await expect
+    .poll(async () => (await engineRequest(request, base, "GET", "/story-writer/preferences")).theme)
+    .toBe("document");
+  await root.getByRole("button", { name: "Hide story settings" }).click();
+  const documentView = root.locator(".sw-document");
+  await expect(documentView).toBeVisible();
+  await expect(root.locator(".sw-page, .sw-viewport, .sw-columns, .sw-nav-arrow, .sw-page-number")).toHaveCount(0);
+  const scroll = () =>
+    documentView.evaluate((element) => ({
+      top: element.scrollTop,
+      height: element.scrollHeight,
+      view: element.clientHeight,
+    }));
+  // Where a block's top and bottom are, measured from the top of the visible document.
+  const blockSpan = (index: number) =>
+    root
+      .locator(".sw-block--chapter")
+      .nth(index)
+      .evaluate((block) => {
+        const box = block.getBoundingClientRect();
+        const view = block.closest(".sw-document")!.getBoundingClientRect();
+        return { top: box.top - view.top, bottom: box.bottom - view.top };
+      });
+  // The story opens at the end of its last chapter.
+  await expect(indicator).toContainText("Chapter 2 of 2");
+  const opened = await scroll();
+  expect(opened.height).toBeGreaterThan(opened.view * 3);
+  const lastEnd = (await blockSpan(1)).bottom;
+  expect(lastEnd).toBeGreaterThan(0);
+  expect(lastEnd).toBeLessThanOrEqual(opened.view);
+  await page.screenshot({ path: testInfo.outputPath("06a-document.png") });
+
+  // It scrolls up and down: a swipe on a phone, the wheel on a desktop.
+  const viewBox = (await documentView.boundingBox())!;
+  if (mobile) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.synthesizeScrollGesture", {
+      x: viewBox.x + viewBox.width / 2,
+      y: viewBox.y + viewBox.height / 2,
+      yDistance: 500,
+      gestureSourceType: "touch",
+    });
+  } else {
+    await documentView.hover();
+    await page.mouse.wheel(0, -800);
+  }
+  await expect.poll(async () => (await scroll()).top).toBeLessThan(opened.top - 200);
+
+  // Author tools → Chapters jumps to a chapter's heading.
+  await root.getByRole("button", { name: "Show story settings" }).click();
+  await tools.click();
+  await root.getByRole("button", { name: /^Go to chapter 1:/ }).click();
+  // On a phone the drawer closes itself.
+  if (!mobile) await root.getByRole("button", { name: "Hide story settings" }).click();
+  await expect.poll(async () => Math.abs((await blockSpan(0)).top)).toBeLessThan(1);
+  await expect(root.locator(".sw-block--chapter .sw-chapter-head").first()).toBeInViewport();
+  await expect(indicator).toContainText("Chapter 1 of 2");
+
+  // A selection from the start of chapter 1 runs on down the column, which scrolls with it, past a whole screen.
+  const firstBody = root.locator(".sw-block--chapter .sw-body").first();
+  await firstBody.evaluate((body) => {
+    body.focus();
+    const range = document.createRange();
+    range.setStart(body.firstElementChild!, 0);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  const beforeSelecting = (await scroll()).top;
+  for (let line = 0; line < 60; line += 1) await page.keyboard.press("Shift+ArrowDown");
+  const selected = await page.evaluate(() => {
+    const selection = document.getSelection()!;
+    return { text: selection.toString(), height: selection.getRangeAt(0).getBoundingClientRect().height };
+  });
+  expect(selected.text.startsWith(OPENING)).toBe(true);
+  expect(selected.height).toBeGreaterThan(opened.view);
+  expect((await scroll()).top).toBeGreaterThan(beforeSelecting + opened.view / 2);
+  await page.screenshot({ path: testInfo.outputPath("06b-document-selection.png") });
+
+  // When the on-screen keyboard opens, the Engine's hook would show this long chapter from its top, far from the
+  // caret. Here the document stays where it is.
+  await page.evaluate(() => document.getSelection()!.collapseToEnd());
+  const typingAt = (await scroll()).top;
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent("marinara:chat-visual-viewport-change", {
+        detail: { height: 400, offsetTop: 0, keyboardOpen: true },
+      }),
+    ),
+  );
+  await page.waitForTimeout(300);
+  expect(Math.abs((await scroll()).top - typingAt)).toBeLessThanOrEqual(2);
+  await page.keyboard.press("Escape");
+
+  // The chapter bar moves between chapter headings.
+  await chapterBar.getByRole("button", { name: "Next chapter" }).click();
+  await expect(indicator).toContainText("Chapter 2 of 2");
+  await expect.poll(async () => Math.abs((await blockSpan(1)).top)).toBeLessThan(1);
+  await chapterBar.getByRole("button", { name: "Previous chapter" }).click();
+  await expect(indicator).toContainText("Chapter 1 of 2");
+  await expect.poll(async () => Math.abs((await blockSpan(0)).top)).toBeLessThan(1);
+
+  // A new chapter is followed down the column as it is written.
+  await writeNext.click();
+  await expect(writeNext).toBeEnabled({ timeout: 30_000 });
+  await expect(indicator).toContainText("Chapter 3 of 3");
+  await expect
+    .poll(async () => {
+      const end = (await blockSpan(2)).bottom;
+      return end > 0 && end <= (await scroll()).view;
+    })
+    .toBe(true);
+
+  await root.getByRole("button", { name: "Show story settings" }).click();
+  await tools.click();
+  await root.getByRole("button", { name: "Book", exact: true }).click();
+  await expect(root).toHaveAttribute("data-sw-theme", "book");
+  await expect(pageTurn).toBeVisible();
+  await root.getByRole("button", { name: "Hide story settings" }).click();
+
   // The library: start a new story, then come back to this one.
   await root.getByRole("button", { name: "Your stories" }).click();
   const list = root.getByRole("list", { name: "Your stories" });
