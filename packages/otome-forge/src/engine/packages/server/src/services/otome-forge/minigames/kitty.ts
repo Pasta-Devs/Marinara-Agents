@@ -117,7 +117,8 @@ const points = (count: number) => `${count} ${count === 1 ? "point" : "points"}`
 
 /** How his cheat moment reads in memory, with no pronoun (`P` is the protagonist's name, `L` his). */
 const CHEAT_MEMORY: Record<ClawCheat, (P: string, L: string, caught: boolean) => string> = {
-  steady: (P, L) => `${L} let ${P} take back a card and play it again.`,
+  // An offer, as the trade is: she may keep the card where it is, and the game does not record which (Dottore, #2372).
+  steady: (P, L) => `${L} offered to let ${P} take back a card and play it again.`,
   nudge: (P, L, caught) =>
     caught
       ? `${L} cheated, swapping the kittens of two cups, and ${P} caught it in time, so the kittens went back.`

@@ -678,8 +678,10 @@ test("each game is his private memory, in plain words: who went first, the score
   );
   assert.equal(
     sources[2]!.content,
-    "Ines and Mireille played Kitty Cards together, Ines going first. Mireille let Ines take back a card and play it again. It was a draw, 12 points each.",
+    "Ines and Mireille played Kitty Cards together, Ines going first. Mireille offered to let Ines take back a card and play it again. It was a draw, 12 points each.",
   );
+  // A steady game sends no choice of hers, so his memory never claims she took the card back (she may have kept it).
+  assert.doesNotMatch(sources[2]!.content, /Mireille let Ines take back|Ines took back/u);
   assert.match(
     sources[3]!.content,
     /Kai dozed off for a moment so Ines could swap two cups' kittens, then woke, noticed and swapped them back\./u,
