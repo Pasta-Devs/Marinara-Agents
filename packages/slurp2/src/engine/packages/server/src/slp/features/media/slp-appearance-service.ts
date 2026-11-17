@@ -116,7 +116,7 @@ async function resolveImageAppearanceOnce(input: Parameters<typeof resolveImageA
   };
   const connection = await resolveSlurpTextConnection(createConnectionsStorage(input.db), input.connectionId);
   if (!connection) {
-    if (fallback) return fallback;
+    if (fallback && !input.regenerate) return fallback;
     throw new Error("Set up a Slurp text connection or add a written appearance before generating pictures.");
   }
   const provider = slpWithProviderRetry(

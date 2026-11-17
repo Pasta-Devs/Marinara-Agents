@@ -73,6 +73,7 @@ export function stripAppearanceLabel(value: string): string {
 const CLOTHING_SENTENCE =
   /\b(?:wear|wears|wearing|worn|dress|dresses|dressed|outfits?|cloth(?:es|ing)|fashion|favou?rs|cosplay|costumes?|accessor(?:y|ies)|carries|carrying|shoes|boots|jewel(?:ry|lery)|hoodies?|shirts?|skirts?|jeans|jackets?|gowns?|couture|heels|lingerie|bikinis?|sweaters?|uniforms?)\b/iu;
 // A long Stage look is written on purpose; 600 cut its last traits (scars, tattoos) off.
+const HAIR_WITH = /\s+with\s+(?:[\p{L}'-]+\s+){0,3}$/u;
 const MAX_LOOK_LENGTH = 2_000;
 /** Two or more commas and no sentence end: a tag list, not prose. */
 const TAG_LIST = /^[^.!?]*,[^.!?]*,[^.!?]*$/u;
@@ -95,13 +96,14 @@ function withoutClothes(sentence: string): string {
   for (let index = 0; index < parts.length; index += 2) {
     let clause = parts[index]!.trim();
     // "Hair worn in a ponytail" is a hairstyle, not clothing: blank the verb, keep the offsets.
-    const hit = CLOTHING_SENTENCE.exec(
-      HAIR.test(clause) ? clause.replace(WEAR_VERB, (verb) => " ".repeat(verb.length)) : clause,
-    );
+    const scan = HAIR.test(clause) ? clause.replace(WEAR_VERB, (verb) => " ".repeat(verb.length)) : clause;
+    const hit = CLOTHING_SENTENCE.exec(scan);
     if (hit) {
-      const phrase = CLOTHES_PHRASE.exec(clause.slice(0, hit.index));
+      const lead = clause.slice(0, hit.index);
+      // A hairstyle may also hang on "with a hoodie".
+      const phrase = CLOTHES_PHRASE.exec(lead) ?? (HAIR.test(clause) ? HAIR_WITH.exec(lead) : null);
       const before = phrase ? clause.slice(0, phrase.index).trim() : "";
-      clause = before.split(/\s+/u).length >= 2 && !CLOTHING_SENTENCE.test(before) ? before : "";
+      clause = before.split(/\s+/u).length >= 2 && !CLOTHING_SENTENCE.test(scan.slice(0, phrase.index)) ? before : "";
     }
     if (!BODY_TRAIT.test(clause)) clause = "";
     if (clause) kept += kept ? `${parts[index - 1] ?? " "}${clause}` : clause;

@@ -79,8 +79,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "569d4b84321c8f30f13997fb395f9ee66f04f1dde4bac60a3073c5e478b1b373",
-      "bytes": 2164545
+      "sha256": "20ec7962fc550c01a26d0a42d9251c1a323c26a034566ee8c9ecf60bfe49ed86",
+      "bytes": 2164658
     },
     {
       "path": "client.js",
@@ -119,8 +119,8 @@
     },
     {
       "path": "src/engine/packages/client/src/slp/locales/pl.json",
-      "sha256": "c62e52949c0819686febb4dd3bbb19db9a12db5d96707fa36e5c39dd8efaa889",
-      "bytes": 248799
+      "sha256": "bafc238a0079bc8aee56d2a13a91b41b42205eaf7d25956feaee565cbe9933c3",
+      "bytes": 249403
     }
   ],
   "permissions": [

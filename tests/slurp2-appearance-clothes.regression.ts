@@ -53,4 +53,19 @@ const prompt = JSON.stringify(messages);
 assert.doesNotMatch(prompt, /style details/u);
 assert.match(prompt, /appearance \(their look: body, face, hair and marks[^)]*no clothes/u);
 
+// A hairstyle clause that also names the garment keeps its hairstyle, with or without a lead-in.
+for (const card of [
+  "Long black hair worn in a high ponytail under a black hoodie. Green eyes.",
+  "Long black hair worn in a high ponytail with a black hoodie. Green eyes.",
+]) {
+  assert.match(slurpImageLook(card), /hair worn in a high ponytail/u);
+  assert.doesNotMatch(slurpImageLook(card), /hoodie/u);
+}
+
+// A regenerate with no text connection must fail (the route answers 422), not return the old card text as a refresh.
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-appearance-service.ts"),
+  /if \(fallback && !input\.regenerate\) return fallback;/u,
+);
+
 console.log("slurp2 appearance clothes regression checks passed");
