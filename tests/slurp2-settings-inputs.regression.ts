@@ -33,7 +33,7 @@ assert.doesNotMatch(audience, /ChoiceRow/u);
 assert.match(audience, /value=\{audiencePreset === "custom" \? null : audiencePreset\}/u);
 
 // "Own value": off shows the Slurp-wide value, on shows the control; off deletes the override.
-assert.match(inputs, /role="switch"[\s\S]*event\.target\.checked \? onOverride\(\) : onReset\(\)/u);
+assert.match(inputs, /<Switch[\s\S]*onCheckedChange=\{\(checked\) => \(checked \? onOverride\(\) : onReset\(\)\)\}/u);
 assert.match(inputs, /\{overridden && children\}/u);
 for (const key of ["own", "usesSlurp", "slurpValue"]) assert.ok(en[`ui.slurp.settings.override.${key}`]);
 

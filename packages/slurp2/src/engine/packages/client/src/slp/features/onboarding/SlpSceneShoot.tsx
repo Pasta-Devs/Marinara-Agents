@@ -1,13 +1,14 @@
 // The friend's photo-shoot moment: pick the outfit and the place, then the real image pipeline
 // takes the profile photo and the cover. Shown above the composer while the moment is on.
 import { useState } from "react";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpUsesAiMark } from "../../modules/chrome/SlpAiMark";
 import { SlpButton, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import type { SlpSceneModel } from "./slp-scene-model";
+import { Spinner } from "../../../components/ui/Spinner";
 
 const firstLine = (value: string) =>
   value
@@ -67,7 +68,7 @@ export function SlpSceneShoot({ model, onMissing }: { model: SlpSceneModel; onMi
             if (missing?.length) onMissing(missing);
           }}
         >
-          {model.shooting ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : <SlpUsesAiMark />}
+          {model.shooting ? <Spinner size="sm" /> : <SlpUsesAiMark />}
           {done ? t("ui.slurp.scene.shoot.again") : t("ui.slurp.scene.shoot.take")}
         </TakeButton>
       </div>

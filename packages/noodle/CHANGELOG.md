@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.5.19 — 2026-11-17
+
+- Changed: Noodle's switches, checkboxes and loading rings are now the ones Marinara Engine hands to packages, so they look and work like the Engine's own. Needs a Marinara Engine with capability API 1.830 or newer.
+
 ## 1.5.18 — 2026-11-15
 
 - Fixed: on Marinara Engine versions that load the character list one page at a time, Noodle found none of your characters, so there was nobody to invite. (#2318)

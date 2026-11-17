@@ -20,7 +20,7 @@ for (const option of ["creatorDetails", "appearance", "sourceReferences", "compo
   assert.match(route, new RegExp(`${option}: z\\.boolean\\(\\)`), `${option} is validated on the old route`);
 }
 assert.match(editor, /<SlpPictureAssist[\s\S]*?advanced/u);
-assert.match(assist, /type="checkbox"[\s\S]*checked=\{options\[key\]\}/u);
+assert.match(assist, /<Checkbox[\s\S]*checked=\{options\[key\]\}/u);
 assert.match(assist, /\.\.\.\(advanced \? \{ options \} : \{\}\)/u);
 assert.match(draw, /suppressCreatorDetails: !options\.creatorDetails/u);
 assert.match(draw, /suppressStageAppearance: !options\.appearance/u);

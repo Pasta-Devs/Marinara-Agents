@@ -7,6 +7,8 @@ import type { SlurpArcType } from "./slp-projects-contract";
 import { useGenerateSlurpArcType } from "./slp-projects-hooks";
 import { toast } from "sonner";
 import { ArcLibraryDraftEditor } from "./SlpArcLibraryDraftEditor";
+import { Switch } from "../../../components/ui/Switch";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
 
 export function ArcLibraryEditor({
   library,
@@ -287,8 +289,17 @@ export function ArcLibraryEditor({
                   disabled={busy}
                   aria-label={`${t("ui.slurp.settings.arcLibrary.delete")}: ${type.name}`}
                   title={t("ui.slurp.settings.arcLibrary.delete")}
-                  onClick={() => {
-                    if (!window.confirm(t("ui.slurp.settings.arcLibrary.deleteConfirm", { name: type.name }))) return;
+                  onClick={async () => {
+                    if (
+                      !(await showConfirmDialog({
+                        title: t("ui.slurp.settings.arcLibrary.delete"),
+                        message: t("ui.slurp.settings.arcLibrary.deleteConfirm", { name: type.name }),
+                        confirmLabel: t("ui.slurp.settings.arcLibrary.delete"),
+                        cancelLabel: t("ui.slurp.actions.cancel"),
+                        tone: "destructive",
+                      }))
+                    )
+                      return;
                     onChange(
                       type.builtin
                         ? library.map((entry) =>
@@ -304,17 +315,10 @@ export function ArcLibraryEditor({
                   <span className="sr-only">
                     {t("ui.slurp.settings.arcLibrary.enabled")}: {type.name}
                   </span>
-                  <input
-                    type="checkbox"
-                    role="switch"
+                  <Switch
                     checked={type.enabled}
                     disabled={busy}
-                    onChange={(event) => replace({ ...type, enabled: event.target.checked })}
-                    className="peer sr-only"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="relative h-6 w-10 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 transition-colors after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
+                    onCheckedChange={(checked) => replace({ ...type, enabled: checked })}
                   />
                 </label>
               </div>

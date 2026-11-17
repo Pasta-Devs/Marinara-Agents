@@ -4,12 +4,12 @@
 import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { useSetSlurpCreatorPrice } from "../economy/slp-economy-contract";
-import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpCreatorMessaging } from "./slp-messages-contract";
 import { useSetSlurpCreatorMessaging, useSlurpCreatorMessagingSettings } from "./slp-messages-hooks";
 import { toast } from "sonner";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export function CreatorMessagingGroup({
   creatorId,
@@ -32,7 +32,7 @@ export function CreatorMessagingGroup({
   if (query.isLoading) {
     return (
       <div className="flex justify-center py-6 text-[var(--muted-foreground)]" role="status">
-        <Loader2 size={18} className="animate-spin" />
+        <Spinner size="md" />
       </div>
     );
   }

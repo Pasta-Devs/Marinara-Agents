@@ -7,7 +7,7 @@ import {
   SLURP_REPLY_STATUS_FALLBACKS,
 } from "./SlpMessages";
 import { CommissionRow } from "./commissions/SlpCommissions";
-import { Info, Loader2 } from "lucide-react";
+import { Info } from "lucide-react";
 import { useCallback, useContext, useMemo, useRef, type ReactNode } from "react";
 import { slpMessageDeepDetailsId } from "../../../../../shared/src/slp/slp-deep-details.js";
 import { createPortal } from "react-dom";
@@ -49,6 +49,7 @@ import { formatClockTime } from "../../base/ui/slp-date-time";
 import { useRegenerateSlurpReply } from "./slp-message-action-hooks";
 import { slurpLastAnswer } from "../../../../../shared/src/slp/slp-message-edit.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /**
  * A conversation is a full-screen task on phones (design language §8): it leaves the page for a
@@ -477,7 +478,7 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                   aria-live="polite"
                   className="flex max-w-[82%] items-center gap-2 self-end rounded-[1.25rem] bg-[var(--slurp-tint)] px-3.5 py-2.5 text-xs text-[var(--slurp-muted)]"
                 >
-                  <Loader2 size={14} className="animate-spin text-[var(--slurp-ink)]" aria-hidden="true" />
+                  <Spinner size="sm" className="text-[var(--slurp-ink)]" />
                   {localizeUi("ui.slurp.messages.preparingImage", {
                     defaultValue: "{{name}} is preparing an image…",
                     name: creator?.displayName ?? "The Creator",

@@ -1,4 +1,4 @@
-import { CalendarClock, Loader2, RefreshCw } from "lucide-react";
+import { CalendarClock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -23,6 +23,7 @@ import { slpExplicitOfStep, slpSpiceStepOf } from "../../../../../../shared/src/
 import { useSlpPersonaBackedCreator } from "../slp-creators-hooks";
 import { useRefreshCreatorConversationSchedule } from "../slp-creator-refresh-hooks";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
+import { Spinner } from "../../../../components/ui/Spinner";
 
 /**
  * How and when this Creator publishes: automation, the prepared slots, production strategy, the
@@ -70,7 +71,7 @@ export function SlpCreatorPublishingSection({ creator, active, mode = "automatio
                 className="flex items-center justify-center gap-2 py-6 text-sm text-[var(--slurp-muted)]"
                 role="status"
               >
-                <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                <Spinner size="md" />
                 {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
               </div>
             ) : reserveStatusQuery.isError ? (
@@ -203,7 +204,7 @@ export function SlpCreatorPublishingSection({ creator, active, mode = "automatio
               className={accentButton}
             >
               {refreshConversationSchedule.isPending ? (
-                <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                <Spinner size="sm" />
               ) : (
                 <CalendarClock size={14} aria-hidden="true" />
               )}

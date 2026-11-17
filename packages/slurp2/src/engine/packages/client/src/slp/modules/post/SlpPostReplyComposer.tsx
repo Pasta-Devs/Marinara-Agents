@@ -14,6 +14,7 @@ import { SlpImageComposer } from "../../base/media/SlpImageComposer";
 import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { ConversationMediaPickerPanel } from "../../../components/chat/ConversationMediaPickerPanel";
 import { ImageIcon, Smile, X } from "lucide-react";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 export interface SlpPostReplyComposerProps {
   nested: boolean;
@@ -184,8 +185,7 @@ export function SlpPostReplyComposer({
         <div className="flex items-center gap-2">
           {creatorReplyRequest && personaAccount?.id !== post.authorAccountId && (
             <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={creatorReplyRequest.asked}
                 onChange={(event) => creatorReplyRequest?.setAsked(event.target.checked)}
                 className="h-3.5 w-3.5 accent-[var(--noodle-accent)]"

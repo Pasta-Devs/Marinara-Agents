@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Loader2, Pause, Play, WandSparkles } from "lucide-react";
+import { AlertCircle, CheckCircle2, Pause, Play, WandSparkles } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { useMemo, useState } from "react";
 import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -14,6 +14,8 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 import { toast } from "sonner";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { SlpSettingScopeBadge } from "../../modules/settings/SlpSettingsKit";
+import { Checkbox } from "../../../components/ui/Checkbox";
+import { Spinner } from "../../../components/ui/Spinner";
 
 // Lanes with a server generator. The server rejects the rest until they exist.
 const LANES = [
@@ -138,8 +140,7 @@ export function SlurpCreatorImprover({
                 key={creator.id}
                 className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-xl p-3 ring-1 ring-inset transition-colors ${active ? "bg-[var(--noodle-accent)]/10 ring-[var(--noodle-accent)]/40" : "bg-[var(--slurp-canvas)] ring-[var(--slurp-outline)] hover:ring-[var(--noodle-accent)]/30"}`}
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={active}
                   onChange={(event) =>
                     setSelected((current) => {
@@ -203,8 +204,7 @@ export function SlurpCreatorImprover({
                 key={lane.id}
                 className="flex min-h-14 items-start gap-3 rounded-xl bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={lanes.has(lane.id)}
                   onChange={(event) =>
                     setLanes((current) => {
@@ -228,8 +228,7 @@ export function SlurpCreatorImprover({
           </p>
         </fieldset>
         <label className="mt-3 flex min-h-14 items-start gap-3 rounded-xl bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={rebrand}
             onChange={(event) => setRebrand(event.target.checked)}
             className="mt-1 size-4 accent-[var(--noodle-accent)]"
@@ -283,11 +282,7 @@ export function SlurpCreatorImprover({
             }
             className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-black text-[var(--slurp-on-accent)] [&_svg]:!text-[var(--slurp-on-accent)] shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:cursor-not-allowed disabled:opacity-45"
           >
-            {createJob.isPending ? (
-              <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            ) : (
-              <SlpSparkleGlyph size={16} aria-hidden="true" />
-            )}
+            {createJob.isPending ? <Spinner size="md" /> : <SlpSparkleGlyph size={16} aria-hidden="true" />}
             Generate proposals
           </button>
         </div>
@@ -383,8 +378,7 @@ export function SlurpCreatorImprover({
                       className={`block rounded-xl p-3 ring-1 ring-inset ${active ? "bg-[var(--noodle-accent)]/8 ring-[var(--noodle-accent)]/35" : "bg-[var(--slurp-canvas)] ring-[var(--slurp-outline)]"}`}
                     >
                       <span className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           disabled={!selectable}
                           checked={active && selectable}
                           onChange={(event) =>
@@ -466,9 +460,7 @@ export function SlurpCreatorImprover({
                   }
                   className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-black text-[var(--slurp-on-accent)] [&_svg]:!text-[var(--slurp-on-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-45"
                 >
-                  {applyProposals.isPending && (
-                    <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
-                  )}
+                  {applyProposals.isPending && <Spinner size="md" />}
                   Apply selected
                 </button>
               </div>

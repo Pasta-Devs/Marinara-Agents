@@ -10,6 +10,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
 import { SLP_EYEBROW_CLASS } from "../../base/chrome/SlpChrome";
 import { cn } from "../../../lib/utils";
+import { Switch } from "../../../components/ui/Switch";
 
 /**
  * Saves a number in order. A slow older request cannot land after a newer one and persist a stale
@@ -353,9 +354,6 @@ export function Field({
   );
   return settingKey ? <SettingAnchor settingKey={settingKey}>{field}</SettingAnchor> : field;
 }
-const SWITCH_TRACK =
-  "relative h-7 w-12 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-5 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none";
-
 /** Toggle's switch alone, for a row that already shows its name (Overview's extension rows). */
 export function CompactSwitch({
   label,
@@ -369,20 +367,9 @@ export function CompactSwitch({
   disabled?: boolean;
 }) {
   return (
-    <label
-      className={`relative flex min-h-11 min-w-14 shrink-0 items-center justify-center rounded-lg ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
-    >
-      <input
-        type="checkbox"
-        role="switch"
-        aria-label={label}
-        disabled={disabled}
-        checked={value}
-        onChange={(event) => onChange(event.target.checked)}
-        className="peer sr-only"
-      />
-      <span aria-hidden="true" className={SWITCH_TRACK} />
-    </label>
+    <span className="flex min-h-11 min-w-14 shrink-0 items-center justify-center">
+      <Switch aria-label={label} disabled={disabled} checked={value} onCheckedChange={onChange} />
+    </span>
   );
 }
 
@@ -408,10 +395,11 @@ export function Toggle({
   const disabled = Boolean(disabledReason);
   const nameId = useId();
   const noteId = `${nameId}-note`;
+  // A label: a click on the name or the note flips the switch too.
   const toggle = (
     <label
       data-slurp-setting-toggle
-      className={`group relative flex ${compact ? "min-h-11" : "min-h-12"} ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} items-center justify-between gap-4 rounded-lg text-sm focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] focus-within:ring-offset-4 focus-within:ring-offset-[var(--slurp-surface)]`}
+      className={`group relative flex ${compact ? "min-h-11" : "min-h-12"} ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} items-center justify-between gap-4 rounded-lg text-sm`}
     >
       <span className="min-w-0">
         <span id={nameId} className="block font-semibold">
@@ -426,17 +414,13 @@ export function Toggle({
           {disabledReason && <span className="mt-1 block text-xs font-semibold leading-5">{disabledReason}</span>}
         </span>
       </span>
-      <input
-        type="checkbox"
-        role="switch"
+      <Switch
         aria-labelledby={nameId}
         aria-describedby={detail || disabledReason ? noteId : undefined}
         disabled={disabled}
         checked={value}
-        onChange={(event) => onChange(event.target.checked)}
-        className="peer sr-only"
+        onCheckedChange={onChange}
       />
-      <span aria-hidden="true" className={SWITCH_TRACK} />
     </label>
   );
   return settingKey ? <SettingAnchor settingKey={settingKey}>{toggle}</SettingAnchor> : toggle;

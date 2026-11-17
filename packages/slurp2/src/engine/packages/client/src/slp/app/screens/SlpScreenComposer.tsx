@@ -36,7 +36,7 @@ import { SlpAutoGrowTextarea } from "../../base/ui/SlpAutoGrowTextarea";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { SlpButton, SlpChip, SlpPrimaryButton, SlpSegment } from "../../modules/chrome/SlpButton";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Crop, ImagePlus, Link2, ListChecks, Loader2, Send, Smile, Trash2 } from "lucide-react";
+import { ChevronDown, Crop, ImagePlus, Link2, ListChecks, Send, Smile, Trash2 } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { SlpPictureAssist, SlpPostGuide, SlpTextAssist } from "../../features/assist/slp-assist-contract";
 import { useSlurpTiesMutations } from "../../features/projects/slp-projects-contract";
@@ -51,6 +51,7 @@ import {
   type PendingCreatorImage,
   SlpCreatorDraftImageFrame,
 } from "./SlpHomeHelpers";
+import { Spinner } from "../../../components/ui/Spinner";
 export type { PendingCreatorImage } from "./SlpHomeHelpers";
 
 export type SlpCreatorComposerTool = "image" | "poll" | "media" | "draw";
@@ -525,11 +526,7 @@ export function NoodlerPostComposer({
           )}
           <div className="flex items-center gap-2">
             <SlpPrimaryButton onClick={() => void publish()} disabled={!canPost} className="ms-auto px-6">
-              {manualPending ? (
-                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Send size={16} aria-hidden="true" />
-              )}
+              {manualPending ? <Spinner size="md" /> : <Send size={16} aria-hidden="true" />}
               {manualPending
                 ? localizeUi("ui.noodle.noodlerpostcomposer.posting")
                 : story

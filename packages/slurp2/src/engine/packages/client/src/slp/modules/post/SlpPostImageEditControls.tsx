@@ -1,4 +1,4 @@
-import { Crop, ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { Crop, ImagePlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../../../lib/utils";
 import { SlpButton } from "../chrome/SlpButton";
@@ -11,6 +11,7 @@ import { slpImageFileAccept } from "../../base/media/slp-media-accept";
 import { SLP_TYPE } from "../../base/chrome/SlpChrome";
 import type { SlpPostCardModel, SlpPostImageUpdate } from "./SlpPostTypes";
 import { SlpPostImageNav } from "./SlpPostImageNav";
+import { Spinner } from "../../../components/ui/Spinner";
 
 type SlpPostImageCropSource =
   | {
@@ -152,11 +153,7 @@ export function PostImageEditControls({
             onClick={() => editing.beginCrop(post)}
             className="min-h-10 px-4 text-[13px]"
           >
-            {editing.loading ? (
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Crop size={16} aria-hidden="true" />
-            )}
+            {editing.loading ? <Spinner size="md" /> : <Crop size={16} aria-hidden="true" />}
             {editing.loading
               ? localizeUi("ui.noodle.postimageeditcontrols.loadingImage")
               : localizeUi("ui.slurp.composer.crop", { defaultValue: "Crop" })}

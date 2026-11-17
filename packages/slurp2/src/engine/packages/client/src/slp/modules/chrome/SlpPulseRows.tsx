@@ -5,7 +5,6 @@ import {
   CircleAlert,
   Handshake,
   ImagePlus,
-  Loader2,
   Megaphone,
   MessageCircle,
   RotateCcw,
@@ -25,6 +24,7 @@ import { SlpUsesAiMark, noteSlpAiUseOnce } from "./SlpAiMark";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 
 import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { Spinner } from "../../../components/ui/Spinner";
 /** Pulse's rows (task C): today's AI use, one "Coming up" line, one long action from this tab (task B). */
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -248,7 +248,7 @@ export function PulseClientTaskRow({
           {failed ? (
             <CircleAlert size={16} className="text-[var(--slurp-danger)]" aria-hidden="true" />
           ) : running ? (
-            <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            <Spinner size="md" />
           ) : (
             <CheckCircle2 size={16} aria-hidden="true" />
           )}

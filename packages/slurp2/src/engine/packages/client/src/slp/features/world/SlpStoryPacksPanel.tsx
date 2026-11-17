@@ -14,6 +14,7 @@ import {
   useSlpBundledStoryPacks,
   type SlpPackPreview,
 } from "./slp-story-hooks.js";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 const button =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-sm font-semibold hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50";
@@ -328,8 +329,7 @@ export function SlpStoryPacksPanel({ arcs, events }: { arcs: SlurpArcType[]; eve
                   </select>
                 </label>
                 <label className="flex min-h-11 items-center gap-2 text-xs font-semibold sm:col-start-2">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={enabledEntries[entryKey(entry)] ?? false}
                     onChange={(event) =>
                       setEnabledEntries({ ...enabledEntries, [entryKey(entry)]: event.target.checked })

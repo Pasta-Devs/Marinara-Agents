@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Eye,
   Image as ImageIcon,
-  Loader2,
   MessageCircle,
   MoreHorizontal,
   Pencil,
@@ -38,6 +37,7 @@ import { useSlpBalance } from "../chrome/SlpShell";
 import type { SlpPostSubscriptionOffer, SlpPostUnlockOffer } from "./SlpPostTypes";
 import { SlpDeepDetailsModal } from "./SlpDeepDetailsModal";
 import { SlpCreatorFictionalPrice, SlpDiscountOfferButton } from "./SlpUnlockOfferRows";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export function LockedSlurpPostCard({
   post,
@@ -596,11 +596,7 @@ export function LockedSlurpPostCard({
             >
               <SlurpCoinBurst active={transaction === "unlock"} />
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--slurp-tint)] [&_svg]:!text-[var(--slurp-ink)]">
-                {transaction === "unlock" ? (
-                  <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Eye size={20} />
-                )}
+                {transaction === "unlock" ? <Spinner size="lg" /> : <Eye size={20} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[15px] font-bold leading-5 text-[var(--slurp-text)]">
@@ -628,11 +624,7 @@ export function LockedSlurpPostCard({
             >
               <SlurpCoinBurst active={transaction === "subscribe"} />
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--slurp-tint)] [&_svg]:!text-[var(--slurp-ink)]">
-                {transaction === "subscribe" ? (
-                  <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Bell size={20} />
-                )}
+                {transaction === "subscribe" ? <Spinner size="lg" /> : <Bell size={20} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
@@ -665,11 +657,7 @@ export function LockedSlurpPostCard({
               >
                 <SlurpCoinBurst active={transaction === "gamble"} />
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--slurp-warm)_16%,transparent)] [&_svg]:!text-[var(--slurp-warm)]">
-                  {transaction === "gamble" ? (
-                    <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <Dices size={20} />
-                  )}
+                  {transaction === "gamble" ? <Spinner size="lg" /> : <Dices size={20} />}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">

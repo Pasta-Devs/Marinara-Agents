@@ -30,7 +30,7 @@ const welcome = splash.slice(splash.indexOf("function SlurpWelcome("), splash.in
 const whatsNew = splash.slice(splash.indexOf("function SlurpWhatsNew("));
 assert.match(
   welcome,
-  /type="checkbox"[\s\S]*?I understand this is alpha software/u,
+  /<Checkbox[\s\S]*?I understand this is alpha software/u,
   "the welcome keeps its one consent tick",
 );
 assert.match(welcome, /Tick the box above to get in\./u, "the disabled Let me in says why");
