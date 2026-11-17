@@ -32,6 +32,7 @@ import { BibleView } from "./screens/BibleView";
 import { ClawMachine } from "./screens/dates/ClawMachine";
 import { DateNight, type DateOpen } from "./screens/dates/DateNight";
 import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
+import { KittyCards } from "./screens/dates/KittyCards";
 import { PhotoShoot } from "./screens/dates/PhotoShoot";
 import { ReadHim } from "./screens/dates/ReadHim";
 import { ReadMe } from "./screens/dates/ReadMe";
@@ -69,6 +70,7 @@ const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>([
   "tarot",
   "photo-shoot",
   "claw",
+  "kitty",
 ]);
 
 interface ScreensProps {
@@ -284,6 +286,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     "date-night": dateReturn,
     "photo-shoot": "dates",
     claw: "dates",
+    kitty: "dates",
     home: activeRun ? undefined : "picker",
   };
   const backTo = back[screen];
@@ -418,6 +421,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       <PhotoShoot runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : screen === "claw" && activeRun && view && datesOf ? (
       <ClawMachine runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : screen === "kitty" && activeRun && view && datesOf ? (
+      <KittyCards runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : activeRun && run.isPending ? (
       // A screen of the story whose view is still on its way (the active story changed beneath it).
       loading
@@ -462,7 +467,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
                     screen === "read-me" ||
                     screen === "tarot" ||
                     screen === "photo-shoot" ||
-                    screen === "claw"
+                    screen === "claw" ||
+                    screen === "kitty"
                   ? `${screen}-${datesOf?.id ?? ""}`
                   : screen === "date-night"
                     ? `date-${dateOpen ? JSON.stringify(dateOpen) : ""}`

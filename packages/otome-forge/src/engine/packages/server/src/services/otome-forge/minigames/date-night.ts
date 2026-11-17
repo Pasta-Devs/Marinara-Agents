@@ -46,10 +46,10 @@
 //   grants.
 // - #2156: while his grievance with her stands (SH/dates.ts heldAgainst) every date with him waits: the Dates hub opens
 //   none, and starting (or resuming) a date with him in it and finishing one, starting, answering or finishing Read
-//   Them, Read Me or Tarot night, finishing a Claw round, and the Photo Shoot are a 409 `locked` before anything is
-//   worn, spent, planned, painted, saved or paid (assertFreeToDate, checkPulledDate, or assertNotHeld inside the write
-//   that pays). Nothing is lost: an open one goes on once his repair has cleared it. #2303: accepting his invitation to
-//   clear the air opens a scene of its own (S/phone/upset.ts), no longer a date.
+//   Them, Read Me or Tarot night, finishing a Claw round or a Kitty Cards game, and the Photo Shoot are a 409 `locked`
+//   before anything is worn, spent, planned, painted, saved or paid (assertFreeToDate, checkPulledDate, or
+//   assertNotHeld inside the write that pays). Nothing is lost: an open one goes on once his repair has cleared it.
+//   #2303: accepting his invitation to clear the air opens a scene of its own (S/phone/upset.ts), no longer a date.
 // - Privacy: a completed date is a `character-story` memory source with `audience: [li]` (S/story/canon.ts
 //   readStorySources), and (#2303) everyone else taken on it too, as GF's bond chapter: summarized and folded into the
 //   shared overview, titled private, while only their own readers and scenes they are in recall it in detail. It is

@@ -645,6 +645,14 @@ function reply(messages: Messages): string {
           miss: many("Miss", 3),
           plush: many("Plush", 3),
         },
+        kitty: {
+          start: many("Deal", 2),
+          good: many("Match", 3),
+          cheat: many("Swap", 3),
+          caught: many("Caught", 2),
+          win: many("Yours", 3),
+          lose: many("Mine", 3),
+        },
       });
     case "chat":
       return json({ messages: [{ text: "Awake. Barely." }], suggestions: ["Sleep.", "Me too."] });

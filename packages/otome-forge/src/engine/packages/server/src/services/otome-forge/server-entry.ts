@@ -23,6 +23,7 @@ import { registerHapticsRoutes } from "./routes/haptics.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerIndexRoutes } from "./routes/index.js";
 import { registerItemRoutes } from "./routes/items.js";
+import { registerKittyRoutes } from "./routes/kitty.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
 import { registerPhoneRoutes } from "./routes/phone.js";
 import { registerQuizRoutes } from "./routes/quiz.js";
@@ -95,6 +96,7 @@ export async function activate({ api }: ActivationContext) {
       registerAlbumRoutes(router, deps);
       registerCareRoutes(router, deps);
       registerClawRoutes(router, deps);
+      registerKittyRoutes(router, deps);
       registerReadHimRoutes(router, deps);
       registerReadMeRoutes(router, deps);
       registerTarotRoutes(router, deps);

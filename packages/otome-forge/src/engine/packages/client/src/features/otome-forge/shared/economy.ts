@@ -29,8 +29,12 @@ export const STARLIGHT_EARNINGS = {
   clawRound: 20,
   /** Per plush caught (proposal). */
   clawPlush: 30,
+  /** A finished Kitty Cards game, whatever its result (0.35.0, the maintainer's: like the Claw). */
+  kittyGame: 20,
+  /** More for a Kitty Cards game she won. */
+  kittyWin: 20,
 } as const;
-/** Starlight from activities (dates, Read Him, Read Me, Tarot night, Claw, Show him) per local day. */
+/** Starlight from activities (dates, Read Him, Read Me, Tarot night, Claw, Kitty Cards, Show him) per local day. */
 export const ACTIVITY_STARLIGHT_DAILY_CAP = 400;
 
 /** Affection points for each prestige point past level 10 (the maintainer's, 2026-11-04: kept at 300). */
@@ -79,6 +83,8 @@ export const AFFECTION_EARNINGS = {
   tarot: 40,
   /** proposal */
   clawRound: 30,
+  /** A finished Kitty Cards game, whatever its result (0.35.0, the maintainer's: like the Claw). */
+  kittyGame: 30,
   /** A phone thread closed with "Close and remember", for an exchange with words from both of them (the maintainer's). */
   closeAndRemember: 5,
   /** The first Show him for a look (the maintainer's, 2026-11-03: 5, was 20). */
@@ -228,6 +234,7 @@ export const REWARD_SOURCES = [
   "read-me",
   "tarot",
   "claw",
+  "kitty",
   "close-and-remember",
   "show-him",
 ] as const;
