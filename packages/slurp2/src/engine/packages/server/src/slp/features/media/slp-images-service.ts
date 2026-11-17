@@ -125,6 +125,7 @@ type CreatorPostImageInput = {
     | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
     | "imageKeepOriginalFiles"
+    | "imageOnePerson"
     | "imageGenerationIncludeDescriptions"
     | "imageAppearanceMode"
     | "appearanceProfileMode"
@@ -210,7 +211,8 @@ async function generateCreatorPostImageRun(
   run: SlpDeepDetailsImageRun,
 ): Promise<CreatorPostImageResult> {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
-  const companions = await resolveSlurpImageCompanions(input.db, input.companionIds, input.account.id);
+  const companionIds = input.settings.imageOnePerson ? undefined : input.companionIds;
+  const companions = await resolveSlurpImageCompanions(input.db, companionIds, input.account.id);
   // A companion whose identity is not open keeps its source hidden too.
   const hiddenSources = [
     input.disclosureMode === "open" ? null : input.linkedPublicAccount,

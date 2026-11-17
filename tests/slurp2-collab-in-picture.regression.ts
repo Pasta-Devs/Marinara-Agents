@@ -87,7 +87,7 @@ assert.match(briefs("explicit", undefined, "Jonas").draftImagePrompt ?? "", /Two
 // The generation service hands the post's beat to the picture briefs.
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts"),
-  /slurpPostPictureBriefs\(\{[^}]*\n\s+beat,\n/u,
+  /slurpPostPictureBriefs\(\{[^}]*\n\s+beat: settings\.imageOnePerson && beat \? \{ \.\.\.beat, cast: \[\] \} : beat,\n/u,
 );
 
 assert.doesNotMatch(

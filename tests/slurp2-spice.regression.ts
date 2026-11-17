@@ -493,7 +493,11 @@ assert.match(postSpice, /slurpSpiceAngle\(\{/u, "posts draw their spicy angle");
 assert.match(generation, /slurpPostLevelInstruction\(postLevel\),\n\s*spiceAngle\?\.line \?\? ""/u);
 assert.match(postSpice, /slurpSpice: \{ kind: angle\.kind/u, "the post keeps what made it spicy");
 assert.match(generation, /\.\.\.spiced\.metadata,/u);
-assert.match(generation, /partner: spiceAngle\?\.partner\?\.company \?\? null/u, "the picture knows the partner");
+assert.match(
+  generation,
+  /partner: settings\.imageOnePerson \? null : \(spiceAngle\?\.partner\?\.company \?\? null\)/u,
+  "the picture knows the partner",
+);
 assert.match(postSpice, /cast: \[\.\.\.input\.beat\.cast, partner\]/u, "a named partner is in the cast");
 assert.match(generation, /spice: spiced\.spice/u, "the brief gets the same spice");
 const dm = server("features/messages/slp-message-generation-service.ts");

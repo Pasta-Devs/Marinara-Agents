@@ -247,3 +247,36 @@ Promise.all([proveDamagedAction(), proveResolve()])
     console.error(error);
     process.exitCode = 1;
   });
+
+// Storylines off keeps collab and couple partners out of posts and occasions; one person per picture drops the cast.
+const generation = read("features/feed/slp-generation-service.ts");
+assert.match(generation, /collabs: slpExtensionOn\(settings, "storylines"\) \? settings\.creatorCollabs : null/u);
+assert.match(generation, /const pictureIds = settings\.imageOnePerson \? \[\] :/u);
+assert.match(generation, /beat: settings\.imageOnePerson && beat \? \{ \.\.\.beat, cast: \[\] \} : beat/u);
+assert.match(read("features/feed/slp-post-spice.ts"), /locked && input\.collabs\n/u);
+assert.match(read("features/feed/slp-occasion-service.ts"), /ties && id/u);
+
+// Audit fixes: a persona's Stir play needs that persona to undo it; a double tap adds one Life panel condition.
+assert.match(
+  read("features/assist/slp-stir-service.ts"),
+  /if \(!play \|\| \(play\.personaId && play\.personaId !== personaId\)\)/u,
+);
+const storyState = read("features/storylines/slp-story-state-routes.ts");
+assert.match(storyState, /if \(adding\.has\(accountId\)\) return reply\.code\(409\)/u);
+assert.match(storyState, /finally \{\n\s*adding\.delete\(accountId\);/u);
+const clientRoot = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/client/src/slp");
+// A tab switch does not refetch ads, so it records no impression; fast event toggles build on the pending list.
+assert.match(readFileSync(join(clientRoot, "features/ads/slp-ads-hooks.ts"), "utf8"), /refetchOnWindowFocus: false/u);
+const eventsPanel = readFileSync(join(clientRoot, "features/world/SlpPlatformEventsPanel.tsx"), "utf8");
+assert.match(eventsPanel, /const current = \(\) => pending\.current \?\? events;/u);
+assert.doesNotMatch(eventsPanel, /onSave\(events\./u);
+
+// Review: the Stir view offers Undo only to the persona that made the play; one person per picture also drops a stored cast.
+assert.match(
+  read("features/assist/slp-stir-service.ts"),
+  /play\.personaId && play\.personaId !== personaId \? \{ \.\.\.play, undoable: false \}/u,
+);
+assert.match(
+  read("features/media/slp-images-service.ts"),
+  /const companionIds = input\.settings\.imageOnePerson \? undefined : input\.companionIds;/u,
+);

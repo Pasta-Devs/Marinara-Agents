@@ -1,5 +1,16 @@
 # Slurp release notes
 
+## 0.4.25 — 2026-11-16
+
+- Fixed: a hairstyle the card says is "worn" a certain way ("hair worn in a high ponytail") was read as clothing and left out of the picture.
+- Fixed: with Storylines off, explicit posts and occasions still brought in collab and couple partners from saved pairs and old collabs.
+- Added: Images › "One person per picture". Post pictures then show the Creator alone, with no partner, guest or collab partner drawn in.
+- Added: Backstage › Creators › "Refresh looks from cards". Slurp drafts each ticked Creator's look again from the card, as a Pulse task. One AI call per Creator.
+- Fixed: switching back to the Slurp tab no longer counts ad impressions again and rotates the ads.
+- Fixed: a fast second toggle in the events list no longer undoes the first one.
+- Fixed: a persona's Stir play can only be undone by that persona, also when no persona is sent.
+- Fixed: a double tap on a Life panel condition adds it once.
+
 ## 0.4.24 — 2026-11-16
 
 - Fixed: cut-off post checks skip bracketed labels before the JSON object, schedule refresh rejects parsed non-object cards, and a relation denial no longer cancels an affirmed bond in a later clause.

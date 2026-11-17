@@ -12,6 +12,7 @@ import type { SlpCreatorFilter } from "./slp-creators-backstage-contract";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 import { SlpContinuityOverview } from "./SlpContinuityOverview";
+import { SlpCreatorLooksRefresh } from "./SlpCreatorLooksRefresh";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { SLP_CREATOR_SETTING_TAB } from "./settings/slp-creator-settings-contract";
 import { openSlpCreatorSettings } from "./settings/slp-creator-settings-store";
@@ -123,6 +124,7 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
             <SlpSparkleGlyph size={14} className="text-[var(--noodle-accent-foreground)]" aria-hidden="true" />
             {t("ui.slurp.settings.creators.improve", { defaultValue: "Improve with AI" })}
           </button>
+          <SlpCreatorLooksRefresh creators={creators} />
         </div>
       </div>
 

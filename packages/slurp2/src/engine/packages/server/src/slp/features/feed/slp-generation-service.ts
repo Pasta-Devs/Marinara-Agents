@@ -339,7 +339,7 @@ export async function generateCreatorPost(
     directed,
     explicitLevel,
     dialLevel,
-    collabs: settings.creatorCollabs,
+    collabs: slpExtensionOn(settings, "storylines") ? settings.creatorCollabs : null,
     recentPosts,
     sequence,
     variation,
@@ -508,7 +508,7 @@ export async function generateCreatorPost(
   });
   // What the picture is and may show, in one place so the two briefs agree on level, shoot and effort.
   const tagged = await resolveSlurpMentionedCast(db, account.id, protectedGenerated.content, false);
-  const pictureIds = [...new Set([...castIds, ...tagged.ids])];
+  const pictureIds = settings.imageOnePerson ? [] : [...new Set([...castIds, ...tagged.ids])];
   const { draftImagePrompt, visualBrief, negativePrompt, shotBriefs, pictureCast } = slurpPostPictureBriefs({
     project,
     variation,
@@ -521,9 +521,9 @@ export async function generateCreatorPost(
     postImages,
     access: input.request.access,
     explicitLevel,
-    partner: spiceAngle?.partner?.company ?? null,
-    cast: [...new Set([...(beat?.cast ?? []), ...mentioned.names, ...tagged.names])],
-    beat,
+    partner: settings.imageOnePerson ? null : (spiceAngle?.partner?.company ?? null),
+    cast: settings.imageOnePerson ? [] : [...new Set([...(beat?.cast ?? []), ...mentioned.names, ...tagged.names])],
+    beat: settings.imageOnePerson && beat ? { ...beat, cast: [] } : beat,
     modelImagePrompt: generated.imagePrompt,
     stageFacts: account.settings.stage,
     scene: generated.scene,

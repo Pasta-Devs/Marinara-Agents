@@ -402,6 +402,13 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
             value={settings.imageGenerationIncludeDescriptions}
             onChange={(value) => update("imageGenerationIncludeDescriptions", value)}
           />
+          <Toggle
+            settingKey="imageOnePerson"
+            label={t("ui.slurp.settings.images.onePerson")}
+            detail={t("ui.slurp.settings.images.onePersonDetail")}
+            value={settings.imageOnePerson}
+            onChange={(value) => update("imageOnePerson", value)}
+          />
         </div>
         {settings.imageGenerationIncludeDescriptions && (
           <ChoiceSetting

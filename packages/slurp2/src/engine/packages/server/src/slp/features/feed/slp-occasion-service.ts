@@ -72,8 +72,10 @@ export async function planSlurpOccasionBeat(
       readSlurpCouplePartner(db, account.id).catch(() => ({ inCouple: false, partnerId: null })),
       listSlurpOpportunities(db, account.id, 40),
     ]);
+    // Storylines off: no partner or collab joins an occasion.
+    const ties = slpExtensionOn(settings, "storylines");
     const nameOf = async (id: string | null | undefined) =>
-      id
+      ties && id
         ? ((await noodle.getNoodlerAccountById(id, { includeHidden: true }).catch(() => null))?.displayName ?? null)
         : null;
     return slurpOccasionBeat({
