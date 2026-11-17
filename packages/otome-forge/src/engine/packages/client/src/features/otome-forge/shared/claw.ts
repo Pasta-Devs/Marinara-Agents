@@ -6,6 +6,7 @@
 // drawn plushes plus each love interest's own, the animal that fits them, drawn once in the background (#1954,
 // S/minigames/plush.ts), or until then their look (cut out once Home has made it) or their initials in a round frame.
 import type { ActivityGrant, ClawCheat, KittyLines, LiId, LinesView } from "./api-types";
+import type { KittenView } from "./kitty";
 
 /** The outline every plush is drawn with, the series' and the love interests' own (S/minigames/plush.ts). */
 export const PLUSH_INK = "#3b2a40";
@@ -139,4 +140,11 @@ export interface PlayView {
       lines: Pick<LinesView, "claw" | "cold"> & { kitty?: KittyLines };
     }
   >;
+  /**
+   * 0.35.0, with images on only: Kitty Cards' painted kittens (S/art/kittens.ts), the protagonist's first, then each
+   * love interest's with a bible, in cast order (SH/kitty.ts kittenCards puts them on the cards).
+   */
+  kittens?: KittenView[];
+  /** A kitten may still land without a tap (one is owed, painting or being cut out): the client reads again. */
+  kittensPending?: true;
 }

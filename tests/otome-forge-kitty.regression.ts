@@ -8,13 +8,20 @@
 // lines' content rule, and none during a rupture. His lines: a new fixed pack (P15) holds the six kitty kinds by their
 // counts and rules; a pack written before them gains only kitty lines from a background job GET /play queues (once, under
 // the pack's own content stamp, with the line packs' cool-down), never touching comfort or claw; the catalog has a
-// fallback line for every kind and every cheat style.
+// fallback line for every kind and every cheat style. The art: twenty transparent kitten cards in the package, each
+// with its breed; with images on, GET /play paints her kitten and each love interest's one at a time in the low lane,
+// shows each only once cut out, leaves them waiting for a tap under Ask or review (which paints once), rests after a
+// failure, reads a restart's paint as stopped and paints nothing with images off; the kitten prompt keeps its rating
+// and adult tags on an edit; and the kittens take rose 5 (hers), sky 5 (his) and lemon and mint 5 (the next two).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type { ClawCheat } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
-import { CLAW_ROUNDS_KEPT } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/claw.ts";
+import {
+  CLAW_ROUNDS_KEPT,
+  type PlayView,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/claw.ts";
 import {
   ACTIVITY_STARLIGHT_DAILY_CAP,
   OUTSIDE_AFFECTION_DAILY_CAP,
@@ -26,6 +33,7 @@ import {
   wordCount,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import {
+  KITTEN_CARDS,
   KITTY_COLOURS,
   KITTY_DECK,
   KITTY_HAND_MAX,
@@ -37,6 +45,7 @@ import {
   deal,
   endCheat,
   isOver,
+  kittenCards,
   legalMoves,
   nudgeSwap,
   partnerMove,
@@ -47,6 +56,7 @@ import {
   tradeCards,
   tradeOffer,
   turnSeed,
+  type KittenView,
   type KittyCard,
   type KittyCupColour,
   type KittyFinishResult,
@@ -55,6 +65,17 @@ import {
   type KittyRound,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/kitty.ts";
 import { mulberry32 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/claw-physics.ts";
+import {
+  KITTY_BREED_KEYS,
+  kittyCardUrl,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/kitty-cards.ts";
+import {
+  cutoutsSettled,
+  type CutoutClient,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
+import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
+import { queueKittens } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/kittens.ts";
+import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
@@ -69,6 +90,7 @@ import {
   type RouteHandler,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/http.ts";
 import {
+  playerId,
   runDocTarget,
   stateId,
   unitId,
@@ -76,6 +98,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { playView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/claw.ts";
+import { registerArtRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/art.ts";
 import { registerClawRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/claw.ts";
 import { registerKittyRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/kitty.ts";
 import {
@@ -83,10 +106,16 @@ import {
   readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { LinePackReplySchema } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/replies.ts";
-import { linePackMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
+  KITTEN_FRAMING,
+  kittenPrompt,
+  linePackMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { HE, KAI, MIR, SOL, bible, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { artWorld, routesOf, setImages, until } from "./fixtures/otome-forge-art.ts";
+import { HE, KAI, MIR, SOL, at, bible, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 // ── The rules ──
 
@@ -1035,4 +1064,351 @@ test("the catalog has a fallback for every kitty line kind and every cheat style
     assert.ok(!/[?？¿؟]/u.test(text), `${key}: no question`);
     assert.ok(!/\b(?:he|him|his|she|her|hers|they|them|their)\b/i.test(text), `${key}: no pronoun for anyone`);
   }
+});
+
+// ── The cards' art, and their painted kittens ──
+
+const BREEDS: Record<string, string[]> = {
+  rose: ["Scottish Fold", "Ragdoll", "Persian", "Sphynx", "Turkish Angora"],
+  sky: ["Russian Blue", "Siamese", "British Shorthair", "Birman", "Devon Rex"],
+  lemon: ["Orange Tabby", "Maine Coon", "Abyssinian", "Bengal", "Exotic Shorthair"],
+  mint: ["Norwegian Forest Cat", "Munchkin", "Tuxedo", "Japanese Bobtail", "Egyptian Mau"],
+};
+
+test("the cards: twenty transparent kittens in the package, one per card, each named for its breed", () => {
+  const dir = new URL("../packages/otome-forge/kitty/", import.meta.url);
+  assert.deepEqual(
+    readdirSync(dir).sort(),
+    KITTY_DECK.map((card) => `${card}.webp`).sort(),
+    "one file per card, nothing else",
+  );
+  const catalog: Record<string, string> = JSON.parse(
+    readFileSync(
+      new URL(
+        "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/locales/en.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  for (const card of KITTY_DECK) {
+    const file = new URL(`${card}.webp`, dir);
+    assert.ok(existsSync(file), `${card}'s kitten is in the package`);
+    const bytes = readFileSync(file);
+    // RIFF....WEBPVP8X with the alpha flag: a WebP with transparency, as the cut-out kittens beside them are.
+    assert.equal(bytes.subarray(0, 4).toString("latin1"), "RIFF", card);
+    assert.equal(bytes.subarray(8, 16).toString("latin1"), "WEBPVP8X", card);
+    assert.ok((bytes[20]! & 0x10) !== 0, `${card} is transparent`);
+    const [colour, value] = card.split("-") as [string, string];
+    assert.equal(catalog[KITTY_BREED_KEYS[card]], BREEDS[colour]![Number(value) - 1], `${card}'s breed`);
+  }
+  assert.equal(new Set(Object.values(KITTY_BREED_KEYS)).size, KITTY_DECK.length, "a key of its own for each card");
+  assert.equal(catalog["ui.otomeForge.kitty.asKitten"], "{{name}} as a kitten");
+  // Fetched from the Engine's package assets, the version making an update's art a new URL.
+  assert.equal(
+    kittyCardUrl("rose-5", "0.35.0"),
+    "/api/capability-packages/otome-forge/assets/kitty/rose-5.webp?v=0.35.0",
+  );
+  assert.equal(kittyCardUrl("mint-1", null), "/api/capability-packages/otome-forge/assets/kitty/mint-1.webp");
+});
+
+test("the kittens take rose 5 (hers), sky 5 (his), lemon and mint 5 (the next two after him who have one)", () => {
+  const shown = (owner: string): KittenView => ({ owner, url: `/k/${owner}.png` });
+  const cast: KittenView[] = [
+    shown("player"),
+    shown("li-a-0001"),
+    shown("li-b-0002"),
+    { owner: "li-c-0003", art: { state: "waiting-consent", at } },
+    shown("li-d-0004"),
+  ];
+  const owners = (li: string, kittens = cast) =>
+    Object.fromEntries(Object.entries(kittenCards(kittens, li)).map(([card, kitten]) => [card, kitten!.owner]));
+  assert.deepEqual(KITTEN_CARDS, ["rose-5", "sky-5", "lemon-5", "mint-5"]);
+  // With B: C has none yet, so D and then A (round to the start of the cast).
+  assert.deepEqual(owners("li-b-0002"), {
+    "rose-5": "player",
+    "sky-5": "li-b-0002",
+    "lemon-5": "li-d-0004",
+    "mint-5": "li-a-0001",
+  });
+  assert.deepEqual(kittenCards(cast, "li-a-0001")["rose-5"], { owner: "player", url: "/k/player.png" });
+  // His own still waiting: sky 5 keeps its breed; so does rose 5 without hers, and every card with none at all.
+  assert.deepEqual(owners("li-c-0003"), { "rose-5": "player", "lemon-5": "li-d-0004", "mint-5": "li-a-0001" });
+  assert.deepEqual(owners("li-a-0001", cast.slice(1)), {
+    "sky-5": "li-a-0001",
+    "lemon-5": "li-b-0002",
+    "mint-5": "li-d-0004",
+  });
+  assert.deepEqual(kittenCards([], KAI), {});
+});
+
+test("the kitten prompt: a chibi kitten on the look's matte, with her colours and accessories, kept safe on an edit", async () => {
+  const t = await artWorld({ runKey: "r-kitprompt-aaaaaa" });
+  const world = (await readRun(t.store, t.runId))!.world;
+  const style = { styleText: "soft watercolor", positiveTags: "pastel", negativeTags: "blurry" };
+  const input = {
+    name: "Kai",
+    identityLine: "tall man, green eyes, black hair",
+    outfitLine: "navy coat, silver earring",
+    presentation: "man" as const,
+    world,
+    style,
+  };
+  const built = kittenPrompt(input);
+  assert.ok(built.prompt.startsWith("soft watercolor, Kai as a kitten, a cat breed whose fur and eyes echo"));
+  assert.ok(built.prompt.includes("Kai's look: tall man, green eyes, black hair; navy coat, silver earring"));
+  assert.ok(built.prompt.includes(KITTEN_FRAMING), built.prompt);
+  assert.match(built.prompt, /plain flat solid chroma magenta #FF00FF background/, "green and blue are named: magenta");
+  // A person-less picture's tags at SFW, and the adult and rating negatives every picture keeps.
+  assert.match(built.prompt, /safe for work, fully clothed, adults only/);
+  assert.match(built.prompt, /use it only for Kai's colours/, "the avatar reference is for colours only");
+  assert.match(built.negativePrompt, /^human, humanoid, person/);
+  assert.match(built.negativePrompt, /child, childlike, minor, underage/);
+  assert.match(built.negativePrompt, /nudity, nsfw/);
+  assert.match(built.negativePrompt, /cast shadow/, "the matte's negatives");
+  assert.match(built.negativePrompt, /blurry/);
+  // Above SFW it stays a clothed, never explicit, picture.
+  const explicit = { ...world, images: { ...world.images, rating: "explicit" as const } };
+  const above = kittenPrompt({ ...input, world: explicit });
+  assert.match(above.prompt, /clothed, adults only/);
+  assert.doesNotMatch(above.prompt, /explicit/);
+  assert.match(above.negativePrompt, /child, childlike, minor, underage, school uniform, nudity, explicit sexual/);
+  // An edit keeps its wording and gets every required tag back; a tag profile gets no sentence about the reference.
+  const edited = kittenPrompt(input, { prompt: "a kitten in a navy coat", negativePrompt: "text" });
+  assert.match(edited.prompt, /^a kitten in a navy coat, safe for work, fully clothed, adults only$/);
+  assert.match(edited.negativePrompt, /^text, child, childlike, minor/);
+  assert.doesNotMatch(kittenPrompt({ ...input, style: { ...style, tagged: true } }).prompt, /reference picture/);
+  assert.doesNotMatch(kittenPrompt({ ...input, identityLine: "", outfitLine: "" }).prompt, /Kai's look:/);
+});
+
+/** A free cut-out that lands at once, or (held) once `release()` is called. */
+function freeCutouts(held: boolean) {
+  let release = () => {};
+  const gate = held ? new Promise<void>((resolve) => (release = resolve)) : Promise.resolve();
+  const client: CutoutClient = {
+    async cutOut(url) {
+      await gate;
+      return { url: `${url}.cut.png`, id: `cut-${url.length}` };
+    },
+    deleteGalleryImage: async () => true,
+  };
+  return { client, release: () => release() };
+}
+
+/** The art world with GET /play and the art routes, the art service and free cut-outs. */
+async function kittenWorld(runKey: string, { ask = false, held = false } = {}) {
+  const t = await artWorld({ runKey, images: { ask } });
+  const cut = freeCutouts(held);
+  const deps = { ...t.deps, cutouts: cut.client };
+  const full = { ...deps, art: createOtomeArt(deps) };
+  const play = routesOf(registerClawRoutes, full, runKey);
+  const arts = routesOf(registerArtRoutes, full, runKey);
+  const view = async (query: object = {}) => {
+    const result = await play("GET", "/runs/:run/play", query);
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body as PlayView;
+  };
+  /** Reads the play view until no kitten may land without a tap (each read starts what is owed). */
+  const settle = async () => {
+    for (let round = 0; round < 80; round += 1) {
+      const shown = await view();
+      await cutoutsSettled();
+      if (!shown.kittensPending) return;
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    assert.fail("the kittens never settled");
+  };
+  const kittenPaints = () => t.paid.filter((call) => call.request.prompt.includes(KITTEN_FRAMING));
+  const record = async (owner: string) =>
+    owner === "player"
+      ? (await t.store.readDoc(playerId(t.runId), normalizePlayer))!.kitten
+      : (await t.store.readDoc(unitId(t.runId, owner), normalizeUnit))!.kitten;
+  const states = async () =>
+    Promise.all(["player", KAI, MIR, SOL].map(async (owner) => (await record(owner))?.state ?? null));
+  return { ...t, cut, arts, view, settle, kittenPaints, record, states };
+}
+
+test("images on: GET /play paints her kitten and each of theirs, one at a time in the low lane, shown once cut out", async () => {
+  const t = await kittenWorld("r-kitten-aaaaaa");
+  let live = 0;
+  let most = 0;
+  const original = t.images.generatePortrait;
+  t.images.generatePortrait = async (request) => {
+    live += 1;
+    most = Math.max(most, live);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    live -= 1;
+    return original(request);
+  };
+  // In the low lane: a scene paint queued while the connection is busy goes before her kitten.
+  const order: string[] = [];
+  let release!: () => void;
+  const busy = paintSlot("conn-image", () => new Promise<void>((resolve) => (release = resolve)), "high");
+  // Released however this ends: a lane left busy would hold back every later paint in this file.
+  try {
+    const first = await t.view();
+    assert.deepEqual(
+      first.kittens!.map((kitten) => kitten.owner),
+      ["player", KAI, MIR, SOL],
+      "hers, then the cast in order",
+    );
+    assert.equal(first.kittensPending, true);
+    await until(async () => (await t.record("player"))?.state === "pending", "her kitten waits for the lane");
+    const scene = paintSlot("conn-image", async () => void order.push("scene"), "high");
+    const paint = t.images.generatePortrait;
+    t.images.generatePortrait = async (request) => (order.push("kitten"), paint(request));
+    // While it waits, more reads claim nothing else: a restart now would stop this one kitten only.
+    await Promise.all([t.view(), t.view(), t.view()]);
+    for (let round = 0; round < 100; round += 1) await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(await t.states(), ["pending", null, null, null], "one kitten in flight per run");
+    release();
+    await scene;
+  } finally {
+    release();
+  }
+  await busy;
+  await t.settle();
+  assert.deepEqual(order, ["scene", "kitten", "kitten", "kitten", "kitten"]);
+  assert.equal(most, 1);
+  // Each through the portrait path (the avatar as the likeness reference), square, as a kitten of that person.
+  const paints = t.kittenPaints();
+  assert.deepEqual(
+    paints.map((call) => [call.method, call.request.name, call.request.width, call.request.height]),
+    ["Ines", "Kai", "Mireille", "Sol"].map((name) => ["generatePortrait", name, 1024, 1024]),
+  );
+  assert.ok(
+    paints.every((call, index) =>
+      call.request.prompt.includes(`${["Ines", "Kai", "Mireille", "Sol"][index]} as a kitten`),
+    ),
+  );
+  // Shown cut out; more reads paint nothing more.
+  const shown = await t.view();
+  assert.equal(shown.kittensPending, undefined);
+  assert.ok(
+    shown.kittens!.every((kitten) => kitten.url?.endsWith(".cut.png") && !kitten.art),
+    JSON.stringify(shown),
+  );
+  await t.settle();
+  assert.equal(t.kittenPaints().length, 4);
+});
+
+test("a kitten shows only once its cut-out settles; with images off there are none and nothing is painted", async () => {
+  const t = await kittenWorld("r-kitcut-aaaaaa", { held: true });
+  try {
+    await t.view();
+    await until(async () => (await t.states()).every((state) => state === "ready"), "every kitten is painted");
+    const held = await t.view();
+    assert.equal(held.kittensPending, true, "the client reads again");
+    assert.ok(
+      held.kittens!.every((kitten) => !kitten.url && kitten.art?.state === "pending"),
+      "painted, not cut out yet: painting",
+    );
+  } finally {
+    t.cut.release();
+  }
+  await t.settle();
+  assert.ok((await t.view()).kittens!.every((kitten) => kitten.url?.endsWith(".cut.png")));
+
+  const u = await kittenWorld("r-kitoff-aaaaaa");
+  await setImages(u.store, u.runId, { connectionId: null });
+  const off = await u.view();
+  assert.deepEqual(["kittens" in off, "kittensPending" in off], [false, false]);
+  await u.settle();
+  assert.deepEqual([await u.states(), u.paid.length], [[null, null, null, null], 0]);
+});
+
+test("Ask before painting or prompt review leaves every kitten waiting for the tap, which paints once", async () => {
+  const t = await kittenWorld("r-kitask-aaaaaa", { ask: true });
+  await t.settle();
+  assert.deepEqual(await t.states(), ["waiting-consent", "waiting-consent", "waiting-consent", "waiting-consent"]);
+  assert.equal(t.paid.length, 0, "nothing paid before the tap");
+  const waiting = await t.view();
+  assert.deepEqual(
+    waiting.kittens!.map((kitten) => kitten.art?.state),
+    ["waiting-consent", "waiting-consent", "waiting-consent", "waiting-consent"],
+    "Paint our kittens (4 images)",
+  );
+  const prompt = await t.arts("POST", "/runs/:run/art/kitten/prompt", { owner: KAI });
+  assert.ok(prompt.body.prompt.includes(KITTEN_FRAMING), JSON.stringify(prompt.body));
+  const [one, two] = await Promise.all([
+    t.arts("POST", "/runs/:run/art/kitten", { owner: KAI }),
+    t.arts("POST", "/runs/:run/art/kitten", { owner: KAI }),
+  ]);
+  assert.deepEqual([one.body.art.state, two.body.art.state], ["ready", "ready"]);
+  assert.equal(t.kittenPaints().length, 1, "two taps pay once");
+  const again = await t.arts("POST", "/runs/:run/art/kitten", { owner: KAI });
+  assert.deepEqual([again.body.art.state, t.kittenPaints().length], ["ready", 1], "a painted kitten is not repainted");
+  assert.equal((await t.arts("POST", "/runs/:run/art/kitten", { owner: "li-nobody-zz99" })).status, 404);
+  await setImages(t.store, t.runId, { connectionId: null });
+  const off = await t.arts("POST", "/runs/:run/art/kitten", { owner: "player" });
+  assert.deepEqual([off.status, (await t.record("player"))!.state], [503, "waiting-consent"]);
+  assert.equal(t.paid.length, 1);
+
+  // Review mode from a GET does the same with Ask off.
+  const u = await kittenWorld("r-kitreview-aaaaaa");
+  await u.view({ reviewImagePrompts: "true" });
+  await until(async () => !!(await u.record("player")), "her kitten is claimed");
+  assert.equal((await u.record("player"))!.state, "waiting-consent");
+  assert.equal(u.paid.length, 0);
+});
+
+test("a failed kitten rests the chain and waits for Try again; a restart's paint reads as stopped", async () => {
+  const t = await kittenWorld("r-kitfail-aaaaaa");
+  const original = t.images.generatePortrait;
+  let tries = 0;
+  t.images.generatePortrait = async (request) => {
+    tries += 1;
+    await original(request);
+    throw new Error("the image connection is down");
+  };
+  await t.settle();
+  await Promise.all([t.view(), t.view(), t.view()]);
+  await t.settle();
+  assert.equal(tries, 1, "one kitten fails, not every one owed");
+  assert.deepEqual(await t.states(), ["failed", null, null, null]);
+  const rested = await t.view();
+  assert.deepEqual([rested.kittensPending, rested.kittens![0]!.art?.state], [undefined, "failed"]);
+  t.images.generatePortrait = original;
+  const retry = await t.arts("POST", "/runs/:run/art/kitten", { owner: "player" });
+  assert.equal(retry.body.art.state, "ready");
+  assert.deepEqual([t.kittenPaints().length, (await t.states()).slice(1)], [2, [null, null, null]]);
+
+  // A paint left pending by a restart reads as stopped and is never painted again by itself.
+  const u = await kittenWorld("r-kitstop-aaaaaa");
+  await u.store.updateDoc(runDocTarget("unit", unitId(u.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    kitten: { state: "pending", at },
+  }));
+  await u.settle();
+  assert.deepEqual(await u.states(), ["ready", "pending", "ready", "ready"]);
+  assert.equal((await u.view()).kittens!.find((kitten) => kitten.owner === KAI)!.art?.state, "stopped");
+  assert.equal(u.kittenPaints().length, 3);
+});
+
+test("a kitten claim that does not stay ends the chain instead of claiming that kitten again", async () => {
+  const t = await kittenWorld("r-kitlost-aaaaaa");
+  // Her document keeps no kitten record (as one dropped on read would): each claim of hers is lost.
+  const updateDoc = t.store.updateDoc.bind(t.store);
+  let claims = 0;
+  let on = true;
+  t.store.updateDoc = ((target, normalize, change, options) =>
+    updateDoc(
+      target,
+      normalize,
+      async (current) => {
+        const next = (await change(current)) as { kitten?: unknown };
+        if (target.id !== playerId(t.runId) || !next.kitten) return next as typeof current;
+        claims += 1;
+        // Without the chain's guard it would claim her forever: stop it, so the test fails instead of hanging.
+        if (claims > 3) on = false;
+        const { kitten: _lost, ...rest } = next;
+        return rest as typeof current;
+      },
+      options,
+    )) as typeof t.store.updateDoc;
+  const chain = queueKittens(t.deps, t.runId, { debugMode: false, active: () => on });
+  const ended = await Promise.race([chain.then(() => true), new Promise((resolve) => setTimeout(resolve, 500, false))]);
+  on = false;
+  await chain;
+  assert.deepEqual([ended, claims, t.paid.length], [true, 1, 0], "claimed once, and nothing paid");
 });

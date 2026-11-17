@@ -349,6 +349,8 @@ export function normalizeUnit(data: unknown): Unit {
       plushArt: normalizePlushArt,
       figurine: PaintSchema.optional(),
       stickers: normalizeStickerSet,
+      // 0.35.0: absent until GET /play is read with images on (S/art/kittens.ts).
+      kitten: PaintSchema.optional(),
     },
     defaultUnit,
     isRecord(data) ? data : undefined,

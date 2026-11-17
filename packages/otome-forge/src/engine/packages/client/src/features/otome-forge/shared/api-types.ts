@@ -312,6 +312,8 @@ export interface Player {
    * on, which starts them; absent: the built-in set only.
    */
   stickers?: Partial<Record<PlayerSticker, Paint>>;
+  /** 0.35.0: her Kitty Cards kitten's paint (S/art/kittens.ts), claimed once GET /play is read with images on. */
+  kitten?: Paint;
 }
 
 export type ArcStageKey = "1" | "2" | "3" | "4" | "5" | "6";
@@ -436,6 +438,8 @@ export interface Unit {
   figurine?: Paint;
   /** #2044: his nine chibi stickers, designed once he reaches level 2 with images on (S/art/stickers.ts). */
   stickers?: StickerSet;
+  /** 0.35.0: their Kitty Cards kitten's paint (S/art/kittens.ts), claimed once GET /play is read with images on. */
+  kitten?: Paint;
 }
 
 /**

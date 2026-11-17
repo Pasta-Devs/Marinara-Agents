@@ -5843,6 +5843,9 @@ export function showMessages(input: LookLineInput): OtomeMessage[] {
 // base, full figure on the look's chroma matte for the cut-out, with a look's own tags (`clothed`, never explicit).
 // #2151 adds a Tarot card: the card's iconography with its people (`clothed`, never explicit) or, for a card of
 // nobody, scenery as a place is painted; the illustration only, full-bleed, with no border or lettering.
+// 0.35.0 adds a Kitty Cards kitten: the protagonist or a love interest drawn as a chibi kitten in the sticker style, on
+// the look's chroma matte for the cut-out. It draws no person, so it carries a person-less picture's tags (`clothed`,
+// "adults only") and the same adult and rating negatives as a sticker.
 
 // ── An image's rating and adult tags ──
 
@@ -6420,6 +6423,60 @@ export function stickerPrompt(input: StickerInput, edited: Partial<ImagePrompt> 
         .filter(Boolean)
         .join(", "),
       negativePrompt: mergeTags(STICKER_NEGATIVE, MATTE_NEGATIVE, negative, style.negativeTags),
+    }),
+    required,
+    negative,
+    edited,
+  );
+}
+
+// ── 0.35.0: Kitty Cards' painted kittens ──
+
+/**
+ * A kitten in the stickers' style (thick clean line art, soft cel shading, no white rim), a whole cat so it sits in a
+ * card's frame as the pre-made kittens do. Square, at STICKER_SIZE, and cut out of its matte afterwards.
+ */
+export const KITTEN_FRAMING =
+  "cute 2D anime chibi kitten, a real cat on four paws, full body, big head, big eyes, thick clean line art, soft cel shading, no white outline around the figure";
+const KITTEN_NEGATIVE =
+  "human, humanoid, person, catgirl, catboy, kemonomimi, text, letters, captions, logos, watermarks, frame, collage layouts, multiple animals, scenery, busy background, white outline, white border, sticker border, die-cut border";
+
+/**
+ * The protagonist or a love interest as a kitten: the style, then a cat whose breed and fur echo their colouring (their
+ * identity line) wearing small accessories from their look (their outfit line), the kitten framing on the matte their
+ * look names least, and a person-less picture's rating and adult tags. Their avatar goes along as the likeness
+ * reference (generatePortrait), for colours only. An edited prompt keeps its wording with every required tag put back.
+ */
+export function kittenPrompt(input: Omit<LookInput, "matte">, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const { world, style } = input;
+  const required = otomeImageTags({ world, people: [], use: "clothed", tagged: style.tagged === true });
+  const negative = requiredNegative(world, "clothed");
+  const matte = lookMatte(input.outfitLine, input.identityLine);
+  const name = input.name.trim() || "this person";
+  const look = [input.identityLine.trim(), input.outfitLine.trim()].filter(Boolean).join("; ");
+  const note =
+    style.tagged === true
+      ? ""
+      : sentence(
+          `If a reference picture of ${name} is attached, use it only for ${name}'s colours and the look of the accessories: draw a kitten, never a person, and never the picture's pose, framing or background`,
+        );
+  return finish(
+    world,
+    () => ({
+      prompt: [
+        [
+          style.styleText,
+          `${name} as a kitten, a cat breed whose fur and eyes echo ${name}'s colouring, wearing small accessories from ${name}'s look`,
+          look ? `${name}'s look: ${look}` : "",
+          mergeTags(KITTEN_FRAMING, `plain flat solid ${matte} background`, required, style.positiveTags),
+        ]
+          .filter(Boolean)
+          .join(", "),
+        note,
+      ]
+        .filter(Boolean)
+        .join(". "),
+      negativePrompt: mergeTags(KITTEN_NEGATIVE, MATTE_NEGATIVE, negative, style.negativeTags),
     }),
     required,
     negative,

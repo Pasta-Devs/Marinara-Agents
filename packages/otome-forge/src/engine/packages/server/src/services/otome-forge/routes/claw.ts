@@ -4,12 +4,14 @@
 // GET  /runs/:run/play                                      → PlayView: today's capped earnings, the plush shelf, and
 //                                                             how each love interest plays (bible.play), whether a
 //                                                             rupture stands between them or holds their dates, and
-//                                                             their claw and cold lines
+//                                                             their claw and cold lines; 0.35.0, with images on, Kitty
+//                                                             Cards' painted kittens (`kittens`, `kittensPending`)
 // POST /runs/:run/claw/finish {li, round, first, caught, cheered} → ClawFinishResult {grants, newPlush, firstPlush,
 //                                                             line?, capped, replay, plush, starlight}
 // A finish never calls a model or paints an image (S/minigames/claw.ts). GET /play only queues, in the background, the
 // drawing of a love interest's own plush when they have none yet (#1954, S/minigames/plush.ts), and 0.35.0 his Kitty
-// Cards lines when his fixed pack was written before them (S/home/lines.ts ensureKittyLines); it never waits for either.
+// Cards lines when his fixed pack was written before them (S/home/lines.ts ensureKittyLines) and, with images on, the
+// kittens' paints and free cut-outs (S/art/kittens.ts); it never waits for any of them.
 // A finish is answered once per round id: the same body sent again (a lost answer, a double tap) is a replay that pays
 // nothing.
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
@@ -19,8 +21,17 @@ import {
   CLAW_ROUND_ID,
   type ClawFinishResult,
 } from "../../../../../client/src/features/otome-forge/shared/claw.js";
+import { kittensView, queueKittenCutouts, queueKittens } from "../art/kittens.js";
 import { ensureKittyLines } from "../home/lines.js";
-import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRouter, type RouteDeps } from "../http.js";
+import {
+  OtomeForgeError,
+  debugModeOf,
+  parseBody,
+  reviewModeOf,
+  runParam,
+  type OtomeRouter,
+  type RouteDeps,
+} from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { finishClawRound, playView } from "../minigames/claw.js";
 import { assertFreeToDate } from "../minigames/date-night.js";
@@ -43,7 +54,7 @@ const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not
 
 export function registerClawRoutes(
   router: OtomeRouter,
-  deps: Pick<RouteDeps, "store" | "handle" | "runtime" | "background">,
+  deps: Pick<RouteDeps, "store" | "handle" | "runtime" | "background" | "images" | "cutouts" | "art">,
 ): void {
   const { store, handle, runtime } = deps;
   router.get(
@@ -68,7 +79,15 @@ export function registerClawRoutes(
           error instanceof Error ? error.message : String(error),
         ),
       );
-      return playView(run.state, run.units, run.world.content, forgeDayKey(Date.now()));
+      // 0.35.0: with images on, each painted kitten is cut out (free), and those owed are painted one at a time in the
+      // background (or wait for the tap under Ask or review); nothing here waits for them.
+      const shown = await queueKittenCutouts(deps, runId, run);
+      const art = deps.art;
+      if (art) void queueKittens(deps, runId, { debugMode, review: reviewModeOf(request), active: art.active });
+      return {
+        ...playView(run.state, run.units, run.world.content, forgeDayKey(Date.now())),
+        ...kittensView(runId, shown, !!art),
+      };
     }),
   );
 

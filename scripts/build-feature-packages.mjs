@@ -278,6 +278,10 @@ const otomeForgeOwnedSourcePaths = [
   "packages/client/src/features/otome-forge",
   "packages/server/src/services/otome-forge",
 ];
+// 0.35.0: Kitty Cards' 20 pre-made kittens, one per colour and value (C/lib/kitty-cards.ts kittyCardUrl).
+const otomeForgeServedAssetPaths = ["rose", "sky", "lemon", "mint"].flatMap((colour) =>
+  [1, 2, 3, 4, 5].map((value) => `kitty/${colour}-${value}.webp`),
+);
 // The forge kit: plain .mjs modules Gacha Forge pastes into its bundles and Otome Forge imports as
 // `@forge-kit/<module>.mjs`. Package sources are copied into a temporary build root, so a relative import out of it
 // cannot resolve; both bundles alias the name instead. The gates and source capture skip files outside the build root.
@@ -958,7 +962,7 @@ const features = [
     packageSourceRoot: otomeForgeSourceRoot,
     ownedSourcePaths: otomeForgeOwnedSourcePaths,
     // The fonts are embedded in client.js as data: URIs; their licence ships beside them.
-    assetPaths: ["otome-hearth-icon.png", "otome-hearth-tab-heart.png", "fonts/OFL.txt"],
+    assetPaths: ["otome-hearth-icon.png", "otome-hearth-tab-heart.png", "fonts/OFL.txt", ...otomeForgeServedAssetPaths],
     libraryHidden: true,
     contributions: {
       slots: ["home-browser-tab"],
@@ -967,6 +971,7 @@ const features = [
         ariaLabel: "Open Otome Hearth",
         iconPaths: ["otome-hearth-tab-heart.png"],
       },
+      assets: { paths: otomeForgeServedAssetPaths },
     },
   },
 ];

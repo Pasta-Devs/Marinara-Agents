@@ -26,8 +26,11 @@
 //   steady     he lets her take back the card she played last and play again (takeBack)
 // `caught` on a finish (KittyCheat) means the moment was found out: she caught his nudge, or he caught her (freeze,
 // extra). Only those three can be caught.
+//
+// The cards' art is pre-made (packages/otome-forge/kitty/<card>.webp, a package asset). With images on, the protagonist
+// and each love interest also get a painted kitten (S/art/kittens.ts), which kittenCards puts on the value-5 cards.
 import { mulberry32 } from "../lib/claw-physics";
-import type { ActivityGrant, ClawCheat, LiId } from "./api-types";
+import type { ActivityGrant, ClawCheat, LiId, Paint } from "./api-types";
 import type { ClawPlayer } from "./claw";
 
 export const KITTY_COLOURS = ["rose", "sky", "lemon", "mint"] as const;
@@ -386,4 +389,47 @@ export interface KittyFinishResult {
   replay: boolean;
   /** The wallet after the game. */
   starlight: number;
+}
+
+// ── Their painted kittens ──
+
+/** Whose painted kitten: the protagonist's, or a love interest's. */
+export type KittenOwner = "player" | LiId;
+
+/**
+ * One painted kitten as GET /runs/:run/play shows it (S/art/kittens.ts), with images on only. `url`: the kitten once it
+ * is painted and cut out (the painted picture when its cut-out failed). Until then `art` is its paint as the client
+ * should see it: `waiting-consent` (Paint our kittens), `pending` (painting, or being cut out), `failed` or `stopped`
+ * (Try again); neither while it waits for its turn to be claimed.
+ */
+export interface KittenView {
+  owner: KittenOwner;
+  url?: string;
+  art?: Paint;
+}
+
+/** The cards painted kittens take, in kittenCards' order: hers, his, then two more love interests'. */
+export const KITTEN_CARDS: readonly KittyCard[] = ["rose-5", "sky-5", "lemon-5", "mint-5"];
+
+/**
+ * Which cards a game with `li` shows as painted kittens: rose 5 the protagonist, sky 5 him, lemon 5 and mint 5 the next
+ * two love interests after him in cast order (round to the start) who have one. `kittens` is the play view's: the
+ * protagonist, then the cast in order. Only a kitten with a `url` takes a card; any other card keeps its breed's art.
+ */
+export function kittenCards(
+  kittens: readonly KittenView[],
+  li: LiId,
+): Partial<Record<KittyCard, { owner: KittenOwner; url: string }>> {
+  const shown = (owner: KittenOwner | undefined) => {
+    const url = kittens.find((kitten) => kitten.owner === owner)?.url;
+    return owner && url ? { owner, url } : undefined;
+  };
+  const cast = kittens.flatMap((kitten) => (kitten.owner === "player" ? [] : [kitten.owner]));
+  const at = cast.indexOf(li);
+  const after = at < 0 ? [] : [...cast.slice(at + 1), ...cast.slice(0, at)];
+  const others = after.map(shown).filter((kitten) => kitten !== undefined);
+  const owners = [shown("player"), shown(at < 0 ? undefined : li), ...others];
+  return Object.fromEntries(
+    KITTEN_CARDS.flatMap((card, index) => (owners[index] ? [[card, owners[index]]] : [])),
+  ) as Partial<Record<KittyCard, { owner: KittenOwner; url: string }>>;
 }

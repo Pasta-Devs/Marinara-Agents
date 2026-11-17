@@ -18,6 +18,9 @@
 //                                                            protagonist's five stickers start (#2044, once)
 // POST /runs/:run/art/sticker {sticker, prompt?, negativePrompt?} → {art}; paints that sticker now (the tap)
 // POST /runs/:run/art/sticker/prompt {sticker}             → {prompt, negativePrompt}
+// POST /runs/:run/art/kitten {owner, prompt?, negativePrompt?} → {art}; 0.35.0: paints that Kitty Cards kitten now
+//                                                            (`player` or a love interest's id, S/art/kittens.ts)
+// POST /runs/:run/art/kitten/prompt {owner}                → {prompt, negativePrompt}
 // POST /runs/:run/art/side {key, prompt?, negativePrompt?}  → {art}; 0.20.0: paints that side character's sprite now
 // POST /runs/:run/art/side/prompt {key}                    → {prompt, negativePrompt} (S/art/side-sprites.ts)
 // A tap is the consent Ask before painting waits for, and the Retry for a failed or stopped paint: it waits for the
@@ -40,6 +43,7 @@ import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 import { cgPromptFor, cgView, markCgSeen, paintCgNow } from "../art/cg.js";
 import { itemArtView, outfitOf } from "../art/outfits.js";
 import { paintStickerNow, startPlayerStickers, stickerPromptFor } from "../art/stickers.js";
+import { kittenPromptFor, paintKittenNow } from "../art/kittens.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { chooseBackground, paintPlaceNow, placePromptFor, readPlace, withPlaceViews } from "../art/places.js";
 import { paintSideNow, sidePromptFor } from "../art/side-sprites.js";
@@ -69,6 +73,10 @@ const CgRefBody = z.object(BeatRef);
 const StickerRef = { sticker: z.string().regex(STICKER_ID) };
 const StickerBody = z.object({ ...StickerRef, ...Edited });
 const StickerRefBody = z.object(StickerRef);
+// A love interest's id is at most 80 characters, as every other route reads it; one owed no kitten is a 404.
+const KittenRef = { owner: z.string().min(1).max(80) };
+const KittenBody = z.object({ ...KittenRef, ...Edited });
+const KittenRefBody = z.object(KittenRef);
 const SideRef = { key: z.string().min(1).max(SIDE_NAME_MAX) };
 const SideBody = z.object({ ...SideRef, ...Edited });
 const SideRefBody = z.object(SideRef);
@@ -243,6 +251,28 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { sticker } = parseBody(StickerRefBody, request.body);
       const { prompt, negativePrompt } = await stickerPromptFor(deps, runParam(request).runId, sticker);
+      return { prompt, negativePrompt };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/art/kitten",
+    handle(async (request) => {
+      const body = parseBody(KittenBody, request.body);
+      const art = await paintKittenNow(deps, runParam(request).runId, body.owner, {
+        debugMode: debugModeOf(request),
+        edited: { prompt: body.prompt, negativePrompt: body.negativePrompt },
+        active: deps.art?.active,
+      });
+      return { art };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/art/kitten/prompt",
+    handle(async (request) => {
+      const { owner } = parseBody(KittenRefBody, request.body);
+      const { prompt, negativePrompt } = await kittenPromptFor(deps, runParam(request).runId, owner);
       return { prompt, negativePrompt };
     }),
   );

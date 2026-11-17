@@ -75,6 +75,8 @@ export function normalizePlayer(data: unknown): Player {
       noticed: NoticedSchema.nullable(),
       // #2044: absent until the phone first opens with images on (S/art/stickers.ts).
       stickers: (value) => (isRecord(value) ? normalizePaints(value, isPlayerSticker) : undefined),
+      // 0.35.0: absent until GET /play is read with images on (S/art/kittens.ts).
+      kitten: PaintSchema.optional(),
     },
     defaultPlayer,
     isRecord(data) ? data : undefined,
