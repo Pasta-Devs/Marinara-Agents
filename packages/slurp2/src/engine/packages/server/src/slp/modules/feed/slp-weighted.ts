@@ -24,19 +24,7 @@
  * rather than adjacent. Weights then say how often each option should actually appear, so the
  * ordinary stays ordinary and the rare stays rare no matter how long a Creator runs.
  */
-
-/** FNV-1a with a final avalanche, matching the hash the older rotations use. */
-function hash(value: string): number {
-  let out = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 0x01000193);
-  }
-  out ^= out >>> 16;
-  out = Math.imul(out, 0x85ebca6b);
-  out ^= out >>> 13;
-  return out >>> 0;
-}
+import { slpHashMix as hash } from "../../../../../shared/src/slp/slp-hash.js";
 
 export type SlurpWeighted<T> = { value: T; weight: number };
 

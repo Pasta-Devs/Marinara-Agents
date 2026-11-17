@@ -9,6 +9,7 @@
  * shared schema and cannot grow a ledger from this repository. `wallet.coins` is still mirrored
  * on write so existing balance UI keeps reading the number it already knows.
  */
+import { slpIntOrNull as intOrNull } from "../../../../../shared/src/slp/slp-coerce.js";
 
 /** Storage key for a viewer's wallet. Mirrors the `slurp2.viewer.<id>.ads` key shape. */
 export const slurpWalletKey = (viewerAccountId: string) => `slurp2.viewer.${viewerAccountId}.wallet`;
@@ -151,9 +152,6 @@ export function slurpDayKey(at: Date, startHour: number = SLURP_DEFAULT_DAY_STAR
   const day = String(shifted.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
-
-const intOrNull = (value: unknown): number | null =>
-  typeof value === "number" && Number.isInteger(value) ? value : null;
 
 export function emptySlurpWallet(economy: SlurpEconomy = SLURP_DEFAULT_ECONOMY): SlurpWallet {
   return {

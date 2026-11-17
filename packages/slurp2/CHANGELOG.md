@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.4.27 — 2026-11-17
+
+- Changed: 23 copied helpers now come from two shared modules, `slp-hash.ts` and `slp-coerce.ts`, with the same output. A new regression freezes the hash values, so stored picks and rotations stay put.
+- Changed: the drama service uses the drama cast's `pairKey`, and earnings call `slurpDayKey` directly. No behaviour changes.
+
 ## 0.4.26 — 2026-11-17
 
 - Changed: Slurp's switches, checkboxes and loading rings are now the ones Marinara Engine hands to packages (capability API 1.830), so they look and work like the Engine's own. The setting rows keep their name and note.

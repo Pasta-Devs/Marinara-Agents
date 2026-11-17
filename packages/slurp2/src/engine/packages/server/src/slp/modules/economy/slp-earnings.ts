@@ -29,6 +29,7 @@
  * migrated, because that money is already spent or already counted.
  */
 import { slurpDayKey } from "./slp-wallet.js";
+import { slpIntOrNull as intOrNull } from "../../../../../shared/src/slp/slp-coerce.js";
 
 export type SlurpEarningsEntryKind =
   | "unlock"
@@ -137,11 +138,10 @@ export function slurpPayoutAllowance(
 
 /** Coins this Creator already withdrew today. */
 export const slurpPaidOutToday = (earnings: SlurpEarnings, at: Date): number =>
-  earnings.payoutOn === dayKey(at) ? Math.max(0, earnings.paidOutToday) : 0;
+  earnings.payoutOn === slurpDayKey(at) ? Math.max(0, earnings.paidOutToday) : 0;
 
 // The Slurp day, like the wallet's refill (starts 08:00 host time), not the UTC day (R1-087).
 // ponytail: the default start hour; pass walletDayStartHour through if players move it.
-const dayKey = (at: Date) => slurpDayKey(at);
 
 const LEDGER_LIMIT = 60;
 
@@ -164,9 +164,6 @@ export const slurpEarningsKey = (creatorAccountId: string) => `slurp2.creator.${
 /** Apply the configured share rule to a charge, including its required floor. */
 export const slurpCreatorRevenueShare = (price: number, percent: number): number =>
   Math.max(0, Math.floor((price * percent) / 100));
-
-const intOrNull = (value: unknown): number | null =>
-  typeof value === "number" && Number.isInteger(value) ? value : null;
 
 export function emptySlurpEarnings(): SlurpEarnings {
   return { coins: 0, lifetime: 0, ledger: [], receipts: {}, payoutOn: null, paidOutToday: 0, platform: true };
@@ -329,7 +326,7 @@ export function payout(
     {
       ...earnings,
       coins: earnings.coins - amount,
-      payoutOn: dayKey(at),
+      payoutOn: slurpDayKey(at),
       paidOutToday: slurpPaidOutToday(earnings, at) + amount / weight,
     },
     { kind: "payout", amount: -amount, at: at.toISOString() },

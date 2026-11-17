@@ -27,6 +27,7 @@ import {
   SLURP_TUNING_ACTIONS_PER_TICK_CEILING,
   type SlurpSimulationTuning,
 } from "./slp-tuning.js";
+import { slpHashMix as hashSeed } from "./slp-hash.js";
 
 export type SlurpWorldAction =
   /** Somebody asks the Creator to make something. */
@@ -163,18 +164,6 @@ function mulberry32(seed: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function hashSeed(value: string): number {
-  let out = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 0x01000193);
-  }
-  out ^= out >>> 16;
-  out = Math.imul(out, 0x85ebca6b);
-  out ^= out >>> 13;
-  return out >>> 0;
 }
 
 /**

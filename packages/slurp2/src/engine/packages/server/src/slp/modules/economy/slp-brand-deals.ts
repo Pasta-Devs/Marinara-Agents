@@ -18,6 +18,7 @@ import {
   slurpCreatorInterests,
   type SlurpTieCreator,
 } from "../projects/slp-creator-ties.js";
+import { slpDate as date } from "../../../../../shared/src/slp/slp-coerce.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const ANSWER_AFTER_MS = 2 * HOUR_MS;
@@ -147,7 +148,6 @@ export function slurpDealAnswer(
 
 const STATUSES: readonly SlurpBrandDealStatus[] = ["offered", "accepted", "planned", "done", "declined"];
 const DECLINES: readonly SlurpDealDecline[] = ["offBrand", "noAds", "notNow", "noAnswer", "player"];
-const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 
 export function readSlurpBrandDeals(raw: unknown): SlurpBrandDeal[] {
   return (Array.isArray(raw) ? raw : []).flatMap((entry): SlurpBrandDeal[] => {

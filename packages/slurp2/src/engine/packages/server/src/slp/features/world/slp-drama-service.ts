@@ -15,7 +15,7 @@ import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-s
 import { readSlurpSpice, resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import { readSlurpCreatorFitText } from "../../data/creators/slp-flavour-source.js";
 import { readSlurpCreatorSteering } from "../../data/creators/slp-steering-storage.js";
-import { slpStorylineGated } from "../../modules/world/events/slp-drama-cast.js";
+import { pairKey, slpStorylineGated } from "../../modules/world/events/slp-drama-cast.js";
 import { getSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { selectSlurpExplicitLevel } from "../../modules/feed/slp-post-guidance.js";
 import { SLP_EXPLICIT_LEVELS, slpClampExplicitLevel } from "../../../../../shared/src/slp/slp-spice.js";
@@ -56,8 +56,6 @@ import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js"
 const ADVANCE_EVERY_MS = 20 * 60_000;
 /** A comment goes on a post from the last few days, or waits for one. */
 const COMMENT_POST_DAYS = 3;
-
-const pairKey = (kind: string, a: string, b: string) => `${kind}:${[a, b].sort().join("|")}`;
 
 /** The runtime's view of the world: live Creators and the player's pages, their spice, and the ties. */
 export async function loadDramaWorld(

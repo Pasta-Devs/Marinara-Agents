@@ -11,6 +11,7 @@
  */
 import { slurpWorldNow } from "./slp-world-clock.js";
 import { z } from "zod";
+import { slpRecord as record } from "./slp-coerce.js";
 
 export const SLP_DESK_TIERS = ["wary", "neutral", "cooperative", "partner"] as const;
 export type SlpDeskTier = (typeof SLP_DESK_TIERS)[number];
@@ -239,8 +240,6 @@ const date = (value: unknown) => {
   const text = str(value, 40);
   return text && Number.isFinite(Date.parse(text)) ? text : null;
 };
-const record = (value: unknown) =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 const oneOf = <T extends string>(list: readonly T[], value: unknown): T | null =>
   list.includes(value as T) ? (value as T) : null;
 

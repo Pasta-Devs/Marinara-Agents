@@ -24,6 +24,7 @@
 import { DAY_MS, clampText, hash } from "./slp-project.js";
 import { slurpPairKey, slurpSharedNiche, type SlurpTieCreator } from "./slp-creator-ties.js";
 import { slurpCoupleOf, type SlurpCouple } from "./slp-creator-couples.js";
+import { slpRecord as record, slpDate as date } from "../../../../../shared/src/slp/slp-coerce.js";
 
 export const SLURP_BOND_KINDS = ["friend", "roommate", "coworker", "ex", "family"] as const;
 export type SlurpBondKind = (typeof SLURP_BOND_KINDS)[number];
@@ -144,9 +145,6 @@ export function slurpCreatorNamed(
 
 // ─── Storage shape ──────────────────────────────────────────────────────────────────────────────
 
-const record = (value: unknown) =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 const pick = <T extends string>(list: readonly T[], value: unknown, fallback: T): T =>
   list.find((entry) => entry === value) ?? fallback;
 

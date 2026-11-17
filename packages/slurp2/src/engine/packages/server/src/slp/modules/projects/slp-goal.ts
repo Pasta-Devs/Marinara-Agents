@@ -13,6 +13,7 @@
  */
 
 import { SLURP_EARNINGS_LEGACY_SCALE } from "../economy/slp-earnings.js";
+import { slpIntOrNull as intOrNull } from "../../../../../shared/src/slp/slp-coerce.js";
 
 /** Longest goal label. Long enough for "new set on Friday", short enough for one line. */
 export const SLURP_GOAL_LABEL_MAX_LENGTH = 80;
@@ -45,9 +46,6 @@ export type SlurpGoalProgress = {
   met: boolean;
   startedAt: string;
 };
-
-const intOrNull = (value: unknown): number | null =>
-  typeof value === "number" && Number.isInteger(value) ? value : null;
 
 /** Read stored JSON back into a goal, or null when there is not a usable one. */
 export function readSlurpGoal(raw: string | null): SlurpGoal | null {
