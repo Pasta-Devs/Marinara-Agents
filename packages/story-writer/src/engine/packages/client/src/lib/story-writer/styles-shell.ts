@@ -786,6 +786,8 @@ ${R} .sw-dock {
   position: absolute; left: 50%; bottom: calc(16px + ${SAFE_BOTTOM}); z-index: 20; translate: -50% 0;
   display: flex; align-items: center; gap: 6px; width: max-content; max-width: calc(100% - 96px);
 }
+/* The dock takes focus only from code, when the hidden note's button had it: no ring around the whole bar. */
+${R} .sw-dock:focus { outline: none; }
 ${R} .sw-actionbar {
   display: flex; flex: none; align-items: center; gap: 4px; max-width: 100%; padding: 6px;
   border: 1px solid var(--sw-bar-border); border-radius: 999px; background: var(--sw-bar-bg); color: var(--sw-bar-fg);

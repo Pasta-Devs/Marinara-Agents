@@ -296,7 +296,10 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await root.getByRole("button", { name: "Hide the author's note" }).focus();
   await page.keyboard.press("Enter");
   await expect(root.locator(".sw-note-anchor")).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest(".sw-dock"))).toBe(true);
+  // The dock itself, never one of its buttons: the next Enter must not write or stop a chapter.
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.classList.contains("sw-dock") ?? false))
+    .toBe(true);
   await expect(root).toHaveAttribute("data-sw-note-shown", "false");
   await expect
     .poll(async () => (await engineRequest(request, base, "GET", "/story-writer/preferences")).showAuthorNote)
