@@ -98,9 +98,6 @@ const HOST_CHARACTERS_BUILT_AGAINST = Object.freeze({
   engineVersion: "2.5.2",
   engineCommit: "c18c1af639cd2c253c13f8ca392ac450065025d3",
 });
-// The Engine moved a character's selfie instructions from the Convo tab into the Images tab's `image-instructions`
-// section (Pasta-Devs/Marinara-Engine#9193). 1.826 is the first capability API with that tab, so Noodle's "Edit image
-// instructions" link opens it, and an older Engine keeps the Noodle that opens Convo (Pasta-Devs/Marinara-Agents#2296).
 // Capability API 1.830 hands packages the Engine's Switch, Checkbox and Spinner (Pasta-Devs/Marinara-Engine#9383), so
 // Noodle and Slurp draw the same controls as the Engine. An older Engine refuses the manifest.
 const HOST_COMPONENTS_CAPABILITY_API = Object.freeze({ major: 1, minor: 830 });

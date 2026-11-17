@@ -3269,8 +3269,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "ea82bbb1b61783f21dd29c2f2e51fe1f097b108e00a596bd4842e9f2a6605cdd",
-            "bytes": 733841
+            "sha256": "f395d52456b5e19af4fcd50949449ab775e165e7150082118bc925e8402fede1",
+            "bytes": 733953
           },
           {
             "path": "noodle-klusek.png",
@@ -3292,8 +3292,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.19.zip",
-        "sha256": "8886321beb824affbbeaf084c3b3a9fd7b849cef54c247f4ba714dab7c4ef3e8",
-        "bytes": 1299847
+        "sha256": "c4745727126d1014f0b74f7d4f27debd5bd84b2deca4427ffb194be59352e9f1",
+        "bytes": 1299959
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -4440,8 +4440,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "1b34113d1af2bab4c3bde1fcefc8616b2ebf48f0912bd7b9adf696bcdd204d89",
-            "bytes": 2920931
+            "sha256": "d67d4d71d941a73580b006e2e2d01a5501a64cdb0c63284bacc5018624fad905",
+            "bytes": 2921043
           },
           {
             "path": "slurp2-logo.png",
@@ -4496,8 +4496,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.26.zip",
-        "sha256": "c30bfb646ecc2df35161f027440f2d9dacc3acc78f71a659273d3f7ee36ef0f4",
-        "bytes": 6158975
+        "sha256": "8b6fca615663ade9d80856417cf07738b7f8db7c223eb53179e9a7147ce24716",
+        "bytes": 6159087
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

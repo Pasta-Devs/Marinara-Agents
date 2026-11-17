@@ -430,7 +430,7 @@ for (const [label, options] of [
     assert.equal(module[name], HostComponent, `the package's ${name} is the Engine's`);
     await assert.rejects(
       load(file, { host: hostWith({ components: {} }) }),
-      new RegExp(`does not provide the ${name} component`, "u"),
+      new RegExp(`does not provide the ${name} component.*capability API 1\\.830`, "u"),
     );
   }
   assert.equal(modalWithI18n.props.children.type, HostModal);

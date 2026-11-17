@@ -16,6 +16,7 @@ import { SectionTitle } from "../../modules/settings/SlpSettingsControls";
 
 import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { Checkbox } from "../../../components/ui/Checkbox";
+
 const fieldClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm";
 const buttonClass =
