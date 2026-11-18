@@ -10,6 +10,7 @@
 // not make a monster good at once; Angst no longer sanitizes cruelty.
 // 0.6.25 (#2061): the maintainer's own edit of the shared writing rules.
 // 0.36.3: the shared writing rules no longer ask for what the protagonist feels in their body.
+// 0.36.4 (#2384): the shared writing rules drop the dialogue rule (fragments, dodged questions).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -164,10 +165,10 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so theirs moved; Memories is
 // unchanged, and the Dates banner's is new.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "64ccb4003f84c9e6",
-  "his-wardrobe": "c41aa3be76af4fc4",
-  "my-wardrobe": "1286206a2e6a5efe",
-  dates: "37e2bfb24fbae39d",
+  memories: "b84c29108f60cfdb",
+  "his-wardrobe": "09fc8e18f8065713",
+  "my-wardrobe": "57d0a43c81933780",
+  dates: "33ff19e73633020c",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {
