@@ -19,6 +19,7 @@
 import type {
   AlbumCg,
   Beat,
+  Cutout,
   Paint,
   Player,
   Unit,
@@ -32,6 +33,7 @@ import { normalizeBeat } from "../schemas/story.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import { readBeat, readChapter } from "../story/canon.js";
 import { GALLERY_REF_PREFIX, worldStyle, type ImageSubject } from "./image-client.js";
+import { cutoutsSettled, queueCutouts, type CutoutDeps } from "./cutout.js";
 import {
   imagesOf,
   paintRecord,
@@ -266,10 +268,16 @@ export interface CgSubject {
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
   /**
-   * The picture of the outfit they wear in the picture: the look put on with Wear, else their painted base look. None
-   * while that look has no picture yet, or while an Engine sprite or avatar stands in for it (cgSubjects).
+   * The cut-out of the outfit they wear in the picture (the look put on with Wear, else their painted base look), so no
+   * backdrop goes with it. None while that look has no picture, or no cut-out yet (outfitCutouts cuts it before a
+   * paint), or while an Engine sprite or avatar stands in for it (cgSubjects).
    */
   outfitUrl?: string;
+  /**
+   * Their outfit picture as painted, with its backdrop: the last resort when it has no cut-out yet and they have no card
+   * or persona whose avatar could stand in, so they are still drawn as themselves (cgSubjects).
+   */
+  uncutOutfitUrl?: string;
   /** Only named, by a name several people share (resolveCast). */
   ambiguous?: true;
 }
@@ -278,11 +286,12 @@ export interface CgSubject {
  * The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most
  * CG_PEOPLE_MAX), each matched by resolveCast. A story key image (`scene`) whose cast names nobody takes them from its
  * brief (briefCast). Story CGs, date keepsakes, Wish art, banner art and tarot cards all draw their people from here.
- * 0.36.5 (the maintainer's call): each person is ONE reference, the picture of the outfit they wear (`outfitUrl`), so
- * the picture shows them in the clothes the prompt names. Only while that outfit has no picture yet do they send their
- * card or persona avatar instead (never a card's full-body sprite, whose clothes would contradict the outfit), and the
- * prompt dresses them in words (`outfitInText`). One picture each, as since 2026-11-03: two full-body pictures of one
- * person made the model merge bodies and draw extra limbs.
+ * 0.36.5 (the maintainer's call): each person is ONE reference, the outfit they wear, cut out of its backdrop
+ * (`outfitUrl`), so the picture shows them in the clothes the prompt names and brings no background. Only while that
+ * outfit has no picture or no cut-out do they send their card or persona avatar instead (never a card's full-body
+ * sprite, whose clothes would contradict the outfit), and the prompt dresses them in words (`outfitInText`). A paint
+ * awaits outfitCutouts first, so a look without its cut-out yet is cut then. One picture each, as since 2026-11-03: two
+ * full-body pictures of one person made the model merge bodies and draw extra limbs.
  */
 export function cgSubjects(
   cast: readonly string[],
@@ -295,6 +304,8 @@ export function cgSubjects(
     const { who } = subject.image;
     if (subject.outfitUrl) return { ...subject, image: { kind: "character", avatarPath: subject.outfitUrl, who } };
     const { cardId, personaId } = subject.image;
+    // No card or persona avatar to stand in: their uncut outfit, so they are not painted as a stranger (#2145).
+    const avatarPath = !cardId && !personaId ? subject.uncutOutfitUrl : undefined;
     return {
       ...subject,
       person: { ...subject.person, outfitInText: true },
@@ -302,6 +313,7 @@ export function cgSubjects(
         kind: "character",
         ...(cardId ? { cardId } : {}),
         ...(personaId ? { personaId } : {}),
+        ...(avatarPath ? { avatarPath } : {}),
         avatarOnly: true,
         who,
       },
@@ -361,6 +373,46 @@ function outfitPicture(worn: { url?: string } | undefined, portrait: string | un
   return portrait && !isEngineArt(portrait) ? portrait : undefined;
 }
 
+/** The outfit picture's cut-out, ready (art/cutout.ts): an uncut look would send its chroma backdrop along. */
+const outfitCutout = (owner: Pick<Unit, "cutouts">, url: string | undefined) => {
+  const record = url ? owner.cutouts?.[url] : undefined;
+  return record?.state === "ready" && record.url ? record.url : undefined;
+};
+
+/**
+ * Cuts out, before a paint, the outfit pictures of the people it shows that have no cut-out yet (free, one at a time,
+ * art/cutout.ts), so cgSubjects can send each person's outfit with no backdrop. Returns the run's people with those
+ * cut-outs; a cut-out that fails leaves its person on their avatar and the outfit line (cgSubjects).
+ */
+export async function outfitCutouts<T extends { units: Unit[]; player: Player }>(
+  deps: CutoutDeps,
+  runId: string,
+  run: T,
+): Promise<T> {
+  const owners: Array<{ id: string; cutouts: Record<string, Cutout> }> = [
+    ...run.units,
+    { id: "player", cutouts: run.player.cutouts ?? {} },
+  ];
+  const urls = (owner: Unit | Player) => {
+    const worn = owner.wornOutfit ? owner.outfits.find((outfit) => outfit.id === owner.wornOutfit) : undefined;
+    const url = outfitPicture(worn, owner.portrait);
+    return url && !outfitCutout(owner, url) ? [url] : [];
+  };
+  const asked = [...run.units.map(urls), urls(run.player)];
+  if (!asked.some((list) => list.length)) return run;
+  await Promise.all(owners.map((owner, index) => queueCutouts(deps, runId, owner as never, asked[index]!)));
+  await cutoutsSettled();
+  const fresh = await readRun(deps.store, runId);
+  if (!fresh) return run;
+  const cutoutsOf = (id: string) =>
+    id === "player" ? fresh.player.cutouts : fresh.units.find((unit) => unit.id === id)?.cutouts;
+  return {
+    ...run,
+    units: run.units.map((unit) => ({ ...unit, cutouts: cutoutsOf(unit.id) ?? unit.cutouts })),
+    player: { ...run.player, cutouts: cutoutsOf("player") ?? run.player.cutouts },
+  };
+}
+
 /** The CG's people as the brief names them, each with their likeness and the look they wear. */
 function castSubjects(
   cast: readonly string[],
@@ -375,7 +427,8 @@ function castSubjects(
       const unit = member.li;
       // The look worn now dresses them in the CG: its outfit line in the prompt, its picture as their reference.
       const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
-      const outfitUrl = outfitPicture(worn, unit.portrait);
+      const outfit = outfitPicture(worn, unit.portrait);
+      const outfitUrl = outfitCutout(unit, outfit);
       return {
         person: {
           name: unit.name,
@@ -391,12 +444,13 @@ function castSubjects(
           ...(worn ? { wornOutfit: worn.id } : {}),
           who: unit.name,
         },
-        ...(outfitUrl ? { outfitUrl } : {}),
+        ...(outfitUrl ? { outfitUrl } : outfit ? { uncutOutfitUrl: outfit } : {}),
       };
     }
     if ("player" in member) {
       const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
-      const outfitUrl = outfitPicture(worn, player.portrait);
+      const outfit = outfitPicture(worn, player.portrait);
+      const outfitUrl = outfitCutout(player, outfit);
       const name = player.name || "Protagonist";
       return {
         person: {
@@ -412,7 +466,7 @@ function castSubjects(
           ...(worn ? { wornOutfit: worn.id } : {}),
           who: name,
         },
-        ...(outfitUrl ? { outfitUrl } : {}),
+        ...(outfitUrl ? { outfitUrl } : outfit ? { uncutOutfitUrl: outfit } : {}),
       };
     }
     return {
@@ -424,8 +478,11 @@ function castSubjects(
 
 /** The CG prompt for the stored beat, and who is in it. */
 async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial<ImagePrompt> = {}) {
-  const run = await readRun(deps.store, runId);
-  if (!run) throw runNotFound();
+  const read = await readRun(deps.store, runId);
+  if (!read) throw runNotFound();
+  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
+  // for the prompt review alike, so both name the same pictures.
+  const run = await outfitCutouts(deps, runId, read);
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const cg = beat.cg;
   if (!cg) throw noCg();

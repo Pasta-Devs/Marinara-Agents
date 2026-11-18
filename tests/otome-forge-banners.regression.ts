@@ -677,7 +677,10 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
   );
   // Each banner's art is its featured item's own picture, so the item's first open finds it painted; others have none.
   for (const banner of view.banners) {
-    assert.deepEqual((await readItem(t.store, t.runId, banner.five.id))?.art, banner.art);
+    // The view shows a look banner's art as its free cut-out once it is ready; the item keeps the painted original.
+    const stored = (await readItem(t.store, t.runId, banner.five.id))?.art;
+    assert.deepEqual({ ...stored, url: undefined }, { ...banner.art, url: undefined });
+    assert.ok([stored?.url, `${stored?.url}.cut.png`].includes(banner.art?.url), banner.kind);
     assert.equal(banner.five.art?.url, banner.art?.url);
     assert.equal((await readItem(t.store, t.runId, banner.four[0]!.id))?.art, null);
   }

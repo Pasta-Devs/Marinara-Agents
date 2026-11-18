@@ -53,7 +53,7 @@ import {
   type WishOpenResult,
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { cgReferences, cgSubjects, warnUnmatched } from "../art/cg.js";
+import { cgReferences, cgSubjects, outfitCutouts, warnUnmatched } from "../art/cg.js";
 import { viewCutouts } from "../art/cutout.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
 import { addOutfit, bannerArtOwner, itemArtOwner, lookWearer } from "../art/outfits.js";
@@ -603,8 +603,11 @@ export async function openWish(
 
 /** The prompt and the paid call for a banner's art, built from the documents as they stand now. */
 async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edited: Partial<ImagePrompt> = {}) {
-  const run = await readRun(deps.store, runId);
-  if (!run) throw runNotFound();
+  const read = await readRun(deps.store, runId);
+  if (!read) throw runNotFound();
+  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
+  // for the prompt review alike, so both name the same pictures.
+  const run = await outfitCutouts(deps, runId, read);
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const five = await readItem(deps.store, runId, banner.items.five[0] ?? "");
   if (!five) throw bannerNotFound();

@@ -6148,8 +6148,13 @@ export const PLACE_FRAMING = "scenery, no humans, wide establishing shot, detail
 const PLACE_NEGATIVE =
   "people, person, humans, crowd, character, text, captions, logos, watermarks, borders, UI, collage layouts";
 export const CG_FRAMING = "cinematic composition, detailed background, dramatic lighting, emotional moment";
+/**
+ * 0.36.5 (the maintainer's call): the scene's bodies, named for what goes wrong in a picture of people who touch
+ * (merged and duplicated figures, extra or missing limbs, wrong hands), beside the layout ones. The count of limbs and
+ * fingers left the positive prompt, where it pulled legs into waist-up shots.
+ */
 const CG_NEGATIVE =
-  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, extra limbs";
+  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, bad anatomy, deformed body, merged bodies, fused limbs, extra limbs, extra arms, extra legs, missing limbs, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, twisted torso, disproportionate body, long neck";
 /** At most this many people are drawn in a CG (and sent as references), as every brief rule says. */
 export const CG_PEOPLE_MAX = 3;
 
@@ -6296,7 +6301,7 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
           : "",
         people.length
           ? sentence(
-              `Draw exactly ${COUNT_WORDS[people.length] ?? `${people.length} people`}, ${people.length === 1 ? "once" : "each appearing once"}, with two arms, two legs and five fingers on each visible hand`,
+              `Draw exactly ${COUNT_WORDS[people.length] ?? `${people.length} people`}, ${people.length === 1 ? "once" : "each appearing once"}`,
             )
           : "",
       ];

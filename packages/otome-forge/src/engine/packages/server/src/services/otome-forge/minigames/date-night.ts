@@ -106,7 +106,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
-import { cgReferences, cgSubjects } from "../art/cg.js";
+import { cgReferences, cgSubjects, outfitCutouts } from "../art/cg.js";
 import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
 import { imagesOf, updateIfChanged, type ArtDeps } from "../art/paint.js";
 import { placeKey } from "../art/places.js";
@@ -795,8 +795,11 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
 
 /** The finished date's plan, its world, and the two of them as the keepsake draws them. */
 async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
-  const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
-  if (!run) throw runNotFound();
+  const [read, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
+  if (!read) throw runNotFound();
+  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
+  // for the prompt review alike, so both name the same pictures.
+  const run = await outfitCutouts(deps, runId, read);
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   if (!isFinished(run.state, chapter)) throw conflict("A keepsake is painted once the date is over.");

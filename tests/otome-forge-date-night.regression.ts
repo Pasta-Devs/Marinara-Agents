@@ -293,7 +293,12 @@ async function dateWorld(
     }));
   }
   const art = fakeImages();
-  const deps: RouteDeps = { ...t.deps, images: art.client };
+  // A free cut-out as the Engine's sprite cleanup makes it: a keepsake sends each person's outfit cut out (0.36.5).
+  const cutouts: CutoutClient = {
+    cutOut: async (url) => ({ url: `${url}.cut.png`, id: `cut-${url}` }),
+    deleteGalleryImage: async () => true,
+  };
+  const deps: RouteDeps = { ...t.deps, images: art.client, cutouts };
   // #2303: a date won from Wish, owned: three scenes at the aquarium, as Date Night's evenings were.
   await giveDate(t, DATE_ITEM);
   return { ...t, deps, art, call: routes(deps, runKey) };

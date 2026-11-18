@@ -20,6 +20,12 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 
 const coat = { id: "coat", name: "Coat", outfitLine: "long black greatcoat", url: "/api/global-gallery/file/coat.png" };
 const gown = { id: "gown", name: "Gown", outfitLine: "silver evening gown", url: "/api/global-gallery/file/gown.png" };
+const KAI_BASE = "/api/global-gallery/file/kai.png";
+const SOL_BASE = "/api/global-gallery/file/sol.png";
+// 0.36.5: each look is sent cut out of its backdrop, as the free cleanup saves it.
+const cut = (url: string) => `${url}.cut.png`;
+const cutouts = (...urls: string[]) =>
+  Object.fromEntries(urls.map((url) => [url, { state: "ready", at: "2026-11-18T00:00:00.000Z", url: cut(url) }]));
 
 const unit = (wornOutfit?: string) =>
   ({
@@ -27,10 +33,11 @@ const unit = (wornOutfit?: string) =>
     name: "Kai",
     cardId: "card-kai",
     pronouns: { subject: "he", object: "him", possessive: "his" },
-    portrait: "/api/global-gallery/file/kai.png",
+    portrait: KAI_BASE,
     identityLine: "tall man, grey eyes",
     outfitLine: "keeper's coat",
     outfits: [coat],
+    cutouts: cutouts(KAI_BASE, coat.url),
     ...(wornOutfit ? { wornOutfit } : {}),
     bible: null,
   }) as unknown as Unit;
@@ -39,10 +46,11 @@ const player = (wornOutfit?: string) =>
   ({
     name: "Sol",
     personaId: "persona-sol",
-    portrait: "/api/global-gallery/file/sol.png",
+    portrait: SOL_BASE,
     pronouns: { subject: "she", object: "her", possessive: "her" },
     look: { identityLine: "short woman, red hair", outfitLine: "travel cloak" },
     outfits: [gown],
+    cutouts: cutouts(SOL_BASE, gown.url),
     ...(wornOutfit ? { wornOutfit } : {}),
   }) as unknown as Player;
 
@@ -53,8 +61,8 @@ test("a CG describes and references the outfit each person wears now (0.36.5)", 
   assert.equal(sol!.person.outfitLine, "silver evening gown");
   // The maintainer's call: one picture each, the outfit they wear, and nothing else (no card, persona or portrait for
   // the kit to find first, no worn look to add after it). The paint must show each as themselves (`who`).
-  assert.deepEqual(kai!.image, { kind: "character", avatarPath: coat.url, who: "Kai" });
-  assert.deepEqual(sol!.image, { kind: "character", avatarPath: gown.url, who: "Sol" });
+  assert.deepEqual(kai!.image, { kind: "character", avatarPath: cut(coat.url), who: "Kai" });
+  assert.deepEqual(sol!.image, { kind: "character", avatarPath: cut(gown.url), who: "Sol" });
   assert.deepEqual(cgReferences(subjects), { units: [kai!.image, sol!.image], labels: ["Kai", "Sol"] });
   // The pictures dress them, beside the outfit lines.
   assert.deepEqual(
@@ -80,14 +88,11 @@ test("a CG describes and references the outfit each person wears now (0.36.5)", 
   );
   // Without a look worn, their painted base look is the outfit.
   const [baseKai, baseSol] = cgSubjects(["Kai", "Sol"], [unit()], player());
-  assert.deepEqual(
-    [baseKai!.image?.avatarPath, baseSol!.image?.avatarPath],
-    ["/api/global-gallery/file/kai.png", "/api/global-gallery/file/sol.png"],
-  );
+  assert.deepEqual([baseKai!.image?.avatarPath, baseSol!.image?.avatarPath], [cut(KAI_BASE), cut(SOL_BASE)]);
   assert.match(prompt([baseKai!, baseSol!]), /face, hair, build and clothing, never/);
   // Alone: the outfit only, as in a group.
   const [alone] = cgSubjects(["Kai"], [unit("coat")], player("gown"));
-  assert.deepEqual(alone!.image, { kind: "character", avatarPath: coat.url, who: "Kai" });
+  assert.deepEqual(alone!.image, { kind: "character", avatarPath: cut(coat.url), who: "Kai" });
   assert.deepEqual(cgReferences([alone!]).labels, ["Kai"]);
   assert.match(prompt([alone!]), /face, hair, build and clothing, never/);
 });
@@ -117,9 +122,23 @@ test("an archetype alone in a look, with no card or portrait, sends the look lab
   const archetype = { ...unit("coat"), cardId: undefined, portrait: undefined } as unknown as Unit;
   const [alone] = cgSubjects(["Kai"], [archetype], player());
   assert.deepEqual(cgReferences([alone!]), {
-    units: [{ kind: "character", avatarPath: coat.url, who: "Kai" }],
+    units: [{ kind: "character", avatarPath: cut(coat.url), who: "Kai" }],
     labels: ["Kai"],
   });
+  // Not cut out yet, and no avatar to stand in: the uncut look, so he is still drawn as himself (0.36.5).
+  const [uncut] = cgSubjects(["Kai"], [{ ...archetype, cutouts: {} } as unknown as Unit], player());
+  assert.deepEqual(uncut!.image, { kind: "character", avatarPath: coat.url, avatarOnly: true, who: "Kai" });
+  assert.equal(uncut!.person.outfitInText, true);
+});
+
+test("an outfit not cut out yet sends the avatar instead, never the look's backdrop (0.36.5)", () => {
+  const [kai, sol] = cgSubjects(["Kai", "Sol"], [{ ...unit("coat"), cutouts: {} } as unknown as Unit], {
+    ...player("gown"),
+    cutouts: {},
+  } as unknown as Player);
+  assert.deepEqual(kai!.image, { kind: "character", cardId: "card-kai", avatarOnly: true, who: "Kai" });
+  assert.deepEqual(sol!.image, { kind: "character", personaId: "persona-sol", avatarOnly: true, who: "Sol" });
+  assert.deepEqual([kai!.person.outfitInText, sol!.person.outfitInText], [true, true]);
 });
 
 test("whom each reference shows always matches what is sent: nobody without a picture, a persona's last (2026-11-03)", () => {
@@ -163,10 +182,10 @@ test("two people who share a first name are each named in full; a namesake prota
   const namesake = { ...player("gown"), name: "Kai" } as unknown as Player;
   const pair = cgSubjects(["Kai", "Kai"], [unit("coat")], namesake);
   assert.equal(pair.length, 2);
-  // Each is their worn look: his coat, then her gown.
+  // Each is their worn look, cut out: his coat, then her gown.
   assert.deepEqual(
     pair.map((subject) => subject.image?.avatarPath),
-    [coat.url, gown.url],
+    [cut(coat.url), cut(gown.url)],
   );
 });
 

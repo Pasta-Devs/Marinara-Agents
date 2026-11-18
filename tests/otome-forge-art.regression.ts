@@ -731,10 +731,10 @@ test("a CG's loopback request carries the override and at most four references, 
     prompt,
     /Reference images, in order: Kai; Mireille; Sol\. Use them only for each person's face, hair and build, and for the clothing of Sol, never for the pose, framing or background\./,
   );
-  assert.match(
-    prompt,
-    /Draw exactly three people, each appearing once, with two arms, two legs and five fingers on each visible hand\./,
-  );
+  // 0.36.5: the count, with no limbs or fingers counted (they pulled legs into waist-up shots); the negative names them.
+  assert.match(prompt, /Draw exactly three people, each appearing once\./);
+  assert.doesNotMatch(prompt, /two arms|five fingers/);
+  assert.match(negativePrompt, /bad anatomy, deformed body, merged bodies, fused limbs, extra limbs/);
   assert.doesNotMatch(negativePrompt, /extra people/);
   assert.match(negativePrompt, /child, childlike/);
 });

@@ -3,6 +3,8 @@
 ## 0.36.5 — 2026-11-18
 
 - Pictures of people in a scene (story pictures, date keepsakes, Wish art, banners and tarot cards) now show everyone in the outfit they wear. Each person's picture is sent as the outfit they have on, or their painted base look, instead of their card's or persona's picture. Until an outfit has a picture, their avatar is sent and the outfit is described in words.
+- That outfit picture is sent cut out, with no background. One that isn't cut out yet is cut first, for free. If that fails, the avatar is sent instead.
+- Scene pictures no longer ask for "two arms, two legs and five fingers", which pulled legs into close-up shots. They now tell the image model to avoid bad anatomy, merged bodies, extra or missing limbs and malformed hands.
 
 ## 0.36.4 — 2026-11-18
 

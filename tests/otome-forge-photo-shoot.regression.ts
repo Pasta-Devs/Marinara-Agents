@@ -439,8 +439,9 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   assert.match(solo.prompt, /safe for work, fully clothed/u);
   assert.match(solo.negativePrompt, /nudity, nsfw, sexual content, lingerie/u);
   assert.match(solo.negativePrompt, /extra people/u);
-  // How many people to draw and with how many limbs (the maintainer's anatomy report, 2026-11-03).
-  assert.match(solo.prompt, /Draw exactly two people, each appearing once, with two arms, two legs and five fingers/u);
+  // How many people to draw (the maintainer's anatomy report, 2026-11-03), with no limbs counted since 0.36.5.
+  assert.match(solo.prompt, /Draw exactly two people, each appearing once\./u);
+  assert.doesNotMatch(solo.prompt, /two arms|five fingers/u);
 
   const kiss = (await promptOf(t, setup({ his: pick("fond", "kiss"), her: pick("blush", "kiss") }))).body.prompt;
   assert.match(

@@ -88,7 +88,7 @@ function engine({
       assert.fail(`unexpected fetch ${path}`);
     }) as typeof globalThis.fetch,
   });
-  return { client, reads, generations, warnings };
+  return { client, reads, generations, warnings, missing };
 }
 
 test("a portrait sends the card's full body AND its avatar; a scene sends one per subject", async () => {
@@ -318,6 +318,14 @@ async function keyImage(
 ) {
   const t = await artWorld({ runKey });
   t.deps.images = host.client;
+  // The free cleanup reads the look as the Engine serves it: a file that is gone is never cut (0.36.5).
+  t.deps.cutouts = {
+    cutOut: async (url) => {
+      if (host.missing.includes(url)) throw new Error("missing");
+      return { url: `${url}.cut.png`, id: `cut-${url}` };
+    },
+    deleteGalleryImage: async () => true,
+  };
   await seedChapter(t.store, t.runId);
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({ ...unit, ...kai }));
   await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
@@ -340,7 +348,8 @@ test("a group key image sends each person's worn outfit, and their avatar only w
     assert.equal((await t.paint())?.state, "ready");
     assert.equal(host.generations.length, 1);
     const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
-    assert.deepEqual(body.referenceImages, [data(outfit), data(gown)]);
+    // Each look cut out of its backdrop before it is sent.
+    assert.deepEqual(body.referenceImages, [data(`${outfit}.cut.png`), data(`${gown}.cut.png`)]);
     assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "no card sprite is read");
     assert.match(
       body.promptOverrides[0]!.prompt,
@@ -381,8 +390,8 @@ test("beside others, someone whose only picture is the look they wear sends that
   });
   assert.equal((await t.paint())?.state, "ready");
   const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
-  assert.deepEqual(body.referenceImages, [data(outfit), data("/api/avatars/file/persona.png")]);
-  assert.equal(host.reads.filter((path) => path === outfit).length, 1, "the look is read once");
+  assert.deepEqual(body.referenceImages, [data(`${outfit}.cut.png`), data("/api/avatars/file/persona.png")]);
+  assert.ok(!host.reads.includes(outfit), "the uncut look is never sent");
   assert.match(body.promptOverrides[0]!.prompt, /Reference images, in order: Kai; Ines\./);
 });
 
@@ -414,7 +423,7 @@ test("names the story writes another way still send that person: a surname, a ti
     assert.equal((await t.paint())?.state, "ready");
     assert.deepEqual(
       host.generations[0]!.referenceImages,
-      [data("/api/global-gallery/file/kai.png"), data("/api/avatars/file/persona.png")],
+      [data("/api/global-gallery/file/kai.png.cut.png"), data("/api/avatars/file/persona.png")],
       cast.join(", "),
     );
   }

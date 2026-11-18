@@ -45,7 +45,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
-import { cgReferences, cgSubjects, resolveCast, warnUnmatched } from "./cg.js";
+import { cgReferences, cgSubjects, outfitCutouts, resolveCast, warnUnmatched } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
@@ -224,8 +224,11 @@ async function buildItemArt(
   debugMode: boolean,
 ): Promise<BuiltArt> {
   if (!hasArt(item)) throw notFound("art for this item");
-  const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  const read = await readRun(deps.store, runId);
+  if (!read) throw notFound("Otome Forge run");
+  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
+  // for the prompt review alike, so both name the same pictures.
+  const run = await outfitCutouts(deps, runId, read);
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);

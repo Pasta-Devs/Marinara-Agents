@@ -39,7 +39,7 @@ import { readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
-import { cgReferences, cgSubjects } from "./cg.js";
+import { cgReferences, cgSubjects, outfitCutouts } from "./cg.js";
 import { worldStyle } from "./image-client.js";
 import type { ItemArtDeps, ItemPaintOptions } from "./outfits.js";
 import {
@@ -132,8 +132,11 @@ const activeOf = (deps: ItemArtDeps) => () => !deps.art || deps.art.active();
 
 /** The prompt and the paid call for a deck card, from the documents as they are now. */
 async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: Partial<ImagePrompt>) {
-  const [run, deck] = await Promise.all([readRun(deps.store, runId), readDeck(deps.store, runId)]);
-  if (!run) throw notFound("Otome Forge run");
+  const [read, deck] = await Promise.all([readRun(deps.store, runId), readDeck(deps.store, runId)]);
+  if (!read) throw notFound("Otome Forge run");
+  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
+  // for the prompt review alike, so both name the same pictures.
+  const run = await outfitCutouts(deps, runId, read);
   const entry = deck.cards[key];
   if (!entry) throw locked();
   const unit: Unit | undefined = entry.li ? run.units.find((item) => item.id === entry.li) : undefined;

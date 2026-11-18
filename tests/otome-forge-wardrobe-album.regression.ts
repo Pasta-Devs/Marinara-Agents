@@ -450,7 +450,10 @@ test("new Snapshot artwork uses its English brief and only the reward's own char
   assert.ok(!request.prompt.includes("SNAP-KAI"), "new artwork uses its planned English brief");
   assert.equal(request.units?.length, 2);
   // 0.36.5: each person's one picture is the outfit they wear, here his painted base look.
-  assert.ok(request.units?.some((unit) => unit.avatarPath === "/kai.png"));
+  assert.ok(
+    request.units?.some((unit) => unit.avatarPath === "/kai.png.cut.png"),
+    "cut out of its backdrop",
+  );
   assert.ok(
     request.units?.some((unit) => unit.personaId === "persona-ines"),
     "the protagonist keeps their selected persona even when another LI shares their name",
@@ -542,8 +545,8 @@ test("a four-star Moment paints once on concurrent first opens and remains a pla
   assert.ok(request.prompt.includes(original.premise!));
   assert.equal(request.units?.length, 2, "only the item's love interest and protagonist are references");
   assert.ok(request.units?.some((subject) => subject.personaId === "persona-ines"));
-  assert.ok(request.units?.some((subject) => subject.avatarPath === `/${MIR}.png`));
-  assert.ok(!request.units?.some((subject) => subject.avatarPath === `/${KAI}.png`));
+  assert.ok(request.units?.some((subject) => subject.avatarPath === `/${MIR}.png.cut.png`));
+  assert.ok(!request.units?.some((subject) => subject.avatarPath?.startsWith(`/${KAI}.png`)));
   assert.ok(request.prompt.includes(`VISUAL-${MIR}`) && !request.prompt.includes(`VISUAL-${KAI}`));
   assert.ok(
     !request.prompt.includes("MYSTERY-TRUTH") && !request.prompt.includes("HIDDEN-TRUTH"),
