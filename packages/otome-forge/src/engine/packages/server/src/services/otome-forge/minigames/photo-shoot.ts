@@ -339,7 +339,10 @@ async function buildPhoto(
   };
 }
 
-/** POST /runs/:run/photos/prompt: the prompt Take picture would send (the review dialog shows it). No write; 503 too. */
+/**
+ * POST /runs/:run/photos/prompt: the prompt Take picture would send (the review dialog shows it); 503 too. It paints
+ * nothing, but cuts out each look with no cut-out yet (free, art/cg.ts loadedCutouts) and waits for it (0.36.7).
+ */
 export async function photoPromptFor(deps: PhotoDeps, runId: string, setup: PhotoSetup): Promise<ImagePrompt> {
   const { prompt, negativePrompt } = await buildPhoto(deps, runId, setup);
   return { prompt, negativePrompt };

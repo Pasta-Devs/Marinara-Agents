@@ -664,7 +664,8 @@ export async function paintPairNow(
         painted = await paintSlot(connectionId, async () => {
           if (!activeOf(deps)()) throw new Error("Otome Hearth stopped before painting");
           // Built now, so the run, both looks, the rating (and its 18+ gate) and the connection are the ones in force
-          // at the paid call, however long it waited behind other paints.
+          // once it leaves the queue behind other paints. Building waits for the looks' free cut-outs (0.36.7), as a
+          // scene paint waits for its people's; a connection changed during that wait paints on the one it started on.
           const built = await buildPair(deps, runId, hers, edited);
           if (built.run.world.images.connectionId !== connectionId) {
             throw new OtomeForgeError(409, "The image connection changed before painting; try again.", "conflict");
