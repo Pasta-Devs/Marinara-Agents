@@ -70,7 +70,7 @@ function owedKittens(run: Pick<Run, "player" | "units" | "state">): OwedKitten[]
 
 const ownerOf = (owner: KittenOwner): PaintOwner => `kitten:${owner}`;
 const notFound = () => new OtomeForgeError(404, "No such kitten.", "not-found");
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 /** A kitten's record changed when `change` returns one; true when it was saved. */
 async function saveArt(

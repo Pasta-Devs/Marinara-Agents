@@ -197,7 +197,7 @@ export interface NoteDeps extends GenerationDeps {
   memory?: Pick<OtomeMemory, "recall" | "maintain">;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 /**
  * Today's note from `li`: the stored one while it fits his rupture state, or P16 writes it (once, whoever asks first).

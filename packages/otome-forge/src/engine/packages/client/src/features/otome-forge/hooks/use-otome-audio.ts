@@ -359,7 +359,7 @@ export class OtomeAudioController {
     try {
       await this.playCue(force);
     } catch (error) {
-      console.warn("Otome Forge could not play music", error);
+      console.warn("Otome Hearth could not play music", error);
     }
   }
 
@@ -568,13 +568,13 @@ export class OtomeAudioController {
         }
         if (!chapterKey && Array.isArray(saved?.tracks)) deps.onTracks(saved.tracks as SoundtrackTrack[]);
       } catch (error) {
-        console.warn("Otome Forge could not record a generated track", error);
+        console.warn("Otome Hearth could not record a generated track", error);
       }
       return track;
     } catch (error) {
       if (!abort.signal.aborted && (error as { name?: string })?.name !== "AbortError") {
         this.failed.add(`${connectionId}:${cue}`);
-        console.warn("Otome Forge could not generate music", error);
+        console.warn("Otome Hearth could not generate music", error);
         this.notify(chapterKey ? "chapterMusicFailed" : "musicFailed");
       }
       return null;
@@ -674,7 +674,7 @@ export class OtomeAudioController {
       return abort.signal.aborted ? "stopped" : "spoken";
     } catch (error) {
       if (abort.signal.aborted || (error as { name?: string })?.name === "AbortError") return "stopped";
-      console.warn("Otome Forge could not voice a line", error);
+      console.warn("Otome Hearth could not voice a line", error);
       this.notify("voiceFailed");
       return "failed";
     } finally {

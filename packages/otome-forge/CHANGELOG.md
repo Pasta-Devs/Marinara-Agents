@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.36.6 — 2026-11-18
+
+- Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.
+- When a love interest's linked character card can't be read, the server log now tags the warning as Otome Hearth's instead of Gacha Forge's.
+
 ## 0.36.5 — 2026-11-18
 
 - Pictures of people in a scene (story pictures, date keepsakes, Wish art, banners and tarot cards) now show everyone in the outfit they wear. Each person's picture is sent as the outfit they have on, or their painted base look, instead of their card's or persona's picture. Until an outfit has a picture, their avatar is sent and the outfit is described in words.

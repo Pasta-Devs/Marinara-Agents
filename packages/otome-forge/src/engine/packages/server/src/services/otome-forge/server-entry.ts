@@ -122,7 +122,7 @@ export async function activate({ api }: ActivationContext) {
 }
 
 export async function selfCheck() {
-  if (!activeStore) throw new Error("Otome Forge routes did not activate");
+  if (!activeStore) throw new Error("Otome Hearth routes did not activate");
   // Reads the index, so broken storage fails here instead of on the first request.
   await activeStore.readDoc(INDEX_ID, normalizeIndex);
 }

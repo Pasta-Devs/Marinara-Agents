@@ -527,7 +527,7 @@ export async function ensureQuizScores(
   queueQuizJob(deps, runId, run, scoreKey(runId), writeQuizScores, debugMode);
 }
 
-const noRun = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const noRun = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 /** GET /runs/:run/quiz: the quiz, after queueing what it is missing. */
 export async function readQuizView(deps: QuizDeps, runId: string, options: { debugMode: boolean }): Promise<QuizView> {

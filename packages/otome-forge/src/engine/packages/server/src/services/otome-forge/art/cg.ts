@@ -63,7 +63,7 @@ export const albumKey = (key: string, i: number) => `${key}/${i}`;
 
 const beatNotFound = () => new OtomeForgeError(404, "No such beat.", "not-found");
 const noCg = () => new OtomeForgeError(404, "This beat has no key image.", "not-found");
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 /** The beat's CG as the client should see it: a pending paint this process is not painting reads as stopped. */
 export function cgView(runId: string, beat: Pick<Beat, "key" | "i" | "cg" | "written">): BeatCg | null {

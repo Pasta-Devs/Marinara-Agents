@@ -165,7 +165,7 @@ export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<W
   // Asked before the reads: a line that lands while they run then answers "on its way", never "none and done".
   const noticingNow = noticingLooks(runId);
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth run");
   const allItems = await readItems(deps.store, runId);
   const looks = ownedItems(run, allItems).filter((item) => isLookKind(item.kind));
   const owned = new Set(run.state.owned.items);
@@ -377,7 +377,7 @@ export async function wearLook(
   { debugMode }: { debugMode: boolean },
 ): Promise<void> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth run");
   const who = ownerOf(owner, run);
   const wearer = who.kind === "me" ? "player" : (`li:${who.unit.id}` as const);
   if (look !== BASE_LOOK) await wearableItem(deps, runId, look, wearer);
@@ -388,7 +388,7 @@ export async function wearLook(
       normalizePlayer,
       (current) => wearing(current, look),
     );
-    if (!saved) throw notFound("Otome Forge run");
+    if (!saved) throw notFound("Otome Hearth run");
     if (look !== BASE_LOOK && saved.value.noticed?.look !== look) noticeLook(deps, runId, look, li, debugMode);
     return;
   }
@@ -461,7 +461,7 @@ export async function showLook(
     const his = next.lis[li]!;
     return { ...next, lis: { ...next.lis, [li]: { ...his, firsts: { ...his.firsts, [showFirst(look)]: at } } } };
   });
-  if (!saved) throw notFound("Otome Forge run");
+  if (!saved) throw notFound("Otome Hearth run");
   return { line: line.text, ...(line.face ? { face: line.face } : {}), grants };
 }
 

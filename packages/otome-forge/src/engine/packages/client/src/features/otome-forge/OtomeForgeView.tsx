@@ -235,7 +235,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     try {
       await activate(made.runKey);
     } catch (failure) {
-      console.warn("Otome Forge could not open the new story", failure);
+      console.warn("Otome Hearth could not open the new story", failure);
       void queryClient.invalidateQueries({ queryKey: INDEX_QUERY_KEY });
     }
     go("forge");

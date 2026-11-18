@@ -39,7 +39,7 @@ export function isRunKey(value: unknown): value is string {
 
 /** The run id R that prefixes every document of the run. Throws on anything but a run key. */
 export function runIdOf(runKey: string): string {
-  if (!isRunKey(runKey)) throw new RangeError(`Not an Otome Forge run key: ${JSON.stringify(runKey).slice(0, 40)}`);
+  if (!isRunKey(runKey)) throw new RangeError(`Not an Otome Hearth run key: ${JSON.stringify(runKey).slice(0, 40)}`);
   return `${ID_PREFIX}${runKey}`;
 }
 

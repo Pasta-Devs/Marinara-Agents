@@ -379,7 +379,7 @@ function createHomeStub({
     if (path === `${base}/home/thoughts`) {
       if (state.thoughtsFailures > 0) {
         state.thoughtsFailures -= 1;
-        return { status: 500, json: { error: "Otome Forge could not complete the request." } };
+        return { status: 500, json: { error: "Otome Hearth could not complete the request." } };
       }
       const text = String(call.body!.text ?? "").trim();
       state.thoughts = text ? { text, at: now() } : null;

@@ -92,7 +92,7 @@ export async function cancelStoryWork(post: ReturnType<typeof useOtomeApi>["post
   try {
     await post<{ ok: boolean }>(`${runPath(runKey)}/cancel`);
   } catch (error) {
-    console.warn("Otome Forge could not cancel the story's writing", error);
+    console.warn("Otome Hearth could not cancel the story's writing", error);
   }
 }
 
@@ -522,7 +522,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
           return true;
         })
         .catch((error: unknown) => {
-          console.warn("Otome Forge could not save how far the beat was read", error);
+          console.warn("Otome Hearth could not save how far the beat was read", error);
           if (end) {
             // Next sends it again; nothing moves on until the server has it. A rupture that opened elsewhere holds
             // the gate (holdFor).
@@ -558,7 +558,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       if (!last || !line || index === null || last.replay || line.main <= last.reported) return;
       otome
         .post<ReadResult>(`${path}/beats/${index}/read`, { segment: line.main })
-        .catch((error: unknown) => console.warn("Otome Forge could not save how far the beat was read", error));
+        .catch((error: unknown) => console.warn("Otome Hearth could not save how far the beat was read", error));
     },
     // On unmount only; the ref holds the latest place.
     [],
@@ -660,7 +660,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       if (result?.unlocked === true) pushToast({ kind: "cg" });
     } catch (error) {
       seenCgs.current.delete(refBase);
-      console.warn("Otome Forge could not mark a key image seen", error);
+      console.warn("Otome Hearth could not mark a key image seen", error);
     }
   }, [cg, chapterKey, current, node, otome, position, pushToast, refBase, report, runKey]);
 

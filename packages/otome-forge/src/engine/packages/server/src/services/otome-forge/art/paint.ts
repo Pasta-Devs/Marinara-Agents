@@ -60,7 +60,7 @@ export function parseLookOwner(value: unknown): LookOwner | null {
   return typeof value === "string" && value.startsWith("li:") && isLiId(value.slice(3)) ? (value as LookOwner) : null;
 }
 
-const notFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const notFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 // ── Live paints in this process ──
 

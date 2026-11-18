@@ -107,7 +107,7 @@ export function useMarkSeen(runKey: string) {
     }
     void otome
       .post(`${runPath(runKey)}/items/${encodeURIComponent(id)}/seen`, {})
-      .catch((error: unknown) => console.warn("Otome Forge could not mark an item seen", error))
+      .catch((error: unknown) => console.warn("Otome Hearth could not mark an item seen", error))
       .finally(() => {
         // The run view and the screen are read again, never written from this answer: two seen in quick succession
         // may answer out of order (Dottore on #2204), and a read sent before the write must not leave its dot. A failed

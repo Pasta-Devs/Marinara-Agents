@@ -324,7 +324,7 @@ export async function ensureItemStory(
     return stored;
   }
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth run");
   const unit = run.units.find((candidate) => candidate.id === li && candidate.bible);
   if (!unit) throw notFound("love interest");
   if (item.kind !== "memory5") {

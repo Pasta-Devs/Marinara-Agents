@@ -498,7 +498,7 @@ export async function stickerPromptFor(
   debugMode = false,
 ): Promise<ImagePrompt & { world: World; subject: Awaited<ReturnType<typeof readSubject>> }> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
   const sticker = owedStickers(run).find((entry) => entry.id === id);
   if (!sticker) throw notFound();
   const subject = await readSubject(
@@ -658,7 +658,7 @@ export function stickersComing(runId: string, run: Run): boolean {
  */
 export async function startPlayerStickers(deps: Pick<ArtDeps, "store">, runId: string): Promise<boolean> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
   if (run.player.stickers) return true;
   if (!run.world.images.connectionId) return false;
   await updateIfChanged(deps.store, runDocTarget("player", playerId(runId)), normalizePlayer, (current) =>
@@ -679,7 +679,7 @@ export async function paintStickerNow(
 ): Promise<Paint | null> {
   const read = async () => {
     const run = await readRun(deps.store, runId);
-    if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
     const sticker = owedStickers(run).find((entry) => entry.id === id);
     if (!sticker) throw notFound();
     return { run, sticker, art: sticker.art ? paintView(runId, ownerOf(id), sticker.art) : undefined };

@@ -187,7 +187,7 @@ const AccentBody = z.object({
 });
 const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nullable() });
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
 const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate before raising this setting.", "age-gate");
@@ -357,7 +357,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
             images: { ...world.images, rating: DEFAULT_IMAGE_RATING },
           }));
         } catch (error) {
-          runtime.logger.error(error, "Otome Forge could not lower %s after the 18+ gate was revoked", run.runKey);
+          runtime.logger.error(error, "Otome Hearth could not lower %s after the 18+ gate was revoked", run.runKey);
           failed.push(run.runKey);
         }
       }

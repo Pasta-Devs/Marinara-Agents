@@ -156,7 +156,7 @@ export function albumPhotos(photos: readonly Photo[]): AlbumImage[] {
     .sort((a, b) => b.at.localeCompare(a.at));
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const photoNotFound = () => new OtomeForgeError(404, "No such photo.", "not-found");
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");

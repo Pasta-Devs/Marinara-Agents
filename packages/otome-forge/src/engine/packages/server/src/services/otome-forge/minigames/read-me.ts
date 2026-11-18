@@ -320,7 +320,7 @@ export interface ReadMeDeps extends GenerationDeps {
   memory?: Pick<OtomeMemory, "recall" | "maintain">;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const setNotFound = () => new OtomeForgeError(404, "No such Read Me set.", "not-found");
 const entryNotFound = () => new OtomeForgeError(404, "No such notebook entry.", "not-found");

@@ -97,7 +97,7 @@ export const registerItemRoutes: RegisterRoutes = (router, deps) => {
           ? { ...state, owned: { ...state.owned, unseen: state.owned.unseen.filter((entry) => entry !== id) } }
           : undefined,
       );
-      if (!saved) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+      if (!saved) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
       return { unseen: unseenCounts(saved.value.owned.unseen) };
     }),
   );

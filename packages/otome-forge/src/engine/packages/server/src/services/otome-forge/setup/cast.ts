@@ -164,7 +164,13 @@ export async function castOf(
   runtime: Pick<CapabilityRuntimeHost, "resources" | "logger">,
   units: readonly Unit[],
 ): Promise<CastMember[]> {
-  const hydrated = await forgeHydrateStoryCharacters([...units], (cardId) => readCard(runtime, cardId), runtime.logger);
+  // The kit's warning about a card that can't be read names Otome's package, not Gacha Forge's (its default).
+  const hydrated = await forgeHydrateStoryCharacters(
+    [...units],
+    (cardId) => readCard(runtime, cardId),
+    runtime.logger,
+    { logPrefix: "[otome-forge]" },
+  );
   return hydrated.map(({ forgeCardCanon, ...unit }) => ({
     unit,
     ...(forgeCardCanon ? { canon: forgeCardCanon } : {}),

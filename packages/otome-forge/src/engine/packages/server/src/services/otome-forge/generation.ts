@@ -216,7 +216,7 @@ async function resolveModel(deps: GenerationDeps, connectionId: string): Promise
     return await deps.runtime.languageModels.resolveForRequest({ connectionId });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new OtomeForgeError(503, `Otome Forge could not use connection ${connectionId}: ${reason}`, "no-connection");
+    throw new OtomeForgeError(503, `Otome Hearth could not use connection ${connectionId}: ${reason}`, "no-connection");
   }
 }
 

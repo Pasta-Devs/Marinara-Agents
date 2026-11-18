@@ -303,7 +303,7 @@ test("route plumbing: bad bodies are 400s, unknown failures are logged once and 
     throw failure;
   };
   const crashed = await call("POST", "/index/opened", { secret: "never logged" });
-  assert.deepEqual(crashed, { status: 500, body: { error: "Otome Forge could not complete the request." } });
+  assert.deepEqual(crashed, { status: 500, body: { error: "Otome Hearth could not complete the request." } });
   assert.equal(logs.length, 1);
   assert.equal(logs[0].level, "error");
   assert.equal(logs[0].error, failure, "the error object comes first");

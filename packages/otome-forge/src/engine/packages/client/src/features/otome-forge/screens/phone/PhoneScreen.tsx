@@ -128,7 +128,7 @@ function useStartStickers(runKey: string, view: RunView) {
       .then(({ started }) => {
         if (started) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
       })
-      .catch((failure: unknown) => console.warn("Otome Forge could not start the protagonist's stickers", failure));
+      .catch((failure: unknown) => console.warn("Otome Hearth could not start the protagonist's stickers", failure));
   }, [due, otome, queryClient, runKey]);
 }
 

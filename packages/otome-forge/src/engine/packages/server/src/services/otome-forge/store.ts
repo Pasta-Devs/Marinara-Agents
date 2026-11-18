@@ -20,7 +20,7 @@ const DEFAULT_ATTEMPTS = 4;
 
 function checkedId(id: string): string {
   if (isOtomeId(id)) return id;
-  throw new RangeError(`Otome Forge document ids start with "otome-forge:": ${String(id).slice(0, 60)}`);
+  throw new RangeError(`Otome Hearth document ids start with "otome-forge:": ${String(id).slice(0, 60)}`);
 }
 
 export function createOtomeStore(documents: CapabilityDocumentStore) {
@@ -38,7 +38,7 @@ export function createOtomeStore(documents: CapabilityDocumentStore) {
         return document;
       }
     }
-    throw new OtomeForgeError(409, `Otome Forge data changed while removing ${id}. Try again.`, "conflict");
+    throw new OtomeForgeError(409, `Otome Hearth data changed while removing ${id}. Try again.`, "conflict");
   }
 
   async function write<T>(
@@ -89,7 +89,7 @@ export function createOtomeStore(documents: CapabilityDocumentStore) {
         return normalize(saved.data);
       }
     }
-    throw new OtomeForgeError(409, `Otome Forge data changed while saving ${id}. Try again.`, "conflict");
+    throw new OtomeForgeError(409, `Otome Hearth data changed while saving ${id}. Try again.`, "conflict");
   }
 
   return {

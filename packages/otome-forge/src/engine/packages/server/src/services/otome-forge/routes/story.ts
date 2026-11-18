@@ -120,7 +120,7 @@ export function beatParams(request: OtomeRequest): { key: string; i: number } {
   return { key, i: index };
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 /** The beat as the client sees it, its CG's paint left pending by a restart reading as `stopped` (S/art/cg.ts). */
 function beatView(runId: string, beat: Beat): BeatView {
