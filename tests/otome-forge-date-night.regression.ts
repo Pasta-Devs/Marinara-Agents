@@ -1327,11 +1327,12 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
 // 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved.
 // 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so these moved.
+// 0.36.3: the writing rules no longer ask for what the protagonist feels in their body, so these moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "c6a72b88184fb1b7",
-  scene1: "9932909ae8f40609",
-  scene2: "d093f01f249dc9f2",
-  scene3: "6249fff3d128c11e",
+  plan: "1890379102ca7b92",
+  scene1: "3d4cec81a7d4760f",
+  scene2: "b86ba7242709749e",
+  scene3: "04141a1d207499cd",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

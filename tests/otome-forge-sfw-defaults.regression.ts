@@ -40,6 +40,8 @@
 // 0.8.7: the arc and chapter planners read the player's premise in one line after the setting (the maintainer's: only
 // they get it), so the chapter, route and repair plan digests moved, by that line alone; the scenes, Confrontations,
 // Closers and banners are untouched (otome-forge-knowledge's 0.8.7 world test pins both).
+// 0.36.3: the shared writing rules no longer ask for what the protagonist feels in their body (0.6.6's line), so
+// every story and banner digest moved once.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -255,17 +257,17 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerDates: "aa9d3cf03d67cdfd",
-  bannerHis: "21bf95d684f68f79",
-  bannerMemories: "7c716d4c55345092",
-  bannerMine: "c351237cd3c46b0e",
-  beat: "b63cec610253640e",
-  beatWithCg: "ab3daf28929fade8",
-  chapterPlan: "1dfc5c7c85d163b9",
-  closer: "60bb16736a15bb0a",
-  confrontation: "9c7bdef6e213df6c",
-  repairPlan: "2cb72f086364081e",
-  routePlan: "69aea8e9df88c573",
+  bannerDates: "f1c958bdbcb3caaa",
+  bannerHis: "29ddf8f32f5d68b1",
+  bannerMemories: "d6d361a3fafebaf4",
+  bannerMine: "577c488ecd0fe999",
+  beat: "6f4f6fe350c51435",
+  beatWithCg: "f47649f48c0c2812",
+  chapterPlan: "90205c98c1c7ebd9",
+  closer: "3c6861ff367da324",
+  confrontation: "40142ccbf4264d11",
+  repairPlan: "b24072b25acfa0de",
+  routePlan: "ad290933529795ee",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
 // 0.20.2: P10 and P11 open with the story context their chapter's scenes cache, so both sets' routePlan and
@@ -279,17 +281,17 @@ const EXPECTED_ANGST: Record<string, string> = {
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so both sets' bannerHis and
 // bannerMine moved; bannerMemories is unchanged, and bannerDates (the Dates banner) is new.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerDates: "e3ae25f32dc27735",
-  bannerHis: "1b78cc8091ed8932",
-  bannerMemories: "cb274bff4e234963",
-  bannerMine: "c698fce9011ce84d",
-  beat: "ae78638cbb3abad3",
-  beatWithCg: "ea025fe3a71f4461",
-  chapterPlan: "7d820bc2925c1592",
-  closer: "363bfbbc780e2cba",
-  confrontation: "b91cac93b2208c8c",
-  repairPlan: "d72a8c77557498cd",
-  routePlan: "84118b57f235e75e",
+  bannerDates: "f3ad76e7a5230755",
+  bannerHis: "4acb62f6b0b86616",
+  bannerMemories: "61469790f6cf3f81",
+  bannerMine: "34f77988121c5fff",
+  beat: "69e8051dfa6e82dd",
+  beatWithCg: "1ed2c57b0c196041",
+  chapterPlan: "91f4be9d0d94eba6",
+  closer: "6c8c9585cc3adf3c",
+  confrontation: "76b80502d3ae56e1",
+  repairPlan: "193ddb9ecf5ce60d",
+  routePlan: "087f00b9d25868bf",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

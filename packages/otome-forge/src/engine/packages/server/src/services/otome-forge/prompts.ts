@@ -402,7 +402,9 @@ export const WRITING_RULES = [
   "Write in plain, everyday words: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
   "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them. The choices the protagonist is offered are plain too, not riddles.",
   "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
-  "Write what the protagonist feels in their body when something happens to them, not only the action.",
+  // 0.36.3: the maintainer removed "Write what the protagonist feels in their body when something happens to them, not
+  // only the action." (0.6.6, #1978). With the rule on thought lines, it made the protagonist's thoughts open with a
+  // bodily sensation every time ("My stomach knots…", "My heart is pounding in my chest.").
   // The maintainer's (2026-11-15), word for word.
   "Narration should show what happens, not what doesn’t.",
   "Dialogue must be realistic in the speaker’s own voice and rhythm, as if spoken: with contractions, fragments, abandoned sentences, dodged questions, interruptions, stutters, ramblings, and so on. Speech uses everyday words. The line itself must convey its emotions.",

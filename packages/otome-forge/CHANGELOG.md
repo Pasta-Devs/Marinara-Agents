@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.36.3 — 2026-11-18
+
+- Your thoughts in a scene no longer open with how your body feels every time, such as "My stomach knots" or "My heart is pounding in my chest". The story no longer asks for a bodily feeling each time something happens to you.
+
 ## 0.36.2 — 2026-11-18
 
 - Scrollbars in Otome Hearth, such as the one in a scene's narration and dialogue box, now use your Midnight or Pearl look's colours instead of Marinara Engine's accent.
