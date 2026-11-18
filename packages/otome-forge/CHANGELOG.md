@@ -3,6 +3,7 @@
 ## 0.36.6 — 2026-11-18
 
 - Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.
+- When a love interest's linked character card can't be read, the server log now tags the warning as Otome Hearth's instead of Gacha Forge's.
 
 ## 0.36.5 — 2026-11-18
 

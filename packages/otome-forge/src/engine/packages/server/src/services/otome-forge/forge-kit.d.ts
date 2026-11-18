@@ -41,6 +41,7 @@ declare module "@forge-kit/character-card-context.mjs" {
     units: U[],
     readCard: (cardId: string) => Promise<unknown>,
     logger?: { warn?(message: string, ...args: unknown[]): void },
+    options?: { logPrefix?: string },
   ): Promise<Array<U & { forgeCardCanon?: ForgeCardCanon }>>;
   /** "CANONICAL CHARACTER CARD — …" with the card's authored fields, or "" without a card. */
   export function forgeFormatCharacterCardReference(card: unknown, name?: string): string;

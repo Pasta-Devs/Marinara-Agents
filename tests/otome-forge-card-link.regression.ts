@@ -228,3 +228,18 @@ test("a linked generated love interest reads current authored canon only, and un
   assert.deepEqual(t.calls, []);
   assert.deepEqual(t.paid, []);
 });
+
+test("a linked card that is gone is logged under Otome's own tag, never Gacha Forge's (#2388)", async () => {
+  const t = await fixture();
+  assert.equal((await t.call("POST", PATH, { cardId: CARD })).status, 200);
+  // The player deleted the card in the Engine: the prompt keeps the saved summary and the log says whose card it was.
+  t.cards.splice(0, 1);
+  const [member] = await castOf(t.runtime, [(await t.unit())!]);
+  assert.equal(member!.canon, undefined);
+  const warned = t.logs.filter((entry) => entry.level === "warn").map((entry) => entry.message);
+  assert.ok(
+    warned.includes("[otome-forge] linked character card %s could not be read; using the saved character summary"),
+    warned.join("\n"),
+  );
+  assert.ok(!warned.some((message) => message.includes("gacha-forge")));
+});
