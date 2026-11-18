@@ -390,7 +390,7 @@ test("Otome Hearth Read Me: four guesses answered by button, key and words, paid
     await activities
       .locator(".of-activity")
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.activity)),
-  ).toEqual(["read-him", "read-me", "tarot", "photo-shoot", "claw", "kitty"]);
+  ).toEqual(["read-him", "read-me", "tarot", "photo-shoot", "kitty", "claw"]);
   // Without an image connection the Photo Shoot is shown as unavailable: the five Play buttons above stand.
   await expect(activities.locator('.of-activity[data-activity="photo-shoot"]')).toContainText(
     "Needs an image connection",

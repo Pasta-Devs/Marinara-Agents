@@ -480,7 +480,7 @@ test("Otome Hearth Kitty Cards from Dates: a whole game, his nudge caught, the l
     await activities
       .locator(".of-activity")
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.activity)),
-  ).toEqual(["read-him", "read-me", "tarot", "photo-shoot", "claw", "kitty"]);
+  ).toEqual(["read-him", "read-me", "tarot", "photo-shoot", "kitty", "claw"]);
   const card = root.locator('.of-activity[data-activity="kitty"]');
   await expect(card.getByRole("heading", { name: "Kitty Cards with Kai Ardent" })).toBeVisible();
   await expect(card).toContainText("+20 Starlight a game, +20 more for a win · +30 affection");

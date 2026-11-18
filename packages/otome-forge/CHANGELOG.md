@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.36.7 — 2026-11-18
+
+- Dates now lists Kitty Cards above the Claw Machine, so the Claw Machine is last.
+
 ## 0.36.6 — 2026-11-18
 
 - Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.

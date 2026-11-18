@@ -710,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.36.7",
+          "date": "2026-11-18",
+          "notes": "- Dates now lists Kitty Cards above the Claw Machine, so the Claw Machine is last.",
+          "highlight": false
+        },
+        {
           "version": "0.36.6",
           "date": "2026-11-18",
           "notes": "- Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.\n- When a love interest's linked character card can't be read, the server log now tags the warning as Otome Hearth's instead of Gacha Forge's.",
@@ -821,12 +827,6 @@
           "version": "0.34.3",
           "date": "2026-11-16",
           "notes": "- **Retry picks up where the summary stopped.** When condensing the timeline fails because it is still too long after three shortenings, **Retry the summary** now shortens the last result again. Before, it condensed the whole timeline again and ran all three shortenings from the start, which can take half an hour on a slow model. Restarting Marinara Engine forgets the last result, so a Retry after that condenses again.",
-          "highlight": false
-        },
-        {
-          "version": "0.34.2",
-          "date": "2026-11-15",
-          "notes": "- **A too-long timeline gets shortened.** When condensing the timeline comes back over 5,000 words, the result goes back on its own, told how long it is and how many words to cut, up to three times. Before, the whole timeline went back with it, and the model copied it out again, so the rebuild stopped.\n- **Prompts keep the old timeline during a rebuild.** Until a rebuild finishes, story prompts use the earlier timeline instead of the half-rebuilt one. A half-rebuilt timeline covered only the first chapters, so every later chapter went in on its own and a chapter plan could pass 160,000 tokens.",
           "highlight": false
         }
       ]
