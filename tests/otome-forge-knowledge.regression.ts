@@ -382,21 +382,23 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // again; the bible has no card and kept its bytes.
 // 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so every prompt
 // that carries them moved.
+// 0.36.3: the writing rules no longer ask for what the protagonist feels in their body, so every prompt that carries
+// them moved.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "61bb090263e1907a",
-  callScene: "d0b5b15715b90c79",
-  confrontation: "fac8810f0aa66c7a",
-  closer: "90c2bada664d2526",
-  bible: "4e899a1053b1eb60",
+  scene: "acc577f07853dc1b",
+  callScene: "2e661a385329f1e1",
+  confrontation: "30aa8b4fbe7f1e56",
+  closer: "c3074ca8f8114281",
+  bible: "3e44e2c8691780ca",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
   // 2026-11-14 (0.29.0): P17's HARD RULES gained the no-echo line and the plain-texting line, so both moved again.
-  chat: "da5e78755ac01f13",
-  daily: "32474e6fb7549e86",
-  note: "c0d9686d8425b719",
+  chat: "94d318af65ccc5ea",
+  daily: "7cd18a48c8f073fe",
+  note: "efbc5880bc676f35",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "fe26ca63beab56d8",
+  datePlan: "73a8f87d912d8ac8",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {

@@ -710,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.36.3",
+          "date": "2026-11-18",
+          "notes": "- Your thoughts in a scene no longer open with how your body feels every time, such as \"My stomach knots\" or \"My heart is pounding in my chest\". The story no longer asks for a bodily feeling each time something happens to you.",
+          "highlight": false
+        },
+        {
           "version": "0.36.2",
           "date": "2026-11-18",
           "notes": "- Scrollbars in Otome Hearth, such as the one in a scene's narration and dialogue box, now use your Midnight or Pearl look's colours instead of Marinara Engine's accent.",
@@ -821,12 +827,6 @@
           "version": "0.33.3",
           "date": "2026-11-15",
           "notes": "- **Date cards that fit a phone.** In Album → Dates, each date's text now uses the card's full width, with **Plan a date**, **Read again** and an evening's outcome in one row below it.\n- **A picture for 4★ dates.** A 4★ date now paints its place, with nobody in it, when you first open it, 1 image, as a 5★ date shows its banner's picture. A date won before this update offers **Paint it** in Album → Dates.\n- **Narration and dialogue.** Every story prompt now asks narration to show what happens, not what doesn't. Dialogue should sound spoken, in each speaker's own voice, with everyday words. No echoing or parroting.",
-          "highlight": false
-        },
-        {
-          "version": "0.33.2",
-          "date": "2026-11-15",
-          "notes": "- **A date opens where you left it.** Going to Settings from a date's scenes or its ending and coming back opens it there again, where it used to start over at its first step. A trip to Settings no longer resets the Album to its first tab either.\n- **A failed keepsake can switch connections.** When a keepsake fails to paint, **Change the image connection** opens Settings → Images. Back returns to the date's ending, where you can paint the keepsake again. One still painting when you left shows as painting until it lands.",
           "highlight": false
         }
       ]

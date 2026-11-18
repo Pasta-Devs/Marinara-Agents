@@ -835,10 +835,11 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 0.23.0: the affection line reads "of 20" (the bond ranks).
   // Retaken 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register.
   // Retaken 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing.
-  assert.equal(sha(mainMessages), "e3ceb88d3c59dcd8122e0a45508d6e5abbd5aac7e316c08fe205ca496c49bc1b", "a main chapter");
+  // Retaken 0.36.3: the writing rules no longer ask for what the protagonist feels in their body.
+  assert.equal(sha(mainMessages), "4a4510837ef47669c57f1d299b0c629ca50a57cc17e6ac373ed4bde3eb640c6d", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "70a5be6ea3021a4e81c4cafc085d3f8e3a357f00145253e8d674f16e533fd739",
+    "548de1fe77be3d3dfd65cdc929182ded7afb47d1220c28076a762ae71f742799",
     "a Character Story, even with a scene handed to it",
   );
 });
