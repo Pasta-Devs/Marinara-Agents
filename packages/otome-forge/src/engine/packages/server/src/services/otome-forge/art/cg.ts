@@ -7,7 +7,7 @@
 // prompts; then it waits for the tap, as a failed or stopped one does. Serving the beat paints it when it has no record
 // yet. A beat an Ease off or a Rewrite drops lets its CG go: a paint still waiting stops, a painted one is deleted. The
 // prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
-// person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
+// person, sent as the prompt override, with each person's worn outfit as their reference (at most 4; cgSubjects). A brief
 // that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
 // without the outfit lines (S/prompts.ts cgPrompt).
 // The paint belongs to the beat as it was written (`written.at`): a rewrite while it paints gets nothing, and the
@@ -23,6 +23,7 @@ import type {
   Player,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { OtomeForgeError } from "../http.js";
 import { beatId, runDocTarget, stateId } from "../ids.js";
@@ -264,8 +265,11 @@ export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
-  /** The painted look they wear, if any: their last-resort reference beside others (cgSubjects). */
-  wornUrl?: string;
+  /**
+   * The picture of the outfit they wear in the picture: the look put on with Wear, else their painted base look. None
+   * while that look has no picture yet, or while an Engine sprite or avatar stands in for it (cgSubjects).
+   */
+  outfitUrl?: string;
   /** Only named, by a name several people share (resolveCast). */
   ambiguous?: true;
 }
@@ -273,11 +277,12 @@ export interface CgSubject {
 /**
  * The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most
  * CG_PEOPLE_MAX), each matched by resolveCast. A story key image (`scene`) whose cast names nobody takes them from its
- * brief (briefCast). Alone, a person is sent as who they are and the look they wear (two references). With others,
- * each person is ONE reference (two full-body pictures of each person in the same standing pose made the model merge
- * bodies and draw extra limbs, the maintainer's report, 2026-11-03): who they are (their card or persona avatar, else
- * their setup portrait), and only when none of that loads, the look they wear; the prompt dresses them in it
- * (`outfitInText`).
+ * brief (briefCast). Story CGs, date keepsakes, Wish art, banner art and tarot cards all draw their people from here.
+ * 0.36.5 (the maintainer's call): each person is ONE reference, the picture of the outfit they wear (`outfitUrl`), so
+ * the picture shows them in the clothes the prompt names. Only while that outfit has no picture yet do they send their
+ * card or persona avatar instead (never a card's full-body sprite, whose clothes would contradict the outfit), and the
+ * prompt dresses them in words (`outfitInText`). One picture each, as since 2026-11-03: two full-body pictures of one
+ * person made the model merge bodies and draw extra limbs.
  */
 export function cgSubjects(
   cast: readonly string[],
@@ -285,15 +290,21 @@ export function cgSubjects(
   player: Player,
   scene?: { present: readonly string[]; brief: string },
 ): CgSubject[] {
-  const subjects = castSubjects(cast, units, player, scene);
-  if (subjects.length < 2) return subjects;
-  return subjects.map((subject) => {
-    if (!subject.image?.wornOutfit) return subject;
-    const { wornOutfit: _worn, outfits: _outfits, ...identity } = subject.image;
+  return castSubjects(cast, units, player, scene).map((subject) => {
+    if (!subject.image) return subject;
+    const { who } = subject.image;
+    if (subject.outfitUrl) return { ...subject, image: { kind: "character", avatarPath: subject.outfitUrl, who } };
+    const { cardId, personaId } = subject.image;
     return {
       ...subject,
       person: { ...subject.person, outfitInText: true },
-      image: { ...identity, ...(subject.wornUrl ? { avatarPath: subject.wornUrl } : {}) },
+      image: {
+        kind: "character",
+        ...(cardId ? { cardId } : {}),
+        ...(personaId ? { personaId } : {}),
+        avatarOnly: true,
+        who,
+      },
     };
   });
 }
@@ -304,9 +315,9 @@ const likenessOf = (image: ImageSubject): "sure" | "maybe" | "none" =>
 
 /**
  * The references a CG of these subjects sends (`units`, for generateBannerArt) and whom each one shows (`labels`, for
- * cgPrompt), from one list so the two always agree: every person's likeness in turn, then a lone person's worn look,
- * as the kit sends them. Someone with nothing to send is neither sent nor named, and a protagonist known only by a
- * persona (whose avatar may be empty) goes last, so a missing picture of her never moves anyone else's label.
+ * cgPrompt), from one list so the two always agree: one picture per person, as the kit sends them. Someone with
+ * nothing to send is neither sent nor named, and a protagonist known only by a persona (whose avatar may be empty)
+ * goes last, so a missing picture of her never moves anyone else's label.
  * ponytail: a file that fails to load (a deleted card image) still shifts the labels after it; the kit logs it. The
  * upgrade path is the kit returning which references it sent.
  */
@@ -320,11 +331,7 @@ export function cgReferences(subjects: readonly CgSubject[]): { units: ImageSubj
   const ordered = [...shown].sort(
     (a, b) => Number(likenessOf(a.image!) === "maybe") - Number(likenessOf(b.image!) === "maybe"),
   );
-  const labels = ordered.map(first);
-  const alone = ordered.length === 1 ? ordered[0]! : undefined;
-  // A lone person's look follows their likeness; when that likeness may be missing, the look is named as them.
-  if (alone?.image?.wornOutfit && likenessOf(alone.image) === "sure") labels.push(`${first(alone)}'s outfit`);
-  return { units: ordered.map((subject) => subject.image!), labels };
+  return { units: ordered.map((subject) => subject.image!), labels: ordered.map(first) };
 }
 
 /** Logs, at a paid paint, each person the brief names whom no love interest or the protagonist answers to. */
@@ -345,6 +352,15 @@ export function warnUnmatched(
   }
 }
 
+/**
+ * The picture of the outfit someone wears: the worn look's, else (no look worn) their base look when Otome painted it.
+ * An Engine sprite or avatar standing in for the base look (art/engine-art.ts) shows other clothes, so it is none.
+ */
+function outfitPicture(worn: { url?: string } | undefined, portrait: string | undefined): string | undefined {
+  if (worn) return worn.url || undefined;
+  return portrait && !isEngineArt(portrait) ? portrait : undefined;
+}
+
 /** The CG's people as the brief names them, each with their likeness and the look they wear. */
 function castSubjects(
   cast: readonly string[],
@@ -357,8 +373,9 @@ function castSubjects(
   return members.slice(0, CG_PEOPLE_MAX).map((member): CgSubject => {
     if ("li" in member) {
       const unit = member.li;
-      // The look worn now dresses them in the CG: its outfit line in the prompt, its image after the faces.
+      // The look worn now dresses them in the CG: its outfit line in the prompt, its picture as their reference.
       const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
+      const outfitUrl = outfitPicture(worn, unit.portrait);
       return {
         person: {
           name: unit.name,
@@ -374,11 +391,12 @@ function castSubjects(
           ...(worn ? { wornOutfit: worn.id } : {}),
           who: unit.name,
         },
-        ...(worn?.url ? { wornUrl: worn.url } : {}),
+        ...(outfitUrl ? { outfitUrl } : {}),
       };
     }
     if ("player" in member) {
       const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
+      const outfitUrl = outfitPicture(worn, player.portrait);
       const name = player.name || "Protagonist";
       return {
         person: {
@@ -394,7 +412,7 @@ function castSubjects(
           ...(worn ? { wornOutfit: worn.id } : {}),
           who: name,
         },
-        ...(worn?.url ? { wornUrl: worn.url } : {}),
+        ...(outfitUrl ? { outfitUrl } : {}),
       };
     }
     return {

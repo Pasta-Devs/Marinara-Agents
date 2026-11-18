@@ -24,8 +24,13 @@ export interface ImageSubject {
   cardId?: string;
   personaId?: string;
   portrait?: string;
-  /** The last likeness the kit tries, after the card or persona avatar and `portrait` (cgSubjects: a worn look). */
+  /** The last likeness the kit tries, after the card or persona avatar and `portrait` (cgSubjects: their outfit). */
   avatarPath?: string;
+  /**
+   * Only the card or persona avatar, never the card's full-body sprite: scene art's stand-in while someone's outfit has
+   * no picture yet (art/cg.ts cgSubjects), so no picture shows clothes the prompt does not name.
+   */
+  avatarOnly?: true;
   outfits?: unknown[];
   /** The look worn now: the kit sends its image after the faces for scene and banner art. */
   wornOutfit?: string;
@@ -552,7 +557,7 @@ export function createImageClient({
   async function likeness(client: ImageClient, subject: Omit<ImageSubject, "kind">, method?: string) {
     const cardId = str(subject.cardId);
     const both = method === "generatePortrait" || method === "generateOutfit";
-    if (cardId && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
+    if (cardId && !subject.avatarOnly && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
       try {
         const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
         const neutral = Array.isArray(sprites)

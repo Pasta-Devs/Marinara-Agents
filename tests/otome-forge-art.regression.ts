@@ -725,10 +725,11 @@ test("a CG's loopback request carries the override and at most four references, 
   const { prompt, negativePrompt } = body.promptOverrides[0];
   assert.match(prompt, /^All of them at the lamp\. Kai: tall man, grey eyes; keeper's coat\./);
   assert.doesNotMatch(prompt, /Ines|Harbour Master/, "three people at most");
-  // Which picture is whose, and how many people to draw, so nobody is drawn twice or merged (2026-11-03).
+  // Which picture is whose, and how many people to draw, so nobody is drawn twice or merged (2026-11-03). Kai and
+  // Mireille have no outfit picture, so their card avatars give their faces; Sol's painted look dresses him (0.36.5).
   assert.match(
     prompt,
-    /Reference images, in order: Kai; Mireille; Sol\. Use them only for each person's face, hair, build and clothing, never for the pose, framing or background\./,
+    /Reference images, in order: Kai; Mireille; Sol\. Use them only for each person's face, hair and build, and for the clothing of Sol, never for the pose, framing or background\./,
   );
   assert.match(
     prompt,

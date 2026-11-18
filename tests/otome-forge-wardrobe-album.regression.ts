@@ -338,10 +338,10 @@ test("an existing owned Snapshot paints its saved vignette once without rewritin
   assert.equal(t.paid[0]!.method, "generateBannerArt");
   assert.ok(t.paid[0]!.request.prompt.includes(original.text!), "the legacy vignette remains the scene context");
   // Only its love interest and protagonist, and only who has a picture to send: this world's love interest has no
-  // card, portrait or look, so only her persona goes (2026-11-03).
+  // card, portrait or look, so only her persona goes (2026-11-03), as its avatar: she has no outfit picture (0.36.5).
   assert.deepEqual(
     t.paid[0]!.request.units,
-    [{ kind: "character", personaId: "persona-ines", outfits: [], who: "Ines" }],
+    [{ kind: "character", personaId: "persona-ines", avatarOnly: true, who: "Ines" }],
     "only its love interest and protagonist are references",
   );
   const saved = await t.stored(original.id);
@@ -449,7 +449,8 @@ test("new Snapshot artwork uses its English brief and only the reward's own char
   assert.ok(request.negativePrompt.includes(negative), "reviewed Snapshot negatives are not shortened either");
   assert.ok(!request.prompt.includes("SNAP-KAI"), "new artwork uses its planned English brief");
   assert.equal(request.units?.length, 2);
-  assert.ok(request.units?.some((unit) => unit.portrait === "/kai.png"));
+  // 0.36.5: each person's one picture is the outfit they wear, here his painted base look.
+  assert.ok(request.units?.some((unit) => unit.avatarPath === "/kai.png"));
   assert.ok(
     request.units?.some((unit) => unit.personaId === "persona-ines"),
     "the protagonist keeps their selected persona even when another LI shares their name",
@@ -541,8 +542,8 @@ test("a four-star Moment paints once on concurrent first opens and remains a pla
   assert.ok(request.prompt.includes(original.premise!));
   assert.equal(request.units?.length, 2, "only the item's love interest and protagonist are references");
   assert.ok(request.units?.some((subject) => subject.personaId === "persona-ines"));
-  assert.ok(request.units?.some((subject) => subject.portrait === `/${MIR}.png`));
-  assert.ok(!request.units?.some((subject) => subject.portrait === `/${KAI}.png`));
+  assert.ok(request.units?.some((subject) => subject.avatarPath === `/${MIR}.png`));
+  assert.ok(!request.units?.some((subject) => subject.avatarPath === `/${KAI}.png`));
   assert.ok(request.prompt.includes(`VISUAL-${MIR}`) && !request.prompt.includes(`VISUAL-${KAI}`));
   assert.ok(
     !request.prompt.includes("MYSTERY-TRUTH") && !request.prompt.includes("HIDDEN-TRUTH"),

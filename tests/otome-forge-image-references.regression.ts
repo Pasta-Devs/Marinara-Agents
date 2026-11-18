@@ -1,4 +1,5 @@
 // Inspect actual loopback requests: selected-card full_neutral, then its current avatar, then retained Otome art.
+// Scene art (0.36.5) sends each person's worn outfit instead, and their avatar only while it has no picture.
 // Metadata URLs and invalid sprite filenames never become fetch targets.
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -327,28 +328,48 @@ async function keyImage(
   return { ...t, paint: () => paintCgNow(t.deps, t.runId, KEY, 1, { debugMode: false }) };
 }
 
-test("a group key image sends each person's own picture, never the looks they wear (#2145)", async () => {
+test("a group key image sends each person's worn outfit, and their avatar only while the outfit has no picture (0.36.5)", async () => {
   const wearing = {
     kai: { cardId: "card-dottore", outfits: [look("winter", outfit)], wornOutfit: "winter" },
     her: { outfits: [look("gown", gown)], wornOutfit: "gown" },
   };
-  // His card's full body and her persona's avatar; with no neutral art and both looks gone, his card's avatar.
-  for (const [i, options, expected] of [
-    [0, {}, data("/api/sprites/card-dottore/file/full_neutral.png")],
-    [1, { sprites: [], missing: [outfit, gown] }, data("/api/avatars/file/card.png")],
-  ] as const) {
-    const host = engine({ ...options, missing: [...(options.missing ?? [])] });
-    const t = await keyImage(`r-groupref${i}-aaaaaa`, host, ["Kai", "Ines"], wearing.kai, wearing.her);
+  // The maintainer's call: each person is the outfit they wear, one picture each; no card sprite or avatar is read.
+  {
+    const host = engine();
+    const t = await keyImage("r-groupref0-aaaaaa", host, ["Kai", "Ines"], wearing.kai, wearing.her);
     assert.equal((await t.paint())?.state, "ready");
     assert.equal(host.generations.length, 1);
     const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
-    assert.deepEqual(body.referenceImages, [expected, data("/api/avatars/file/persona.png")]);
-    assert.ok(!host.reads.includes(outfit) && !host.reads.includes(gown), "no look picture is read or sent");
+    assert.deepEqual(body.referenceImages, [data(outfit), data(gown)]);
+    assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "no card sprite is read");
+    assert.match(
+      body.promptOverrides[0]!.prompt,
+      /Reference images, in order: Kai; Ines\. Use them only for each person's face, hair, build and clothing,/,
+    );
+    assert.match(body.promptOverrides[0]!.prompt, /Kai: [^.]*winter outfit\./, "the outfit line names it too");
+  }
+  // His base look an Engine sprite and her portrait her persona's avatar: no outfit has a picture, so each sends their
+  // avatar (his card's, never its full-body sprite) and the outfit lines dress them.
+  {
+    const host = engine();
+    const t = await keyImage(
+      "r-groupref1-aaaaaa",
+      host,
+      ["Kai", "Ines"],
+      {
+        cardId: "card-dottore",
+        portrait: "/api/sprites/card-dottore/file/full_neutral.png",
+      },
+      { portrait: "/api/avatars/file/persona.png" },
+    );
+    assert.equal((await t.paint())?.state, "ready");
+    const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
+    assert.deepEqual(body.referenceImages, [data("/api/avatars/file/card.png"), data("/api/avatars/file/persona.png")]);
+    assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "the sprite is never read");
     assert.match(
       body.promptOverrides[0]!.prompt,
       /Reference images, in order: Kai; Ines\. Use them only for each person's face, hair and build,/,
     );
-    assert.match(body.promptOverrides[0]!.prompt, /Kai: [^.]*winter outfit\./, "the outfit line dresses him");
   }
 });
 
@@ -426,12 +447,12 @@ test("someone with no picture at all is painted from the description, as before 
   );
 });
 
-test("an adopted Engine sprite portrait, which the kit never reads, stops no key image while his card has a likeness (#2147)", async () => {
+test("an adopted Engine sprite portrait, which the kit never reads, stops no key image while his card has an avatar (#2147)", async () => {
   const kai = { cardId: "card-dottore", portrait: "/api/sprites/card-dottore/file/full_neutral.png" };
-  // His card's full body, else (no sprites to read) his card's avatar.
-  for (const [i, options, expected] of [
-    [0, {}, data("/api/sprites/card-dottore/file/full_neutral.png")],
-    [1, { missing: ["/api/sprites/card-dottore"] }, data("/api/avatars/file/card.png")],
+  // 0.36.5: an Engine base look is no outfit picture, so he sends his card's avatar, never its full-body sprite.
+  for (const [i, options] of [
+    [0, {}],
+    [1, { missing: ["/api/sprites/card-dottore"] }],
   ] as const) {
     const host = engine({ missing: [...(options.missing ?? [])] });
     const t = await keyImage(`r-engineref${i}-aaaaaa`, host, ["Kai", "Ines"], kai, {
@@ -439,6 +460,9 @@ test("an adopted Engine sprite portrait, which the kit never reads, stops no key
     });
     assert.equal((await t.paint())?.state, "ready");
     assert.equal(host.generations.length, 1);
-    assert.deepEqual(host.generations[0]!.referenceImages, [expected, data("/api/avatars/file/persona.png")]);
+    assert.deepEqual(host.generations[0]!.referenceImages, [
+      data("/api/avatars/file/card.png"),
+      data("/api/avatars/file/persona.png"),
+    ]);
   }
 });

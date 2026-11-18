@@ -710,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.36.5",
+          "date": "2026-11-18",
+          "notes": "- Pictures of people in a scene (story pictures, date keepsakes, Wish art, banners and tarot cards) now show everyone in the outfit they wear. Each person's picture is sent as the outfit they have on, or their painted base look, instead of their card's or persona's picture. Until an outfit has a picture, their avatar is sent and the outfit is described in words.",
+          "highlight": false
+        },
+        {
           "version": "0.36.3",
           "date": "2026-11-18",
           "notes": "- Your thoughts in a scene no longer open with how your body feels every time, such as \"My stomach knots\" or \"My heart is pounding in my chest\". The story no longer asks for a bodily feeling each time something happens to you.",
@@ -822,12 +828,6 @@
           "date": "2026-11-15",
           "notes": "- **Emotion cues.** Turn on **Emotion cues** in **Settings → Audio → Voices**: with voiced dialogue, new scenes mark how lines are said, like [hushed whisper] or [gasps]. The voice performs them; the dialogue box hides them. ElevenLabs v3 and v4 act on them; other models may read the brackets aloud.\n- **Haptics.** In an explicit story, **Settings → Audio → Haptics** connects your toys through Intiface Central and tests them all. Sex scenes then drive them, each cue looping until the story changes it, and in Messages you can hand him the remote. **Stop the toys** stays on screen while they play.\n- **Memory keeps its newest chapters.** Condensing the timeline now keeps the newest three chapters as written and refuses a result that comes back too long, which had lost chapters. Every story's timeline is rebuilt once from its saved summaries.",
           "highlight": true
-        },
-        {
-          "version": "0.33.3",
-          "date": "2026-11-15",
-          "notes": "- **Date cards that fit a phone.** In Album → Dates, each date's text now uses the card's full width, with **Plan a date**, **Read again** and an evening's outcome in one row below it.\n- **A picture for 4★ dates.** A 4★ date now paints its place, with nobody in it, when you first open it, 1 image, as a 5★ date shows its banner's picture. A date won before this update offers **Paint it** in Album → Dates.\n- **Narration and dialogue.** Every story prompt now asks narration to show what happens, not what doesn't. Dialogue should sound spoken, in each speaker's own voice, with everyday words. No echoing or parroting.",
-          "highlight": false
         }
       ]
     },

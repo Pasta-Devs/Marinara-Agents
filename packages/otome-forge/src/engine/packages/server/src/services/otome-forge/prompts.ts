@@ -6218,8 +6218,8 @@ export interface CgPerson {
   outfitLine: string;
   presentation: Presentation;
   /**
-   * Their reference is who they are, not the look they wear (a picture of several people, S/art/cg.ts cgSubjects):
-   * only the outfit line dresses them, so the references are not used for clothing.
+   * Their reference is their avatar, not the outfit they wear, which has no picture yet (S/art/cg.ts cgSubjects): only
+   * the outfit line dresses them, so the references are not used for clothing.
    */
   outfitInText?: boolean;
 }
@@ -6263,12 +6263,22 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
   // Sentence prompts say how many people there are and which picture is whose: unlabelled full-body references of
   // people standing, beside a brief where they touch, are how bodies come out merged or with extra limbs (2026-11-03).
   const tagged = style.tagged === true;
+  // 0.36.5: a reference is the outfit its person wears, so it dresses them too; one that is only their avatar (their
+  // outfit has no picture yet, `outfitInText`) gives their face alone, and their outfit line dresses them. An explicit
+  // moment takes no clothing from any of them.
+  const sent = input.references ?? [];
+  const dressed = bare ? [] : names.filter((name, index) => !people[index]!.outfitInText && sent.includes(name));
+  const uses = !dressed.length
+    ? "face, hair and build"
+    : dressed.length === sent.length
+      ? "face, hair, build and clothing"
+      : `face, hair and build, and for the clothing of ${nameList(dressed)}`;
   const staging = tagged
     ? []
     : [
-        input.references?.length
+        sent.length
           ? sentence(
-              `Reference images, in order: ${input.references.join("; ")}. Use them only for each person's face, hair${bare || people.some((person) => person.outfitInText) ? " and build" : ", build and clothing"}, never for the pose, framing or background`,
+              `Reference images, in order: ${sent.join("; ")}. Use them only for each person's ${uses}, never for the pose, framing or background`,
             )
           : "",
         people.length

@@ -1,8 +1,8 @@
 // Otome Hearth M4: a CG dresses each person in the look they wear now. The prompt describes the worn look's outfit
-// line. Alone, the subject names the look, so the kit sends its image after the face; with others, each person is one
-// reference (the maintainer's anatomy report, 2026-11-03): who they are, with the look only as their last resort
-// (0.9.5, #2145: a look painted without their likeness put a stranger's face in every group picture). The cast's
-// names resolve at paint time (art/cg.ts resolveCast): ids, "you", titles, honorifics, surnames, accents.
+// line. 0.36.5 (the maintainer's call): each person is ONE reference, the picture of the outfit they wear (the worn
+// look, else their painted base look), and only while that outfit has no picture yet their card or persona avatar,
+// never the card's full-body sprite, with the outfit line dressing them. The cast's names resolve at paint time
+// (art/cg.ts resolveCast): ids, "you", titles, honorifics, surnames, accents.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
@@ -46,33 +46,20 @@ const player = (wornOutfit?: string) =>
     ...(wornOutfit ? { wornOutfit } : {}),
   }) as unknown as Player;
 
-test("a CG describes and references the look each person wears now", () => {
+test("a CG describes and references the outfit each person wears now (0.36.5)", () => {
   const subjects = cgSubjects(["Kai", "Sol"], [unit("coat")], player("gown"));
   const [kai, sol] = subjects;
   assert.equal(kai!.person.outfitLine, "long black greatcoat");
   assert.equal(sol!.person.outfitLine, "silver evening gown");
-  // Two people: one picture each, never their face and their look as two standing figures. It is who they are (his
-  // card, her persona, then their setup portrait); the look they wear is tried last (avatarPath), and the kit adds no
-  // look picture (no wornOutfit). The paint must show each as themselves (`who`).
-  assert.deepEqual(kai!.image, {
-    kind: "character",
-    cardId: "card-kai",
-    portrait: "/api/global-gallery/file/kai.png",
-    avatarPath: coat.url,
-    who: "Kai",
-  });
-  assert.deepEqual(sol!.image, {
-    kind: "character",
-    personaId: "persona-sol",
-    portrait: "/api/global-gallery/file/sol.png",
-    avatarPath: gown.url,
-    who: "Sol",
-  });
+  // The maintainer's call: one picture each, the outfit they wear, and nothing else (no card, persona or portrait for
+  // the kit to find first, no worn look to add after it). The paint must show each as themselves (`who`).
+  assert.deepEqual(kai!.image, { kind: "character", avatarPath: coat.url, who: "Kai" });
+  assert.deepEqual(sol!.image, { kind: "character", avatarPath: gown.url, who: "Sol" });
   assert.deepEqual(cgReferences(subjects), { units: [kai!.image, sol!.image], labels: ["Kai", "Sol"] });
-  // The outfit line dresses them, so the references are only for face, hair and build.
+  // The pictures dress them, beside the outfit lines.
   assert.deepEqual(
     subjects.map((subject) => subject.person.outfitInText),
-    [true, true],
+    [undefined, undefined],
   );
   const style = { styleText: "", positiveTags: "", negativeTags: "" };
   const world = normalizeWorld({});
@@ -85,28 +72,52 @@ test("a CG describes and references the look each person wears now", () => {
       use: "clothed",
       references: cgReferences(people).labels,
     }).prompt;
-  assert.match(prompt(subjects), /face, hair and build, never for the pose/);
+  assert.match(prompt(subjects), /face, hair, build and clothing, never for the pose/);
   assert.match(
     prompt(subjects),
     /Kai: tall man, grey eyes; long black greatcoat\./,
     "the outfit line still names the look",
   );
-  // Without a look worn, the references still dress them.
-  assert.match(prompt(cgSubjects(["Kai", "Sol"], [unit()], player())), /face, hair, build and clothing, never/);
-  // Alone: who they are, then the look they wear, as today.
+  // Without a look worn, their painted base look is the outfit.
+  const [baseKai, baseSol] = cgSubjects(["Kai", "Sol"], [unit()], player());
+  assert.deepEqual(
+    [baseKai!.image?.avatarPath, baseSol!.image?.avatarPath],
+    ["/api/global-gallery/file/kai.png", "/api/global-gallery/file/sol.png"],
+  );
+  assert.match(prompt([baseKai!, baseSol!]), /face, hair, build and clothing, never/);
+  // Alone: the outfit only, as in a group.
   const [alone] = cgSubjects(["Kai"], [unit("coat")], player("gown"));
-  assert.equal((alone!.image as { wornOutfit?: string }).wornOutfit, "coat");
-  assert.equal((alone!.image as { cardId?: string }).cardId, "card-kai");
-  assert.equal(alone!.person.outfitInText, undefined);
-  assert.deepEqual(cgReferences([alone!]).labels, ["Kai", "Kai's outfit"]);
+  assert.deepEqual(alone!.image, { kind: "character", avatarPath: coat.url, who: "Kai" });
+  assert.deepEqual(cgReferences([alone!]).labels, ["Kai"]);
   assert.match(prompt([alone!]), /face, hair, build and clothing, never/);
+});
+
+test("an outfit with no picture yet sends the avatar, never the card's full body, and the outfit line dresses them (0.36.5)", () => {
+  // His base look still an Engine sprite (no image connection when the story began), and a look worn whose picture is
+  // missing: neither is an outfit picture.
+  const engineKai = { ...unit(), portrait: "/api/sprites/card-kai/file/full_neutral.png" } as unknown as Unit;
+  const unpainted = { ...player("gown"), outfits: [{ ...gown, url: "" }] } as unknown as Player;
+  const subjects = cgSubjects(["Kai", "Sol"], [engineKai], unpainted);
+  assert.deepEqual(
+    subjects.map((subject) => subject.image),
+    [
+      { kind: "character", cardId: "card-kai", avatarOnly: true, who: "Kai" },
+      { kind: "character", personaId: "persona-sol", avatarOnly: true, who: "Sol" },
+    ],
+  );
+  assert.deepEqual(
+    subjects.map((subject) => subject.person.outfitInText),
+    [true, true],
+  );
+  assert.equal(subjects[1]!.person.outfitLine, "silver evening gown", "the worn look still names her outfit");
+  assert.deepEqual(cgReferences(subjects).labels, ["Kai", "Sol"]);
 });
 
 test("an archetype alone in a look, with no card or portrait, sends the look labelled as him (#2145)", () => {
   const archetype = { ...unit("coat"), cardId: undefined, portrait: undefined } as unknown as Unit;
   const [alone] = cgSubjects(["Kai"], [archetype], player());
   assert.deepEqual(cgReferences([alone!]), {
-    units: [{ kind: "character", outfits: [coat], wornOutfit: "coat", who: "Kai" }],
+    units: [{ kind: "character", avatarPath: coat.url, who: "Kai" }],
     labels: ["Kai"],
   });
 });
@@ -135,7 +146,7 @@ test("whom each reference shows always matches what is sent: nobody without a pi
   assert.deepEqual(cgReferences([her!]).labels, ["Sol"]);
 });
 
-test("without a worn look a CG keeps the base outfit and sends faces only", () => {
+test("without a worn look a CG keeps the base outfit and adds no worn look", () => {
   const [kai, sol] = cgSubjects(["Kai", "Sol"], [unit()], player());
   assert.equal(kai!.person.outfitLine, "keeper's coat");
   assert.equal((kai!.image as { wornOutfit?: string }).wornOutfit, undefined);

@@ -987,7 +987,8 @@ test("a card's picture: a CG's size, by id and role, clothed at most, no letteri
   // The two of them, by id and role: his likeness first, then hers.
   assert.equal(lovers.method, "generateBannerArt");
   assert.deepEqual(
-    lovers.request.units!.map((unit) => [unit.who, unit.personaId ?? unit.portrait]),
+    // 0.36.5: his painted look is his one picture; she has no outfit picture, so her persona's avatar.
+    lovers.request.units!.map((unit) => [unit.who, unit.personaId ?? unit.avatarPath]),
     [
       ["Kai", "/api/global-gallery/file/kai.png"],
       ["Ines", "persona-ines"],
