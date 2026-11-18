@@ -716,6 +716,12 @@
           "highlight": false
         },
         {
+          "version": "0.36.4",
+          "date": "2026-11-18",
+          "notes": "- Characters no longer talk in short, clipped one-liners that make little sense in the scene. Each line now says what that person would really say right then, in everyday words, and can run to a few sentences.",
+          "highlight": false
+        },
+        {
           "version": "0.36.3",
           "date": "2026-11-18",
           "notes": "- Your thoughts in a scene no longer open with how your body feels every time, such as \"My stomach knots\" or \"My heart is pounding in my chest\". The story no longer asks for a bodily feeling each time something happens to you.",
@@ -822,12 +828,6 @@
           "date": "2026-11-15",
           "notes": "- **The timeline rebuild can finish.** The condensing prompt no longer also asks to keep every event, which fought its 5,000-word limit. Models kept bringing back about 7,400 words, so the rebuild stopped with **Retry the summary**. Until it finishes, each later chapter is sent on its own, which made chapter prompts very large.\n- **Summaries keep a story's periods and pregnancies.** Summaries no longer leave out anyone's period or cycle, so a character's period or a pregnancy in your story is remembered like anything else. The period tracker's data still never reaches memory.",
           "highlight": false
-        },
-        {
-          "version": "0.34.0",
-          "date": "2026-11-15",
-          "notes": "- **Emotion cues.** Turn on **Emotion cues** in **Settings → Audio → Voices**: with voiced dialogue, new scenes mark how lines are said, like [hushed whisper] or [gasps]. The voice performs them; the dialogue box hides them. ElevenLabs v3 and v4 act on them; other models may read the brackets aloud.\n- **Haptics.** In an explicit story, **Settings → Audio → Haptics** connects your toys through Intiface Central and tests them all. Sex scenes then drive them, each cue looping until the story changes it, and in Messages you can hand him the remote. **Stop the toys** stays on screen while they play.\n- **Memory keeps its newest chapters.** Condensing the timeline now keeps the newest three chapters as written and refuses a result that comes back too long, which had lost chapters. Every story's timeline is rebuilt once from its saved summaries.",
-          "highlight": true
         }
       ]
     },

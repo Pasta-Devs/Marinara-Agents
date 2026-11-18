@@ -184,16 +184,14 @@ test("writing rules: story prompts get the knowledge boundary first, planners ne
   }
 });
 
-test("the writing rules carry the maintainer's lines on narration, spoken dialogue and echoing, word for word", () => {
-  // The maintainer's (2026-11-15), added to every story prompt's and planner's WRITING RULES as written.
+test("the writing rules carry the maintainer's lines on narration and echoing, word for word", () => {
+  // The maintainer's (2026-11-15), added to every story prompt's and planner's WRITING RULES as written. 0.36.4
+  // (#2384): they removed the spoken-dialogue line (fragments, dodged questions); its "Speech uses everyday words."
+  // lives in the scene prompts' dialogue instructions (otome-forge-beats pins it there).
   for (const story of [true, false]) {
     const rules = otomeWritingRules({ story });
     assert.ok(rules.includes("\n- Narration should show what happens, not what doesn’t.\n"));
-    assert.ok(
-      rules.includes(
-        "\n- Dialogue must be realistic in the speaker’s own voice and rhythm, as if spoken: with contractions, fragments, abandoned sentences, dodged questions, interruptions, stutters, ramblings, and so on. Speech uses everyday words. The line itself must convey its emotions.\n",
-      ),
-    );
+    assert.doesNotMatch(rules, /Dialogue must be realistic|fragments, abandoned sentences/u);
     assert.ok(rules.includes("\n- Ban echoing and parroting in any form.\n"));
   }
 });

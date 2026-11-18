@@ -4,6 +4,10 @@
 
 - Pictures of people in a scene (story pictures, date keepsakes, Wish art, banners and tarot cards) now show everyone in the outfit they wear. Each person's picture is sent as the outfit they have on, or their painted base look, instead of their card's or persona's picture. Until an outfit has a picture, their avatar is sent and the outfit is described in words.
 
+## 0.36.4 — 2026-11-18
+
+- Characters no longer talk in short, clipped one-liners that make little sense in the scene. Each line now says what that person would really say right then, in everyday words, and can run to a few sentences.
+
 ## 0.36.3 — 2026-11-18
 
 - Your thoughts in a scene no longer open with how your body feels every time, such as "My stomach knots" or "My heart is pounding in my chest". The story no longer asks for a bodily feeling each time something happens to you.

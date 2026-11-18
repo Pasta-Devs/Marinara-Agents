@@ -836,10 +836,11 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register.
   // Retaken 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing.
   // Retaken 0.36.3: the writing rules no longer ask for what the protagonist feels in their body.
-  assert.equal(sha(mainMessages), "4a4510837ef47669c57f1d299b0c629ca50a57cc17e6ac373ed4bde3eb640c6d", "a main chapter");
+  // Retaken 0.36.4 (#2384): the writing rules drop the dialogue rule; the scene asks for spoken lines in its place.
+  assert.equal(sha(mainMessages), "993083310f35e21f408ddada78043b11362345c0cf7b5b8d7283851fb5496d5e", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "548de1fe77be3d3dfd65cdc929182ded7afb47d1220c28076a762ae71f742799",
+    "d41dbfb11719d7c5f5ab6239117432888859ad64fcbfe397ff7dcac6c2c78ff2",
     "a Character Story, even with a scene handed to it",
   );
 });
