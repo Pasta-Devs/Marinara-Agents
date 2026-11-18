@@ -225,7 +225,7 @@ async function buildItemArt(
 ): Promise<BuiltArt> {
   if (!hasArt(item)) throw notFound("art for this item");
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth run");
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
@@ -424,7 +424,7 @@ export async function queueItemArt(
   // A featured 5★ whose banner's art is painting now waits for that picture (it becomes this item's art).
   if (!hasArt(item) || item.art || bannerPaints(runId, item)) return itemArtView(runId, item);
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-  if (!world) throw notFound("Otome Forge run");
+  if (!world) throw notFound("Otome Hearth run");
   const connectionId = world.images.connectionId;
   if (!connectionId || !activeOf(deps)()) return null;
   const owner = itemArtOwner(item.id);
@@ -495,7 +495,7 @@ export async function paintItemNow(
         return itemArtView(runId, current);
       }
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-      if (!world) throw notFound("Otome Forge run");
+      if (!world) throw notFound("Otome Hearth run");
       const connectionId = world.images.connectionId;
       if (!connectionId) throw noConnection();
       const at = new Date().toISOString();
@@ -532,7 +532,7 @@ export function pairView(runId: string, cgs: readonly AlbumCg[], hers: string): 
 /** The couple set of `hers`: both items, owned and painted, or the reason the pair cannot be painted. */
 async function readPair(deps: ArtDeps, runId: string, hers: string) {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth run");
   const her = await readItem(deps, runId, hers);
   if (!her || her.kind !== "her-look5" || !her.coupleWith) throw notFound("couple set");
   const his = await readItem(deps, runId, her.coupleWith);
@@ -652,7 +652,7 @@ export async function paintPairNow(
       let painted: { image: PaintedImage; built: Awaited<ReturnType<typeof buildPair>> };
       try {
         painted = await paintSlot(connectionId, async () => {
-          if (!activeOf(deps)()) throw new Error("Otome Forge stopped before painting");
+          if (!activeOf(deps)()) throw new Error("Otome Hearth stopped before painting");
           // Built now, so the run, both looks, the rating (and its 18+ gate) and the connection are the ones in force
           // at the paid call, however long it waited behind other paints.
           const built = await buildPair(deps, runId, hers, edited);

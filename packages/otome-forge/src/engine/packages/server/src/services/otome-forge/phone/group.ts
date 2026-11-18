@@ -127,7 +127,7 @@ export async function groupMembers(deps: Pick<PhoneDeps, "store">, runId: string
 /** The run and the group's members, or a 404; a 409 while the world is forged or until two are met. */
 async function loadGroup(deps: Pick<PhoneDeps, "store">, runId: string) {
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
   if (run.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
   const members = await groupMembers(deps, runId, run);
   if (members.length < GROUP_MIN_MEMBERS) throw conflict("The group chat opens once you have met two love interests.");
@@ -347,7 +347,7 @@ export async function groupDue(
 ): Promise<NonNullable<PhoneDueResult["group"]>> {
   if (open !== undefined) noteOpenThread(runId, open);
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
   const latest = run.world.groupDaily?.last ?? null;
   const result = (status: PhoneDueResult["status"]) => ({ status, latest });
   const limit = run.world.groupSquabbles ?? 0;
@@ -370,7 +370,7 @@ export async function groupDue(
       decided = dailyDecision(current.groupDaily, { now, seen, limit: current.groupSquabbles ?? 0 });
       return "next" in decided ? { ...current, groupDaily: decided.next } : current;
     });
-    if (!saved) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!saved) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
     if (decided.status !== "queued") return result(decided.status);
     background.ensure({
       key,

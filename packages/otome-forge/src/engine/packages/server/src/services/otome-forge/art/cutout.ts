@@ -348,7 +348,7 @@ export async function queueCutouts<T extends Pick<Unit, "id" | "cutouts">>(
     live.add(key);
     const job = () =>
       cutOne(deps, runId, unit.id, url, revision)
-        .catch((error: unknown) => deps.runtime.logger.error(error, "Otome Forge could not save a cut-out"))
+        .catch((error: unknown) => deps.runtime.logger.error(error, "Otome Hearth could not save a cut-out"))
         .finally(() => {
           live.delete(key);
           quiet.delete(key);

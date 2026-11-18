@@ -151,7 +151,7 @@ export async function phoneDue(
 ): Promise<PhoneDueResult> {
   if (open !== undefined) noteOpenThread(runId, open);
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
   const latest = run.world.phoneDaily?.last ?? null;
   const result = (status: PhoneDueResult["status"]): PhoneDueResult => ({ status, latest });
   const limit = run.world.dailyMessages ?? 0;
@@ -177,7 +177,7 @@ export async function phoneDue(
       decided = dailyDecision(current.phoneDaily, { now, seen, limit: spread(current.dailyMessages ?? 0) });
       return "next" in decided ? { ...current, phoneDaily: decided.next } : current;
     });
-    if (!saved) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!saved) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
     if (decided.status !== "queued") return result(decided.status);
     const order = shuffled(candidates, random);
     background.ensure({

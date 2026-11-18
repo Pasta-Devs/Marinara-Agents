@@ -234,6 +234,12 @@ test("the bundle answers conflicts, bad bodies and storage failures with the agr
   const conflict = await host.call("POST", "/api/otome-forge/index/opened", {});
   assert.equal(conflict.status, 409);
   assert.equal(conflict.body.code, "conflict");
+  // Players read these messages, so they name the package as it is called now (#2388).
+  assert.match(conflict.body.error, /^Otome Hearth data changed while saving .+\. Try again\.$/);
+  assert.deepEqual(await host.call("GET", "/api/otome-forge/runs/:run"), {
+    status: 404,
+    body: { error: "No such Otome Hearth run.", code: "not-found" },
+  });
 
   const badBody = await host.call("POST", "/api/otome-forge/index/opened", "nope");
   assert.equal(badBody.status, 400);
@@ -244,7 +250,7 @@ test("the bundle answers conflicts, bad bodies and storage failures with the agr
     throw new Error("disk on fire");
   };
   const failure = await host.call("GET", "/api/otome-forge/index");
-  assert.deepEqual(failure, { status: 500, body: { error: "Otome Forge could not complete the request." } });
+  assert.deepEqual(failure, { status: 500, body: { error: "Otome Hearth could not complete the request." } });
   assert.equal(host.logs.length, 1);
   assert.equal(host.logs[0].level, "error");
   assert.match(String(host.logs[0].error), /disk on fire/);

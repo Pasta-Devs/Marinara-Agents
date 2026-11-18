@@ -148,7 +148,7 @@ export async function setUpset(
     if (upset === !!his.upset) return current;
     return { ...current, lis: { ...current.lis, [li]: { ...his, upset: upset ? { since } : null } } };
   });
-  if (!state) throw notFound("Otome Forge run");
+  if (!state) throw notFound("Otome Hearth run");
   if (!upset) {
     await settleInvites(deps, runId, li, "lapsed");
     return { upset: false, writing: false };
@@ -205,7 +205,7 @@ export async function answerInvite(
     const at = new Date().toISOString();
     let lapsed = false;
     const before = await deps.store.readDoc(stateId(runId), normalizeState);
-    if (!before) throw notFound("Otome Forge run");
+    if (!before) throw notFound("Otome Hearth run");
     const key = await saveClearAirScene(deps.store, runId, li, before);
     const state = await deps.store
       .updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
@@ -225,7 +225,7 @@ export async function answerInvite(
         await deps.store.removeDoc(chapterId(runId, key)).catch(() => false);
         throw error;
       });
-    if (!state) throw notFound("Otome Forge run");
+    if (!state) throw notFound("Otome Hearth run");
     // The scene this acceptance registered, or (an Accept sent again) the one already waiting; one saved for nothing
     // goes.
     scene = state.chapters[key] ? key : clearAirScenes(state, li).at(-1)?.key;

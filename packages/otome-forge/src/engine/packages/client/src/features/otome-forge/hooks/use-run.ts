@@ -85,7 +85,7 @@ export function useSampledAccents(view: RunView | undefined) {
         } catch (error) {
           // Its colour goes back to the cast, so a later pick may take it.
           picked.current.delete(li.id);
-          console.warn("Otome Forge could not save an accent colour", error);
+          console.warn("Otome Hearth could not save an accent colour", error);
         }
       });
     }

@@ -147,7 +147,7 @@ function schedule(
       // A run deleted mid-forge ends its job here: every write refuses to bring the run back.
       error instanceof OtomeForgeError && error.code === "not-found"
         ? deps.runtime.logger.info("[otome-forge] The forge job for %s ended: the run was deleted", runId)
-        : deps.runtime.logger.error(error, "Otome Forge: the forge job for %s stopped", runId),
+        : deps.runtime.logger.error(error, "Otome Hearth: the forge job for %s stopped", runId),
     )
     .finally(() => {
       const left = (jobs.get(runId) ?? 1) - 1;
@@ -199,7 +199,7 @@ function withStep(world: World, id: string, patch: Partial<ForgeStep>): World {
   };
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 /** Changes the run's world and recomputes the phase; a deleted world stays deleted (404). */
 async function updateWorld(deps: ForgeDeps, runId: string, change: (world: World) => World): Promise<World> {
@@ -268,7 +268,7 @@ async function runTextStep(deps: ForgeDeps, runId: string, stepId: string, write
       if (error instanceof OtomeForgeError) {
         deps.runtime.logger.warn("[otome-forge] forge step %s failed: %s", stepId, error.message);
       } else {
-        deps.runtime.logger.error(error, "Otome Forge: forge step %s failed", stepId);
+        deps.runtime.logger.error(error, "Otome Hearth: forge step %s failed", stepId);
       }
       await updateWorld(deps, runId, (world) => withStep(world, stepId, { state: "failed", error: errorCode(error) }));
     }

@@ -29,7 +29,7 @@ export function useOtomeIndex() {
     otome
       .post<{ index: OtomeIndex }>("/index/opened")
       .then(({ index: next }) => queryClient.setQueryData(INDEX_QUERY_KEY, next))
-      .catch((error: unknown) => console.warn("Otome Forge could not record this visit", error));
+      .catch((error: unknown) => console.warn("Otome Hearth could not record this visit", error));
   }, [otome, queryClient]);
   return index;
 }

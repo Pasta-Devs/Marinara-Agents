@@ -80,7 +80,7 @@ export interface PurchaseRequest {
   at: string;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const insufficient = () => new OtomeForgeError(409, "Not enough Starlight for this purchase.", "insufficient");
 

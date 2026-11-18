@@ -324,7 +324,7 @@ export function Thread({
         );
         void queryClient.invalidateQueries({ queryKey: homeQueryKey(runKey) });
       })
-      .catch((failure: unknown) => console.warn("Otome Forge could not mark a thread as read", failure));
+      .catch((failure: unknown) => console.warn("Otome Hearth could not mark a thread as read", failure));
     // `li` changes only with `id` (PhoneScreen keys the thread by it).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastHis, id, otome, path, queryClient, runKey]);

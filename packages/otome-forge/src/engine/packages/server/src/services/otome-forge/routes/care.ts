@@ -134,7 +134,7 @@ export const registerCareRoutes: RegisterRoutes = (router, deps) => {
           if (error instanceof OtomeForgeError) throw error;
           // An unexpected failure is a plain 500 here and never logged, unlike other routes' (createHandle logs the
           // path): a line naming this route, or a stack through the care code, would date a cycle day in the log.
-          throw new OtomeForgeError(500, "Otome Forge could not complete the request.");
+          throw new OtomeForgeError(500, "Otome Hearth could not complete the request.");
         }
       }),
     ),
@@ -145,7 +145,7 @@ export const registerCareRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { runId } = runParam(request);
       const [run, banners] = await Promise.all([readRun(store, runId), store.listRun("banner", runId)]);
-      if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+      if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
       return calendarView(
         run,
         banners.map((record) => record.data),

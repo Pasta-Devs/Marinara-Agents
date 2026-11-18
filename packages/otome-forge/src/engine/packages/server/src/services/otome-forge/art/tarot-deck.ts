@@ -133,7 +133,7 @@ const activeOf = (deps: ItemArtDeps) => () => !deps.art || deps.art.active();
 /** The prompt and the paid call for a deck card, from the documents as they are now. */
 async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: Partial<ImagePrompt>) {
   const [run, deck] = await Promise.all([readRun(deps.store, runId), readDeck(deps.store, runId)]);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth run");
   const entry = deck.cards[key];
   if (!entry) throw locked();
   const unit: Unit | undefined = entry.li ? run.units.find((item) => item.id === entry.li) : undefined;
@@ -287,7 +287,7 @@ export async function claimDeckCards(
 /** A love interest the run has, or a 404; then their deck card for `card`, or 409 `locked` before it was drawn. */
 async function readEntry(deps: Pick<ItemArtDeps, "store">, runId: string, li: LiId, card: Arcana) {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth run");
   if (!run.state.lis[li] || !run.units.some((unit) => unit.id === li)) throw notFound("love interest");
   const key = deckKey(card, li);
   const entry = (await readDeck(deps.store, runId)).cards[key];
@@ -343,7 +343,7 @@ export async function paintTarotCardNow(
           ? { ...current, cards: { ...current.cards, [key]: { ...latest, art: repainting(latest.art, at) } } }
           : undefined;
       });
-      if (!claimed) throw notFound("Otome Forge run");
+      if (!claimed) throw notFound("Otome Hearth run");
       if (claimed.changed)
         await paintDeckCard(deps, runId, key, at, connectionId, { debugMode, consent: true, edited });
       return shown();

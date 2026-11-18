@@ -81,7 +81,7 @@ export function registerMemoryRoutes(router: OtomeRouter, { store, handle, memor
   const runOf = async (request: OtomeRequest) => {
     const { runId } = runParam(request);
     if (!(await store.readDoc(worldId(runId), normalizeWorld))) {
-      throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+      throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
     }
     return runId;
   };

@@ -710,6 +710,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.36.6",
+          "date": "2026-11-18",
+          "notes": "- Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.",
+          "highlight": false
+        },
+        {
           "version": "0.36.5",
           "date": "2026-11-18",
           "notes": "- Pictures of people in a scene (story pictures, date keepsakes, Wish art, banners and tarot cards) now show everyone in the outfit they wear. Each person's picture is sent as the outfit they have on, or their painted base look, instead of their card's or persona's picture. Until an outfit has a picture, their avatar is sent and the outfit is described in words.\n- That outfit picture is sent cut out, with no background. One that isn't cut out yet is cut first, for free. If that fails, the avatar is sent instead.\n- Scene pictures no longer ask for \"two arms, two legs and five fingers\", which pulled legs into close-up shots. They now tell the image model to avoid bad anatomy, merged bodies, extra or missing limbs and malformed hands.",
@@ -821,12 +827,6 @@
           "version": "0.34.2",
           "date": "2026-11-15",
           "notes": "- **A too-long timeline gets shortened.** When condensing the timeline comes back over 5,000 words, the result goes back on its own, told how long it is and how many words to cut, up to three times. Before, the whole timeline went back with it, and the model copied it out again, so the rebuild stopped.\n- **Prompts keep the old timeline during a rebuild.** Until a rebuild finishes, story prompts use the earlier timeline instead of the half-rebuilt one. A half-rebuilt timeline covered only the first chapters, so every later chapter went in on its own and a chapter plan could pass 160,000 tokens.",
-          "highlight": false
-        },
-        {
-          "version": "0.34.1",
-          "date": "2026-11-15",
-          "notes": "- **The timeline rebuild can finish.** The condensing prompt no longer also asks to keep every event, which fought its 5,000-word limit. Models kept bringing back about 7,400 words, so the rebuild stopped with **Retry the summary**. Until it finishes, each later chapter is sent on its own, which made chapter prompts very large.\n- **Summaries keep a story's periods and pregnancies.** Summaries no longer leave out anyone's period or cycle, so a character's period or a pregnancy in your story is remembered like anything else. The period tracker's data still never reaches memory.",
           "highlight": false
         }
       ]

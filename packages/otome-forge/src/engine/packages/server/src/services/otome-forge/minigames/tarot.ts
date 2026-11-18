@@ -418,7 +418,7 @@ export interface TarotDeps extends ItemArtDeps {
   memory?: Pick<OtomeMemory, "recall" | "maintain">;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const readingNotFound = () => new OtomeForgeError(404, "No such Tarot reading.", "not-found");
 const badRequest = (what: string) => new OtomeForgeError(400, `Invalid request: ${what}`, "bad-request");

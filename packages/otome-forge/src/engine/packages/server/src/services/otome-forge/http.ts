@@ -77,8 +77,8 @@ export function createHandle(logger: OtomeLogger): Handle {
           .status(error.statusCode)
           .send(error.code ? { error: error.message, code: error.code } : { error: error.message });
       }
-      logger.error(error, "Otome Forge request failed: %s %s", request.method ?? "", request.url ?? "");
-      return reply.status(500).send({ error: "Otome Forge could not complete the request." });
+      logger.error(error, "Otome Hearth request failed: %s %s", request.method ?? "", request.url ?? "");
+      return reply.status(500).send({ error: "Otome Hearth could not complete the request." });
     }
   };
 }
@@ -130,7 +130,7 @@ function param(request: OtomeRequest, name: string): unknown {
 /** The `:run` param as its run key and run id R, or a 404 (a malformed key names no run). */
 export function runParam(request: OtomeRequest): { runKey: string; runId: string } {
   const runKey = param(request, "run");
-  if (!isRunKey(runKey)) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!isRunKey(runKey)) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
   return { runKey, runId: runIdOf(runKey) };
 }
 

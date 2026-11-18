@@ -79,7 +79,7 @@ export interface HomeRouteDeps extends RouteDeps {
   cutouts?: CutoutClient;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 
 /**

@@ -84,7 +84,7 @@ const SideBody = z.object({ ...SideRef, ...Edited });
 const SideRefBody = z.object(SideRef);
 const NoFields = z.object({});
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 
 /** A beat named by `key` and `i`, or a 404 (a malformed one names no beat). */
 function beatRef(key: unknown, i: unknown): { key: string; i: number } {

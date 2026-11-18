@@ -31,7 +31,7 @@ const FinishBody = z.object({
   cheat: KittyCheatSchema.nullable(),
 });
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 
 export function registerKittyRoutes(router: OtomeRouter, { store, handle }: Pick<RouteDeps, "store" | "handle">): void {

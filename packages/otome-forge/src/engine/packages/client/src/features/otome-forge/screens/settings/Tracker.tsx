@@ -189,7 +189,7 @@ export function TrackerSettings({ run }: { run: RunView | null }) {
       setTimeout(() => URL.revokeObjectURL(url), 1_000);
       setStatus("data", { error: false, text: t("ui.otomeForge.tracker.exported") });
     } catch (error) {
-      console.warn("Otome Forge could not export the tracker", error);
+      console.warn("Otome Hearth could not export the tracker", error);
       setStatus("data", { error: true, text: t("ui.otomeForge.tracker.exportFailed") });
     }
   };
