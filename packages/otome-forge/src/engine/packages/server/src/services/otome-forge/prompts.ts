@@ -407,7 +407,11 @@ export const WRITING_RULES = [
   // bodily sensation every time ("My stomach knots…", "My heart is pounding in my chest.").
   // The maintainer's (2026-11-15), word for word.
   "Narration should show what happens, not what doesn’t.",
-  "Dialogue must be realistic in the speaker’s own voice and rhythm, as if spoken: with contractions, fragments, abandoned sentences, dodged questions, interruptions, stutters, ramblings, and so on. Speech uses everyday words. The line itself must convey its emotions.",
+  // 0.36.4 (#2384): the maintainer removed "Dialogue must be realistic in the speaker’s own voice and rhythm, as if
+  // spoken: with contractions, fragments, abandoned sentences, dodged questions, interruptions, stutters, ramblings,
+  // and so on. Speech uses everyday words. The line itself must convey its emotions." Every character spoke in
+  // fragmentary one-liners that made no sense in the scene. "Speech uses everyday words." moved to the scene prompts'
+  // dialogue instructions (SPOKEN_LINE_RULE).
   "Ban echoing and parroting in any form.",
   "All characters, player included, can change; for better, or worse.",
   "Character change must be earned and consistent with established identity and canonical character cards; it is not automatic redemption or a replacement personality.",
@@ -2227,6 +2231,15 @@ export function chapterPlanMessages({
 export const BEAT_WORDS = 650;
 export const BEAT_WORDS_MAX = 950;
 
+/**
+ * 0.36.4 (#2384): what a spoken segment is, in P6, P12 and P12c. Players found every character speaking in short,
+ * "witty" one-liners that made no sense in the scene ("Jules. The piano. I hear it's sharp."), so a line says what the
+ * person would really say, about what is happening, at the length it needs. "Speech uses everyday words." is the
+ * maintainer's, kept from the dialogue rule they removed from the writing rules.
+ */
+export const SPOKEN_LINE_RULE =
+  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it may run to a few sentences. Speech uses everyday words.";
+
 // Under NSFW: Explicit, sex is never rushed (HEAT_TEXT, Shared blocks), so a node or a Closer's opened ending that
 // reaches it gets more room (CLOSER_INTIMATE_ENDING_MAX is in S/story/replies.ts). Each fits the reply's budget
 // (generation.ts outputBudget: 8192 tokens at least, plus reasoning headroom) and the segments normalizeBeatReply keeps
@@ -2452,13 +2465,13 @@ export function beatMessages({
   // say the same thing from one constant, so they cannot drift.
   const beatShape = `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]}`;
   const instructions = [
-    "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
+    "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, one segment at a time.",
     NO_CHOICES_SENTENCE,
     `Write about ${BEAT_WORDS} words in total across the segments, and NEVER more than ${BEAT_WORDS_MAX}; use at most ${BEAT_SEGMENTS_MAX} segments.${world.content.heat === "explicit" ? ` A node that reaches sex is the exception: give it the room it needs, up to ${INTIMATE_BEAT_WORDS_MAX} words and ${INTIMATE_BEAT_SEGMENTS_MAX} segments, so it is never rushed.` : ""}`,
     "Respond with ONLY a JSON object, no markdown, in this exact shape:",
     beatShape,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
-    "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
+    `- Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE} Never put dialogue inside narration, and never mark it with dashes or quotes as prose.`,
     ...emotionCues(world),
     pov
       ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
@@ -3113,7 +3126,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- endings: truth (${name}'s guard is down and something true comes out), walkout (${name} leaves; it leaves a hurt between them), standoff (neither gives; it ends charged). Each 1 to ${CONFRONTATION_ENDING_MAX} segments that close the scene.`,
     `- grievance.text: what a walkout leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in reveal, as one short third-person sentence ("The protagonist said their brother drowned here.").`,
     `- musicMood: tense or angst.`,
-    '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
+    `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
@@ -3219,7 +3232,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
       : "",
     `- grievance.text: what being shut out leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in mirror, as one short third-person sentence ("The protagonist said they still sleep with a light on.").`,
     "- musicMood: tender or confession.",
-    '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
+    `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,

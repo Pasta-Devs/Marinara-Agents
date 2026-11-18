@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.36.4 — 2026-11-18
+
+- Characters no longer talk in short, clipped one-liners that make little sense in the scene. Each line now says what that person would really say right then, in everyday words, and can run to a few sentences.
+
 ## 0.36.3 — 2026-11-18
 
 - Your thoughts in a scene no longer open with how your body feels every time, such as "My stomach knots" or "My heart is pounding in my chest". The story no longer asks for a bodily feeling each time something happens to you.

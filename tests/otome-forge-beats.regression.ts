@@ -18,6 +18,8 @@
 // Side with (#2046): a side-with node's reply needs ONE small choice with an option backing each love interest present
 // (a repair turn names what is missing); its effects are the game's, never the reply's; the pick moves affection once
 // (+ for the one backed, − for each one passed over, never below a level reached), and the decisions name it.
+// 0.36.4 (#2384): scenes, Confrontations and Closers ask for spoken lines that say what the person would really say,
+// in everyday words, with no rule asking for fragments; each carries How it's written and the player's banned phrases.
 // Your thoughts… (#2127): every scene of the main chapter whose plan read them, its Confrontation included, carries
 // them with its task and nowhere else (each prompt is otherwise byte for byte the same); a route, repair, date or story
 // chapter's never does, nor a Closer's outside a main chapter.
@@ -58,7 +60,9 @@ import { z } from "zod";
 import { generateJson } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
   NO_CHOICES_SENTENCE,
+  SPOKEN_LINE_RULE,
   SUMMARY_WORDING,
+  bannedPhrasesRule,
   beatMessages,
   closerMessages,
   confrontationMessages,
@@ -4418,4 +4422,54 @@ test("a scene that must shed some of the story sheds the chapter's own context, 
   assert.ok(!prompt.includes("NIGHTONE-START"), "the scene had to shed: the oldest chapter in full gave way");
   assert.ok(prompt.includes("HEAD: the harbour before."), "what it sheds is the chapter's own context");
   assert.ok(!prompt.includes("HEAD: MOVED BY UPKEEP."), "never the story as it is now");
+});
+
+test("0.36.4 (#2384): spoken lines say what the person would say, and every scene carries the player's own rules", () => {
+  const units = [KAI, MIR].map((id, index) => ({
+    ...normalizeUnit({}),
+    id,
+    name: ["Kai", "Mireille"][index]!,
+    bible: normalizeBible({})!,
+  }));
+  const state = normalizeState({ lis: { [KAI]: {}, [MIR]: {} } });
+  const player = normalizePlayer({ name: "Ines" });
+  const style = "STYLE-MARK: past tense, close third person.";
+  const banned = "BANNED-MARK one, BANNED-MARK two";
+  const world = {
+    ...normalizeWorld({ connections: { narration: "conn-text" } }),
+    writingStyle: style,
+    bannedPhrases: banned,
+  };
+  const node = (kind: ChapterNode["kind"]) => ({ i: 0, kind, guide: "The lamp room.", cast: [KAI] }) as ChapterNode;
+  for (const [build, kind] of [
+    [beatMessages, "beat"],
+    [confrontationMessages, "confrontation"],
+    [closerMessages, "closer"],
+  ] as const) {
+    const prompt = whole(
+      build({
+        world,
+        player,
+        units,
+        state,
+        chapter: { kind: "main", number: 2, title: "The Lamp", lead: KAI, nodes: [node(kind)] },
+        node: node(kind),
+        storySoFar: [],
+        memory: "",
+        li: KAI,
+      } as Parameters<typeof confrontationMessages>[0]),
+    );
+    assert.ok(prompt.includes(`one piece of narration. ${SPOKEN_LINE_RULE}`), `${kind}: the spoken-line rule`);
+    assert.ok(prompt.includes("Speech uses everyday words."), `${kind}: everyday words`);
+    assert.doesNotMatch(prompt, /fragments, abandoned sentences|The line itself must convey/u, `${kind}: no fragments`);
+    assert.ok(
+      prompt.includes(
+        `HOW THE PLAYER WANTS IT WRITTEN (follow it in every line you write; the content contract still holds):\n${style}`,
+      ),
+      `${kind}: How it's written`,
+    );
+    assert.ok(prompt.includes(bannedPhrasesRule(banned)), `${kind}: the banned phrases`);
+    if (kind === "beat")
+      assert.doesNotMatch(prompt, /a short segment at a time/u, "the scene asks for segments, not short ones");
+  }
 });
