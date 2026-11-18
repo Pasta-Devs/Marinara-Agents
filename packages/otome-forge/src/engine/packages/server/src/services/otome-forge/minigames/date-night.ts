@@ -152,7 +152,7 @@ const DATES_LISTED = 24;
 const DATE_KEY = /^date-([1-9]\d{0,5})$/;
 const TEXT_MAX = 4000;
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const dateNotFound = () => new OtomeForgeError(404, "No such date.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");

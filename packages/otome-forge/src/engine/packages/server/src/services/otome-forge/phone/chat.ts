@@ -206,7 +206,7 @@ export async function loadThreadRun(
   { forged = true }: { forged?: boolean } = {},
 ): Promise<{ run: RunDocuments; unit: Unit }> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   const unit = run.units.find((entry) => entry.id === li);
   if (!unit || !run.state.lis[li]) throw notFound("love interest");
   if (forged && run.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
@@ -229,12 +229,12 @@ export async function saveThread(
     saved = await deps.store.mutateDoc(chatTarget(runId, li), normalizeThread, (current) => change({ ...current, li }));
   } catch (error) {
     // A change refused because the thread vanished: the run was deleted under it.
-    if (await gone()) throw notFound("Otome Hearth run");
+    if (await gone()) throw notFound("Otome Hearth story");
     throw error;
   }
   if (await gone()) {
     await deps.store.removeDoc(chatId(runId, li)).catch(() => false);
-    throw notFound("Otome Hearth run");
+    throw notFound("Otome Hearth story");
   }
   return saved;
 }
@@ -257,7 +257,7 @@ export async function phoneList(
   runId: string,
 ): Promise<Pick<PhoneListView, "threads">> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li));
   const threads = await Promise.all(
     cast.map(async (li) => {

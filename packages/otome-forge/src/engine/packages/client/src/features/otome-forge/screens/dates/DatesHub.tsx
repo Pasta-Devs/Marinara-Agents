@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Dates. Pick who to spend time with, then one of the six activities: Read {{name}}, Read Me (#1945),
-// Tarot night (#2151), the Photo Shoot (#2087: only with an image connection, and it pays nothing), the Claw Machine and
-// (0.35.0) Kitty Cards, each with what it pays and what it costs; today's capped rewards; and the plush shelf. Play is never
-// limited, only the day's rewards are (plan M5, design: Mini-games). #2303: Date Night is gone; dates are won on Wish's
-// Dates banner and planned from Album → Dates.
+// Tarot night (#2151), the Photo Shoot (#2087: only with an image connection, and it pays nothing), (0.35.0) Kitty Cards
+// and the Claw Machine (last since 0.36.7, the maintainer's call), each with what it pays and what it costs; today's
+// capped rewards; and the plush shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).
+// #2303: Date Night is gone; dates are won on Wish's Dates banner and planned from Album → Dates.
 // ──────────────────────────────────────────────
 // GET /runs/:run/play → PlayView (S/routes/claw.ts). Each activity is a screen of its own that OtomeForgeView opens
 // with ActivityScreenProps; one that has not arrived yet in this build shows its card without a Play button, and so
@@ -38,7 +38,7 @@ import type { RunLiView, RunView } from "../../shared/api-types";
 import { PLUSH_SERIES, liPlushId, type PlayView } from "../../shared/claw";
 import { AFFECTION_EARNINGS, STARLIGHT_EARNINGS } from "../../shared/economy";
 
-export const DATE_ACTIVITIES = ["read-him", "read-me", "tarot", "photo-shoot", "claw", "kitty"] as const;
+export const DATE_ACTIVITIES = ["read-him", "read-me", "tarot", "photo-shoot", "kitty", "claw"] as const;
 export type DateActivity = (typeof DATE_ACTIVITIES)[number];
 
 /** What OtomeForgeView gives each activity's screen: the run, the love interest it is played with, and the way back. */

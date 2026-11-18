@@ -166,7 +166,7 @@ function castOf(run: RunDocuments): Unit[] {
 
 async function readyRun(deps: ChapterDeps, runId: string, li: LiId) {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
   const units = castOf(run);
   const unit = units.find((item) => item.id === li);

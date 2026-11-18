@@ -10,7 +10,8 @@
 // POST /runs/:run/dates/:key/finish                             → DateFinishResult
 // POST /runs/:run/art/keepsake/prompt {key}                     → {prompt, negativePrompt}
 // POST /runs/:run/art/keepsake {key, prompt?, negativePrompt?}  → {paint}
-// POST /runs/:run/photos/prompt {li, place, hisLook, herLook, his, her} → {prompt, negativePrompt} (#2087: no write)
+// POST /runs/:run/photos/prompt {li, place, hisLook, herLook, his, her} → {prompt, negativePrompt} (#2087: no paint;
+//   it saves only the looks' free cut-outs, 0.36.7)
 // POST /runs/:run/photos {id, ...setup, prompt?, negativePrompt?} → {photo: PhotoView}: one image, on the tap
 // POST /runs/:run/photos/:id/delete                             → {deleted: true}
 // A date's scenes are written and read through the story routes (chapter `date-<n>`). Date Night is no longer started

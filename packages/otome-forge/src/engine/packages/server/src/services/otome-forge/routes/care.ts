@@ -145,7 +145,7 @@ export const registerCareRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { runId } = runParam(request);
       const [run, banners] = await Promise.all([readRun(store, runId), store.listRun("banner", runId)]);
-      if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+      if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       return calendarView(
         run,
         banners.map((record) => record.data),

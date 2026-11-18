@@ -145,7 +145,7 @@ async function buildSprite(deps: SideSpriteDeps, runId: string, key: string, edi
     deps.store.readDoc(worldId(runId), normalizeWorld),
     readSides(deps, runId),
   ]);
-  if (!world) throw notFound("Otome Hearth run");
+  if (!world) throw notFound("Otome Hearth story");
   const person = sides?.people[key];
   if (!person) throw notFound("side character");
   const subject = await spriteSubject(deps, person);
@@ -294,7 +294,7 @@ export async function paintSideNow(
         deps.store.readDoc(worldId(runId), normalizeWorld),
         readSides(deps, runId),
       ]);
-      if (!world) throw notFound("Otome Hearth run");
+      if (!world) throw notFound("Otome Hearth story");
       const person = sides?.people[key];
       if (!person || !qualifies(person)) throw notFound("side character");
       if (!world.images.sideSprites) {
@@ -318,7 +318,7 @@ export async function paintSideNow(
           current.art?.state === "ready" ? undefined : { ...current, art: { state: "pending", at } },
         ),
       );
-      if (!claimed) throw notFound("Otome Hearth run");
+      if (!claimed) throw notFound("Otome Hearth story");
       if (claimed.changed) await paintSprite(deps, runId, key, at, connectionId, { debugMode, consent: true, edited });
       return shown();
     },

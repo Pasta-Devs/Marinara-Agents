@@ -63,7 +63,7 @@ export const albumKey = (key: string, i: number) => `${key}/${i}`;
 
 const beatNotFound = () => new OtomeForgeError(404, "No such beat.", "not-found");
 const noCg = () => new OtomeForgeError(404, "This beat has no key image.", "not-found");
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 
 /** The beat's CG as the client should see it: a pending paint this process is not painting reads as stopped. */
 export function cgView(runId: string, beat: Pick<Beat, "key" | "i" | "cg" | "written">): BeatCg | null {
@@ -402,39 +402,63 @@ const readyCutout = (cutouts: Record<string, Cutout> | undefined, url: string | 
 export type OutfitDeps = CutoutDeps &
   Pick<ArtDeps, "runtime" | "images"> & { store: Pick<OtomeStore, "readDoc" | "updateDoc"> };
 
+/** Whose document keeps a picture's cut-out (art/cutout.ts): a love interest's id, or "player". */
+export type CutoutOwner = LiId | "player";
+
 /**
- * A paint's and its prompt review's people, with their outfits cut out: for these subjects only, it cuts each outfit
- * picture with no cut-out yet (free, art/cutout.ts) and waits for those cut-outs alone, then sends each person's
- * cut-out when its file loads. One that failed, or whose file is gone, leaves them on their avatar and the outfit line.
+ * The cut-outs of these pictures, each kept by its owner, for a paint and its prompt review: it cuts each one with no
+ * cut-out yet (free, art/cutout.ts) and waits for those cut-outs alone, then answers a picture's cut-out only when its
+ * file loads. A cut that failed, or a cut-out whose file is gone, answers nothing, and the caller sends what it would
+ * have without one. Scene art (outfitCutouts), the pair portrait and the Photo Shoot share it.
  */
-export async function outfitCutouts(deps: OutfitDeps, runId: string, subjects: CgSubject[]): Promise<CgSubject[]> {
-  const wanted = new Map<LiId | "player", string[]>();
-  for (const { owner, outfit, likeness } of subjects) {
-    if (owner && outfit && likeness) wanted.set(owner, [...(wanted.get(owner) ?? []), outfit]);
-  }
-  if (!wanted.size) return subjects;
-  const ownerDoc = (run: RunDocuments, owner: LiId | "player") =>
+export async function loadedCutouts(
+  deps: OutfitDeps,
+  runId: string,
+  wanted: ReadonlyArray<{ owner: CutoutOwner; url: string }>,
+): Promise<(owner: CutoutOwner, url: string) => string | undefined> {
+  const loaded = new Map<string, string>();
+  const cutoutOf = (owner: CutoutOwner, url: string) => loaded.get(`${owner}|${url}`);
+  const byOwner = new Map<CutoutOwner, string[]>();
+  for (const { owner, url } of wanted) byOwner.set(owner, [...(byOwner.get(owner) ?? []), url]);
+  if (!byOwner.size) return cutoutOf;
+  const ownerDoc = (run: RunDocuments, owner: CutoutOwner) =>
     owner === "player"
       ? { id: "player", cutouts: run.player.cutouts ?? {} }
       : run.units.find((unit) => unit.id === owner);
   const run = await readRun(deps.store, runId);
-  if (!run) return subjects;
+  if (!run) return cutoutOf;
   // A cut-out already saved, failed or on its way is not cut again (queueCutouts claims each in its document).
-  for (const [owner, urls] of wanted) {
+  for (const [owner, urls] of byOwner) {
     const doc = ownerDoc(run, owner);
     if (doc) await queueCutouts(deps, runId, doc as Pick<Unit, "id" | "cutouts">, urls);
   }
-  await Promise.all([...wanted].map(([owner, urls]) => cutoutsFor(runId, owner, urls)));
+  await Promise.all([...byOwner].map(([owner, urls]) => cutoutsFor(runId, owner, urls)));
   const fresh = (await readRun(deps.store, runId)) ?? run;
   const images = imagesOf(deps as ArtDeps);
-  return Promise.all(
-    subjects.map(async (subject) => {
-      if (!subject.owner || !subject.likeness) return subject;
-      const cutout = readyCutout(ownerDoc(fresh, subject.owner)?.cutouts, subject.outfit);
+  await Promise.all(
+    wanted.map(async ({ owner, url }) => {
+      const cutout = readyCutout(ownerDoc(fresh, owner)?.cutouts, url);
       // A ready record whose file is gone (deleted, unreadable) is no picture to send.
-      const loads = cutout ? !!(await images.cardAvatarImage(cutout).catch(() => null)) : false;
-      return dressedIn(subject, loads ? cutout : undefined);
+      if (cutout && (await images.cardAvatarImage(cutout).catch(() => null))) loaded.set(`${owner}|${url}`, cutout);
     }),
+  );
+  return cutoutOf;
+}
+
+/**
+ * A paint's and its prompt review's people, with their outfits cut out (loadedCutouts): each person's cut-out when its
+ * file loads. One that failed, or whose file is gone, leaves them on their avatar and the outfit line (dressedIn).
+ */
+export async function outfitCutouts(deps: OutfitDeps, runId: string, subjects: CgSubject[]): Promise<CgSubject[]> {
+  const wanted = subjects.flatMap(({ owner, outfit, likeness }) =>
+    owner && outfit && likeness ? [{ owner, url: outfit }] : [],
+  );
+  if (!wanted.length) return subjects;
+  const cutoutOf = await loadedCutouts(deps, runId, wanted);
+  return subjects.map((subject) =>
+    subject.owner && subject.likeness
+      ? dressedIn(subject, subject.outfit ? cutoutOf(subject.owner, subject.outfit) : undefined)
+      : subject,
   );
 }
 

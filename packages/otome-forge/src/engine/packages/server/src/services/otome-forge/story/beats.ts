@@ -186,7 +186,7 @@ const CG_BRIEF_MAX = 1200;
 const CG_CAST_MAX = 3;
 const EFFECT_TEXT_MAX = 300;
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const chapterNotFound = () => new OtomeForgeError(404, "No such chapter.", "not-found");
 const beatNotFound = () => new OtomeForgeError(404, "No such beat.", "not-found");
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");

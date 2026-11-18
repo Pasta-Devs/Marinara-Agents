@@ -238,7 +238,7 @@ test("the bundle answers conflicts, bad bodies and storage failures with the agr
   assert.match(conflict.body.error, /^Otome Hearth data changed while saving .+\. Try again\.$/);
   assert.deepEqual(await host.call("GET", "/api/otome-forge/runs/:run"), {
     status: 404,
-    body: { error: "No such Otome Hearth run.", code: "not-found" },
+    body: { error: "No such Otome Hearth story.", code: "not-found" },
   });
 
   const badBody = await host.call("POST", "/api/otome-forge/index/opened", "nope");

@@ -204,7 +204,7 @@ export async function placePromptFor(
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-  if (!world) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+  if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const place = world.places[placeKey(name)];
   if (!place) throw notFound();
   const style = await worldStyle(imagesOf(deps), world.images);
@@ -304,7 +304,7 @@ export async function paintPlaceNow(
     },
     async () => {
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-      if (!world) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+      if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       if (!world.places[key]) throw notFound();
       if (!world.places[key].tags.trim()) throw untagged();
       const connectionId = world.images.connectionId;
@@ -318,7 +318,7 @@ export async function paintPlaceNow(
           ? { ...current, places: { ...current.places, [key]: { ...place, art: repainting(place.art, at) } } }
           : undefined;
       });
-      if (!claim) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+      if (!claim) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       if (claim.changed)
         await paintPlace(deps, runId, key, at, connectionId, { debugMode, consent: true, edited, active });
       return read();
@@ -349,7 +349,7 @@ export async function chooseBackground(deps: ArtDeps, runId: string, name: strin
       const painted = place.art?.ref?.startsWith(GALLERY_REF_PREFIX) ? place.art : place.painted;
       return { ...current, places: { ...current.places, [key]: { ...place, art, ...(painted ? { painted } : {}) } } };
     });
-    if (!world) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+    if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
     return placeView(runId, key, world.places[key]!);
   } finally {
     release();

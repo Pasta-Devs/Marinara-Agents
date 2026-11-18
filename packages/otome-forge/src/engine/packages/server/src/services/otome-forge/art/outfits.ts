@@ -45,7 +45,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
-import { cgReferences, cgSubjects, outfitCutouts, resolveCast, warnUnmatched } from "./cg.js";
+import { cgReferences, cgSubjects, loadedCutouts, outfitCutouts, resolveCast, warnUnmatched } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
@@ -225,7 +225,7 @@ async function buildItemArt(
 ): Promise<BuiltArt> {
   if (!hasArt(item)) throw notFound("art for this item");
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
@@ -424,7 +424,7 @@ export async function queueItemArt(
   // A featured 5★ whose banner's art is painting now waits for that picture (it becomes this item's art).
   if (!hasArt(item) || item.art || bannerPaints(runId, item)) return itemArtView(runId, item);
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-  if (!world) throw notFound("Otome Hearth run");
+  if (!world) throw notFound("Otome Hearth story");
   const connectionId = world.images.connectionId;
   if (!connectionId || !activeOf(deps)()) return null;
   const owner = itemArtOwner(item.id);
@@ -495,7 +495,7 @@ export async function paintItemNow(
         return itemArtView(runId, current);
       }
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-      if (!world) throw notFound("Otome Hearth run");
+      if (!world) throw notFound("Otome Hearth story");
       const connectionId = world.images.connectionId;
       if (!connectionId) throw noConnection();
       const at = new Date().toISOString();
@@ -532,7 +532,7 @@ export function pairView(runId: string, cgs: readonly AlbumCg[], hers: string): 
 /** The couple set of `hers`: both items, owned and painted, or the reason the pair cannot be painted. */
 async function readPair(deps: ArtDeps, runId: string, hers: string) {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   const her = await readItem(deps, runId, hers);
   if (!her || her.kind !== "her-look5" || !her.coupleWith) throw notFound("couple set");
   const his = await readItem(deps, runId, her.coupleWith);
@@ -589,11 +589,21 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
     edited,
   );
   // One reference each, the pair's looks (each painted from its wearer's likeness): with his card's full body beside
-  // his look, the model got two standing pictures of him and merged bodies (2026-11-03). A look that does not load
+  // his look, the model got two standing pictures of him and merged bodies (2026-11-03). Each look goes cut out of its
+  // backdrop, as a scene's people do (0.36.7, art/cg.ts loadedCutouts, for the paint and its prompt review alike); one
+  // that cannot be cut is sent as painted, since the look is what this portrait shows. A look that does not load
   // stops the paint: the labels say each picture is them in this outfit.
+  const cutoutOf = await loadedCutouts(deps, runId, [
+    { owner: unit.id, url: hisOutfit.url },
+    { owner: "player", url: herOutfit.url },
+  ]);
   const units: ImageSubject[] = [
-    { kind: "character", portrait: hisOutfit.url, who: unit.name },
-    { kind: "character", portrait: herOutfit.url, who: run.player.name || "Protagonist" },
+    { kind: "character", portrait: cutoutOf(unit.id, hisOutfit.url) ?? hisOutfit.url, who: unit.name },
+    {
+      kind: "character",
+      portrait: cutoutOf("player", herOutfit.url) ?? herOutfit.url,
+      who: run.player.name || "Protagonist",
+    },
   ];
   return { ...pair, ...prompt, units, name: first(unit.name, "Couple") };
 }
@@ -654,7 +664,8 @@ export async function paintPairNow(
         painted = await paintSlot(connectionId, async () => {
           if (!activeOf(deps)()) throw new Error("Otome Hearth stopped before painting");
           // Built now, so the run, both looks, the rating (and its 18+ gate) and the connection are the ones in force
-          // at the paid call, however long it waited behind other paints.
+          // once it leaves the queue behind other paints. Building waits for the looks' free cut-outs (0.36.7), as a
+          // scene paint waits for its people's; a connection changed during that wait paints on the one it started on.
           const built = await buildPair(deps, runId, hers, edited);
           if (built.run.world.images.connectionId !== connectionId) {
             throw new OtomeForgeError(409, "The image connection changed before painting; try again.", "conflict");

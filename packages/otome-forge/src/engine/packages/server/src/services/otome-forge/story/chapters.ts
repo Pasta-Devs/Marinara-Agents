@@ -478,7 +478,7 @@ export async function planNextChapter(
   { debugMode, signal }: { debugMode: boolean; signal?: AbortSignal },
 ): Promise<Chapter> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
   const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
   if (!cast.includes(lead)) throw notFound("love interest");
@@ -675,7 +675,7 @@ export async function startArc(
 ): Promise<StoryArc> {
   return runForeground(runId, async () => {
     const run = await readRun(deps.store, runId);
-    if (!run) throw notFound("Otome Hearth run");
+    if (!run) throw notFound("Otome Hearth story");
     if (run.world.forge.phase !== "ready")
       throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
     const arcs = await listArcs(deps.store, runId);
@@ -752,7 +752,7 @@ export const byStoryOrder = (a: Chapter, b: Chapter) =>
 
 export async function storyView(deps: { store: OtomeStore }, runId: string): Promise<StoryView> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   // Dates (M5) are played from Dates, not listed with the story.
   const chapters = (await deps.store.listRun("chapter", runId))
     .map((record) => normalizeChapter(record.data))

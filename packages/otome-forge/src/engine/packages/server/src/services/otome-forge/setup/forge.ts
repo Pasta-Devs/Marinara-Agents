@@ -199,7 +199,7 @@ function withStep(world: World, id: string, patch: Partial<ForgeStep>): World {
   };
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 
 /** Changes the run's world and recomputes the phase; a deleted world stays deleted (404). */
 async function updateWorld(deps: ForgeDeps, runId: string, change: (world: World) => World): Promise<World> {

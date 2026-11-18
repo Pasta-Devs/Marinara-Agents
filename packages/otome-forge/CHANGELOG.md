@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.36.7 — 2026-11-18
+
+- Dates now lists Kitty Cards above the Claw Machine, so the Claw Machine is last.
+- The couple portrait and the Photo Shoot now send each look cut out, with no background, as scene pictures do. A look that isn't cut out yet is cut first, for free, and one that can't be cut is sent as painted. The Photo Shoot still sends the place's picture as the background.
+- Error messages now say "story" instead of "run", as in "No such Otome Hearth story."
+
 ## 0.36.6 — 2026-11-18
 
 - Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.

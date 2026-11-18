@@ -102,7 +102,7 @@ export type WishDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "memory"
 
 export { bannerArtOwner };
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const bannerNotFound = () => new OtomeForgeError(404, "No such banner.", "not-found");
 
 // ── Reading ──

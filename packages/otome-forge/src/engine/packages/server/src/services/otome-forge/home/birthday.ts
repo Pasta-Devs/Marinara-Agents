@@ -35,7 +35,7 @@ import { normalizeChapter } from "../schemas/story.js";
 import type { OtomeStore } from "../store.js";
 import { todayKey } from "./note.js";
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const noBirthday = () => new OtomeForgeError(404, "No birthday to celebrate.", "not-found");
 
 /** The birthdays that can be celebrated on the local day `today` (see the header), in cast order. */

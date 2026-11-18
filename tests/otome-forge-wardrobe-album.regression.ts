@@ -1093,8 +1093,11 @@ test("a couple set completes once on the Love Timeline, and its pair portrait pa
   assert.equal(request.units?.length, 2);
   assert.deepEqual(
     request.units?.map((unit) => unit.portrait),
-    [(await t.stored(ITEMS.hisLook.id)).art!.url, (await t.stored(ITEMS.herLook.id)).art!.url],
-    "each painted look is its wearer's reference",
+    [
+      `${(await t.stored(ITEMS.hisLook.id)).art!.url}.cut.png`,
+      `${(await t.stored(ITEMS.herLook.id)).art!.url}.cut.png`,
+    ],
+    "each painted look, cut out of its backdrop, is its wearer's reference (0.36.7)",
   );
   assert.ok(request.prompt.includes("navy greatcoat") && request.prompt.includes("amber silk dress"));
   state = await t.state();

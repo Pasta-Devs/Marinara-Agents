@@ -63,7 +63,7 @@ export const registerHapticsRoutes: RegisterRoutes = (router, { store, handle, h
       const { cues } = parseBody(PlayBody, request.body);
       const { runId } = runParam(request);
       const world = await store.readDoc(worldId(runId), normalizeWorld);
-      if (!world) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+      if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       if (!hapticsOn(world)) throw new OtomeForgeError(409, "Haptics are off in this story.", "conflict");
       await toys().play(runId, normalizeHapticCues(cues));
       return {};

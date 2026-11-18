@@ -331,7 +331,7 @@ export interface ReadHimDeps extends GenerationDeps {
   memory?: Pick<OtomeMemory, "recall" | "maintain">;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const setNotFound = () => new OtomeForgeError(404, "No such Read Him set.", "not-found");
 

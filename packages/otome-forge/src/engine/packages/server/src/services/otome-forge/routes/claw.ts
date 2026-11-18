@@ -49,7 +49,7 @@ const FinishBody = z.object({
   cheered: z.boolean(),
 });
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 
 export function registerClawRoutes(

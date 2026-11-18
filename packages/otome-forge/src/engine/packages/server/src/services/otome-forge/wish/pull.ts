@@ -130,7 +130,7 @@ export function applyPull(
   };
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 
 /** A wardrobe banner's other half of its couple set: His Wardrobe's 5★ and My Wardrobe's of the same rotation. */
 async function couplePartner(store: OtomeStore, runId: string, banner: Banner, items: ReadonlyMap<string, Item>) {

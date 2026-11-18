@@ -192,7 +192,7 @@ export async function ensureHisSide(
   const stored = await readChapter(deps.store, runId, key);
   if (stored) return stored;
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   const unit = run.units.find((candidate) => candidate.id === li && candidate.bible);
   const his = run.state.lis[li];
   if (!unit || !his) throw notFound("love interest");
