@@ -111,8 +111,9 @@ test("an outfit with no picture yet sends the avatar, never the card's full body
     ],
   );
   assert.deepEqual(
-    subjects.map((subject) => subject.person.outfitInText),
-    [true, true],
+    subjects.map((subject) => subject.person.outfitPictured),
+    [undefined, undefined],
+    "their pictures are only their faces, so their outfit lines dress them",
   );
   assert.equal(subjects[1]!.person.outfitLine, "silver evening gown", "the worn look still names her outfit");
   assert.deepEqual(cgReferences(subjects).labels, ["Kai", "Sol"]);
@@ -125,10 +126,11 @@ test("an archetype alone in a look, with no card or portrait, sends the look lab
     units: [{ kind: "character", avatarPath: cut(coat.url), who: "Kai" }],
     labels: ["Kai"],
   });
-  // Not cut out yet, and no avatar to stand in: the uncut look, so he is still drawn as himself (0.36.5).
+  // Not cut out yet, and no avatar to stand in: the uncut look, so he is still drawn as himself, and dressed by it
+  // (0.36.5).
   const [uncut] = cgSubjects(["Kai"], [{ ...archetype, cutouts: {} } as unknown as Unit], player());
-  assert.deepEqual(uncut!.image, { kind: "character", avatarPath: coat.url, avatarOnly: true, who: "Kai" });
-  assert.equal(uncut!.person.outfitInText, true);
+  assert.deepEqual(uncut!.image, { kind: "character", avatarPath: coat.url, who: "Kai" });
+  assert.equal(uncut!.person.outfitPictured, true);
 });
 
 test("an outfit not cut out yet sends the avatar instead, never the look's backdrop (0.36.5)", () => {
@@ -138,7 +140,7 @@ test("an outfit not cut out yet sends the avatar instead, never the look's backd
   } as unknown as Player);
   assert.deepEqual(kai!.image, { kind: "character", cardId: "card-kai", avatarOnly: true, who: "Kai" });
   assert.deepEqual(sol!.image, { kind: "character", personaId: "persona-sol", avatarOnly: true, who: "Sol" });
-  assert.deepEqual([kai!.person.outfitInText, sol!.person.outfitInText], [true, true]);
+  assert.deepEqual([kai!.person.outfitPictured, sol!.person.outfitPictured], [undefined, undefined]);
 });
 
 test("whom each reference shows always matches what is sent: nobody without a picture, a persona's last (2026-11-03)", () => {

@@ -6236,10 +6236,10 @@ export interface CgPerson {
   outfitLine: string;
   presentation: Presentation;
   /**
-   * Their reference is their avatar, not the outfit they wear, which has no picture yet (S/art/cg.ts cgSubjects): only
-   * the outfit line dresses them, so the references are not used for clothing.
+   * Their reference is the picture of the outfit they wear here (S/art/cg.ts cgSubjects, a pair portrait's looks), so
+   * it dresses them. Absent, their picture is only their avatar, or there is none, and the outfit line dresses them.
    */
-  outfitInText?: boolean;
+  outfitPictured?: boolean;
 }
 
 export interface CgInput {
@@ -6281,14 +6281,14 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
   // Sentence prompts say how many people there are and which picture is whose: unlabelled full-body references of
   // people standing, beside a brief where they touch, are how bodies come out merged or with extra limbs (2026-11-03).
   const tagged = style.tagged === true;
-  // 0.36.5: a reference is the outfit its person wears, so it dresses them too; one that is only their avatar (their
-  // outfit has no picture yet, `outfitInText`) gives their face alone, and their outfit line dresses them. An explicit
-  // moment takes no clothing from any of them.
+  // 0.36.5: a person whose reference is the outfit they wear (`outfitPictured`) is dressed by it; one whose picture is
+  // only their avatar gives their face alone, and their outfit line dresses them. Read from each person, never from
+  // the labels, which may say more ("Kai in this outfit"). An explicit moment takes no clothing from any of them.
   const sent = input.references ?? [];
-  const dressed = bare ? [] : names.filter((name, index) => !people[index]!.outfitInText && sent.includes(name));
+  const dressed = bare ? [] : names.filter((_, index) => people[index]!.outfitPictured);
   const uses = !dressed.length
     ? "face, hair and build"
-    : dressed.length === sent.length
+    : dressed.length >= sent.length
       ? "face, hair, build and clothing"
       : `face, hair and build, and for the clothing of ${nameList(dressed)}`;
   const staging = tagged

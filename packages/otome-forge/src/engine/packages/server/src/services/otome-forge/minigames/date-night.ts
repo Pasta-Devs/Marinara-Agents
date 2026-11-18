@@ -795,11 +795,8 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
 
 /** The finished date's plan, its world, and the two of them as the keepsake draws them. */
 async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
-  const [read, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
-  if (!read) throw runNotFound();
-  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
-  // for the prompt review alike, so both name the same pictures.
-  const run = await outfitCutouts(deps, runId, read);
+  const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
+  if (!run) throw runNotFound();
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   if (!isFinished(run.state, chapter)) throw conflict("A keepsake is painted once the date is over.");
@@ -829,15 +826,22 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   // Each of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model
   // drew him twice or gave her his body (the maintainer's report, 2026-11-03). By id and role, so a namesake or a
   // protagonist without a name is still each of them.
-  const subjects = cgSubjects([...company.map((member) => member.id), "protagonist"], company, run.player);
+  // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+  const subjects = await outfitCutouts(
+    deps,
+    runId,
+    cgSubjects([...company.map((member) => member.id), "protagonist"], company, run.player),
+  );
   const { units, labels } = cgReferences(subjects);
-  const outfitInText = subjects.some((subject) => subject.person.outfitInText);
   return {
     run,
     chapter,
     plan: chapter.date,
     unit,
-    people: outfitInText ? people.map((person) => ({ ...person, outfitInText })) : people,
+    // The subjects are the people in the same order; whoever's reference is their outfit is dressed by it (cgPrompt).
+    people: people.map((person, index) =>
+      subjects[index]?.person.outfitPictured ? { ...person, outfitPictured: true } : person,
+    ),
     units,
     references: labels,
   };

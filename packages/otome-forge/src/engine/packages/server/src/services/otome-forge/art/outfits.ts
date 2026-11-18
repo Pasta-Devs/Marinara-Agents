@@ -224,11 +224,8 @@ async function buildItemArt(
   debugMode: boolean,
 ): Promise<BuiltArt> {
   if (!hasArt(item)) throw notFound("art for this item");
-  const read = await readRun(deps.store, runId);
-  if (!read) throw notFound("Otome Forge run");
-  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
-  // for the prompt review alike, so both name the same pictures.
-  const run = await outfitCutouts(deps, runId, read);
+  const run = await readRun(deps.store, runId);
+  if (!run) throw notFound("Otome Forge run");
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
@@ -274,7 +271,8 @@ async function buildItemArt(
           ],
         }
       : item.cg!;
-    const subjects = cgSubjects(cg.cast, li ? [li] : run.units, run.player);
+    // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+    const subjects = await outfitCutouts(deps, runId, cgSubjects(cg.cast, li ? [li] : run.units, run.player));
     // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story; only a
     // Memory whose brief the banner plan marked explicit goes further, while the world allows it (as banner art does),
     // and a lowered one paints the clothed brief written beside it.
@@ -564,12 +562,15 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
       identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
       outfitLine: hisOutfit.outfitLine,
       presentation: unit.bible?.look.presentation ?? "person",
+      // Each reference is the pair look itself, so it dresses them (0.36.5, cgPrompt).
+      outfitPictured: true,
     },
     {
       name: run.player.name || "Protagonist",
       identityLine: run.player.look.identityLine,
       outfitLine: herOutfit.outfitLine,
       presentation: run.player.look.presentation,
+      outfitPictured: true,
     },
   ];
   const him = first(unit.name, "them");

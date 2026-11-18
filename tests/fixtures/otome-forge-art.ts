@@ -101,7 +101,9 @@ export function fakeImages({ before }: { before?: (call: PaidCall, n: number) =>
     deleteGalleryImage: async (id) => (deleted.push(id), true),
     characterCard: async () => null,
     personaAvatar: async () => "",
-    cardAvatarImage: async (path) => (path.startsWith("/api/") ? { mime: "image/png", base64: PNG } : null),
+    // An Engine file, or an outfit's cut-out (the default cutter's, artWorld).
+    cardAvatarImage: async (path) =>
+      path.startsWith("/api/") || path.endsWith(".cut.png") ? { mime: "image/png", base64: PNG } : null,
   };
   return { images, paid, uploads, deleted };
 }

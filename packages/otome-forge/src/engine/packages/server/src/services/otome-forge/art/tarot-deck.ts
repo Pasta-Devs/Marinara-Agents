@@ -132,11 +132,8 @@ const activeOf = (deps: ItemArtDeps) => () => !deps.art || deps.art.active();
 
 /** The prompt and the paid call for a deck card, from the documents as they are now. */
 async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: Partial<ImagePrompt>) {
-  const [read, deck] = await Promise.all([readRun(deps.store, runId), readDeck(deps.store, runId)]);
-  if (!read) throw notFound("Otome Forge run");
-  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
-  // for the prompt review alike, so both name the same pictures.
-  const run = await outfitCutouts(deps, runId, read);
+  const [run, deck] = await Promise.all([readRun(deps.store, runId), readDeck(deps.store, runId)]);
+  if (!run) throw notFound("Otome Forge run");
   const entry = deck.cards[key];
   if (!entry) throw locked();
   const unit: Unit | undefined = entry.li ? run.units.find((item) => item.id === entry.li) : undefined;
@@ -146,7 +143,8 @@ async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: 
     entry.figure
   ];
   const player = cast.includes("protagonist") ? await withPersonaImageAppearance(deps.runtime, run.player) : run.player;
-  const subjects = cast.length ? cgSubjects(cast, unit ? [unit] : [], player) : [];
+  // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+  const subjects = cast.length ? await outfitCutouts(deps, runId, cgSubjects(cast, unit ? [unit] : [], player)) : [];
   const { units, labels } = cgReferences(subjects);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);

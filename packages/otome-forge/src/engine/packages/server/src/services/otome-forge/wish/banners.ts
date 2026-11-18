@@ -603,11 +603,8 @@ export async function openWish(
 
 /** The prompt and the paid call for a banner's art, built from the documents as they stand now. */
 async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edited: Partial<ImagePrompt> = {}) {
-  const read = await readRun(deps.store, runId);
-  if (!read) throw runNotFound();
-  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
-  // for the prompt review alike, so both name the same pictures.
-  const run = await outfitCutouts(deps, runId, read);
+  const run = await readRun(deps.store, runId);
+  if (!run) throw runNotFound();
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const five = await readItem(deps.store, runId, banner.items.five[0] ?? "");
   if (!five) throw bannerNotFound();
@@ -634,7 +631,8 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
     };
   }
   if (banner.kind === "memories") {
-    const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
+    // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+    const subjects = await outfitCutouts(deps, runId, cgSubjects(five.cg?.cast ?? [], run.units, run.player));
     // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;
     // a lowered world paints the clothed brief written beside it.
     const { brief, explicit } = memoryArtBrief(five.cg, five.title, run.world);

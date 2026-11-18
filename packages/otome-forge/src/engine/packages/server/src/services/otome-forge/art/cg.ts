@@ -20,6 +20,7 @@ import type {
   AlbumCg,
   Beat,
   Cutout,
+  LiId,
   Paint,
   Player,
   Unit,
@@ -28,12 +29,13 @@ import { isEngineArt } from "../../../../../client/src/features/otome-forge/shar
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { OtomeForgeError } from "../http.js";
 import { beatId, runDocTarget, stateId } from "../ids.js";
-import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/state.js";
+import { STATE_LIMITS, keepNewest, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
+import type { OtomeStore } from "../store.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import { readBeat, readChapter } from "../story/canon.js";
 import { GALLERY_REF_PREFIX, worldStyle, type ImageSubject } from "./image-client.js";
-import { cutoutsSettled, queueCutouts, type CutoutDeps } from "./cutout.js";
+import { cutoutsFor, queueCutouts, type CutoutDeps } from "./cutout.js";
 import {
   imagesOf,
   paintRecord,
@@ -267,17 +269,16 @@ export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
+  /** Whose documents keep their pictures and cut-outs: a love interest's id, or "player". */
+  owner?: LiId | "player";
   /**
-   * The cut-out of the outfit they wear in the picture (the look put on with Wear, else their painted base look), so no
-   * backdrop goes with it. None while that look has no picture, or no cut-out yet (outfitCutouts cuts it before a
-   * paint), or while an Engine sprite or avatar stands in for it (cgSubjects).
+   * The picture of the outfit they wear in the picture, as painted (the look put on with Wear, else their painted base
+   * look); its cut-out is what is sent. None while that look has no picture, or while an Engine sprite or avatar stands
+   * in for it.
    */
-  outfitUrl?: string;
-  /**
-   * Their outfit picture as painted, with its backdrop: the last resort when it has no cut-out yet and they have no card
-   * or persona whose avatar could stand in, so they are still drawn as themselves (cgSubjects).
-   */
-  uncutOutfitUrl?: string;
+  outfit?: string;
+  /** Who they are when their outfit cannot be sent: their card or persona, whose avatar then stands in. */
+  likeness?: { cardId?: string; personaId?: string; who: string };
   /** Only named, by a name several people share (resolveCast). */
   ambiguous?: true;
 }
@@ -286,12 +287,13 @@ export interface CgSubject {
  * The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most
  * CG_PEOPLE_MAX), each matched by resolveCast. A story key image (`scene`) whose cast names nobody takes them from its
  * brief (briefCast). Story CGs, date keepsakes, Wish art, banner art and tarot cards all draw their people from here.
- * 0.36.5 (the maintainer's call): each person is ONE reference, the outfit they wear, cut out of its backdrop
- * (`outfitUrl`), so the picture shows them in the clothes the prompt names and brings no background. Only while that
+ * 0.36.5 (the maintainer's call): each person is ONE reference, the outfit they wear, cut out of its backdrop, so the
+ * picture shows them in the clothes the prompt names and brings no background (`outfitPictured`). Only while that
  * outfit has no picture or no cut-out do they send their card or persona avatar instead (never a card's full-body
- * sprite, whose clothes would contradict the outfit), and the prompt dresses them in words (`outfitInText`). A paint
- * awaits outfitCutouts first, so a look without its cut-out yet is cut then. One picture each, as since 2026-11-03: two
- * full-body pictures of one person made the model merge bodies and draw extra limbs.
+ * sprite, whose clothes would contradict the outfit), and the prompt dresses them in words. This reads the cut-outs
+ * as saved; a paint and its prompt review go through outfitCutouts, which cuts what is missing and checks each picture
+ * loads. One picture each, as since 2026-11-03: two full-body pictures of one person made the model merge bodies and
+ * draw extra limbs.
  */
 export function cgSubjects(
   cast: readonly string[],
@@ -299,26 +301,43 @@ export function cgSubjects(
   player: Player,
   scene?: { present: readonly string[]; brief: string },
 ): CgSubject[] {
-  return castSubjects(cast, units, player, scene).map((subject) => {
-    if (!subject.image) return subject;
-    const { who } = subject.image;
-    if (subject.outfitUrl) return { ...subject, image: { kind: "character", avatarPath: subject.outfitUrl, who } };
-    const { cardId, personaId } = subject.image;
-    // No card or persona avatar to stand in: their uncut outfit, so they are not painted as a stranger (#2145).
-    const avatarPath = !cardId && !personaId ? subject.uncutOutfitUrl : undefined;
+  const cutoutsOf = (owner: CgSubject["owner"]) =>
+    owner === "player" ? player.cutouts : units.find((unit) => unit.id === owner)?.cutouts;
+  return castSubjects(cast, units, player, scene).map((subject) =>
+    dressedIn(subject, readyCutout(cutoutsOf(subject.owner), subject.outfit)),
+  );
+}
+
+/**
+ * Whom a subject's reference shows: their outfit's cut-out when there is one to send, else their card or persona
+ * avatar (outfit in words). With neither, the uncut outfit, so they are still drawn as themselves (#2145).
+ */
+function dressedIn(subject: CgSubject, cutout: string | undefined): CgSubject {
+  if (!subject.likeness) return subject;
+  const { cardId, personaId, who } = subject.likeness;
+  const { outfitPictured: _pictured, ...person } = subject.person;
+  if (cutout) {
     return {
       ...subject,
-      person: { ...subject.person, outfitInText: true },
-      image: {
-        kind: "character",
-        ...(cardId ? { cardId } : {}),
-        ...(personaId ? { personaId } : {}),
-        ...(avatarPath ? { avatarPath } : {}),
-        avatarOnly: true,
-        who,
-      },
+      person: { ...person, outfitPictured: true },
+      image: { kind: "character", avatarPath: cutout, who },
     };
-  });
+  }
+  if (cardId || personaId) {
+    const avatar = {
+      kind: "character" as const,
+      ...(cardId ? { cardId } : { personaId }),
+      avatarOnly: true as const,
+      who,
+    };
+    return { ...subject, person, image: avatar };
+  }
+  if (!subject.outfit) return { ...subject, person, image: { kind: "character", who } };
+  return {
+    ...subject,
+    person: { ...person, outfitPictured: true },
+    image: { kind: "character", avatarPath: subject.outfit, who },
+  };
 }
 
 /** Whether the kit can find a picture of this subject for sure (a card, a portrait or a look), or only maybe. */
@@ -374,43 +393,49 @@ function outfitPicture(worn: { url?: string } | undefined, portrait: string | un
 }
 
 /** The outfit picture's cut-out, ready (art/cutout.ts): an uncut look would send its chroma backdrop along. */
-const outfitCutout = (owner: Pick<Unit, "cutouts">, url: string | undefined) => {
-  const record = url ? owner.cutouts?.[url] : undefined;
+const readyCutout = (cutouts: Record<string, Cutout> | undefined, url: string | undefined) => {
+  const record = url ? cutouts?.[url] : undefined;
   return record?.state === "ready" && record.url ? record.url : undefined;
 };
 
+/** What outfitCutouts needs: the cut-outs' documents and client, and the image client to check a picture loads. */
+export type OutfitDeps = CutoutDeps &
+  Pick<ArtDeps, "runtime" | "images"> & { store: Pick<OtomeStore, "readDoc" | "updateDoc"> };
+
 /**
- * Cuts out, before a paint, the outfit pictures of the people it shows that have no cut-out yet (free, one at a time,
- * art/cutout.ts), so cgSubjects can send each person's outfit with no backdrop. Returns the run's people with those
- * cut-outs; a cut-out that fails leaves its person on their avatar and the outfit line (cgSubjects).
+ * A paint's and its prompt review's people, with their outfits cut out: for these subjects only, it cuts each outfit
+ * picture with no cut-out yet (free, art/cutout.ts) and waits for those cut-outs alone, then sends each person's
+ * cut-out when its file loads. One that failed, or whose file is gone, leaves them on their avatar and the outfit line.
  */
-export async function outfitCutouts<T extends { units: Unit[]; player: Player }>(
-  deps: CutoutDeps,
-  runId: string,
-  run: T,
-): Promise<T> {
-  const owners: Array<{ id: string; cutouts: Record<string, Cutout> }> = [
-    ...run.units,
-    { id: "player", cutouts: run.player.cutouts ?? {} },
-  ];
-  const urls = (owner: Unit | Player) => {
-    const worn = owner.wornOutfit ? owner.outfits.find((outfit) => outfit.id === owner.wornOutfit) : undefined;
-    const url = outfitPicture(worn, owner.portrait);
-    return url && !outfitCutout(owner, url) ? [url] : [];
-  };
-  const asked = [...run.units.map(urls), urls(run.player)];
-  if (!asked.some((list) => list.length)) return run;
-  await Promise.all(owners.map((owner, index) => queueCutouts(deps, runId, owner as never, asked[index]!)));
-  await cutoutsSettled();
-  const fresh = await readRun(deps.store, runId);
-  if (!fresh) return run;
-  const cutoutsOf = (id: string) =>
-    id === "player" ? fresh.player.cutouts : fresh.units.find((unit) => unit.id === id)?.cutouts;
-  return {
-    ...run,
-    units: run.units.map((unit) => ({ ...unit, cutouts: cutoutsOf(unit.id) ?? unit.cutouts })),
-    player: { ...run.player, cutouts: cutoutsOf("player") ?? run.player.cutouts },
-  };
+export async function outfitCutouts(deps: OutfitDeps, runId: string, subjects: CgSubject[]): Promise<CgSubject[]> {
+  const wanted = new Map<LiId | "player", string[]>();
+  for (const { owner, outfit, likeness } of subjects) {
+    if (owner && outfit && likeness) wanted.set(owner, [...(wanted.get(owner) ?? []), outfit]);
+  }
+  if (!wanted.size) return subjects;
+  const ownerDoc = (run: RunDocuments, owner: LiId | "player") =>
+    owner === "player"
+      ? { id: "player", cutouts: run.player.cutouts ?? {} }
+      : run.units.find((unit) => unit.id === owner);
+  const run = await readRun(deps.store, runId);
+  if (!run) return subjects;
+  // A cut-out already saved, failed or on its way is not cut again (queueCutouts claims each in its document).
+  for (const [owner, urls] of wanted) {
+    const doc = ownerDoc(run, owner);
+    if (doc) await queueCutouts(deps, runId, doc as Pick<Unit, "id" | "cutouts">, urls);
+  }
+  await Promise.all([...wanted].map(([owner, urls]) => cutoutsFor(runId, owner, urls)));
+  const fresh = (await readRun(deps.store, runId)) ?? run;
+  const images = imagesOf(deps as ArtDeps);
+  return Promise.all(
+    subjects.map(async (subject) => {
+      if (!subject.owner || !subject.likeness) return subject;
+      const cutout = readyCutout(ownerDoc(fresh, subject.owner)?.cutouts, subject.outfit);
+      // A ready record whose file is gone (deleted, unreadable) is no picture to send.
+      const loads = cutout ? !!(await images.cardAvatarImage(cutout).catch(() => null)) : false;
+      return dressedIn(subject, loads ? cutout : undefined);
+    }),
+  );
 }
 
 /** The CG's people as the brief names them, each with their likeness and the look they wear. */
@@ -428,7 +453,6 @@ function castSubjects(
       // The look worn now dresses them in the CG: its outfit line in the prompt, its picture as their reference.
       const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
       const outfit = outfitPicture(worn, unit.portrait);
-      const outfitUrl = outfitCutout(unit, outfit);
       return {
         person: {
           name: unit.name,
@@ -444,13 +468,14 @@ function castSubjects(
           ...(worn ? { wornOutfit: worn.id } : {}),
           who: unit.name,
         },
-        ...(outfitUrl ? { outfitUrl } : outfit ? { uncutOutfitUrl: outfit } : {}),
+        owner: unit.id,
+        ...(outfit ? { outfit } : {}),
+        likeness: { ...(unit.cardId ? { cardId: unit.cardId } : {}), who: unit.name },
       };
     }
     if ("player" in member) {
       const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
       const outfit = outfitPicture(worn, player.portrait);
-      const outfitUrl = outfitCutout(player, outfit);
       const name = player.name || "Protagonist";
       return {
         person: {
@@ -466,7 +491,9 @@ function castSubjects(
           ...(worn ? { wornOutfit: worn.id } : {}),
           who: name,
         },
-        ...(outfitUrl ? { outfitUrl } : outfit ? { uncutOutfitUrl: outfit } : {}),
+        owner: "player",
+        ...(outfit ? { outfit } : {}),
+        likeness: { ...(player.personaId ? { personaId: player.personaId } : {}), who: name },
       };
     }
     return {
@@ -478,17 +505,20 @@ function castSubjects(
 
 /** The CG prompt for the stored beat, and who is in it. */
 async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial<ImagePrompt> = {}) {
-  const read = await readRun(deps.store, runId);
-  if (!read) throw runNotFound();
-  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free, art/cg.ts), for the paint and
-  // for the prompt review alike, so both name the same pictures.
-  const run = await outfitCutouts(deps, runId, read);
+  const run = await readRun(deps.store, runId);
+  if (!run) throw runNotFound();
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const cg = beat.cg;
   if (!cg) throw noCg();
   // The node's love interests settle a name several share, and stand in for a cast that names nobody.
   const present = (await readChapter(deps.store, runId, beat.key))?.nodes[beat.i]?.cast ?? [];
-  const subjects = cgSubjects(cg.cast, run.units, run.player, { present, brief: cg.brief });
+  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free), for the paint and for the
+  // prompt review alike, so both name the same pictures.
+  const subjects = await outfitCutouts(
+    deps,
+    runId,
+    cgSubjects(cg.cast, run.units, run.player, { present, brief: cg.brief }),
+  );
   const style = await worldStyle(imagesOf(deps), run.world.images);
   const prompt = cgPrompt(
     {

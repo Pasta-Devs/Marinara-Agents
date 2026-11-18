@@ -231,6 +231,12 @@ test("a real couple-portrait paint sends each of them once, as their pair look, 
     assert.equal(host.generations.length, 1);
     // His card's full body beside his look was two standing pictures of him: the model merged bodies.
     assert.deepEqual(host.generations[0]!.referenceImages, [data(hisLook), data(herLook)], scenario);
+    // Each picture is the pair look they wear, so it dresses them both (0.36.5).
+    assert.match(
+      (host.generations[0] as { promptOverrides: Array<{ prompt: string }> }).promptOverrides[0]!.prompt,
+      /Use them only for each person's face, hair, build and clothing, never/,
+      scenario,
+    );
     assert.ok(
       !host.reads.some((path) => path.startsWith("/api/characters/personas/")),
       "the persona keeps its painted pair-look reference",
@@ -393,6 +399,54 @@ test("beside others, someone whose only picture is the look they wear sends that
   assert.deepEqual(body.referenceImages, [data(`${outfit}.cut.png`), data("/api/avatars/file/persona.png")]);
   assert.ok(!host.reads.includes(outfit), "the uncut look is never sent");
   assert.match(body.promptOverrides[0]!.prompt, /Reference images, in order: Kai; Ines\./);
+});
+
+test("a cut-out saved as ready whose file is gone sends the avatar, and the outfit line dresses them (0.36.5)", async () => {
+  const cutout = `${outfit}.cut.png`;
+  const host = engine({ missing: [cutout] });
+  const t = await keyImage(
+    "r-cutgone0-aaaaaa",
+    host,
+    ["Kai", "Ines"],
+    {
+      cardId: "card-dottore",
+      outfits: [look("winter", outfit)],
+      wornOutfit: "winter",
+      cutouts: { [outfit]: { state: "ready", at: "2026-11-18T00:00:00.000Z", url: cutout } },
+    },
+    { outfits: [look("gown", gown)], wornOutfit: "gown" },
+  );
+  assert.equal((await t.paint())?.state, "ready", "a missing cut-out never stops the paint");
+  const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
+  assert.deepEqual(body.referenceImages, [data("/api/avatars/file/card.png"), data(`${gown}.cut.png`)]);
+  assert.ok(!host.reads.includes(outfit), "the uncut look is never sent");
+  assert.match(
+    body.promptOverrides[0]!.prompt,
+    /Use them only for each person's face, hair and build, and for the clothing of Ines, never/,
+  );
+  assert.match(body.promptOverrides[0]!.prompt, /Kai: [^.]*winter outfit\./, "his outfit line dresses him");
+});
+
+test("a key image cuts out only the outfits of the people it draws (0.36.5)", async () => {
+  const cut: string[] = [];
+  const host = engine();
+  const t = await keyImage(
+    "r-cutonly0-aaaaaa",
+    host,
+    ["Kai"],
+    { outfits: [look("winter", outfit)], wornOutfit: "winter" },
+    {
+      outfits: [look("gown", gown)],
+      wornOutfit: "gown",
+    },
+  );
+  const cutter = t.deps.cutouts!;
+  t.deps.cutouts = { ...cutter, cutOut: (url) => (cut.push(url), cutter.cutOut(url)) };
+  assert.equal((await t.paint())?.state, "ready");
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(`${outfit}.cut.png`)]);
+  assert.deepEqual(cut, [outfit], "her gown, not in the picture, is not cut");
+  const her = await t.store.readDoc(playerId(t.runId), normalizePlayer);
+  assert.equal(her?.cutouts?.[gown], undefined, "nor queued for later");
 });
 
 test("a group key image fails before paying when one person's only picture is gone (#2145)", async () => {

@@ -205,8 +205,9 @@ function fakeImages() {
     async personaAvatar() {
       return "";
     },
-    async cardAvatarImage() {
-      return null;
+    // Only an outfit's cut-out (the fake cutter's) loads, so a keepsake sends it (0.36.5).
+    async cardAvatarImage(path) {
+      return path.endsWith(".cut.png") ? { mime: "image/png", base64: "iVBORw0KGgo=" } : null;
     },
   };
   return { client, paid, deleted, control };
