@@ -6148,8 +6148,13 @@ export const PLACE_FRAMING = "scenery, no humans, wide establishing shot, detail
 const PLACE_NEGATIVE =
   "people, person, humans, crowd, character, text, captions, logos, watermarks, borders, UI, collage layouts";
 export const CG_FRAMING = "cinematic composition, detailed background, dramatic lighting, emotional moment";
+/**
+ * 0.36.5 (the maintainer's call): the scene's bodies, named for what goes wrong in a picture of people who touch
+ * (merged and duplicated figures, extra or missing limbs, wrong hands), beside the layout ones. The count of limbs and
+ * fingers left the positive prompt, where it pulled legs into waist-up shots.
+ */
 const CG_NEGATIVE =
-  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, extra limbs";
+  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, bad anatomy, deformed body, merged bodies, fused limbs, extra limbs, extra arms, extra legs, missing limbs, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, twisted torso, disproportionate body, long neck";
 /** At most this many people are drawn in a CG (and sent as references), as every brief rule says. */
 export const CG_PEOPLE_MAX = 3;
 
@@ -6231,10 +6236,10 @@ export interface CgPerson {
   outfitLine: string;
   presentation: Presentation;
   /**
-   * Their reference is who they are, not the look they wear (a picture of several people, S/art/cg.ts cgSubjects):
-   * only the outfit line dresses them, so the references are not used for clothing.
+   * Their reference is the picture of the outfit they wear here (S/art/cg.ts cgSubjects, a pair portrait's looks), so
+   * it dresses them. Absent, their picture is only their avatar, or there is none, and the outfit line dresses them.
    */
-  outfitInText?: boolean;
+  outfitPictured?: boolean;
 }
 
 export interface CgInput {
@@ -6276,17 +6281,27 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
   // Sentence prompts say how many people there are and which picture is whose: unlabelled full-body references of
   // people standing, beside a brief where they touch, are how bodies come out merged or with extra limbs (2026-11-03).
   const tagged = style.tagged === true;
+  // 0.36.5: a person whose reference is the outfit they wear (`outfitPictured`) is dressed by it; one whose picture is
+  // only their avatar gives their face alone, and their outfit line dresses them. Read from each person, never from
+  // the labels, which may say more ("Kai in this outfit"). An explicit moment takes no clothing from any of them.
+  const sent = input.references ?? [];
+  const dressed = bare ? [] : names.filter((_, index) => people[index]!.outfitPictured);
+  const uses = !dressed.length
+    ? "face, hair and build"
+    : dressed.length >= sent.length
+      ? "face, hair, build and clothing"
+      : `face, hair and build, and for the clothing of ${nameList(dressed)}`;
   const staging = tagged
     ? []
     : [
-        input.references?.length
+        sent.length
           ? sentence(
-              `Reference images, in order: ${input.references.join("; ")}. Use them only for each person's face, hair${bare || people.some((person) => person.outfitInText) ? " and build" : ", build and clothing"}, never for the pose, framing or background`,
+              `Reference images, in order: ${sent.join("; ")}. Use them only for each person's ${uses}, never for the pose, framing or background`,
             )
           : "",
         people.length
           ? sentence(
-              `Draw exactly ${COUNT_WORDS[people.length] ?? `${people.length} people`}, ${people.length === 1 ? "once" : "each appearing once"}, with two arms, two legs and five fingers on each visible hand`,
+              `Draw exactly ${COUNT_WORDS[people.length] ?? `${people.length} people`}, ${people.length === 1 ? "once" : "each appearing once"}`,
             )
           : "",
       ];

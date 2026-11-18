@@ -39,7 +39,7 @@ import { readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
-import { cgReferences, cgSubjects } from "./cg.js";
+import { cgReferences, cgSubjects, outfitCutouts } from "./cg.js";
 import { worldStyle } from "./image-client.js";
 import type { ItemArtDeps, ItemPaintOptions } from "./outfits.js";
 import {
@@ -143,7 +143,8 @@ async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: 
     entry.figure
   ];
   const player = cast.includes("protagonist") ? await withPersonaImageAppearance(deps.runtime, run.player) : run.player;
-  const subjects = cast.length ? cgSubjects(cast, unit ? [unit] : [], player) : [];
+  // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+  const subjects = cast.length ? await outfitCutouts(deps, runId, cgSubjects(cast, unit ? [unit] : [], player)) : [];
   const { units, labels } = cgReferences(subjects);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);

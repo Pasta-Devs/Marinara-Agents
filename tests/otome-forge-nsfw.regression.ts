@@ -759,10 +759,11 @@ test("the adult-only negatives stay on every image, at every rating and after an
   assert.doesNotMatch(prompt, /16-year-old|schoolgirl/);
   assert.match(prompt, /in the lamp room, candlelight/);
   // An explicit CG draws each person from who they are: its references give their faces and builds, never the
-  // clothing of the clothed looks it is sent (2026-11-03).
+  // clothing of the clothed looks it is sent (2026-11-03), even when each reference is the outfit they wear (0.36.5).
+  const pictured = [KAI_LOOK, INES_LOOK].map((person) => ({ ...person, outfitPictured: true }));
   const two = cgPrompt({
     brief: "In the lamp room",
-    people: [KAI_LOOK, INES_LOOK],
+    people: pictured,
     world,
     style: PLAIN,
     use: "cg",
@@ -774,7 +775,7 @@ test("the adult-only negatives stay on every image, at every rating and after an
   // Only an explicit scene does: an ordinary CG in the same Explicit world keeps their outfits, in words and pictures.
   const clothed = cgPrompt({
     brief: "In the lamp room",
-    people: [KAI_LOOK, INES_LOOK],
+    people: pictured,
     world,
     style: PLAIN,
     use: "cg",

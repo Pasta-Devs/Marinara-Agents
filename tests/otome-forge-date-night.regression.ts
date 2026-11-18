@@ -205,8 +205,9 @@ function fakeImages() {
     async personaAvatar() {
       return "";
     },
-    async cardAvatarImage() {
-      return null;
+    // Only an outfit's cut-out (the fake cutter's) loads, so a keepsake sends it (0.36.5).
+    async cardAvatarImage(path) {
+      return path.endsWith(".cut.png") ? { mime: "image/png", base64: "iVBORw0KGgo=" } : null;
     },
   };
   return { client, paid, deleted, control };
@@ -293,7 +294,12 @@ async function dateWorld(
     }));
   }
   const art = fakeImages();
-  const deps: RouteDeps = { ...t.deps, images: art.client };
+  // A free cut-out as the Engine's sprite cleanup makes it: a keepsake sends each person's outfit cut out (0.36.5).
+  const cutouts: CutoutClient = {
+    cutOut: async (url) => ({ url: `${url}.cut.png`, id: `cut-${url}` }),
+    deleteGalleryImage: async () => true,
+  };
+  const deps: RouteDeps = { ...t.deps, images: art.client, cutouts };
   // #2303: a date won from Wish, owned: three scenes at the aquarium, as Date Night's evenings were.
   await giveDate(t, DATE_ITEM);
   return { ...t, deps, art, call: routes(deps, runKey) };
@@ -757,14 +763,15 @@ test("a date wears the owned looks picked for it, a 4★ included, and its plan 
   assert.match(plan, /How Kai looks now [^\n]*; wearing HIS-LOOK: navy greatcoat, brass buttons\.\n/);
   assert.match(plan, /looks now [^\n]*: wearing HER-LOOK: amber silk dress\.\n/);
   for (const look of ["HIS-LOOK", "HER-LOOK"]) assert.equal(plan.split(look).length, 2, `${look} once`);
-  // The keepsake draws them in their looks, on top of who they are.
+  // The keepsake draws them in their looks, their pictures and their outfit lines alike.
   await playDate(t, "date-1", [1, 2, 1]);
   assert.equal((await finish(t, "date-1")).status, 200);
   const keepsake = (await t.call("POST", "/runs/:run/art/keepsake/prompt", { key: "date-1" })).body.prompt as string;
   assert.match(keepsake, /Kai: tall man, salt-white hair, grey eyes; HIS-LOOK: navy greatcoat, brass buttons/);
   assert.match(keepsake, /HER-LOOK: amber silk dress/);
   assert.doesNotMatch(keepsake, /dark keeper's coat/, "never his everyday coat over the date look");
-  assert.match(keepsake, /face, hair and build, never/);
+  // 0.36.5: each reference is the look they wear, so it dresses them too.
+  assert.match(keepsake, /face, hair, build and clothing, never/);
 });
 
 /**
@@ -1117,7 +1124,7 @@ test("a keepsake still draws a protagonist with no name, from her persona (#2145
   const painted = await t.call("POST", "/runs/:run/art/keepsake", { key: date.key });
   assert.equal(painted.body.paint.state, "ready");
   const units = (t.art.paid[0] as unknown as { units: Array<{ personaId?: string; who?: string }> }).units;
-  assert.deepEqual(units, [{ kind: "character", personaId: "persona-ines", outfits: [], who: "Protagonist" }]);
+  assert.deepEqual(units, [{ kind: "character", personaId: "persona-ines", avatarOnly: true, who: "Protagonist" }]);
   assert.match(t.art.paid[0]!.prompt, /Reference images, in order: Protagonist\./u);
 });
 

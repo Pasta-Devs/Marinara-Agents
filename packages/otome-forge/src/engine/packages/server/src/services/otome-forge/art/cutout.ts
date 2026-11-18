@@ -174,13 +174,22 @@ const liveKey = (runId: string, li: LiId, url: string) => `${runId}|${li}|${url}
 // Home and the reader queue meanwhile goes first.
 const quiet = new Set<string>();
 const waiting = new Map<string, () => Promise<void>>();
+// When each queued cut-out settles, so a scene paint waits for its own and not for every one queued (cutoutsFor).
+const settled = new Map<string, Promise<void>>();
+/** Runs `job` after everything queued so far, and records when it settles. */
+function enqueue(key: string, job: () => Promise<void>): Promise<void> {
+  const done = chain.then(job);
+  settled.set(key, done);
+  chain = done;
+  return done;
+}
 let draining = false;
 function drainWaiting(): void {
   const [next] = waiting;
   draining = !!next;
   if (!next) return;
   waiting.delete(next[0]);
-  chain = chain.then(next[1]).then(drainWaiting);
+  void enqueue(next[0], next[1]).then(drainWaiting);
 }
 /** Home or the reader wants one a view queued: it counts as pending, and goes ahead of the view's others. */
 function hurry(key: string): void {
@@ -188,7 +197,7 @@ function hurry(key: string): void {
   const job = waiting.get(key);
   if (!job) return;
   waiting.delete(key);
-  chain = chain.then(job);
+  void enqueue(key, job);
 }
 
 export type CutoutState = "ready" | "pending" | "uncut";
@@ -343,9 +352,10 @@ export async function queueCutouts<T extends Pick<Unit, "id" | "cutouts">>(
         .finally(() => {
           live.delete(key);
           quiet.delete(key);
+          settled.delete(key);
         });
     if (!later) {
-      chain = chain.then(job);
+      void enqueue(key, job);
       continue;
     }
     quiet.add(key);
@@ -370,6 +380,14 @@ export function viewCutouts(deps: CutoutDeps, runId: string) {
     queue: () =>
       Promise.all([...asked].map(([owner, urls]) => queueCutouts(deps, runId, owner, urls, { later: true }))),
   };
+}
+
+/**
+ * Resolves once the cut-outs queued for these images of this owner have settled, and only those (with whatever runs
+ * ahead of them, one at a time): a scene paint waits for its people's outfits (art/cg.ts outfitCutouts).
+ */
+export async function cutoutsFor(runId: string, owner: LiId | "player", urls: readonly string[]): Promise<void> {
+  await Promise.all(urls.map((url) => settled.get(liveKey(runId, owner as LiId, url))));
 }
 
 /** Resolves once every cut-out queued so far, a view's waiting ones included, has settled (tests). */

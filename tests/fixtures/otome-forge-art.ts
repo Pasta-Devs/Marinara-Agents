@@ -31,6 +31,7 @@ import {
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeWorld } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import type { OtomeStore } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
+import type { CutoutClient } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { KAI, MIR, at, storyWorld } from "./otome-forge-story.ts";
 
 export const PNG = "iVBORw0KGgo=";
@@ -100,7 +101,9 @@ export function fakeImages({ before }: { before?: (call: PaidCall, n: number) =>
     deleteGalleryImage: async (id) => (deleted.push(id), true),
     characterCard: async () => null,
     personaAvatar: async () => "",
-    cardAvatarImage: async (path) => (path.startsWith("/api/") ? { mime: "image/png", base64: PNG } : null),
+    // An Engine file, or an outfit's cut-out (the default cutter's, artWorld).
+    cardAvatarImage: async (path) =>
+      path.startsWith("/api/") || path.endsWith(".cut.png") ? { mime: "image/png", base64: PNG } : null,
   };
   return { images, paid, uploads, deleted };
 }
@@ -166,7 +169,13 @@ export async function artWorld({
   const images = refuseHeldDeletes
     ? { ...fake.images, deleteGalleryImage: engineDeletes(world.fake.rows, fake.deleted) }
     : fake.images;
-  const deps: RouteDeps = { ...world.deps, images };
+  // A free cut-out as the Engine's sprite cleanup would make it (`<url>.cut.png`): scene art sends each person's outfit
+  // cut out (0.36.5, S/art/cg.ts outfitCutouts), so a paint finds one. A test that needs another passes its own.
+  const cutouts: CutoutClient = {
+    cutOut: async (url) => ({ url: `${url}.cut.png`, id: `cut-${url}` }),
+    deleteGalleryImage: async () => true,
+  };
+  const deps: RouteDeps = { ...world.deps, images, cutouts };
   return { ...world, ...fake, images, deps };
 }
 

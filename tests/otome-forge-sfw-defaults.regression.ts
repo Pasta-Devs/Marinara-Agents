@@ -367,8 +367,9 @@ test("the SFW defaults' content contracts are the ones every prompt carried befo
 
 const LOOK_NEGATIVE =
   "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, extra people, cropped-off heads, cropped feet, busy background, scenery";
+// 0.36.5: the scene negative names the anatomy that goes wrong when people touch (the maintainer's call).
 const CG_NEGATIVE =
-  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, extra limbs";
+  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, bad anatomy, deformed body, merged bodies, fused limbs, extra limbs, extra arms, extra legs, missing limbs, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, twisted torso, disproportionate body, long neck";
 const PLACE_NEGATIVE =
   "people, person, humans, crowd, character, text, captions, logos, watermarks, borders, UI, collage layouts";
 const SAFE = "child, childlike, minor, underage, school uniform, nudity, nsfw, sexual content, lingerie";
@@ -402,7 +403,7 @@ test("SFW images keep their safety prompts and negatives, and tagged faces retai
     "harbour, night, lanterns, no humans, scenery, wide establishing shot, detailed background, atmospheric lighting";
   // Sentence prompts say how many people to draw (the maintainer's anatomy report, 2026-11-03).
   const two =
-    "Kai: tall man, grey eyes; keeper's coat. Ines: short dark hair; oilskin. Draw exactly two people, each appearing once, with two arms, two legs and five fingers on each visible hand.";
+    "Kai: tall man, grey eyes; keeper's coat. Ines: short dark hair; oilskin. Draw exactly two people, each appearing once.";
   const cgTail =
     "cinematic composition, detailed background, dramatic lighting, emotional moment, safe for work, fully clothed";
   assert.deepEqual(

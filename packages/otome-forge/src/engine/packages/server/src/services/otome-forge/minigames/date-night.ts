@@ -106,7 +106,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
-import { cgReferences, cgSubjects } from "../art/cg.js";
+import { cgReferences, cgSubjects, outfitCutouts } from "../art/cg.js";
 import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
 import { imagesOf, updateIfChanged, type ArtDeps } from "../art/paint.js";
 import { placeKey } from "../art/places.js";
@@ -826,15 +826,22 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   // Each of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model
   // drew him twice or gave her his body (the maintainer's report, 2026-11-03). By id and role, so a namesake or a
   // protagonist without a name is still each of them.
-  const subjects = cgSubjects([...company.map((member) => member.id), "protagonist"], company, run.player);
+  // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+  const subjects = await outfitCutouts(
+    deps,
+    runId,
+    cgSubjects([...company.map((member) => member.id), "protagonist"], company, run.player),
+  );
   const { units, labels } = cgReferences(subjects);
-  const outfitInText = subjects.some((subject) => subject.person.outfitInText);
   return {
     run,
     chapter,
     plan: chapter.date,
     unit,
-    people: outfitInText ? people.map((person) => ({ ...person, outfitInText })) : people,
+    // The subjects are the people in the same order; whoever's reference is their outfit is dressed by it (cgPrompt).
+    people: people.map((person, index) =>
+      subjects[index]?.person.outfitPictured ? { ...person, outfitPictured: true } : person,
+    ),
     units,
     references: labels,
   };

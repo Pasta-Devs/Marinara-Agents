@@ -53,7 +53,7 @@ import {
   type WishOpenResult,
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { cgReferences, cgSubjects, warnUnmatched } from "../art/cg.js";
+import { cgReferences, cgSubjects, outfitCutouts, warnUnmatched } from "../art/cg.js";
 import { viewCutouts } from "../art/cutout.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
 import { addOutfit, bannerArtOwner, itemArtOwner, lookWearer } from "../art/outfits.js";
@@ -631,7 +631,8 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
     };
   }
   if (banner.kind === "memories") {
-    const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
+    // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+    const subjects = await outfitCutouts(deps, runId, cgSubjects(five.cg?.cast ?? [], run.units, run.player));
     // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;
     // a lowered world paints the clothed brief written beside it.
     const { brief, explicit } = memoryArtBrief(five.cg, five.title, run.world);

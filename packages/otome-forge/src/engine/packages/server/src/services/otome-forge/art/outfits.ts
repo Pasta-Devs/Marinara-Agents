@@ -45,7 +45,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
-import { cgReferences, cgSubjects, resolveCast, warnUnmatched } from "./cg.js";
+import { cgReferences, cgSubjects, outfitCutouts, resolveCast, warnUnmatched } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
@@ -271,7 +271,8 @@ async function buildItemArt(
           ],
         }
       : item.cg!;
-    const subjects = cgSubjects(cg.cast, li ? [li] : run.units, run.player);
+    // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+    const subjects = await outfitCutouts(deps, runId, cgSubjects(cg.cast, li ? [li] : run.units, run.player));
     // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story; only a
     // Memory whose brief the banner plan marked explicit goes further, while the world allows it (as banner art does),
     // and a lowered one paints the clothed brief written beside it.
@@ -561,12 +562,15 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
       identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
       outfitLine: hisOutfit.outfitLine,
       presentation: unit.bible?.look.presentation ?? "person",
+      // Each reference is the pair look itself, so it dresses them (0.36.5, cgPrompt).
+      outfitPictured: true,
     },
     {
       name: run.player.name || "Protagonist",
       identityLine: run.player.look.identityLine,
       outfitLine: herOutfit.outfitLine,
       presentation: run.player.look.presentation,
+      outfitPictured: true,
     },
   ];
   const him = first(unit.name, "them");
