@@ -45,7 +45,7 @@ export async function readItems(store: Pick<OtomeStore, "listRun">, runId: strin
 /** An item the player owns, with the run: 404 for no such item, 409 `locked` for one not won yet. */
 export async function readOwnedItem(deps: Pick<RouteDeps, "store">, runId: string, id: string) {
   const [run, item] = await Promise.all([readRun(deps.store, runId), readItem(deps.store, runId, id)]);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   if (!item) throw notFound("item");
   if (!run.state.owned.items.includes(item.id)) {
     throw new OtomeForgeError(409, "This item has not been won yet.", "locked");

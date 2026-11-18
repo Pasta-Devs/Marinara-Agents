@@ -147,7 +147,7 @@ async function chapterThemes(
 
 export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): Promise<AlbumView> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const items = await readItems(deps.store, runId);
   const owned = ownedItems(run, items);
   const cgs = albumCgs(run, items);

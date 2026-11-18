@@ -44,7 +44,7 @@ export async function fillBondReveals(
   return readOrGenerate(runId, read, async () => {
     signal?.throwIfAborted();
     const run = await readRun(deps.store, runId);
-    if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+    if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
     const unit = run.units.find((candidate) => candidate.id === li);
     if (!unit) throw new OtomeForgeError(404, "No such love interest.", "not-found");
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");

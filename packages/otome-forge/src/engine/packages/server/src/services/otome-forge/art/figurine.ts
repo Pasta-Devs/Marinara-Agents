@@ -79,7 +79,7 @@ async function readBought(deps: Pick<FigurineDeps, "store">, runId: string, li: 
     deps.store.readDoc(stateId(runId), normalizeState),
     readUnit(deps, runId, li),
   ]);
-  if (!state) throw notFound("Otome Hearth run");
+  if (!state) throw notFound("Otome Hearth story");
   if (!unit?.bible || !state.lis[li]) throw notFound("love interest");
   if (!state.owned.figurines[li]) {
     throw new OtomeForgeError(409, "This figurine has not been bought yet.", "locked");
@@ -93,7 +93,7 @@ async function buildFigurine(deps: FigurineDeps, runId: string, li: LiId, edited
     deps.store.readDoc(worldId(runId), normalizeWorld),
     readUnit(deps, runId, li),
   ]);
-  if (!world) throw notFound("Otome Hearth run");
+  if (!world) throw notFound("Otome Hearth story");
   if (!unit) throw notFound("love interest");
   const subject = await readSubject(deps, runId, world, `li:${li}`, false);
   const worn = unit.outfits.find((outfit) => outfit.id === unit.wornOutfit);
@@ -234,7 +234,7 @@ export async function paintFigurineNow(
         return unit.figurine;
       }
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-      if (!world) throw notFound("Otome Hearth run");
+      if (!world) throw notFound("Otome Hearth story");
       const connectionId = world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();

@@ -130,7 +130,7 @@ function param(request: OtomeRequest, name: string): unknown {
 /** The `:run` param as its run key and run id R, or a 404 (a malformed key names no run). */
 export function runParam(request: OtomeRequest): { runKey: string; runId: string } {
   const runKey = param(request, "run");
-  if (!isRunKey(runKey)) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+  if (!isRunKey(runKey)) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   return { runKey, runId: runIdOf(runKey) };
 }
 

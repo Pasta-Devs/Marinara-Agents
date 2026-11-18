@@ -19,8 +19,9 @@
 //   goes through paintRecord: one paid image per connection in the high lane, the prompt built at the paid call, and a
 //   result saved only onto the record still waiting for it.
 // - The references are exactly the three the issue names, people first (a provider that keeps fewer still gets both
-//   likenesses): his chosen look, hers, then the place's picture, each fetched as a data URL; a base look with no
-//   portrait falls back to his card's or her persona's avatar, labelled as their face (it may wear something else).
+//   likenesses): his chosen look, hers, then the place's picture, each fetched as a data URL, the looks cut out of
+//   their backdrops (0.36.7); a base look with no portrait falls back to his card's or her persona's avatar, labelled
+//   as their face (it may wear something else).
 //   When one of them has a picture that does not load, the paint fails before the paid call (Try again), rather than
 //   paying for a stranger. Only the label `photo <id>` is ever logged.
 // - The Album lists the ready photos (newest first) apart from `cgs`, which Home's back layer reads, and Home tapes the
@@ -41,6 +42,7 @@ import {
   type PhotoView,
 } from "../../../../../client/src/features/otome-forge/shared/photos.js";
 import { BASE_LOOK, type AlbumImage } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
+import { loadedCutouts, type CutoutOwner } from "../art/cg.js";
 import { galleryRefIds, hasLikenessSource, MissingLikenessError, worldStyle } from "../art/image-client.js";
 import {
   imagesOf,
@@ -62,7 +64,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 
-export type PhotoDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "art">;
+export type PhotoDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "art" | "cutouts">;
 
 /** `${R}:photo:<id>`: one Photo Shoot photo. */
 export const photoId = (runId: string, id: string) => `${runId}:photo:${id}`;
@@ -156,7 +158,7 @@ export function albumPhotos(photos: readonly Photo[]): AlbumImage[] {
     .sort((a, b) => b.at.localeCompare(a.at));
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const photoNotFound = () => new OtomeForgeError(404, "No such photo.", "not-found");
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
@@ -257,9 +259,32 @@ async function buildPhoto(
   setup: PhotoSetup,
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt & { name: string; references: string[]; missing?: string }> {
-  const { run, unit, place, his, her, hisLook, herLook } = await resolveSetup(deps, runId, setup);
+  const {
+    run,
+    unit,
+    place,
+    his,
+    her,
+    hisLook: hisPainted,
+    herLook: herPainted,
+  } = await resolveSetup(deps, runId, setup);
   const player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
+  // 0.36.7: each look goes cut out of its backdrop, as a scene's people do (art/cg.ts loadedCutouts, for the paint and
+  // its prompt review alike), so only the place's picture brings a background. An avatar standing in for a look is
+  // sent as it is, and a look that cannot be cut is sent as painted: the look is what the photo shows.
+  const painted = (owner: CutoutOwner, look: PhotoLook) =>
+    look.likeness.portrait && !look.face && !look.engineUrl ? [{ owner, url: look.likeness.portrait }] : [];
+  const cutoutOf = await loadedCutouts(deps, runId, [
+    ...painted(unit.id, hisPainted),
+    ...painted("player", herPainted),
+  ]);
+  const cut = (owner: CutoutOwner, look: PhotoLook): PhotoLook => {
+    const cutout = look.likeness.portrait ? cutoutOf(owner, look.likeness.portrait) : undefined;
+    return cutout ? { ...look, likeness: { ...look.likeness, portrait: cutout } } : look;
+  };
+  const hisLook = cut(unit.id, hisPainted);
+  const herLook = cut("player", herPainted);
   const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject, string?, string?]> = [
     [hisLook.face ? "li-face" : "li", hisLook.likeness, unit.name, hisLook.engineUrl],
     [herLook.face ? "her-face" : "her", herLook.likeness, player.name || "Protagonist", herLook.engineUrl],

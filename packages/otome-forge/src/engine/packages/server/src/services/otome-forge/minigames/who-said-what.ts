@@ -105,7 +105,7 @@ export async function whoSaidWhat(
 ): Promise<WhoSaidWhatView> {
   const { store } = deps;
   const run = await readRun(store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const protagonist = run.player.name;
   const chapters = (await completedChapters(store, runId, run.state)).filter(({ chapter }) => !chapter.hisSide);
   const canon = await Promise.all(

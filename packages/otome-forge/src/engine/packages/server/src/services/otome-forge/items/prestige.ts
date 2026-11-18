@@ -83,7 +83,7 @@ export async function ensurePrestigeStory(
   { debugMode, signal }: { debugMode: boolean; signal?: AbortSignal },
 ): Promise<Chapter> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Hearth run");
+  if (!run) throw notFound("Otome Hearth story");
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
   const unit = run.units.find((candidate) => candidate.id === li && candidate.bible);
   const liState = run.state.lis[li];

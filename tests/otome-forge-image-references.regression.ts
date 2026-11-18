@@ -185,13 +185,33 @@ test("Otome's reference opt-in preserves persona identity, scene outfit ordering
   );
 });
 
+/**
+ * The free cleanup as the Engine runs it, reading the picture from `host`: a file that is gone is never cut (0.36.5).
+ * `cut` lists what it was asked to cut; `refuse` fails a cut whose file is there.
+ */
+function fileCutter(host: ReturnType<typeof engine>, { refuse = [] as string[] } = {}) {
+  const cut: string[] = [];
+  return {
+    cut,
+    client: {
+      cutOut: async (url: string) => {
+        cut.push(url);
+        if (host.missing.includes(url) || refuse.includes(url)) throw new Error("missing");
+        return { url: `${url}.cut.png`, id: `cut-${url}` };
+      },
+      deleteGalleryImage: async () => true,
+    },
+  };
+}
+
 const hisLook = "/api/global-gallery/file/his-pair-look.png";
 const herLook = "/api/global-gallery/file/her-pair-look.png";
 
 /** A run whose couple set (his look, her look) is owned and painted, painted through `host`'s real client. */
-async function pairWorld(runKey: string, host: ReturnType<typeof engine>, cardId?: string) {
+async function pairWorld(runKey: string, host: ReturnType<typeof engine>, cardId?: string, cutter = fileCutter(host)) {
   const t = await artWorld({ runKey });
   t.deps.images = host.client;
+  t.deps.cutouts = cutter.client;
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
     ...unit,
     source: cardId ? "card" : "archetype",
@@ -229,8 +249,13 @@ test("a real couple-portrait paint sends each of them once, as their pair look, 
     const t = await pairWorld(`r-pairrefs${i}-aaaaaa`, host, scenario === "no-card" ? undefined : "card-dottore");
     assert.equal((await t.paint()).state, "ready");
     assert.equal(host.generations.length, 1);
-    // His card's full body beside his look was two standing pictures of him: the model merged bodies.
-    assert.deepEqual(host.generations[0]!.referenceImages, [data(hisLook), data(herLook)], scenario);
+    // His card's full body beside his look was two standing pictures of him: the model merged bodies. Each look goes
+    // cut out of its backdrop (0.36.7).
+    assert.deepEqual(
+      host.generations[0]!.referenceImages,
+      [data(`${hisLook}.cut.png`), data(`${herLook}.cut.png`)],
+      scenario,
+    );
     // Each picture is the pair look they wear, so it dresses them both (0.36.5).
     assert.match(
       (host.generations[0] as { promptOverrides: Array<{ prompt: string }> }).promptOverrides[0]!.prompt,
@@ -243,6 +268,21 @@ test("a real couple-portrait paint sends each of them once, as their pair look, 
     );
     assert.equal(t.calls.length, 0);
   }
+});
+
+test("a pair look that cannot be cut, or whose cut-out file is gone, is sent as painted (0.36.7)", async () => {
+  // Her look's cut fails; his cut-out was saved, but its file is gone since.
+  const host = engine({ missing: [`${hisLook}.cut.png`] });
+  const cutter = fileCutter(host, { refuse: [herLook] });
+  const t = await pairWorld("r-pairuncut-aaaaaa", host, "card-dottore", cutter);
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cutouts: { [hisLook]: { state: "ready", at: "2026-11-18T00:00:00.000Z", url: `${hisLook}.cut.png` } },
+  }));
+  assert.equal((await t.paint()).state, "ready", "neither stops the paint");
+  // The look is what the portrait shows, so it is sent as painted, never swapped for an avatar.
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(hisLook), data(herLook)]);
+  assert.deepEqual(cutter.cut, [herLook], "his saved cut-out is not cut again");
 });
 
 test("a pair look whose file is gone fails the pair portrait before anything is paid for (#2145)", async () => {
@@ -268,9 +308,10 @@ const setup = {
 };
 
 /** A run with his and her everyday portraits and a painted Lamp Room, photographed through `host`'s real client. */
-async function photoWorld(runKey: string, host: ReturnType<typeof engine>) {
+async function photoWorld(runKey: string, host: ReturnType<typeof engine>, cutter = fileCutter(host)) {
   const t = await artWorld({ runKey });
   t.deps.images = host.client;
+  t.deps.cutouts = cutter.client;
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
     ...unit,
     cardId: "card-dottore",
@@ -295,10 +336,25 @@ test("a real Photo Shoot paint sends his look, her look and the place to the Eng
   const photo = await takePhoto(t.deps, t.runId, setup, { debugMode: true });
   assert.equal(photo.art.state, "ready");
   assert.equal(host.generations.length, 1);
-  // generateImage is not the kit's wrapped scene paint: no card sprite or avatar is put in front of the looks.
-  assert.deepEqual(host.generations[0]!.referenceImages, [data(his), data(hers), data(place)]);
+  // generateImage is not the kit's wrapped scene paint: no card sprite or avatar is put in front of the looks. Each look
+  // goes cut out of its backdrop (0.36.7); the place keeps its picture.
+  assert.deepEqual(host.generations[0]!.referenceImages, [
+    data(`${his}.cut.png`),
+    data(`${hers}.cut.png`),
+    data(place),
+  ]);
   assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "his card's sprites are not read");
   assert.equal(t.calls.length, 0);
+});
+
+test("a Photo Shoot look that cannot be cut is sent as painted, and the place is never cut (0.36.7)", async () => {
+  const host = engine();
+  const cutter = fileCutter(host, { refuse: [his] });
+  const t = await photoWorld("r-photouncut-aaaaaa", host, cutter);
+  const photo = await takePhoto(t.deps, t.runId, setup, { debugMode: true });
+  assert.equal(photo.art.state, "ready", "a failed cut never stops the photo");
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(his), data(`${hers}.cut.png`), data(place)]);
+  assert.deepEqual(cutter.cut.sort(), [hers, his].sort(), "only the looks are cut");
 });
 
 test("a Photo Shoot whose picture of him is gone fails before paying; its prompt can still be reviewed (#2145)", async () => {
@@ -325,13 +381,7 @@ async function keyImage(
   const t = await artWorld({ runKey });
   t.deps.images = host.client;
   // The free cleanup reads the look as the Engine serves it: a file that is gone is never cut (0.36.5).
-  t.deps.cutouts = {
-    cutOut: async (url) => {
-      if (host.missing.includes(url)) throw new Error("missing");
-      return { url: `${url}.cut.png`, id: `cut-${url}` };
-    },
-    deleteGalleryImage: async () => true,
-  };
+  t.deps.cutouts = fileCutter(host).client;
   await seedChapter(t.store, t.runId);
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({ ...unit, ...kai }));
   await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({

@@ -190,7 +190,8 @@ async function photoWorld(
     },
   };
   const cutouts: CutoutClient = {
-    cutOut: async () => ({ id: "cut", url: `${FILE}/cut.png` }),
+    // One cut-out per picture, as the Engine's free cleanup makes them (0.36.7: the looks are sent cut out).
+    cutOut: async (url) => ({ id: `cut-${url}`, url: `${url}.cut.png` }),
     deleteGalleryImage: async () => true,
   };
   const deps: RouteDeps = { ...t.deps, art, cutouts } as RouteDeps;
@@ -238,7 +239,12 @@ test("Take picture paints one photo with no model call: his look, her look, then
   assert.equal(t.paid.length, 1);
   const paid = t.paid[0]!;
   assert.equal(paid.method, "generateImage", "the kit wrapper never rebuilds these references");
-  assert.deepEqual(decoded(paid), [HIS_URL, HER_URL, PLACE_URL], "people first, the place last");
+  // Each look cut out of its backdrop (0.36.7); the place keeps its picture, the photo's only background.
+  assert.deepEqual(
+    decoded(paid),
+    [`${HIS_URL}.cut.png`, `${HER_URL}.cut.png`, PLACE_URL],
+    "people first, the place last",
+  );
   assert.deepEqual([paid.request.width, paid.request.height], [1024, 1024]);
   assert.equal(paid.request.prompt, review.body.prompt, "the review showed what was sent");
   assert.equal(t.calls.length, 0, "no model call");
@@ -252,10 +258,10 @@ test("Take picture paints one photo with no model call: his look, her look, then
   assert.equal((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.wornOutfit, undefined);
   assert.deepEqual(await t.store.readDoc(stateId(t.runId), normalizeState), stateBefore);
 
-  // Everyday looks send their portraits; without one, his card's avatar and her persona's.
+  // Everyday looks send their portraits, cut out (0.36.7); without one, his card's avatar and her persona's, as they are.
   const base = await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
   assert.equal(base.body.photo.art.state, "ready");
-  assert.deepEqual(decoded(t.paid[1]!), [KAI_PORTRAIT, INES_PORTRAIT, PLACE_URL]);
+  assert.deepEqual(decoded(t.paid[1]!), [`${KAI_PORTRAIT}.cut.png`, `${INES_PORTRAIT}.cut.png`, PLACE_URL]);
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => {
     const { portrait: _portrait, portraitRef: _ref, ...rest } = unit;
     return { ...rest, cardId: "card-kai" };
