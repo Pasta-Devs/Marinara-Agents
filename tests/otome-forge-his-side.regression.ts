@@ -839,10 +839,10 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 0.36.4 (#2384): the writing rules drop the dialogue rule; the scene asks for spoken lines in its place.
   // Retaken 0.36.9: the writing rules ask not to fall into patterns.
   // Retaken 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech.
-  assert.equal(sha(mainMessages), "65e72d95e973fc8afe4c370a2be8b19cefd616da8fcfce94314bc9bc6d29d9e2", "a main chapter");
+  assert.equal(sha(mainMessages), "202fb84a6cd21067d839c7bd91cf3f471c536814b240eb207993e06e7c914119", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "ce075c50bb51bcbf5ed9174e878abc537873ad1532a5688db086b3145506e39c",
+    "9ec097251ad9066dadf576f3db5ccc8b12d37ab73e182e80804f59df6d330848",
     "a Character Story, even with a scene handed to it",
   );
 });

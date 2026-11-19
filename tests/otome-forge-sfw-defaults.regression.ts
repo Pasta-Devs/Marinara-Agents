@@ -261,17 +261,17 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerDates: "49a3e857c23eba74",
-  bannerHis: "5ed89630f2ce538f",
-  bannerMemories: "939455d2eebd0360",
-  bannerMine: "0a44e88233031a03",
-  beat: "4dadc52c198d5574",
-  beatWithCg: "a8753c8ec2ad0185",
-  chapterPlan: "214fe5cbe2302530",
-  closer: "ce72c190a1a09daa",
-  confrontation: "3eb3a42fbc57b890",
-  repairPlan: "503e27bf5b9797cf",
-  routePlan: "86d10e39f8ea6b77",
+  bannerDates: "01f3dc79244629d2",
+  bannerHis: "5e0147516776dea9",
+  bannerMemories: "82e4d56fca0925e4",
+  bannerMine: "0876b3a1ebcc0b4f",
+  beat: "9395573543e22ca9",
+  beatWithCg: "29d3ed3746b16e02",
+  chapterPlan: "54a53fee39e780d5",
+  closer: "9462aa7b3173c75b",
+  confrontation: "9b3c63de1784cedc",
+  repairPlan: "b917b2bf278dcfaa",
+  routePlan: "2b9d3d8beee73239",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
 // 0.20.2: P10 and P11 open with the story context their chapter's scenes cache, so both sets' routePlan and
@@ -287,17 +287,17 @@ const EXPECTED_ANGST: Record<string, string> = {
 // 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and
 // plot, so both sets moved.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerDates: "df7436c7099abf67",
-  bannerHis: "98851666eba46510",
-  bannerMemories: "d16cff3cfd0a46eb",
-  bannerMine: "811f9704c1938402",
-  beat: "80aa1c18db435a8f",
-  beatWithCg: "6cb4d74a029775be",
-  chapterPlan: "6f17042bf96131ed",
-  closer: "85f059ac7cd36cea",
-  confrontation: "c0e7d68d4847fb65",
-  repairPlan: "2ccc0cc663522d44",
-  routePlan: "78f97134072f3c65",
+  bannerDates: "525ca99788af7d01",
+  bannerHis: "5be343ef2b74ce56",
+  bannerMemories: "e76821810c1d044c",
+  bannerMine: "728d54ea0384a36f",
+  beat: "c1e4dd59d09b13e2",
+  beatWithCg: "001fc1632a0a18c3",
+  chapterPlan: "977ee28a883673db",
+  closer: "4e85a2bff89c2178",
+  confrontation: "c30d7a185c124aef",
+  repairPlan: "c68deaab0d42743c",
+  routePlan: "60aa992a4c671fdb",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

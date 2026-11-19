@@ -401,11 +401,12 @@ export const WRITING_RULES = [
   // 0.38.2: the maintainer found Claude models writing every line as coded subtext and narration and plots hard to
   // follow, where Gemini wrote easy, natural dialogue. They kept the hat and asked for balance ("humans don't always
   // speak with subtext"), by editing these lines rather than adding new ones (the prompt is long already), with no
-  // examples so nothing is primed. Was "A face may contradict the words it speaks."; the plain-words line gained the
-  // reader who always knows where they are.
+  // examples so nothing is primed. Was "A face may contradict the words it speaks." The plain-words line stays as it
+  // was: the maintainer found "the reader always knows where they are…" would make models say too much. The voice line
+  // gained "and anyone may joke when it fits them", so jokes are allowed, behind a mask too.
   "Now and then a face may contradict the words it speaks, but most of what people say, behind a mask or not, means what it says.",
-  "Write in plain, everyday words, so the reader always knows where they are, who is there and what just happened: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
-  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them. The choices the protagonist is offered are plain too, not riddles.",
+  "Write in plain, everyday words: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
+  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them, and anyone may joke when it fits them. The choices the protagonist is offered are plain too, not riddles.",
   "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   // 0.36.3: the maintainer removed "Write what the protagonist feels in their body when something happens to them, not
   // only the action." (0.6.6, #1978). With the rule on thought lines, it made the protagonist's thoughts open with a

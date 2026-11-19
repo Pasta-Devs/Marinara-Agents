@@ -209,9 +209,10 @@ test("0.36.9: the writing rules ask every prompt not to fall into patterns, with
   }
 });
 
-test("0.38.2: the writing rules balance subtext and keep the reader oriented by rewording lines, with no example", () => {
-  // The maintainer's ask: Claude models wrote every line as coded subtext and narration hard to follow. They kept the
-  // hat, and the fix rewords lines already there instead of adding rules (the prompt is long already).
+test("0.38.2: the writing rules balance subtext and allow jokes by rewording lines, with no example", () => {
+  // The maintainer's ask: Claude models wrote every line as coded subtext. They kept the hat, and the fix rewords lines
+  // already there instead of adding rules (the prompt is long already). The plain-words line stays as it was: "the
+  // reader always knows where they are…" would make models say too much.
   for (const story of [true, false]) {
     const rules = otomeWritingRules({ story });
     assert.ok(rules.includes("\n- Put on your I-Have-Good-Theory-Of-Mind Hat.\n"), "the hat stays word for word");
@@ -224,10 +225,11 @@ test("0.38.2: the writing rules balance subtext and keep the reader oriented by 
       !rules.includes("\n- A face may contradict the words it speaks.\n"),
       "the old line is reworded, not kept",
     );
+    assert.ok(rules.includes("\n- Write in plain, everyday words: say what happens and what it means without ornate"));
+    assert.doesNotMatch(rules, /always knows where they are/u, "no line asks the model to spell everything out");
     assert.ok(
-      rules.includes(
-        "\n- Write in plain, everyday words, so the reader always knows where they are, who is there and what just happened: say what happens",
-      ),
+      rules.includes("never the same polished voice for all of them, and anyone may joke when it fits them."),
+      "jokes are allowed",
     );
     assert.doesNotMatch(rules, /What\?/u, "no example reaction a model could copy");
   }

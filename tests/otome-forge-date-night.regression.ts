@@ -1363,10 +1363,10 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
 // 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and plot, so every prompt that carries them moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "f4bdb05c8807f4f0",
-  scene1: "138e65c1303eb73d",
-  scene2: "8d200e05f26786a0",
-  scene3: "21e2235d2930d50d",
+  plan: "a7d796e415470793",
+  scene1: "08c8f08e9390501b",
+  scene2: "9e2da27cf1e76186",
+  scene3: "139995c9c56c098f",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

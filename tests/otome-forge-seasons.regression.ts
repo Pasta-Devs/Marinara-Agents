@@ -168,10 +168,10 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so theirs moved; Memories is
 // unchanged, and the Dates banner's is new.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "da55c14945309c1d",
-  "his-wardrobe": "c4b2c4e01981e564",
-  "my-wardrobe": "0bc2454d58cf94d9",
-  dates: "e71089d2eaa16bf2",
+  memories: "82b477373a298bb8",
+  "his-wardrobe": "0eb0938c01fd19af",
+  "my-wardrobe": "02da0200c0a462d4",
+  dates: "0d19316b74168a67",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {
