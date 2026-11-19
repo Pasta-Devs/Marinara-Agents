@@ -1,6 +1,7 @@
-import { ArrowLeft, ChevronRight, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, ChevronRight, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { SearchInput } from "../../../components/ui/SearchInput";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptDefinition } from "./slp-settings-contract";
 import { useSlurpLivePromptBlocks, useSlurpPromptBlocks } from "./slp-settings-hooks";
@@ -259,25 +260,15 @@ export function SlurpPromptBlockBuilder({
                 })}
               </p>
             </div>
-            <label className="relative block sm:w-64">
-              <span className="sr-only">
-                {t("ui.slurp.settings.prompts.searchRecipes", { defaultValue: "Search prompt recipes" })}
-              </span>
-              <Search
-                size={16}
-                className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[var(--slurp-muted)]"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("ui.slurp.settings.prompts.searchRecipesPlaceholder", {
-                  defaultValue: "Search recipes…",
-                })}
-                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] pe-3 ps-10 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
-              />
-            </label>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              label={t("ui.slurp.settings.prompts.searchRecipes", { defaultValue: "Search prompt recipes" })}
+              placeholder={t("ui.slurp.settings.prompts.searchRecipesPlaceholder", {
+                defaultValue: "Search recipes…",
+              })}
+              className="sm:w-64"
+            />
             {/* Draft only: the player still saves or discards it like any other edit. */}
             <button
               type="button"

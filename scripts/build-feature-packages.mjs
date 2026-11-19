@@ -105,6 +105,13 @@ const HOST_COMPONENTS_BUILT_AGAINST = Object.freeze({
   engineVersion: "2.5.2",
   engineCommit: "611557bc28a57e63dc634742f59f1769cc1c261c",
 });
+// Capability API 1.832 hands packages the Engine's Tabs and SearchInput (Pasta-Devs/Marinara-Engine#9455), so
+// Slurp's Backstage search fields are the Engine's. An older Engine refuses the manifest.
+const SHARED_PARTS_CAPABILITY_API = Object.freeze({ major: 1, minor: 832 });
+const SHARED_PARTS_BUILT_AGAINST = Object.freeze({
+  engineVersion: "2.5.2",
+  engineCommit: "5c5cfedf6d31a09c5712422765cad3424fcaa31b",
+});
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -534,8 +541,8 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.27",
-    minEngineVersion: HOST_COMPONENTS_BUILT_AGAINST.engineVersion,
+    version: "0.4.28",
+    minEngineVersion: SHARED_PARTS_BUILT_AGAINST.engineVersion,
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
     description:
@@ -589,8 +596,8 @@ const features = [
     clientImport: "packages/client/src/slp/slp-client-entry.tsx",
     packageSourceRoot: slurp2SourceRoot,
     ownedSourcePaths: slurp2OwnedSourcePaths,
-    capabilityApi: HOST_COMPONENTS_CAPABILITY_API,
-    builtAgainst: HOST_COMPONENTS_BUILT_AGAINST,
+    capabilityApi: SHARED_PARTS_CAPABILITY_API,
+    builtAgainst: SHARED_PARTS_BUILT_AGAINST,
     libraryHidden: true,
     // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
     // package-asset content types, so the route 404s it whatever the manifest declares. The coin
@@ -855,7 +862,7 @@ const features = [
   {
     id: "blackjack",
     name: "Blackjack",
-    version: "1.0.1",
+    version: "1.0.2",
     maxEngineExclusive: "4.0.0",
     capabilityApi: PACKAGE_CAPABILITY_API,
     builtAgainst: PACKAGE_BUILT_AGAINST,
@@ -882,7 +889,7 @@ const features = [
   {
     id: "wordle",
     name: "Wordle",
-    version: "1.1.0",
+    version: "1.1.1",
     // Package storage and routes (api.runtime.persistence, registerPrivilegedRoutes) arrived in capability API 1.386.
     minEngineVersion: "2.5.1",
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),

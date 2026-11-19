@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { CheckCircle2, ListChecks, Search, Settings2, UsersRound } from "lucide-react";
+import { CheckCircle2, ListChecks, Settings2, UsersRound } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { SlurpCreatorBulkEdit } from "./SlpCreatorBulkEdit";
@@ -16,6 +16,7 @@ import { SlpCreatorLooksRefresh } from "./SlpCreatorLooksRefresh";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { SLP_CREATOR_SETTING_TAB } from "./settings/slp-creator-settings-contract";
 import { openSlpCreatorSettings } from "./settings/slp-creator-settings-store";
+import { SearchInput } from "../../../components/ui/SearchInput";
 import { Spinner } from "../../../components/ui/Spinner";
 
 const CREATOR_FILTERS: readonly SlpCreatorFilter[] = ["all", "active", "paused", "attention"];
@@ -177,23 +178,12 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
       ) : creators.length ? (
         <div className="min-w-0 space-y-3">
           <CreatorMetricsTotals metrics={metricsQuery.data?.creators ?? []} t={t} />
-          <label className="relative block">
-            <span className="sr-only">
-              {t("ui.slurp.settings.creators.search", { defaultValue: "Search Creators" })}
-            </span>
-            <Search
-              size={16}
-              className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[var(--slurp-muted)]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("ui.slurp.settings.creators.search", { defaultValue: "Search Creators" })}
-              className={`min-h-11 w-full rounded-lg bg-[var(--slurp-surface-raised)] ps-9 pe-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm ${focusRing}`}
-            />
-          </label>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            label={t("ui.slurp.settings.creators.search", { defaultValue: "Search Creators" })}
+            placeholder={t("ui.slurp.settings.creators.search", { defaultValue: "Search Creators" })}
+          />
           <div
             className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]"
             role="group"

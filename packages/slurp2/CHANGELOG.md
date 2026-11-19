@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.4.28 — 2026-11-19
+
+- Changed: the search fields on the Backstage Creators, Prompts and Continuity pages are now Marinara's own search field. Escape clears the text first, and a button clears it.
+- Needs a Marinara Engine with capability API 1.832 or newer; an older Engine does not load this version.
+
 ## 0.4.27 — 2026-11-17
 
 - Changed: 23 copied helpers now come from two shared modules, `slp-hash.ts` and `slp-coerce.ts`, with the same output. A new regression freezes the hash values, so stored picks and rotations stay put.

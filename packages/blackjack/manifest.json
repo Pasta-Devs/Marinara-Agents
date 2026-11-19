@@ -10,7 +10,7 @@
   },
   "id": "blackjack",
   "name": "Blackjack",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on.",
   "engine": {
     "min": "2.3.0",
@@ -52,8 +52,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "5af460588bb33c9cb9e21ea35c01e1aa71789a02504aefca7414d7821dc5b628",
-      "bytes": 162828
+      "sha256": "4d39848e652bb2a86dc7dcfd5bfa2a8a5a657034098db2143f64c4d1974f4bbc",
+      "bytes": 36454
     }
   ],
   "permissions": [

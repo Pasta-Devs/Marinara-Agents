@@ -288,7 +288,7 @@
         },
         "id": "blackjack",
         "name": "Blackjack",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on.",
         "engine": {
           "min": "2.3.0",
@@ -330,8 +330,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "5af460588bb33c9cb9e21ea35c01e1aa71789a02504aefca7414d7821dc5b628",
-            "bytes": 162828
+            "sha256": "4d39848e652bb2a86dc7dcfd5bfa2a8a5a657034098db2143f64c4d1974f4bbc",
+            "bytes": 36454
           }
         ],
         "permissions": [
@@ -346,9 +346,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/blackjack.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/blackjack-1.0.1.zip",
-        "sha256": "aa2a0cadeaff9410251ac35699923a64a0f334bcd43a9129e1ce5fd40cbdb203",
-        "bytes": 183085
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/blackjack-1.0.2.zip",
+        "sha256": "75b093f67c8f441a8ab5e46771ec27c97fa70bf39bc967748209d35da2bda875",
+        "bytes": 56710
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#blackjack"
     },
@@ -4482,15 +4482,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 830
+          "minor": 832
         },
         "builtAgainst": {
           "engineVersion": "2.5.2",
-          "engineCommit": "611557bc28a57e63dc634742f59f1769cc1c261c"
+          "engineCommit": "5c5cfedf6d31a09c5712422765cad3424fcaa31b"
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.27",
+        "version": "0.4.28",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -4564,8 +4564,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "9d6384a84244de07f96c44f3fb3d455e0bdfd9d3ee93040cd7700a5b57be623e",
-            "bytes": 2920581
+            "sha256": "dba351e49d82ad6f7513325fa15e2f4729409c59a6c083ff97c5213e04511b84",
+            "bytes": 2919986
           },
           {
             "path": "slurp2-logo.png",
@@ -4619,9 +4619,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.27.zip",
-        "sha256": "e4a5a192c98783b69359f9b9d5e0538dc64db643e055b4ce795a819a9289bc85",
-        "bytes": 6157125
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.28.zip",
+        "sha256": "a7f0a6c7d9a394615201f38c2df2c5f584505e1cb2ac62ec05fbb43a055a62f8",
+        "bytes": 6156530
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },
@@ -4938,7 +4938,7 @@
         },
         "id": "wordle",
         "name": "Wordle",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
         "engine": {
           "min": "2.5.1",
@@ -4980,8 +4980,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "f160804de32769bc71fd29e258820a1075dfc99840c55991b7eae03274d09336",
-            "bytes": 160427
+            "sha256": "f1a543b20f3fe660731db8aa1c38022bc7e694140f709a8d281002d48ee3dffc",
+            "bytes": 34104
           }
         ],
         "permissions": [
@@ -4997,9 +4997,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/wordle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/wordle-1.1.0.zip",
-        "sha256": "744a03705a5abf23f4d13e96a8e14ea8c8de9be9cb59e8d06b20f866bbfa6404",
-        "bytes": 228813
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/wordle-1.1.1.zip",
+        "sha256": "5c59c8122abc6a015516c801f043d300767e3b958bfb928deb36601e60dbd2b7",
+        "bytes": 102489
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#wordle"
     },

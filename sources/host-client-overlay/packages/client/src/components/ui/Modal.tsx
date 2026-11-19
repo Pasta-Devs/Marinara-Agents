@@ -46,6 +46,11 @@ export interface ModalProps {
   panelStyle?: CSSProperties;
   /** Prevent every dismissal path while an action is in progress. */
   closeDisabled?: boolean;
+  /** From capability API 1.832; an older Engine ignores these. */
+  backdrop?: "blur" | "dark" | "solid" | "none";
+  labelledBy?: string;
+  dataComponent?: string;
+  fadeOnly?: boolean;
   /** Optional classes for the scroll area. */
   contentClassName?: string;
 }

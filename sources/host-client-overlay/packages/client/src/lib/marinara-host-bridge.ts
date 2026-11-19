@@ -37,7 +37,14 @@ interface MarinaraHostNamespace {
   services?: { tts?: unknown; dialogs?: unknown };
   modules?: Record<string, unknown>;
   queryClient?: unknown;
-  components?: { Modal?: unknown; Switch?: unknown; Checkbox?: unknown; Spinner?: unknown };
+  components?: {
+    Modal?: unknown;
+    Switch?: unknown;
+    Checkbox?: unknown;
+    Spinner?: unknown;
+    Tabs?: unknown;
+    SearchInput?: unknown;
+  };
   data?: { emojiCatalog?: unknown };
   api?: unknown;
 }
@@ -53,6 +60,8 @@ const HOST_MEMBER_CAPABILITY_APIS: Record<string, string> = {
   "the Switch component": "1.830",
   "the Checkbox component": "1.830",
   "the Spinner component": "1.830",
+  "the Tabs component": "1.832",
+  "the SearchInput component": "1.832",
 };
 
 /** The message a package shows, or throws, when the Engine lacks a member it needs. */

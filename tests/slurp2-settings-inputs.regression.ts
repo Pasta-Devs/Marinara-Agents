@@ -57,7 +57,7 @@ assert.match(inputs, /size-11 shrink-0/u);
 const continuity = slurp2Source(`${root}features/creators/SlpContinuityPanel.tsx`);
 assert.match(
   continuity,
-  /type="search"[\s\S]*<AdvancedGroup[\s\S]*type="range"[\s\S]*type="date"[\s\S]*<\/AdvancedGroup>/u,
+  /<SearchInput[\s\S]*<AdvancedGroup[\s\S]*type="range"[\s\S]*type="date"[\s\S]*<\/AdvancedGroup>/u,
 );
 assert.match(continuity, /\{lifeDetails\}\s*<SettingsGroup title=\{t\("ui\.slurp\.continuity\.factsGroup"/u);
 
