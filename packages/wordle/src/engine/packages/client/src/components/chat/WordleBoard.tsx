@@ -149,7 +149,13 @@ export function WordleBoard({ chatId }: Props) {
                 ? "End today's Wordle? Your go for today still counts."
                 : "End today's Wordle? You haven't guessed yet, so you can still play today's word later.";
               if (view.status === "finished") resign.mutate();
-                else void showConfirmDialog({ title: "End game", message: question, confirmLabel: "End game", tone: "destructive" }).then((ok) => ok && resign.mutate());
+              else
+                void showConfirmDialog({
+                  title: "End game",
+                  message: question,
+                  confirmLabel: "End game",
+                  tone: "destructive",
+                }).then((ok) => ok && resign.mutate());
             }}
             className="rounded p-1 text-[var(--muted-foreground)] hover:bg-[var(--muted)] active:scale-90"
             title={view.status === "finished" ? "Close" : "End game"}
