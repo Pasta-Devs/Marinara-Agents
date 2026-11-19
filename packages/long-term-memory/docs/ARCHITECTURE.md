@@ -46,16 +46,17 @@ The package reads these Engine-owned values without a declared Engine API, so
 `engine-boundary.json` cannot list them.
 `tests/long-term-memory-engine-fields.regression.ts` checks them against an
 Engine checkout and fails when one is renamed or removed. A failure means Sources
-quietly stops finding those summaries, or the built-in assistant starts appearing
-as a source and place.
+quietly stops finding those summaries, Game chat pieces lose their clock date,
+or the built-in assistant starts appearing as a source and place.
 
-| Field or constant                            | Feeds                                                   | Engine definition                           |
-| -------------------------------------------- | ------------------------------------------------------- | ------------------------------------------- |
-| `ChatMetadata.daySummaries`, `weekSummaries` | day and week conversation summaries                     | `packages/shared/src/types/chat.ts`         |
-| `ChatMetadata.summaryEntries`                | agent summary entries                                   | `packages/shared/src/types/chat.ts`         |
-| `ChatMetadata.summary`                       | the single legacy summary                               | `packages/shared/src/types/chat.ts`         |
-| `ChatMetadata.gamePreviousSessionSummaries`  | game session summaries                                  | `packages/shared/src/types/chat.ts`         |
-| `PROFESSOR_MARI_ID` (`__professor_mari__`)   | excludes the built-in assistant from sources and places | `packages/shared/src/constants/defaults.ts` |
+| Field or constant                             | Feeds                                                   | Engine definition                                   |
+| --------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
+| `ChatMetadata.daySummaries`, `weekSummaries`  | day and week conversation summaries                     | `packages/shared/src/types/chat.ts`                 |
+| `ChatMetadata.summaryEntries`                 | agent summary entries                                   | `packages/shared/src/types/chat.ts`                 |
+| `ChatMetadata.summary`                        | the single legacy summary                               | `packages/shared/src/types/chat.ts`                 |
+| `ChatMetadata.gamePreviousSessionSummaries`   | game session summaries                                  | `packages/shared/src/types/chat.ts`                 |
+| `PROFESSOR_MARI_ID` (`__professor_mari__`)    | excludes the built-in assistant from sources and places | `packages/shared/src/constants/defaults.ts`         |
+| `metadata.gameTime` (`day`, `hour`, `minute`) | the story date of a Game chat's newest piece            | `packages/server/src/services/game/time.service.ts` |
 
 The reads are in `sources/interop.ts`. The long-term fix is an Engine API for chat
 summaries, which needs a higher minimum Engine version.
@@ -118,6 +119,18 @@ user typed (`manual`), then a date the Engine holds for the piece's messages
 it out when read, from the chat's pieces in order. The source hash ignores both
 fields, so dating a piece never makes it look changed to extraction. The schema
 is strict, so an older LTM cannot read a vault that holds these fields.
+
+Importing a chat piece dates it from what the Engine saved for the piece's own
+messages, with no model call (`stampPieceStoryTime` in `sources/interop.ts`). A
+Conversation piece gets the real date of its first message, and of its last when
+the day differs, in the server's time zone. A Roleplay or Game piece gets the
+first and last World State date or time saved on its messages
+(`listGameStates`). An Engine without that API offers only the newest snapshot
+(`getGameState`), which dates the piece that holds its message when it was
+saved on the swipe that message shows now. A Game piece
+with no World State date gets the game clock, but only the piece that holds the
+chat's newest message, since the clock stands there. Any other piece stays
+undated; a date is never copied from a neighbouring piece.
 
 ## Write Flow
 
