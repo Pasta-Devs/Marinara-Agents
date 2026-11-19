@@ -1277,6 +1277,27 @@ export interface Beat {
   confrontation?: Confrontation;
   /** #2046: this beat's side-with choice, and the love interest each of its options backs (optionId → LiId). */
   sideWith?: { choice: string; backs: Record<string, LiId> };
+  /**
+   * 0.38.0: what this scene's picks and its read to the end changed in the story state, oldest first, so a Rewrite can
+   * take them back (S/story/rewrite-undo.ts). Hidden from the client.
+   */
+  undo?: StateUndo[];
+}
+
+/**
+ * 0.38.0: one change a scene made to the story state: a pick's effects, or its read to the end. `before` and `after`
+ * hold the parts of RunState it changed (`lis` and `chapters` by id, other fields whole). `blocked` says why a Rewrite
+ * cannot take it back: a read that moved more than the scene (a stage, a repair, his side, the chapter's end).
+ */
+export interface StateUndo {
+  kind: "pick" | "finish";
+  /** A pick's choice id. */
+  choice?: string;
+  /** The picks whose effects a finish applied (they had none applied before it). */
+  covers?: string[];
+  blocked?: "chapter" | "stage" | "repair" | "his-side" | "clearing";
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
 }
 
 // ── A chapter's climax game, one call: the Confrontation (M2b, P12: three rounds of Press, Hold, Yield or Reveal) or
@@ -1397,7 +1418,10 @@ export type ChapterView = Omit<
  * A beat as the client sees it: without its effects, its stored confrontation (POST .../beats/:i sends a view) or a
  * date's scores.
  */
-export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation" | "scores">;
+export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation" | "scores" | "undo"> & {
+  /** 0.38.0: false when a Rewrite cannot take this scene's picks or read back (S/story/rewrite-undo.ts rewriteBlock). */
+  rewritable?: boolean;
+};
 
 /** GET /runs/:run/art/scene (M2b): what the reader polls while a beat's art is painting. */
 export interface SceneArt {
@@ -1601,6 +1625,8 @@ export interface ReadResult {
    * side now waits in Routes.
    */
   hisSide?: LiId;
+  /** 0.38.0: false once this read moved more than the scene, so a Rewrite cannot take it back. */
+  rewritable?: boolean;
 }
 
 /**

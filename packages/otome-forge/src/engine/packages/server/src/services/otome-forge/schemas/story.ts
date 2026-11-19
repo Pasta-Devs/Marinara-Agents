@@ -21,7 +21,9 @@ import type {
   ForgeChoice,
   HisSideNote,
   Segment,
+  StateUndo,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { rewriteBlock } from "../story/rewrite-undo.js";
 import {
   CLOSER_ENDINGS,
   CLOSER_MOVES,
@@ -336,6 +338,19 @@ export function normalizeChapter(data: unknown): Chapter | null {
   return chapter.nodes.length ? chapter : null;
 }
 
+/** 0.38.0: one change a scene made to the story state (S/story/rewrite-undo.ts), as stored on its beat. */
+const UndoSchema: ZodType<StateUndo> = z.object({
+  kind: z.enum(["pick", "finish"]),
+  choice: z.string().max(40).optional(),
+  covers: z.array(z.string().max(40)).max(8).optional(),
+  blocked: z.enum(["chapter", "stage", "repair", "his-side", "clearing"]).optional(),
+  before: z.record(z.string(), z.unknown()),
+  after: z.record(z.string(), z.unknown()),
+});
+
+/** A beat holds a few picks and one read; more is not a record any Rewrite reads. */
+const UNDO_MAX = 16;
+
 /**
  * A stored beat, or null when there is none (or it has no valid key or index, or no segments; only a node eased off
  * before it was written has none).
@@ -376,6 +391,10 @@ export function normalizeBeat(data: unknown): Beat | null {
       shown: z.literal(true).optional(),
       confrontation: ConfrontationSchema.optional(),
       sideWith: z.object({ choice: short(40), backs: z.record(z.string(), z.string()) }).optional(),
+      undo: (value) => {
+        const entries = validItems(UndoSchema, value, UNDO_MAX);
+        return entries.length ? entries : undefined;
+      },
     },
     () => ({
       key: data.key as string,
@@ -394,7 +413,7 @@ export function normalizeBeat(data: unknown): Beat | null {
     }),
     data,
   );
-  const beat = withoutEmpty(read, "scores");
+  const beat = withoutEmpty(withoutEmpty(read, "scores"), "undo");
   return beat.segments.length || beat.easedOff ? beat : null;
 }
 
@@ -440,6 +459,14 @@ export function toChapterView(chapter: Chapter): ChapterView {
  * scores.
  */
 export function toBeatView(beat: Beat): BeatView {
-  const { effects: _effects, applied: _applied, confrontation: _confrontation, scores: _scores, ...rest } = beat;
-  return rest;
+  const {
+    effects: _effects,
+    applied: _applied,
+    confrontation: _confrontation,
+    scores: _scores,
+    undo: _undo,
+    ...rest
+  } = beat;
+  // 0.38.0: only a scene a Rewrite cannot take back says so.
+  return rewriteBlock(beat) ? { ...rest, rewritable: false } : rest;
 }
