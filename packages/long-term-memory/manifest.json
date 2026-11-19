@@ -82,8 +82,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "19403582d76585edae00a49e59e08754d16e3cf89dc889ee9c2cf99044d25266",
-      "bytes": 1104753
+      "sha256": "3be2b770ea483f4a28654d1f23ae6cd54608884c0669ed89da7311998b889506",
+      "bytes": 1104755
     },
     {
       "path": "assets/onboarding/activity-log-small.webp",

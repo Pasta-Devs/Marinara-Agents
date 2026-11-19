@@ -4224,7 +4224,7 @@ export default function MemoryVault({
                                         <StoryDateLine
                                           key={draft.id}
                                           noteId={draft.id}
-                                          disabled={Boolean(busy)}
+                                          vaultBusy={Boolean(busy)}
                                           onSaved={applyStoryDate}
                                         />
                                       </dd>

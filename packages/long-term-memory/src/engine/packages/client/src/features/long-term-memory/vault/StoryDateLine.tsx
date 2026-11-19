@@ -29,11 +29,11 @@ const normalizeStoryDate = (value: string) => value.replace(/\s+/g, " ").trim();
  */
 export function StoryDateLine({
   noteId,
-  disabled,
+  vaultBusy,
   onSaved,
 }: {
   noteId: string;
-  disabled: boolean;
+  vaultBusy: boolean;
   onSaved: (note: LtmNote) => Promise<void> | void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
@@ -49,7 +49,7 @@ export function StoryDateLine({
     retry: false,
   });
   const data = story.data;
-  const locked = disabled || pending !== null;
+  const locked = vaultBusy || pending !== null;
   const lock = lockedActionProps(locked);
   const next = normalizeStoryDate(value);
 
