@@ -71,9 +71,17 @@ function revertList(current: unknown[], before: unknown[], after: unknown[]): un
     } else if (now.has(key) && was.has(key)) kept.push(revertValue(item, was.get(key), now.get(key)));
     else kept.push(item);
   }
-  // Removed by the change (a list bounded as it grew) and still gone: it comes back.
-  const present = new Set(kept.map(itemKey));
-  for (const [key, item] of was) if (!now.has(key) && !present.has(key)) kept.push(copy(item));
+  // Removed by the change (a list bounded as it grew) and still gone: it comes back where it was: after the item of the
+  // old list before it, else before the one after it, else at its old place.
+  const order = before.map(itemKey);
+  const position = (key: string) => kept.findIndex((item) => itemKey(item) === key);
+  for (const [index, key] of order.entries()) {
+    if (now.has(key) || position(key) >= 0) continue;
+    const previous = order.slice(0, index).reverse().find((other) => position(other) >= 0);
+    const following = order.slice(index + 1).find((other) => position(other) >= 0);
+    const at = previous ? position(previous) + 1 : following ? position(following) : Math.min(index, kept.length);
+    kept.splice(at, 0, copy(was.get(key)));
+  }
   return kept;
 }
 
@@ -106,15 +114,15 @@ function revertValue(current: unknown, before: unknown, after: unknown): unknown
   return current;
 }
 
-/** The state with the parts `from` → `to` reverted (a Rewrite), or redone (`from` and `to` swapped). */
-function apply(state: RunState, from: Record<string, unknown>, to: Record<string, unknown>): RunState {
+/** `state` with the change from `before` to `after` taken out: a Rewrite, or with the two swapped, a redo. */
+function takeOut(state: RunState, before: Record<string, unknown>, after: Record<string, unknown>): RunState {
   const next: Record<string, unknown> = { ...state };
   const current = state as unknown as Record<string, unknown>;
-  for (const key of new Set([...Object.keys(from), ...Object.keys(to)])) {
-    if ((key === "lis" || key === "chapters") && isRecord(from[key]) && isRecord(to[key])) {
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if ((key === "lis" || key === "chapters") && isRecord(before[key]) && isRecord(after[key])) {
       const byId: Record<string, unknown> = { ...(isRecord(current[key]) ? current[key] : {}) };
-      const was = from[key];
-      const now = to[key];
+      const was = before[key];
+      const now = after[key];
       for (const id of new Set([...Object.keys(was), ...Object.keys(now)])) {
         if (!(id in now)) {
           if (!(id in byId)) byId[id] = copy(was[id]);
@@ -126,17 +134,17 @@ function apply(state: RunState, from: Record<string, unknown>, to: Record<string
       }
       next[key] = byId;
     } else {
-      next[key] = revertValue(current[key], from[key], to[key]);
+      next[key] = revertValue(current[key], before[key], after[key]);
     }
   }
   return next as unknown as RunState;
 }
 
 /** `state` with this change taken back. */
-export const revertUndo = (state: RunState, undo: StateUndo): RunState => apply(state, undo.after, undo.before);
+export const revertUndo = (state: RunState, undo: StateUndo): RunState => takeOut(state, undo.before, undo.after);
 
 /** `state` with this change made again: a Rewrite that reverted it and then found its scene changed puts it back. */
-export const redoUndo = (state: RunState, undo: StateUndo): RunState => apply(state, undo.before, undo.after);
+export const redoUndo = (state: RunState, undo: StateUndo): RunState => takeOut(state, undo.after, undo.before);
 
 /**
  * Why this beat cannot be rewritten now, or null when it can. Its picks and its read must each be on record, so a

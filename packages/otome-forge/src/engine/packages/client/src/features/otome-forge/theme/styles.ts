@@ -1870,8 +1870,9 @@ ${R} .of-reader-pill {
   display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px;
   font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
 }
-${R} .of-reader-pill:hover { background: var(--of-surface-strong); }
+${R} .of-reader-pill:not([aria-disabled="true"]):hover { background: var(--of-surface-strong); }
 ${R} .of-reader-pill--ease { color: var(--of-accent-text); }
+${R} .of-reader-pill[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
 /* The middle: the place, the face on stage (or a quiet card for a key image), and toasts. */
 /* A size container: the face and the quiet card fit whatever height the choices or a panel leave them. */
 ${R} .of-reader-stage {

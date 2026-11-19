@@ -742,6 +742,66 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   expect(pageErrors).toEqual([]);
 });
 
+for (const unrecorded of [false, true]) {
+  test(`Otome Hearth 0.38.0: Rewrite stays after a pick${unrecorded ? ", greyed with its reason when the pick can't be taken back" : ""}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const stub = createStoryStub({ memory: MEMORY_READY });
+    await stubRoutes(page, stub);
+    // As the server answers a pick from before 0.38.0, which has no record a Rewrite could take back.
+    await page.route("**/api/otome-forge/**/beats/*/choose", async (route) => {
+      const request = route.request();
+      const { status, json } = stub.answer({
+        method: "POST",
+        path: new URL(request.url()).pathname,
+        body: request.postDataJSON(),
+      });
+      const answer = json as { beat?: Record<string, unknown> };
+      await route.fulfill({
+        status,
+        json: unrecorded && answer.beat ? { ...answer, beat: { ...answer.beat, rewritable: false } } : json,
+      });
+    });
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Choose who leads" }).click();
+    await page
+      .getByRole("dialog", { name: "Who walks with you this chapter?" })
+      .getByRole("button", { name: /Ilvar Thorne/ })
+      .click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    const choice = root.getByRole("group", { name: "What do you do?" });
+    for (let step = 0; step < 8 && !(await choice.isVisible()); step += 1) {
+      await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+      await root.locator(".of-next").click();
+    }
+    await expect(choice).toBeVisible();
+    const rewrite = root.getByRole("button", { name: /^Rewrite this scene|played before Rewrite/u });
+    await setReaderControlsExpanded(root);
+    await expect(rewrite).toBeVisible();
+    await expect(rewrite).toHaveAccessibleName(/^Rewrite this scene and take back your choices in it/u);
+    await setReaderControlsExpanded(root, false);
+    await choice.getByRole("button", { name: "Tell him the truth." }).click();
+    await expect(line(root)).toContainText("I came because you were alone up here.");
+    await setReaderControlsExpanded(root);
+    await expect(rewrite, "a pick no longer hides Rewrite").toBeVisible();
+    if (unrecorded) {
+      await expect(rewrite).toHaveAttribute("aria-disabled", "true");
+      await expect(rewrite).toHaveAccessibleName(
+        "This scene was played before Rewrite could take its choices back, so it can't be rewritten.",
+      );
+      const before = posts(stub, "/beats/0").filter((call) => call.body?.rewrite).length;
+      await rewrite.click();
+      await page.waitForTimeout(200);
+      expect(posts(stub, "/beats/0").filter((call) => call.body?.rewrite)).toHaveLength(before);
+    } else {
+      await expect(rewrite).not.toHaveAttribute("aria-disabled", "true");
+      await expect(rewrite).toHaveAccessibleName(/^Rewrite this scene and take back your choices in it/u);
+    }
+  });
+}
+
 test("Otome Hearth waits: What happened so far… while a chapter is planned, Who said what? while a scene is written", async ({
   page,
 }, testInfo) => {

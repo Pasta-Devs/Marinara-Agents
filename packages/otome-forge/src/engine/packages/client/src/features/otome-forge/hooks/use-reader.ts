@@ -264,6 +264,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
    * end, a Rewrite or an Ease off (holdFor).
    */
   const [held, setHeld] = useState<LiId | null>(null);
+  /** 0.38.0: the version of the beat (refBase) whose read to the end moved more than the scene, so no Rewrite. */
+  const [readMovedOn, setReadMovedOn] = useState<string | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [starred, setStarred] = useState<ReadonlySet<string>>(() => new Set());
   /** The read (position id) whose Confrontation ending card is showing. */
@@ -464,13 +466,15 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       setLoad({ status: "ready", node, beat: next, confrontation: shown });
       setPosition(openPosition(next, node, false, protagonist));
       refreshStory();
+      // 0.38.0: the old scene's picks and read were taken back: affection, Starlight and levels follow.
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
     } catch (error) {
       if (controller.signal.aborted) return;
       setLoad(rewriteFrom.current);
       rewriteFrom.current = null;
       if (!holdFor(error)) setNotice(otome.errorMessage(error));
     }
-  }, [base, holdFor, node, otome, protagonist, ready, refreshStory]);
+  }, [base, holdFor, node, otome, protagonist, queryClient, ready, refreshStory, runKey]);
 
   // ── Reading progress ──
 
@@ -518,6 +522,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         .post<ReadResult>(`${base}/beats/${node}/read`, { segment })
         .then((result) => {
           applyRead(result);
+          if (result.rewritable === false) setReadMovedOn(refBase);
           if (end) setHeld(null);
           return true;
         })
@@ -1112,17 +1117,26 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   // `locked`.
   const heldBy = held ?? (load?.status === "failed" ? ruptureHold(otomeErrorCode(load.error), detail?.chapter) : null);
 
+  // 0.38.0: Rewrite shows for the scene on screen while its chapter is open, after its picks and its read to the end too
+  // (the server takes them back, S/story/rewrite-undo.ts). It is greyed, saying why, when the server cannot.
   const canRewrite =
     !preparingBackground &&
     !heldBy &&
     !!ready &&
     !!position &&
     !position.replay &&
-    // Read to its end, the beat is canon (the server refuses); a choice still waiting at the last line keeps it open.
-    !(position.ended && !pendingChoice) &&
+    !finished &&
     !ready.beat.easedOff &&
-    !ready.beat.choices.some((choice) => canonOption(ready.beat, choice)) &&
     !(detail?.beats ?? []).some((item) => item.i > ready.node && item.state === "read");
+  const rewriteBlocked: "stance" | "moved" | "unrecorded" | null = !canRewrite
+    ? null
+    : ready?.confrontation?.rounds.some((round) => round.picked)
+      ? "stance"
+      : readMovedOn === refBase
+        ? "moved"
+        : ready?.beat.rewritable === false
+          ? "unrecorded"
+          : null;
 
   // Ease off is there for every node not yet finished, until its end is saved: while its scene is read, opened or
   // written, and after a Cancel or a failure (the server cuts a node with no beat before its first line). A node read
@@ -1180,6 +1194,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     canEaseOff,
     veil,
     canRewrite,
+    rewriteBlocked,
     rewrite,
     cancel,
     retry,

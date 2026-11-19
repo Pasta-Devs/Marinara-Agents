@@ -1407,7 +1407,7 @@ export async function serveBeat(
         if (block) throw conflict(REWRITE_REFUSED[block]);
         // The scene after one read to its end is dropped, so it must not have been played into.
         const following = finished ? await readBeat(deps.store, runId, key, i + 1) : null;
-        if (following && (hasCanon(following) || following.readThrough > 0 || following.easedOff)) {
+        if (following && (following.shown || hasCanon(following) || following.readThrough > 0 || following.easedOff)) {
           throw conflict(REWRITE_REFUSED.later);
         }
         await dropBeatsAfter(deps, runId, chapter, i);
@@ -1427,8 +1427,9 @@ export async function serveBeat(
       );
     }
   }
-  if (!beat.shown && chapter.kind === "route") {
-    // On screen from now on (ruptureHolds): a beat the lookahead wrote is not, until it is served.
+  if (!beat.shown) {
+    // On screen from now on: a beat the lookahead wrote is not, until it is served. A rupture opens no route beat that
+    // was never shown (ruptureHolds), and 0.38.0's Rewrite of the scene before it stops once it is.
     beat =
       (await deps.store.updateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (current) =>
         current && !current.shown ? { ...current, shown: true as const } : current,
