@@ -11,6 +11,7 @@ import type { WordleMark, WordlePublicRow } from "../../../../shared/src/feature
 import { useChatStore } from "../../stores/chat.store";
 import { useWordleGameStore } from "../../stores/wordle-game.store";
 import { useResignWordle, useWordleMove, useWordleState } from "../../hooks/use-wordle";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 
 interface Props {
   chatId: string;
@@ -147,7 +148,8 @@ export function WordleBoard({ chatId }: Props) {
               const question = you?.rows.length
                 ? "End today's Wordle? Your go for today still counts."
                 : "End today's Wordle? You haven't guessed yet, so you can still play today's word later.";
-              if (view.status === "finished" || window.confirm(question)) resign.mutate();
+              if (view.status === "finished") resign.mutate();
+                else void showConfirmDialog({ title: "End game", message: question, confirmLabel: "End game", tone: "destructive" }).then((ok) => ok && resign.mutate());
             }}
             className="rounded p-1 text-[var(--muted-foreground)] hover:bg-[var(--muted)] active:scale-90"
             title={view.status === "finished" ? "Close" : "End game"}

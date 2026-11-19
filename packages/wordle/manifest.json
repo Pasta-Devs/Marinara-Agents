@@ -10,7 +10,7 @@
   },
   "id": "wordle",
   "name": "Wordle",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
   "engine": {
     "min": "2.5.1",
@@ -52,8 +52,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "f160804de32769bc71fd29e258820a1075dfc99840c55991b7eae03274d09336",
-      "bytes": 160427
+      "sha256": "f1a543b20f3fe660731db8aa1c38022bc7e694140f709a8d281002d48ee3dffc",
+      "bytes": 34104
     }
   ],
   "permissions": [

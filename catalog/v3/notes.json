@@ -76,6 +76,12 @@
     "blackjack": {
       "versions": [
         {
+          "version": "1.0.2",
+          "date": "2026-11-19",
+          "notes": "- Changed: \"End game\" asks in Marinara's own dialog in place of the browser's.",
+          "highlight": false
+        },
+        {
           "version": "1.0.1",
           "date": "2026-11-15",
           "notes": "- Fixed: the setup screen lists characters by name again on Marinara Engine versions that load the character list one page at a time. (#2318)",
@@ -1104,6 +1110,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.28",
+          "date": "2026-11-19",
+          "notes": "- Changed: the search fields on the Backstage Creators, Prompts and Continuity pages are now Marinara's own search field. Escape clears the text first, and a button clears it.\n- Needs a Marinara Engine with capability API 1.832 or newer; an older Engine does not load this version.",
+          "highlight": false
+        },
+        {
           "version": "0.4.27",
           "date": "2026-11-17",
           "notes": "- Changed: 23 copied helpers now come from two shared modules, `slp-hash.ts` and `slp-coerce.ts`, with the same output. A new regression freezes the hash values, so stored picks and rotations stay put.\n- Changed: the drama service uses the drama cast's `pairKey`, and earnings call `slurpDayKey` directly. No behaviour changes.",
@@ -1216,12 +1228,6 @@
           "date": "2026-10-29",
           "notes": "- Creators' posts and DM replies now use what Long-Term Memory remembers about them, through its recall service. A new \"Long-term memory\" choice in Backstage (Engine link) sets whether they get whole memories (the default) or only the parts that fit the post or message. It shows while \"What your other Agents know\" is on.\n- Backstage says when Long-Term Memory is missing, or is not sharing (\"Other Agents can read memories\" is off in its Memory Settings).\n- A DM brings in the persona's memories only when that persona's Slurp page uses Linked identity. A hinted or concealed page never does.\n- The Creator brief no longer reads Long-Term Memory's storage; the Character Tracker, World State and Persona Stats lines are unchanged.",
           "highlight": false
-        },
-        {
-          "version": "0.4.8",
-          "date": "2026-10-28",
-          "notes": "- World lens: the canon-anchor reading also returns `world` (era, device, money, festivals). Cache version v4 → v5, so each card is read once more in the background. A modern card has no lens and nothing changes.\n- The Creator brief (posts, DMs, comment replies, scenes, Stir suggestions, rewritten fan lines) and both live show prompts get one \"Your world\" line for a non-modern lens. Drama and Support desk prompts do not use the brief and are unchanged.\n- Pictures: a non-modern Creator never gets the mirror, desk or screenshot camera source, so no phone or screen appears. The image model gets no world words.\n- Holidays: when events run, a non-modern Creator is told to play them as their world's nearest festival.\n- Culture-shock fans: about 1 in 4 regular fan comments under a non-modern Creator's post comes from a free bank per era.\n- Backstage: the canon-anchor editor shows and edits the world (era, device, money, festivals); a player's fix survives a new reading.",
-          "highlight": false
         }
       ]
     },
@@ -1261,6 +1267,12 @@
     },
     "wordle": {
       "versions": [
+        {
+          "version": "1.1.1",
+          "date": "2026-11-19",
+          "notes": "- Changed: \"End game\" asks in Marinara's own dialog in place of the browser's.",
+          "highlight": false
+        },
         {
           "version": "1.1.0",
           "date": "2026-11-15",

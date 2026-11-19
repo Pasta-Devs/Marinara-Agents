@@ -31,6 +31,8 @@ export const HOST_CLIENT_PATHS = [
   "components/ui/Switch.tsx",
   "components/ui/Checkbox.tsx",
   "components/ui/Spinner.tsx",
+  "components/ui/Tabs.tsx",
+  "components/ui/SearchInput.tsx",
 ];
 
 const CLIENT_SOURCE = "packages/client/src/";
