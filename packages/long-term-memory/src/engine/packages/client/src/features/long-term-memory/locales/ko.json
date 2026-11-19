@@ -1706,7 +1706,7 @@
   "ui.longTermMemory.lastinjectionsummary.raiseLimit": "한도 올리기",
   "ui.longTermMemory.storyDates.title": "이야기 속 날짜 찾기",
   "ui.longTermMemory.storyDates.text": "채팅 기억에 이야기 속 날짜를 붙여요. 저장된 정보나 글 속 표현에서 찾아요. 남길 것은 직접 고르세요.",
-  "ui.longTermMemory.storyDates.confirm": "채팅 조각의 텍스트가 추출 모델로 전송돼요. World State, 게임 시계, 메시지 날짜로 날짜가 정해진 조각은 전송되지 않아요.",
+  "ui.longTermMemory.storyDates.confirm": "채팅 조각과 채팅 요약의 텍스트가 추출 모델로 전송돼요. World State, 게임 시계, 메시지 날짜로 날짜가 정해진 항목은 전송되지 않아요.",
   "ui.longTermMemory.storyDates.checking": "채팅을 읽는 중…",
   "ui.longTermMemory.storyDates.scopeOne": "아직 확인하지 않은 채팅 조각 {{count}}개예요.",
   "ui.longTermMemory.storyDates.scopeOther": "아직 확인하지 않은 채팅 조각 {{count}}개예요.",

@@ -212,7 +212,7 @@ replaces the whole vault and the settings, so it drops the open draft and the se
 (Memory Settings refills its forms when it opens). Their results are toasts; the Restore preview stays in the panel.
 The same menu holds Tidy with AI, Link memories, People and Find story dates (`onboarding/FindStoryDates.tsx`,
 `data-ltm-vault-story-dates`). Find story dates opens a dialog like Tidy with AI's. It shows the connection it will use
-and how many chat pieces are not checked yet. Start reads one batch. Each row names its piece, then
+and how many chat pieces are not checked yet (a chat summary counts and is listed as a piece). Start reads one batch. Each row names its piece, then
 `date · where from · "quote"`, and each time jump reads `"quote" → +3 weeks → Day 23 · Friday`, with "(implied)" for a
 new morning the text implies. Leave out drops a row from the save, and a folded list shows what the checks dropped, with
 the reason. Save writes the kept rows, a toast gives the counts, and Check the next batch reads the next batch.

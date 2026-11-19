@@ -311,6 +311,31 @@ async function main() {
     asOf: true,
     sourceNoteIds: ["source_wren_2"],
   });
+  // A chat summary is counted on its own: its jump is not added to the pieces over the same messages, and the pieces'
+  // jumps are not added to it. One without a message range is not worked out on its own, whatever the pieces say.
+  const summaryNote = (id: string, range: string | null, text: string, extra: object = {}) =>
+    chatPiece(id, "chat-s", range ?? "last 20", text, {
+      provenance: { kind: "chat_summary", sourceId: "chat-s", entryId: `${id}-entry` },
+      tags: [],
+      ...extra,
+    });
+  const summaryNotes = [
+    chatPiece("source_s_1", "chat-s", "1-10", "Start.", scanned("Start.", [day(1)])),
+    chatPiece("source_s_2", "chat-s", "11-20", "Later.", scanned("Later.", [day(1)])),
+    summaryNote("source_sum_ranged", "1-20", "Summary.", scanned("Summary.", [day(5)])),
+    summaryNote("source_sum_open", null, "Open summary.", scanned("Open summary.", [day(2)])),
+    summaryNote("source_sum_dated", null, "Dated summary.", {
+      storyTime: { start: { date: "20 Frostmonth" }, origin: "world_state" },
+    }),
+  ];
+  const summaryById = new Map(summaryNotes.map((note) => [note.id, note]));
+  const endOf = (id: string) => formatStoryPosition(resolveStoryTime(summaryById.get(id)!, summaryById).end);
+  assert.deepEqual(
+    ["source_s_2", "source_sum_ranged", "source_sum_open", "source_sum_dated"].map(endOf),
+    ["Day 3", "Day 6", "not worked out yet", "20 Frostmonth"],
+    "pieces and a ranged summary are counted apart; a summary with no range holds only a date it was given",
+  );
+
   // A memory drawing on two chats is dated from the chat of its newest contribution.
   const mixed = memory("char_wren_mixed", "character", [
     contribution("source_wren_3", "2026-11-19T01:00:00.000Z"),
@@ -507,6 +532,7 @@ async function findStoryDates({ hash, resolveStoryTime, formatStoryPosition }: a
     ],
     ["chat-wren", ["w1", "w2", "w3", "w4"].map((id) => message("chat-wren", id))],
   ]);
+  const gameStates = new Map<string, object[]>();
   const releaseHost = configurePackageRuntime({
     dataDir,
     logger: { debug() {}, info() {}, warn() {}, error() {} },
@@ -515,6 +541,7 @@ async function findStoryDates({ hash, resolveStoryTime, formatStoryPosition }: a
       getChat: async (id: string) => chats.find((entry) => entry.id === id) ?? null,
       listChats: async () => chats,
       listMessages: async (id: string) => messages.get(id) ?? [],
+      listGameStates: async (id: string) => gameStates.get(id) ?? [],
     },
   } as never);
   const storage = new LongTermMemoryStorage(root);
@@ -790,6 +817,134 @@ async function findStoryDates({ hash, resolveStoryTime, formatStoryPosition }: a
       assert.ok(log.includes("story_dates_chunk") && log.includes("story_dates_apply"));
       for (const text of [...texts, kitchen, "Frostfall"])
         assert.ok(!log.includes(text), `the debug log must not hold piece text: ${text}`);
+
+      // Chat summaries: one that says which messages it covers, or names its day, is dated by the Engine like a piece.
+      const vault = "The vault opened.";
+      const tide = "The tide turned.";
+      chats.push(
+        {
+          ...chat("chat-sums", "roleplay"),
+          metadata: {
+            summaryEntries: [
+              { id: "sum-a", content: vault, rangeStartIndex: 1, rangeEndIndex: 2 },
+              { id: "sum-b", content: `${tide} It was rewritten.`, rangeStartIndex: 3, rangeEndIndex: 4 },
+              { id: "sum-c", content: "The harbour froze.", rangeStartIndex: 1, rangeEndIndex: 2 },
+              { id: "sum-last", content: "A last-N summary.", messageCount: 20 },
+            ],
+          },
+        },
+        {
+          ...chat("chat-days", "conversation"),
+          metadata: { daySummaries: { "28.10.2026": { summary: "Tea." } }, weekSummaries: { "26.10.2026": "A week." } },
+        },
+      );
+      messages.set(
+        "chat-sums",
+        ["s1", "s2", "s3", "s4"].map((id) => message("chat-sums", id)),
+      );
+      gameStates.set("chat-sums", [
+        { messageId: "s1", swipeIndex: 0, date: "14 Frostmonth", time: null },
+        { messageId: "s2", swipeIndex: 0, date: "15 Frostmonth", time: null },
+      ]);
+      const createSummary = async (chatId: string, entryId: string, range: string, text: string) =>
+        storage.createNote({
+          id: `source_${(counter++).toString(16).padStart(8, "0")}`,
+          title: `${chatId}, msgs ${range}`,
+          type: "source",
+          modes: ["roleplay"],
+          scope: { chatId, chatIds: [chatId] },
+          tags: ["imported_chat_summary"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_summary", sourceId: chatId, entryId },
+          sections: {
+            source: { text, updatedAt: timestamp, evidence: [`chat:${chatId}`, `message_range:${range}`] },
+          },
+        });
+      const sumA = await createSummary("chat-sums", "sum-a", "1-2", vault);
+      const sumB = await createSummary("chat-sums", "sum-b", "3-4", tide);
+      const sumC = await createSummary("chat-sums", "sum-c", "5-6", "The harbour froze.");
+      const sumLast = await createSummary("chat-sums", "sum-last", "last 20", "A last-N summary.");
+      const day28 = await createSummary("chat-days", "day:28.10.2026", "28.10.2026", "Tea.");
+      const week26 = await createSummary("chat-days", "week:26.10.2026", "26.10.2026", "A week.");
+      const scoped = await scopeLtmStoryDates({ storage });
+      assert.deepEqual(
+        scoped.chats.filter((entry: any) => ["chat-sums", "chat-days"].includes(entry.chatId)),
+        [
+          { chatId: "chat-days", dated: 0, checked: 0, notChecked: 2 },
+          { chatId: "chat-sums", dated: 0, checked: 0, notChecked: 4 },
+        ],
+        "summaries are listed with the pieces",
+      );
+      const engineRow = (note: any, text: string) => ({ kind: "engine", noteId: note.id, sourceHash: hash(text) });
+      const summaryApply = await applyLtmStoryDates({
+        root,
+        storage,
+        rows: [
+          engineRow(sumA, vault),
+          engineRow(sumB, tide),
+          engineRow(sumC, "The harbour froze."),
+          engineRow(sumLast, "A last-N summary."),
+          engineRow(day28, "Tea."),
+          engineRow(week26, "A week."),
+        ],
+        rebuild,
+      });
+      assert.deepEqual(summaryApply.applied.sort(), [sumA.id, day28.id, week26.id].sort());
+      assert.deepEqual(
+        summaryApply.skipped.map((entry: any) => [entry.noteId, entry.reason]).sort(),
+        [
+          [sumB.id, "no_engine_date"],
+          [sumC.id, "no_engine_date"],
+          [sumLast.id, "no_engine_date"],
+        ].sort(),
+        "a summary the chat rewrote, renumbered or never numbered is not dated by the Engine",
+      );
+      const stampOf = async (note: any) => (await storage.getNote(note.id))?.storyTime;
+      assert.deepEqual(
+        [await stampOf(sumA), await stampOf(day28), await stampOf(week26)].map(
+          (stamp: any) => stamp && { start: stamp.start, end: stamp.end, origin: stamp.origin },
+        ),
+        [
+          { start: { date: "14 Frostmonth" }, end: { date: "15 Frostmonth" }, origin: "world_state" },
+          { start: { date: "2026-10-28" }, end: undefined, origin: "message_time" },
+          { start: { date: "2026-10-26" }, end: { date: "2026-11-01" }, origin: "message_time" },
+        ],
+      );
+      const afterSummaries = await scopeLtmStoryDates({ storage });
+      assert.deepEqual(
+        afterSummaries.chats.filter((entry: any) => ["chat-sums", "chat-days"].includes(entry.chatId)),
+        [
+          { chatId: "chat-days", dated: 2, checked: 0, notChecked: 0 },
+          { chatId: "chat-sums", dated: 1, checked: 0, notChecked: 3 },
+        ],
+      );
+
+      // The preview counts a summary and the pieces over the same messages apart, as the Vault does: the piece has no date
+      // of its own, so its jump reaches Day 4 with no weekday, and the summary's jump is not carried into it (one walk
+      // over both would reach Day 7).
+      const shipPiece = await createPiece("chat-reach", 2, "r2", "The ship left the quay. Three days later it docked.");
+      const shipSummary = await createSummary(
+        "chat-reach",
+        "sum-ship",
+        "1-2",
+        "Thursday morning, the ship left. Three days later it docked.",
+      );
+      answers["The ship left the quay. Three days later it docked."] = {
+        stated: null,
+        jumps: [jump("Three days later", 3, "day")],
+      };
+      answers["Thursday morning, the ship left. Three days later it docked."] = {
+        stated: { date: "Thursday", time: "morning", quote: "Thursday morning" },
+        jumps: [jump("Three days later", 3, "day")],
+      };
+      const reachPreview = await previewLtmStoryDates({ root, storage, languageModel: model, complete: answering });
+      const reachOf = (id: string) => (reachPreview.pieces.find((row: any) => row.noteId === id) as any)?.reaches;
+      assert.deepEqual(
+        [reachOf(shipSummary.id), reachOf(shipPiece.id)],
+        [["Day 4 · Sunday"], ["Day 4"]],
+        "a summary and the pieces over its messages are counted apart in the preview",
+      );
 
       assert.ok(!ltmStoryDatesApplyRequestSchema.safeParse({ rows: [] }).success);
       const row = { kind: "engine", noteId: talk.id, sourceHash: hash(kitchen) };

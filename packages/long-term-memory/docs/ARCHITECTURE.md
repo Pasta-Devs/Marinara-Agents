@@ -132,6 +132,15 @@ with no World State date gets the game clock, but only the piece that holds the
 chat's newest message, since the clock stands there. Any other piece stays
 undated; a date is never copied from a neighbouring piece.
 
+A chat summary (`chat_summary` source note) is dated the same way when it says which messages it covers
+(`stampSummaryStoryTime`): a numbered summary takes the date of the messages in its range by the rules above, a
+Conversation day summary takes its day, and a week summary takes the seven days from the Monday in its key. A summary
+with no range ("last N", an agent summary, an old single summary, a Game session summary) stays undated at import; Find
+story dates can still read its text. The messages are loaded only for an imported summary, once per chat, and a failed
+read leaves the summary undated without failing the import. `persistence/story-time.ts` counts the transcript pieces,
+the ranged summaries and each rangeless summary as separate walks, so a time jump is never counted twice. Find story
+dates gives a summary an Engine date only while the chat still holds the entry with the same id, text and range.
+
 Find story dates (`maintenance/story-dates.ts`, routes `GET
 /story-dates/scope`, `POST /story-dates/preview` and `POST /story-dates/apply`)
 dates the pieces already in the vault. It runs like Tidy with AI: the preview

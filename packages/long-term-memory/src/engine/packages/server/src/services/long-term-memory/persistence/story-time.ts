@@ -7,10 +7,10 @@ import type {
   LtmStoryTimeUnit,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { textHashForLtmSourceMaterial } from "../extraction/source-hash.js";
-import { ltmSourceLastMessageNumber } from "../identity/chat-scope.js";
+import { ltmSourceLastMessageNumber, ltmSourceMessageRange } from "../identity/chat-scope.js";
 
-// Story dates: where in the story a chat piece or a memory happened. Pure functions, no I/O. A date keeps the story's
-// own words; the only arithmetic is the day count below.
+// Story dates: where in the story a chat piece (a Chat Messages piece or a chat summary) or a memory happened. Pure
+// functions, no I/O. A date keeps the story's own words; the only arithmetic is the day count below.
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 const WEEKDAY_PATTERN = /\b(sun|mon|tues|wednes|thurs|fri|satur)day\b/i;
@@ -236,14 +236,24 @@ export function formatStoryPosition(position: LtmStoryPosition, dot = " · ") {
 
 export type LtmChatPiece = LtmNote & { provenance: NonNullable<LtmNote["provenance"]> };
 
-// An archived piece is left out of the count, so a piece the user archived unscanned does not stop the chat's count.
+// A chat piece is a Chat Messages piece or a chat summary. An archived piece is left out of the count, so a piece the
+// user archived unscanned does not stop the chat's count.
 export function isChatPiece(note: LtmNote | undefined): note is LtmChatPiece {
-  return note?.type === "source" && note.status !== "archived" && note.provenance?.kind === "chat_transcript";
+  return (
+    note?.type === "source" &&
+    note.status !== "archived" &&
+    (note.provenance?.kind === "chat_transcript" || note.provenance?.kind === "chat_summary")
+  );
 }
 
+// A numbered summary stands at its first message; a summary with no range sorts after every piece that has one.
 export function pieceOrder(note: LtmChatPiece): [number, number] {
   const part = /:part:(\d+)$/.exec(note.provenance.entryId ?? "");
-  return [ltmSourceLastMessageNumber(note) ?? Number.MAX_SAFE_INTEGER, part ? Number(part[1]) : 1];
+  return [
+    (note.provenance.kind === "chat_summary" ? ltmSourceMessageRange(note)?.first : ltmSourceLastMessageNumber(note)) ??
+      Number.MAX_SAFE_INTEGER,
+    part ? Number(part[1]) : 1,
+  ];
 }
 
 export function byPieceOrder(left: LtmChatPiece, right: LtmChatPiece) {
@@ -255,25 +265,51 @@ export function byPieceOrder(left: LtmChatPiece, right: LtmChatPiece) {
 /** Each chat's count by piece id, so a caller resolving many notes counts each chat once. */
 export type LtmStoryDayCounts = Map<string, Map<string, LtmStoryDayResult>>;
 
+// A chat can hold Chat Messages pieces and summaries of the same messages, so each kind is counted on its own: one walk
+// over both would count a time jump twice. A summary with no range has no place among the messages, so it stands alone
+// and shows only a date it holds.
+/** Which of a chat's walks a piece belongs to: its messages, its ranged summaries, or a rangeless summary alone. */
+export function chatPieceWalk(note: LtmChatPiece) {
+  return note.provenance.kind === "chat_transcript"
+    ? "messages"
+    : ltmSourceMessageRange(note)
+      ? "summaries"
+      : `summary:${note.id}`;
+}
+
 function countChat(chatId: string, notes: Iterable<LtmNote>) {
-  const pieces = [...notes]
-    .filter((note): note is LtmChatPiece => isChatPiece(note) && note.provenance.sourceId === chatId)
-    .sort(byPieceOrder);
-  return new Map(
-    countStoryDays(
-      pieces.map((note) => ({
+  const walks = new Map<string, LtmChatPiece[]>();
+  for (const note of notes) {
+    if (!isChatPiece(note) || note.provenance.sourceId !== chatId) continue;
+    const key = chatPieceWalk(note),
+      walk = walks.get(key) ?? [];
+    walk.push(note);
+    walks.set(key, walk);
+  }
+  const results = new Map<string, LtmStoryDayResult>();
+  for (const [key, walk] of walks) {
+    const days = countStoryDays(
+      walk.sort(byPieceOrder).map((note) => ({
         id: note.id,
         sourceHash: textHashForLtmSourceMaterial({ sourceText: note.sections.source?.text ?? "" }),
         ...(note.storyTime ? { storyTime: note.storyTime } : {}),
         ...(note.storyTimeScan ? { storyTimeScan: note.storyTimeScan } : {}),
       })),
-    ).map((result) => [result.id, result]),
-  );
+    );
+    for (const result of days)
+      results.set(
+        result.id,
+        key.startsWith("summary:") && result.start.kind === "counted" && result.start.anchor === null
+          ? { id: result.id, start: UNKNOWN, end: UNKNOWN, steps: [] }
+          : result,
+      );
+  }
+  return results;
 }
 
 // The chat pieces behind a memory's section contributions, in message order.
-// ponytail: a memory drawing on pieces of several chats is dated from the chat of its newest contribution, since each
-// chat counts on its own. Upgrade path: one count across a branch and its parent.
+// ponytail: a memory drawing on pieces of several chats, or on both messages and summaries, is dated from the chat and
+// kind of its newest contribution, since each counts on its own. Upgrade path: one count across a branch and its parent.
 function contributingPieces(note: LtmNote, sourceNotesById: ReadonlyMap<string, LtmNote>) {
   const updatedAt = new Map<string, string>();
   for (const section of Object.values(note.sections))
@@ -288,7 +324,12 @@ function contributingPieces(note: LtmNote, sourceNotesById: ReadonlyMap<string, 
   const newest = pieces.reduce((latest, piece) =>
     Date.parse(updatedAt.get(piece.id)!) > Date.parse(updatedAt.get(latest.id)!) ? piece : latest,
   );
-  return pieces.filter((piece) => piece.provenance.sourceId === newest.provenance.sourceId).sort(byPieceOrder);
+  return pieces
+    .filter(
+      (piece) =>
+        piece.provenance.sourceId === newest.provenance.sourceId && piece.provenance.kind === newest.provenance.kind,
+    )
+    .sort(byPieceOrder);
 }
 
 export type LtmResolvedStoryTime = {

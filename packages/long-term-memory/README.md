@@ -42,9 +42,9 @@ the last reply in the open chat used. It works at phone width, in both themes an
 [`docs/UI.md`](docs/UI.md) for the details.
 
 Each memory shows its story date (where it sits in the story's timeline) and where that date came from, and you can
-type your own. Find story dates, in the Vault's ⋯ menu, dates the chat pieces that have no date yet: it reads what the
-Engine saved (World State, the game clock, message times) and asks the AI for dates and time jumps in the text, and
-you choose which rows to save. Timeline memories reach the AI with their dates.
+type your own. Find story dates, in the Vault's ⋯ menu, dates the chat pieces and chat summaries that have no date
+yet: it reads what the Engine saved (World State, the game clock, message times) and asks the AI for dates and time
+jumps in the text, and you choose which rows to save. Timeline memories reach the AI with their dates.
 
 ## Source Layout
 
