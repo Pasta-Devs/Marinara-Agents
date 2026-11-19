@@ -90,6 +90,7 @@ import {
   buildScopeMemoryPresence,
   deriveScopeBranchChats,
   deriveScopeConversations,
+  indexById,
   uniqueById,
 } from "../scope-targets";
 import type { AvailabilityChatTarget } from "../AvailabilityTabRail";
@@ -958,23 +959,24 @@ export default function MemoryVault({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- linkContextNotes derives from notes.data
     [draft?.id, draft?.links, notes.data?.linkContext, memoryLabel, locale],
   );
+  // Id -> label lookups, so the search index below costs one `get` per subject, not a scan of the whole library.
+  const subjectLabelsByKind = useMemo(
+    () => ({
+      character: indexById(scopeTargets.data?.characters ?? []),
+      persona: indexById(scopeTargets.data?.personas ?? []),
+      local_character: indexById(localCharacters.data ?? []),
+    }),
+    [localCharacters.data, scopeTargets.data?.characters, scopeTargets.data?.personas],
+  );
   const subjectSearchLabel = useCallback(
     (subject: LtmSubject) => {
       if (!subject.ref) return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
-      const targets =
-        subject.ref.kind === "character"
-          ? scopeTargets.data?.characters
-          : subject.ref.kind === "persona"
-            ? scopeTargets.data?.personas
-            : subject.ref.kind === "local_character"
-              ? localCharacters.data
-              : [];
       return (
-        targets?.find((target) => target.id === subject.ref!.id)?.label ??
+        subjectLabelsByKind[subject.ref.kind as keyof typeof subjectLabelsByKind]?.get(subject.ref.id)?.label ??
         localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject")
       );
     },
-    [localCharacters.data, localizeUi, scopeTargets.data],
+    [localizeUi, subjectLabelsByKind],
   );
   // The list filters with a deferred copy of the search, so the field updates at once and React
   // renders the filtered rows in the background, dropping that render when another key arrives.
@@ -1137,45 +1139,50 @@ export default function MemoryVault({
     ? linkContextNotes.filter((note) => note.links.some((link) => link.target === draft.id))
     : [];
   const outgoingLinks = draft?.links.filter((link) => link.relation !== "extracted_from") ?? [];
-  const targets: Target[] = uniqueById([
-    {
-      id: "all",
-      label: localizeUi("ui.longTermMemory.memoryvault.allMemories"),
-    },
-    ...(props.chatId
-      ? [
-          {
-            id: `chat:${props.chatId}`,
-            label: props.chatName ?? localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-            scope: { chatId: props.chatId, chatIds: [props.chatId] },
-          },
-        ]
-      : []),
-    ...(scopeTargets.data?.chats ?? []).map((chat) => ({
-      id: `chat:${chat.id}`,
-      label: chat.label,
-      chatName: chat.chatName,
-      scope: { chatId: chat.id, chatIds: [chat.id] },
-    })),
-    ...(scopeTargets.data?.groups ?? []).map((group) => ({
-      id: `group:${group.id}`,
-      label: localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
-        group: group.label,
-      }),
-      scope: { groupId: group.id },
-    })),
-    ...(scopeTargets.data?.characters ?? []).map((character) => ({
-      id: `character:${character.id}`,
-      label: character.label,
-      scope: { characterIds: [character.id] },
-    })),
-    ...(scopeTargets.data?.personas ?? []).map((persona) => ({
-      id: `persona:${persona.id}`,
-      label: persona.label,
-      comment: persona.comment,
-      scope: { personaId: persona.id },
-    })),
-  ]);
+  const targets = useMemo<Target[]>(
+    () =>
+      uniqueById([
+        {
+          id: "all",
+          label: localizeUi("ui.longTermMemory.memoryvault.allMemories"),
+        },
+        ...(props.chatId
+          ? [
+              {
+                id: `chat:${props.chatId}`,
+                label: props.chatName ?? localizeUi("ui.longTermMemory.memoryvault.currentChat"),
+                scope: { chatId: props.chatId, chatIds: [props.chatId] },
+              },
+            ]
+          : []),
+        ...(scopeTargets.data?.chats ?? []).map((chat) => ({
+          id: `chat:${chat.id}`,
+          label: chat.label,
+          chatName: chat.chatName,
+          scope: { chatId: chat.id, chatIds: [chat.id] },
+        })),
+        ...(scopeTargets.data?.groups ?? []).map((group) => ({
+          id: `group:${group.id}`,
+          label: localizeUi("ui.longTermMemory.memoryvault.groupBranches", {
+            group: group.label,
+          }),
+          scope: { groupId: group.id },
+        })),
+        ...(scopeTargets.data?.characters ?? []).map((character) => ({
+          id: `character:${character.id}`,
+          label: character.label,
+          scope: { characterIds: [character.id] },
+        })),
+        ...(scopeTargets.data?.personas ?? []).map((persona) => ({
+          id: `persona:${persona.id}`,
+          label: persona.label,
+          comment: persona.comment,
+          scope: { personaId: persona.id },
+        })),
+      ]),
+    [localizeUi, props.chatId, props.chatName, scopeTargets.data],
+  );
+  const targetsById = useMemo(() => indexById(targets), [targets]);
   const scopeIndexes = useMemo(() => buildScopeIndexes(scopeTargets.data?.chats ?? []), [scopeTargets.data?.chats]);
   const currentChat = props.chatId ? scopeIndexes.chatsById.get(props.chatId) : undefined;
   const selectedChat =
@@ -1203,130 +1210,180 @@ export default function MemoryVault({
       ),
     [localizeUi, scopeIndexes, scopeChats, scopeGroups],
   );
-  const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
-    targets.find((candidate) => candidate.id === `character:${character.id}`)!,
+  const characterScopeTargets = useMemo(
+    () => (scopeTargets.data?.characters ?? []).map((character) => targetsById.get(`character:${character.id}`)!),
+    [scopeTargets.data?.characters, targetsById],
   );
-  const currentCharacterTarget: Target | null = currentChat?.characterIds.length
-    ? {
-        id: `character:${currentChat.characterIds[0]}`,
-        label:
-          characterScopeTargets.find((candidate) => candidate.id === `character:${currentChat.characterIds[0]}`)
-            ?.label ?? localizeUi("ui.longTermMemory.memoryvault.current"),
-        scope: { characterIds: [currentChat.characterIds[0]] },
-      }
-    : null;
-  const pickerCharacterScopeTargets = uniqueById([
-    ...(currentCharacterTarget ? [currentCharacterTarget] : []),
-    ...characterScopeTargets,
-  ]);
+  const currentCharacterTarget = useMemo<Target | null>(
+    () =>
+      currentChat?.characterIds.length
+        ? {
+            id: `character:${currentChat.characterIds[0]}`,
+            label:
+              targetsById.get(`character:${currentChat.characterIds[0]}`)?.label ??
+              localizeUi("ui.longTermMemory.memoryvault.current"),
+            scope: { characterIds: [currentChat.characterIds[0]] },
+          }
+        : null,
+    [currentChat, localizeUi, targetsById],
+  );
+  const pickerCharacterScopeTargets = useMemo(
+    () => uniqueById([...(currentCharacterTarget ? [currentCharacterTarget] : []), ...characterScopeTargets]),
+    [characterScopeTargets, currentCharacterTarget],
+  );
   // The primary picker folds the selected character into a place so the place also
   // shows that character's memories. The secondary place stays literal: otherwise
   // its scope becomes "the place OR the primary character" and the AND view
   // collapses back to the primary character alone.
-  const conversationScopeTargetsFor = (characterId: string) =>
-    conversations.map((conversation) => {
-      const [kind, id] = conversation.id.split(/:(.+)/, 2);
-      return {
-        id: conversation.id,
-        label: conversation.label,
-        scope:
-          kind === "group"
-            ? {
-                groupId: id,
-                chatIds: conversation.chatIds,
-                ...(characterId ? { characterIds: [characterId] } : {}),
-              }
-            : {
-                chatId: id,
-                chatIds: [id],
-                ...(characterId ? { characterIds: [characterId] } : {}),
-              },
-      };
-    });
-  const conversationScopeTargets = conversationScopeTargetsFor(selectedCharacterId);
-  const secondaryConversationScopeTargets = conversationScopeTargetsFor("");
-  const currentConversationScopeTarget: Target | null = currentChat
-    ? {
-        id: `chat:${currentChat.id}`,
-        label:
-          conversationScopeTargets.find((candidate) => candidate.id === `chat:${currentChat.id}`)?.label ??
-          props.chatName ??
-          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-        scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
-      }
-    : null;
+  const conversationScopeTargetsFor = useCallback(
+    (characterId: string) =>
+      conversations.map((conversation) => {
+        const [kind, id] = conversation.id.split(/:(.+)/, 2);
+        return {
+          id: conversation.id,
+          label: conversation.label,
+          scope:
+            kind === "group"
+              ? {
+                  groupId: id,
+                  chatIds: conversation.chatIds,
+                  ...(characterId ? { characterIds: [characterId] } : {}),
+                }
+              : {
+                  chatId: id,
+                  chatIds: [id],
+                  ...(characterId ? { characterIds: [characterId] } : {}),
+                },
+        };
+      }),
+    [conversations],
+  );
+  const conversationScopeTargets = useMemo(
+    () => conversationScopeTargetsFor(selectedCharacterId),
+    [conversationScopeTargetsFor, selectedCharacterId],
+  );
+  const secondaryConversationScopeTargets = useMemo(
+    () => conversationScopeTargetsFor(""),
+    [conversationScopeTargetsFor],
+  );
+  const currentConversationScopeTarget = useMemo<Target | null>(
+    () =>
+      currentChat
+        ? {
+            id: `chat:${currentChat.id}`,
+            label:
+              conversationScopeTargets.find((candidate) => candidate.id === `chat:${currentChat.id}`)?.label ??
+              props.chatName ??
+              localizeUi("ui.longTermMemory.memoryvault.currentChat"),
+            scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
+          }
+        : null,
+    [conversationScopeTargets, currentChat, localizeUi, props.chatName, scopeTargets.data?.currentScope],
+  );
   // The secondary place stays literal for the current chat too. Reusing currentScope
   // here would fold the primary character (and persona) into the second place, so
   // "A AND (B OR A)" collapses back to A.
-  const secondaryCurrentConversationScopeTarget: Target | null = currentChat
-    ? {
-        id: `chat:${currentChat.id}`,
-        label:
-          currentConversationScopeTarget?.label ??
-          props.chatName ??
-          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-        scope: chatOnlyLtmScope(currentChat.id),
-      }
-    : null;
-  const personaScopeTargets = targets.filter((candidate) => candidate.id.startsWith("persona:"));
-  const characterComments = new Map(
-    (scopeTargets.data?.characters ?? []).map((character) => [`character:${character.id}`, character.comment]),
+  const secondaryCurrentConversationScopeTarget = useMemo<Target | null>(
+    () =>
+      currentChat
+        ? {
+            id: `chat:${currentChat.id}`,
+            label:
+              currentConversationScopeTarget?.label ??
+              props.chatName ??
+              localizeUi("ui.longTermMemory.memoryvault.currentChat"),
+            scope: chatOnlyLtmScope(currentChat.id),
+          }
+        : null,
+    [currentChat, currentConversationScopeTarget?.label, localizeUi, props.chatName],
+  );
+  const personaScopeTargets = useMemo(
+    () => targets.filter((candidate) => candidate.id.startsWith("persona:")),
+    [targets],
+  );
+  const characterComments = useMemo(
+    () =>
+      new Map(
+        (scopeTargets.data?.characters ?? []).map((character) => [`character:${character.id}`, character.comment]),
+      ),
+    [scopeTargets.data?.characters],
   );
   // One place list for both Vault filters. A chat with branches is one entry whose scope already covers every
   // branch, so memories assigned to a single branch still show under it.
-  const vaultPlaceOptions = (secondary: boolean) => {
-    type VaultPlaceOption = ScopeTarget & { target: Target | null };
-    const place = (kind: ScopeTarget["kind"], candidate: Target, extra: Partial<VaultPlaceOption> = {}) =>
-      ({
-        id: candidate.id,
-        label: candidate.label,
-        comment: candidate.comment,
-        kind,
-        sourceScope: candidate.scope,
-        target: candidate,
-        ...extra,
-      }) satisfies VaultPlaceOption;
-    const current = secondary ? secondaryCurrentConversationScopeTarget : currentConversationScopeTarget;
-    const selected = secondary ? secondaryTarget : target;
-    const kindOf = (id: string) =>
-      id.startsWith("character:") ? "character" : id.startsWith("persona:") ? "persona" : "chat";
-    return uniqueById<VaultPlaceOption>([
-      secondary
-        ? {
-            id: "all",
-            label: localizeUi("ui.longTermMemory.memoryvault.noSecondPlace"),
-            kind: "all",
-            pinned: "all",
-            target: null,
-          }
-        : { ...place("all", targets[0]!), label: localizeUi("ui.longTermMemory.sourcesworkspace.all"), pinned: "all" },
-      ...(current
-        ? [
-            place("chat", current, {
-              label: localizeUi("ui.longTermMemory.memoryvault.current"),
-              comment: current.label,
-              pinned: "current",
-            }),
-          ]
-        : []),
-      ...(secondary ? secondaryConversationScopeTargets : conversationScopeTargets).map((candidate) =>
-        candidate.id.startsWith("group:")
-          ? place("chat", candidate, {
-              comment: localizeUi("ui.longTermMemory.sourcesworkspace.allBranches"),
-              searchText: candidate.scope.chatIds.map((id) => scopeIndexes.chatsById.get(id)?.label ?? id).join(" "),
-            })
-          : place("chat", candidate),
-      ),
-      ...pickerCharacterScopeTargets.map((candidate) =>
-        place("character", candidate, { comment: characterComments.get(candidate.id) }),
-      ),
-      ...personaScopeTargets.map((candidate) => place("persona", candidate)),
-      // A place that has since been deleted stays selectable under its last label.
-      ...(selected && selected.id !== "all" ? [place(kindOf(selected.id), selected)] : []),
-    ]);
-  };
-  const primaryPlaceOptions = vaultPlaceOptions(false);
-  const secondaryPlaceOptions = vaultPlaceOptions(true);
+  const vaultPlaceOptions = useCallback(
+    (secondary: boolean, selected: Target | null) => {
+      type VaultPlaceOption = ScopeTarget & { target: Target | null };
+      const place = (kind: ScopeTarget["kind"], candidate: Target, extra: Partial<VaultPlaceOption> = {}) =>
+        ({
+          id: candidate.id,
+          label: candidate.label,
+          comment: candidate.comment,
+          kind,
+          sourceScope: candidate.scope,
+          target: candidate,
+          ...extra,
+        }) satisfies VaultPlaceOption;
+      const current = secondary ? secondaryCurrentConversationScopeTarget : currentConversationScopeTarget;
+      const kindOf = (id: string) =>
+        id.startsWith("character:") ? "character" : id.startsWith("persona:") ? "persona" : "chat";
+      return uniqueById<VaultPlaceOption>([
+        secondary
+          ? {
+              id: "all",
+              label: localizeUi("ui.longTermMemory.memoryvault.noSecondPlace"),
+              kind: "all",
+              pinned: "all",
+              target: null,
+            }
+          : {
+              ...place("all", targets[0]!),
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.all"),
+              pinned: "all",
+            },
+        ...(current
+          ? [
+              place("chat", current, {
+                label: localizeUi("ui.longTermMemory.memoryvault.current"),
+                comment: current.label,
+                pinned: "current",
+              }),
+            ]
+          : []),
+        ...(secondary ? secondaryConversationScopeTargets : conversationScopeTargets).map((candidate) =>
+          candidate.id.startsWith("group:")
+            ? place("chat", candidate, {
+                comment: localizeUi("ui.longTermMemory.sourcesworkspace.allBranches"),
+                searchText: candidate.scope.chatIds.map((id) => scopeIndexes.chatsById.get(id)?.label ?? id).join(" "),
+              })
+            : place("chat", candidate),
+        ),
+        ...pickerCharacterScopeTargets.map((candidate) =>
+          place("character", candidate, { comment: characterComments.get(candidate.id) }),
+        ),
+        ...personaScopeTargets.map((candidate) => place("persona", candidate)),
+        // A place that has since been deleted stays selectable under its last label.
+        ...(selected && selected.id !== "all" ? [place(kindOf(selected.id), selected)] : []),
+      ]);
+    },
+    [
+      characterComments,
+      conversationScopeTargets,
+      currentConversationScopeTarget,
+      localizeUi,
+      personaScopeTargets,
+      pickerCharacterScopeTargets,
+      scopeIndexes.chatsById,
+      secondaryConversationScopeTargets,
+      secondaryCurrentConversationScopeTarget,
+      targets,
+    ],
+  );
+  // Built once per change of their inputs: each list holds an entry per character, so a keystroke must not rebuild it.
+  const primaryPlaceOptions = useMemo(() => vaultPlaceOptions(false, target), [target, vaultPlaceOptions]);
+  const secondaryPlaceOptions = useMemo(
+    () => vaultPlaceOptions(true, secondaryTarget),
+    [secondaryTarget, vaultPlaceOptions],
+  );
   const memoryPresence = scopeTargets.data?.memoryPresence;
   const hasMemories = useMemo(
     () => (memoryPresence ? buildScopeMemoryPresence(memoryPresence) : null),

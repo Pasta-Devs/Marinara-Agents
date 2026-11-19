@@ -77,7 +77,7 @@ import {
   subscribeLtmSourceTask,
   type LtmSourceTaskContract,
 } from "../source-task";
-import { buildScopeIndexes, type ScopeTargetChat } from "../scope-targets";
+import { buildScopeIndexes, uniqueById, type ScopeTargetChat } from "../scope-targets";
 import {
   chatOnlyLtmScope,
   getLtmScopeGroupIds,
@@ -563,7 +563,7 @@ export default function SourcesWorkspace({
       searchText: [chat.label, chat.mode, chat.groupId, chat.personaId, ...chat.characterIds].filter(Boolean).join(" "),
       ...(current ? { pinned: "current" as const } : {}),
     });
-    return [
+    return uniqueById([
       ...(currentChatId
         ? [
             chatTarget(
@@ -624,7 +624,7 @@ export default function SourcesWorkspace({
         sourceScope: { personaId: persona.id, personaIds: [persona.id] },
         destinationScope: { personaId: persona.id, personaIds: [persona.id] },
       })),
-    ].filter((target, index, targets) => targets.findIndex((item) => item.id === target.id) === index);
+    ]);
   }, [localizeUi, props.chatId, props.chatName, scopeIndexes.chatsById, scopeTargets.data]);
   const sourceTarget =
     scopeTargetOptions.find((target) => target.id === sourceTargetId) ??
