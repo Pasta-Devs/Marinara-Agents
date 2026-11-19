@@ -220,6 +220,12 @@ test("P17 lists only stickers that exist, and threads render stickers by name, o
   assert.doesNotMatch(off, /"sticker"/, "the JSON shape no longer carries a face");
   const on = prompt([{ id: `${KAI}:smug`, name: "kai_smug", about: "smug" }]);
   assert.match(on, /Your stickers: \[kai_smug\] \(smug\)\./);
+  // 0.36.8 (#2394): stickers go out the way people send them in a chat, not only when words fall short.
+  assert.match(
+    on,
+    /Send stickers the way people do in a chat: to react, tease, sulk or answer without words\. At most one sticker in a reply, only from these lists; it may stand alone\./,
+  );
+  assert.doesNotMatch(on, /when a picture says it better than words/);
   assert.match(on, /e\.g\. "\[kai_smug\]"/);
   assert.match(
     on,

@@ -382,6 +382,10 @@ test("P17 is a message from him alone: boundary, chat contract, comfort rule, st
     // 0.29.0: he never echoes her words, and texts like a person, not a novel.
     "Never parrot or echo what Ines wrote",
     "Text the way a real person texts: plain, everyday words",
+    // 0.36.8 (#2394): the thread reads like a chat (capitals to scream, emoji and so on), as far as fits who writes.
+    "- Whatever carries these messages, they read like a chat, as far as it fits the one writing",
+    "CAPS to scream when excited, angry or flustered",
+    "Someone stiff or formal still texts stiff and formal",
   ]) {
     assert.ok(head.includes(part), `system has: ${part.slice(0, 50)}`);
   }

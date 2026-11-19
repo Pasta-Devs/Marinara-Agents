@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.36.8 — 2026-11-19
+
+- In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like "nooo", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.
+- They send stickers the way people do too: to react, tease, sulk or answer without words, not only when a picture says it better than words. A reply still has at most one sticker, or one from each of them in the group chat.
+
 ## 0.36.7 — 2026-11-18
 
 - Dates now lists Kitty Cards above the Claw Machine, so the Claw Machine is last.
