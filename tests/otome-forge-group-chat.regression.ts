@@ -443,6 +443,8 @@ test("P17g's parser: speakers by name, the repair turn for the protagonist, a st
     normalizeGroupReply({ messages }, { player: "Ines", members: speakers, yours }, { squabble });
   assert.match(read([{ speaker: "Ines", text: "Fine." }]) as string, /^a message was written as Ines/);
   assert.match(read([{ speaker: "Kai", text: "Hm.\nInes: fine" }]) as string, /^a message was written as Ines/);
+  // 0.36.8 (#2394): an emoticon after her name is his message to her, not a line written as her.
+  assert.deepEqual(read([{ speaker: "Kai", text: "ines :(" }]), { messages: [{ li: KAI, text: "ines :(" }] });
   assert.match(read([{ speaker: "Noor", text: "Hello." }]) as string, /"Noor" is not in the group chat/);
   assert.match(read([{ text: "Hello." }]) as string, /names no speaker/);
   assert.match(read([{ speaker: "Kai", text: "  " }]) as string, /^the reply had no message/);
@@ -595,9 +597,17 @@ test("P17g: the plural rules, the knowledge line, each member's card, ties witho
     // 0.29.0: nobody echoes her words, and each texts like a person, not a novel.
     "Nobody parrots or echoes what Ines wrote",
     "Each of them texts the way a real person texts: plain, everyday words",
+    // 0.36.8 (#2394): the thread reads like a chat, and stickers go out the way people send them in one.
+    "- Whatever carries these messages, they read like a chat, as far as it fits the one writing",
+    "CAPS to scream when excited, angry or flustered",
+    "the way people do in a group chat: to react, tease, sulk or answer without words. At most one sticker from each",
   ]) {
     assert.ok(head.includes(part), `system has: ${part}`);
   }
+  assert.ok(
+    !head.includes("when a picture says it better than words"),
+    "stickers are not held back for when words fail",
+  );
   assert.ok(!head.includes("You are Kai") && !head.includes("HOW CLOSE YOU ARE"), "no single-LI P17 lines");
   assert.ok(!head.includes("A rupture stands between you"));
   const all = JSON.stringify(prompt);

@@ -3525,6 +3525,15 @@ const CHAT_HAPTICS_RULE =
 const CLEAR_AIR_RULE =
   "- The one exception: when you are told below that you may, you may ask them out to clear the air. That evening is kept by the game, not by your message.";
 
+/**
+ * 0.36.8 (#2394): the maintainer asked that love interests treat the thread as messages: "allowing them to SCREAM in
+ * caps lock, use stickers, etc." P17 and P17g carry it after their plain-words line; each writer's voice decides how
+ * much of it they use. It names emoji, not stickers, for the shortest reply: a sticker alone is allowed by the sticker
+ * lines, which P17 carries only when there is a sticker to send.
+ */
+const CHAT_HABITS_RULE =
+  '- Whatever carries these messages, they read like a chat, as far as it fits the one writing and how they feel right now: CAPS to scream when excited, angry or flustered, stretched words ("nooo", "whaaat"), piled-up "?!", "!!!" or "...", lowercase with no full stops, emoji or emoticons, a keyboard smash, a reply that is one word or one emoji. Someone stiff or formal still texts stiff and formal; a hothead SHOUTS.';
+
 export interface ChatReplyInput {
   world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases" | "audio">;
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
@@ -3580,7 +3589,7 @@ export function chatReplyMessages({
         `- To send a sticker, write its name in square brackets in a message, e.g. "[${example.name}]".`,
         stickers!.his.length ? `Your stickers: ${stickerList(stickers!.his)}.` : "",
         stickers!.yours.length ? `${them}'s stickers, which you may send too: ${stickerList(stickers!.yours)}.` : "",
-        "At most one sticker in a reply, only from these lists, when a picture says it better than words; it may stand alone.",
+        "Send stickers the way people do in a chat: to react, tease, sulk or answer without words. At most one sticker in a reply, only from these lists; it may stand alone.",
       ]
         .filter(Boolean)
         .join(" ")
@@ -3609,6 +3618,7 @@ export function chatReplyMessages({
     "- Never repeat a line you already sent in this thread.",
     `- Never parrot or echo what ${them} wrote: never repeat their words back, quote them, restate what they said or mirror their phrasing. Answer it in your own words.`,
     "- Text the way a real person texts: plain, everyday words in your own register, never ornate metaphors, stacked adjectives or polished, literary lines. A message reads like something someone typed, not a line from a novel.",
+    CHAT_HABITS_RULE,
     "",
     otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
@@ -3768,7 +3778,7 @@ export function groupChatMessages({
     `{"messages": [{"speaker": "<exact name>", "text": "..."}]}`,
     `- speaker: the exact name of the one who sends it, one of ${everyone}. Never ${them}.`,
     "- text: each message short, a line or a few, the way people text.",
-    `- Stickers: one of them may send a sticker by writing its name in square brackets in a message, their own or ${them}'s, only from the lists under STICKERS. At most one sticker from each of them in a reply, when a picture says it better than words; it may stand alone.`,
+    `- Stickers: one of them may send a sticker by writing its name in square brackets in a message, their own or ${them}'s, only from the lists under STICKERS, the way people do in a group chat: to react, tease, sulk or answer without words. At most one sticker from each of them in a reply; it may stand alone.`,
     `- Write every message in ${world.language}.`,
     "",
     "HARD RULES",
@@ -3781,6 +3791,7 @@ export function groupChatMessages({
     "- Never repeat a line already sent in this thread.",
     `- Nobody parrots or echoes what ${them} wrote: never repeat their words back, quote them, restate what they said or mirror their phrasing. Answer it in their own words.`,
     "- Each of them texts the way a real person texts: plain, everyday words in their own register, never ornate metaphors, stacked adjectives or polished, literary lines. A message reads like something someone typed, not a line from a novel.",
+    CHAT_HABITS_RULE,
     "",
     "WHO KNOWS WHAT",
     `- Everyone in the group reads everything said here. Each of them knows only what the story showed them, what they were told, and this chat. What one card says ${them} knows of them, or what they hide, is theirs alone: the others do not know it, and nobody says it for them.`,

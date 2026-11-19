@@ -30,9 +30,16 @@ export const MEMORY_QUOTE_MAX = 200;
 const chars = (value: string) => [...value].length;
 const squash = (value: string) => value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim();
 
+/**
+ * A colon that ends a speaker's name: any colon but one that opens an emoticon (":(", ":D", ":3", ":-P", ":(("), with
+ * only a space or the line's end after it. 0.36.8 (#2394): the chat prompts ask for emoticons, and "ines :(" is his
+ * message to her, not a line written as her.
+ */
+const SPEAKER_COLON = /[:：](?!-?[()DPpOo03/\\|*[\]<>@$xX]+(?:\s|$))/u;
+
 /** "Name: rest" when a line opens with a speaker's name (within 60 characters), otherwise null. */
 function speakerPrefix(text: string): { speaker: string; rest: string } | null {
-  const colon = text.search(/[:：]/u);
+  const colon = text.search(SPEAKER_COLON);
   if (colon <= 0 || colon > 60) return null;
   return { speaker: text.slice(0, colon).trim(), rest: text.slice(colon + 1).trim() };
 }
