@@ -349,15 +349,16 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audio, voicedKey]);
 
-  // The lines after this one are voiced ahead, in order, so each plays as its text starts (the controller skips the
-  // ones nobody voices). Leaving the scene lets the rest go.
+  // This line and the ones after it are voiced ahead, in order, so each plays as its text starts (the controller skips
+  // the ones nobody voices, and a line already asked for). This line comes first: one held by its place's backdrop is
+  // not spoken yet, so it must not wait behind the lines after it. Leaving the scene lets the rest go.
   const { timeline, lineIndex, refBase } = reader;
   useEffect(() => {
     if (!audio || !timeline || lineIndex < 0) return;
     audio.prepare(
       timeline.lines
         .map((line, index) => ({ line, index }))
-        .slice(lineIndex + 1)
+        .slice(lineIndex)
         .flatMap(({ line, index }) =>
           line.kind === "aftermath" ? [] : [{ segment: line.segment, ref: lineRef(timeline, index, refBase) }],
         ),

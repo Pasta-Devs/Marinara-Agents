@@ -204,13 +204,16 @@ export interface PrepLine {
 /**
  * Makes lines' voices ahead, one at a time and in order, so each plays as its text appears. The newest list replaces
  * the lines still waiting, and a line is asked for once. A failure stops it until `reset` (the voice settings
- * changed), so the lines are then voiced as they appear, as before; a stopped wait (AbortError) is no failure.
+ * changed), so the lines are then voiced as they appear, as before; a stopped wait (AbortError) is no failure, and
+ * neither is one from a line asked for before the last reset.
  */
 export class VoicePrep {
   private waiting: PrepLine[] = [];
   private readonly asked = new Set<string>();
   private running = false;
   private failed = false;
+  /** Counts resets, so a line asked for before one cannot stop the lines after it. */
+  private settings = 0;
 
   constructor(
     private readonly make: (line: PrepLine) => Promise<void>,
@@ -226,6 +229,7 @@ export class VoicePrep {
     this.waiting = [];
     this.asked.clear();
     this.failed = false;
+    this.settings += 1;
   }
 
   private async run() {
@@ -235,10 +239,11 @@ export class VoicePrep {
         const key = this.key(line);
         if (this.asked.has(key)) continue;
         this.asked.add(key);
+        const settings = this.settings;
         try {
           await this.make(line);
         } catch (error) {
-          if ((error as { name?: string })?.name === "AbortError") continue;
+          if ((error as { name?: string })?.name === "AbortError" || settings !== this.settings) continue;
           console.warn("Otome Hearth could not voice a line ahead", error);
           this.failed = true;
           this.waiting = [];

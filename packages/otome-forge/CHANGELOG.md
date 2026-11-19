@@ -3,8 +3,8 @@
 ## 0.37.0 — 2026-11-19
 
 - A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.
-- Lines after a choice are made once you pick. Leaving a scene stops making the rest of its voices.
-- Voices are made ahead only while voices are on and not muted. If one can't be made, the rest are voiced as they appear, as before, until you change the voice settings.
+- The lines after a choice are made ahead too, and the reply to your pick once you pick it. Leaving a scene stops making the rest of its voices.
+- Voices are made ahead only while **Voice the dialogue** is on, the **Voices** volume is up and nothing is muted. If one can't be made, the rest are voiced as they appear, as before, until you switch **Voice the dialogue**, **Voice everyone else** or muting off or on.
 - This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.
 
 ## 0.36.8 — 2026-11-19
