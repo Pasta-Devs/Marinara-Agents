@@ -77,7 +77,10 @@ function revertList(current: unknown[], before: unknown[], after: unknown[]): un
   const position = (key: string) => kept.findIndex((item) => itemKey(item) === key);
   for (const [index, key] of order.entries()) {
     if (now.has(key) || position(key) >= 0) continue;
-    const previous = order.slice(0, index).reverse().find((other) => position(other) >= 0);
+    const previous = order
+      .slice(0, index)
+      .reverse()
+      .find((other) => position(other) >= 0);
     const following = order.slice(index + 1).find((other) => position(other) >= 0);
     const at = previous ? position(previous) + 1 : following ? position(following) : Math.min(index, kept.length);
     kept.splice(at, 0, copy(was.get(key)));
@@ -150,7 +153,9 @@ export const redoUndo = (state: RunState, undo: StateUndo): RunState => takeOut(
  * Why this beat cannot be rewritten now, or null when it can. Its picks and its read must each be on record, so a
  * Rewrite can take them back; a finish may cover picks it applied itself.
  */
-export function rewriteBlock(beat: Pick<Beat, "easedOff" | "confrontation" | "choiceCanon" | "undo">): RewriteBlock | null {
+export function rewriteBlock(
+  beat: Pick<Beat, "easedOff" | "confrontation" | "choiceCanon" | "undo">,
+): RewriteBlock | null {
   if (beat.easedOff) return "eased-off";
   if (beat.confrontation?.picks.length) return "stance";
   const undo = beat.undo ?? [];

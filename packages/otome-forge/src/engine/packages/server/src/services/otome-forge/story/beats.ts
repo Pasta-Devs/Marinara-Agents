@@ -1845,8 +1845,13 @@ async function finishBeat(
             : undefined;
     const appliedNow = (state: RunState, choice: string) =>
       !!state.chapters[chapter.key]?.applied.includes(`${beat.i}/${choice}`);
-    const covers = canon.flatMap(([choice]) => (!appliedNow(current, choice) && appliedNow(next, choice) ? [choice] : []));
-    undo = stateUndo("finish", current, next, { ...(blocked ? { blocked } : {}), ...(covers.length ? { covers } : {}) });
+    const covers = canon.flatMap(([choice]) =>
+      !appliedNow(current, choice) && appliedNow(next, choice) ? [choice] : [],
+    );
+    undo = stateUndo("finish", current, next, {
+      ...(blocked ? { blocked } : {}),
+      ...(covers.length ? { covers } : {}),
+    });
     return next;
   });
   if (!state) throw runNotFound();

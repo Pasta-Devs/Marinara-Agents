@@ -792,7 +792,8 @@ for (const unrecorded of [false, true]) {
         "This scene was played before Rewrite could take its choices back, so it can't be rewritten.",
       );
       const before = posts(stub, "/beats/0").filter((call) => call.body?.rewrite).length;
-      await rewrite.click();
+      // Playwright will not press an aria-disabled button by itself; a player's tap still reaches it.
+      await rewrite.click({ force: true });
       await page.waitForTimeout(200);
       expect(posts(stub, "/beats/0").filter((call) => call.body?.rewrite)).toHaveLength(before);
     } else {
