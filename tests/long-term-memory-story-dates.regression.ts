@@ -50,6 +50,15 @@ async function main() {
       .time,
     "dawn",
   );
+  // A time-only stamp read from older piece text does not leak its time; one read from the same text keeps it.
+  assert.deepEqual(
+    mergeStoryTime({ ...timeOnly("world_state"), sourceHash: hash("older text") }, at("stated", "new"))?.start,
+    { date: "new" },
+  );
+  assert.deepEqual(
+    mergeStoryTime({ ...timeOnly("world_state"), sourceHash: hash("new") }, at("stated", "new"))?.start,
+    { date: "new", time: "evening" },
+  );
   for (const [existing, incoming, kept] of mergeCases) {
     const existingTime = existing ? at(existing, "old") : undefined,
       incomingTime = incoming ? at(incoming, "new") : undefined;

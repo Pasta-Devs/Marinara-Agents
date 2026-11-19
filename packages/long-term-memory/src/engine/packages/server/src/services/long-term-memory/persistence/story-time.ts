@@ -36,7 +36,10 @@ const PINNED_ORIGINS = new Set<LtmStoryTimeOrigin>(["manual", "world_state", "ga
 export function mergeStoryTime(existing: LtmStoryTime | undefined, incoming: LtmStoryTime | undefined) {
   if (!existing || !incoming) return incoming ?? existing;
   if (existing.origin !== "manual" && !existing.start.date && incoming.start.date) {
-    const time = incoming.start.time ?? existing.start.time;
+    // The old time of day is carried only when it was read from the same piece text (or no text is recorded for it).
+    const carried =
+        !existing.sourceHash || existing.sourceHash === incoming.sourceHash ? existing.start.time : undefined,
+      time = incoming.start.time ?? carried;
     return time ? { ...incoming, start: { ...incoming.start, time } } : incoming;
   }
   return ORIGIN_RANK[incoming.origin] <= ORIGIN_RANK[existing.origin] ? incoming : existing;
