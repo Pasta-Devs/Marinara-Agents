@@ -35,7 +35,23 @@ async function main() {
     [],
     `the Engine's ChatMetadata no longer declares ${missing.join(", ")}; Sources would stop finding those summaries`,
   );
-  console.log(`Long-Term Memory Engine fields ok: ${chatMetadataFields.length} chat fields and the assistant id`);
+
+  // The Game clock is not declared on ChatMetadata: the game routes write it as `gameTime` with the GameTime shape.
+  const gameTimeType = /^export interface GameTime \{\n([\s\S]*?)^\}/mu.exec(
+    readFileSync(join(engineRoot, "packages/server/src/services/game/time.service.ts"), "utf8"),
+  )?.[1];
+  const missingClock = ["day", "hour", "minute"].filter(
+    (field) => !new RegExp(`^ {2}${field}: number;`, "mu").test(gameTimeType ?? ""),
+  );
+  assert.deepEqual(missingClock, [], "the Engine's GameTime changed; Game chat pieces would lose their clock date");
+  assert.match(
+    readFileSync(join(engineRoot, "packages/server/src/routes/game.routes.ts"), "utf8"),
+    /\bgameTime: \w+/u,
+    "the game routes no longer write chat metadata gameTime; Game chat pieces would lose their clock date",
+  );
+  console.log(
+    `Long-Term Memory Engine fields ok: ${chatMetadataFields.length} chat fields, the game clock and the assistant id`,
+  );
 }
 
 void main().catch((error) => {

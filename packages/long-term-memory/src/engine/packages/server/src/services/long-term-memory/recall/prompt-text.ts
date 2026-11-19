@@ -76,5 +76,11 @@ export function formatLtmChunkPromptText(chunk: LtmMemoryChunk) {
     return `${text} [${chunk.status}${questTag}]`;
   }
 
+  if (chunk.noteType === "timeline_event" && chunk.storyDate) {
+    // The prefix goes before the first line's text, past a bullet marker or a `text:` label (and the line break after a
+    // bare label), so the serializer keeps it with the event.
+    return `[${chunk.storyDate}] ${text.replace(/^(?:[-*]\s+)?(?:(?:text|summary):\s*)?/i, "")}`;
+  }
+
   return text;
 }

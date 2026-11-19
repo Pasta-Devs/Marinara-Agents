@@ -52,7 +52,14 @@ const divergedChatB = { ...divergedChatA, id: "chat-diverged-b", name: "Draft B"
 async function main() {
   const [
     { configurePackageRuntime },
-    { previewPackageInterop, sourcePackageDetails, importPackageInterop, transcriptPieces },
+    {
+      previewPackageInterop,
+      sourcePackageDetails,
+      importPackageInterop,
+      transcriptPieces,
+      loadChatStoryTimeSources,
+      stampPieceStoryTime,
+    },
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
     { LongTermMemoryStorage },
     { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig },
@@ -214,6 +221,17 @@ async function main() {
       };
     },
   };
+  // World State snapshots per chat, in message order, on swipe 0 unless set. An Engine without listGameStates offers
+  // only the newest.
+  const gameStates = new Map<
+    string,
+    Array<{ messageId: string; swipeIndex?: number; date: string | null; time: string | null }>
+  >();
+  const onSwipe = (chatId: string) => (gameStates.get(chatId) ?? []).map((row) => ({ swipeIndex: 0, ...row }));
+  let hostListsGameStates = true;
+  let gameStatesFail = false;
+  // Runs while an import reads World State, after it listed the vault's notes and before it writes them.
+  let duringImport: (() => Promise<void>) | undefined;
   let releaseRuntime: (() => void) | undefined;
   let messageReads = 0;
   // Each extraction prompt, and the units the fixture model answers it with.
@@ -262,6 +280,20 @@ async function main() {
           async listMessages(chatId: string) {
             messageReads += 1;
             return messages.get(chatId) ?? [];
+          },
+          async getGameState(chatId: string) {
+            if (gameStatesFail) throw new Error("World State table is locked");
+            await duringImport?.();
+            return onSwipe(chatId).at(-1) ?? null;
+          },
+          get listGameStates() {
+            return hostListsGameStates
+              ? async (chatId: string) => {
+                  if (gameStatesFail) throw new Error("World State table is locked");
+                  await duringImport?.();
+                  return onSwipe(chatId);
+                }
+              : undefined;
           },
           ...advancedMemoryHost,
         },
@@ -1749,11 +1781,226 @@ async function main() {
         await new Promise((resolveWait) => setTimeout(resolveWait, 10));
       assert.equal(prompts.length, 0, "a run armed before the setting was turned off makes no model call");
       assert.equal((await autoEvents(failingChat.id)).length, failingEvents, "and logs nothing");
+
+      // Story dates from what the Engine saved for each piece's own messages, with no model call.
+      const storyRoot = join(dataDir, "story-dates", "long-term-memory");
+      const storyStore = new LongTermMemoryStorage(storyRoot);
+      const storyChat = (
+        chatId: string,
+        mode: string,
+        ids: string[],
+        metadata: Record<string, unknown> | string = {},
+      ) => {
+        chats.push({ ...roleplayChat, id: chatId, name: chatId, mode, metadata });
+        // The long first message closes its piece, so each chat has a one-message piece and then the rest.
+        messages.set(
+          chatId,
+          ids.map((id, index) =>
+            message(chatId, id, index % 2 ? "assistant" : "user", index ? `Line ${index}.` : "x".repeat(23_990)),
+          ),
+        );
+        return importPackageInterop(
+          {
+            source: "messages",
+            chatId,
+            sourceIds: [`${chatId}:messages:${ids[0]}`, `${chatId}:messages:${ids[1]}`],
+            extract: false,
+            limit: 100,
+          },
+          storyRoot,
+          new AbortController().signal,
+        );
+      };
+      const datesOf = async (chatId: string) =>
+        (await storyStore.listNotes({ type: "source" }))
+          .filter((note) => note.provenance?.sourceId === chatId)
+          .sort((left, right) => left.title.localeCompare(right.title))
+          .map((note) => {
+            if (!note.storyTime || note.storyTime.origin === "manual") return note.storyTime;
+            const { sourceHash, ...date } = note.storyTime;
+            assert.match(sourceHash ?? "", /^[a-f0-9]{64}$/, "an Engine date records the piece text it was read for");
+            return date;
+          });
+      // Roleplay: the first and last World State date or time on the piece's messages; a snapshot of a message that
+      // is not in any piece (another swipe or branch) dates nothing.
+      gameStates.set("chat-story-rp", [
+        { messageId: "sr1", date: " 14 Frostmonth ", time: "dusk\nfalling" },
+        { messageId: "sr2", date: "14 Frostmonth", time: "midnight" },
+        { messageId: "sr3", date: null, time: null },
+        // A malformed row from the host is skipped.
+        { messageId: "sr3", date: 42 as never, time: "dawn" },
+        { messageId: "sr4", date: "15 Frostmonth", time: "morning" },
+        { messageId: "sr-swiped-away", date: "1 Thawmonth", time: null },
+      ]);
+      await storyChat("chat-story-rp", "roleplay", ["sr1", "sr2", "sr3", "sr4"]);
+      const rpDates = [
+        { start: { date: "14 Frostmonth", time: "dusk falling" }, origin: "world_state" },
+        {
+          start: { date: "14 Frostmonth", time: "midnight" },
+          end: { date: "15 Frostmonth", time: "morning" },
+          origin: "world_state",
+        },
+      ];
+      assert.deepEqual(await datesOf("chat-story-rp"), rpDates, "Roleplay pieces carry the tracker's dates");
+      // A re-import never replaces a date the user typed.
+      const [rpFirst] = (await storyStore.listNotes({ type: "source" })).filter(
+        (note) => note.provenance?.sourceId === "chat-story-rp" && note.title.endsWith("message 1"),
+      );
+      const typed = { start: { date: "Midsummer" }, origin: "manual" as const };
+      await storyStore.updateNote(rpFirst!.id, { storyTime: typed });
+      gameStates.get("chat-story-rp")![0]!.date = "20 Frostmonth";
+      await importPackageInterop(
+        {
+          source: "messages",
+          chatId: "chat-story-rp",
+          sourceIds: ["chat-story-rp:messages:sr1"],
+          extract: false,
+          limit: 100,
+        },
+        storyRoot,
+        new AbortController().signal,
+      );
+      assert.deepEqual(await datesOf("chat-story-rp"), [typed, rpDates[1]], "a re-import keeps the typed date");
+      // A date typed while an import waits on the vault lock is read under it, so the import does not replace it.
+      await storyStore.updateNote(rpFirst!.id, { storyTime: rpFirst!.storyTime });
+      const { withLtmVaultLock } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/vault-lock.ts");
+      duringImport = async () => {
+        duringImport = undefined;
+        void withLtmVaultLock(storyRoot, async () => {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          await storyStore.updateNote(rpFirst!.id, { storyTime: typed });
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      };
+      await importPackageInterop(
+        {
+          source: "messages",
+          chatId: "chat-story-rp",
+          sourceIds: ["chat-story-rp:messages:sr1"],
+          extract: false,
+          limit: 100,
+        },
+        storyRoot,
+        new AbortController().signal,
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-rp"),
+        [typed, rpDates[1]],
+        "a re-import keeps a date typed while it waited for the lock",
+      );
+      // Without listGameStates, the newest snapshot dates only the piece that holds its message.
+      hostListsGameStates = false;
+      gameStates.set("chat-story-fallback", [
+        { messageId: "sf1", date: "2 Thawmonth", time: null },
+        { messageId: "sf2", date: "3 Thawmonth", time: "noon" },
+      ]);
+      await storyChat("chat-story-fallback", "roleplay", ["sf1", "sf2"]);
+      assert.deepEqual(
+        await datesOf("chat-story-fallback"),
+        [undefined, { start: { date: "3 Thawmonth", time: "noon" }, origin: "world_state" }],
+        "the newest snapshot dates its own piece and no other",
+      );
+      // The newest snapshot can belong to a swipe the user moved away from; it dates nothing.
+      gameStates.set("chat-story-swipe", [{ messageId: "sw2", swipeIndex: 1, date: "5 Thawmonth", time: null }]);
+      await storyChat("chat-story-swipe", "roleplay", ["sw1", "sw2"]);
+      assert.deepEqual(
+        await datesOf("chat-story-swipe"),
+        [undefined, undefined],
+        "a snapshot of a swiped-away reply dates nothing",
+      );
+      // A newest snapshot outside every piece dates nothing, and a Roleplay chat ignores a game clock.
+      gameStates.set("chat-story-outside", [{ messageId: "so-swiped-away", date: "9 Thawmonth", time: null }]);
+      await storyChat("chat-story-outside", "roleplay", ["so1", "so2"], { gameTime: { day: 4, hour: 9, minute: 0 } });
+      assert.deepEqual(
+        await datesOf("chat-story-outside"),
+        [undefined, undefined],
+        "a piece with no Engine date stays undated",
+      );
+      hostListsGameStates = true;
+      // A World State the host fails to read leaves the pieces undated but imported; a later read dates an undated one.
+      gameStatesFail = true;
+      const failedRead = await storyChat("chat-story-later", "roleplay", ["sl1", "sl2"]);
+      gameStatesFail = false;
+      assert.deepEqual(
+        [failedRead.writeFailures.length, await datesOf("chat-story-later")],
+        [0, [undefined, undefined]],
+        "a failed World State read still imports the pieces",
+      );
+      gameStates.set("chat-story-later", [{ messageId: "sl2", date: "6 Thawmonth", time: null }]);
+      await storyChat("chat-story-later", "roleplay", ["sl1", "sl2"]);
+      assert.deepEqual(
+        await datesOf("chat-story-later"),
+        [undefined, { start: { date: "6 Thawmonth" }, origin: "world_state" }],
+        "a re-import dates a piece imported undated",
+      );
+      // Game: the clock dates only the piece holding the chat's newest message.
+      await storyChat(
+        "chat-story-game",
+        "game",
+        ["sg1", "sg2"],
+        JSON.stringify({ gameTime: { day: 3, hour: 14, minute: 5 } }),
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-game"),
+        [undefined, { start: { date: "Day 3", time: "14:05" }, origin: "game_clock" }],
+        "the game clock dates the newest piece only",
+      );
+      const gameSources = await loadChatStoryTimeSources(
+        chats.find((chat) => chat.id === "chat-story-game")!,
+        messages.get("chat-story-game")!,
+      );
+      assert.equal(
+        stampPieceStoryTime(
+          { messageIds: ["sg2"], sourceText: "Line 1." },
+          { ...gameSources, gameStates: [{ messageId: "sg2", date: "Harvest Eve", time: null }] },
+        )?.origin,
+        "world_state",
+        "a World State date wins over the game clock",
+      );
+      // Conversation: the real date of the first message, and of the last when the day differs, in the server's zone.
+      const zone = process.env.TZ;
+      process.env.TZ = "Pacific/Auckland";
+      try {
+        const talkId = "chat-story-talk";
+        chats.push({ ...roleplayChat, id: talkId, name: talkId, mode: "conversation" });
+        messages.set(talkId, [
+          { ...message(talkId, "st1", "user", "x".repeat(23_990)), createdAt: "2026-10-27T20:30:00.000Z" },
+          { ...message(talkId, "st2", "assistant", "Line 1."), createdAt: "2026-10-28T01:00:00.000Z" },
+          { ...message(talkId, "st3", "user", "Line 2."), createdAt: "2026-10-28T12:15:00.000Z" },
+        ]);
+        await importPackageInterop(
+          {
+            source: "messages",
+            chatId: talkId,
+            sourceIds: [`${talkId}:messages:st1`, `${talkId}:messages:st2`],
+            extract: false,
+            limit: 100,
+          },
+          storyRoot,
+          new AbortController().signal,
+        );
+      } finally {
+        if (zone === undefined) delete process.env.TZ;
+        else process.env.TZ = zone;
+      }
+      assert.deepEqual(
+        await datesOf("chat-story-talk"),
+        [
+          { start: { date: "2026-10-28", time: "09:30" }, origin: "message_time" },
+          {
+            start: { date: "2026-10-28", time: "14:00" },
+            end: { date: "2026-10-29", time: "01:15" },
+            origin: "message_time",
+          },
+        ],
+        "Conversation pieces carry the real date",
+      );
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, kept piece cuts, previous-piece context, and chat import detail ok\n",
+    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, kept piece cuts, previous-piece context, chat import detail, and Engine story dates ok\n",
   );
 }
 

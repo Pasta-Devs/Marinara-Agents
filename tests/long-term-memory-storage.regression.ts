@@ -83,7 +83,7 @@ async function main() {
     deleteRejectedSuggestionsForSource,
     listRejectedSuggestions,
   } = await import(`${source}/drafts/rejected-suggestions.ts`);
-  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmAgentSettingsSchema, ltmGlobalSettingsSchema, packageAccess } =
+  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmAgentSettingsSchema, ltmGlobalSettingsSchema, ltmNoteSchema, packageAccess } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
@@ -196,6 +196,98 @@ async function main() {
         provenance: transcriptProvenance,
         sections: { source: { text: "User: Hello.", updatedAt: timestamp } },
       });
+      {
+        // Story dates: a chat piece stores its date and scan; a memory stores only a date the user typed.
+        const { textHashForLtmSourceMaterial } = await import(`${source}/extraction/source-hash.ts`);
+        const pieceHash = textHashForLtmSourceMaterial({ sourceText: "User: Hello." });
+        const pieceTime = {
+          start: { date: "Thursday", time: "morning" },
+          origin: "stated" as const,
+          evidence: "Thursday morning",
+          sourceHash: pieceHash,
+        };
+        const pieceScan = {
+          sourceHash: pieceHash,
+          jumps: [{ quote: "The next morning", amount: 1, unit: "day" as const, implied: true as const }],
+        };
+        const before = await first.storage.getNote("source_transcript_import");
+        const datedPiece = await first.storage.updateNote("source_transcript_import", {
+          storyTime: pieceTime,
+          storyTimeScan: pieceScan,
+        });
+        assert.deepEqual(datedPiece.storyTime, pieceTime);
+        assert.deepEqual(datedPiece.storyTimeScan, pieceScan);
+        assert.deepEqual(datedPiece.sections, before?.sections, "dating a piece leaves its text alone");
+        assert.equal(
+          sourceHashForLtmSourceNote(datedPiece),
+          sourceHashForLtmSourceNote(before),
+          "dating a piece keeps its source hash",
+        );
+        const manualTime = { start: { date: "First of Frostmonth" }, end: { time: "dusk" }, origin: "manual" as const };
+        const datedMemory = await first.storage.updateNote(noteInput.id, { storyTime: manualTime });
+        assert.deepEqual(datedMemory.storyTime, manualTime);
+        assert.equal(datedMemory.sections.facts?.text, "This note survives runtime restart.");
+        assert.deepEqual((await first.storage.getNote(noteInput.id))?.storyTime, manualTime, "a typed date is stored");
+        const undated = await first.storage.updateNote(noteInput.id, { storyTime: undefined });
+        assert.equal(undated.storyTime, undefined);
+        assert.equal(
+          Object.hasOwn((await first.storage.getNote(noteInput.id)) ?? {}, "storyTime"),
+          false,
+          "clearing a date removes it",
+        );
+        await assert.rejects(
+          first.storage.updateNote(noteInput.id, { storyTime: { ...pieceTime } }),
+          /A memory can store only a story date the user typed/,
+        );
+        await assert.rejects(
+          first.storage.updateNote(noteInput.id, { storyTimeScan: pieceScan }),
+          /Only source notes can store a story date scan/,
+        );
+        const stored = { ...datedPiece };
+        const rejects = (patch: object, message: RegExp, label: string) =>
+          assert.throws(() => ltmNoteSchema.parse({ ...stored, ...patch }), message, label);
+        assert.equal(ltmNoteSchema.parse(stored).storyTime?.origin, "stated");
+        rejects(
+          { storyTime: { ...pieceTime, evidence: undefined } },
+          /must keep its quote/,
+          "stated date without its quote",
+        );
+        rejects(
+          { storyTime: { ...pieceTime, sourceHash: undefined } },
+          /must keep its quote/,
+          "stated date without its hash",
+        );
+        rejects({ storyTime: { start: {}, origin: "manual" } }, /needs a date or a time/, "empty point");
+        rejects(
+          { storyTime: { start: { date: " Thursday" }, origin: "manual" } },
+          /cannot start or end with spaces/,
+          "padded date",
+        );
+        rejects(
+          { storyTime: { start: { date: "Thursday\nFriday" }, origin: "manual" } },
+          /cannot start or end with spaces/,
+          "multi-line date",
+        );
+        rejects({ storyTime: { start: { date: "Thursday" }, origin: "guessed" } }, /origin/, "unknown origin");
+        rejects(
+          { storyTime: { start: { date: "Thursday" }, origin: "manual", note: "x" } },
+          /Unrecognized key/,
+          "extra key",
+        );
+        const jump = (patch: object) => ({
+          storyTimeScan: { ...pieceScan, jumps: [{ ...pieceScan.jumps[0], ...patch }] },
+        });
+        rejects(jump({ amount: 2 }), /implied jump is always one day/, "implied jump of two days");
+        rejects(jump({ implied: undefined, amount: 3, unit: null }), /./, "amount without a unit");
+        rejects(jump({ amount: 0 }), /./, "zero jump");
+        rejects({ storyTimeScan: { ...pieceScan, sourceHash: "abc" } }, /./, "short scan hash");
+        assert.equal(
+          ltmNoteSchema.parse({ ...stored, ...jump({ implied: undefined, amount: null, unit: null }) }).storyTimeScan
+            ?.jumps[0]?.unit,
+          null,
+          "a jump with no length is kept",
+        );
+      }
       await first.cleanup();
       first = null;
       restarted = await activateLongTermMemoryStorage(root);

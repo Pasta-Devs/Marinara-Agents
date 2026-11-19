@@ -17,7 +17,7 @@ import { LtmServiceError } from "../service-error.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
 
 const MAX_CHUNK_MEMORIES = 80;
-const MAX_CHUNK_CHARS = 24_000;
+export const MAX_CHUNK_CHARS = 24_000;
 export const MAX_CHUNKS = 12;
 const MAX_BODY_CHARS = 600;
 const MAX_OUTPUT_TOKENS = 2_000;

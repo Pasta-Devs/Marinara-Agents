@@ -210,6 +210,12 @@ open until toggled. Back up downloads
 current and incoming counts, then Replace with this backup asks the host "Replace Long-Term Memory data?". A restore
 replaces the whole vault and the settings, so it drops the open draft and the selection and refetches everything
 (Memory Settings refills its forms when it opens). Their results are toasts; the Restore preview stays in the panel.
+The same menu holds Tidy with AI, Link memories, People and Find story dates (`onboarding/FindStoryDates.tsx`,
+`data-ltm-vault-story-dates`). Find story dates opens a dialog like Tidy with AI's. It shows the connection it will use
+and how many chat pieces are not checked yet. Start reads one batch. Each row names its piece, then
+`date · where from · "quote"`, and each time jump reads `"quote" → +3 weeks → Day 23 · Friday`, with "(implied)" for a
+new morning the text implies. Leave out drops a row from the save, and a folded list shows what the checks dropped, with
+the reason. Save writes the kept rows, a toast gives the counts, and Check the next batch reads the next batch.
 When the integrity check finds a problem, a warning bar above the memory list reads "N memories need fixing · Fix"
 (`vault/useVaultFix.tsx`; N counts the memories the issues name, and a problem with no memory, such as a stale index,
 reads "Recall data needs fixing"). Fix opens the Vault Maintenance panel under the header: the integrity state, each
@@ -243,6 +249,10 @@ The memory's side panel is called Memory info wherever it opens: the toggle in t
 memory header (`aria-pressed`, no `aria-label`, so its accessible name is its visible
 label) and the narrow-layout pane tab. Its first section is named for what it holds,
 Keywords and links.
+Record info has a Story date row (`vault/StoryDateLine.tsx`, `data-ltm-record-story-date`): the date, then where it
+came from (World State, Game clock, message date, found in the text with its quote, counted, typed by you, or not worked
+out yet). Edit takes free text and saves it at once as the user's own date, apart from the editor's Save; Clear shows
+only when the user typed the date.
 The workbench distinguishes read-only
 source notes from editable memories and keeps validation, evidence, freshness,
 confidence, subjects, links, keywords, and availability visible as applicable.
@@ -345,7 +355,8 @@ Sources is one column inside its card: the filters, then the list. Choosing a ro
 preview inline, right under it, as a region the row's button owns (`aria-expanded`,
 `aria-controls`); choosing the row again or pressing Esc closes it and focus returns to the row. An
 imported row's region also holds what the old Details pane held (Open source memory, Review related
-drafts, Re-extract, Manage source). A lorebook opens the same way, with its entries under it. Search,
+drafts, Re-extract, Manage source). A chat piece's region also lists the time jumps Find story dates stored for it
+(`sources/StoryJumps.tsx`), each with Remove. A lorebook opens the same way, with its entries under it. Search,
 chat type with Reload, the Ready / Imported status tabs and Find sources in wrap in one row above the
 list. Find sources in carries its hint under the picker ("Limit imports to this chat and its related scope." or
 "Search every available character, lorebook, and chat."), read with the picker, no (i). Import detail (Standard or Detailed, with a one-line hint for Detailed) closes the card.

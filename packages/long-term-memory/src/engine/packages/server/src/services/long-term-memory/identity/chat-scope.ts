@@ -76,10 +76,10 @@ export function resolveChatLtmWriteScope(chat: { id: string; groupId?: string | 
 }
 
 /**
- * The last message number of a chat transcript piece or numbered summary range source note
+ * The 1-based message numbers a chat transcript piece or numbered summary range source note covers
  * (`message_range:<first>-<last>` or `message_range:<n>` evidence), or undefined for any other source.
  */
-export function ltmSourceLastMessageNumber(note: LtmNote | undefined) {
+export function ltmSourceMessageRange(note: LtmNote | undefined) {
   if (note?.provenance?.kind !== "chat_transcript" && note?.provenance?.kind !== "chat_summary") return undefined;
   const range = note.sections.source?.evidence
     ?.find((entry) => entry.startsWith("message_range:"))
@@ -88,7 +88,12 @@ export function ltmSourceLastMessageNumber(note: LtmNote | undefined) {
     .match(/^(\d+)(?:-(\d+))?$/);
   const first = Number(range?.[1]),
     last = Number(range?.[2] ?? range?.[1]);
-  return range && first > 0 && first <= last ? last : undefined;
+  return range && first > 0 && first <= last ? { first, last } : undefined;
+}
+
+/** The last message number of a chat transcript piece or numbered summary range source note. */
+export function ltmSourceLastMessageNumber(note: LtmNote | undefined) {
+  return ltmSourceMessageRange(note)?.last;
 }
 
 type LtmBranchChat = { id: string; metadata: unknown };

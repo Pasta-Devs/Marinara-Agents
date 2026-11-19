@@ -10,6 +10,9 @@ export type PackageLanguageModelError = Error & {
   retryAfterMs?: number;
 };
 
+// The fields this package reads from an Engine World State snapshot; the Engine's record carries more.
+export type PackageGameState = { messageId: string; swipeIndex: number; date: string | null; time: string | null };
+
 export type CapabilityRuntimeHost = {
   dataDir?: string;
   embeddings?: PackageEmbeddingAdapter;
@@ -115,6 +118,10 @@ export type CapabilityRuntimeHost = {
     >;
     /** Engines that have it skip messages the user hid or showed by hand and return the ids actually changed. */
     setMessagesHiddenFromAI?(chatId: string, messageIds: string[], hidden: boolean): Promise<string[]>;
+    /** The chat's newest committed World State snapshot, on whichever swipe it was saved. */
+    getGameState?(chatId: string): Promise<PackageGameState | null>;
+    /** Engines that have it: the committed snapshot of each message's active swipe, in message order. */
+    listGameStates?(chatId: string): Promise<PackageGameState[]>;
   };
 };
 

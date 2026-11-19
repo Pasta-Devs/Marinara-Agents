@@ -16,6 +16,8 @@ import {
   type LtmNote,
   type LtmScope,
   type LtmSourceProvenance,
+  type LtmStoryTime,
+  type LtmStoryTimePoint,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
@@ -39,7 +41,13 @@ import {
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { resolveLtmChatMemories } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { nowIso } from "../ltm-utils.js";
-import { getPackagePersistence, getPackageResources, logger, resolvePackageLanguageModel } from "../package-runtime.js";
+import {
+  getPackagePersistence,
+  getPackageResources,
+  logger,
+  resolvePackageLanguageModel,
+  type PackageGameState,
+} from "../package-runtime.js";
 import { processLongTermMemorySourceBatch, type ImportedSourceItem } from "../extraction/source-processing.js";
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import {
@@ -47,9 +55,11 @@ import {
   extractionFingerprintForLtmSourceNote,
   extractionFingerprintsMatchSourceText,
   isLtmSourceExtractionFingerprintCurrent,
+  textHashForLtmSourceMaterial,
 } from "../extraction/source-hash.js";
 import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-identity.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
+import { mergeStoryTime } from "../persistence/story-time.js";
 import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
 import {
   ltmSetMessagesHiddenFromAI,
@@ -77,6 +87,8 @@ type Candidate = {
   messageRange?: { chatName: string; first: number; last: number };
   // Chat Messages pieces only: the ids of the messages the piece reads.
   messageIds?: string[];
+  // Chat Messages pieces only: the chat and its messages, for the piece's story date at import.
+  storyTimeChat?: { chat: StoryTimeChat; messages: TranscriptMessage[] };
   // Chat Summaries without a numbered range: the label is the range text from the title.
   summaryRange?: { chatName: string; label: string };
   sourceText: string;
@@ -242,6 +254,125 @@ export function transcriptPieces(
   }
   if (current) pieces.push(current);
   return pieces;
+}
+
+type StoryTimeChat = { id: string; mode: string; metadata: unknown };
+/** What the Engine saved about time in one chat, read once per chat for stampPieceStoryTime. */
+export type LtmChatStoryTimeSources = {
+  mode: LtmMode;
+  // The chat's messages in order, the newest last.
+  messages: readonly TranscriptMessage[];
+  // World State snapshots in message order; without listGameStates, only the newest one.
+  gameStates: readonly PackageGameState[];
+  // The Game mode clock, which stands at the chat's newest message.
+  gameTime?: { day: number; hour: number; minute: number };
+};
+
+export async function loadChatStoryTimeSources(
+  chat: StoryTimeChat,
+  messages: readonly TranscriptMessage[],
+): Promise<LtmChatStoryTimeSources> {
+  const mode = ltmModeForChatMode(chat.mode);
+  if (mode === "conversation") return { mode, messages, gameStates: [] };
+  let rows: unknown = [];
+  try {
+    const persistence = getPackagePersistence();
+    rows = persistence.listGameStates
+      ? await persistence.listGameStates(chat.id)
+      : [await persistence.getGameState?.(chat.id)];
+  } catch (error) {
+    // A story date is extra: the piece still imports, undated.
+    logger.warn("[ltm] Could not read the World State of chat %s: %s", chat.id, String(error));
+  }
+  // A snapshot counts only for the swipe its message shows now (the newest one can belong to a swiped-away reply),
+  // and a malformed row is skipped rather than failing the piece's write.
+  const activeSwipes = new Map(messages.map((message) => [message.id, message.activeSwipeIndex])),
+    gameStates = (Array.isArray(rows) ? rows : []).filter((row): row is PackageGameState => {
+      const { messageId, swipeIndex, date, time } = object(row);
+      return (
+        typeof messageId === "string" &&
+        activeSwipes.get(messageId) === swipeIndex &&
+        [date, time].every((value) => value === null || typeof value === "string")
+      );
+    });
+  const clock = object(parseLtmChatMetadata(chat.metadata).gameTime),
+    { day, hour, minute } = clock,
+    whole = (value: unknown, min: number, max: number): value is number =>
+      Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+  return {
+    mode,
+    messages,
+    gameStates,
+    ...(mode === "game" && whole(day, 0, 1_000_000) && whole(hour, 0, 23) && whole(minute, 0, 59)
+      ? { gameTime: { day, hour, minute } }
+      : {}),
+  };
+}
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
+function storyTimeText(value: string | null | undefined, max: number) {
+  const clean = value?.replace(/\s+/gu, " ").trim().slice(0, max).trimEnd();
+  return clean || undefined;
+}
+function storyTimePoint(
+  date: string | null | undefined,
+  time: string | null | undefined,
+): LtmStoryTimePoint | undefined {
+  const point = { date: storyTimeText(date, 120), time: storyTimeText(time, 80) };
+  return point.date || point.time
+    ? { ...(point.date ? { date: point.date } : {}), ...(point.time ? { time: point.time } : {}) }
+    : undefined;
+}
+// ponytail: real dates use the server's clock zone, which is the user's own on a local install. Upgrade path: the
+// user's zone from the client.
+function realTimePoint(createdAt: string) {
+  const at = new Date(createdAt);
+  if (Number.isNaN(at.getTime())) return undefined;
+  return {
+    date: `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())}`,
+    time: `${pad2(at.getHours())}:${pad2(at.getMinutes())}`,
+  };
+}
+
+/**
+ * A chat piece's story date from what the Engine saved for the piece's own messages, with no model call. Conversation:
+ * the real date of its first message (and of its last when the day differs). Roleplay and Game: the first and last
+ * World State date or time saved on its messages. Game without those: the game clock, only for the piece holding the
+ * chat's newest message, since the clock stands there. Otherwise undefined: a piece is never dated from another one.
+ */
+export function stampPieceStoryTime(
+  piece: { messageIds: readonly string[]; sourceText: string },
+  sources: LtmChatStoryTimeSources,
+): LtmStoryTime | undefined {
+  const ids = new Set(piece.messageIds),
+    sourceHash = textHashForLtmSourceMaterial({ sourceText: piece.sourceText }),
+    dated = (
+      points: LtmStoryTimePoint[],
+      origin: LtmStoryTime["origin"],
+      sameEnd: (end: LtmStoryTimePoint) => boolean,
+    ) => {
+      const start = points[0],
+        end = points.at(-1);
+      return start && end ? { start, ...(sameEnd(end) ? {} : { end }), origin, sourceHash } : undefined;
+    };
+  if (sources.mode === "conversation") {
+    const points = sources.messages.flatMap((message) =>
+      ids.has(message.id) ? (realTimePoint(message.createdAt) ?? []) : [],
+    );
+    return dated(points, "message_time", (end) => end.date === points[0]?.date);
+  }
+  const points = sources.gameStates.flatMap((row) =>
+    ids.has(row.messageId) ? (storyTimePoint(row.date, row.time) ?? []) : [],
+  );
+  if (points.length) return dated(points, "world_state", (end) => isDeepStrictEqual(end, points[0]));
+  const newest = sources.messages.at(-1),
+    clock = sources.gameTime;
+  if (!clock || !newest || !ids.has(newest.id)) return undefined;
+  return {
+    start: { date: `Day ${clock.day}`, time: `${pad2(clock.hour)}:${pad2(clock.minute)}` },
+    origin: "game_clock",
+    sourceHash,
+  };
 }
 function boundedId(value: string, prefix: string) {
   return value.length <= 120 ? value : `${prefix}_${hash(value, 32)}`;
@@ -722,8 +853,9 @@ async function candidates(
       const starts = pieces?.starts.get(chat.id),
         cap = pieces?.sizes.get(chat.id) ?? pieces?.size ?? CHAT_PIECE_CHARS.standard;
       let previousPiece: Candidate["previousPiece"];
+      const storyTimeChat = { chat, messages: await getPackagePersistence().listMessages(chat.id) };
       for (const piece of transcriptPieces(
-        await getPackagePersistence().listMessages(chat.id),
+        storyTimeChat.messages,
         speaker,
         (messageId) => starts?.has(boundedId(messageId, "message")) === true,
         cap,
@@ -739,6 +871,7 @@ async function candidates(
           title,
           messageRange: { chatName: chatDisplayName.slice(0, 240), first: piece.first, last: piece.last },
           messageIds: piece.messageIds,
+          storyTimeChat,
           sourceText: piece.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: [],
@@ -1796,6 +1929,13 @@ export async function importPackageInterop(
       });
     }
   }
+  // Each chat's World State is read once per import.
+  const chatStoryTimeSources = new Map<string, Promise<LtmChatStoryTimeSources>>();
+  const storyTimeSources = ({ chat, messages }: NonNullable<Candidate["storyTimeChat"]>) => {
+    let sources = chatStoryTimeSources.get(chat.id);
+    if (!sources) chatStoryTimeSources.set(chat.id, (sources = loadChatStoryTimeSources(chat, messages)));
+    return sources;
+  };
   for (const row of rows) {
     if (conflictingSourceIds.has(row.sourceId)) continue;
     try {
@@ -1822,21 +1962,39 @@ export async function importPackageInterop(
             },
           },
         },
+        stamp =
+          row.messageIds && row.storyTimeChat
+            ? stampPieceStoryTime(
+                { messageIds: row.messageIds, sourceText: row.sourceText },
+                await storyTimeSources(row.storyTimeChat),
+              )
+            : undefined,
         found = matchExisting(row),
         existing =
           found && found.id !== row.sourceNoteId ? await storage.renameNoteId(found.id, row.sourceNoteId) : found,
+        // A date the user typed is never replaced (mergeStoryTime), so the merge reads the note under the vault lock
+        // (updateNote joins it) and not as the import's start found it.
         note = existing
-          ? await storage.updateNote(existing.id, {
-              title: row.title,
-              status: "active",
-              modes: request.modes ?? (request.mode ? [request.mode] : undefined) ?? existing.modes ?? row.modes,
-              scope,
-              ...(destinationScope ? { destinationScope } : {}),
-              tags: Array.from(new Set([...existing.tags, ...input.tags])),
-              provenance: row.provenance,
-              sections: { ...existing.sections, source: input.sections.source },
+          ? await withLtmVaultLock(root, async () => {
+              const storyTime = mergeStoryTime(((await storage.getNote(existing.id)) ?? existing).storyTime, stamp);
+              return storage.updateNote(existing.id, {
+                title: row.title,
+                status: "active",
+                modes: request.modes ?? (request.mode ? [request.mode] : undefined) ?? existing.modes ?? row.modes,
+                scope,
+                ...(destinationScope ? { destinationScope } : {}),
+                tags: Array.from(new Set([...existing.tags, ...input.tags])),
+                provenance: row.provenance,
+                sections: { ...existing.sections, source: input.sections.source },
+                ...(storyTime ? { storyTime } : {}),
+              });
             })
-          : await storage.createNote(input);
+          : // ponytail: createNote's draft schema drops storyTime, so a new dated note takes a second write; if that
+            // write fails, the note stays undated and the row reports failed for a retry. Upgrade path: let the draft
+            // schema carry storyTime.
+            await storage
+              .createNote(input)
+              .then((created) => (stamp ? storage.updateNote(created.id, { storyTime: stamp }) : created));
       const previousFingerprint = existing?.extractionFingerprint;
       // Only a background import skips; a manual import is an explicit read and always extracts.
       if (request.extract && options.keepPendingDrafts && previousFingerprint) {
