@@ -398,9 +398,15 @@ export const WRITING_RULES = [
   "Care is shown in the love interest's own register, never in borrowed comfort lines.",
   "Every cruelty has a reason the love interest believes, and the love interest keeps whatever red lines they have.",
   "A love interest may be genuinely evil, a monster or a villain, as dark as this story's Darkness allows: taming them is the point, so never soften them before the story earns it.",
-  "A face may contradict the words it speaks.",
+  // 0.38.2: the maintainer found Claude models writing every line as coded subtext and narration and plots hard to
+  // follow, where Gemini wrote easy, natural dialogue. They kept the hat and asked for balance ("humans don't always
+  // speak with subtext"), by editing these lines rather than adding new ones (the prompt is long already), with no
+  // examples so nothing is primed. Was "A face may contradict the words it speaks." The plain-words line stays as it
+  // was: the maintainer found "the reader always knows where they are…" would make models say too much. The voice line
+  // gained "and anyone may joke when it fits them", so jokes are allowed, behind a mask too.
+  "Now and then a face may contradict the words it speaks, but most of what people say, behind a mask or not, means what it says.",
   "Write in plain, everyday words: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
-  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them. The choices the protagonist is offered are plain too, not riddles.",
+  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them, and anyone may joke when it fits them. The choices the protagonist is offered are plain too, not riddles.",
   "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   // 0.36.3: the maintainer removed "Write what the protagonist feels in their body when something happens to them, not
   // only the action." (0.6.6, #1978). With the rule on thought lines, it made the protagonist's thoughts open with a
@@ -424,8 +430,9 @@ export const WRITING_RULES = [
   "When the story is set in an existing world from a game, book, film or show, keep to its canon: its places, peoples, characters, powers, history and terms. Never rename, replace, or reinvent them.",
 ] as const;
 
+// 0.38.2 (the maintainer's ask, folded into their pacing line): twists need build-up too, and the plot makes sense.
 export const STORY_PACING_INSTRUCTION =
-  'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs only if they have proper build-ups between more mundane scenes.';
+  'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs and twists only if they have proper build-ups between more mundane scenes; the plot always makes sense to an ordinary reader.';
 
 /**
  * The banned-phrases line: the built-in list, then the player's own (Settings → Content), each quoted as typed. With no
@@ -977,7 +984,7 @@ export function worldPlanMessages({
     "FIELDS",
     "- title: the story's name, 2 to 6 words.",
     "- setting: 2 to 4 sentences: the place, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous. When the premise or a love interest's card sets the story in an existing world from a game, book, film or show (such as Teyvat from Genshin Impact), the setting is that world, named as it is, with its canon intact; only this story's situation is new.",
-    "- mystery.question: the question the protagonist will chase, one sentence. mystery.truth: the full hidden answer, 2 to 4 sentences.",
+    "- mystery.question: the question the protagonist will chase, one sentence. mystery.truth: the full hidden answer, 2 to 4 sentences, in plain cause and effect that makes sense once told.",
     "- pieces: exactly one per love interest, with that love interest's exact id. piece: the part of the truth that love interest holds. reasonToHide: that love interest's own reason to keep it from the protagonist.",
     "- web: one row for each pair of love interests: their shared history, their stance, what one owes the other, and optionally a secret between them the protagonist does not know (omit it when there is none).",
     "- openingSituation: 2 to 3 sentences: where the protagonist is when the story begins, and what has just happened.",
@@ -2238,10 +2245,11 @@ export const BEAT_WORDS_MAX = 950;
  * 0.36.4 (#2384): what a spoken segment is, in P6, P12 and P12c. Players found every character speaking in short,
  * "witty" one-liners that made no sense in the scene ("Jules. The piano. I hear it's sharp."), so a line says what the
  * person would really say, about what is happening, at the length it needs. "Speech uses everyday words." is the
- * maintainer's, kept from the dialogue rule they removed from the writing rules.
+ * maintainer's, kept from the dialogue rule they removed from the writing rules. 0.38.2 (the maintainer's pick): a line
+ * may also be a single word, as people really react, so a surprise need not be wrapped in a sentence.
  */
 export const SPOKEN_LINE_RULE =
-  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it may run to a few sentences. Speech uses everyday words.";
+  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words.";
 
 // Under NSFW: Explicit, sex is never rushed (HEAT_TEXT, Shared blocks), so a node or a Closer's opened ending that
 // reaches it gets more room (CLOSER_INTIMATE_ENDING_MAX is in S/story/replies.ts). Each fits the reply's budget

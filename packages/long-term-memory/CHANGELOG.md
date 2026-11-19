@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.6 — 2026-11-20
 
 - The Vault and Sources open and respond quickly with a very large character library (tens of thousands of cards) instead of freezing for minutes.
 

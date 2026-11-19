@@ -617,7 +617,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.6.5",
+    version: "1.6.6",
     // ponytail: Engine 2.5.2 is the newest release and predates Capability API 1.820, so a version cannot tell an Engine
     // with it from one without; the capabilityApi declaration is what makes an older Engine refuse this package. Raise
     // minEngineVersion to the first Engine release that carries 1.820 once it exists.
@@ -948,7 +948,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.38.1",
+    version: "0.38.2",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),

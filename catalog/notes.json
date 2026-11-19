@@ -428,6 +428,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.6",
+          "date": "2026-11-20",
+          "notes": "- The Vault and Sources open and respond quickly with a very large character library (tens of thousands of cards) instead of freezing for minutes.",
+          "highlight": false
+        },
+        {
           "version": "1.6.5",
           "date": "2026-11-19",
           "notes": "- New memories from Roleplay and Game chats carry the story date the World State tracker saved, and Conversation memories carry the real date.\n- Find story dates reads your existing memories' chat text for in-story dates and time skips, shows what it found with the exact words it relied on, and saves only what you apply.\n- Memories show their story date in the Vault, where you can correct it, and the story's timeline reaches the AI with its dates.",
@@ -539,12 +545,6 @@
           "version": "1.5.17",
           "date": "2026-10-30",
           "notes": "- Other packages can no longer read Long-Term Memory's internal runtime service, which only Marinara itself uses. This needs a Marinara version with Capability API 1.388; on older versions nothing changes. Recall for Slurp and Noodle is unaffected.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.16",
-          "date": "2026-10-30",
-          "notes": "- Review: a later chat piece's thread and relationship updates apply together with the rest of the draft instead of one at a time.",
           "highlight": false
         }
       ]
@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.38.2",
+          "date": "2026-11-19",
+          "notes": "- Characters talk more plainly. The writing rules now say that most of what people say means what it says, even behind a mask, and that a face which contradicts the words is only an occasional beat. A spoken line can be a single word as well as a few sentences, and anyone may joke when it fits them. Some models, Claude among them, wrote nearly every line as hidden meaning that was hard to follow.\n- Twists need a build-up, as emotional payoffs already did, and the plot has to make sense to an ordinary reader. A new story's central mystery is planned so that it makes sense once it is revealed.",
+          "highlight": false
+        },
+        {
           "version": "0.38.1",
           "date": "2026-11-19",
           "notes": "- On the Story screen's **Between you**, a love interest past their finale now shows their real level, from **Level 11** to **Level 20**. Before, every bond rank showed as Level 10 followed by the rank's name, such as \"Level 10 · named\".",
@@ -827,12 +833,6 @@
           "version": "0.34.9",
           "date": "2026-11-17",
           "notes": "- **New looks don't copy your avatar's hood.** A look is painted with your persona avatar (or his card picture) as the likeness, and when that picture wore a hood or a hat, every new look wore it too. The picture is now used only for the face, hair and build: a look wears just the outfit it was written with, and a hood or hat only when that outfit has one. Looks you already have keep their pictures; tap **Repaint** to paint one again.\n- **No more stray pixels at a look's edges.** A look is painted on a flat backdrop that its cut-out then removes, and a plum cardigan was painted on magenta, so the cut-out ate its edges. The backdrop is now chosen from more colour names (plum, burgundy, wine, lilac, sage, moss, denim and others) and mostly from the clothes, which are what touch it. Repaint a look that shows the specks.",
-          "highlight": false
-        },
-        {
-          "version": "0.34.8",
-          "date": "2026-11-16",
-          "notes": "- **Take them along sits in its card on an iPhone.** On a date's **Who's coming?**, the title and its icon sat on the card's top edge, with a second frame showing above it. They are now inside the card, side by side, and the Dates screen's **Who are you spending time with?** card is fixed the same way.\n- **The chapter count is centred.** On the Story home, the arc line is centred under the title, and \"chapter 3 of 5\" always stays on one line.\n- **Paint it shows painting at once.** In **Album → Dates**, tapping **Paint it** on a 4★ date shows **Painting…** right away, and the picture appears when it is ready. You no longer need to leave the screen and come back.",
           "highlight": false
         }
       ]
