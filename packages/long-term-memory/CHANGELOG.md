@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.5 — 2026-11-19
 
 - New memories from Roleplay and Game chats carry the story date the World State tracker saved, and Conversation memories carry the real date.
 - Find story dates reads your existing memories' chat text for in-story dates and time skips, shows what it found with the exact words it relied on, and saves only what you apply.
