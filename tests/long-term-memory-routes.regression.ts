@@ -37,6 +37,7 @@ const EXPECTED_ROUTES = [
   "GET /api/long-term-memory/notes",
   "GET /api/long-term-memory/notes/:id",
   "GET /api/long-term-memory/notes/:id/derived",
+  "GET /api/long-term-memory/notes/:id/story-date",
   "GET /api/long-term-memory/people/scope",
   "GET /api/long-term-memory/rejected-suggestions",
   "GET /api/long-term-memory/scope-targets",
@@ -696,6 +697,16 @@ async function main(routeScenario: RouteScenario) {
         const typedDate = await patchStory({ storyTime: { start: { date: "Midwinter" }, origin: "manual" } });
         assert.equal(typedDate.statusCode, 200, typedDate.body);
         assert.deepEqual(typedDate.json().note.storyTime, { start: { date: "Midwinter" }, origin: "manual" });
+        const storyDate = (id: string) =>
+          app.inject({ method: "GET", url: `/api/long-term-memory/notes/${id}/story-date`, headers });
+        const shownDate = await storyDate("source_route_story_edit");
+        assert.equal(shownDate.statusCode, 200, shownDate.body);
+        assert.deepEqual(shownDate.json(), {
+          text: "Midwinter",
+          source: "manual",
+          typed: { start: { date: "Midwinter" }, origin: "manual" },
+        });
+        assert.equal((await storyDate("source_route_story_missing")).statusCode, 404);
         const clearedDate = await patchStory({ storyTime: null });
         assert.equal(clearedDate.statusCode, 200, clearedDate.body);
         assert.equal((await storageService.storage.getNote("source_route_story_edit"))?.storyTime, undefined);
@@ -1467,7 +1478,7 @@ async function main(routeScenario: RouteScenario) {
         url: "/api/long-term-memory/status",
         headers,
       });
-      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 6);
+      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 7);
       assert.ok(
         Number.isInteger(rebuiltStatus.json().indexes.averageMemoryTokens) &&
           rebuiltStatus.json().indexes.averageMemoryTokens >= 1,

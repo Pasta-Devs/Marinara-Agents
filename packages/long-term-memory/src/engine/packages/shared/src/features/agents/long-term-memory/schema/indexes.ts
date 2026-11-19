@@ -37,6 +37,8 @@ export const ltmMemoryChunkSchema = z
     dimensions: ltmRelationshipDimensionsSchema.optional(),
     dimensionChanges: ltmRelationshipDimensionChangesSchema.optional(),
     updatedAt: ltmIsoTimestampSchema,
+    // Timeline events: the story date their recall bullet starts with.
+    storyDate: z.string().min(1).max(600).optional(),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strict();

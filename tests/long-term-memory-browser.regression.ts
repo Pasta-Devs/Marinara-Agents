@@ -8674,6 +8674,235 @@ async function main() {
         await fixPage.close();
       }
       {
+        // #2396: the Vault shows a memory's story date with its source, a typed date saves on its own as a manual
+        // date, and Find story dates previews chat pieces, leaves out rejected rows and sends only the kept rows.
+        const storyPage = await browserContext.newPage();
+        const storyBase = "**/api/long-term-memory";
+        const sourceHash = "a".repeat(64);
+        let typedDate: string | null = null;
+        const storyPatches: Array<Record<string, unknown>> = [];
+        await storyPage.route(`${storyBase}/notes/${scopedDesktopNote.id}/story-date`, (route) =>
+          route.request().method() !== "GET"
+            ? route.fallback()
+            : route.fulfill({
+                json: typedDate
+                  ? { text: typedDate, source: "manual", typed: { start: { date: typedDate }, origin: "manual" } }
+                  : { text: "Day 23, Friday", source: "stated", evidence: "the next morning" },
+              }),
+        );
+        await storyPage.route(`${storyBase}/notes/${scopedDesktopNote.id}`, (route) => {
+          if (route.request().method() !== "PATCH") return route.fallback();
+          const patch = route.request().postDataJSON() as { storyTime: { start: { date: string } } | null };
+          storyPatches.push(patch);
+          typedDate = patch.storyTime?.start.date ?? null;
+          return route.fulfill({
+            json: {
+              note: {
+                ...scopedDesktopNote,
+                ...(patch.storyTime ? { storyTime: patch.storyTime } : {}),
+                updatedAt: noteTimestamp,
+                version: scopedDesktopNote.version + storyPatches.length,
+              },
+              rebuild: null,
+            },
+          });
+        });
+        const chatPieceTitles: Record<string, string> = {
+          chat_piece_engine: "Chat piece A",
+          chat_piece_scan: "Chat piece B",
+          chat_piece_next: "Chat piece C",
+        };
+        const engineRow = (noteId: string, date: string) => ({
+          kind: "engine",
+          noteId,
+          sourceHash,
+          chatId: "story-chat",
+          title: chatPieceTitles[noteId],
+          storyTime: { start: { date }, origin: "world_state" },
+        });
+        const scanStated = { date: "Day 20", time: "evening", quote: "it was day twenty, in the evening" };
+        const scanJump = { quote: "three weeks passed", amount: 3, unit: "week" };
+        const storyPreviewBodies: unknown[] = [];
+        const storyApplyBodies: Array<{ rows: Array<Record<string, unknown>> }> = [];
+        await storyPage.route(`${storyBase}/story-dates/scope`, (route) =>
+          route.fulfill({ json: { count: 3, connectionId: null, model: "fictional-model-1", chats: [] } }),
+        );
+        await storyPage.route(`${storyBase}/story-dates/preview`, (route) => {
+          const body = route.request().postDataJSON() as { after?: string } | null;
+          storyPreviewBodies.push(body);
+          return route.fulfill({
+            json: body?.after
+              ? {
+                  total: 3,
+                  checked: 3,
+                  unchecked: 0,
+                  truncated: false,
+                  next: null,
+                  failedChunks: 0,
+                  pieces: [engineRow("chat_piece_next", "Day 40")],
+                  rejected: [],
+                }
+              : {
+                  total: 3,
+                  checked: 2,
+                  unchecked: 0,
+                  truncated: true,
+                  next: "after-piece-2",
+                  failedChunks: 0,
+                  pieces: [
+                    engineRow("chat_piece_engine", "Day 2"),
+                    {
+                      kind: "scan",
+                      noteId: "chat_piece_scan",
+                      sourceHash,
+                      chatId: "story-chat",
+                      title: chatPieceTitles.chat_piece_scan,
+                      stated: scanStated,
+                      jumps: [scanJump],
+                      reaches: ["Day 23 · Friday"],
+                    },
+                  ],
+                  rejected: [
+                    {
+                      noteId: "chat_piece_scan",
+                      kind: "jump",
+                      quote: "a few days later",
+                      reason: "amount_not_in_quote",
+                    },
+                  ],
+                },
+          });
+        });
+        await storyPage.route(`${storyBase}/story-dates/apply`, (route) => {
+          const body = route.request().postDataJSON() as { rows: Array<Record<string, unknown>> };
+          storyApplyBodies.push(body);
+          return route.fulfill({
+            json: { applied: body.rows.map((row) => row.noteId), skipped: [], rejected: [], rebuild: null },
+          });
+        });
+        await storyPage.goto(`http://127.0.0.1:${address.port}/`);
+        await storyPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await storyPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        const storySearch = storyPage.getByLabel("Search memories", { exact: true });
+        await storySearch.fill("Scoped desktop memory");
+        const storyCard = storyPage
+          .locator('[data-ltm-note-type="world"]')
+          .filter({ hasText: /^Scoped desktop memory/u })
+          .first();
+        await storyCard.waitFor();
+        await storyCard.locator("button").first().click();
+        if ((await storyPage.locator("[data-ltm-details-toggle]").getAttribute("aria-pressed")) !== "true")
+          await storyPage.locator("[data-ltm-details-toggle]").click();
+        await storyPage
+          .locator("[data-ltm-record-info]")
+          .first()
+          .evaluate((element) => {
+            (element as HTMLDetailsElement).open = true;
+          });
+        const storyLine = storyPage.locator("[data-ltm-story-date]").first();
+        const storyText = storyLine.locator("[data-ltm-story-date-text]");
+        await storyText.waitFor();
+        assert.equal(
+          (await storyText.textContent())?.trim(),
+          "Day 23, Friday · Found in the text: “the next morning”",
+          "the story date shows with where it came from",
+        );
+        const storySource = storyLine.locator("[data-ltm-story-date-source]");
+        assert.equal(await storySource.getAttribute("data-ltm-story-date-source"), "stated");
+        assert.equal(await storyLine.locator("[data-ltm-story-date-clear]").count(), 0, "Clear waits for a typed date");
+        // Typing a date saves it at once as a manual date; spaces and line breaks are tidied first.
+        await storyLine.locator("[data-ltm-story-date-edit]").click();
+        const storyInput = storyLine.locator("[data-ltm-story-date-input]");
+        await storyInput.fill("  3rd of Frostfall,   evening ");
+        await storyLine.locator("[data-ltm-story-date-save]").click();
+        await toastWith(storyPage, "Story date saved.").waitFor({ timeout: 5000 });
+        assert.deepEqual(
+          storyPatches,
+          [{ storyTime: { start: { date: "3rd of Frostfall, evening" }, origin: "manual" } }],
+          "a typed date is a manual date",
+        );
+        await storyLine.locator("[data-ltm-story-date-clear]").waitFor({ timeout: 5000 });
+        assert.equal(
+          (await storyText.textContent())?.trim(),
+          "3rd of Frostfall, evening · typed by you",
+          "the typed date shows as typed by you",
+        );
+        await storyLine.locator("[data-ltm-story-date-clear]").click();
+        await toastWith(storyPage, "Typed story date cleared.").waitFor({ timeout: 5000 });
+        assert.deepEqual(storyPatches[1], { storyTime: null }, "Clear removes only the typed date");
+        await storyLine.locator("[data-ltm-story-date-clear]").waitFor({ state: "detached", timeout: 5000 });
+        assert.match((await storyText.textContent()) ?? "", /Day 23, Friday/u, "the found date shows again");
+
+        // Find story dates: nothing is sent until Start.
+        await storyPage.locator("[data-ltm-vault-more]").click();
+        await storyPage.locator("[data-ltm-vault-story-dates]").click();
+        const storyDialog = storyPage.locator("[data-ltm-story-dates-dialog]");
+        await storyDialog.locator('[data-ltm-story-dates-state="confirm"]').waitFor();
+        await storyDialog
+          .locator("[data-ltm-story-dates-scope]")
+          .getByText(/Uses fictional-model-1\..*3 chat pieces not checked yet\./u)
+          .waitFor();
+        assert.deepEqual(storyPreviewBodies, [], "nothing is sent before Start");
+        await storyDialog.locator("[data-ltm-story-dates-start]").click();
+        await storyDialog.locator('[data-ltm-story-dates-state="results"]').waitFor();
+        assert.deepEqual(storyPreviewBodies, [null], "the first batch starts from the beginning");
+        const engineRowText = storyDialog.locator('[data-ltm-story-dates-row="chat_piece_engine"]');
+        const scanRowText = storyDialog.locator('[data-ltm-story-dates-row="chat_piece_scan"]');
+        assert.match((await engineRowText.textContent()) ?? "", /Chat piece A.*Day 2 · World State/u);
+        assert.match(
+          (await scanRowText.textContent()) ?? "",
+          /Chat piece B.*Day 20, evening · found in the text · “it was day twenty, in the evening”/u,
+        );
+        assert.equal(
+          (await scanRowText.locator("[data-ltm-story-dates-jump]").textContent())?.trim(),
+          "“three weeks passed” → +3 weeks → Day 23 · Friday",
+          "a jump shows what it counts and where the story stands after it",
+        );
+        const droppedEntries = storyDialog.locator("[data-ltm-story-dates-dropped-reason]");
+        assert.equal(await droppedEntries.count(), 1);
+        assert.match(
+          (await droppedEntries.first().textContent()) ?? "",
+          /Chat piece B.*“a few days later”/u,
+          "an entry the checks dropped shows with its piece and quote",
+        );
+        const storyApply = storyDialog.locator("[data-ltm-story-dates-apply]");
+        assert.match((await storyApply.textContent()) ?? "", /Save 2 pieces/u);
+        // Leaving a row out keeps it out of what is sent.
+        await storyDialog.locator('[data-ltm-story-dates-reject="chat_piece_engine"]').click();
+        await engineRowText.locator("[data-ltm-story-dates-reject]").getByText("Put back", { exact: true }).waitFor();
+        assert.match((await storyApply.textContent()) ?? "", /Save 1 piece/u);
+        assert.deepEqual(storyApplyBodies, [], "nothing is saved before Save");
+        await storyApply.click();
+        await storyDialog.locator('[data-ltm-story-dates-state="done"]').waitFor();
+        assert.deepEqual(
+          storyApplyBodies,
+          [{ rows: [{ kind: "scan", noteId: "chat_piece_scan", sourceHash, stated: scanStated, jumps: [scanJump] }] }],
+          "only the kept row is sent",
+        );
+        await toastWith(storyPage, "Dated 1 piece.").waitFor({ timeout: 5000 });
+        // The next batch carries on after the position the first one gave.
+        await storyDialog.locator("[data-ltm-story-dates-next]").click();
+        await storyDialog.locator('[data-ltm-story-dates-state="results"]').waitFor();
+        assert.deepEqual(storyPreviewBodies[1], { after: "after-piece-2" });
+        assert.equal(await storyDialog.locator('[data-ltm-story-dates-row="chat_piece_next"]').count(), 1);
+        await storyApply.click();
+        await storyDialog.locator('[data-ltm-story-dates-state="done"]').waitFor();
+        assert.deepEqual(
+          storyApplyBodies[1],
+          { rows: [{ kind: "engine", noteId: "chat_piece_next", sourceHash }] },
+          "an Engine-dated row sends no date, only the piece text it was read from",
+        );
+        assert.equal(await storyDialog.locator("[data-ltm-story-dates-next]").count(), 0, "no batch is left");
+        await storyDialog.getByRole("button", { name: "Done", exact: true }).click();
+        await storyDialog.waitFor({ state: "detached" });
+        await storyPage.close();
+      }
+      {
         // #1588: clearing the memory search keeps focus in the search box, Create detail moves focus into the
         // new detail's text, and Cancel returns it to the button that opened the form.
         const detailPage = await browserContext.newPage();

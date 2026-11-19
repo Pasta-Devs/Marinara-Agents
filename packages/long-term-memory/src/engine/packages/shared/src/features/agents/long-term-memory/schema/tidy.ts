@@ -141,6 +141,8 @@ export const ltmStoryDatesPreviewRowSchema = z.discriminatedUnion("kind", [
       title: z.string().max(240),
       stated: ltmStoryDatesStatedSchema.nullable(),
       jumps: z.array(ltmStoryTimeJumpSchema).max(100),
+      /** Per jump: where the story stands after it once this preview is applied ("Day 23 · Friday"); null when not worked out. */
+      reaches: z.array(z.string().min(1).max(600).nullable()).max(100),
     })
     .strict(),
 ]);

@@ -312,6 +312,54 @@ async function main() {
     sourceNoteIds: [],
   });
 
+  // Recall: a timeline bullet starts with its story date. The date is in the chunk hash, so a changed jump on an earlier
+  // piece rebuilds the chunks of the events after it, and only those; the chunk text, and so its embedding, stays.
+  const { chunkNotes, CURRENT_LTM_CHUNK_FORMAT_VERSION } = await import(`${source}/recall/chunking.ts`);
+  const { formatLtmChunkPromptText } = await import(`${source}/recall/prompt-text.ts`);
+  assert.equal(CURRENT_LTM_CHUNK_FORMAT_VERSION, 7);
+  const timeline = (id: string, contributions: object[], extra: object = {}) =>
+    memory(id, "timeline_event", contributions, extra);
+  const events = [
+    event,
+    timeline("timeline_exact", [], {
+      storyTime: { start: { date: "3rd of Frostfall", time: "evening" }, origin: "manual" },
+    }),
+    timeline("timeline_vague", [contribution("source_other_1", timestamp)]),
+    timeline("timeline_none", []),
+    timeline("timeline_first", [contribution("source_wren_1", timestamp)]),
+  ];
+  const chunksOf = (notes: any[]) =>
+    new Map(
+      chunkNotes(notes)
+        .filter((chunk: any) => chunk.noteType === "timeline_event")
+        .map((chunk: any) => [chunk.noteId, chunk]),
+    );
+  const before = chunksOf([...pieces, ...events]);
+  assert.deepEqual(Object.fromEntries([...before].map(([id, chunk]: any) => [id, formatLtmChunkPromptText(chunk)])), {
+    timeline_wren_trip: "[Day 1, Thursday to Day 23, Friday] Fact.",
+    timeline_exact: "[3rd of Frostfall, evening] Fact.",
+    timeline_vague: "[Day 1 to about 1 year after Day 1] Fact.",
+    timeline_none: "Fact.",
+    timeline_first: "[Day 1, Thursday] Fact.",
+  });
+  const changedJump = pieces.map((note) =>
+    note.id === "source_wren_2" ? { ...note, storyTimeScan: { ...note.storyTimeScan!, jumps: [day(2)] } } : note,
+  );
+  const after = chunksOf([...changedJump, ...events]);
+  assert.equal(
+    formatLtmChunkPromptText(after.get("timeline_wren_trip")),
+    "[Day 1, Thursday to Day 24, Saturday] Fact.",
+  );
+  assert.notEqual(after.get("timeline_wren_trip").sourceHash, before.get("timeline_wren_trip").sourceHash);
+  assert.equal(after.get("timeline_wren_trip").text, before.get("timeline_wren_trip").text);
+  for (const id of ["timeline_exact", "timeline_vague", "timeline_none", "timeline_first"])
+    assert.equal(after.get(id).sourceHash, before.get(id).sourceHash, `${id} keeps its chunk`);
+  // A bare label on its own line: the date stays with the event text, not on a bullet of its own.
+  assert.equal(
+    formatLtmChunkPromptText({ ...before.get("timeline_first"), text: "summary:\nFact." }),
+    "[Day 1, Thursday] Fact.",
+  );
+
   await findStoryDates({ hash, resolveStoryTime, formatStoryPosition });
 
   process.stdout.write(
@@ -567,6 +615,12 @@ async function findStoryDates({ hash, resolveStoryTime, formatStoryPosition }: a
         [null, [{ quote: "a few days later", amount: null, unit: "day" }]],
       );
       assert.deepEqual(rowOf(fourth.id).jumps, [{ quote: "Morning came", amount: 1, unit: "day", implied: true }]);
+      // Where each jump reaches once the preview is applied, counted from the dates in this same preview. The piece the
+      // reply missed is not checked, so the jumps after it reach no known day.
+      assert.deepEqual(
+        [rowOf(talk.id).reaches, rowOf(first.id).reaches, rowOf(third.id).reaches, rowOf(fourth.id).reaches],
+        [undefined, ["Day 4 · Sunday"], [null], [null]],
+      );
       assert.deepEqual(
         preview.rejected.map((entry: any) => [entry.noteId, entry.kind, entry.reason]),
         [

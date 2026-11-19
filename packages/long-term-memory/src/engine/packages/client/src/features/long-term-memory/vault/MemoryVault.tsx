@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Archive,
+  CalendarClock,
   ChevronRight,
   Ellipsis,
   FileText,
@@ -113,6 +114,8 @@ import { BulkAvailabilityWorkbench } from "./BulkAvailabilityWorkbench";
 import { useVaultBackup } from "./useVaultBackup";
 import { useVaultFix } from "./useVaultFix";
 import { TidyDialog, type LtmAiCheckKind } from "../onboarding/TidyWithAi";
+import { FindStoryDatesDialog } from "../onboarding/FindStoryDates";
+import { StoryDateLine } from "./StoryDateLine";
 import { formatAge } from "../settings/debug-activity";
 import { VaultRow, type VaultRowActions } from "./VaultRow";
 
@@ -1948,6 +1951,29 @@ export default function MemoryVault({
     await invalidate().catch(() => undefined);
     toast.success(localizeUi("ui.longTermMemory.memoryvault.availabilitySaved"));
   }
+  // A story date is saved on its own, outside the editor's Save. Unsaved edits keep everything but the story date, as in
+  // saveAvailability; another memory opened meanwhile is left alone.
+  async function applyStoryDate(changed: LtmNote) {
+    const next = structuredClone(changed);
+    if (draftRef.current?.id === next.id) {
+      const editorWasDirty = fingerprint(draftRef.current) !== saved;
+      setDraft((current) =>
+        current && current.id === next.id
+          ? editorWasDirty
+            ? {
+                ...current,
+                storyTime: next.storyTime,
+                storyTimeScan: next.storyTimeScan,
+                updatedAt: next.updatedAt,
+                version: next.version,
+              }
+            : next
+          : current,
+      );
+      setSaved(fingerprint(next));
+    }
+    await invalidate();
+  }
   function save(): Promise<boolean> {
     if (savePromiseRef.current) return savePromiseRef.current;
     const running = runSave().finally(() => {
@@ -2026,6 +2052,9 @@ export default function MemoryVault({
               provenance,
               extractionFingerprint,
               extracted,
+              // Saved on their own by the Story date line; the server refuses them in a full-note save.
+              storyTime,
+              storyTimeScan,
               sections,
               ...note
             }) =>
@@ -2733,6 +2762,7 @@ export default function MemoryVault({
     requestAnimationFrame(reveal);
   };
   const [aiCheck, setAiCheck] = useState<LtmAiCheckKind | null>(null);
+  const [storyDatesOpen, setStoryDatesOpen] = useState(false);
   const fix = useVaultFix({
     props,
     busy: Boolean(busy),
@@ -2889,9 +2919,14 @@ export default function MemoryVault({
               <Users aria-hidden="true" size="0.875rem" />
               {localizeUi("ui.longTermMemory.whatsnew.peopleTitle")}
             </Button>
+            <Button data-ltm-vault-story-dates onClick={() => setStoryDatesOpen(true)}>
+              <CalendarClock aria-hidden="true" size="0.875rem" />
+              {localizeUi("ui.longTermMemory.storyDates.title")}
+            </Button>
           </div>
         ) : null}
         {aiCheck ? <TidyDialog kind={aiCheck} onClose={() => setAiCheck(null)} /> : null}
+        {storyDatesOpen ? <FindStoryDatesDialog onClose={() => setStoryDatesOpen(false)} /> : null}
         {backup.panel}
         {fix}
       </div>
@@ -4180,6 +4215,21 @@ export default function MemoryVault({
                                     </dt>
                                     <dd className="mt-0.5 break-words">{noteTypeLabel(draft.type)}</dd>
                                   </div>
+                                  {isNew ? null : (
+                                    <div data-ltm-record-story-date>
+                                      <dt className="font-medium text-[var(--foreground)]">
+                                        {localizeUi("ui.longTermMemory.memoryvault.storyDate")}
+                                      </dt>
+                                      <dd className="mt-0.5 break-words">
+                                        <StoryDateLine
+                                          key={draft.id}
+                                          noteId={draft.id}
+                                          disabled={Boolean(busy)}
+                                          onSaved={applyStoryDate}
+                                        />
+                                      </dd>
+                                    </div>
+                                  )}
                                   <div>
                                     <dt className="font-medium text-[var(--foreground)]">
                                       {localizeUi("ui.longTermMemory.memoryvault.history")}

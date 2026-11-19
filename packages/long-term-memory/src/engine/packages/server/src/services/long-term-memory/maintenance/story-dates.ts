@@ -17,8 +17,10 @@ import { ltmSourceMessageRange } from "../identity/chat-scope.js";
 import { getPackagePersistence, logger, type PackageLanguageModel } from "../package-runtime.js";
 import type { LongTermMemoryStorage } from "../persistence/storage.js";
 import {
+  countStoryDays,
   currentStoryTime,
   currentStoryTimeScan,
+  formatStoryPosition,
   isChatPiece,
   isPinnedStoryDate,
   isWeekdayOnly,
@@ -465,6 +467,54 @@ function parseReply(content: string, sent: StoryPiece[]) {
 
 const pieceTitle = (piece: StoryPiece) => oneLine(piece.note.title ?? "").slice(0, 240);
 
+type ScanRowDraft = Omit<Extract<LtmStoryDatesPreviewRow, { kind: "scan" }>, "reaches">;
+type PreviewRowDraft = Extract<LtmStoryDatesPreviewRow, { kind: "engine" }> | ScanRowDraft;
+
+/** Counts each chat with every row of this preview applied, and gives each scan row where the story is after each jump. */
+function withReaches(pieces: StoryPiece[], rows: PreviewRowDraft[]): LtmStoryDatesPreviewRow[] {
+  const byId = new Map(rows.map((row) => [row.noteId, row])),
+    steps = new Map<string, ReturnType<typeof countStoryDays>[number]["steps"]>();
+  for (const chatId of new Set(rows.flatMap((row) => (row.kind === "scan" && row.jumps.length ? [row.chatId] : []))))
+    for (const result of countStoryDays(
+      pieces
+        .filter((piece) => piece.chatId === chatId)
+        .map((piece) => {
+          const row = byId.get(piece.note.id),
+            existing = currentStoryTime({ ...piece.note, sourceHash: piece.sourceHash }),
+            storyTime =
+              row?.kind === "engine"
+                ? mergeStoryTime(existing, row.storyTime)
+                : row?.stated
+                  ? mergeStoryTime(existing, {
+                      start: { date: row.stated.date, ...(row.stated.time ? { time: row.stated.time } : {}) },
+                      origin: "stated",
+                      sourceHash: piece.sourceHash,
+                    })
+                  : existing,
+            storyTimeScan =
+              row?.kind === "scan" ? { sourceHash: piece.sourceHash, jumps: row.jumps } : piece.note.storyTimeScan;
+          return {
+            id: piece.note.id,
+            sourceHash: piece.sourceHash,
+            ...(storyTime ? { storyTime } : {}),
+            ...(storyTimeScan ? { storyTimeScan } : {}),
+          };
+        }),
+    ))
+      steps.set(result.id, result.steps);
+  return rows.map((row) => {
+    if (row.kind === "engine") return row;
+    const after = steps.get(row.noteId) ?? [];
+    return {
+      ...row,
+      reaches: row.jumps.map((_, index) => {
+        const position = after[index];
+        return position && position.kind !== "unknown" ? formatStoryPosition(position) : null;
+      }),
+    };
+  });
+}
+
 export async function previewLtmStoryDates(options: {
   root: string;
   storage: LongTermMemoryStorage;
@@ -479,7 +529,7 @@ export async function previewLtmStoryDates(options: {
     pieces = await listPieces(options.storage),
     { processed, next: planned } = planBatches(pieces, options.after),
     chatSources = chatSourcesLoader(),
-    rows: LtmStoryDatesPreviewRow[] = [],
+    rows: PreviewRowDraft[] = [],
     rejected: LtmStoryDatesRejected[] = [],
     unresolved = new Set<StoryPiece>();
   let calls = 0,
@@ -604,7 +654,7 @@ export async function previewLtmStoryDates(options: {
     truncated: next !== null,
     next,
     failedChunks,
-    pieces: rows,
+    pieces: withReaches(pieces, rows),
     rejected,
   });
 }

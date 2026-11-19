@@ -65,7 +65,13 @@ export type LtmStoryDayPiece = {
   storyTimeScan?: LtmStoryTimeScan;
 };
 
-export type LtmStoryDayResult = { id: string; start: LtmStoryPosition; end: LtmStoryPosition };
+// steps: where the piece stands after each of its jumps, in order (empty when its jumps were not added).
+export type LtmStoryDayResult = {
+  id: string;
+  start: LtmStoryPosition;
+  end: LtmStoryPosition;
+  steps: LtmStoryPosition[];
+};
 
 type DayState = { anchor: string | null; days: number; after: LtmStoryStep[]; weekday?: number };
 
@@ -90,7 +96,7 @@ export function countStoryDays(pieces: readonly LtmStoryDayPiece[]): LtmStoryDay
       scan = currentStoryTimeScan(piece);
     if (!state || (!storyTime?.start.date && !storyTime?.end?.date && !scan)) {
       state = undefined;
-      return { id: piece.id, start: UNKNOWN, end: UNKNOWN };
+      return { id: piece.id, start: UNKNOWN, end: UNKNOWN, steps: [] };
     }
     let next: DayState = storyTime?.start.date ? markDate(state, storyTime.start.date) : state;
     const startOrigin = storyTime?.start.date ? storyTime.origin : undefined,
@@ -98,7 +104,11 @@ export function countStoryDays(pieces: readonly LtmStoryDayPiece[]): LtmStoryDay
     // A pinned date covers the whole piece, so its text cannot move it. Without an end it ends where it began.
     const pinned = isPinnedStoryDate(storyTime),
       jumps = pinned ? [] : (scan?.jumps ?? []);
-    for (const jump of jumps) next = applyJump(next, jump);
+    const steps: LtmStoryPosition[] = [];
+    for (const jump of jumps) {
+      next = applyJump(next, jump);
+      steps.push(position(next, undefined, undefined));
+    }
     let endTime = jumps.length ? undefined : storyTime?.start.time,
       endOrigin = jumps.length ? undefined : startOrigin;
     if (storyTime?.end) {
@@ -107,7 +117,7 @@ export function countStoryDays(pieces: readonly LtmStoryDayPiece[]): LtmStoryDay
       endOrigin = storyTime.end.date || pinned ? storyTime.origin : undefined;
     }
     state = next;
-    return { id: piece.id, start, end: position(next, endTime, endOrigin) };
+    return { id: piece.id, start, end: position(next, endTime, endOrigin), steps };
   });
 }
 
@@ -195,7 +205,7 @@ function describeSteps(steps: LtmStoryStep[]) {
 }
 
 /** Display text for a position: "Day 23 · Friday", "about 2 months after Day 23", "not worked out yet". */
-export function formatStoryPosition(position: LtmStoryPosition) {
+export function formatStoryPosition(position: LtmStoryPosition, dot = " · ") {
   if (position.kind === "unknown") return "not worked out yet";
   if (position.kind === "date") return [position.date, position.time].filter(Boolean).join(", ");
   const steps: LtmStoryStep[] =
@@ -213,7 +223,7 @@ export function formatStoryPosition(position: LtmStoryPosition) {
     return detail ? `${detail}, ${span}` : span;
   }
   if (!detail) return base;
-  return position.anchor === null ? `${base} · ${detail}` : `${base}, ${detail}`;
+  return position.anchor === null ? `${base}${dot}${detail}` : `${base}, ${detail}`;
 }
 
 export type LtmChatPiece = LtmNote & { provenance: NonNullable<LtmNote["provenance"]> };
@@ -233,6 +243,9 @@ export function byPieceOrder(left: LtmChatPiece, right: LtmChatPiece) {
     [rightMessage, rightPart] = pieceOrder(right);
   return leftMessage - rightMessage || leftPart - rightPart || left.id.localeCompare(right.id);
 }
+
+/** Each chat's count by piece id, so a caller resolving many notes counts each chat once. */
+export type LtmStoryDayCounts = Map<string, Map<string, LtmStoryDayResult>>;
 
 function countChat(chatId: string, notes: Iterable<LtmNote>) {
   const pieces = [...notes]
@@ -282,11 +295,15 @@ export type LtmResolvedStoryTime = {
 /**
  * Where a note sits in the story: a date the user typed on it; else the chat pieces behind its section contributions
  * (a chat piece reads its own); else unknown. A piece's position is its stored date or, without one, its count.
- * `sourceNotesById` must hold every chat piece of the note's chat, since counting reads the earlier ones.
- * ponytail: each call counts the note's whole chat again, hashing every piece. Upgrade path: a caller resolving many
- * notes (the recall rebuild) counts each chat once with countStoryDays and reuses the result.
+ * `sourceNotesById` must hold every chat piece of the note's chat, since counting reads the earlier ones. A caller
+ * resolving many notes passes one `counts` map, so each chat is counted once; it must not change the pieces between
+ * calls. A chat piece is counted with itself as given, never from `counts`.
  */
-export function resolveStoryTime(note: LtmNote, sourceNotesById: ReadonlyMap<string, LtmNote>): LtmResolvedStoryTime {
+export function resolveStoryTime(
+  note: LtmNote,
+  sourceNotesById: ReadonlyMap<string, LtmNote>,
+  counts?: LtmStoryDayCounts,
+): LtmResolvedStoryTime {
   if (!isChatPiece(note) && note.storyTime) {
     const { start, end, origin } = note.storyTime;
     return {
@@ -299,9 +316,12 @@ export function resolveStoryTime(note: LtmNote, sourceNotesById: ReadonlyMap<str
   const first = pieces[0],
     last = pieces.at(-1);
   if (!first || !last) return { start: UNKNOWN, sourceNoteIds: [] };
-  const notes = isChatPiece(note) ? new Map(sourceNotesById).set(note.id, note) : sourceNotesById,
-    counted = countChat(first.provenance.sourceId, notes.values()),
-    sourceNoteIds = pieces.map((piece) => piece.id);
+  const chatId = first.provenance.sourceId,
+    counted = isChatPiece(note)
+      ? countChat(chatId, new Map(sourceNotesById).set(note.id, note).values())
+      : (counts?.get(chatId) ?? countChat(chatId, sourceNotesById.values()));
+  if (counts && !isChatPiece(note)) counts.set(chatId, counted);
+  const sourceNoteIds = pieces.map((piece) => piece.id);
   // ponytail: a timeline event spans its pieces, not the messages it came from. Upgrade path: per-unit dates from
   // the extractor.
   if (isChatPiece(note) || note.type === "timeline_event")
@@ -311,4 +331,42 @@ export function resolveStoryTime(note: LtmNote, sourceNotesById: ReadonlyMap<str
       sourceNoteIds,
     };
   return { start: counted.get(last.id)?.end ?? UNKNOWN, asOf: true, sourceNoteIds };
+}
+
+/**
+ * The bracket prefix of a timeline bullet in the recall prompt: "3rd of Frostfall, evening", "Day 23, Friday",
+ * "about 2 months after Day 23", "Day 3 to Day 5"; undefined when the start is not worked out.
+ */
+export function formatStoryTimeForPrompt(resolved: LtmResolvedStoryTime) {
+  if (resolved.start.kind === "unknown") return undefined;
+  const start = formatStoryPosition(resolved.start, ", "),
+    end = resolved.end && resolved.end.kind !== "unknown" ? formatStoryPosition(resolved.end, ", ") : start;
+  return end === start ? start : `${start} to ${end}`;
+}
+
+export type LtmStoryDateSource = LtmStoryTimeOrigin | "counted" | "unknown";
+
+/**
+ * What the Vault shows for a note: the date text, where it came from, and the quote of a date found in the text.
+ * ponytail: the counted words ("Day", "about … after", weekdays) are English, as the recall prompt's. Upgrade path:
+ * return the position and format it with locale keys on the client.
+ */
+export function describeStoryTime(note: LtmNote, sourceNotesById: ReadonlyMap<string, LtmNote>) {
+  const resolved = resolveStoryTime(note, sourceNotesById),
+    shown = resolved.start,
+    piece = sourceNotesById.get((resolved.asOf ? resolved.sourceNoteIds.at(-1) : resolved.sourceNoteIds[0]) ?? ""),
+    source: LtmStoryDateSource =
+      shown.kind === "unknown" ? "unknown" : shown.kind === "date" ? shown.origin : (shown.origin ?? "counted"),
+    evidence = source === "stated" && piece ? piece.storyTime?.evidence : undefined,
+    end = resolved.end && resolved.end.kind !== "unknown" ? formatStoryPosition(resolved.end) : undefined,
+    text = shown.kind === "unknown" ? undefined : formatStoryPosition(shown);
+  return {
+    ...(text ? { text } : {}),
+    ...(end && end !== text ? { end } : {}),
+    source,
+    ...(evidence ? { evidence } : {}),
+    ...(resolved.asOf ? { asOf: true as const } : {}),
+    // The date the user typed on this note, for the edit field.
+    ...(note.storyTime?.origin === "manual" ? { typed: note.storyTime } : {}),
+  };
 }

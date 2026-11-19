@@ -128,6 +128,8 @@ export const queryKeys = {
   branchMemories: (chatId: string | null | undefined) =>
     ["long-term-memory", "notes", "branch-memories", chatId] as const,
   branchHiddenTail: (chatId: string | null | undefined) => ["long-term-memory", "branch-hidden-tail", chatId] as const,
+  // Under `notes`, so every memory change (a save, a Find story dates apply) refreshes the date a memory shows.
+  storyDate: (noteId: string) => ["long-term-memory", "notes", "story-date", noteId] as const,
 } as const;
 
 /** The memories a chat recalls from the other branches of its conversation, grouped by the branch they are saved to. */

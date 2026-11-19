@@ -64,6 +64,7 @@ import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import { LtmServiceError } from "../service-error.js";
 import type { UpdateLtmNotePatch } from "../persistence/storage.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
+import { describeStoryTime } from "../persistence/story-time.js";
 import type { FastifyInstance } from "fastify";
 import {
   NOTE_BODY_LIMIT_BYTES,
@@ -517,6 +518,13 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
         }))
         .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
     );
+  });
+  app.get<{ Params: { id: string } }>("/notes/:id/story-date", async (request, reply) => {
+    const noteId = ltmNoteIdSchema.parse(request.params.id);
+    const notesById = new Map((await storage.listNotes()).map((note) => [note.id, note]));
+    const note = notesById.get(noteId);
+    if (!note) return reply.status(404).send({ error: "Long-term memory note not found" });
+    return describeStoryTime(note, notesById);
   });
   app.get<{ Params: { id: string } }>("/notes/:id/derived", async (request, reply) => {
     const sourceNoteId = ltmNoteIdSchema.parse(request.params.id);
