@@ -3868,11 +3868,13 @@ test("Otome Hearth shows prestige at the last bond rank and writes an unlocked e
   await expect(
     section.getByText("Past the last bond rank, every 300 affection earns a prestige point.", { exact: false }),
   ).toBeVisible();
-  // The bond ladder is under way at rank 11: no prestige row yet, and the level text names the rank.
+  // The bond ladder is under way at rank 11: no prestige row yet, and the level text is his real level, not the ten
+  // outer hearts (2026-11-19: ranks 11 to 20 all read "Level 10 · <rank>").
   const mid = section.getByRole("listitem").filter({ hasText: "Ren" });
   await expect(mid.locator(".of-prestige")).toHaveCount(0);
   await expect(mid.getByRole("meter", { name: "Ren: affection progress", exact: true })).toHaveText("0 / 650");
-  await expect(mid.locator(".of-affection-level")).toHaveText("Level 10 · named");
+  await expect(mid.locator(".of-affection-level")).toHaveText("Level 11");
+  await expect(row.locator(".of-affection-level")).toHaveText("Level 20");
   // His "Open named" sits in a row of its own under his hearts and leaves the row lined up with the others: his name
   // where theirs starts, his hearts as wide and as many lines as Marin's, who also has a counter and no button
   // (2026-11-17: the button took the picture's column and squeezed the hearts into three rows).
