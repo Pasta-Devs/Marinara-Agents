@@ -86,13 +86,8 @@ const UNKNOWN: LtmStoryPosition = { kind: "unknown" };
 export function countStoryDays(pieces: readonly LtmStoryDayPiece[]): LtmStoryDayResult[] {
   let state: DayState | undefined = { anchor: null, days: 0, after: [] };
   return pieces.map((piece) => {
-    const storyTime =
-      piece.storyTime?.origin !== "manual" &&
-      piece.storyTime?.sourceHash &&
-      piece.storyTime.sourceHash !== piece.sourceHash
-        ? undefined
-        : piece.storyTime;
-    const scan = piece.storyTimeScan?.sourceHash === piece.sourceHash ? piece.storyTimeScan : undefined;
+    const storyTime = currentStoryTime(piece),
+      scan = currentStoryTimeScan(piece);
     if (!state || (!storyTime?.start.date && !storyTime?.end?.date && !scan)) {
       state = undefined;
       return { id: piece.id, start: UNKNOWN, end: UNKNOWN };
@@ -101,7 +96,7 @@ export function countStoryDays(pieces: readonly LtmStoryDayPiece[]): LtmStoryDay
     const startOrigin = storyTime?.start.date ? storyTime.origin : undefined,
       start = position(next, storyTime?.start.time, startOrigin);
     // A pinned date covers the whole piece, so its text cannot move it. Without an end it ends where it began.
-    const pinned = storyTime !== undefined && PINNED_ORIGINS.has(storyTime.origin) && !!storyTime.start.date,
+    const pinned = isPinnedStoryDate(storyTime),
       jumps = pinned ? [] : (scan?.jumps ?? []);
     for (const jump of jumps) next = applyJump(next, jump);
     let endTime = jumps.length ? undefined : storyTime?.start.time,
@@ -116,20 +111,43 @@ export function countStoryDays(pieces: readonly LtmStoryDayPiece[]): LtmStoryDay
   });
 }
 
+/** A piece's stored date, unless it was read from older piece text; a date the user typed is always current. */
+export function currentStoryTime(piece: Pick<LtmStoryDayPiece, "sourceHash" | "storyTime">) {
+  const { storyTime } = piece;
+  return storyTime?.origin !== "manual" && storyTime?.sourceHash && storyTime.sourceHash !== piece.sourceHash
+    ? undefined
+    : storyTime;
+}
+
+/** The scan's result for a piece, unless it was read from older piece text. */
+export function currentStoryTimeScan(piece: Pick<LtmStoryDayPiece, "sourceHash" | "storyTimeScan">) {
+  return piece.storyTimeScan?.sourceHash === piece.sourceHash ? piece.storyTimeScan : undefined;
+}
+
+/** A date typed by the user or read from the Engine: the piece stays on it whatever its text says. */
+export function isPinnedStoryDate(storyTime: LtmStoryTime | undefined) {
+  return storyTime !== undefined && PINNED_ORIGINS.has(storyTime.origin) && !!storyTime.start.date;
+}
+
 function weekdayIn(text: string) {
   const match = WEEKDAY_PATTERN.exec(text);
   return match ? WEEKDAYS.findIndex((day) => day.toLowerCase().startsWith(match[1]!.toLowerCase())) : undefined;
 }
 
-function markDate(state: DayState, date: string): DayState {
-  const weekday = weekdayIn(date);
-  const weekdayOnly =
-    weekday !== undefined &&
+/** True for a date that names only a weekday ("Monday", "on the Friday"), which does not restart the count. */
+export function isWeekdayOnly(date: string) {
+  return (
+    weekdayIn(date) !== undefined &&
     !date
       .replace(WEEKDAY_PATTERN, "")
       .replace(/\b(on|the)\b/gi, "")
-      .replace(/[\s\p{P}]+/gu, "");
-  if (!weekdayOnly) return { anchor: date, days: 0, after: [], ...(weekday === undefined ? {} : { weekday }) };
+      .replace(/[\s\p{P}]+/gu, "")
+  );
+}
+
+function markDate(state: DayState, date: string): DayState {
+  const weekday = weekdayIn(date);
+  if (!isWeekdayOnly(date)) return { anchor: date, days: 0, after: [], ...(weekday === undefined ? {} : { weekday }) };
   if (state.weekday === undefined || state.weekday === weekday) return { ...state, weekday };
   // The story names another weekday than the count reached, so time passed that no jump recorded. Say so; never
   // guess how much.
@@ -198,19 +216,19 @@ export function formatStoryPosition(position: LtmStoryPosition) {
   return position.anchor === null ? `${base} · ${detail}` : `${base}, ${detail}`;
 }
 
-type LtmChatPiece = LtmNote & { provenance: NonNullable<LtmNote["provenance"]> };
+export type LtmChatPiece = LtmNote & { provenance: NonNullable<LtmNote["provenance"]> };
 
 // An archived piece is left out of the count, so a piece the user archived unscanned does not stop the chat's count.
-function isChatPiece(note: LtmNote | undefined): note is LtmChatPiece {
+export function isChatPiece(note: LtmNote | undefined): note is LtmChatPiece {
   return note?.type === "source" && note.status !== "archived" && note.provenance?.kind === "chat_transcript";
 }
 
-function pieceOrder(note: LtmChatPiece): [number, number] {
+export function pieceOrder(note: LtmChatPiece): [number, number] {
   const part = /:part:(\d+)$/.exec(note.provenance.entryId ?? "");
   return [ltmSourceLastMessageNumber(note) ?? Number.MAX_SAFE_INTEGER, part ? Number(part[1]) : 1];
 }
 
-function byPieceOrder(left: LtmChatPiece, right: LtmChatPiece) {
+export function byPieceOrder(left: LtmChatPiece, right: LtmChatPiece) {
   const [leftMessage, leftPart] = pieceOrder(left),
     [rightMessage, rightPart] = pieceOrder(right);
   return leftMessage - rightMessage || leftPart - rightPart || left.id.localeCompare(right.id);

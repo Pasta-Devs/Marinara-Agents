@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { runRegressionToCompletion } from "./regression-helpers.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
 
@@ -309,7 +312,421 @@ async function main() {
     sourceNoteIds: [],
   });
 
-  process.stdout.write("Long-Term Memory story dates regression: merge, day count, formatter, resolver ok\n");
+  await findStoryDates({ hash, resolveStoryTime, formatStoryPosition });
+
+  process.stdout.write(
+    "Long-Term Memory story dates regression: merge, day count, formatter, resolver, find story dates ok\n",
+  );
+}
+
+// Find story dates: the Engine dates what it can, the model scans the rest, and every quote is checked before apply.
+async function findStoryDates({ hash, resolveStoryTime, formatStoryPosition }: any) {
+  const { checkStoryDatesScan, previewLtmStoryDates, applyLtmStoryDates, scopeLtmStoryDates } = await import(
+    `${source}/maintenance/story-dates.ts`
+  );
+  const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
+  const { ltmStoryDatesApplyRequestSchema } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+
+  // The checks on one answer, without a model.
+  const scan = (text: string, answer: object) => checkStoryDatesScan(text, { stated: null, jumps: [], ...answer }, "n");
+  const jump = (quote: string, amount: number | null, unit: string | null, implied = false) => ({
+    quote,
+    amount,
+    unit,
+    implied,
+  });
+  const reasons = (result: any) => result.rejected.map((entry: any) => entry.reason);
+  assert.deepEqual(scan("Twenty five days later.", { jumps: [jump("Twenty five days later", 25, "day")] }).jumps, [
+    { quote: "Twenty five days later", amount: 25, unit: "day" },
+  ]);
+  const few = scan("A few days later.", { jumps: [jump("A few days later", 1, "day")] });
+  assert.deepEqual(
+    [few.jumps, reasons(few)],
+    [[{ quote: "A few days later", amount: null, unit: "day" }], ["amount_not_in_quote"]],
+    "'a few' is not an exact amount",
+  );
+  assert.deepEqual(scan("After a fortnight.", { jumps: [jump("After a fortnight", 14, "day")] }).jumps[0].amount, 14);
+  const noUnit = scan("Some time later.", { jumps: [jump("Some time later", 2, "week")] });
+  assert.deepEqual(
+    [noUnit.jumps[0], reasons(noUnit)],
+    [{ quote: "Some time later", amount: null, unit: null }, ["unit_not_in_quote"]],
+  );
+  assert.deepEqual(reasons(scan("Tomorrow.", { stated: { date: "tomorrow", quote: "Tomorrow" } })), ["not_a_date"]);
+  assert.deepEqual(scan("It was Day 3.", { stated: { date: "Day 3", quote: "Day 3" } }).stated, {
+    date: "Day 3",
+    quote: "Day 3",
+  });
+  // A quote must stand as whole words: never part of a longer number or word.
+  assert.deepEqual(reasons(scan("It was Day 30 of the siege.", { stated: { date: "Day 3", quote: "Day 3" } })), [
+    "quote_not_found",
+  ]);
+  assert.deepEqual(reasons(scan("We had 10 apples.", { stated: { date: "1", quote: "1" } })), ["quote_not_found"]);
+  assert.deepEqual(reasons(scan("13 days later.", { jumps: [jump("3 days later", 3, "day")] })), ["quote_not_found"]);
+  assert.deepEqual(reasons(scan("Twenty-three days later.", { jumps: [jump("three days later", 3, "day")] })), [
+    "quote_not_found",
+  ]);
+  const cutAmount = scan("Twenty three days later.", { jumps: [jump("three days later", 3, "day")] });
+  assert.deepEqual(
+    [cutAmount.jumps, reasons(cutAmount)],
+    [[{ quote: "three days later", amount: null, unit: "day" }], ["amount_not_in_quote"]],
+    "the piece's word before the quote is part of the amount",
+  );
+  assert.deepEqual(
+    scan("On Day 3's dawn.", { stated: { date: "Day 3", quote: "Day 3" } }).stated?.date,
+    "Day 3",
+    "a possessive after the quote still ends a word",
+  );
+  // A unit that is not one of the four, even an object key such as "toString", is dropped, not a crash.
+  assert.deepEqual(reasons(scan("Two days later.", { jumps: [jump("Two days later", 2, "toString")] })), ["invalid"]);
+  const lateWeekday = scan("Two days later, on Monday.", {
+    stated: { date: "Monday", quote: "on Monday" },
+    jumps: [jump("Two days later", 2, "day")],
+  });
+  assert.deepEqual(
+    [lateWeekday.stated, lateWeekday.jumps.length, reasons(lateWeekday)],
+    [null, 1, ["weekday_after_jump"]],
+  );
+  const lateDate = scan("Two days later came the 3rd of Frostfall. A week on.", {
+    stated: { date: "the 3rd of Frostfall", quote: "the 3rd of Frostfall" },
+    jumps: [jump("Two days later", 2, "day"), jump("A week on", 1, "week")],
+  });
+  assert.deepEqual(
+    [lateDate.stated?.date, lateDate.jumps.map((entry: any) => entry.quote), reasons(lateDate)],
+    ["the 3rd of Frostfall", ["A week on"], ["jump_before_date"]],
+  );
+  assert.deepEqual(reasons(scan("At dusk.", { stated: { date: "Spring 3", time: "noon", quote: "At dusk" } })), [
+    "date_not_in_quote",
+  ]);
+
+  const previousZone = process.env.TZ;
+  process.env.TZ = "UTC";
+  const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-story-dates-"));
+  const root = join(dataDir, "long-term-memory");
+  const timestamp = "2026-11-19T00:00:00.000Z";
+  const chat = (id: string, mode: string) => ({
+    id,
+    name: id,
+    mode,
+    characterIds: [],
+    groupId: null,
+    personaId: null,
+    connectionId: null,
+    metadata: {},
+    lastMessageAt: null,
+    updatedAt: timestamp,
+  });
+  const chats = [chat("chat-talk", "conversation"), chat("chat-wren", "roleplay")];
+  const message = (chatId: string, id: string, createdAt = timestamp) => ({
+    id,
+    chatId,
+    role: "user",
+    characterId: null,
+    content: "Line.",
+    activeSwipeIndex: 0,
+    extra: {},
+    createdAt,
+  });
+  const messages = new Map([
+    [
+      "chat-talk",
+      [message("chat-talk", "t1", "2026-10-28T09:30:00.000Z"), message("chat-talk", "t2"), message("chat-talk", "t3")],
+    ],
+    ["chat-wren", ["w1", "w2", "w3", "w4"].map((id) => message("chat-wren", id))],
+  ]);
+  const releaseHost = configurePackageRuntime({
+    dataDir,
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    persistence: {
+      dataDir,
+      getChat: async (id: string) => chats.find((entry) => entry.id === id) ?? null,
+      listChats: async () => chats,
+      listMessages: async (id: string) => messages.get(id) ?? [],
+    },
+  } as never);
+  const storage = new LongTermMemoryStorage(root);
+  const model = { name: "Fictional Provider", model: "fictional-model-1", maxOutputTokens: 4000 };
+  let counter = 0;
+  // A new note takes no story date, so one is written after it is created.
+  const createPiece = async (chatId: string, number: number, entryId: string, text: string, storyTime?: object) => {
+    const created = await storage.createNote({
+      id: `source_${(counter++).toString(16).padStart(8, "0")}`,
+      title: `${chatId} piece ${number}`,
+      type: "source",
+      modes: ["roleplay"],
+      scope: { chatId, chatIds: [chatId] },
+      tags: ["imported_chat_messages"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_transcript", sourceId: chatId, entryId },
+      sections: {
+        source: { text, updatedAt: timestamp, evidence: [`chat:${chatId}`, `message_range:${number}-${number}`] },
+      },
+    });
+    return storyTime ? storage.updateNote(created.id, { storyTime } as never) : created;
+  };
+  const reply = (answers: object[]) => JSON.stringify({ pieces: answers });
+  const textsOf = (prompt: string) =>
+    prompt
+      .split(/^=== p\d+ ===\n/m)
+      .slice(1)
+      .map((text) => text.trim());
+
+  await runWithSafeCleanup(
+    "LTM find story dates",
+    async () => {
+      await storage.initializeLtmStore();
+      const kitchen = "Tea in the kitchen on Thursday.";
+      // A stated date on a piece the Engine can date: the Engine's date replaces it.
+      const talk = await createPiece("chat-talk", 1, "t1", kitchen, {
+        start: { date: "Thursday" },
+        origin: "stated",
+        evidence: "Thursday",
+        sourceHash: hash(kitchen),
+      });
+      const manualText = "Thursday, the shop opens.";
+      const manual = await createPiece("chat-talk", 2, "t2", manualText, {
+        start: { date: "Spring 4" },
+        origin: "manual",
+      });
+      // Its first message is no longer at its number (hidden or edited): the Engine does not date it.
+      const moved = await createPiece("chat-talk", 3, "t-hidden", "The kettle boils.");
+      const texts = [
+        "Thursday morning, Wren opens the shop. Three days later she sails.",
+        "The bell rang twice.",
+        "On the 4th of Frostfall, a few days later, the rain stops.",
+        "Morning came over the harbour. That night the lamps burned.",
+      ];
+      const [first, missing, third, fourth] = await Promise.all(
+        texts.map((text, index) => createPiece("chat-wren", index + 1, `w${index + 1}`, text)),
+      );
+
+      assert.deepEqual(await scopeLtmStoryDates({ storage }), {
+        count: 6,
+        chats: [
+          { chatId: "chat-talk", dated: 1, checked: 0, notChecked: 2 },
+          { chatId: "chat-wren", dated: 0, checked: 0, notChecked: 4 },
+        ],
+      });
+
+      const answers: Record<string, object> = {
+        "The kettle boils.": { stated: null, jumps: [] },
+        [texts[0]!]: {
+          stated: { date: "Thursday", time: "morning", quote: "Thursday morning" },
+          jumps: [jump("Three days later", 3, "day"), jump("Two weeks passed", 2, "week")],
+        },
+        [texts[2]!]: {
+          stated: { date: "the 5th of Frostfall", quote: "the 4th of Frostfall" },
+          jumps: [jump("a few days later", 3, "day")],
+        },
+        [texts[3]!]: {
+          stated: null,
+          jumps: [jump("Morning came", 1, "day", true), jump("That night", 1, "day", true)],
+        },
+      };
+      const prompts: string[] = [];
+      const answering = async (messages: { content: string }[]) => {
+        prompts.push(messages[1]!.content);
+        const sent = textsOf(messages[1]!.content);
+        return `\`\`\`json\n${reply([
+          ...sent.flatMap((text, index) => (answers[text] ? [{ id: `p${index + 1}`, ...answers[text] }] : [])),
+          { id: "p99", stated: null, jumps: [] },
+        ])}\n\`\`\``;
+      };
+      const before = JSON.stringify(await storage.listNotes());
+      const preview = await previewLtmStoryDates({ root, storage, languageModel: model, complete: answering });
+      assert.equal(JSON.stringify(await storage.listNotes()), before, "preview changes nothing");
+      assert.deepEqual(
+        prompts.map(textsOf),
+        [["The kettle boils."], texts],
+        "one call per chat; the Engine-dated and the user-dated pieces are not sent",
+      );
+      for (const prompt of prompts)
+        for (const date of ["2026-10-28", "Spring 4", talk.id])
+          assert.ok(!prompt.includes(date), `the prompt holds only piece text, not ${date}`);
+      assert.deepEqual(
+        [preview.total, preview.checked, preview.unchecked, preview.failedChunks, preview.truncated],
+        [7, 5, 1, 0, true],
+      );
+      const rowOf = (id: string) => preview.pieces.find((row: any) => row.noteId === id) as any;
+      assert.equal(rowOf(talk.id).kind, "engine");
+      assert.deepEqual(rowOf(talk.id).storyTime.start, { date: "2026-10-28", time: "09:30" });
+      assert.equal(rowOf(moved.id).kind, "scan");
+      assert.equal(rowOf(manual.id), undefined);
+      assert.deepEqual(
+        [rowOf(first.id).stated, rowOf(first.id).jumps],
+        [
+          { date: "Thursday", time: "morning", quote: "Thursday morning" },
+          [{ quote: "Three days later", amount: 3, unit: "day" }],
+        ],
+      );
+      assert.deepEqual(
+        [rowOf(third.id).stated, rowOf(third.id).jumps],
+        [null, [{ quote: "a few days later", amount: null, unit: "day" }]],
+      );
+      assert.deepEqual(rowOf(fourth.id).jumps, [{ quote: "Morning came", amount: 1, unit: "day", implied: true }]);
+      assert.deepEqual(
+        preview.rejected.map((entry: any) => [entry.noteId, entry.kind, entry.reason]),
+        [
+          [null, "piece", "unknown_id"],
+          [null, "piece", "unknown_id"],
+          [missing.id, "piece", "missing"],
+          [first.id, "jump", "quote_not_found"],
+          [third.id, "stated", "date_not_in_quote"],
+          [third.id, "jump", "amount_not_in_quote"],
+          [fourth.id, "jump", "implied_without_morning"],
+        ],
+      );
+
+      // Apply writes the rows; the Engine date replaces the stated one.
+      let rebuilds = 0;
+      const rebuild = async () => {
+        rebuilds += 1;
+        return { status: "deferred" as const, error: "test" } as never;
+      };
+      const asApplyRow = (row: any) =>
+        row.kind === "engine"
+          ? { kind: "engine", noteId: row.noteId, sourceHash: row.sourceHash }
+          : { kind: "scan", noteId: row.noteId, sourceHash: row.sourceHash, stated: row.stated, jumps: row.jumps };
+      const applied = await applyLtmStoryDates({ root, storage, rows: preview.pieces.map(asApplyRow), rebuild });
+      assert.deepEqual([applied.applied.length, applied.skipped, applied.rejected, rebuilds], [5, [], [], 1]);
+      assert.equal((await storage.getNote(talk.id))?.storyTime?.origin, "message_time");
+      assert.deepEqual((await storage.getNote(first.id))?.storyTime?.start, { date: "Thursday", time: "morning" });
+      assert.deepEqual((await storage.getNote(moved.id))?.storyTimeScan?.jumps, []);
+
+      // The piece the reply missed stays not checked and blocks the count after it.
+      const notesById = async () => new Map((await storage.listNotes()).map((note: any) => [note.id, note]));
+      const at = async (id: string) => {
+        const byId = await notesById();
+        return formatStoryPosition(resolveStoryTime(byId.get(id), byId).end);
+      };
+      assert.equal(await at(first.id), "Day 4 · Sunday");
+      assert.equal(await at(third.id), "not worked out yet");
+
+      // A carried-on run starts at the missed piece; checked pieces are not sent again.
+      prompts.length = 0;
+      answers[texts[1]!] = { stated: null, jumps: [] };
+      const carried = await previewLtmStoryDates({
+        root,
+        storage,
+        languageModel: model,
+        complete: answering,
+        after: preview.next,
+      });
+      assert.deepEqual([prompts.map(textsOf), carried.next], [[[texts[1]]], null]);
+      // A forged row is checked again: the invented quote is left out, the piece is marked checked.
+      const forged = await applyLtmStoryDates({
+        root,
+        storage,
+        rows: [
+          {
+            kind: "scan",
+            noteId: missing.id,
+            sourceHash: hash(texts[1]!),
+            stated: { date: "Midsummer", quote: "on Midsummer" },
+            jumps: [],
+          },
+        ],
+        rebuild,
+      });
+      assert.deepEqual(
+        forged.rejected.map((entry: any) => entry.reason),
+        ["quote_not_found"],
+      );
+      assert.equal((await storage.getNote(missing.id))?.storyTime, undefined);
+      assert.notEqual(await at(third.id), "not worked out yet");
+
+      // A date the user typed is never replaced.
+      const onManual = await applyLtmStoryDates({
+        root,
+        storage,
+        rows: [
+          {
+            kind: "scan",
+            noteId: manual.id,
+            sourceHash: hash(manualText),
+            stated: { date: "Thursday", quote: "Thursday" },
+            jumps: [],
+          },
+        ],
+        rebuild,
+      });
+      assert.deepEqual(onManual.applied, [manual.id]);
+      assert.deepEqual((await storage.getNote(manual.id))?.storyTime, {
+        start: { date: "Spring 4" },
+        origin: "manual",
+      });
+      const engineOnManual = await applyLtmStoryDates({
+        root,
+        storage,
+        rows: [{ kind: "engine", noteId: manual.id, sourceHash: hash(manualText) }],
+        rebuild,
+      });
+      assert.deepEqual(engineOnManual.skipped, [{ noteId: manual.id, reason: "no_engine_date" }]);
+
+      // Changed text: apply refuses the old row, and the piece is sent again.
+      const current = (await storage.getNote(first.id))!;
+      const changed = "Thursday morning, Wren opens the shop. Four days later she sails.";
+      await storage.updateNote(first.id, {
+        sections: { ...current.sections, source: { ...current.sections.source!, text: changed } },
+      });
+      const stale = await applyLtmStoryDates({ root, storage, rows: [asApplyRow(rowOf(first.id))], rebuild });
+      assert.deepEqual(stale.skipped, [{ noteId: first.id, reason: "text_changed" }]);
+      prompts.length = 0;
+      answers[changed] = { stated: null, jumps: [] };
+      await previewLtmStoryDates({ root, storage, languageModel: model, complete: answering });
+      assert.deepEqual(prompts.map(textsOf), [[changed]]);
+
+      // Every call failing is an error; an aborted run stops after the call in flight.
+      await assert.rejects(
+        previewLtmStoryDates({
+          root,
+          storage,
+          languageModel: model,
+          complete: async () => {
+            throw new Error("provider down");
+          },
+        }),
+        (error: { code?: string }) => error.code === "ltm_model_output_unusable",
+      );
+      const controller = new AbortController();
+      let calls = 0;
+      await assert.rejects(
+        previewLtmStoryDates({
+          root,
+          storage,
+          languageModel: model,
+          signal: controller.signal,
+          complete: async () => {
+            calls += 1;
+            controller.abort();
+            throw new Error("aborted");
+          },
+        }),
+      );
+      assert.equal(calls, 1);
+
+      // The debug log holds counts, never piece text.
+      const log = JSON.stringify(await readLtmDebugLog(root));
+      assert.ok(log.includes("story_dates_chunk") && log.includes("story_dates_apply"));
+      for (const text of [...texts, kitchen, "Frostfall"])
+        assert.ok(!log.includes(text), `the debug log must not hold piece text: ${text}`);
+
+      assert.ok(!ltmStoryDatesApplyRequestSchema.safeParse({ rows: [] }).success);
+      const row = { kind: "engine", noteId: talk.id, sourceHash: hash(kitchen) };
+      assert.ok(!ltmStoryDatesApplyRequestSchema.safeParse({ rows: [row, row] }).success);
+    },
+    [
+      () => releaseHost(),
+      () => rm(dataDir, { recursive: true, force: true }),
+      () => {
+        if (previousZone === undefined) delete process.env.TZ;
+        else process.env.TZ = previousZone;
+      },
+    ],
+  );
 }
 
 void runRegressionToCompletion("long-term-memory-story-dates", main).catch((error) => {

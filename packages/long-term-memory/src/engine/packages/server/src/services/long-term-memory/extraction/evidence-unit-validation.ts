@@ -39,7 +39,7 @@ function relationshipDescribesChange(unit: LtmEvidenceUnit): boolean {
 }
 
 // `tokenize` keeps only the first 500 tokens; a unit drawn from later in a long source must still overlap.
-function sourceTokenSet(sourceText: string) {
+export function sourceTokenSet(sourceText: string) {
   return new Set(
     sourceText
       .toLowerCase()
@@ -48,7 +48,7 @@ function sourceTokenSet(sourceText: string) {
   );
 }
 
-function lexicalOverlap(sourceTokens: Set<string>, proposedText: string) {
+export function lexicalOverlap(sourceTokens: Set<string>, proposedText: string) {
   const proposedTokens = tokenize(proposedText);
   if (sourceTokens.size === 0 || proposedTokens.size === 0) return 0;
   let shared = 0;

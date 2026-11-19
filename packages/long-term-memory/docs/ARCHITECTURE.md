@@ -132,6 +132,24 @@ with no World State date gets the game clock, but only the piece that holds the
 chat's newest message, since the clock stands there. Any other piece stays
 undated; a date is never copied from a neighbouring piece.
 
+Find story dates (`maintenance/story-dates.ts`, routes `GET
+/story-dates/scope`, `POST /story-dates/preview` and `POST /story-dates/apply`)
+dates the pieces already in the vault. It runs like Tidy with AI: the preview
+writes nothing and carries on from `next`, and apply writes the rows the user
+keeps and rebuilds the index once. A piece the Engine dates gets an `engine`
+row with no model call. The model reads the rest, at most 8 pieces per call,
+and only their text: no note ids, no dates already found. Each date, time and
+jump it reports must quote the piece. A date or time that is not in its quote is
+dropped; a jump whose amount or unit is not in its quote is kept as a vaguer
+jump. Each of these is listed under `rejected`, and nothing is filled in by
+guessing. Apply checks every row again against the piece's current text and
+skips a row whose text changed (`text_changed`), and a `scan` row never
+replaces a date the user typed or the Engine holds. A piece that has been
+scanned counts as checked even when nothing was found, so the next run skips it
+until its text changes. The user sets or clears a piece's date, and removes a
+wrong jump, through `PATCH /notes/:id`; a jump removal names the jump's index
+and quote, and a jump that moved in between gives 409.
+
 ## Write Flow
 
 ```text
