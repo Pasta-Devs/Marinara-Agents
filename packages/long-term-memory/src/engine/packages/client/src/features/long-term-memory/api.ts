@@ -20,6 +20,8 @@ export type LtmChatMemoriesResponse = {
   chatMemories: LtmChatMemoriesMode | null;
   /** What background import reads in this chat; absent on a server older than the option. */
   readFrom?: LtmChatReadFrom;
+  /** This chat's own choice, null when it follows the global default; absent on a server older than the global default. */
+  readFromOverride?: LtmChatReadFrom | null;
   /** A background read of this chat's messages is running. */
   reading?: boolean;
   /** The latest messages an import hid in this chat: 1-based first and last position, and when. */

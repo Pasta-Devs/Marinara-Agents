@@ -16,6 +16,7 @@ import {
   ltmChatMemoriesModeOf,
   ltmRecallBudgetMemories,
   type LtmChatMemoriesMode,
+  type LtmChatReadFrom,
 } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import {
   errorMessage,
@@ -34,6 +35,9 @@ import {
   chatMemoriesFlags,
   chatMemoriesLabelKey,
   chatMemoriesModes,
+  chatReadFromDescriptionKey,
+  chatReadFromLabelKey,
+  chatReadFromOptions,
 } from "../chat-memories";
 import {
   Button,
@@ -222,6 +226,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
     autoAcceptSafeChanges: resolved.autoAcceptSafeChanges ?? false,
     autoImportChatSources: resolved.autoImportChatSources ?? false,
+    autoImportReadFrom: resolved.autoImportReadFrom ?? "messages",
     autoImportLeaveMessages: resolved.autoImportLeaveMessages ?? 0,
     chatImportDetail: resolved.chatImportDetail ?? "standard",
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
@@ -260,6 +265,7 @@ export default function MemorySettings({
   const verbosityLabelId = useId();
   const extractionConnectionLabelId = useId();
   const chatMemoriesLabelId = useId();
+  const readFromLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery(settingsQueryOptions);
   const status = useQuery(statusQueryOptions);
@@ -1342,6 +1348,41 @@ export default function MemorySettings({
               <ChatMemoriesSample mode={ltmChatMemoriesModeOf(extractionFormState)} compact />
             </div>
           </Field>
+          {extractionFormState.autoImportChatSources ? (
+            <Field
+              wide
+              data-ltm-chat-read-from-field
+              labelId={readFromLabelId}
+              label={localizeUi("ui.longTermMemory.chatsettings.readFrom")}
+            >
+              <select
+                aria-labelledby={readFromLabelId}
+                aria-describedby={`${readFromLabelId}-hint`}
+                data-ltm-chat-read-from="global"
+                className={inputClass}
+                value={extractionFormState.autoImportReadFrom}
+                onChange={(event) =>
+                  setExtractionFormState({
+                    ...extractionFormState,
+                    autoImportReadFrom: event.target.value as LtmChatReadFrom,
+                  })
+                }
+              >
+                {chatReadFromOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {localizeUi(chatReadFromLabelKey(option))}
+                  </option>
+                ))}
+              </select>
+              <p
+                id={`${readFromLabelId}-hint`}
+                data-ltm-field-hint
+                className="text-[0.6875rem] font-normal text-[var(--muted-foreground)]"
+              >
+                {localizeUi(chatReadFromDescriptionKey(extractionFormState.autoImportReadFrom))}
+              </p>
+            </Field>
+          ) : null}
           {extractionFormState.autoImportChatSources ? (
             <NumberField
               liveCommit
