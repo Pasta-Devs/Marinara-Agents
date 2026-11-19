@@ -151,6 +151,8 @@ interface ReaderControlsProps {
   onLog: () => void;
   onHide: () => void;
   canRewrite: boolean;
+  /** 0.38.0: why the server cannot take this scene back, so Rewrite shows greyed with the reason. */
+  rewriteBlocked?: "stance" | "moved" | "unrecorded" | null;
   /** A rewrite paints the scene's key moment again by itself (its old image is let go). */
   rewritePaints?: boolean;
   onRewrite: () => void;
@@ -160,6 +162,13 @@ interface ReaderControlsProps {
   /** Faded under a story CG's pan: nothing in it can be focused or pressed. */
   inert?: boolean;
 }
+
+/** 0.38.0: why Rewrite is greyed (use-reader rewriteBlocked). */
+const REWRITE_BLOCKED_KEYS = {
+  stance: "ui.otomeForge.reader.rewriteBlockedStance",
+  moved: "ui.otomeForge.reader.rewriteBlockedMoved",
+  unrecorded: "ui.otomeForge.reader.rewriteBlockedUnrecorded",
+} as const;
 
 export function ReaderControls(props: ReaderControlsProps) {
   const { t } = useTranslation();
@@ -209,9 +218,12 @@ export function ReaderControls(props: ReaderControlsProps) {
   const frameKey = frameLabelKey(chapter && node !== null ? chapter.nodes[node] : null);
   const tagKeys = tags.flatMap((tag) => tagLabelKey(tag) ?? []);
   const exitLabel = t("ui.otomeForge.reader.exit");
-  const rewriteLabel = props.rewritePaints
-    ? t("ui.otomeForge.reader.rewritePaintsLabel")
-    : t("ui.otomeForge.reader.rewriteLabel");
+  const rewriteBlocked = props.rewriteBlocked ? REWRITE_BLOCKED_KEYS[props.rewriteBlocked] : null;
+  const rewriteLabel = rewriteBlocked
+    ? t(rewriteBlocked)
+    : props.rewritePaints
+      ? t("ui.otomeForge.reader.rewritePaintsLabel")
+      : t("ui.otomeForge.reader.rewriteLabel");
   const auto = (
     <Tool
       label={t("ui.otomeForge.reader.auto")}
@@ -231,13 +243,15 @@ export function ReaderControls(props: ReaderControlsProps) {
   );
   const log = <Tool label={t("ui.otomeForge.reader.backlog")} Icon={ScrollText} onClick={props.onLog} />;
   const hide = <Tool label={t("ui.otomeForge.reader.hide")} Icon={EyeOff} disabled={!reading} onClick={props.onHide} />;
+  // Greyed with aria-disabled rather than disabled, so its reason still shows on hover and reaches a screen reader.
   const rewrite = props.canRewrite ? (
     <button
       type="button"
       className="of-reader-pill of-glass"
       aria-label={rewriteLabel}
       title={rewriteLabel}
-      onClick={props.onRewrite}
+      aria-disabled={rewriteBlocked ? true : undefined}
+      onClick={rewriteBlocked ? undefined : props.onRewrite}
     >
       <RefreshCw size={14} strokeWidth={2.1} aria-hidden="true" />
       <span>{t("ui.otomeForge.reader.rewrite")}</span>

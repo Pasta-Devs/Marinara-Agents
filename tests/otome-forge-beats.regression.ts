@@ -94,6 +94,11 @@ import {
   withoutCues,
   withoutMaskedThoughts,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
+import {
+  redoUndo,
+  revertUndo,
+  stateUndo,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/rewrite-undo.ts";
 import { normalizeConfrontationReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/confrontation.ts";
 import {
   EASE_OFF_MARKER,
@@ -400,21 +405,145 @@ test("effects map to the kit's ids; the first canonical pick applies them once, 
   );
 });
 
-test("Rewrite is for the beat being read before any choice; it drops the beats after it", async () => {
+test("Rewrite is for the scene on screen, picks included, and takes them back; it drops the scenes after it", async () => {
   const t = await plannedWorld("r-rewr-aaaaaa", (i) => (i === 1 ? twoChoices() : beatReply()));
+  const state = async () => (await t.store.readDoc(stateId(t.runId), normalizeState))!;
   await readThrough(t, 0, 0);
   await t.call("POST", beatPath, {}, node(1));
   await t.settle();
   assert.equal(labels(t, "beat/main-1/2"), 1, "the lookahead wrote beat 2");
-  assert.equal((await t.call("POST", beatPath, { rewrite: true }, node(0))).status, 409, "beat 0 is read");
+  assert.equal(
+    (await t.call("POST", beatPath, { rewrite: true }, node(0))).status,
+    409,
+    "beat 1 is open: beat 0 stays",
+  );
   const rewritten = await t.call("POST", beatPath, { rewrite: true }, node(1));
   assert.equal(rewritten.status, 200);
   assert.equal(rewritten.body.beat.rewrites, 1);
   assert.equal(labels(t, "beat/main-1/1"), 2, "a rewrite costs one call");
   await t.settle();
   assert.equal(labels(t, "beat/main-1/2"), 2, "beat 2 followed the old beat 1 and was written again");
+
+  // 0.38.0: picks no longer lock the scene. A Rewrite takes back every change they made.
+  const before = await state();
+  await t.call("POST", `${beatPath}/choose`, { choice: "choice-2", option: "option-2" }, node(1));
+  const picked = await t.call("POST", `${beatPath}/choose`, { choice: "choice-1", option: "option-1" }, node(1));
+  assert.equal(picked.status, 200);
+  assert.equal(picked.body.beat.rewritable, undefined, "a recorded pick leaves the scene rewritable");
+  assert.equal("undo" in picked.body.beat, false, "the record never reaches the client");
+  const after = await state();
+  assert.equal(after.lis[KAI]!.trust, before.lis[KAI]!.trust + 1);
+  assert.equal(after.lis[KAI]!.grievances.length, before.lis[KAI]!.grievances.length + 1);
+  assert.equal(after.lis[KAI]!.disclosures.length, before.lis[KAI]!.disclosures.length + 1);
+  const again = await t.call("POST", beatPath, { rewrite: true }, node(1));
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(again.body.beat.rewrites, 2);
+  assert.deepEqual(again.body.beat.choiceCanon, {}, "the new scene has no picks");
+  const back = await state();
+  assert.deepEqual(back.lis, before.lis, "trust, grievances and disclosures are as before the picks");
+  assert.deepEqual(back.chapters, before.chapters, "the picks' applied entries are gone");
+  assert.deepEqual(back.wallet, before.wallet);
+  // The same picks on the new scene apply again: their entries were taken back with them.
+  await t.call("POST", `${beatPath}/choose`, { choice: "choice-2", option: "option-2" }, node(1));
+  await t.call("POST", `${beatPath}/choose`, { choice: "choice-1", option: "option-1" }, node(1));
+  assert.equal((await state()).lis[KAI]!.trust, before.lis[KAI]!.trust + 1);
+});
+
+test("0.38.0: Rewrite of the scene just read to its end takes back its read and Starlight, until the next one opens", async () => {
+  const t = await plannedWorld("r-rewr-bbbbbb");
+  const state = async () => (await t.store.readDoc(stateId(t.runId), normalizeState))!;
+  const before = await state();
+  await t.call("POST", beatPath, {}, node(0));
+  const read = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(0));
+  assert.deepEqual(read.body.grants, [{ source: "beat", starlight: 30 }]);
+  assert.equal(read.body.rewritable, undefined, "a plain read can be taken back");
+  assert.equal((await state()).chapters["main-1"]!.beatsRead, 1);
+  await t.settle();
+  assert.ok(await t.store.readDoc(beatId(t.runId, "main-1", 1), normalizeBeat), "the lookahead wrote beat 1");
+  const rewritten = await t.call("POST", beatPath, { rewrite: true }, node(0));
+  assert.equal(rewritten.status, 200, JSON.stringify(rewritten.body));
+  const back = await state();
+  assert.equal(back.chapters["main-1"]!.beatsRead, 0, "the scene is read again");
+  assert.deepEqual(back.wallet, before.wallet, "its Starlight is taken back");
+  assert.deepEqual(back.daily, before.daily, "and with it the day's earnings");
+  assert.equal(await t.store.readDoc(beatId(t.runId, "main-1", 1), normalizeBeat), null, "the scene after it goes");
+  const reread = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(0));
+  assert.deepEqual(reread.body.grants, [{ source: "beat", starlight: 30 }], "reading it again pays again");
+  await t.call("POST", beatPath, {}, node(1));
+  const refused = await t.call("POST", beatPath, { rewrite: true }, node(0));
+  assert.equal(refused.status, 409, "once the next scene opens, the read one stays");
+});
+
+test("0.38.0: a read that finishes the chapter, or a pick from before 0.38.0, cannot be taken back", async () => {
+  const t = await plannedWorld("r-rewr-cccccc", (i) => (i === 1 ? twoChoices() : beatReply()));
+  // A pick from before 0.38.0 has no record: the scene says so, and a Rewrite is refused.
+  await readThrough(t, 0, 0);
+  await t.call("POST", beatPath, {}, node(1));
   await t.call("POST", `${beatPath}/choose`, { choice: "choice-2", option: "option-1" }, node(1));
-  assert.equal((await t.call("POST", beatPath, { rewrite: true }, node(1))).status, 409, "not after a choice");
+  await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, "main-1", 1)), normalizeBeat, (stored) => {
+    const { undo: _undo, ...rest } = stored!;
+    return rest;
+  });
+  const reopened = await t.call("POST", beatPath, {}, node(1));
+  assert.equal(reopened.body.beat.rewritable, false);
+  const refused = await t.call("POST", beatPath, { rewrite: true }, node(1));
+  assert.equal(refused.status, 409);
+  assert.match(JSON.stringify(refused.body), /played before Rewrite could take its choices back/u);
+  // The chapter's last read finished it: that read says so, and its scene is refused.
+  await t.call("POST", `${beatPath}/choose`, { choice: "choice-1", option: "option-2" }, node(1));
+  const detail = await t.call("GET", "/runs/:run/chapters/:key", undefined, { key: "main-1" });
+  const last = detail.body.chapter.nodes.length - 1;
+  await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(1));
+  const reads = await readThrough(t, 2, last);
+  const final = reads.at(-1)!;
+  assert.equal(final.body.chapterDone, true);
+  assert.equal(final.body.rewritable, false);
+  assert.equal((await t.call("POST", beatPath, { rewrite: true }, node(last))).status, 409);
+});
+
+test("0.38.0: a Rewrite takes back only the scene's own change, keeping what changed since", () => {
+  const base = normalizeState({ lis: { [KAI]: {} } });
+  const kai = base.lis[KAI]!;
+  const grievance = {
+    id: "g-1",
+    li: KAI,
+    by: "li" as const,
+    text: "She mocked his lamp.",
+    severity: "minor" as const,
+    opened: "main-1/1",
+    status: "open" as const,
+  };
+  const picked = {
+    ...base,
+    lis: {
+      ...base.lis,
+      [KAI]: { ...kai, trust: kai.trust + 1, points: kai.points + 5, grievances: [...kai.grievances, grievance] },
+    },
+  };
+  const undo = stateUndo("pick", base, picked, { choice: "choice-1" })!;
+  assert.deepEqual(Object.keys(undo.after), ["lis"], "only what changed is recorded");
+  assert.equal(stateUndo("pick", base, base), null, "a change of nothing is not recorded");
+  // Something else moved his points since, and another grievance opened.
+  const other = { ...grievance, id: "g-2", text: "She left early." };
+  const later = {
+    ...picked,
+    lis: {
+      ...picked.lis,
+      [KAI]: {
+        ...picked.lis[KAI]!,
+        points: picked.lis[KAI]!.points + 10,
+        grievances: [...picked.lis[KAI]!.grievances, other],
+      },
+    },
+  };
+  const back = revertUndo(later, undo);
+  assert.equal(back.lis[KAI]!.trust, kai.trust);
+  assert.equal(back.lis[KAI]!.points, kai.points + 10, "the later move stays");
+  assert.deepEqual(
+    back.lis[KAI]!.grievances.map((item) => item.id),
+    [...kai.grievances.map((item) => item.id), "g-2"],
+  );
+  assert.deepEqual(redoUndo(back, undo).lis[KAI], later.lis[KAI], "a stale rewrite puts it back as it was");
 });
 
 test("Ease off cuts the canon with its marker, makes no model call, and drops the lookahead", async () => {

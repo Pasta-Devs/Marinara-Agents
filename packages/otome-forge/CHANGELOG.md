@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.38.0 — 2026-11-19
+
+- **Rewrite** now stays in the reader for the whole scene, in dates and Character Stories as in the main story. Before, it disappeared as soon as you picked a choice, and dates and Character Stories put their choice early in every scene.
+- Rewriting a scene takes back your choices in it: the trust, affection, grievances and secrets told that they changed go back to how they were, and you choose again in the new scene.
+- You can also rewrite the scene you just read to its end, until you open the next one. Its Starlight is taken back, and you earn it again when you read the new scene.
+- **Rewrite** shows greyed, saying why, when a scene can't be taken back: a Confrontation once a stance is played, a scene whose end moved the story on (a new stage, a mended rift, the chapter's end), or a choice made before this update.
+
 ## 0.37.0 — 2026-11-19
 
 - A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.

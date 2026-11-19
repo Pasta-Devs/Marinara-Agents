@@ -84,6 +84,7 @@ import type {
   RunState,
   Segment,
   StanceResult,
+  StateUndo,
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -135,6 +136,7 @@ import {
   recallText,
 } from "./canon.js";
 import { prologueProblem } from "./prologue.js";
+import { redoUndo, revertUndo, rewriteBlock, stateUndo, type RewriteBlock } from "./rewrite-undo.js";
 import {
   afterRound,
   applyConfrontation,
@@ -869,12 +871,63 @@ const hasCanon = (beat: Beat) => Object.keys(beat.choiceCanon).length > 0 || !!b
  */
 const cutShort = (beat: Beat) => !!beat.easedOff && !beat.confrontation?.ending;
 
+const sameJson = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+
 /** True while the stored beat is still the one a rewrite was checked against: no pick, read or Ease off since. */
 const untouched = (stored: Beat, checked: Beat) =>
   stored.written.at === checked.written.at &&
-  !stored.easedOff &&
-  !hasCanon(stored) &&
+  sameJson(stored.easedOff, checked.easedOff) &&
+  sameJson(stored.choiceCanon, checked.choiceCanon) &&
+  (stored.confrontation?.picks.length ?? 0) === (checked.confrontation?.picks.length ?? 0) &&
+  (stored.undo?.length ?? 0) === (checked.undo?.length ?? 0) &&
   stored.readThrough === checked.readThrough;
+
+/** What the player is told when a Rewrite is refused (S/story/rewrite-undo.ts rewriteBlock). */
+const REWRITE_REFUSED: Record<RewriteBlock | "later", string> = {
+  later: "Only the scene being read, or the one you just finished, can be rewritten.",
+  "eased-off": "A scene you eased off can't be rewritten.",
+  stance: "A Confrontation can't be rewritten once a stance is played.",
+  unrecorded: "This scene was played before Rewrite could take its choices back, so it can't be rewritten.",
+  chapter: "Reading this scene finished the chapter, so it can't be rewritten.",
+  stage: "Reading this scene to its end moved the story on, so it can't be rewritten.",
+  repair: "Reading this scene to its end moved the story on, so it can't be rewritten.",
+  "his-side": "Reading this scene to its end moved the story on, so it can't be rewritten.",
+  clearing: "Reading this scene to its end moved the story on, so it can't be rewritten.",
+};
+
+/**
+ * 0.38.0: takes back what the replaced scene's picks and read changed, newest first, while the chapter is still read as
+ * far as when the rewrite was checked. Returns the changes taken back, newest first.
+ */
+async function revertScene(
+  deps: BeatDeps,
+  runId: string,
+  key: string,
+  replacing: Beat,
+  readAtCheck: number | undefined,
+): Promise<StateUndo[]> {
+  const undone = [...(replacing.undo ?? [])].reverse();
+  const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+    const progress = current.chapters[key];
+    if (progress?.completed || (readAtCheck !== undefined && (progress?.beatsRead ?? 0) !== readAtCheck)) {
+      throw conflict(REWRITE_STALE);
+    }
+    return undone.reduce(revertUndo, current);
+  });
+  if (!state) throw runNotFound();
+  return undone;
+}
+
+/** Puts back what revertScene took back, oldest first, when the scene turned out to have changed. */
+async function redoScene(deps: BeatDeps, runId: string, undone: StateUndo[]): Promise<void> {
+  try {
+    await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
+      [...undone].reverse().reduce(redoUndo, current),
+    );
+  } catch (error) {
+    deps.runtime.logger.error(error, "[otome-forge] A stale rewrite could not put back what its scene did");
+  }
+}
 
 /**
  * Writes beat `i` of the chapter from its node and the canon before it, and saves it. A rewrite (`replacing`, the beat
@@ -885,7 +938,18 @@ async function generateBeat(
   runId: string,
   key: string,
   i: number,
-  { debugMode, review, signal, replacing }: PaintMode & { signal?: AbortSignal; replacing?: Beat },
+  {
+    debugMode,
+    review,
+    signal,
+    replacing,
+    readAtCheck,
+  }: PaintMode & {
+    signal?: AbortSignal;
+    replacing?: Beat;
+    /** 0.38.0: the chapter's beats read when the rewrite was checked; a read since makes it stale. */
+    readAtCheck?: number;
+  },
 ): Promise<Beat> {
   signal?.throwIfAborted();
   const { run, chapter } = await load(deps, runId, key);
@@ -1126,18 +1190,31 @@ async function generateBeat(
     // another tab): the beat the player read stays canon. The state shows a finished read; the stored beat, below,
     // shows the rest, and a finish still on its way by the readThrough its read wrote first.
     const progress = (await deps.store.readDoc(stateId(runId), normalizeState))?.chapters[key];
-    if (progress?.completed || (progress?.beatsRead ?? 0) > i) throw conflict(REWRITE_STALE);
+    const read = progress?.beatsRead ?? 0;
+    if (progress?.completed || (readAtCheck === undefined ? read > i : read !== readAtCheck)) {
+      throw conflict(REWRITE_STALE);
+    }
   }
   const target = runDocTarget("beat", beatId(runId, key, i));
   // The beat a rewrite replaced, as it was when replaced (its CG may have been painted while this was written).
   let replaced = null as Beat | null;
+  // 0.38.0: the replaced scene's picks and read are taken back first. If the process stops between the two writes, the
+  // old scene's picks have no applied entry, so they land again the next time it is read (chooseOption, finishBeat).
+  const undone = replacing?.undo?.length ? await revertScene(deps, runId, key, replacing, readAtCheck) : [];
   // A first write keeps whatever another request saved first; a rewrite replaces only the beat it was checked against.
-  const saved = await deps.store.mutateDoc(target, normalizeBeat, (stored) => {
-    if (!replacing) return stored ?? beat;
-    if (!stored || !untouched(stored, replacing)) throw conflict(REWRITE_STALE);
-    replaced = stored;
-    return beat;
-  });
+  let saved: Beat | null;
+  try {
+    saved = await deps.store.mutateDoc(target, normalizeBeat, (stored) => {
+      if (!replacing) return stored ?? beat;
+      if (!stored || !untouched(stored, replacing)) throw conflict(REWRITE_STALE);
+      replaced = stored;
+      return beat;
+    });
+  } catch (error) {
+    // The old scene changed meanwhile and stays: what it did comes back.
+    if (undone.length) await redoScene(deps, runId, undone);
+    throw error;
+  }
   // Ease off saves its cut before it removes the beats after it, so one that landed between the check above and this
   // save either removed this beat or shows here: then this beat followed the uncut scene, and it is removed again.
   if (saved?.written.at === beat.written.at && !sameBasis(await readBeat(deps.store, runId, key, i - 1))) {
@@ -1319,11 +1396,22 @@ export async function serveBeat(
         ]);
         const progress = state?.chapters[key];
         if (!current) throw beatNotFound();
-        if (progress?.completed || (progress?.beatsRead ?? 0) > i || hasCanon(current)) {
-          throw conflict("Only the beat being read can be rewritten, before any of its choices is made.");
+        // 0.38.0: the scene being read, or the one just read to its end, while its picks and read are on record to be
+        // taken back (S/story/rewrite-undo.ts).
+        const read = progress?.beatsRead ?? 0;
+        const finished = read === i + 1;
+        const block =
+          rewriteBlock(current) ??
+          (finished && !(current.undo ?? []).some((entry) => entry.kind === "finish") ? "unrecorded" : null);
+        if (progress?.completed || read > i + 1) throw conflict(REWRITE_REFUSED.later);
+        if (block) throw conflict(REWRITE_REFUSED[block]);
+        // The scene after one read to its end is dropped, so it must not have been played into.
+        const following = finished ? await readBeat(deps.store, runId, key, i + 1) : null;
+        if (following && (following.shown || hasCanon(following) || following.readThrough > 0 || following.easedOff)) {
+          throw conflict(REWRITE_REFUSED.later);
         }
         await dropBeatsAfter(deps, runId, chapter, i);
-        return generateBeat(deps, runId, key, i, { debugMode, review, signal, replacing: current });
+        return generateBeat(deps, runId, key, i, { debugMode, review, signal, replacing: current, readAtCheck: read });
       }),
     );
   } else {
@@ -1339,14 +1427,16 @@ export async function serveBeat(
       );
     }
   }
-  if (!beat.shown && chapter.kind === "route") {
-    // On screen from now on (ruptureHolds): a beat the lookahead wrote is not, until it is served.
+  if (!beat.shown) {
+    // On screen from now on: a beat the lookahead wrote is not, until it is served. A rupture opens no route beat that
+    // was never shown (ruptureHolds), and 0.38.0's Rewrite of the scene before it stops once it is.
     beat =
       (await deps.store.updateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (current) =>
         current && !current.shown ? { ...current, shown: true as const } : current,
       )) ?? beat;
   }
-  if (!run.state.chapters[key]?.completed && i >= (run.state.chapters[key]?.beatsRead ?? 0)) {
+  // A rewrite of the scene just read to its end took that read back, so it is the one being read again.
+  if (!run.state.chapters[key]?.completed && (rewrite || i >= (run.state.chapters[key]?.beatsRead ?? 0))) {
     // generateBeat may itself run inside the foreground queue. Await its place registration only after that lock
     // has been released; the reader's first art response must distinguish pending from no image/description.
     await deps.art?.prepareScenePlaces?.(runId, beat, { debugMode, review });
@@ -1426,6 +1516,7 @@ async function applyPick(
   optionId: string,
 ): Promise<Picked> {
   let outcome = NOTHING_PICKED;
+  let undo: StateUndo | null = null;
   const at = new Date().toISOString();
   const arc = await arcOfPick(deps, runId, chapter, mayOpenGrievance(beat.effects[choiceId]?.[optionId] ?? []));
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
@@ -1436,12 +1527,21 @@ async function applyPick(
       affection,
     } = applyPickTo(current, chapter, beat, choiceId, optionId, at, arc);
     outcome = { remembered, rememberedBy, affection };
+    // 0.38.0: what the pick changed, so a Rewrite of this scene can take it back.
+    undo = stateUndo("pick", current, next, { choice: choiceId });
     return next;
   });
   if (!state) throw runNotFound();
-  if (!beat.applied[choiceId]) {
+  const recorded = undo as StateUndo | null;
+  if (!beat.applied[choiceId] || recorded) {
     await deps.store.updateDoc(runDocTarget("beat", beatId(runId, chapter.key, beat.i)), normalizeBeat, (current) =>
-      current ? { ...current, applied: { ...current.applied, [choiceId]: true as const } } : current,
+      current
+        ? {
+            ...current,
+            applied: { ...current.applied, [choiceId]: true as const },
+            ...(recorded ? { undo: [...(current.undo ?? []), recorded] } : {}),
+          }
+        : current,
     );
   }
   return outcome;
@@ -1668,6 +1768,7 @@ async function finishBeat(
   let repaired: ReadResult["repaired"];
   let hisSide: ReadResult["hisSide"];
   let completedNow = false;
+  let undo: StateUndo | null = null;
   const at = new Date().toISOString();
   // His secrets, for the gate (the stage it opens reveals each secret due by then). Bibles are not edited mid-read.
   const owner = chapter.kind === "route" && chapter.li ? await readUnit(deps, runId, chapter.li) : null;
@@ -1732,9 +1833,34 @@ async function finishBeat(
       const notes = Object.entries(next.lis);
       hisSide = notes.find(([, his]) => his.hisSide.some(({ ref }) => momentChapterKey(ref) === chapter.key))?.[0];
     }
+    // 0.38.0: what the read changed, so a Rewrite of this scene can take it back, unless it moved more than the scene.
+    const blocked: StateUndo["blocked"] = completedNow
+      ? "chapter"
+      : stageUp
+        ? "stage"
+        : repaired
+          ? "repair"
+          : hisSide
+            ? "his-side"
+            : undefined;
+    const appliedNow = (state: RunState, choice: string) =>
+      !!state.chapters[chapter.key]?.applied.includes(`${beat.i}/${choice}`);
+    const covers = canon.flatMap(([choice]) =>
+      !appliedNow(current, choice) && appliedNow(next, choice) ? [choice] : [],
+    );
+    undo = stateUndo("finish", current, next, {
+      ...(blocked ? { blocked } : {}),
+      ...(covers.length ? { covers } : {}),
+    });
     return next;
   });
   if (!state) throw runNotFound();
+  const recorded = undo as StateUndo | null;
+  if (recorded) {
+    await deps.store.updateDoc(runDocTarget("beat", beatId(runId, chapter.key, beat.i)), normalizeBeat, (current) =>
+      current ? { ...current, undo: [...(current.undo ?? []), recorded] } : current,
+    );
+  }
   await noteSideSpeakers(deps, runId, chapter.key, beat, { debugMode, review });
   if (completedNow && deps.memory) {
     void Promise.resolve(deps.memory.maintain({ runId, debugMode })).catch((error: unknown) =>
@@ -1752,6 +1878,7 @@ async function finishBeat(
     ...(stageUp ? { stageUp } : {}),
     ...(repaired ? { repaired } : {}),
     ...(hisSide ? { hisSide } : {}),
+    ...(recorded?.blocked ? { rewritable: false } : {}),
   };
 }
 

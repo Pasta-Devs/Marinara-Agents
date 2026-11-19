@@ -475,6 +475,30 @@ test("the outcome follows the total of the picks: 2 or more is great, 0 or 1 goo
 
 // ── A whole date ──
 
+test("0.38.0: a date's scene is rewritten after its pick, and the pick is taken back", async () => {
+  const t = await dateWorld("r-mg5date-rewr01");
+  const started = await startDate(t);
+  const key = started.date.key;
+  const params = { key, i: "0" };
+  const state = async () => (await t.store.readDoc(stateId(t.runId), normalizeState))!;
+  assert.equal((await t.call("POST", beatPath, {}, params)).status, 200);
+  const before = await state();
+  const picked = await t.call("POST", `${beatPath}/choose`, { choice: "choice-1", option: "option-1" }, params);
+  assert.equal(picked.status, 200, JSON.stringify(picked.body));
+  assert.equal(picked.body.beat.rewritable, undefined, "a date's pick leaves its scene rewritable");
+  const rewritten = await t.call("POST", beatPath, { rewrite: true }, params);
+  assert.equal(rewritten.status, 200, JSON.stringify(rewritten.body));
+  assert.equal(rewritten.body.beat.rewrites, 1);
+  assert.deepEqual(rewritten.body.beat.choiceCanon, {}, "the new scene has no pick");
+  const back = await state();
+  assert.deepEqual(back.lis, before.lis);
+  assert.deepEqual(back.chapters, before.chapters);
+  // Picked again, the date goes on as any.
+  const again = await t.call("POST", `${beatPath}/choose`, { choice: "choice-1", option: "option-2" }, params);
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(again.body.beat.choiceCanon["choice-1"], "option-2");
+});
+
 test("a date is 4 model calls, pays once whatever the outcome, and keeps its answers until it ends", async () => {
   const t = await dateWorld("r-mg5date-aa0001");
   const started = await startDate(t);
