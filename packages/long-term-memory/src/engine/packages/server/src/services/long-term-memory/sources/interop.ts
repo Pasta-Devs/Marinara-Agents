@@ -1972,30 +1972,29 @@ export async function importPackageInterop(
         found = matchExisting(row),
         existing =
           found && found.id !== row.sourceNoteId ? await storage.renameNoteId(found.id, row.sourceNoteId) : found,
-        // A date the user typed is never replaced (mergeStoryTime), so the merge reads the note as it is now, not as the
-        // import's start found it.
-        storyTime = mergeStoryTime(
-          existing ? ((await storage.getNote(existing.id)) ?? existing).storyTime : undefined,
-          stamp,
-        ),
+        // A date the user typed is never replaced (mergeStoryTime), so the merge reads the note under the vault lock
+        // (updateNote joins it) and not as the import's start found it.
         note = existing
-          ? await storage.updateNote(existing.id, {
-              title: row.title,
-              status: "active",
-              modes: request.modes ?? (request.mode ? [request.mode] : undefined) ?? existing.modes ?? row.modes,
-              scope,
-              ...(destinationScope ? { destinationScope } : {}),
-              tags: Array.from(new Set([...existing.tags, ...input.tags])),
-              provenance: row.provenance,
-              sections: { ...existing.sections, source: input.sections.source },
-              ...(storyTime ? { storyTime } : {}),
+          ? await withLtmVaultLock(root, async () => {
+              const storyTime = mergeStoryTime(((await storage.getNote(existing.id)) ?? existing).storyTime, stamp);
+              return storage.updateNote(existing.id, {
+                title: row.title,
+                status: "active",
+                modes: request.modes ?? (request.mode ? [request.mode] : undefined) ?? existing.modes ?? row.modes,
+                scope,
+                ...(destinationScope ? { destinationScope } : {}),
+                tags: Array.from(new Set([...existing.tags, ...input.tags])),
+                provenance: row.provenance,
+                sections: { ...existing.sections, source: input.sections.source },
+                ...(storyTime ? { storyTime } : {}),
+              });
             })
           : // ponytail: createNote's draft schema drops storyTime, so a new dated note takes a second write; if that
             // write fails, the note stays undated and the row reports failed for a retry. Upgrade path: let the draft
             // schema carry storyTime.
             await storage
               .createNote(input)
-              .then((created) => (storyTime ? storage.updateNote(created.id, { storyTime }) : created));
+              .then((created) => (stamp ? storage.updateNote(created.id, { storyTime: stamp }) : created));
       const previousFingerprint = existing?.extractionFingerprint;
       // Only a background import skips; a manual import is an explicit read and always extracts.
       if (request.extract && options.keepPendingDrafts && previousFingerprint) {

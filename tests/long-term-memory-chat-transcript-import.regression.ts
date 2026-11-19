@@ -230,6 +230,8 @@ async function main() {
   const onSwipe = (chatId: string) => (gameStates.get(chatId) ?? []).map((row) => ({ swipeIndex: 0, ...row }));
   let hostListsGameStates = true;
   let gameStatesFail = false;
+  // Runs while an import reads World State, after it listed the vault's notes and before it writes them.
+  let duringImport: (() => Promise<void>) | undefined;
   let releaseRuntime: (() => void) | undefined;
   let messageReads = 0;
   // Each extraction prompt, and the units the fixture model answers it with.
@@ -281,12 +283,14 @@ async function main() {
           },
           async getGameState(chatId: string) {
             if (gameStatesFail) throw new Error("World State table is locked");
+            await duringImport?.();
             return onSwipe(chatId).at(-1) ?? null;
           },
           get listGameStates() {
             return hostListsGameStates
               ? async (chatId: string) => {
                   if (gameStatesFail) throw new Error("World State table is locked");
+                  await duringImport?.();
                   return onSwipe(chatId);
                 }
               : undefined;
@@ -1857,6 +1861,34 @@ async function main() {
         new AbortController().signal,
       );
       assert.deepEqual(await datesOf("chat-story-rp"), [typed, rpDates[1]], "a re-import keeps the typed date");
+      // A date typed while an import waits on the vault lock is read under it, so the import does not replace it.
+      await storyStore.updateNote(rpFirst!.id, { storyTime: rpFirst!.storyTime });
+      const { withLtmVaultLock } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/vault-lock.ts");
+      duringImport = async () => {
+        duringImport = undefined;
+        void withLtmVaultLock(storyRoot, async () => {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          await storyStore.updateNote(rpFirst!.id, { storyTime: typed });
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      };
+      await importPackageInterop(
+        {
+          source: "messages",
+          chatId: "chat-story-rp",
+          sourceIds: ["chat-story-rp:messages:sr1"],
+          extract: false,
+          limit: 100,
+        },
+        storyRoot,
+        new AbortController().signal,
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-rp"),
+        [typed, rpDates[1]],
+        "a re-import keeps a date typed while it waited for the lock",
+      );
       // Without listGameStates, the newest snapshot dates only the piece that holds its message.
       hostListsGameStates = false;
       gameStates.set("chat-story-fallback", [

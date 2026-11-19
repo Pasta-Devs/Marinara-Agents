@@ -40,6 +40,16 @@ async function main() {
   const timeOnly = (origin: string) => ({ start: { time: "evening" }, origin });
   assert.equal(mergeStoryTime(timeOnly("world_state"), at("stated", "new"))?.origin, "stated");
   assert.equal(mergeStoryTime(timeOnly("manual"), at("stated", "new"))?.origin, "manual");
+  // The stamp's time of day survives the stated date unless the date brings its own.
+  assert.deepEqual(mergeStoryTime(timeOnly("world_state"), at("stated", "new"))?.start, {
+    date: "new",
+    time: "evening",
+  });
+  assert.equal(
+    mergeStoryTime(timeOnly("world_state"), { ...at("stated", "new"), start: { date: "new", time: "dawn" } })?.start
+      .time,
+    "dawn",
+  );
   for (const [existing, incoming, kept] of mergeCases) {
     const existingTime = existing ? at(existing, "old") : undefined,
       incomingTime = incoming ? at(incoming, "new") : undefined;

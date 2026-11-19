@@ -35,7 +35,10 @@ const PINNED_ORIGINS = new Set<LtmStoryTimeOrigin>(["manual", "world_state", "ga
  */
 export function mergeStoryTime(existing: LtmStoryTime | undefined, incoming: LtmStoryTime | undefined) {
   if (!existing || !incoming) return incoming ?? existing;
-  if (existing.origin !== "manual" && !existing.start.date && incoming.start.date) return incoming;
+  if (existing.origin !== "manual" && !existing.start.date && incoming.start.date) {
+    const time = incoming.start.time ?? existing.start.time;
+    return time ? { ...incoming, start: { ...incoming.start, time } } : incoming;
+  }
   return ORIGIN_RANK[incoming.origin] <= ORIGIN_RANK[existing.origin] ? incoming : existing;
 }
 
