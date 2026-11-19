@@ -613,6 +613,42 @@ async function main(routeScenario: RouteScenario) {
         });
       }
       if (routeScenario === "backup") {
+        // Story dates must survive a backup round-trip: a chat piece's date and scan, and a date typed on a memory.
+        const storyText = "Mara reaches the observatory. Three weeks later the gate opens.";
+        const storyHash = createHash("sha256").update(storyText).digest("hex");
+        await storageService.storage.createNote({
+          id: "source_route_story",
+          title: "Imported chat messages",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          tags: ["imported_chat_messages"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_transcript", sourceId: "chat-a", entryId: "route-story" },
+          sections: {
+            source: {
+              text: storyText,
+              updatedAt: "2026-07-17T00:00:00.000Z",
+              evidence: ["chat:chat-a", "message_range:1-4"],
+            },
+          },
+        });
+        // createNote drops these fields, as it drops extractionFingerprint; updateNote stamps them.
+        await storageService.storage.updateNote("source_route_story", {
+          storyTime: { start: { date: "Spring 3", time: "dawn" }, origin: "world_state" },
+          storyTimeScan: {
+            sourceHash: storyHash,
+            jumps: [{ quote: "Three weeks later", amount: 3, unit: "week" }],
+          },
+        });
+        await storageService.storage.updateNote("world_route_fixture", {
+          storyTime: { start: { date: "First of Frostmonth" }, origin: "manual" },
+        });
+        // Those writes skip the routes, so rebuild the recall index they mark stale.
+        const storyRebuild = await app.inject({ method: "POST", url: "/api/long-term-memory/rebuild", headers });
+        assert.equal(storyRebuild.statusCode, 200, storyRebuild.body);
         const backupDraft = await storageService.drafts.createDraft({
           source: { sourceNoteId: "source_route_review", chatId: "chat-a" },
           scope: { chatId: "chat-a", chatIds: ["chat-a"] },
@@ -6228,7 +6264,15 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(backupPreview.json().incoming.rejectedSuggestions, expectedRejectedCount);
       assert.equal(backupPreview.json().current.rejectedSuggestions, expectedRejectedCount);
       const replacement = backup.json();
-      replacement.notes = replacement.notes.filter((note: any) => note.id === "world_route_fixture");
+      const storyNoteIds = routeScenario === "backup" ? ["world_route_fixture", "source_route_story"] : [];
+      const exportedStoryNotes = storyNoteIds.map((id) => replacement.notes.find((note: any) => note.id === id));
+      if (routeScenario === "backup") {
+        assert.equal(exportedStoryNotes[0]?.storyTime?.origin, "manual", "the export keeps a typed date");
+        assert.equal(exportedStoryNotes[1]?.storyTimeScan?.jumps[0]?.unit, "week", "the export keeps a piece's scan");
+      }
+      replacement.notes = replacement.notes.filter(
+        (note: any) => note.id === "world_route_fixture" || storyNoteIds.includes(note.id),
+      );
       const imported = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/backup/import",
@@ -6236,6 +6280,14 @@ async function main(routeScenario: RouteScenario) {
         payload: replacement,
       });
       assert.equal(imported.statusCode, 200, imported.body);
+      for (const exported of exportedStoryNotes) {
+        const restored = await storageService.storage.getNote(exported.id);
+        assert.deepEqual(
+          { storyTime: restored?.storyTime, storyTimeScan: restored?.storyTimeScan },
+          { storyTime: exported.storyTime, storyTimeScan: exported.storyTimeScan },
+          `${exported.id} keeps its story date through a backup`,
+        );
+      }
       assert.equal(
         (await storageService.storage.listNotes()).some((note: any) => note.id === "world_route_fixture"),
         true,
