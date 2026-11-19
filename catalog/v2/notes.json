@@ -428,6 +428,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.6",
+          "date": "2026-11-20",
+          "notes": "- The Vault and Sources open and respond quickly with a very large character library (tens of thousands of cards) instead of freezing for minutes.",
+          "highlight": false
+        },
+        {
           "version": "1.6.5",
           "date": "2026-11-19",
           "notes": "- New memories from Roleplay and Game chats carry the story date the World State tracker saved, and Conversation memories carry the real date.\n- Find story dates reads your existing memories' chat text for in-story dates and time skips, shows what it found with the exact words it relied on, and saves only what you apply.\n- Memories show their story date in the Vault, where you can correct it, and the story's timeline reaches the AI with its dates.",
@@ -539,12 +545,6 @@
           "version": "1.5.17",
           "date": "2026-10-30",
           "notes": "- Other packages can no longer read Long-Term Memory's internal runtime service, which only Marinara itself uses. This needs a Marinara version with Capability API 1.388; on older versions nothing changes. Recall for Slurp and Noodle is unaffected.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.16",
-          "date": "2026-10-30",
-          "notes": "- Review: a later chat piece's thread and relationship updates apply together with the rest of the draft instead of one at a time.",
           "highlight": false
         }
       ]

@@ -60,6 +60,13 @@ export function uniqueById<T extends { id: string }>(items: readonly T[]): T[] {
   });
 }
 
+/** Maps each id to its first item, so a lookup per item costs one `get` instead of a scan of the list. */
+export function indexById<T extends { id: string }>(items: readonly T[]): Map<string, T> {
+  const byId = new Map<string, T>();
+  for (const item of items) if (!byId.has(item.id)) byId.set(item.id, item);
+  return byId;
+}
+
 /**
  * Answers `memoryPresence.some((scope) => ltmScopesOverlap(scope, place, { includeGlobal: false }))`
  * from one id index. Without globals, two scopes overlap only by sharing a chat, group,
