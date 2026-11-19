@@ -413,6 +413,9 @@ export const WRITING_RULES = [
   // fragmentary one-liners that made no sense in the scene. "Speech uses everyday words." moved to the scene prompts'
   // dialogue instructions (SPOKEN_LINE_RULE).
   "Ban echoing and parroting in any form.",
+  // 0.36.9: the maintainer found Gemini falling into patterns (every thought opening "My X feels…", beats built the
+  // same way) and asked for an anti-pattern line. They chose a version with no example, which could prime the model.
+  "Never fall into patterns: lines of the same kind (narration, speech, thoughts, messages) never keep opening or running the same way, and scenes or replies never keep the same build. Vary how each one starts and is built, across what you write now and what was written before.",
   "All characters, player included, can change; for better, or worse.",
   "Character change must be earned and consistent with established identity and canonical character cards; it is not automatic redemption or a replacement personality.",
   "Falling for the protagonist does not make a monster good or secretly kind at once; as affection grows and they come to know the protagonist, they may become a better partner to them, in their own way.",
