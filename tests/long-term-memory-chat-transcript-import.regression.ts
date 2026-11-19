@@ -1464,6 +1464,43 @@ async function main() {
       await autoImport(summariesChat.id);
       assert.equal(prompts.length, 4, "switched back to Messages, the chat reads its two closed pieces as before");
 
+      // The global "Read from" applies to a chat with no choice of its own; a stored choice still wins.
+      const globalReadChat = (id: string, choice?: string) => {
+        const chat = {
+          ...roleplayChat,
+          id,
+          name: id,
+          metadata: {
+            ...(choice ? { longTermMemoryChatReadFrom: choice } : {}),
+            summaryEntries: [{ id: "sum-g", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 1 }],
+          },
+        };
+        chats.push(chat);
+        messages.set(id, [message(id, `${id}-1`, "user", "x".repeat(23_990)), message(id, `${id}-2`, "user", "Tail.")]);
+        return chat;
+      };
+      const readStatuses = async (chatId: string, source: "chats" | "messages") =>
+        (await previewPackageInterop({ source, chatId, limit: 100 }, autoRoot)).samples
+          .filter(({ sourceId }) => sourceId.startsWith(`${chatId}:`))
+          .map(({ status }) => status);
+      await updateLtmExtractionConfig({ autoImportReadFrom: "summaries" }, autoRoot);
+      const followsGlobal = globalReadChat("chat-read-global");
+      const ownMessages = globalReadChat("chat-read-own-messages", "messages");
+      prompts.length = 0;
+      await autoImport(followsGlobal.id);
+      assert.equal(prompts.length, 1, "no chat choice: the global Summaries reads the finished summary");
+      assert.deepEqual(await readStatuses(followsGlobal.id, "chats"), ["imported"]);
+      assert.deepEqual(
+        await readStatuses(followsGlobal.id, "messages"),
+        ["pending", "pending"],
+        "its messages stay unread",
+      );
+      await autoImport(ownMessages.id);
+      assert.equal(prompts.length, 2, "a chat set to Messages reads its closed piece under the global Summaries");
+      assert.deepEqual(await readStatuses(ownMessages.id, "chats"), ["pending"], "and leaves its summary unread");
+      await updateLtmExtractionConfig({ autoImportReadFrom: "messages" }, autoRoot);
+      prompts.length = 0;
+
       // "Memories from this chat": the chat's choice beats the global one for the run's re-check and its accept step.
       const memoriesChat = (id: string, choice?: string) => {
         const chat = { ...roleplayChat, id, name: id, metadata: choice ? { longTermMemoryChatMemories: choice } : {} };

@@ -458,7 +458,7 @@ has one. Background import brings in each chat's new or changed finished message
 pieces a couple of seconds after the chat's latest generation starts and never
 the piece still being written, and each run is an "Imported automatically" row
 in Activity. While background import is on, "Newest messages to leave for later" (0 by default) keeps back a finished
-piece until that many newer messages follow it. A chat whose Read from is Summaries reads its finished summaries instead (a fixed range, a Game previous session, a
+piece until that many newer messages follow it. A chat whose Read from is Summaries (its own choice, else the global one) reads its finished summaries instead (a fixed range, a Game previous session, a
 Conversation day or week that has ended), never both; a summary that keeps changing is imported by hand from Sources. A selection whose import failed is not retried
 until a source or the extraction connection changes.
 When background import is on and has no extraction connection, Extraction shows a warning
@@ -480,7 +480,9 @@ button clears it. The Engine passes only the recall keys to Chat Settings, so th
 the chat's choice from `GET /chat-memories/:chatId` and writes it through the host's chat
 settings change. Memories from this chat is the first field. Under it, except for I add them myself, Read from (Messages by default, or
 Summaries; stored as `longTermMemoryChatReadFrom` and returned as `readFrom` by the same route) picks what background
-import reads in the chat. Below these fields the drawer keeps one status line only for I add them myself
+import reads in the chat. A chat with no stored choice follows the global Read from (`autoImportReadFrom`, Memory
+Settings → Extraction, under Memories from chats, hidden for I add them myself) and shows the Default chip; a chat with its own
+choice shows "Use the default for all chats", which clears it (`readFromOverride` in the route's response is that stored choice or `null`). Below these fields the drawer keeps one status line only for I add them myself
 (`ChatMemoriesStatusLine` in `chat-memories.tsx`, shared with the "After a reply" sample): "Nothing is added on its own"
 with an Import button that opens Sources. For Save them for me and Collect them, I'll review the counts moved onto the
 Long-Term Memory card (part 3, below), so the drawer repeats nothing. Review and Import leave a short-lived open

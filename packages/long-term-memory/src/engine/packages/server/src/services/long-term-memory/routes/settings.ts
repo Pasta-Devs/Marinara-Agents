@@ -95,10 +95,13 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
   app.get<{ Params: { chatId: string } }>("/chat-memories/:chatId", async (request, reply) => {
     const chat = await getPackagePersistence().getChat(request.params.chatId);
     if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    const metadata = parseLtmChatMetadata(chat.metadata);
+    const config = await getLtmExtractionConfig(root);
     return {
-      chatMemories: readLtmChatMemoriesMode(parseLtmChatMetadata(chat.metadata).longTermMemoryChatMemories) ?? null,
-      // What background import reads in this chat: its messages (the default) or its finished summaries.
-      readFrom: readLtmChatReadFrom(parseLtmChatMetadata(chat.metadata).longTermMemoryChatReadFrom),
+      chatMemories: readLtmChatMemoriesMode(metadata.longTermMemoryChatMemories) ?? null,
+      // What background import reads in this chat: its own choice, else the global one (messages by default).
+      readFrom: resolveLtmChatMemories(metadata, config).readFrom,
+      readFromOverride: readLtmChatReadFrom(metadata.longTermMemoryChatReadFrom) ?? null,
       // A background read of this chat's messages is running, and the latest messages an import hid in it.
       reading: isLtmAutoImportReading(root, chat.id),
       hidden: readLtmMessagesJustHidden(root, chat.id),

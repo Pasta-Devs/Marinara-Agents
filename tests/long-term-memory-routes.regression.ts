@@ -785,6 +785,7 @@ async function main(routeScenario: RouteScenario) {
       assert.deepEqual((await chatMemoriesFor("chat-a")).json(), {
         chatMemories: null,
         readFrom: "messages",
+        readFromOverride: null,
         reading: false,
         hidden: null,
       });
@@ -792,13 +793,65 @@ async function main(routeScenario: RouteScenario) {
       assert.deepEqual((await chatMemoriesFor("chat-b")).json(), {
         chatMemories: "review",
         readFrom: "summaries",
+        readFromOverride: "summaries",
         reading: false,
         hidden: null,
+      });
+      // The global "Read from" is what a chat with no choice reads; a stored choice still wins.
+      const savedReadFrom = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/extraction-settings",
+        headers,
+        payload: { autoImportReadFrom: "summaries" },
+      });
+      assert.equal(savedReadFrom.statusCode, 200);
+      assert.equal(savedReadFrom.json().autoImportReadFrom, "summaries", "the global Read from round-trips");
+      assert.equal(
+        (await app.inject({ method: "GET", url: "/api/long-term-memory/extraction-settings", headers })).json()
+          .autoImportReadFrom,
+        "summaries",
+      );
+      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), {
+        chatMemories: null,
+        readFrom: "summaries",
+        readFromOverride: null,
+        reading: false,
+        hidden: null,
+      });
+      const chatAMetadata = chats[0].metadata;
+      chats[0].metadata = { longTermMemoryChatReadFrom: "bogus" };
+      assert.deepEqual(
+        (await chatMemoriesFor("chat-a")).json(),
+        { chatMemories: null, readFrom: "summaries", readFromOverride: null, reading: false, hidden: null },
+        "an invalid stored Read from follows the global default",
+      );
+      chats[0].metadata = chatAMetadata;
+      chats[1].metadata = { longTermMemoryChatReadFrom: "messages" };
+      const ownChoice = (await chatMemoriesFor("chat-b")).json();
+      assert.equal(ownChoice.readFrom, "messages", "a chat's own choice beats the global one");
+      assert.equal(ownChoice.readFromOverride, "messages");
+      assert.equal(
+        (
+          await app.inject({
+            method: "PUT",
+            url: "/api/long-term-memory/extraction-settings",
+            headers,
+            payload: { autoImportReadFrom: "everything" },
+          })
+        ).statusCode,
+        400,
+        "an unknown Read from is refused",
+      );
+      await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/extraction-settings",
+        headers,
+        payload: { autoImportReadFrom: "messages" },
       });
       chats[1].metadata = JSON.stringify({ longTermMemoryChatMemories: "everything" });
       assert.deepEqual(
         (await chatMemoriesFor("chat-b")).json(),
-        { chatMemories: null, readFrom: "messages", reading: false, hidden: null },
+        { chatMemories: null, readFrom: "messages", readFromOverride: null, reading: false, hidden: null },
         "an unknown stored choice reads as the global default",
       );
       chats[1].metadata = {};

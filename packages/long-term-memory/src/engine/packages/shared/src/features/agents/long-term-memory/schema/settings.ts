@@ -14,6 +14,7 @@ import {
   ltmNoteTypeSchema,
   ltmSectionKeySchema,
 } from "./primitives.js";
+import { LTM_CHAT_READ_FROM } from "../runtime-settings.js";
 
 // ponytail: the host cannot list the installed Agents that use memories, so the migration from the two global
 // switches knows only these. Upgrade path: the Engine tells LTM which installed Agents can use it (Engine issue
@@ -372,6 +373,8 @@ const ltmExtractionSettingsFields = {
   finishCutOffAnswers: z.boolean().optional(),
   autoAcceptSafeChanges: z.boolean().optional(),
   autoImportChatSources: z.boolean().optional(),
+  // What background import reads in a chat that has no choice of its own: its messages or its finished summaries.
+  autoImportReadFrom: z.enum(LTM_CHAT_READ_FROM).optional(),
   // Background import waits until this many newer messages follow a finished piece.
   autoImportLeaveMessages: z.number().int().min(0).max(LTM_HIDE_TAIL_MESSAGES_MAX).optional(),
   chatImportDetail: ltmChatImportDetailSchema.optional(),
@@ -424,6 +427,7 @@ export const ltmResolvedExtractionSettingsSchema = z
     finishCutOffAnswers: z.boolean(),
     autoAcceptSafeChanges: z.boolean(),
     autoImportChatSources: z.boolean(),
+    autoImportReadFrom: z.enum(LTM_CHAT_READ_FROM),
     autoImportLeaveMessages: z.number().int().min(0).max(LTM_HIDE_TAIL_MESSAGES_MAX),
     chatImportDetail: ltmChatImportDetailSchema,
     useExtractionAgentOnGameMode: z.boolean(),

@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.6.4 — 2026-11-19
+
+- Read from, the choice between reading messages or finished summaries in the background, can be set once for every chat in Memory Settings under "Memories from chats". A chat follows it until you pick its own in Chat Settings, and "Use the default for all chats" there goes back. The default stays Messages, so no chat changes until you pick Summaries.
+
 ## 1.6.3 — 2026-11-16
 
 - A chat can read its summaries instead of its messages in the background. Set "Read from" to Summaries in Chat Settings under "Memories from this chat". A summary is read once it covers a finished stretch, and one that keeps changing stays in Sources. The default stays Messages, so no chat changes until you pick Summaries.
