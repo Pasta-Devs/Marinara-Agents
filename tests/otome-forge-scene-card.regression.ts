@@ -9,6 +9,7 @@ import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs"
 import type { Bible } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   SCENE_CARD_MAX_TOKENS,
+  SPOKEN_LINE_RULE,
   otomeSceneCard,
   otomeWritingRules,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
@@ -206,6 +207,33 @@ test("0.36.9: the writing rules ask every prompt not to fall into patterns, with
     );
     assert.doesNotMatch(rules, /My (chest|stomach|heart)/u, "the rule names no pattern a model could copy");
   }
+});
+
+test("0.38.2: the writing rules balance subtext and allow jokes by rewording lines, with no example", () => {
+  // The maintainer's ask: Claude models wrote every line as coded subtext. They kept the hat, and the fix rewords lines
+  // already there instead of adding rules (the prompt is long already). The plain-words line stays as it was: "the
+  // reader always knows where they are…" would make models say too much.
+  for (const story of [true, false]) {
+    const rules = otomeWritingRules({ story });
+    assert.ok(rules.includes("\n- Put on your I-Have-Good-Theory-Of-Mind Hat.\n"), "the hat stays word for word");
+    assert.ok(
+      rules.includes(
+        "\n- Now and then a face may contradict the words it speaks, but most of what people say, behind a mask or not, means what it says.\n",
+      ),
+    );
+    assert.ok(
+      !rules.includes("\n- A face may contradict the words it speaks.\n"),
+      "the old line is reworded, not kept",
+    );
+    assert.ok(rules.includes("\n- Write in plain, everyday words: say what happens and what it means without ornate"));
+    assert.doesNotMatch(rules, /always knows where they are/u, "no line asks the model to spell everything out");
+    assert.ok(
+      rules.includes("never the same polished voice for all of them, and anyone may joke when it fits them."),
+      "jokes are allowed",
+    );
+    assert.doesNotMatch(rules, /What\?/u, "no example reaction a model could copy");
+  }
+  assert.ok(SPOKEN_LINE_RULE.includes("; it can be a single word or a few sentences, whatever they would really say."));
 });
 
 test("tells are a few possible signs among others, and the writing rules ask for variety without repeats", () => {
