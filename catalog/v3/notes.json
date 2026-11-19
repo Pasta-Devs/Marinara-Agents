@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.37.0",
+          "date": "2026-11-19",
+          "notes": "- A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.\n- Lines after a choice are made once you pick. Leaving a scene stops making the rest of its voices.\n- Voices are made ahead only while voices are on and not muted. If one can't be made, the rest are voiced as they appear, as before, until you change the voice settings.\n- This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.",
+          "highlight": true
+        },
+        {
           "version": "0.36.8",
           "date": "2026-11-19",
           "notes": "- In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like \"nooo\", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.\n- They send stickers the way people do too: to react, tease, sulk or answer without words, not only when a picture says it better than words. A reply still has at most one sticker, or one from each of them in the group chat.\n- A message that puts an emoticon after your name, such as \"ines :(\", is no longer mistaken for a line written as you, so the reply no longer fails. A conversation's remembered line keeps such a message whole too, instead of cutting it down to \"P\".",
@@ -827,12 +833,6 @@
           "version": "0.34.5",
           "date": "2026-11-16",
           "notes": "- **A scene whose choices break a rule says which one.** When a scene's choices don't follow the format, the retry now tells the model exactly what to fix, such as \"choice 2, option 3 has 10 branch segments; a small choice needs 1 to 8 in every option\". Before, it always repeated the same four rules, so a scene that broke any other rule (a choice placed after the last line, a fifth place, a big choice before the chapter's last scene) failed the same way again and the chapter could not go on.",
-          "highlight": false
-        },
-        {
-          "version": "0.34.4",
-          "date": "2026-11-16",
-          "notes": "- **Condensing keeps only what matters most.** When the timeline is condensed or shortened, fitting 5,000 words now comes first: the model may leave details out entirely and keeps only the biggest choices, where each relationship stands, what changed for good, the open threads and the people who still matter. Before, it was asked to keep every choice, every relationship turn and every change, so long stories kept coming back too long.",
           "highlight": false
         }
       ]

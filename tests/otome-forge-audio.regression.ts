@@ -14,8 +14,11 @@ import {
   ENGINE_MUSIC_CUE,
   lineSpeaker,
   lineVoice,
+  lineVoiceRequest,
   runIdOf,
+  VoicePrep,
   wouldVoice,
+  type PrepLine,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
 import { playsHomeCue } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/screens.ts";
 import type { RunLiView } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
@@ -366,4 +369,101 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
   assert.equal(await voice("Kai", "...don't leave again.", { thought: true }), null, "nor a thought");
   settings.tts = false;
   assert.equal(await voice("Kai"), null, "voices off: nothing is spoken");
+});
+
+test("a line made ahead is sent as it is played: same text, voice, speaker and cache key", () => {
+  const segment = { speaker: "Kai", text: "Stay.", voiced: "[softly] Stay." };
+  const kai = { name: "Kai", characterId: "card-kai", cast: true };
+  assert.deepEqual(lineVoiceRequest("run-1", "ch1/0r0/2", segment, kai, "kai-voice", { emotionCues: false }), {
+    text: "Stay.",
+    speaker: "Kai",
+    voice: "kai-voice",
+    characterId: "card-kai",
+    cacheKey: "otome-forge:run-1:ch1/0r0/2",
+  });
+  assert.deepEqual(
+    lineVoiceRequest("run-1", "ch1/0r0/2", segment, kai, "kai-voice", { emotionCues: true }),
+    {
+      text: "[softly] Stay.",
+      speaker: "Kai",
+      voice: "kai-voice",
+      characterId: "card-kai",
+      cacheKey: "otome-forge:run-1:ch1/0r0/2~cues",
+    },
+    "with Emotion cues, the line as written under a key of its own",
+  );
+  assert.equal(
+    lineVoiceRequest("run-1", "ch1/0r0/2", segment, kai, "kai-voice", { emotionCues: false }, false).cacheKey,
+    undefined,
+    "a comfort line has no cache key",
+  );
+});
+
+test("a scene's voices are made ahead one at a time, in order; a newer list replaces the rest, and a failure stops it", async () => {
+  const line = (ref: string): PrepLine => ({ segment: { speaker: "Kai", text: ref }, ref });
+  const made: string[] = [];
+  let active = 0;
+  let most = 0;
+  const failOn = new Set<string>();
+  const abortOn = new Set<string>();
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const prep = new VoicePrep(
+    async ({ ref }) => {
+      active += 1;
+      most = Math.max(most, active);
+      await settle();
+      active -= 1;
+      made.push(ref);
+      if (abortOn.has(ref)) throw new DOMException("stopped", "AbortError");
+      if (failOn.has(ref)) throw new Error("rate limited");
+    },
+    ({ ref }) => ref,
+  );
+  const idle = async () => {
+    for (let wait = 0; wait < 50 && (active || made.length < 1); wait += 1) await settle();
+    await settle();
+    await settle();
+  };
+
+  prep.set(["a", "b", "c"].map(line));
+  await idle();
+  assert.deepEqual(made, ["a", "b", "c"], "in order");
+  assert.equal(most, 1, "one at a time");
+
+  prep.set(["b", "c", "d"].map(line));
+  await idle();
+  assert.deepEqual(made, ["a", "b", "c", "d"], "a line is asked for once");
+
+  made.length = 0;
+  prep.set(["e", "f", "g"].map(line));
+  prep.set(["g", "h"].map(line));
+  await idle();
+  await idle();
+  assert.deepEqual(made, ["e", "g", "h"], "the newest list replaces the lines still waiting");
+
+  made.length = 0;
+  abortOn.add("i");
+  prep.set(["i", "j"].map(line));
+  await idle();
+  assert.deepEqual(made, ["i", "j"], "a stopped wait is no failure");
+
+  made.length = 0;
+  failOn.add("k");
+  const warn = console.warn;
+  console.warn = () => undefined;
+  try {
+    prep.set(["k", "l"].map(line));
+    await idle();
+  } finally {
+    console.warn = warn;
+  }
+  prep.set(["m"].map(line));
+  await idle();
+  assert.deepEqual(made, ["k"], "after a failure nothing more is made ahead");
+
+  made.length = 0;
+  prep.reset();
+  prep.set(["l", "m"].map(line));
+  await idle();
+  assert.deepEqual(made, ["l", "m"], "until the voice settings change");
 });

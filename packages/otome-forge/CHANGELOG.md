@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.37.0 — 2026-11-19
+
+- A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.
+- Lines after a choice are made once you pick. Leaving a scene stops making the rest of its voices.
+- Voices are made ahead only while voices are on and not muted. If one can't be made, the rest are voiced as they appear, as before, until you change the voice settings.
+- This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.
+
 ## 0.36.8 — 2026-11-19
 
 - In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like "nooo", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.
