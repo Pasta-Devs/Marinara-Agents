@@ -7,6 +7,10 @@
 - Voices are made ahead only while **Voice the dialogue** is on, the **Voices** volume is up and nothing is muted. If one can't be made, the rest are voiced as they appear, as before, until you switch **Voice the dialogue**, **Voice everyone else** or muting off or on.
 - This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.
 
+## 0.36.9 — 2026-11-19
+
+- The story, messages and every other text Otome Hearth writes are now told not to fall into patterns. Lines of the same kind, such as narration, speech, thoughts and messages, should not keep opening or running the same way, and scenes and replies should not keep the same build. Some models, Gemini among them, kept starting every thought with "My … feels" and building scenes the same way.
+
 ## 0.36.8 — 2026-11-19
 
 - In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like "nooo", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.

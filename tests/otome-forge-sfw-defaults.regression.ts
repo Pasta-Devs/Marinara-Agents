@@ -44,6 +44,7 @@
 // every story and banner digest moved once.
 // 0.36.4 (#2384): the shared writing rules drop the dialogue rule (fragments, dodged questions), and the beat,
 // confrontation and closer ask for spoken lines in its place, so every story and banner digest moved once.
+// 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -259,17 +260,17 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerDates: "11439ac2a9760348",
-  bannerHis: "5b995771c45ee365",
-  bannerMemories: "47a9e2d39789e3b7",
-  bannerMine: "981d5c8065e8614b",
-  beat: "04b3f8a177ac042f",
-  beatWithCg: "2b19f66b1404df90",
-  chapterPlan: "6c03e148c80feb5a",
-  closer: "c8c37e56aea03946",
-  confrontation: "e953bafd8f36078e",
-  repairPlan: "e1f660a3bd4a260a",
-  routePlan: "c6bd560525539cfb",
+  bannerDates: "b796908cdd97d54c",
+  bannerHis: "cb616f4e17eaa08d",
+  bannerMemories: "ce1d178ef41e8973",
+  bannerMine: "725fba74b2eb3b2e",
+  beat: "433fc0897f5bc73a",
+  beatWithCg: "9157752147d83887",
+  chapterPlan: "d046a2c964a7785b",
+  closer: "b06b99b19bfbf9db",
+  confrontation: "6b6f1370f199802b",
+  repairPlan: "93abd204773303a3",
+  routePlan: "9408e2b52db46a9a",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
 // 0.20.2: P10 and P11 open with the story context their chapter's scenes cache, so both sets' routePlan and
@@ -283,17 +284,17 @@ const EXPECTED_ANGST: Record<string, string> = {
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so both sets' bannerHis and
 // bannerMine moved; bannerMemories is unchanged, and bannerDates (the Dates banner) is new.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerDates: "32beea6f3a35fba2",
-  bannerHis: "dd3b419035418d48",
-  bannerMemories: "dd52ef01a887c210",
-  bannerMine: "34ce0fcbb80ace22",
-  beat: "6b98e30d3713279a",
-  beatWithCg: "1e40efcfd3855e3b",
-  chapterPlan: "b1ace2c3d2149297",
-  closer: "58406f7d8e38cc90",
-  confrontation: "0456b4f4b7173fc9",
-  repairPlan: "e3c15f45fe55a5d0",
-  routePlan: "3804630559bb1112",
+  bannerDates: "571afcba0e0ab87e",
+  bannerHis: "b14147cf3df3a542",
+  bannerMemories: "70e32fa566053e64",
+  bannerMine: "ecbae7e5b4a66890",
+  beat: "2b489cced51a96b9",
+  beatWithCg: "a2aacab10af4b9ae",
+  chapterPlan: "d619e96a3916c54c",
+  closer: "7d24462898d3310a",
+  confrontation: "8b46641ff2264007",
+  repairPlan: "bccaf9f4fe3a1056",
+  routePlan: "2a4b4764ed08a318",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

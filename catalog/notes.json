@@ -722,6 +722,12 @@
           "highlight": true
         },
         {
+          "version": "0.36.9",
+          "date": "2026-11-19",
+          "notes": "- The story, messages and every other text Otome Hearth writes are now told not to fall into patterns. Lines of the same kind, such as narration, speech, thoughts and messages, should not keep opening or running the same way, and scenes and replies should not keep the same build. Some models, Gemini among them, kept starting every thought with \"My … feels\" and building scenes the same way.",
+          "highlight": false
+        },
+        {
           "version": "0.36.8",
           "date": "2026-11-19",
           "notes": "- In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like \"nooo\", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.\n- They send stickers the way people do too: to react, tease, sulk or answer without words, not only when a picture says it better than words. A reply still has at most one sticker, or one from each of them in the group chat.\n- A message that puts an emoticon after your name, such as \"ines :(\", is no longer mistaken for a line written as you, so the reply no longer fails. A conversation's remembered line keeps such a message whole too, instead of cutting it down to \"P\".",
@@ -827,12 +833,6 @@
           "version": "0.34.6",
           "date": "2026-11-16",
           "notes": "- **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).",
-          "highlight": false
-        },
-        {
-          "version": "0.34.5",
-          "date": "2026-11-16",
-          "notes": "- **A scene whose choices break a rule says which one.** When a scene's choices don't follow the format, the retry now tells the model exactly what to fix, such as \"choice 2, option 3 has 10 branch segments; a small choice needs 1 to 8 in every option\". Before, it always repeated the same four rules, so a scene that broke any other rule (a choice placed after the last line, a fifth place, a big choice before the chapter's last scene) failed the same way again and the chapter could not go on.",
           "highlight": false
         }
       ]
