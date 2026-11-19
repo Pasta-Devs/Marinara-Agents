@@ -1361,11 +1361,12 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 0.36.3: the writing rules no longer ask for what the protagonist feels in their body, so these moved.
 // 0.36.4 (#2384): the writing rules drop the dialogue rule, and scenes ask for spoken lines in its place, so these moved.
 // 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
+// 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and plot, so every prompt that carries them moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "2bb5f83e09a955ff",
-  scene1: "b1d958052a139b4b",
-  scene2: "3c221c6e499f477a",
-  scene3: "aba6e95a4af60fba",
+  plan: "f4bdb05c8807f4f0",
+  scene1: "138e65c1303eb73d",
+  scene2: "8d200e05f26786a0",
+  scene3: "21e2235d2930d50d",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

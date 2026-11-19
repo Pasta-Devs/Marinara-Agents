@@ -196,6 +196,11 @@ test("the world plan names an existing world as it is; the Surprise me premise s
     plan,
     /- In an existing world, the mystery, the pieces and the web fit its canon: [^\n]*never contradict it\./,
   );
+  // 0.38.2 (the maintainer's ask): the truth a story is built on makes sense once told, in its field, not a new rule.
+  assert.match(
+    plan,
+    /mystery\.truth: the full hidden answer, 2 to 4 sentences, in plain cause and effect that makes sense once told\./,
+  );
   // The premise writer keeps real people out, and no longer bans existing media (the maintainer's, 2026-11-08).
   const premise = text(premiseMessages("English"));
   assert.match(premise, /- No real people\./);
@@ -387,22 +392,24 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // 0.36.4 (#2384): the writing rules drop the dialogue rule (fragments, dodged questions), and scenes, Confrontations
 // and Closers ask for spoken lines in its place, so every prompt that carries them moved.
 // 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
+// 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and
+// plot, so every prompt that carries them moved.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "9b4d244d7b9e1439",
-  callScene: "1f309f3f9a88c7ff",
-  confrontation: "f0e260fc1e806521",
-  closer: "93b20d4721b5de71",
-  bible: "20358a8d712691b9",
+  scene: "fcb244fd929451e7",
+  callScene: "e25e24b244279bd0",
+  confrontation: "4d2f448edd6c5b7a",
+  closer: "33c1d46917b08c20",
+  bible: "cb218cc2088f7bd0",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
   // 2026-11-14 (0.29.0): P17's HARD RULES gained the no-echo line and the plain-texting line, so both moved again.
   // 0.36.8 (#2394): P17's HARD RULES gained the chat-habits line (capitals, emoji and so on), so both moved again.
-  chat: "02970d72d37c4313",
-  daily: "7330aa6e27485566",
-  note: "88c89ef1dee509f6",
+  chat: "e262e64c273ec251",
+  daily: "78c0001c4369ebe0",
+  note: "ddf391631043f986",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "265b3579577f9037",
+  datePlan: "e7075dd70bf9dd31",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {

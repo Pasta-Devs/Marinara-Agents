@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.38.2 — 2026-11-19
+
+- Characters talk more plainly. The writing rules now say that most of what people say means what it says, even behind a mask, and that a face which contradicts the words is only an occasional beat. A spoken line can be a single word as well as a few sentences. Some models, Claude among them, wrote nearly every line as hidden meaning that was hard to follow.
+- Narration keeps you oriented: you always know where you are, who is there and what just happened.
+- Twists need a build-up, as emotional payoffs already did, and the plot has to make sense to an ordinary reader. A new story's central mystery is planned so that it makes sense once it is revealed.
+
 ## 0.38.1 — 2026-11-19
 
 - On the Story screen's **Between you**, a love interest past their finale now shows their real level, from **Level 11** to **Level 20**. Before, every bond rank showed as Level 10 followed by the rank's name, such as "Level 10 · named".

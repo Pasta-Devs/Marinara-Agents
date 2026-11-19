@@ -184,7 +184,8 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
 
 test("chapter and scene prompts keep emotional payoffs occasional and permit character change", () => {
   const instructions = [
-    'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs only if they have proper build-ups between more mundane scenes.',
+    // 0.38.2: twists need build-up too, and the plot makes sense (the maintainer's ask, folded into their pacing line).
+    'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs and twists only if they have proper build-ups between more mundane scenes; the plot always makes sense to an ordinary reader.',
     "All characters, player included, can change; for better, or worse.",
   ];
   for (const content of [defaultContent(), gentle]) {
@@ -260,17 +261,17 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerDates: "b796908cdd97d54c",
-  bannerHis: "cb616f4e17eaa08d",
-  bannerMemories: "ce1d178ef41e8973",
-  bannerMine: "725fba74b2eb3b2e",
-  beat: "433fc0897f5bc73a",
-  beatWithCg: "9157752147d83887",
-  chapterPlan: "d046a2c964a7785b",
-  closer: "b06b99b19bfbf9db",
-  confrontation: "6b6f1370f199802b",
-  repairPlan: "93abd204773303a3",
-  routePlan: "9408e2b52db46a9a",
+  bannerDates: "49a3e857c23eba74",
+  bannerHis: "5ed89630f2ce538f",
+  bannerMemories: "939455d2eebd0360",
+  bannerMine: "0a44e88233031a03",
+  beat: "4dadc52c198d5574",
+  beatWithCg: "a8753c8ec2ad0185",
+  chapterPlan: "214fe5cbe2302530",
+  closer: "ce72c190a1a09daa",
+  confrontation: "3eb3a42fbc57b890",
+  repairPlan: "503e27bf5b9797cf",
+  routePlan: "86d10e39f8ea6b77",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
 // 0.20.2: P10 and P11 open with the story context their chapter's scenes cache, so both sets' routePlan and
@@ -283,18 +284,20 @@ const EXPECTED_ANGST: Record<string, string> = {
 // 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so both moved.
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so both sets' bannerHis and
 // bannerMine moved; bannerMemories is unchanged, and bannerDates (the Dates banner) is new.
+// 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and
+// plot, so both sets moved.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerDates: "571afcba0e0ab87e",
-  bannerHis: "b14147cf3df3a542",
-  bannerMemories: "70e32fa566053e64",
-  bannerMine: "ecbae7e5b4a66890",
-  beat: "2b489cced51a96b9",
-  beatWithCg: "a2aacab10af4b9ae",
-  chapterPlan: "d619e96a3916c54c",
-  closer: "7d24462898d3310a",
-  confrontation: "8b46641ff2264007",
-  repairPlan: "bccaf9f4fe3a1056",
-  routePlan: "2a4b4764ed08a318",
+  bannerDates: "df7436c7099abf67",
+  bannerHis: "98851666eba46510",
+  bannerMemories: "d16cff3cfd0a46eb",
+  bannerMine: "811f9704c1938402",
+  beat: "80aa1c18db435a8f",
+  beatWithCg: "6cb4d74a029775be",
+  chapterPlan: "6f17042bf96131ed",
+  closer: "85f059ac7cd36cea",
+  confrontation: "c0e7d68d4847fb65",
+  repairPlan: "2ccc0cc663522d44",
+  routePlan: "78f97134072f3c65",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

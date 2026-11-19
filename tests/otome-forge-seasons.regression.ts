@@ -12,6 +12,8 @@
 // 0.36.3: the shared writing rules no longer ask for what the protagonist feels in their body.
 // 0.36.4 (#2384): the shared writing rules drop the dialogue rule (fragments, dodged questions).
 // 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
+// 0.38.2: the writing rules and the pacing line are reworded for plainer speech, narration and plot, so every prompt
+// that carries them moved.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -166,10 +168,10 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so theirs moved; Memories is
 // unchanged, and the Dates banner's is new.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "a6148f0dbc6e7e39",
-  "his-wardrobe": "62c8987cac2eb50d",
-  "my-wardrobe": "2412fa806af3c0eb",
-  dates: "209be60392893c7b",
+  memories: "da55c14945309c1d",
+  "his-wardrobe": "c4b2c4e01981e564",
+  "my-wardrobe": "0bc2454d58cf94d9",
+  dates: "e71089d2eaa16bf2",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {
