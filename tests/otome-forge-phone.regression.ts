@@ -64,7 +64,10 @@ import {
   phoneDue,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/daily.ts";
 import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
-import { normalizeChatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
+import {
+  normalizeChatMemory,
+  normalizeChatReply,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
 import { registerPhoneRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/phone.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
@@ -328,6 +331,16 @@ test("a reply written as the protagonist on a later line is refused, an ordinary
   assert.match(refused("He waits.\nInes: fine") as string, /^a message was written as Ines/);
   const kept = refused("Kai: Meet at 7:30\nBring the key.");
   assert.deepEqual(kept, { messages: [{ text: "Meet at 7:30\nBring the key." }] });
+  // 0.36.8 (#2394): an emoticon after a name is his message, kept whole; a speaker's colon still counts, space or not.
+  for (const text of ["ines :(", "Ines :P", "INES :D", "Ines:3", "omg\nines :((", "Kai :)", "Ines :-P see you"]) {
+    assert.deepEqual(refused(text), { messages: [{ text }] }, text);
+  }
+  assert.match(refused("Ines:fine") as string, /^a message was written as Ines/);
+  assert.match(refused("Ines: :(") as string, /^a message was written as Ines/);
+  // P18's quote keeps an emoticon line whole instead of cutting it after the name.
+  const conversation = "Ines: you ate my pie\nKai: Kai :P";
+  const memory = normalizeChatMemory({ memory: "She caught him.", quote: "Kai :P" }, names, conversation);
+  assert.deepEqual(memory, { memory: "She caught him.", quote: "Kai :P" });
 });
 
 test("P17 is a message from him alone: boundary, chat contract, comfort rule, stage, rupture, the note, nothing hidden", async () => {

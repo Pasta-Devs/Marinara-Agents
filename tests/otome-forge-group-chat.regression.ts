@@ -443,6 +443,8 @@ test("P17g's parser: speakers by name, the repair turn for the protagonist, a st
     normalizeGroupReply({ messages }, { player: "Ines", members: speakers, yours }, { squabble });
   assert.match(read([{ speaker: "Ines", text: "Fine." }]) as string, /^a message was written as Ines/);
   assert.match(read([{ speaker: "Kai", text: "Hm.\nInes: fine" }]) as string, /^a message was written as Ines/);
+  // 0.36.8 (#2394): an emoticon after her name is his message to her, not a line written as her.
+  assert.deepEqual(read([{ speaker: "Kai", text: "ines :(" }]), { messages: [{ li: KAI, text: "ines :(" }] });
   assert.match(read([{ speaker: "Noor", text: "Hello." }]) as string, /"Noor" is not in the group chat/);
   assert.match(read([{ text: "Hello." }]) as string, /names no speaker/);
   assert.match(read([{ speaker: "Kai", text: "  " }]) as string, /^the reply had no message/);
