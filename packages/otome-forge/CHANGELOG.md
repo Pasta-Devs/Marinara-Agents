@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.38.1 — 2026-11-19
+
+- On the Story screen's **Between you**, a love interest past their finale now shows their real level, from **Level 11** to **Level 20**. Before, every bond rank showed as Level 10 followed by the rank's name, such as "Level 10 · named".
+
 ## 0.38.0 — 2026-11-19
 
 - **Rewrite** now stays in the reader for the whole scene, in dates and Character Stories as in the main story. Before, it disappeared as soon as you picked a choice, and dates and Character Stories put their choice early in every scene.

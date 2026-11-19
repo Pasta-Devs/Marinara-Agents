@@ -2197,7 +2197,6 @@
   "ui.otomeForge.album.repaintStickerShort": "Repaint",
   "ui.otomeForge.album.repaintKitten": "Paint {{title}} again",
   "ui.otomeForge.album.repaintKittenShort": "Repaint",
-  "ui.otomeForge.story.levelBond": "Level {{level}} · {{rank}}",
   "ui.otomeForge.story.levelOfBond": "{{name}}: affection level {{level}} of {{max}}, bond rank {{bond}} of {{bondMax}}",
   "ui.otomeForge.story.bondOpen": "Open {{rank}}",
   "ui.otomeForge.story.bondWaiting": "A new bond story with {{name}} is ready: {{rank}}.",

@@ -425,13 +425,12 @@ function Affection({
           return (
             <li key={li.id} className="of-affection" style={{ "--of-li-accent": accent } as CSSProperties}>
               <Avatar name={li.name} url={li.portrait} accent={accent} size={38} />
-              {/* Name and level share one line, so a long level ("Level 10 · named") never narrows the hearts. */}
+              {/* Name and level share one line, so a long name never narrows the hearts. The level is his real one,
+                  11 to 20 past his finale, not the ten outer hearts (2026-11-19: it read "Level 10 · named"). */}
               <span className="of-affection-head">
                 <span className="of-affection-name">{li.name}</span>
                 <span className="of-affection-level" aria-hidden="true">
-                  {bond
-                    ? t("ui.otomeForge.story.levelBond", { level: outer, rank: bond.name })
-                    : t("ui.otomeForge.story.level", { level: outer })}
+                  {t("ui.otomeForge.story.level", { level })}
                 </span>
               </span>
               <span
