@@ -196,6 +196,18 @@ test("the writing rules carry the maintainer's lines on narration and echoing, w
   }
 });
 
+test("0.36.9: the writing rules ask every prompt not to fall into patterns, with no example to copy", () => {
+  for (const story of [true, false]) {
+    const rules = otomeWritingRules({ story });
+    assert.ok(
+      rules.includes(
+        "\n- Never fall into patterns: lines of the same kind (narration, speech, thoughts, messages) never keep opening or running the same way, and scenes or replies never keep the same build. Vary how each one starts and is built, across what you write now and what was written before.\n",
+      ),
+    );
+    assert.doesNotMatch(rules, /My (chest|stomach|heart)/u, "the rule names no pattern a model could copy");
+  }
+});
+
 test("tells are a few possible signs among others, and the writing rules ask for variety without repeats", () => {
   // The maintainer's (2026-11-10): love interests showed only their bible's tells, often in the same words within a
   // chapter. The card names them as some signs among others, and every story prompt's writing rules forbid reusing one.
