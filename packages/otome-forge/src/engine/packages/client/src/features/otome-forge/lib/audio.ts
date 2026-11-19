@@ -163,6 +163,98 @@ export function wouldVoice(settings: AudioSettings, speaker: LineSpeaker | null)
  */
 export const voiceCacheKey = (runKey: string, ref: string) => `otome-forge:${runKey}:${ref}`;
 
+/** A line as the Engine voices it: playing it and making it ahead send the same, so the clip made ahead is the one played. */
+export interface LineVoiceRequest {
+  text: string;
+  speaker: string;
+  voice: string;
+  characterId?: string;
+  cacheKey?: string;
+}
+
+/**
+ * What a line is voiced with. 0.34.0: with Emotion cues on, the line as written, cues and all, kept apart from the
+ * plain clip. `cache` false voices it with no cache key.
+ */
+export function lineVoiceRequest(
+  runKey: string,
+  ref: string,
+  segment: Segment,
+  speaker: LineSpeaker,
+  voice: string,
+  settings: Pick<AudioSettings, "emotionCues">,
+  cache = true,
+): LineVoiceRequest {
+  const voiced = settings.emotionCues ? segment.voiced : undefined;
+  return {
+    text: voiced ?? segment.text,
+    speaker: segment.speaker,
+    voice,
+    ...(speaker.characterId ? { characterId: speaker.characterId } : {}),
+    ...(cache ? { cacheKey: voiceCacheKey(runKey, voiced ? `${ref}~cues` : ref) } : {}),
+  };
+}
+
+/** A line whose voice may be made ahead, with its ref (lib/reader-state.ts lineRef). */
+export interface PrepLine {
+  segment: Segment;
+  ref: string;
+}
+
+/**
+ * Makes lines' voices ahead, one at a time and in order, so each plays as its text appears. The newest list replaces
+ * the lines still waiting, and a line is asked for once. A failure stops it until `reset` (the voice settings
+ * changed), so the lines are then voiced as they appear, as before; a stopped wait (AbortError) is no failure, and
+ * neither is one from a line asked for before the last reset.
+ */
+export class VoicePrep {
+  private waiting: PrepLine[] = [];
+  private readonly asked = new Set<string>();
+  private running = false;
+  private failed = false;
+  /** Counts resets, so a line asked for before one cannot stop the lines after it. */
+  private settings = 0;
+
+  constructor(
+    private readonly make: (line: PrepLine) => Promise<void>,
+    private readonly key: (line: PrepLine) => string,
+  ) {}
+
+  set(lines: readonly PrepLine[]) {
+    this.waiting = this.failed ? [] : lines.filter((line) => !this.asked.has(this.key(line)));
+    if (!this.running) void this.run();
+  }
+
+  reset() {
+    this.waiting = [];
+    this.asked.clear();
+    this.failed = false;
+    this.settings += 1;
+  }
+
+  private async run() {
+    this.running = true;
+    try {
+      for (let line = this.waiting.shift(); line; line = this.waiting.shift()) {
+        const key = this.key(line);
+        if (this.asked.has(key)) continue;
+        this.asked.add(key);
+        const settings = this.settings;
+        try {
+          await this.make(line);
+        } catch (error) {
+          if ((error as { name?: string })?.name === "AbortError" || settings !== this.settings) continue;
+          console.warn("Otome Hearth could not voice a line ahead", error);
+          this.failed = true;
+          this.waiting = [];
+        }
+      }
+    } finally {
+      this.running = false;
+    }
+  }
+}
+
 /**
  * The ref a Home tap line is voiced under (M3): his id and a hash of the line, since the Engine keys a clip by its ref,
  * voice and speaker but never its text, and a new stage's pack may put other words in the same place. `kind` names

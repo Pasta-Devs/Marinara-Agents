@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.37.0",
+          "date": "2026-11-19",
+          "notes": "- A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.\n- The lines after a choice are made ahead too, and the reply to your pick once you pick it. Leaving a scene stops making the rest of its voices.\n- Voices are made ahead only while **Voice the dialogue** is on, the **Voices** volume is up and nothing is muted. If one can't be made, the rest are voiced as they appear, as before, until you switch **Voice the dialogue**, **Voice everyone else** or muting off or on.\n- This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.",
+          "highlight": true
+        },
+        {
           "version": "0.36.9",
           "date": "2026-11-19",
           "notes": "- The story, messages and every other text Otome Hearth writes are now told not to fall into patterns. Lines of the same kind, such as narration, speech, thoughts and messages, should not keep opening or running the same way, and scenes and replies should not keep the same build. Some models, Gemini among them, kept starting every thought with \"My … feels\" and building scenes the same way.",
@@ -827,12 +833,6 @@
           "version": "0.34.6",
           "date": "2026-11-16",
           "notes": "- **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).",
-          "highlight": false
-        },
-        {
-          "version": "0.34.5",
-          "date": "2026-11-16",
-          "notes": "- **A scene whose choices break a rule says which one.** When a scene's choices don't follow the format, the retry now tells the model exactly what to fix, such as \"choice 2, option 3 has 10 branch segments; a small choice needs 1 to 8 in every option\". Before, it always repeated the same four rules, so a scene that broke any other rule (a choice placed after the last line, a fifth place, a big choice before the chapter's last scene) failed the same way again and the chapter could not go on.",
           "highlight": false
         }
       ]

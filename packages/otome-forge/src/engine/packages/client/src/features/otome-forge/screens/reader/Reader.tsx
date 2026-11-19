@@ -60,7 +60,16 @@ import {
 import { useOtomeHaptics } from "../../hooks/use-otome-haptics";
 import { useReader, useReducedMotion, type ReaderState } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
-import { canonOption, cgOnLine, hapticAt, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
+import {
+  canonOption,
+  cgOnLine,
+  hapticAt,
+  lineRef,
+  readyUrl,
+  sumGrants,
+  voiceOf,
+  type Voice,
+} from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, LiId, RunLiView, RunView } from "../../shared/api-types";
 import { OWN_OPTION } from "../../shared/arcs";
@@ -116,7 +125,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const audio = useOtomeAudio();
-  const { notice: audioNotice, speaking } = useAudioSnapshot();
+  const { notice: audioNotice, speaking, settings: voiceSettings } = useAudioSnapshot();
   // The current line's voice: `outcome` null while it is still to come or playing (Auto waits for it).
   const [voiceState, setVoiceState] = useState<{ key: string; outcome: SpeakOutcome | null }>({
     key: "",
@@ -339,6 +348,23 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     // Once per line: the segment and ref belong to the line key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audio, voicedKey]);
+
+  // This line and the ones after it are voiced ahead, in order, so each plays as its text starts (the controller skips
+  // the ones nobody voices, and a line already asked for). This line comes first: one held by its place's backdrop is
+  // not spoken yet, so it must not wait behind the lines after it. Leaving the scene lets the rest go.
+  const { timeline, lineIndex, refBase } = reader;
+  useEffect(() => {
+    if (!audio || !timeline || lineIndex < 0) return;
+    audio.prepare(
+      timeline.lines
+        .map((line, index) => ({ line, index }))
+        .slice(lineIndex)
+        .flatMap(({ line, index }) =>
+          line.kind === "aftermath" ? [] : [{ segment: line.segment, ref: lineRef(timeline, index, refBase) }],
+        ),
+    );
+    return () => audio.prepare([]);
+  }, [audio, timeline, lineIndex, refBase, voiceSettings]);
 
   // 0.34.0: the toys play the newest cue up to this line, from the line it is on, and loop until a later line's cue
   // replaces it; leaving the scene (or its end, or the tags card) lets them go. A beat starts still.

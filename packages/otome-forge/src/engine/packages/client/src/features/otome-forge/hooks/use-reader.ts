@@ -1193,6 +1193,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     outcomeKind,
     showOutcome,
     currentRef,
+    /** This version of the beat's line refs start with it (lib/reader-state.ts lineRef). */
+    refBase,
     cg,
     sceneArt,
     place,
