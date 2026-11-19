@@ -27,6 +27,10 @@ import {
   ltmTidyApplyRequestSchema,
   ltmTidyApplyResponseSchema,
   ltmTidyPreviewResponseSchema,
+  ltmStoryDatesApplyRequestSchema,
+  ltmStoryDatesApplyResponseSchema,
+  ltmStoryDatesPreviewResponseSchema,
+  ltmStoryDatesScopeResponseSchema,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "../maintenance/debug-log.js";
 import { isEnoent } from "../ltm-utils.js";
@@ -50,6 +54,7 @@ import {
   scopeLtmDuplicatePeople,
 } from "../maintenance/duplicate-people.js";
 import { applyLtmTidy, previewLtmTidy, scopeLtmTidy } from "../maintenance/tidy.js";
+import { applyLtmStoryDates, previewLtmStoryDates, scopeLtmStoryDates } from "../maintenance/story-dates.js";
 import { getLtmGlobalSettings } from "../settings.js";
 import { ltmModeForChatMode, normalizeLtmChatCharacterIds, resolveChatLtmScope } from "../identity/chat-scope.js";
 import { resolveLongTermMemoryRecallSettings } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
@@ -445,6 +450,59 @@ export function registerMaintenanceRoutes(app: FastifyInstance, runtime: LtmRout
       return reply.status(result.statusCode).send(result.body);
     }
   });
+  // Find story dates: Engine dates for chat pieces, and the dates and time jumps the model finds in their text, each
+  // checked against that text. Nothing changes until apply.
+  app.post<{ Body: unknown }>(
+    "/story-dates/preview",
+    { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+    async (request, reply) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      const close = () => {
+        if (request.raw.aborted) abort();
+      };
+      request.raw.once("aborted", abort);
+      request.raw.once("close", close);
+      try {
+        const cursor = ltmAiCheckPreviewRequestSchema.parse(request.body ?? {});
+        const extractionConfig = await getLtmExtractionConfig(root);
+        const languageModel = await resolvePackageLanguageModel({ connectionId: extractionConfig.connectionId });
+        return ltmStoryDatesPreviewResponseSchema.parse(
+          await previewLtmStoryDates({ root, storage, languageModel, signal: controller.signal, ...cursor }),
+        );
+      } catch (error) {
+        const result = routeError(error, "Could not preview Find story dates");
+        return reply.status(result.statusCode).send(result.body);
+      } finally {
+        request.raw.off("aborted", abort);
+        request.raw.off("close", close);
+      }
+    },
+  );
+  app.get("/story-dates/scope", async (_request, reply) => {
+    try {
+      return ltmStoryDatesScopeResponseSchema.parse({
+        ...(await scopeLtmStoryDates({ storage })),
+        ...(await resolveAiCheckConnection(root)),
+      });
+    } catch (error) {
+      const result = routeError(error, "Could not count the chat pieces Find story dates would read");
+      return reply.status(result.statusCode).send(result.body);
+    }
+  });
+  app.post<{ Body: unknown }>(
+    "/story-dates/apply",
+    { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+    async (request, reply) => {
+      try {
+        const body = ltmStoryDatesApplyRequestSchema.parse(request.body ?? {});
+        return ltmStoryDatesApplyResponseSchema.parse(await applyLtmStoryDates({ root, storage, rows: body.rows }));
+      } catch (error) {
+        const result = routeError(error, "Could not apply Find story dates");
+        return reply.status(result.statusCode).send(result.body);
+      }
+    },
+  );
   // Link older relationships: names match without the model; the extraction model proposes the rest. Apply only adds links.
   app.post<{ Body: unknown }>("/links/preview", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request, reply) => {
     const controller = new AbortController();

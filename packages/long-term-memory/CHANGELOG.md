@@ -1,5 +1,11 @@
 # Long-Term Memory changelog
 
+## 1.6.5 — 2026-11-19
+
+- New memories from Roleplay and Game chats carry the story date the World State tracker saved, and Conversation memories carry the real date.
+- Find story dates reads your existing memories' chat text for in-story dates and time skips, shows what it found with the exact words it relied on, and saves only what you apply.
+- Memories show their story date in the Vault, where you can correct it, and the story's timeline reaches the AI with its dates.
+
 ## 1.6.4 — 2026-11-19
 
 - Read from, the choice between reading messages or finished summaries in the background, can be set once for every chat in Memory Settings under "Memories from chats". A chat follows it until you pick its own in Chat Settings, and "Use the default for all chats" there goes back. The default stays Messages, so no chat changes until you pick Summaries.

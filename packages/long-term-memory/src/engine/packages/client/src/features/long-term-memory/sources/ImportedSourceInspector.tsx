@@ -2,6 +2,7 @@ import { Sparkles } from "lucide-react";
 import { Button, lockedActionProps } from "../shared-controls";
 import { useLtmTranslation } from "../localization";
 import type { SourceOperation } from "./source-shared";
+import { StoryJumps } from "./StoryJumps";
 
 export function ImportedSourceInspector({
   source,
@@ -44,6 +45,7 @@ export function ImportedSourceInspector({
           {localizeUi("ui.longTermMemory.sourcesworkspace.reExtract")}
         </Button>
       </div>
+      <StoryJumps noteId={source.id} disabled={disabled} lockReasonId={lockReasonId} />
       <details data-ltm-source-management>
         <summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold">
           {localizeUi("ui.longTermMemory.sourceoperation.manageSource")}

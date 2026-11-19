@@ -24,6 +24,8 @@ import {
   ltmSectionKeySchema,
   ltmSourceProvenanceSchema,
   ltmStatusSchema,
+  ltmStoryTimeScanSchema,
+  ltmStoryTimeSchema,
   ltmSubjectsSchema,
   ltmVaultFolderSchema,
   ltmWriteScopeSchema,
@@ -282,6 +284,10 @@ export const ltmNoteSchema = z
     subjects: ltmSubjectsSchema.optional(),
     version: z.number().int().min(1),
     extractionFingerprint: ltmExtractionFingerprintSchema.optional(),
+    // On a chat piece (source note): the piece's story date. On a memory: only a date the user typed.
+    storyTime: ltmStoryTimeSchema.optional(),
+    // Chat pieces only: the time jumps the story date scan found in the piece text.
+    storyTimeScan: ltmStoryTimeScanSchema.optional(),
     // Legacy v1 metadata. Freshness is derived exclusively from extractionFingerprint.
     extracted: z.boolean().optional(),
   })
@@ -340,6 +346,22 @@ export const ltmNoteSchema = z
         code: z.ZodIssueCode.custom,
         path: ["extractionFingerprint"],
         message: "Only source notes can store an extraction fingerprint.",
+      });
+    }
+
+    if (note.storyTimeScan && !isLtmSourceLikeNote(note)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["storyTimeScan"],
+        message: "Only source notes can store a story date scan.",
+      });
+    }
+
+    if (note.storyTime && note.storyTime.origin !== "manual" && !isLtmSourceLikeNote(note)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["storyTime", "origin"],
+        message: "A memory can store only a story date the user typed.",
       });
     }
 

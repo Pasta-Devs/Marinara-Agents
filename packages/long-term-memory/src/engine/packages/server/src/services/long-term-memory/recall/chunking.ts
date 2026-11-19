@@ -11,14 +11,16 @@ import {
   type LtmRelationshipDimensions,
   type LtmMemoryChunk,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { formatStoryTimeForPrompt, resolveStoryTime, type LtmStoryDayCounts } from "../persistence/story-time.js";
 import { buildStopWordSet, extractNoteKeywords } from "./keyword-extract.js";
 
 // Issue #1295: bump when the chunk representation changes in a way that must
 // invalidate stored recall indexes (here, keyword extraction and BM25
 // tokenization). The value is folded into every chunk sourceHash, so existing
 // vaults rebuild once through the normal locked freshness check. Issue #1438
-// bumped it for one-syllable name aliases in BM25.
-export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 6;
+// bumped it for one-syllable name aliases in BM25, and issue #2396 for the
+// story date on timeline chunks.
+export const CURRENT_LTM_CHUNK_FORMAT_VERSION = 7;
 
 export interface ChunkLtmNotesOptions {
   includeSourceNotes?: boolean;
@@ -60,8 +62,15 @@ export function isLtmSourceSummaryNote(note: Pick<LtmNote, "type" | "tags">) {
   return isLtmSourceLikeNote(note);
 }
 
-export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<string>): LtmMemoryChunk[] {
+// storyDate: a timeline event's story date for its recall bullet. It is part of the chunk hash, so a changed date or
+// jump on a piece re-dates the timeline chunks after it on the next freshness check.
+export function chunkNoteSections(
+  note: LtmNote,
+  extraStopWords?: ReadonlySet<string>,
+  storyDate?: string,
+): LtmMemoryChunk[] {
   const keywords = extractNoteKeywords(note, extraStopWords);
+  const dated = storyDate ? { storyDate } : {};
   if (note.type === "tone") {
     const profileText = note.sections.profile?.text ? cleanLongTermMemoryChunkText(note.sections.profile.text) : "";
     const obsText = note.sections.observations?.text
@@ -89,6 +98,7 @@ export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<st
         dimensions: section.dimensions,
         dimensionChanges: section.dimensionChanges,
         updatedAt: note.sections.profile?.updatedAt ?? note.sections.observations?.updatedAt ?? "",
+        ...dated,
         sourceHash: stableJsonHash({
           noteId: note.id,
           title: note.title?.trim() || undefined,
@@ -99,6 +109,7 @@ export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<st
           tags: note.tags,
           keywords,
           chunkFormatVersion: CURRENT_LTM_CHUNK_FORMAT_VERSION,
+          ...dated,
           sectionKey: "profile",
           section,
         }),
@@ -128,6 +139,7 @@ export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<st
         dimensions: section.dimensions,
         dimensionChanges: section.dimensionChanges,
         updatedAt: section.updatedAt,
+        ...dated,
         sourceHash: stableJsonHash({
           noteId: note.id,
           title: note.title?.trim() || undefined,
@@ -138,6 +150,7 @@ export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<st
           tags: note.tags,
           keywords,
           chunkFormatVersion: CURRENT_LTM_CHUNK_FORMAT_VERSION,
+          ...dated,
           sectionKey,
           section,
         }),
@@ -145,8 +158,11 @@ export function chunkNoteSections(note: LtmNote, extraStopWords?: ReadonlySet<st
     });
 }
 
+// `notes` must hold the vault's chat pieces too, filtered out below, so timeline events can be dated from them.
 export function chunkNotes(notes: LtmNote[], options: ChunkLtmNotesOptions = {}) {
   const extraStopWords = buildStopWordSet(options.stopWords);
+  const notesById = new Map(notes.map((note) => [note.id, note]));
+  const counts: LtmStoryDayCounts = new Map();
   return notes
     .slice()
     .filter((note) => {
@@ -155,5 +171,13 @@ export function chunkNotes(notes: LtmNote[], options: ChunkLtmNotesOptions = {})
       return options.includeSourceNotes === true || !isSource;
     })
     .sort((a, b) => a.id.localeCompare(b.id))
-    .flatMap((note) => chunkNoteSections(note, extraStopWords));
+    .flatMap((note) =>
+      chunkNoteSections(
+        note,
+        extraStopWords,
+        note.type === "timeline_event"
+          ? formatStoryTimeForPrompt(resolveStoryTime(note, notesById, counts))
+          : undefined,
+      ),
+    );
 }
