@@ -117,9 +117,10 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
       await props.onChatSettingsChange?.({ longTermMemoryChatMemories: mode });
       await chatMemories.refetch();
     });
-  // The server stores no value until the choice is changed, and an older server sends none: both read as Messages.
+  // The effective choice: the chat's own, else the global default; an older server sends none, which reads as Messages.
   const readFrom: LtmChatReadFrom = chatMemories.data?.readFrom ?? "messages";
-  const updateReadFrom = (value: LtmChatReadFrom) =>
+  const readFromOverride = chatMemories.data?.readFromOverride;
+  const updateReadFrom = (value: LtmChatReadFrom | null) =>
     void runUpdate(async () => {
       await props.onChatSettingsChange?.({ longTermMemoryChatReadFrom: value });
       await chatMemories.refetch();
@@ -300,6 +301,18 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           >
             {localizeUi(chatReadFromDescriptionKey(readFrom))}
           </p>
+          {readFromOverride === null ? (
+            <DefaultChip />
+          ) : readFromOverride && !readOnly ? (
+            <Button
+              {...compactButtonProps}
+              data-ltm-chat-read-from-reset
+              onClick={() => updateReadFrom(null)}
+              aria-disabled={pending || undefined}
+            >
+              {localizeUi("ui.longTermMemory.chatsettings.useGlobalDefault")}
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {props.chatId && effectiveChatMemories === "manual" ? (
