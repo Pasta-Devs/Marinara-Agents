@@ -36,6 +36,10 @@ async function main() {
     ["world_state", "manual", "manual"],
     ["manual", "manual", "manual"],
   ];
+  // A reading that holds only a time gives way to a dated one, unless the user typed it.
+  const timeOnly = (origin: string) => ({ start: { time: "evening" }, origin });
+  assert.equal(mergeStoryTime(timeOnly("world_state"), at("stated", "new"))?.origin, "stated");
+  assert.equal(mergeStoryTime(timeOnly("manual"), at("stated", "new"))?.origin, "manual");
   for (const [existing, incoming, kept] of mergeCases) {
     const existingTime = existing ? at(existing, "old") : undefined,
       incomingTime = incoming ? at(incoming, "new") : undefined;

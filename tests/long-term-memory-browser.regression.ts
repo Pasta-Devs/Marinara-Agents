@@ -8876,6 +8876,21 @@ async function main() {
         await storyDialog.locator('[data-ltm-story-dates-reject="chat_piece_engine"]').click();
         await engineRowText.locator("[data-ltm-story-dates-reject]").getByText("Put back", { exact: true }).waitFor();
         assert.match((await storyApply.textContent()) ?? "", /Save 1 piece/u);
+        const scanJumpText = scanRowText.locator("[data-ltm-story-dates-jump]");
+        assert.equal(
+          (await scanJumpText.textContent())?.trim(),
+          "“three weeks passed” → +3 weeks",
+          "a chat with a left-out piece shows its jumps without a day count",
+        );
+        await engineRowText.locator("[data-ltm-story-dates-reject]").click();
+        await engineRowText.locator("[data-ltm-story-dates-reject]").getByText("Leave out", { exact: true }).waitFor();
+        assert.match(
+          (await scanJumpText.textContent()) ?? "",
+          /Day 23 · Friday/u,
+          "putting the piece back brings the day count back",
+        );
+        await engineRowText.locator("[data-ltm-story-dates-reject]").click();
+        await engineRowText.locator("[data-ltm-story-dates-reject]").getByText("Put back", { exact: true }).waitFor();
         assert.deepEqual(storyApplyBodies, [], "nothing is saved before Save");
         await storyApply.click();
         await storyDialog.locator('[data-ltm-story-dates-state="done"]').waitFor();

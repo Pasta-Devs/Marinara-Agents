@@ -30,10 +30,12 @@ const PINNED_ORIGINS = new Set<LtmStoryTimeOrigin>(["manual", "world_state", "ga
 
 /**
  * The date to keep when a new reading arrives. A stronger origin replaces a weaker one and an equal one refreshes it;
- * a weaker one never replaces a stronger one, so nothing automated replaces a date the user typed.
+ * a weaker one never replaces a stronger one, so nothing automated replaces a date the user typed. A reading that holds
+ * only a time of day gives way to a dated one, so a time-only Engine stamp does not hide a stated date.
  */
 export function mergeStoryTime(existing: LtmStoryTime | undefined, incoming: LtmStoryTime | undefined) {
   if (!existing || !incoming) return incoming ?? existing;
+  if (existing.origin !== "manual" && !existing.start.date && incoming.start.date) return incoming;
   return ORIGIN_RANK[incoming.origin] <= ORIGIN_RANK[existing.origin] ? incoming : existing;
 }
 

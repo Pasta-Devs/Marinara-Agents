@@ -1975,7 +1975,7 @@ export async function importPackageInterop(
         // A date the user typed is never replaced (mergeStoryTime), so the merge reads the note as it is now, not as the
         // import's start found it.
         storyTime = mergeStoryTime(
-          existing && stamp ? ((await storage.getNote(existing.id)) ?? existing).storyTime : existing?.storyTime,
+          existing ? ((await storage.getNote(existing.id)) ?? existing).storyTime : undefined,
           stamp,
         ),
         note = existing

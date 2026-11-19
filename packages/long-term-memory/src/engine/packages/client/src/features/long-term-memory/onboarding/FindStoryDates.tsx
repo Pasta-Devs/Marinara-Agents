@@ -132,6 +132,11 @@ export function FindStoryDatesDialog({ onClose }: { onClose: () => void }) {
     setPhase("confirm");
   };
   const kept = preview?.pieces.filter((row) => !leftOut.has(row.noteId)) ?? [];
+  // The server counted each chat as if every row were saved. A left-out piece stays not checked, so the count for the
+  // later jumps of its chat no longer holds and those jumps show without it.
+  // ponytail: a chat with a left-out row loses its counted lines until the row is put back; upgrade path: recount on
+  // the server from the kept rows.
+  const chatsWithLeftOut = new Set(preview?.pieces.filter((row) => leftOut.has(row.noteId)).map((row) => row.chatId));
   const apply = async () => {
     if (saving || !kept.length) return;
     setSaving(true);
@@ -330,7 +335,12 @@ export function FindStoryDatesDialog({ onClose }: { onClose: () => void }) {
                               data-ltm-story-dates-jump
                               className="break-words text-xs text-[var(--muted-foreground)]"
                             >
-                              {describeStoryJump(jump, row.reaches[jumpIndex], locale, localizeUi)}
+                              {describeStoryJump(
+                                jump,
+                                chatsWithLeftOut.has(row.chatId) ? null : row.reaches[jumpIndex],
+                                locale,
+                                localizeUi,
+                              )}
                             </p>
                           ))
                         : null}
