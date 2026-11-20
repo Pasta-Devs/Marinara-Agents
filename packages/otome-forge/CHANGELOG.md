@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.39.0 — 2026-11-20
+
+- Love interests can ask you on dates in Messages. **Settings → Connections → Date invitations each week** sets how often (0, the default, turns it off). The one you've spent the fewest scenes with lately asks. **Accept** lets you pick your look and a gift, then they choose where you go and what you do: three scenes, paid as any new date.
+- What you write in Messages can hurt them, in their thread or in **Everyone**. A serious hurt is their grievance against you, as one from the story is, and they need space until you make it right in Routes. A milder one is remembered and costs 15 affection.
+- Setup's **Connections** step asks how often they write on their own: messages each day, group chat squabbles each day and date invitations each week.
+
 ## 0.38.3 — 2026-11-20
 
 - In a Confrontation, no stance wins by default. Press works when they lied or are in the wrong, Yield when they argue out of worry for you, Hold when you are in the right, and Reveal when what you tell them is what the argument is really about. A Reveal that answers their pain with your own makes them close off. Before, Reveal got through almost every time.

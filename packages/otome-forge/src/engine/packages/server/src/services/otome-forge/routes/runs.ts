@@ -5,7 +5,8 @@
 // POST /age-gate/revoke                    → {ageGate:null}; every world drops to SFW Heat, Angst at most, SFW images
 // POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge (with
 //                                             an image connection, the cast's looks paint by themselves unless Ask
-//                                             before painting or prompt review holds them)
+//                                             before painting or prompt review holds them); #2424: `setup` may set
+//                                             Settings → Connections' dailyMessages, groupSquabbles and dateInvites
 // GET  /runs/:run                          → {view: RunView}; with the stickers the player has (#2044), whose owed
 //                                             sets and paints it queues in the background, as it queues the love
 //                                             interests' missing personality quiz answers (#2174), long-term recall's

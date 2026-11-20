@@ -69,7 +69,8 @@
 //     0.20.2: its instructions and his card, the story and the conversations that are over are cached (five minutes),
 //     the thread now and the task after them
 //   chatMemoryMessages: P18 what he remembers of a closed conversation (S/phone/memory.ts), and the group chat's
-//   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts)
+//   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts); both P17 and P17g may name
+//     what her message hurt (#2424), and P17 with reason "date" is his date invitation (S/phone/invite.ts)
 // (g) Home and care
 //   NO_ABSENCE_RULE: Home never mentions the player's absence (P15, P16, P27, Read Me, Read Him)
 //   linePackMessages: P15 Home line pack (S/home/lines.ts); 0.35.0: with `kittyOnly`, Kitty Cards' lines alone, for a
@@ -3453,7 +3454,8 @@ export function notebookMemories(
 // (f) Phone: replies (stickers and daily messages), phone memory
 // ──────────────────────────────────────────────
 // P17 is GF's cv() made Otome's: he writes a MESSAGE, never a scene, never the protagonist's reply, and nothing in the
-// story happens because of it. GF's closeness ladder becomes his stage's wording (and a rupture keeps him curt). The
+// story happens because of it but a hurt (#2424): a reply may say what her message hurt in him (`hurt`), which S/phone/
+// chat.ts keeps as his grievance with her. GF's closeness ladder becomes his stage's wording (and a rupture keeps him curt). The
 // system message holds the role, the JSON shape, the hard rules, the knowledge boundary with the writing rules, and the
 // `chat` contract for him alone; the user turn holds his scene card with what stands between them, the story as he may
 // know it (recall with `reader: li`), the conversations that are over, the thread now, and the task, ending with the

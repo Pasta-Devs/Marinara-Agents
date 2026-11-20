@@ -442,8 +442,7 @@ export function DateNight({
           <StepHead
             subtitle={subtitle}
             company={company}
-            step={pulled ? 2 : 1}
-            total={pulled ? 2 : 1}
+            step={pulled ? 2 : undefined}
             title={t("ui.otomeForge.dateNight.looksTitlePulled")}
           />
           <LookPicker
@@ -811,15 +810,13 @@ interface StepHeadProps {
   subtitle: string;
   /** Whom the player has picked so far. */
   company: RunLiView[];
-  /** "Step n of `total`" while choosing; none while planning. */
+  /** "Step n of 2" while choosing; none while planning, nor (#2424) on the only step of a date he asked her on. */
   step?: number;
-  /** #2424: a date he asked her on has only its looks step. */
-  total?: number;
   title: string;
 }
 
 /** The step's heading: the date (its name), who's coming once anyone is, and the step's question. */
-function StepHead({ subtitle, company, step, total = 2, title }: StepHeadProps) {
+function StepHead({ subtitle, company, step, title }: StepHeadProps) {
   const { t } = useTranslation();
   const lead = company[0];
   return (
@@ -835,7 +832,7 @@ function StepHead({ subtitle, company, step, total = 2, title }: StepHeadProps) 
         <p className="of-eyebrow">
           {t("ui.otomeForge.dateNight.pulledTitle")}
           {step ? (
-            <span className="of-faint"> · {t("ui.otomeForge.dateNight.stepOf", { number: step, total })}</span>
+            <span className="of-faint"> · {t("ui.otomeForge.dateNight.stepOf", { number: step, total: 2 })}</span>
           ) : null}
         </p>
         <h1 className="of-title of-title--page" tabIndex={-1}>

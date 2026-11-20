@@ -38,6 +38,9 @@
 //   between each member and the protagonist is what the whole cast may know (S/prompts.ts sharedState): no grievance
 //   or disclosure from a love interest's own chapter, since one call writes every member and all of them read it. The
 //   open conversation reaches only P17g.
+// - #2424: a reply to her may name whom her message hurt (`hurt`, members by name); once it lands, each is kept as a
+//   grievance that member holds, opened at `group/<her message>` (S/phone/chat.ts answerIn), which the whole group may
+//   know. A serious one may be his grievance with her (#2156). A squabble answers nothing of hers and names no hurt.
 import { forgeChatReplyBusy } from "@forge-kit/chat-continuity-server.mjs";
 import { forgeChatRecallQuery } from "@forge-kit/story-memory-integration.mjs";
 import type {
