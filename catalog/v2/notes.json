@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.38.3",
+          "date": "2026-11-20",
+          "notes": "- In a Confrontation, no stance wins by default. Press works when they lied or are in the wrong, Yield when they argue out of worry for you, Hold when you are in the right, and Reveal when what you tell them is what the argument is really about. A Reveal that answers their pain with your own makes them close off. Before, Reveal got through almost every time.",
+          "highlight": false
+        },
+        {
           "version": "0.38.2",
           "date": "2026-11-19",
           "notes": "- Characters talk more plainly. The writing rules now say that most of what people say means what it says, even behind a mask, and that a face which contradicts the words is only an occasional beat. A spoken line can be a single word as well as a few sentences, and anyone may joke when it fits them. Some models, Claude among them, wrote nearly every line as hidden meaning that was hard to follow.\n- Twists need a build-up, as emotional payoffs already did, and the plot has to make sense to an ordinary reader. A new story's central mystery is planned so that it makes sense once it is revealed.",
@@ -827,12 +833,6 @@
           "version": "0.34.10",
           "date": "2026-11-17",
           "notes": "- **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with \"401: Android local authentication required\", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.",
-          "highlight": false
-        },
-        {
-          "version": "0.34.9",
-          "date": "2026-11-17",
-          "notes": "- **New looks don't copy your avatar's hood.** A look is painted with your persona avatar (or his card picture) as the likeness, and when that picture wore a hood or a hat, every new look wore it too. The picture is now used only for the face, hair and build: a look wears just the outfit it was written with, and a hood or hat only when that outfit has one. Looks you already have keep their pictures; tap **Repaint** to paint one again.\n- **No more stray pixels at a look's edges.** A look is painted on a flat backdrop that its cut-out then removes, and a plum cardigan was painted on magenta, so the cut-out ate its edges. The backdrop is now chosen from more colour names (plum, burgundy, wine, lilac, sage, moss, denim and others) and mostly from the clothes, which are what touch it. Repaint a look that shows the specks.",
           "highlight": false
         }
       ]

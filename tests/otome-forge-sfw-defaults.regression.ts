@@ -269,7 +269,8 @@ const EXPECTED_ANGST: Record<string, string> = {
   beatWithCg: "29d3ed3746b16e02",
   chapterPlan: "54a53fee39e780d5",
   closer: "9462aa7b3173c75b",
-  confrontation: "9b3c63de1784cedc",
+  // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
+  confrontation: "8c9105c584885eda",
   repairPlan: "b917b2bf278dcfaa",
   routePlan: "2b9d3d8beee73239",
 };
@@ -295,7 +296,8 @@ const EXPECTED_GENTLE: Record<string, string> = {
   beatWithCg: "001fc1632a0a18c3",
   chapterPlan: "977ee28a883673db",
   closer: "4e85a2bff89c2178",
-  confrontation: "c30d7a185c124aef",
+  // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
+  confrontation: "d49c03b6a98a703c",
   repairPlan: "c68deaab0d42743c",
   routePlan: "60aa992a4c671fdb",
 };
