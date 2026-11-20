@@ -2350,14 +2350,15 @@ test.describe("package-owned Noodle interface", () => {
     await expect(desktopAccountSwitcher).toBeVisible();
     await expect(mobileBottomNav).toBeHidden();
 
-    await page.locator('[data-tour="sidebar-toggle"]').click();
+    // The Chats list and the panels share one sidebar, so an open panel takes one sidebar width.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(desktopAccountSwitcher).toBeVisible();
     await page.locator('[data-tour="panel-settings"]').click();
     await expect.poll(() => center.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1024);
     await expect(mobileBottomNav).toBeVisible();
     await expect(desktopAccountSwitcher).toBeHidden();
 
     await page.locator('[data-tour="panel-settings"]').click();
-    await page.locator('[data-tour="sidebar-toggle"]').click();
     await expect(desktopAccountSwitcher).toBeVisible();
     await expect(mobileBottomNav).toBeHidden();
 
