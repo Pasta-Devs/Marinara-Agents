@@ -19,6 +19,7 @@
 import type {
   LiId,
   PhoneInviteStatus,
+  PhoneMessage,
   PhoneThread,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { clearAirOfKey, heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
@@ -50,8 +51,11 @@ export interface UpsetResult {
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");
 
-/** His thread with every invitation still waiting set to `status` (`only`: that message's alone). */
-async function settleInvites(
+/**
+ * His thread with every invitation to clear the air still waiting set to `status` (`only`: that message's alone, of
+ * either kind: #2424's date invitation is settled only by its own message). Its kind is kept.
+ */
+export async function settleInvites(
   deps: Pick<DailyDeps, "store">,
   runId: string,
   li: LiId,
@@ -60,13 +64,15 @@ async function settleInvites(
   scene?: string,
 ): Promise<PhoneThread | null> {
   return deps.store.updateDoc(chatTarget(runId, li), normalizeThread, (current) => {
-    const waiting = (id: string, invite?: { status: PhoneInviteStatus }) =>
-      invite?.status === "pending" && (!only || id === only);
+    const waiting = (id: string, invite?: PhoneMessage["invite"]) =>
+      invite?.status === "pending" && (only ? id === only : !invite.kind);
     if (!current.messages.some((message) => waiting(message.id, message.invite))) return current;
     return {
       ...current,
       messages: current.messages.map((message) =>
-        waiting(message.id, message.invite) ? { ...message, invite: { status, ...(scene ? { scene } : {}) } } : message,
+        waiting(message.id, message.invite)
+          ? { ...message, invite: { ...message.invite!, status, ...(scene ? { scene } : {}) } }
+          : message,
       ),
     };
   });
@@ -196,6 +202,11 @@ export async function answerInvite(
   );
   if (!invited?.invite) throw notFound("invitation");
   const answer: PhoneInviteStatus = accept ? "accepted" : "declined";
+  // #2424: his date is accepted from its looks step (POST /runs/:run/dates/invited), which plans it; only a decline
+  // comes here.
+  if (accept && invited.invite.kind === "date" && invited.invite.status === "pending") {
+    throw conflict("Accept his date from Messages, where you choose what to wear.");
+  }
   if (invited.invite.status === answer) {
     return { status: answer, ...(invited.invite.scene ? { scene: invited.invite.scene } : {}) };
   }

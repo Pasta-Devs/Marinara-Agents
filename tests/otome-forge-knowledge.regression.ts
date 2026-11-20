@@ -405,8 +405,10 @@ const STAGING_OTHERS: Record<string, string> = {
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
   // 2026-11-14 (0.29.0): P17's HARD RULES gained the no-echo line and the plain-texting line, so both moved again.
   // 0.36.8 (#2394): P17's HARD RULES gained the chat-habits line (capitals, emoji and so on), so both moved again.
-  chat: "ebc627bc253f6e32",
-  daily: "57adb451b1df9d8c",
+  // 0.39.0 (#2424): P17 gained the hurt field (beside "messages"), its no-story-effect line names the hurt, and its one
+  // exception names his date invitations too, so both moved again.
+  chat: "f4266a7a1fb1484d",
+  daily: "e69714087ccb9889",
   note: "0ac1c06bf21e99b0",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).

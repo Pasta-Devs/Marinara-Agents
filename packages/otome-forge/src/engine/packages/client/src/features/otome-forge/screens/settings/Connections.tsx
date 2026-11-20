@@ -1,7 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Connections: the story's text connection for each job ("Same as story" by default), how many
 // love interests may write first each day, each once (#2044, S/phone/daily.ts; 0, the default, is off), how many times
-// a day they may squabble in the group chat on their own (#2154, S/phone/group.ts; 0, the default, is off), and the story
+// a day they may squabble in the group chat on their own (#2154, S/phone/group.ts; 0, the default, is off), how many
+// times a week one may ask her on a date (#2424, S/phone/invite.ts; 0, the default, is off), all three the setup's
+// fields (setup/ConnectionsStep.tsx MessageNumbers), and the story
 // memory's status with its Retry (Debug's MemorySection), next to the connection that writes the summaries. Opened by
 // the memory banner for a failed summary, it shows that connection (Memory, under More connections), focused.
 // Memory recall embeddings (0.19.0, S/memory/recall-index.ts): the model that indexes the chapter summaries for
@@ -16,10 +18,9 @@ import { useConnections } from "../../hooks/use-engine-resources";
 import { useRecallIndex } from "../../hooks/use-memory";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { Connections, RunView } from "../../shared/api-types";
-import { DAILY_MESSAGES_MAX } from "../../shared/home";
-import { ConnectionControls } from "../setup/ConnectionsStep";
-import type { DraftConnections } from "../setup/draft";
-import { ConnectionSelect, TextField } from "../setup/parts";
+import { ConnectionControls, MessageNumbers } from "../setup/ConnectionsStep";
+import { messageNumbersOf, type DraftConnections, type DraftMessages } from "../setup/draft";
+import { ConnectionSelect } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 import { embeddingOptions } from "../../lib/recall-choice";
 import { MemorySection } from "./Debug";
@@ -43,11 +44,12 @@ function toConnections(form: DraftConnections, embeddings: string): Connections 
   };
 }
 
-/** A number a day as typed, when it is a whole number from 0 to DAILY_MESSAGES_MAX; otherwise null. */
-function dailyOf(text: string): number | null {
-  const value = text.trim() === "" ? Number.NaN : Number(text);
-  return Number.isInteger(value) && value >= 0 && value <= DAILY_MESSAGES_MAX ? value : null;
-}
+/** The story's three numbers, as the fields show them. */
+const messagesOf = (world: RunView["world"]): DraftMessages => ({
+  daily: String(world.dailyMessages ?? 0),
+  squabbles: String(world.groupSquabbles ?? 0),
+  invites: String(world.dateInvites ?? 0),
+});
 
 /** Settings' way to the Memory connection (ConnectionControls revealMemory), shown once. */
 interface RevealMemory {
@@ -70,17 +72,21 @@ function StoryConnections({
   // this Engine is (loading, or failed to load), only the saved choice is listed (lib/recall-choice.ts).
   const recallStatus = useRecallIndex(run.runKey).status;
   const olderEngine = recallStatus?.choosable === false;
-  const stored = run.world.dailyMessages ?? 0;
-  const [dailyText, setDailyText] = useState(() => String(stored));
-  const daily = dailyOf(dailyText);
-  const storedSquabbles = run.world.groupSquabbles ?? 0;
-  const [squabblesText, setSquabblesText] = useState(() => String(storedSquabbles));
-  const squabbles = dailyOf(squabblesText);
+  const stored = messageNumbersOf(messagesOf(run.world))!;
+  const [messagesText, setMessagesText] = useState(() => messagesOf(run.world));
+  const numbers = messageNumbersOf(messagesText);
+  const moved = (field: keyof typeof stored) => !!numbers && numbers[field] !== stored[field];
   const connectionsChanged =
     JSON.stringify(toConnections(form, storedEmbeddings)) !==
     JSON.stringify(toConnections(toForm(run.world.connections), storedEmbeddings));
   const embeddingsChanged = embeddings !== storedEmbeddings;
-  const changed = connectionsChanged || embeddingsChanged || daily !== stored || squabbles !== storedSquabbles;
+  const changed =
+    connectionsChanged ||
+    embeddingsChanged ||
+    !numbers ||
+    moved("dailyMessages") ||
+    moved("groupSquabbles") ||
+    moved("dateInvites");
   if (connections.isLoading) {
     return (
       <p className="of-hint" role="status">
@@ -116,53 +122,26 @@ function StoryConnections({
         emptyLabel={t("ui.otomeForge.settings.embeddingsBuiltIn")}
         onChange={setEmbeddings}
       />
-      <TextField
-        label={t("ui.otomeForge.settings.dailyMessages")}
-        type="number"
-        min={0}
-        max={DAILY_MESSAGES_MAX}
-        value={dailyText}
-        onChange={setDailyText}
-        invalid={daily === null}
-        hint={t(
-          daily === null ? "ui.otomeForge.settings.dailyMessagesInvalid" : "ui.otomeForge.settings.dailyMessagesHint",
-          {
-            max: DAILY_MESSAGES_MAX,
-          },
-        )}
-      />
-      <TextField
-        label={t("ui.otomeForge.settings.groupSquabbles")}
-        type="number"
-        min={0}
-        max={DAILY_MESSAGES_MAX}
-        value={squabblesText}
-        onChange={setSquabblesText}
-        invalid={squabbles === null}
-        hint={t(
-          squabbles === null
-            ? "ui.otomeForge.settings.dailyMessagesInvalid"
-            : "ui.otomeForge.settings.groupSquabblesHint",
-          { max: DAILY_MESSAGES_MAX },
-        )}
-      />
+      <MessageNumbers value={messagesText} onChange={setMessagesText} />
       <SaveBar
-        changed={changed && !!form.narration && daily !== null && squabbles !== null}
+        changed={changed && !!form.narration && !!numbers}
         busy={settings.busy}
         status={settings.status}
         onSave={() => {
-          if (daily === null || squabbles === null) return;
-          // The connections' note is about scenes; the embedding model, the daily number and the squabbles get their own.
+          if (!numbers) return;
+          // The connections' note is about scenes; the embedding model and each number get their own.
           void settings.save(
-            { connections: toConnections(form, embeddings), dailyMessages: daily, groupSquabbles: squabbles },
+            { connections: toConnections(form, embeddings), ...numbers },
             t(
               connectionsChanged
                 ? "ui.otomeForge.settings.saved"
                 : embeddingsChanged
                   ? "ui.otomeForge.settings.embeddingsSaved"
-                  : daily !== stored
+                  : moved("dailyMessages")
                     ? "ui.otomeForge.settings.dailyMessagesSaved"
-                    : "ui.otomeForge.settings.groupSquabblesSaved",
+                    : moved("groupSquabbles")
+                      ? "ui.otomeForge.settings.groupSquabblesSaved"
+                      : "ui.otomeForge.settings.dateInvitesSaved",
             ),
           );
         }}

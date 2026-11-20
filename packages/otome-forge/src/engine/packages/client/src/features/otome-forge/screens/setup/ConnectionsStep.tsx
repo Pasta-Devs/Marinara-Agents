@@ -14,7 +14,15 @@ import { CheckAgain, RetryNotice } from "../../components/RetryNotice";
 import { useConnections, type ConnectionOption } from "../../hooks/use-engine-resources";
 import { useImageStyleProfiles } from "../../hooks/use-image-style-profiles";
 import { IMAGE_STYLE_MAX } from "../../shared/content";
-import { FACES_PER_LOOK, type DraftConnections, type DraftImages, type SetupDraft } from "./draft";
+import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../shared/home";
+import {
+  FACES_PER_LOOK,
+  wholeOf,
+  type DraftConnections,
+  type DraftImages,
+  type DraftMessages,
+  type SetupDraft,
+} from "./draft";
 import { ConnectionSelect, Section, Switch, TextField } from "./parts";
 
 /** The context window, in tokens, a story's text connections should have (#2066). */
@@ -251,6 +259,48 @@ interface ConnectionsStepProps {
   update: (change: (draft: SetupDraft) => SetupDraft) => void;
 }
 
+/**
+ * #2424: how often the love interests write on their own, as typed: who writes first each day (#2044), the group
+ * chat's squabbles each day (#2154) and date invitations each week. The same fields serve setup and Settings →
+ * Connections; a number outside its range shows its hint as the error.
+ */
+export function MessageNumbers({
+  value,
+  onChange,
+}: {
+  value: DraftMessages;
+  onChange: (value: DraftMessages) => void;
+}) {
+  const { t } = useTranslation();
+  const fields = [
+    { field: "daily", label: "dailyMessages", max: DAILY_MESSAGES_MAX },
+    { field: "squabbles", label: "groupSquabbles", max: DAILY_MESSAGES_MAX },
+    { field: "invites", label: "dateInvites", max: DATE_INVITES_MAX },
+  ] as const;
+  return (
+    <>
+      {fields.map(({ field, label, max }) => {
+        const invalid = wholeOf(value[field], max) === null;
+        return (
+          <TextField
+            key={field}
+            label={t(`ui.otomeForge.settings.${label}`)}
+            type="number"
+            min={0}
+            max={max}
+            value={value[field]}
+            onChange={(text) => onChange({ ...value, [field]: text })}
+            invalid={invalid}
+            hint={t(invalid ? "ui.otomeForge.settings.dailyMessagesInvalid" : `ui.otomeForge.settings.${label}Hint`, {
+              max,
+            })}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 export function ConnectionsStep({ draft, update }: ConnectionsStepProps) {
   const { t } = useTranslation();
   const connections = useConnections();
@@ -292,6 +342,12 @@ export function ConnectionsStep({ draft, update }: ConnectionsStepProps) {
           connections={connections.text}
           onChange={(value) => update((current) => ({ ...current, connections: value }))}
           onCheckAgain={connections.isError ? undefined : connections.refetch}
+        />
+      </Section>
+      <Section title={t("ui.otomeForge.setup.messagesSection")} hint={t("ui.otomeForge.setup.messagesSectionHint")}>
+        <MessageNumbers
+          value={draft.messages}
+          onChange={(value) => update((current) => ({ ...current, messages: value }))}
         />
       </Section>
       <Section title={t("ui.otomeForge.setup.imageConnections")} hint={t("ui.otomeForge.setup.imagesOptional")}>

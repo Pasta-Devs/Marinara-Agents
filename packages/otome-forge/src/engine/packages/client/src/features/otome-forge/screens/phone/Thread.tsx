@@ -12,7 +12,10 @@
 // the protagonist's five stickers, no quote, and Close and remember for everyone in it (no affection).
 // #2156: his invitation to clear the air (PhoneMessage.invite) shows under his message with Accept and Decline while it
 // waits (POST .../invite), then what became of it; Accept opens the scene that clears it in the reader (#2303,
-// onOpenScene), and the accepted card keeps a way back to it.
+// onOpenScene), and the accepted card keeps a way back to it. #2424: his invitation on a date of his choosing shows the
+// same way; its Accept opens the date's looks step (onOpenDate, Dates' DateNight), which accepts it once the date is
+// planned, and the accepted card opens that date. When her message hurt someone so much that it opened his grievance
+// with her (the send's `held`), the thread says so: he needs space until she makes it right in Routes.
 // A picked sticker is attached to the message box (shown above it, with Remove), not sent: Send sends it with the words
 // in the box, or alone, as one message; picking another replaces it. A failed send that was never saved gives it back.
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
@@ -28,6 +31,7 @@ import { accentOf } from "../../lib/accent";
 import { typingDelay } from "../../lib/typing-delay";
 import { useOtomeProps } from "../../props";
 import type {
+  LiId,
   PhoneCloseResult,
   PhoneHistoryPage,
   PhoneListView,
@@ -40,6 +44,7 @@ import type {
 import { isFace } from "../../shared/faces";
 import { hapticsOn } from "../../shared/haptics";
 import { GROUP_THREAD } from "../../shared/home";
+import type { DateOpen } from "../dates/DateNight";
 import { playQueryKey } from "../dates/DatesHub";
 import { homeQueryKey } from "../home/HomeScreen";
 import { CloseAndRemember } from "./CloseAndRemember";
@@ -97,6 +102,8 @@ interface ThreadProps {
   onQuoteChange: (quote: string | null) => void;
   /** #2156, #2303: opens the scene her acceptance of his invitation to clear the air registered. */
   onOpenScene?: (key: string) => void;
+  /** #2424: opens his date invitation's looks step, or the date it opened. */
+  onOpenDate?: (open: DateOpen) => void;
 }
 
 export function Thread({
@@ -108,6 +115,7 @@ export function Thread({
   onBack,
   onQuoteChange,
   onOpenScene,
+  onOpenDate,
 }: ThreadProps) {
   const { t } = useTranslation();
   const stickers = useStickers(view, li);
@@ -148,6 +156,8 @@ export function Thread({
   const [outgoing, setOutgoing] = useState<{ local: PhoneMessage | null; started: number } | null>(null);
   const [incoming, setIncoming] = useState<Incoming | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** #2424: those whose grievance with her the last reply opened. */
+  const [hurt, setHurt] = useState<LiId[]>([]);
   const [closedGrant, setClosedGrant] = useState(0);
   const [announce, setAnnounce] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
@@ -211,6 +221,7 @@ export function Thread({
     stick.current = true;
     setOutgoing({ local, started });
     setError(null);
+    setHurt([]);
     setClosedGrant(0);
     setAnnounce(li ? t("ui.otomeForge.phone.typing", { name: li.name }) : t("ui.otomeForge.phone.groupTyping"));
     if (local) {
@@ -225,6 +236,14 @@ export function Thread({
       const held = li && haptics && hapticsOn(view.world) ? haptics.remoteMinutes(li.id) : 0;
       const result = await otome.post<PhoneSendResult>(`${path}/send`, held ? { ...body, remote: held } : body);
       const rows = Array.isArray(result.messages) ? result.messages : [];
+      const heldNow = Array.isArray(result.held) ? result.held : [];
+      setHurt(heldNow);
+      // A hurt costs affection, which the run view shows; one that opened a grievance shows in Routes and Dates too.
+      if (result.hurt?.length || heldNow.length) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+      if (heldNow.length) {
+        void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+        void queryClient.invalidateQueries({ queryKey: playQueryKey(runKey) });
+      }
       setIncoming({
         mine: rows.filter((row) => row.who === "player"),
         his: rows.filter((row) => row.who === "li" && !before.has(row.id)),
@@ -545,7 +564,7 @@ export function Thread({
                 group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
               />
               {li && row.invite && row.who === "li" ? (
-                <InviteCard runKey={runKey} li={li} row={row} onOpenScene={onOpenScene} />
+                <InviteCard runKey={runKey} li={li} row={row} onOpenScene={onOpenScene} onOpenDate={onOpenDate} />
               ) : null}
               {session ? (
                 <li className="of-thread-divider">
@@ -589,6 +608,11 @@ export function Thread({
           {error}
         </p>
       ) : null}
+      {hurt.map((held) => (
+        <p key={held} className="of-notice of-reader-notice" role="status">
+          {t("ui.otomeForge.phone.hurtHeld", { name: view.lis.find((entry) => entry.id === held)?.name ?? title })}
+        </p>
+      ))}
       <form
         className="of-composer of-glass of-glass--strong"
         onSubmit={(event) => {
@@ -698,18 +722,29 @@ const INVITE_KEYS = {
   declined: "ui.otomeForge.phone.inviteDeclined",
   lapsed: "ui.otomeForge.phone.inviteLapsed",
 } as const;
+/** #2424: the same for his date invitation. */
+const DATE_INVITE_KEYS = {
+  ...INVITE_KEYS,
+  pending: "ui.otomeForge.phone.dateInvitePending",
+  accepted: "ui.otomeForge.phone.dateInviteAccepted",
+} as const;
 
-/** #2156: his invitation to clear the air: Accept or Decline while it waits, then what became of it. */
+/**
+ * #2156: his invitation to clear the air: Accept or Decline while it waits, then what became of it. #2424: his date
+ * invitation is accepted from its looks step (onOpenDate), and declined here.
+ */
 function InviteCard({
   runKey,
   li,
   row,
   onOpenScene,
+  onOpenDate,
 }: {
   runKey: string;
   li: RunLiView;
   row: Row;
   onOpenScene?: (key: string) => void;
+  onOpenDate?: (open: DateOpen) => void;
 }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
@@ -717,6 +752,7 @@ function InviteCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const status = row.invite!.status;
+  const date = row.invite!.kind === "date";
   // Her answer takes the buttons away: focus moves to the card, whose status line announces what became of it.
   const cardRef = useRef<HTMLDivElement>(null);
   const answered = useRef(false);
@@ -727,6 +763,10 @@ function InviteCard({
   }, [status]);
   const answer = async (accept: boolean) => {
     if (busy) return;
+    if (date && accept) {
+      onOpenDate?.({ invite: { li: li.id, message: row.id } });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -756,14 +796,14 @@ function InviteCard({
       >
         <p className="of-invite-text" role="status">
           <HeartHandshake size={15} strokeWidth={2} aria-hidden="true" />
-          <span>{t(INVITE_KEYS[status], { name: li.name })}</span>
+          <span>{t((date ? DATE_INVITE_KEYS : INVITE_KEYS)[status], { name: li.name })}</span>
         </p>
         {status === "pending" ? (
           <div className="of-invite-actions">
             <button
               type="button"
               className="of-button of-button--primary of-button--small"
-              aria-disabled={busy}
+              aria-disabled={busy || (date && !onOpenDate)}
               onClick={() => void answer(true)}
             >
               {t("ui.otomeForge.phone.inviteAccept")}
@@ -775,6 +815,16 @@ function InviteCard({
               onClick={() => void answer(false)}
             >
               {t("ui.otomeForge.phone.inviteDecline")}
+            </button>
+          </div>
+        ) : status === "accepted" && row.invite!.scene && date && onOpenDate ? (
+          <div className="of-invite-actions">
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              onClick={() => onOpenDate({ key: row.invite!.scene! })}
+            >
+              {t("ui.otomeForge.phone.dateInvitePlay", { name: li.name })}
             </button>
           </div>
         ) : status === "accepted" && row.invite!.scene && onOpenScene ? (

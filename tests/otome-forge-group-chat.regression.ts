@@ -798,7 +798,13 @@ test("squabbles: off by default, armed a minute after a visit starts, spread by 
     (await t.call("POST", due, { body: { open, now } })).body;
   // The route's own clock: called directly with `now`, through the route for the shape.
   const route = await heartbeat(T0);
-  assert.deepEqual(route, { status: "disabled", latest: null, group: { status: "disabled", latest: null } });
+  // #2424: the date invitations answer through the same heartbeat.
+  assert.deepEqual(route, {
+    status: "disabled",
+    latest: null,
+    group: { status: "disabled", latest: null },
+    invite: { status: "disabled", latest: null },
+  });
   const beat = (now: number, open: string | null = null, random = () => 0) =>
     groupDue(t.deps, t.runId, { open, now, random, debugMode: true });
   await t.setWorld({ groupSquabbles: 2 });

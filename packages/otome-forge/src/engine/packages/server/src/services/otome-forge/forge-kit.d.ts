@@ -11,6 +11,8 @@ declare module "@forge-kit/time-zone-server.mjs" {
    * as now: pass Date.parse(iso). The same holds for forgeWallDate and forgeWeekday.
    */
   export function forgeDayKey(value?: number | Date): string;
+  /** The local week's Monday, "YYYY-MM-DD", in the request's time zone (as forgeDayKey reads its value). */
+  export function forgeWeekKey(value?: number | Date): string;
   /** The instant's wall-clock time in the request's zone, as a Date whose UTC fields read that local time. */
   export function forgeWallDate(value?: number | Date, timeZone?: string): Date;
   /** Monday 0 … Sunday 6, in the request's time zone. */

@@ -246,6 +246,16 @@ export interface World {
   groupSquabbles?: number;
   /** The squabbles' quota and the newest one (S/phone/group.ts), `last.li` the group's; never sent to the client. */
   groupDaily?: PhoneDaily;
+  /**
+   * Settings → Connections (#2424): how many times each local week (from Monday) a love interest may ask the
+   * protagonist on a date on their own, in Messages (SH/home.ts DATE_INVITES_MAX at most); absent or 0: never.
+   */
+  dateInvites?: number;
+  /**
+   * #2424: the invitations' quota, as `phoneDaily` with each local week's Monday as its key, `wrote` the love
+   * interests who asked that week (S/phone/invite.ts); never sent to the client.
+   */
+  inviteWeekly?: PhoneDaily;
 }
 
 /**
@@ -655,8 +665,12 @@ export interface PhoneMessage {
    * #2156: his invitation to clear the air, on his last message of a reply while she is upset with him: waiting for her
    * Accept or Decline, or what became of it (lapsed when she took it back first).
    */
-  /** #2303: an accepted invitation names the scene it opened. */
-  invite?: { status: PhoneInviteStatus; scene?: string };
+  /**
+   * #2303: an accepted invitation names the scene it opened. #2424: `kind` "date" is his invitation on a date of his
+   * own choosing (S/phone/invite.ts), accepted from its date's looks step (POST /runs/:run/dates/invited), and its
+   * `scene` is that date's chapter; absent, it is the invitation to clear the air.
+   */
+  invite?: { status: PhoneInviteStatus; scene?: string; kind?: "date" };
   /** 0.34.0: his message drives the toys while he holds the remote (SH/haptics.ts); it loops until his next cue. */
   haptic?: HapticCue[];
 }
@@ -703,6 +717,8 @@ export interface PhoneDueResult {
   latest: { li: LiId; at: string } | null;
   /** #2154: the group chat's squabbles (S/phone/group.ts), the same way; `latest` is the newest squabble's. */
   group?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
+  /** #2424: the date invitations (S/phone/invite.ts), the same way; `latest` is the newest invitation's. */
+  invite?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
 }
 
 /** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
@@ -732,6 +748,13 @@ export interface PhoneHistoryPage {
 export interface PhoneSendResult {
   /** What this request added or found: the player's message (when it was new or named by `id`), then his reply. */
   messages: PhoneMessage[];
+  /** #2424: the love interests what she wrote hurt, as the reply said (their affection may have fallen); absent: none. */
+  hurt?: LiId[];
+  /**
+   * #2424: those of them whose grievance with her (#2156) the hurt opened: they need space until she makes it right in
+   * Routes. Absent when it opened none.
+   */
+  held?: LiId[];
 }
 
 /** Affection from Close and remember (the Grant shape, with its own source). */
@@ -1681,7 +1704,7 @@ export interface RecallIndexStatus {
 // ── Wire shapes ──
 
 /** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quotas. */
-export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily"> & {
+export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily" | "inviteWeekly"> & {
   mystery: { question: string };
   web: Omit<WebRow, "secret">[];
   audio: Omit<WorldAudio, "briefs">;
@@ -1763,6 +1786,10 @@ export interface SetupInput {
   content: ContentSettings;
   images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style">;
   connections: Connections;
+  /** #2424: Settings → Connections' numbers, asked at setup; absent or 0: off, as before. */
+  dailyMessages?: number;
+  groupSquabbles?: number;
+  dateInvites?: number;
 }
 
 /** POST /runs/:run/settings. Raising a gated setting needs the 18+ gate; lowering one never does. */
@@ -1779,4 +1806,6 @@ export interface SettingsInput {
   dailyMessages?: number;
   /** #2154: the group chat's squabbles a day, 0 to DAILY_MESSAGES_MAX. */
   groupSquabbles?: number;
+  /** #2424: date invitations a week, 0 to DATE_INVITES_MAX. */
+  dateInvites?: number;
 }

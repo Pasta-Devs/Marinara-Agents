@@ -69,7 +69,8 @@
 //     0.20.2: its instructions and his card, the story and the conversations that are over are cached (five minutes),
 //     the thread now and the task after them
 //   chatMemoryMessages: P18 what he remembers of a closed conversation (S/phone/memory.ts), and the group chat's
-//   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts)
+//   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts); both P17 and P17g may name
+//     what her message hurt (#2424), and P17 with reason "date" is his date invitation (S/phone/invite.ts)
 // (g) Home and care
 //   NO_ABSENCE_RULE: Home never mentions the player's absence (P15, P16, P27, Read Me, Read Him)
 //   linePackMessages: P15 Home line pack (S/home/lines.ts); 0.35.0: with `kittyOnly`, Kitty Cards' lines alone, for a
@@ -233,6 +234,7 @@ import {
   isFace,
 } from "../../../../client/src/features/otome-forge/shared/faces.js";
 import {
+  GROUP_THREAD,
   LINE_COUNTS,
   LINE_WORDS_MAX,
   MOOD_REASON_WORDS_MAX,
@@ -1409,8 +1411,14 @@ const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
  */
 function knownTo(knows: readonly LiId[], ref: string, about: LiId): boolean {
   const key = ref.split("/")[0] ?? "";
-  return mainChapterNumber(key) !== null || knows.includes(chapterOwner(key) ?? about);
+  return sharedRef(key) || knows.includes(chapterOwner(key) ?? about);
 }
+
+/**
+ * Whether what came of `key` (a ref's first part) is everyone's: a main chapter, or (#2424) the group chat, which every
+ * love interest in it saw. A hurt from his own thread (`chat/…`) stays his, as his own chapter would.
+ */
+const sharedRef = (key: string) => mainChapterNumber(key) !== null || key === GROUP_THREAD;
 
 /** The ledger rows a planner for `knows` may see (a conflict saved before this rule has no key, and is everyone's). */
 export function knownRows<T extends { key?: string; li: LiId }>(rows: readonly T[], knows: readonly LiId[]): T[] {
@@ -3446,7 +3454,8 @@ export function notebookMemories(
 // (f) Phone: replies (stickers and daily messages), phone memory
 // ──────────────────────────────────────────────
 // P17 is GF's cv() made Otome's: he writes a MESSAGE, never a scene, never the protagonist's reply, and nothing in the
-// story happens because of it. GF's closeness ladder becomes his stage's wording (and a rupture keeps him curt). The
+// story happens because of it but a hurt (#2424): a reply may say what her message hurt in him (`hurt`), which S/phone/
+// chat.ts keeps as his grievance with her. GF's closeness ladder becomes his stage's wording (and a rupture keeps him curt). The
 // system message holds the role, the JSON shape, the hard rules, the knowledge boundary with the writing rules, and the
 // `chat` contract for him alone; the user turn holds his scene card with what stands between them, the story as he may
 // know it (recall with `reader: li`), the conversations that are over, the thread now, and the task, ending with the
@@ -3534,7 +3543,7 @@ const CHAT_HAPTICS_RULE =
 
 /** #2156: the one meeting a message may set up, kept by the Dates screen (constant, so the system prefix never varies). */
 const CLEAR_AIR_RULE =
-  "- The one exception: when you are told below that you may, you may ask them out to clear the air. That evening is kept by the game, not by your message.";
+  "- The one exception: when you are told below that you may ask them out to clear the air, or that you are asking them on a date, you may. That evening is kept by the game, not by your message.";
 
 /**
  * 0.36.8 (#2394): the maintainer asked that love interests treat the thread as messages: "allowing them to SCREAM in
@@ -3566,8 +3575,11 @@ export interface ChatReplyInput {
   stickers?: ReplyStickers;
   /** #2156: he may ask her out to clear the air in this reply (S/phone/chat.ts inviteOffered). */
   invite?: boolean;
-  /** #2156: he writes first because she has just told him she is upset with him (S/phone/upset.ts). */
-  reason?: "upset";
+  /**
+   * #2156: he writes first because she has just told him she is upset with him (S/phone/upset.ts); #2424 "date": to ask
+   * her on a date of his own choosing (S/phone/invite.ts).
+   */
+  reason?: "upset" | "date";
   /** 0.34.0: he holds the remote of her toys for about this many more minutes (with haptics on), or none. */
   remote?: number;
   /** 0.34.0: her connected toys as S/haptics.ts devicesText lists them, while he holds the remote. */
@@ -3610,6 +3622,7 @@ export function chatReplyMessages({
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "..."}]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
+    `- hurt: beside "messages" in the JSON object, never inside a message, only when what ${them} just wrote truly hurts you, as ${name} would take it: {"text": "...", "severity": "minor|major|rupture"}, the text one short line in your own words on what hurt, rupture only for words that break something between you. Omit it otherwise.`,
     stickerRule,
     hapticsOn(world) ? CHAT_HAPTICS_RULE : "",
     `- Write every message in ${world.language}.`,
@@ -3621,7 +3634,7 @@ export function chatReplyMessages({
     "HARD RULES",
     `- Write ONLY your own messages. Never write ${them}'s reply, and never narrate what they do or feel.`,
     "- It is a message, not a chapter: no scene headings, no narration, no third person about yourself, no actions in asterisks.",
-    "- Nothing happens in the story because of this conversation. You can talk about what has happened and what you feel; you cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret you are still hiding. No grievance or rupture is settled by text: only the story settles it.",
+    `- Nothing happens in the story because of this conversation, except that what ${them} writes can hurt you (hurt). You can talk about what has happened and what you feel; you cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret you are still hiding. No grievance or rupture is settled by text: only the story settles it.`,
     CLEAR_AIR_RULE,
     "- Never invent shared history: what you two share is only what the story and these conversations hold.",
     `- Never mention how long it has been since ${them} last wrote, that they were away, or anything about their life outside the story, and never ask where they have been.`,
@@ -3683,9 +3696,11 @@ export function chatReplyMessages({
       : "",
     reason === "upset"
       ? `Write ${name}'s next message now: ${them} has just told you they are upset with you, and you write to them about it first, on your own, in your own voice. One or two short messages.`
-      : first
-        ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
-        : `Write ${name}'s next message now, answering ${them}.`,
+      : reason === "date"
+        ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, to ask them out on a date. Where you take them and what you do together is yours to choose, from who you are; you may tell them or keep it a surprise. One or two short messages, the last one asking.`
+        : first
+          ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
+          : `Write ${name}'s next message now, answering ${them}.`,
     otomeContractReminder("chat"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
@@ -3789,13 +3804,14 @@ export function groupChatMessages({
     `{"messages": [{"speaker": "<exact name>", "text": "..."}]}`,
     `- speaker: the exact name of the one who sends it, one of ${everyone}. Never ${them}.`,
     "- text: each message short, a line or a few, the way people text.",
+    `- hurt: beside "messages" in the JSON object, never inside a message, only when what ${them} just wrote truly hurts one of them, as they would take it: [{"speaker": "<exact name>", "text": "...", "severity": "minor|major|rupture"}], one for each one it hurts, the text one short line in their own words on what hurt, rupture only for words that break something between them and ${them}. Omit it otherwise.`,
     `- Stickers: one of them may send a sticker by writing its name in square brackets in a message, their own or ${them}'s, only from the lists under STICKERS, the way people do in a group chat: to react, tease, sulk or answer without words. At most one sticker from each of them in a reply; it may stand alone.`,
     `- Write every message in ${world.language}.`,
     "",
     "HARD RULES",
     `- Write ONLY their messages. Never write ${them}'s messages, and never narrate what anyone does or feels.`,
     "- These are messages, not a chapter: no scene headings, no narration, no one in the third person about themselves, no actions in asterisks.",
-    "- Nothing happens in the story because of this conversation. They can talk about what has happened and what they feel; they cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret they are still hiding. No grievance or rupture is settled by text: only the story settles it.",
+    `- Nothing happens in the story because of this conversation, except that what ${them} writes can hurt them (hurt). They can talk about what has happened and what they feel; they cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret they are still hiding. No grievance or rupture is settled by text: only the story settles it.`,
     "- Never invent shared history: what they share is only what the story and these conversations hold.",
     `- Never mention how long it has been since ${them} last wrote, that they were away, or anything about their life outside the story, and never ask where they have been.`,
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
@@ -4802,6 +4818,8 @@ export interface DatePlanInput {
   gift?: GiftId | null;
   /** #2156: he asked her out on this evening to clear the air (DatePlan.clearAir); absent leaves the prompt as before. */
   clearAir?: boolean;
+  /** #2424: with place PARTNER_CHOICE, what he wrote to ask her out (S/phone/invite.ts); absent leaves it as before. */
+  invitation?: string;
 }
 
 /** "Kai", "Kai and Sol", "Kai, Sol and Mira". */
@@ -4822,6 +4840,7 @@ export function datePlanMessages({
   memory,
   gift = null,
   clearAir = false,
+  invitation = "",
 }: DatePlanInput): OtomeMessage[] {
   const name = unit.name;
   const group = others.length > 0;
@@ -4929,7 +4948,7 @@ export function datePlanMessages({
     pulled
       ? `"${pulled.placeName}"${pulled.placeTags.trim() ? ` (${pulled.placeTags.trim()})` : ""}. The date goes there: keep that name for it.`
       : place === PARTNER_CHOICE
-        ? `${name} chooses where to take the protagonist: somewhere that says something true about ${name} (from their likes, their past or their world).`
+        ? `${name} asked the protagonist out, and chooses where to take them and what they do there: somewhere that says something true about ${name} (from their likes, their past or their world).${invitation.trim() ? ` ${name} asked with these words, and the date keeps to anything they promised: ${JSON.stringify(invitation.trim())}` : ""}`
         : place === STORY_PLACE
           ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
           : place === PULLED_PLACE
@@ -5302,12 +5321,12 @@ export const explicitMemoryArt = (kind: BannerKind, world: Pick<World, "content"
 const relabel = (contract: string, heading: string) => contract.replace(/^CONTENT CONTRACT/, heading);
 
 /**
- * What stands between them that the whole cast may know: grievances and disclosures from main chapters only (a rupture
- * keeps its line), and never a notebook (Read Me, #1945): what one love interest has come to know is theirs alone, and
- * a banner plans for all, as P17g writes for every member of the group chat (#2154).
+ * What stands between them that the whole cast may know: grievances and disclosures from main chapters and (#2424) the
+ * group chat only (a rupture keeps its line), and never a notebook (Read Me, #1945): what one love interest has come
+ * to know is theirs alone, and a banner plans for all, as P17g writes for every member of the group chat (#2154).
  */
 export function sharedState(liState: LiState): LiState {
-  const shared = (ref: string) => mainChapterNumber(ref.split("/")[0] ?? "") !== null;
+  const shared = (ref: string) => sharedRef(ref.split("/")[0] ?? "");
   return {
     ...liState,
     grievances: liState.grievances.filter((grievance) => shared(grievance.opened)),

@@ -28,6 +28,7 @@ import {
   COMFORT_RULE,
   SUMMARY_WORDING,
   chatReplyMessages,
+  sharedState,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   createHandle,
@@ -63,13 +64,24 @@ import {
   dailyJobKey,
   phoneDue,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/daily.ts";
+import {
+  inviteDue,
+  inviteJobKey,
+  leastSeenFirst,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/invite.ts";
+import { applyMessageHurts } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
+import { heldAgainst } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/dates.ts";
 import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
 import {
   normalizeChatMemory,
   normalizeChatReply,
+  normalizeGroupReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
 import { registerPhoneRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/phone.ts";
-import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import {
+  defaultLiState,
+  normalizeState,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
   normalizeBeat,
   normalizeChapter,
@@ -1193,4 +1205,327 @@ test("P17 caches all but the thread now and its task, for five minutes, so the n
   assert.equal(two.messages[0]!.content, one.messages[0]!.content, "the same instructions");
   assert.equal(two.messages[1]!.content, one.messages[1]!.content, "the same card, story and conversations over");
   assert.ok(two.messages[2]!.content.includes("The lamp is out again."));
+});
+
+// ── Date invitations (#2424) ──
+
+const INVITE = { messages: [{ text: "Are you free tonight? I know a place. Let me take you." }] };
+const DATE_LINE = "you are writing to Ines first, on your own, to ask them out on a date";
+/** Answers P17 with a daily message, or with his invitation when it is asked for. */
+const inviteModel = () =>
+  Array.from(
+    { length: 40 },
+    () => (messages: Messages) => json(messages.at(-1)!.content.includes(DATE_LINE) ? INVITE : DAILY),
+  );
+
+/** dailyWorld with date invitations at `limit` a week (daily messages off), and their own heartbeat and job. */
+async function inviteWorld(runKey: string, limit?: number) {
+  const t = await dailyWorld(runKey, { replies: inviteModel() });
+  const setInvites = (value: number) =>
+    t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      dateInvites: value,
+    }));
+  if (limit !== undefined) await setInvites(limit);
+  const due = (now: number, { open }: { open?: string | null } = {}) =>
+    inZone("UTC", () => inviteDue(t.deps, t.runId, { open, now, debugMode: true }));
+  const drain = async () => {
+    for (let round = 0; round < 400 && t.background.has(inviteJobKey(t.runId)); round += 1) await tick();
+  };
+  const weekly = async () => (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.inviteWeekly;
+  return { ...t, setInvites, due, drain, weekly };
+}
+
+/** A chapter as leastSeenFirst reads it: its kind and each node's cast. */
+const timeChapter = (key: string, kind: Chapter["kind"], casts: string[][]) =>
+  ({ key, kind, nodes: casts.map((cast, i) => ({ i, kind: "beat", guide: "", cast })) }) as unknown as Chapter;
+
+test("date invitations: the one she spent the least time with lately asks; ties go to the one seen longest ago", async () => {
+  const now = Date.parse("2026-11-20T12:00:00.000Z");
+  const day = (n: number) => new Date(now - n * 86_400_000).toISOString();
+  const chapters: Record<string, Chapter> = {
+    "main-3": timeChapter("main-3", "main", [[KAI, MIR], [KAI], [MIR], [KAI]]),
+    "route-li-kai-ab12-1": timeChapter("route-li-kai-ab12-1", "route", [[KAI], [KAI]]),
+    // A Character Story of Mireille's: her time too.
+    "story-item-0001": timeChapter("story-item-0001", "story", [[MIR]]),
+    // A date and his side are never time with him in the story.
+    "date-1": timeChapter("date-1", "date", [[SOL], [SOL], [SOL]]),
+    "side-li-sol-ef56-1": timeChapter("side-li-sol-ef56-1", "story", [[SOL]]),
+    // Older than a week: only says when she was last with Sol.
+    "main-1": timeChapter("main-1", "main", [[SOL]]),
+  };
+  const store = { readDoc: async (id: string) => chapters[id.split(":chapter:")[1] ?? ""] ?? null };
+  const progress = (completed: string | null) => ({ beatsRead: 1, completed, applied: [] });
+  const state = {
+    chapters: {
+      "main-1": progress(day(20)),
+      "main-3": progress(day(2)),
+      "route-li-kai-ab12-1": progress(day(1)),
+      "story-item-0001": progress(day(3)),
+      "date-1": progress(day(1)),
+      "side-li-sol-ef56-1": progress(day(1)),
+      "main-4": progress(null),
+    },
+  };
+  // This week: Kai 5 scenes, Mireille 3, Sol none (his date and his side do not count).
+  assert.deepEqual(await leastSeenFirst(store as never, "r", state, [KAI, MIR, SOL], now), [SOL, MIR, KAI]);
+  // Tied at none this week: Sol was seen 20 days ago, a newcomer never, so the newcomer asks first.
+  const NEW = "li-new-aa00";
+  assert.deepEqual(await leastSeenFirst(store as never, "r", state, [SOL, NEW], now), [NEW, SOL]);
+  // Nothing read at all: cast order.
+  assert.deepEqual(await leastSeenFirst(store as never, "r", { chapters: {} }, [MIR, KAI], now), [MIR, KAI]);
+});
+
+test("date invitations: off by default, weekly, each love interest once a week, carrying the invitation", async () => {
+  const t = await inviteWorld("r-invit1-aaaaaa");
+  assert.deepEqual(await t.due(T0), { status: "disabled", latest: null }, "absent is 0: off");
+  await t.setInvites(2);
+  assert.equal((await t.due(T0)).status, "scheduled");
+  assert.equal((await t.due(T0 + 60_000)).status, "queued");
+  // Monday's week, the attempt spent before any call, the next 7 days / 2 away.
+  assert.deepEqual((await t.weekly())!.days["2026-11-02"], {
+    attempts: 1,
+    nextAt: T0 + 60_000 + 84 * HOUR,
+  });
+  await t.drain();
+  // Nothing read this week and main-1 has no chapter to read: a tie, so cast order: Kai asks.
+  const thread = (await t.thread(KAI))!;
+  assert.deepEqual(
+    thread.messages.map((message) => [message.who, message.text, message.invite]),
+    [["li", INVITE.messages[0]!.text, { status: "pending", kind: "date" }]],
+  );
+  assert.equal(unreadCount(thread), 1);
+  assert.equal(t.calls.length, 1);
+  const prompt = t.calls[0]!.messages.at(-1)!.content;
+  assert.ok(prompt.includes(DATE_LINE), prompt.slice(-600));
+  assert.ok(!prompt.includes('add "invite": true'), "a date invitation is never also an invitation to clear the air");
+  assert.deepEqual(t.admitted, ["conn-chat background"]);
+  const weekly = (await t.weekly())!;
+  assert.deepEqual(weekly.days["2026-11-02"]!.wrote, [KAI]);
+  assert.equal(weekly.last!.li, KAI);
+  // The client hears of it through the heartbeat route's `invite` (this route table has no background lane).
+  const both = await t.phone("POST", "/runs/:run/phone/due", { body: { open: null } });
+  assert.deepEqual(both.body.invite.latest, weekly.last);
+
+  // Kai asked this week and his invitation waits: Mireille asks next, and only once the next attempt is due.
+  assert.equal((await t.due(T0 + 2 * HOUR)).status, "scheduled", "a new visit re-arms");
+  assert.equal((await t.due(T0 + 60_000 + 84 * HOUR)).status, "scheduled");
+  assert.equal((await t.due(T0 + 120_000 + 84 * HOUR)).status, "queued");
+  await t.drain();
+  assert.equal((await t.thread(MIR))!.messages.at(-1)!.invite?.kind, "date");
+  assert.equal((await t.thread(KAI))!.messages.length, 1);
+  assert.equal((await t.due(T0 + 180_000 + 84 * HOUR)).status, "quota", "two this week");
+  // A new week starts the count again; Sol, who has not asked, is the one left free.
+  assert.equal((await t.due(T0 + 7 * 24 * HOUR)).status, "scheduled");
+  assert.equal((await t.due(T0 + 7 * 24 * HOUR + 60_000)).status, "queued");
+  await t.drain();
+  assert.equal((await t.thread(SOL))!.messages.at(-1)!.invite?.kind, "date");
+});
+
+test("date invitations: one whose invitation started waiting after the heartbeat is passed over for the next", async () => {
+  // The review of #2427: the job read the candidates at the heartbeat; Kai's clear-air invitation lands before it runs.
+  const t = await inviteWorld("r-invit3-aaaaaa", 1);
+  assert.equal((await t.due(T0)).status, "scheduled");
+  assert.equal((await t.due(T0 + 60_000)).status, "queued");
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    li: KAI,
+    messages: [
+      {
+        id: "m-clear-0001abcd",
+        who: "li" as const,
+        text: "Let me make it up to you.",
+        at: new Date(T0).toISOString(),
+        invite: { status: "pending" as const },
+      },
+    ],
+  }));
+  await t.drain();
+  assert.equal((await t.thread(KAI))!.messages.length, 1, "Kai, no longer free, writes nothing");
+  assert.deepEqual((await t.thread(MIR))!.messages.at(-1)!.invite, { status: "pending", kind: "date" });
+  assert.equal(t.calls.length, 1, "Kai's refusal cost no call");
+});
+
+test("date invitations: never from one who holds a grievance with her, and Decline is the thread's own", async () => {
+  const t = await inviteWorld("r-invit2-aaaaaa", 1);
+  // Kai holds a grievance with her (#2156): his dates wait, so he never asks.
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: {
+      ...state.lis,
+      [KAI]: {
+        ...state.lis[KAI]!,
+        grievances: [
+          {
+            id: "g-x",
+            li: KAI,
+            by: "li",
+            text: "She lied to me.",
+            severity: "rupture",
+            opened: "main-1/2",
+            status: "open",
+          },
+        ],
+        rupture: { grievanceId: "g-x", since: "2026-11-01T20:00:00.000Z", space: 0 },
+      },
+    },
+  }));
+  assert.equal((await t.due(T0)).status, "scheduled");
+  assert.equal((await t.due(T0 + 60_000)).status, "queued");
+  await t.drain();
+  assert.equal(await t.thread(KAI), null);
+  const asked = (await t.thread(MIR))!.messages.at(-1)!;
+  assert.deepEqual(asked.invite, { status: "pending", kind: "date" });
+
+  // Her Accept is the date's looks step (POST /dates/invited); here it is refused, and nothing changes.
+  const invite = "/runs/:run/phone/:li/invite";
+  const accept = await t.phone("POST", invite, { li: MIR, body: { message: asked.id, accept: true } });
+  assert.deepEqual([accept.status, accept.body.code], [409, "conflict"]);
+  // Telling her upset to another love interest, or taking one back, never lapses his date invitation.
+  await t.phone("POST", "/runs/:run/routes/:li/upset", { li: MIR, body: { upset: false } }).catch(() => undefined);
+  const declined = await t.phone("POST", invite, { li: MIR, body: { message: asked.id, accept: false } });
+  assert.deepEqual([declined.status, declined.body.status], [200, "declined"]);
+  assert.deepEqual((await t.thread(MIR))!.messages.at(-1)!.invite, { status: "declined", kind: "date" });
+  assert.equal(t.calls.length, 1, "no call for an answer");
+});
+
+// ── Hurts in Messages (#2424) ──
+
+test("a hurtful message: his reply names the hurt, and a serious one opens his grievance with her once", async () => {
+  const hurtReply = (severity: string) => ({
+    messages: [{ text: "Don't. Don't talk to me right now." }],
+    hurt: { text: "She said I was only ever a use to her.", severity },
+  });
+  let severity = "rupture";
+  const t = await phoneWorld("r-hurt01-aaaaaa", {
+    replies: Array.from({ length: 10 }, () => (messages: Messages) => {
+      if (isReplyPrompt(messages)) return json(hurtReply(severity));
+      throw new Error("Unexpected prompt");
+    }),
+  });
+  const pointsBefore = (await t.state())!.lis[KAI]!.points;
+  const sent = await t.phone("POST", send, {
+    li: KAI,
+    body: { text: "You were only ever useful.", id: "c-hurt-0001" },
+  });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  assert.deepEqual(sent.body.held, [KAI], "the thread says he needs space");
+  let kai = (await t.state())!.lis[KAI]!;
+  assert.ok(heldAgainst(kai), "a serious hurt is his grievance with her (#2156)");
+  const grievance = kai.grievances.at(-1)!;
+  assert.deepEqual(
+    [grievance.by, grievance.severity, grievance.opened, grievance.text],
+    ["li", "rupture", "chat/c-hurt-0001", "She said I was only ever a use to her."],
+  );
+  assert.equal(kai.rupture!.grievanceId, grievance.id);
+  assert.equal(kai.points, Math.max(0, pointsBefore - 15));
+  // The same message again (a retried request) keeps what landed: no second grievance, no second loss.
+  const again = await t.phone("POST", send, {
+    li: KAI,
+    body: { text: "You were only ever useful.", id: "c-hurt-0001" },
+  });
+  assert.equal(again.status, 200);
+  assert.equal((await t.state())!.lis[KAI]!.grievances.length, kai.grievances.length);
+  // His own thread holds it: only his readers know it; a group reader does not.
+  assert.equal(sharedState(kai).grievances.length, 0);
+
+  // Another serious hurt in the same arc is remembered, as major: his grievance opens at most once an arc.
+  assert.deepEqual(sent.body.hurt, [KAI], "the client reads the run again: his affection fell");
+  const mir = await t.phone("POST", send, { li: MIR, body: { text: "Leave me alone.", id: "c-hurt-0002" } });
+  assert.deepEqual(mir.body.held, [MIR]);
+  severity = "minor";
+  const minor = await t.phone("POST", send, { li: SOL, body: { text: "You're boring.", id: "c-hurt-0003" } });
+  assert.equal(minor.body.held, undefined, "a milder hurt locks nothing");
+  const sol = (await t.state())!.lis[SOL]!;
+  assert.deepEqual([heldAgainst(sol), sol.grievances.at(-1)!.severity], [false, "minor"]);
+  kai = (await t.state())!.lis[KAI]!;
+  const outcome = applyMessageHurts(
+    await t.state().then((state) => state!),
+    [{ li: KAI, text: "Again.", severity: "rupture" }],
+    { ref: "chat/c-hurt-0009", at: "2026-11-20T10:00:00.000Z", arc: kai.grievanceArc ?? 0 },
+  );
+  assert.deepEqual(outcome.opened, [], "his grievance opens at most once an arc, and one stands");
+  assert.equal(outcome.state.lis[KAI]!.grievances.at(-1)!.severity, "major", "remembered as major");
+  assert.equal(outcome.state.lis[KAI]!.rupture!.grievanceId, kai.rupture!.grievanceId, "the first still stands");
+  // Past GRIEVANCES_MAX (60) unresolved ones he keeps no more from messages, so none is lost on save, nor a rupture
+  // left naming a grievance the state no longer holds.
+  const before = (await t.state())!;
+  const crowded = {
+    ...before,
+    lis: {
+      ...before.lis,
+      [SOL]: {
+        ...before.lis[SOL]!,
+        grievances: Array.from({ length: 60 }, (_, n) => ({
+          id: `g-old-${n}`,
+          li: SOL,
+          by: "li" as const,
+          text: `Old hurt ${n}.`,
+          severity: "minor" as const,
+          opened: `main-1/${n}`,
+          status: "open" as const,
+        })),
+      },
+    },
+  };
+  const full = applyMessageHurts(crowded, [{ li: SOL, text: "One more.", severity: "rupture" }], {
+    ref: "chat/c-hurt-0010",
+    at: "2026-11-20T10:00:00.000Z",
+    arc: 9,
+  });
+  assert.deepEqual([full.hurt, full.opened, full.state.lis[SOL]!.grievances.length], [[], [], 60]);
+});
+
+test("a hurt is read only from a reply to her, and in the group chat for members by name", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const raw = { messages: [{ text: "Fine." }], hurt: { text: "She mocked my father.", severity: "MAJOR" } };
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, true), {
+    messages: [{ text: "Fine." }],
+    hurt: { text: "She mocked my father.", severity: "major" },
+  });
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, false), { messages: [{ text: "Fine." }] });
+  // A severity that is not listed, or no words, names no hurt.
+  assert.deepEqual(
+    normalizeChatReply({ ...raw, hurt: { text: "x", severity: "furious" } }, names, [], false, false, true),
+    { messages: [{ text: "Fine." }] },
+  );
+  const members = [
+    { id: KAI, name: "Kai", stickers: [] },
+    { id: MIR, name: "Mireille", stickers: [] },
+  ];
+  const group = normalizeGroupReply(
+    {
+      messages: [{ speaker: "Kai", text: "Wow." }],
+      hurt: [
+        { speaker: "Mireille", text: "She laughed at my singing.", severity: "minor" },
+        { speaker: "Mireille", text: "Twice.", severity: "major" },
+        { speaker: "Ines", text: "Not a member.", severity: "major" },
+      ],
+    },
+    { player: "Ines", members, yours: [] },
+    { answering: "lol your singing" },
+  );
+  assert.deepEqual(group, {
+    messages: [{ li: KAI, text: "Wow." }],
+    hurt: [{ li: MIR, text: "She laughed at my singing.", severity: "minor" }],
+  });
+  const squabble = normalizeGroupReply(
+    {
+      messages: [
+        { speaker: "Kai", text: "a" },
+        { speaker: "Mireille", text: "b" },
+      ],
+      hurt: [{ speaker: "Kai", text: "c", severity: "minor" }],
+    },
+    { player: "Ines", members, yours: [] },
+    { squabble: true },
+  );
+  assert.equal(typeof squabble === "object" && "hurt" in squabble, false, "a squabble answers nothing of hers");
+  // Everyone in the group saw it: a hurt from the group chat is the whole cast's to know.
+  const state = applyMessageHurts(
+    { lis: { [MIR]: defaultLiState(), [KAI]: defaultLiState() }, chapters: {} } as never,
+    [{ li: MIR, text: "She laughed at my singing.", severity: "minor" }],
+    { ref: "group/c-grp-0001", at: "2026-11-20T10:00:00.000Z", arc: 0 },
+  ).state;
+  assert.equal(sharedState(state.lis[MIR]!).grievances.length, 1);
 });

@@ -81,6 +81,7 @@ import {
 import {
   BASE_LOOK,
   DATE_BEATS,
+  PARTNER_CHOICE,
   PULLED_PLACE,
   dateCast,
   dateOutcome,
@@ -279,7 +280,7 @@ export function normalizeDatePlanReply(
 // ── Reading the run's dates ──
 
 /** A love interest the run has, with a bible (a date needs one), or a 404. */
-function partnerOf(run: RunDocuments, li: LiId): Unit {
+export function partnerOf(run: RunDocuments, li: LiId): Unit {
   const unit = run.units.find((item) => item.id === li);
   if (!run.state.lis[li] || !unit?.bible) throw liNotFound();
   return unit;
@@ -332,7 +333,7 @@ const readBeats = (store: Pick<OtomeStore, "readDoc">, runId: string, chapter: C
   Promise.all(chapter.nodes.map((node: ChapterNode) => readBeat(store, runId, chapter.key, node.i)));
 
 /** One date as the client sees it. `outcome` is given for a finished date. */
-function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: DateOutcome | null): DateEntry {
+export function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: DateOutcome | null): DateEntry {
   const date = chapter.date!;
   const progress = state.chapters[chapter.key];
   const finished = isFinished(state, chapter);
@@ -497,137 +498,179 @@ export async function startPulledDate(
     if (!run) throw runNotFound();
     const { item, units, open, newcomers } = await checkPulled(deps, run, runId, input);
     if (open) return resume(open);
-    const [lead] = units as [Unit, ...Unit[]];
-    const gift = input.gift;
-    const liState = run.state.lis[lead.id] ?? defaultLiState();
-    const scenes = item.scenes ?? 1;
-    const grand = item.kind === "date5";
-    const placeName = clean(item.place?.name ?? "", 120);
-    const key = nextDateKey(await dateChapters(deps.store, runId));
-    const job: ForgeMemoryJob = "narration";
-    const names = units.map((unit) => unit.name);
-    const memory = await recallText(deps, runId, {
-      job,
-      cast: input.cast,
-      query: {
-        cues: [item.premise ?? "", ...units.map((unit) => unit.bible?.want ?? "")].filter(Boolean),
-        plan: [item.title, item.premise ?? ""].filter(Boolean).join(" "),
-        speakers: [run.player.name, ...names].filter(Boolean),
-      },
-      signal,
-      debugMode,
-    });
-    const context = { world: run.world, liState, beats: scenes, ...(placeName ? { placeName } : {}) };
-    const { value, connectionId } = await generateJson(deps, {
+    const planned = await planDate(
+      deps,
       runId,
-      job,
-      label: `date-plan/${key}`,
-      messages: datePlanMessages({
-        world: run.world,
-        player: await withPersonaStoryAbout(deps.runtime, run.player),
-        unit: lead,
-        others: units.slice(1),
-        state: run.state,
-        place: PULLED_PLACE,
-        pulled: {
-          title: item.title,
-          premise: item.premise ?? "",
-          placeName,
-          placeTags: item.place?.tags ?? "",
-          scenes,
-          ...(grand ? { keyImage: keyImageScene(scenes) } : {}),
-        },
-        makeItRight: null,
-        memory: memory.text,
-        gift: gift ?? null,
-      }),
-      memory,
-      schema: DatePlanReplySchema,
-      normalize: (reply) => {
-        const plan = normalizeDatePlanReply(reply, context);
-        return typeof plan === "string" ? plan : reply;
-      },
-      maxTokens: 2000 + 500 * Math.max(0, scenes - DATE_BEATS),
-      debugMode,
-      lane: "foreground",
-      signal,
-    });
-    signal?.throwIfAborted();
-    const plan = normalizeDatePlanReply(value, context) as PlannedDate;
-    const date: DatePlan = {
-      li: lead.id,
-      place: PULLED_PLACE,
-      placeName: plan.placeName,
-      herLook: input.herLook,
-      hisLook: BASE_LOOK,
-      goesWrong: plan.goesWrong,
-      makeItRight: null,
-      keepsake: { brief: plan.brief },
-      ...(gift ? { gift } : {}),
-      item: item.id,
-      cast: input.cast,
-      newcomers,
-      ...(grand ? { grand: true as const } : {}),
-    };
-    const chapter: Chapter = {
-      key,
-      kind: "date",
-      li: lead.id,
-      lead: lead.id,
-      // The date's own name, whatever the plan calls it.
-      title: item.title || plan.title,
-      tags: plan.tags,
-      summary: "",
-      nodes: plan.guides.map((guide, i) => ({
-        i,
-        kind: "beat",
-        guide,
-        // Everyone the protagonist took is in every scene.
-        cast: input.cast,
-        ...(i === 0 && plan.placeName ? { place: plan.placeName } : {}),
-        // A 5★ date's key image (#2303), painted as a chapter's key moment is.
-        ...(grand && i === keyImageScene(scenes) ? { cg: true } : {}),
-      })),
-      // A stumble's seed is planted for the date's first love interest when its last scene is read.
-      ledger: {
-        relationship: [],
-        conflict: plan.seed ? [{ id: `c-${key}-1`, li: lead.id, type: plan.seed.type, action: "plant" }] : [],
-        offscreen: [],
-      },
-      plannedAt: new Date().toISOString(),
-      connectionId,
-      date,
-    };
-    const saved = await deps.store.mutateDoc(
-      runDocTarget("chapter", chapterId(runId, key)),
-      normalizeChapter,
-      (current) => current ?? chapter,
+      run,
+      { units, cast: input.cast, herLook: input.herLook, gift: input.gift, pulled: { item, newcomers } },
+      { debugMode, signal },
     );
-    // The gift is spent by the write that registers the date, so a date is never saved without it, nor it given twice.
-    let state: RunState | null;
-    try {
-      state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
-        current.chapters[key]
-          ? current
-          : {
-              ...(gift ? giveGift(current, run.world.content, gift) : current),
-              chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } },
-            },
-      );
-    } catch (error) {
-      // The gift was given elsewhere while the date was planned: the plan goes, as it would with the run.
-      if (gift) await deps.store.removeDoc(chapterId(runId, key));
-      throw error;
-    }
-    if (!state) {
-      // The run was deleted while the date was planned: its plan goes too, rather than outlive the run.
-      await deps.store.removeDoc(chapterId(runId, key));
-      throw runNotFound();
-    }
     await keepDatePlace(deps, runId, item);
-    const planned = saved ?? chapter;
-    return { chapter: planned, date: entryOf(runId, planned, state, null), resumed: false };
+    return { chapter: planned.chapter, date: entryOf(runId, planned.chapter, planned.state, null), resumed: false };
   });
+}
+
+/**
+ * What a date is planned from (planDate): everyone on it (the lead first, in `cast` order), her look (worn by the
+ * route first), a gift she owns, and either a pulled date's item and its newcomers (#2303) or the message he asked her
+ * on it with (#2424, `invited`: he chooses the place, DATE_BEATS scenes).
+ */
+export interface DateToPlan {
+  units: Unit[];
+  cast: LiId[];
+  herLook: string;
+  gift?: GiftId;
+  pulled?: { item: Item; newcomers: LiId[] };
+  /** #2424: his invitation: its message's id, and what he wrote to ask. */
+  invited?: { message: string; text: string };
+}
+
+/**
+ * Plans a date (P26) and saves it as the next `date-<n>`, in the caller's run queue, from the run as read there: the
+ * chapter first (one already saved under its key wins), then the state that registers it and spends the gift in the
+ * same write. A refused write, or a run deleted meanwhile, takes the chapter back out.
+ */
+export async function planDate(
+  deps: DateDeps,
+  runId: string,
+  run: RunDocuments,
+  input: DateToPlan,
+  { debugMode, signal }: { debugMode: boolean; signal?: AbortSignal },
+): Promise<{ chapter: Chapter; state: RunState }> {
+  const { units, gift, pulled, invited } = input;
+  const [lead] = units as [Unit, ...Unit[]];
+  const item = pulled?.item;
+  const liState = run.state.lis[lead.id] ?? defaultLiState();
+  const scenes = item?.scenes ?? (item ? 1 : DATE_BEATS);
+  const grand = item?.kind === "date5";
+  const placeName = clean(item?.place?.name ?? "", 120);
+  const key = nextDateKey(await dateChapters(deps.store, runId));
+  const job: ForgeMemoryJob = "narration";
+  const names = units.map((unit) => unit.name);
+  const memory = await recallText(deps, runId, {
+    job,
+    cast: input.cast,
+    query: {
+      cues: [item?.premise ?? "", ...units.map((unit) => unit.bible?.want ?? "")].filter(Boolean),
+      plan: item ? [item.title, item.premise ?? ""].filter(Boolean).join(" ") : `A date ${lead.name} asked for.`,
+      speakers: [run.player.name, ...names].filter(Boolean),
+    },
+    signal,
+    debugMode,
+  });
+  const context = { world: run.world, liState, beats: scenes, ...(placeName ? { placeName } : {}) };
+  const place = item ? PULLED_PLACE : PARTNER_CHOICE;
+  const { value, connectionId } = await generateJson(deps, {
+    runId,
+    job,
+    label: `date-plan/${key}`,
+    messages: datePlanMessages({
+      world: run.world,
+      player: await withPersonaStoryAbout(deps.runtime, run.player),
+      unit: lead,
+      others: units.slice(1),
+      state: run.state,
+      place,
+      ...(item
+        ? {
+            pulled: {
+              title: item.title,
+              premise: item.premise ?? "",
+              placeName,
+              placeTags: item.place?.tags ?? "",
+              scenes,
+              ...(grand ? { keyImage: keyImageScene(scenes) } : {}),
+            },
+          }
+        : {}),
+      makeItRight: null,
+      memory: memory.text,
+      gift: gift ?? null,
+      ...(invited?.text ? { invitation: invited.text } : {}),
+    }),
+    memory,
+    schema: DatePlanReplySchema,
+    normalize: (reply) => {
+      const plan = normalizeDatePlanReply(reply, context);
+      return typeof plan === "string" ? plan : reply;
+    },
+    maxTokens: 2000 + 500 * Math.max(0, scenes - DATE_BEATS),
+    debugMode,
+    lane: "foreground",
+    signal,
+  });
+  signal?.throwIfAborted();
+  const plan = normalizeDatePlanReply(value, context) as PlannedDate;
+  const date: DatePlan = {
+    li: lead.id,
+    place,
+    placeName: plan.placeName,
+    herLook: input.herLook,
+    hisLook: BASE_LOOK,
+    goesWrong: plan.goesWrong,
+    makeItRight: null,
+    keepsake: { brief: plan.brief },
+    ...(gift ? { gift } : {}),
+    ...(item ? { item: item.id, cast: input.cast, newcomers: pulled!.newcomers } : {}),
+    ...(grand ? { grand: true as const } : {}),
+    ...(invited ? { invited: invited.message } : {}),
+  };
+  const chapter: Chapter = {
+    key,
+    kind: "date",
+    li: lead.id,
+    lead: lead.id,
+    // A pulled date's own name, whatever the plan calls it.
+    title: item?.title || plan.title,
+    tags: plan.tags,
+    summary: "",
+    nodes: plan.guides.map((guide, i) => ({
+      i,
+      kind: "beat",
+      guide,
+      // Everyone the protagonist took is in every scene.
+      cast: input.cast,
+      ...(i === 0 && plan.placeName ? { place: plan.placeName } : {}),
+      // A 5★ date's key image (#2303), painted as a chapter's key moment is.
+      ...(grand && i === keyImageScene(scenes) ? { cg: true } : {}),
+    })),
+    // A stumble's seed is planted for the date's first love interest when its last scene is read.
+    ledger: {
+      relationship: [],
+      conflict: plan.seed ? [{ id: `c-${key}-1`, li: lead.id, type: plan.seed.type, action: "plant" }] : [],
+      offscreen: [],
+    },
+    plannedAt: new Date().toISOString(),
+    connectionId,
+    date,
+  };
+  const saved = await deps.store.mutateDoc(
+    runDocTarget("chapter", chapterId(runId, key)),
+    normalizeChapter,
+    (current) => current ?? chapter,
+  );
+  // The gift is spent by the write that registers the date, so a date is never saved without it, nor it given twice.
+  let state: RunState | null;
+  try {
+    state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
+      current.chapters[key]
+        ? current
+        : {
+            ...(gift ? giveGift(current, run.world.content, gift) : current),
+            chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } },
+          },
+    );
+  } catch (error) {
+    // The gift was given elsewhere while the date was planned: the plan goes, as it would with the run.
+    if (gift) await deps.store.removeDoc(chapterId(runId, key));
+    throw error;
+  }
+  if (!state) {
+    // The run was deleted while the date was planned: its plan goes too, rather than outlive the run.
+    await deps.store.removeDoc(chapterId(runId, key));
+    throw runNotFound();
+  }
+  return { chapter: saved ?? chapter, state };
 }
 
 /**

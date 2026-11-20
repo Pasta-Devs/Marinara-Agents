@@ -35,7 +35,7 @@ import {
   type ContentSettings,
   type LimitId,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
-import { DAILY_MESSAGES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { PaintSchema, field, isRecord, readFields, text, validItems } from "./common.js";
 
 export const DEFAULT_LANGUAGE = "English";
@@ -160,7 +160,10 @@ export function normalizeWorldAudio(data: unknown): WorldAudio {
   };
 }
 
-/** The daily messages' quota (S/phone/daily.ts keeps four local days); one that fails its schema starts over. */
+/**
+ * The daily messages' quota (S/phone/daily.ts keeps four local days), and the date invitations' (S/phone/invite.ts, four
+ * local weeks, each keyed by its Monday); one that fails its schema starts over.
+ */
 const PhoneDailySchema: ZodType<PhoneDaily> = z.object({
   days: z.record(
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
@@ -225,6 +228,8 @@ export function normalizeWorld(data: unknown): World {
       phoneDaily: PhoneDailySchema.optional(),
       groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
       groupDaily: PhoneDailySchema.optional(),
+      dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+      inviteWeekly: PhoneDailySchema.optional(),
     },
     defaultWorld,
     isRecord(data) ? data : undefined,
@@ -233,10 +238,18 @@ export function normalizeWorld(data: unknown): World {
 
 /**
  * The world without its hidden story (no mystery truth or pieces, no web secrets), and without the music briefs or the
- * daily messages' and the group chat's quotas.
+ * daily messages', the group chat's and the date invitations' quotas.
  */
 export function toWorldView(world: World): WorldView {
-  const { mystery, web, audio, phoneDaily: _phoneDaily, groupDaily: _groupDaily, ...rest } = world;
+  const {
+    mystery,
+    web,
+    audio,
+    phoneDaily: _phoneDaily,
+    groupDaily: _groupDaily,
+    inviteWeekly: _inviteWeekly,
+    ...rest
+  } = world;
   const { briefs: _briefs, ...shownAudio } = audio;
   return {
     ...rest,

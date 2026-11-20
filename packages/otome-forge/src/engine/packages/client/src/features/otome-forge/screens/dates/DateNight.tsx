@@ -13,6 +13,8 @@
 // counted once by the server; reopening a date read to its end counts it then.
 // #2128: with a gift from the Shop in hand (the Wardrobe view's `gifts`, absent from an older server), the looks step
 // also offers Bring a gift; the gift is spent when the date is planned, and the ending names it.
+// #2424: a date he asked her on in Messages opens as `{invite}` at its looks step (it is only him, and he chooses the
+// place and what they do): Begin plans it (POST /dates/invited), which accepts his invitation, and Back leaves.
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -47,6 +49,7 @@ import { useOtomeProps } from "../../props";
 import type { LiId, Paint, RunLiView, RunView } from "../../shared/api-types";
 import {
   BASE_LOOK,
+  DATE_BEATS,
   dateCast,
   newcomersOf,
   type DateEntry,
@@ -54,9 +57,9 @@ import {
   type DateOutcome,
   type DateScore,
   type DatesView,
-  type PulledDate,
 } from "../../shared/dates";
 import { giftsFor, type GiftId } from "../../shared/shop";
+import { threadQueryKey } from "../phone/PhoneScreen";
 import { Reader } from "../reader/Reader";
 import { playQueryKey, usePlay } from "./DatesHub";
 import { LookPicker, wornDateLook } from "./LookPicker";
@@ -113,7 +116,7 @@ export function useNames() {
  * What the date screen opens: a won date to take someone on (#2303), or an earlier date to go on with by its key, at
  * its ending when `at` says so (#2302: where the player was when they left for Settings).
  */
-export type DateOpen = { item: string } | { key: string; at?: "ending" };
+export type DateOpen = { item: string } | { key: string; at?: "ending" } | { invite: { li: LiId; message: string } };
 
 type Step =
   | { kind: "company" }
@@ -178,7 +181,9 @@ export function DateNight({
   const held = (li: LiId) => !!play.data?.lis[li]?.held;
   // Who's coming: those picked, less anyone whose grievance shows only now (PlayView may arrive after the dates). They
   // show unchecked, and nothing planned or sent holds them.
-  const cast = picked.filter((li) => !held(li));
+  // #2424: a date he asked her on is only him.
+  const invited = "invite" in open ? open.invite : null;
+  const cast = (invited ? [invited.li] : picked).filter((li) => !held(li));
   const [herLook, setHerLook] = useState(BASE_LOOK);
   // The looks she owns (the Wardrobe's list): the picker starts on what she wears now.
   const wardrobe = useWardrobe(runKey);
@@ -227,7 +232,7 @@ export function DateNight({
             ? stepOf(found)
             : { kind: "reading", key: open.key },
       );
-    } else setStep({ kind: "company" });
+    } else setStep({ kind: invited ? "looks" : "company" });
   }
 
   const go = useCallback((next: Step) => {
@@ -280,20 +285,25 @@ export function DateNight({
   }, [queryClient, runKey]);
 
   const plan = useCallback(async () => {
-    if (!pulled || !cast.length) return;
+    if ((!pulled && !invited) || !cast.length) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setPlanError(null);
     go({ kind: "planning" });
     try {
+      const gift = given ? { gift: given } : {};
       const { date } = await otome.post<{ date: DateEntry; resumed: boolean }>(
-        `${runPath(runKey)}/dates/pulled`,
-        { item: pulled.item.id, cast, herLook, ...(given ? { gift: given } : {}) },
+        pulled ? `${runPath(runKey)}/dates/pulled` : `${runPath(runKey)}/dates/invited`,
+        pulled
+          ? { item: pulled.item.id, cast, herLook, ...gift }
+          : { li: invited!.li, message: invited!.message, herLook, ...gift },
         { signal: controller.signal },
       );
       if (controller.signal.aborted) return;
       refresh();
+      // #2424: his invitation is accepted now; his thread says so.
+      if (invited) void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, invited.li) });
       go(stepOf(date));
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -301,7 +311,7 @@ export function DateNight({
       // A gift given elsewhere meanwhile is refused: the picker reads her gifts again.
       if (given) void queryClient.invalidateQueries({ queryKey: wardrobeQueryKey(runKey) });
     }
-  }, [cast, given, go, herLook, otome, pulled, queryClient, refresh, runKey]);
+  }, [cast, given, go, herLook, invited, otome, pulled, queryClient, refresh, runKey]);
 
   const cancelPlan = () => {
     abortRef.current?.abort();
@@ -372,7 +382,10 @@ export function DateNight({
     );
   }
 
-  const newcomers = pulled ? newcomersOf(cast, pulled.playedBy) : [];
+  const newcomers = pulled ? newcomersOf(cast, pulled.playedBy) : cast;
+  // #2424: his name even while his grievance leaves him off the company.
+  const inviter = invited ? (view.lis.find((li) => li.id === invited.li)?.name ?? "") : "";
+  const subtitle = pulled ? pulled.item.title : t("ui.otomeForge.dateNight.invitedSubtitle", { name: inviter });
   const sameCompany = (play: DateEntry) => {
     const own = dateCast(play);
     return own.length === cast.length && own.every((li) => cast.includes(li));
@@ -384,7 +397,12 @@ export function DateNight({
     <div ref={rootRef} className="of-page of-dates" style={lead ? accentStyle(lead) : undefined}>
       {step.kind === "company" && pulled ? (
         <>
-          <StepHead pulled={pulled} company={company} step={1} title={t("ui.otomeForge.dateNight.companyTitle")} />
+          <StepHead
+            subtitle={pulled.item.title}
+            company={company}
+            step={1}
+            title={t("ui.otomeForge.dateNight.companyTitle")}
+          />
           <CompanyPicker view={view} playedBy={pulled.playedBy} held={held} value={cast} onChange={setPicked} />
           <div className="of-dates-actions">
             {!cast.length || newcomers.length ? (
@@ -421,9 +439,28 @@ export function DateNight({
         </>
       ) : null}
 
-      {step.kind === "looks" && pulled ? (
+      {/* #2424: he came to hold a grievance with her after he asked: his date waits, as every date with him does. */}
+      {step.kind === "looks" && invited && held(invited.li) ? (
         <>
-          <StepHead pulled={pulled} company={company} step={2} title={t("ui.otomeForge.dateNight.looksTitlePulled")} />
+          <StepHead subtitle={subtitle} company={[]} title={t("ui.otomeForge.dateNight.looksTitlePulled")} />
+          <p className="of-notice" role="status">
+            {t("ui.otomeForge.dates.heldNote", { name: inviter })}
+          </p>
+          <div className="of-dates-actions">
+            <button type="button" className="of-button of-button--quiet of-glass" onClick={leave}>
+              <ChevronLeft className="of-back-icon" size={16} strokeWidth={2} aria-hidden="true" />
+              {exitLabel}
+            </button>
+          </div>
+        </>
+      ) : step.kind === "looks" && (pulled || invited) ? (
+        <>
+          <StepHead
+            subtitle={subtitle}
+            company={company}
+            step={pulled ? 2 : undefined}
+            title={t("ui.otomeForge.dateNight.looksTitlePulled")}
+          />
           <LookPicker
             partner={null}
             player={view.player}
@@ -449,16 +486,20 @@ export function DateNight({
             <h2 id="of-date-summary" className="of-section-title of-date-summary-title">
               <MapPin size={18} strokeWidth={1.8} aria-hidden="true" />
               <span>
-                {t("ui.otomeForge.dateNight.pulledSummary", {
-                  title: pulled.item.title,
-                  place: pulled.item.place?.name ?? "",
-                  count: pulled.item.scenes ?? 1,
-                })}
+                {pulled
+                  ? t("ui.otomeForge.dateNight.pulledSummary", {
+                      title: pulled.item.title,
+                      place: pulled.item.place?.name ?? "",
+                      count: pulled.item.scenes ?? 1,
+                    })
+                  : t("ui.otomeForge.dateNight.invitedSummary", { name: together })}
               </span>
             </h2>
-            {pulled.item.premise ? <p className="of-body">{pulled.item.premise}</p> : null}
+            {pulled?.item.premise ? <p className="of-body">{pulled.item.premise}</p> : null}
             <p className="of-body">
-              {t("ui.otomeForge.dateNight.pulledHowItPlays", { names: together, count: pulled.item.scenes ?? 1 })}
+              {pulled
+                ? t("ui.otomeForge.dateNight.pulledHowItPlays", { names: together, count: pulled.item.scenes ?? 1 })
+                : t("ui.otomeForge.dateNight.invitedHowItPlays", { name: together, count: DATE_BEATS })}
             </p>
             {newcomers.length < cast.length ? (
               <p className="of-hint">
@@ -482,10 +523,10 @@ export function DateNight({
             <button
               type="button"
               className="of-button of-button--quiet of-glass"
-              onClick={() => go({ kind: "company" })}
+              onClick={() => (invited ? leave() : go({ kind: "company" }))}
             >
               <ChevronLeft className="of-back-icon" size={16} strokeWidth={2} aria-hidden="true" />
-              {t("ui.otomeForge.dateNight.toCompany")}
+              {invited ? exitLabel : t("ui.otomeForge.dateNight.toCompany")}
             </button>
             <button
               type="button"
@@ -507,9 +548,9 @@ export function DateNight({
         </>
       ) : null}
 
-      {step.kind === "planning" && pulled ? (
+      {step.kind === "planning" && (pulled || invited) ? (
         <>
-          <StepHead pulled={pulled} company={company} title={t("ui.otomeForge.dateNight.planningTitle")} />
+          <StepHead subtitle={subtitle} company={company} title={t("ui.otomeForge.dateNight.planningTitle")} />
           {planError ? (
             <>
               <DeclinedPanel error={planError} run={view} job="structured" onRetry={() => void plan()} />
@@ -781,16 +822,17 @@ export function GiftPicker({ partnerName, gifts, value, onChange, title, hint }:
 }
 
 interface StepHeadProps {
-  pulled: PulledDate;
+  /** The date's own line under the title: a won date's title, or (#2424) whose invitation it is. */
+  subtitle: string;
   /** Whom the player has picked so far. */
   company: RunLiView[];
-  /** "Step n of 2" while choosing; none while planning. */
+  /** "Step n of 2" while choosing; none while planning, nor (#2424) on the only step of a date he asked her on. */
   step?: number;
   title: string;
 }
 
 /** The step's heading: the date (its name), who's coming once anyone is, and the step's question. */
-function StepHead({ pulled, company, step, title }: StepHeadProps) {
+function StepHead({ subtitle, company, step, title }: StepHeadProps) {
   const { t } = useTranslation();
   const lead = company[0];
   return (
@@ -812,7 +854,7 @@ function StepHead({ pulled, company, step, title }: StepHeadProps) {
         <h1 className="of-title of-title--page" tabIndex={-1}>
           {title}
         </h1>
-        <p className="of-hand">{pulled.item.title}</p>
+        <p className="of-hand">{subtitle}</p>
       </div>
     </header>
   );

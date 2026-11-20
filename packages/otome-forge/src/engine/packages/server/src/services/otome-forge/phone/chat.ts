@@ -18,7 +18,9 @@
 // first, then writes his reply in the run's foreground queue (generation.ts) and appends it only while no reply to that
 // message exists yet, so a reply lands once. The client may name its message (`id`): sending the same id again returns
 // what was saved, or answers it if its reply never landed. A reply that fails keeps the player's message, and the
-// history page offers Retry. Nothing a message says changes the story or the state. A daily message (S/phone/daily.ts,
+// history page offers Retry. Nothing a message says changes the story or the state, but for one thing (#2424): his
+// reply to her may say what she wrote hurt him, and once that reply lands the hurt is his grievance with her
+// (applyHurts, S/state/relationship.ts applyMessageHurts), which a serious hurt may make his grievance of #2156. A daily message (S/phone/daily.ts,
 // he writes first) holds the same lock while it is written in the background lane, so the thread shows him typing.
 // Stickers (#2044): a message names a sticker by id (SH/stickers.ts); one saved before names his face and still reads.
 // The player may send the protagonist's five and, with images on, his painted ones (S/art/stickers.ts
@@ -30,6 +32,9 @@
 // she takes it back and tells him again, to ask her out to clear the air (inviteOffered): only while he holds no
 // grievance of his own and no evening she accepted waits. Whether he asks is his; his invitation rides on his last
 // message (`invite`, pending until she answers it in the thread).
+// #2424: he may also write first to ask her on a date of his own choosing (reason "date", S/phone/invite.ts): that
+// message always carries the invitation, `kind` "date", and is never written while he holds a grievance with her or an
+// invitation of his still waits.
 import { randomBytes } from "node:crypto";
 import { forgeChatHistoryPage, forgeChatReplyBusy, withForgeChatSend } from "@forge-kit/chat-continuity-server.mjs";
 import { forgeChatRecallQuery } from "@forge-kit/story-memory-integration.mjs";
@@ -49,17 +54,20 @@ import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/c
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { hapticsOn } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
+import { GROUP_THREAD } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { sendableStickers, stickerBook, stickerLookup } from "../art/stickers.js";
 import { generateJson, runForeground, type GenerationDeps } from "../generation.js";
 import type { OtomeHaptics } from "../haptics.js";
 import { OtomeForgeError } from "../http.js";
-import { chatId, isLiId, runDocTarget, worldId } from "../ids.js";
+import { chatId, isLiId, runDocTarget, stateId, worldId } from "../ids.js";
 import { isRecord, readFields, validItems } from "../schemas/common.js";
 import { HapticCuesSchema } from "../schemas/story.js";
-import { readRun, type RunDocuments } from "../schemas/state.js";
+import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
+import { applyMessageHurts, type MessageHurt } from "../state/relationship.js";
+import { listArcs } from "../story/arc.js";
 import { recallText, type StoryMemory } from "../story/canon.js";
 import { chatReplyMessages, ownView } from "../prompts.js";
 import { ChatReplySchema, normalizeChatReply, type ChatReply, type ReplyStickers } from "./replies.js";
@@ -96,6 +104,7 @@ const MESSAGE_DISPLAY = {
   invite: z.object({
     status: z.enum(["pending", "accepted", "declined", "lapsed"]),
     scene: z.string().max(120).optional(),
+    kind: z.literal("date").optional(),
   }),
   haptic: HapticCuesSchema,
 };
@@ -364,13 +373,26 @@ export function inviteOffered(
 ) {
   const since = liState.upset ? Date.parse(liState.upset.since) : NaN;
   if (Number.isNaN(since) || liState.asked || heldAgainst(liState)) return false;
-  return !thread.messages.some((message) => message.invite && Date.parse(message.at) >= since);
+  // #2424: only an invitation to clear the air counts; a date he asked her on is another matter.
+  return !thread.messages.some((message) => message.invite && !message.invite.kind && Date.parse(message.at) >= since);
+}
+
+/** #2424: an invitation of his waiting for her answer in `thread`, of either kind. */
+export const inviteWaiting = (thread: PhoneThread) =>
+  thread.messages.some((message) => message.who === "li" && message.invite?.status === "pending");
+
+/** #2424: a reply as written: its messages, and the hurts her message gave, which land with the reply (applyHurts). */
+export interface Written {
+  messages: PhoneMessage[];
+  hurt?: MessageHurt[];
 }
 
 /**
- * P17 for his thread as read (`thread`, with `run` and his `unit`): his messages, not saved yet.
- * The reply to her waits in the run's foreground queue (answer); a daily message (`first`) runs in a background job on
- * that job's connection (`connectionId`, S/phone/daily.ts). Both recall as his own reader, with his knowledge boundary.
+ * P17 for his thread as read (`thread`, with `run` and his `unit`): his messages, not saved yet, and (#2424) what her
+ * message hurt in him, for a reply to her only. The reply to her waits in the run's foreground queue (answer); a daily
+ * message (`first`) runs in a background job on that job's connection (`connectionId`, S/phone/daily.ts). Both recall
+ * as his own reader, with his knowledge boundary. `reason` "date" (#2424) is his invitation on a date, refused with a
+ * 409 `locked` before any call while he holds a grievance with her or an invitation of his waits.
  */
 async function writeReply(
   deps: PhoneDeps,
@@ -383,10 +405,16 @@ async function writeReply(
     connectionId,
     reason,
     remote: heldFor,
-  }: { debugMode: boolean; first?: boolean; connectionId?: string; reason?: "upset"; remote?: number },
-): Promise<PhoneMessage[]> {
+  }: { debugMode: boolean; first?: boolean; connectionId?: string; reason?: ChatReason; remote?: number },
+): Promise<Written> {
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
-  const invite = inviteOffered(run.state.lis[li]!, thread);
+  const dating = reason === "date";
+  if (dating && (heldAgainst(run.state.lis[li]) || inviteWaiting(thread))) {
+    // `locked`, not `conflict`: nothing was written, so the invitation job may try the next one (S/phone/invite.ts).
+    throw new OtomeForgeError(409, "He holds a grievance with her, or an invitation of his still waits.", "locked");
+  }
+  // A date invitation is his whole message: it never also asks her out to clear the air.
+  const invite = !dating && inviteOffered(run.state.lis[li]!, thread);
   // 0.34.0: only her reply while he holds the remote, never a message he writes first, may drive her toys.
   const remote = !first && heldFor && hapticsOn(run.world) ? Math.round(heldFor) : 0;
   const tail = openMessages(thread).slice(-TAIL_MESSAGES);
@@ -424,7 +452,8 @@ async function writeReply(
     // A conversation's replies come minutes apart, so the five-minute cache, at a cheaper write, carries it (0.20.2).
     cacheTtl: "5m",
     schema: ChatReplySchema,
-    normalize: (raw) => normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite, remote > 0),
+    normalize: (raw) =>
+      normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite, remote > 0, !first),
     maxTokens: 1200,
     debugMode,
     ...(connectionId ? { lane: "background" as const, connectionId } : { lane: "foreground" as const }),
@@ -432,29 +461,71 @@ async function writeReply(
   // generateJson returns what normalizeChatReply made of the reply.
   const written = value as ChatReply;
   const at = new Date().toISOString();
-  return written.messages.map((message, index, all) => ({
+  const asks = dating ? { status: "pending" as const, kind: "date" as const } : { status: "pending" as const };
+  const messages = written.messages.map((message, index, all): PhoneMessage => ({
     id: newMessageId(),
     who: "li",
     text: message.text,
     ...(message.sticker ? { sticker: message.sticker } : {}),
     at,
-    ...(written.invite && index === all.length - 1 ? { invite: { status: "pending" as const } } : {}),
+    ...((dating || written.invite) && index === all.length - 1 ? { invite: asks } : {}),
     ...(message.haptic?.length ? { haptic: message.haptic } : {}),
   }));
+  return { messages, ...(written.hurt ? { hurt: [{ li, ...written.hurt }] } : {}) };
+}
+
+/** Why he writes first: she told him she is upset with him (#2156), or he asks her on a date (#2424). */
+export type ChatReason = "upset" | "date";
+
+/**
+ * #2424: the hurts a landed reply named, kept in one revision-checked write of the state (applyMessageHurts) against
+ * her message `messageId` in thread `key`: those a hurt was kept for, and those whose grievance with her (#2156) they
+ * opened. A write
+ * that fails after the reply is saved is logged and lost, as Close and remember's grant is (S/phone/memory.ts): the
+ * reply is never written again for it.
+ */
+async function applyHurts(
+  deps: PhoneDeps,
+  runId: string,
+  key: string,
+  messageId: string,
+  hurts: readonly MessageHurt[],
+): Promise<Pick<Answered, "hurt" | "held">> {
+  if (!hurts.length) return { hurt: [], held: [] };
+  const ref = `${key === GROUP_THREAD ? "group" : "chat"}/${messageId}`;
+  try {
+    const arc = (await listArcs(deps.store, runId)).at(-1)?.number ?? 0;
+    const at = new Date().toISOString();
+    let kept: Pick<Answered, "hurt" | "held"> = { hurt: [], held: [] };
+    await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+      const outcome = applyMessageHurts(current, hurts, { ref, at, arc });
+      kept = { hurt: outcome.hurt, held: outcome.opened };
+      return outcome.state;
+    });
+    return kept;
+  } catch (error) {
+    deps.runtime.logger.warn(
+      "[otome-forge] A hurt from her message in %s was not kept: %s",
+      key,
+      error instanceof Error ? error.message : String(error),
+    );
+    return { hurt: [], held: [] };
+  }
 }
 
 /**
  * Writes the reply to the open conversation of thread `key` (`write`, with what `load` read) in the run's foreground
  * queue and appends it, unless a reply to the same message landed first (then that one is returned). The open
- * conversation must end on the player's message.
+ * conversation must end on the player's message. #2424: the hurts a reply that landed names are kept (applyHurts), and
+ * `held` names those whose grievance with her they opened.
  */
 export function answerIn<T>(
   deps: PhoneDeps,
   runId: string,
   key: string,
   load: () => Promise<T>,
-  write: (loaded: T, thread: PhoneThread) => Promise<PhoneMessage[]>,
-): Promise<PhoneMessage[]> {
+  write: (loaded: T, thread: PhoneThread) => Promise<Written>,
+): Promise<Answered> {
   // ponytail: the reply waits behind the run's story writes (the plan's one foreground lane per run); the ceiling is a
   // reply that waits for a lookahead beat, and the upgrade path is a lane of the phone's own.
   return runForeground(runId, async () => {
@@ -463,7 +534,7 @@ export function answerIn<T>(
     const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
     const last = openMessages(thread).at(-1);
     if (!last || last.who !== "player") throw conflict("Nothing in this thread is waiting for a reply.");
-    const written = await write(loaded, thread);
+    const { messages: written, hurt = [] } = await write(loaded, thread);
     let kept = written;
     await saveThread(deps, runId, key, (current) => {
       const index = current.messages.findIndex((message) => message.id === last.id);
@@ -477,8 +548,17 @@ export function answerIn<T>(
       kept = written;
       return { ...current, messages: [...current.messages, ...written] };
     });
-    return kept;
+    // Only this request's reply brings its hurts: one that lost to another reply keeps that one's.
+    const hurts = kept === written ? await applyHurts(deps, runId, key, last.id, hurt) : { hurt: [], held: [] };
+    return { messages: kept, ...hurts };
   });
+}
+
+/** What answerIn appended or found, and (#2424) whom the reply's hurts were kept for and whose grievance they opened. */
+export interface Answered {
+  messages: PhoneMessage[];
+  hurt: LiId[];
+  held: LiId[];
 }
 
 /** His reply (P17) to the open conversation, through answerIn. */
@@ -497,21 +577,23 @@ const answer = (deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean, re
  * (the caller's inThreadLock). Null, before anything is sent, when the open conversation waits on her message. The
  * message lands after his newest one only while the thread still ends where it was read (a 409 `conflict` drops it),
  * and the player's seenAt is left alone, so it counts as unread. `reason` "upset" (#2156, S/phone/upset.ts): his
- * answer to her telling him she is upset with him, the same way.
+ * answer to her telling him she is upset with him, the same way; "date" (#2424, S/phone/invite.ts): his invitation on a
+ * date.
  */
 export const writeFirstMessage = (
   deps: PhoneDeps,
   runId: string,
   li: LiId,
-  { connectionId, debugMode, reason }: { connectionId: string; debugMode: boolean; reason?: "upset" },
+  { connectionId, debugMode, reason }: { connectionId: string; debugMode: boolean; reason?: ChatReason },
 ): Promise<PhoneMessage[] | null> =>
   writeFirstIn(
     deps,
     runId,
     li,
     () => loadThreadRun(deps, runId, li),
-    ({ run, unit }, thread) =>
-      writeReply(deps, runId, li, { run, unit, thread }, { debugMode, first: true, connectionId, reason }),
+    async ({ run, unit }, thread) =>
+      (await writeReply(deps, runId, li, { run, unit, thread }, { debugMode, first: true, connectionId, reason }))
+        .messages,
   );
 
 /**
@@ -562,7 +644,7 @@ export interface SendTo {
   /** The sticker ids the player may send there. */
   stickers: () => readonly string[];
   /** Writes the reply to the open conversation (answerIn). */
-  answer: () => Promise<PhoneMessage[]>;
+  answer: () => Promise<Answered>;
 }
 
 /**
@@ -584,9 +666,9 @@ export async function sendIn(
     if (message.who !== "player") throw conflict("That message id belongs to another message.");
     const reply = replyAfter(thread, named);
     if (reply.length || named < archivedCount(thread)) return { messages: [message, ...reply] };
-    return { messages: [message, ...(await answer())] };
+    return answered([message], await answer());
   }
-  if (input.retry) return { messages: await answer() };
+  if (input.retry) return answered([], await answer());
   const text = (input.text ?? "").trim();
   if (!text && !input.sticker) throw new OtomeForgeError(400, "Write a message or pick a sticker.", "bad-request");
   if (input.sticker && !stickers().includes(input.sticker))
@@ -609,8 +691,15 @@ export async function sendIn(
           seenAt: later(current.seenAt, message.at),
         },
   );
-  return { messages: [message, ...(await answer())] };
+  return answered([message], await answer());
 }
+
+/** The send's result: what it saved, then the reply, and (#2424) whose grievance with her the reply opened. */
+const answered = (before: PhoneMessage[], { messages, hurt, held }: Answered): PhoneSendResult => ({
+  messages: [...before, ...messages],
+  ...(hurt.length ? { hurt } : {}),
+  ...(held.length ? { held } : {}),
+});
 
 /** POST .../send: the player's message, then his reply (P17). One send or close per thread at a time (409 `busy`). */
 export function sendMessage(

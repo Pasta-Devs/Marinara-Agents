@@ -49,6 +49,7 @@ import type {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/http.ts";
 import {
   chapterId,
+  chatId,
   itemId,
   playerId,
   runDocTarget,
@@ -71,6 +72,7 @@ import {
   normalizeState,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeChapter } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import { normalizeThread } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
@@ -1438,4 +1440,125 @@ test("a date without a gift keeps every prompt as it was, and a gift adds only i
     assert.ok(task.includes(`Keep it to the two of them; anyone else passes at the edges.\n${line}\n`), kind);
     assert.equal(task.replace(`\n${line}`, ""), without[kind].at(-1)!.content, kind);
   }
+});
+
+// ── #2424: the date he asks her on in Messages ──
+
+const INVITED = "m-invite-0001abcd";
+
+/** Kai's thread with his date invitation waiting (S/phone/invite.ts writes it). */
+async function inviteFromKai(t: DateWorld, message = INVITED) {
+  await t.store.mutateDoc(runDocTarget("chat", chatId(t.runId, KAI)), normalizeThread, (thread) => ({
+    ...thread,
+    li: KAI,
+    messages: [
+      ...thread.messages,
+      {
+        id: message,
+        who: "li" as const,
+        text: "Come out with me tonight. I'll choose where.",
+        at: "2026-11-20T09:00:00.000Z",
+        invite: { status: "pending" as const, kind: "date" as const },
+      },
+    ],
+  }));
+}
+const thread = async (t: DateWorld) => t.store.readDoc(chatId(t.runId, KAI), normalizeThread);
+
+test("his date invitation: accepting plans three scenes he chooses, accepts it once, and pays as a date", async () => {
+  const t = await dateWorld("r-invdate-aa0001");
+  await inviteFromKai(t);
+  const body = { li: KAI, message: INVITED, herLook: "base" };
+  const started = await t.call("POST", "/runs/:run/dates/invited", body);
+  assert.equal(started.status, 200, JSON.stringify(started.body));
+  const key = started.body.date.key;
+  assert.deepEqual([key, started.body.resumed, started.body.date.state], ["date-1", false, "reading"]);
+  const chapter = (await t.store.readDoc(chapterId(t.runId, key), normalizeChapter))!;
+  assert.deepEqual(
+    [chapter.date!.place, chapter.date!.invited, chapter.date!.item, chapter.nodes.length],
+    ["partner-choice", INVITED, undefined, 3],
+  );
+  assert.ok(chapter.nodes.every((node) => node.cast.length === 1 && node.cast[0] === KAI));
+  // P26: he asked her out, and the place and what they do are his to choose.
+  const plan = t.calls.find((call) => isDatePlanner(call.messages))!.messages;
+  assert.ok(
+    plan
+      .at(-1)!
+      .content.includes("Kai asked the protagonist out, and chooses where to take them and what they do there"),
+  );
+  assert.equal(plan.at(-1)!.content.includes("won from Wish"), false);
+  // What he wrote to ask goes with it, so the date keeps to anything he promised.
+  assert.ok(
+    plan
+      .at(-1)!
+      .content.includes(
+        'Kai asked with these words, and the date keeps to anything they promised: "Come out with me tonight. I\'ll choose where."',
+      ),
+  );
+  assert.deepEqual((await thread(t))!.messages.at(-1)!.invite, { status: "accepted", kind: "date", scene: key });
+
+  // Accepted already: the same date again, planned once.
+  const calls = t.calls.length;
+  const again = await t.call("POST", "/runs/:run/dates/invited", body);
+  assert.deepEqual([again.status, again.body.resumed, again.body.date.key], [200, true, key]);
+  assert.equal(t.calls.length, calls);
+
+  // It plays and pays as a date: 120 Starlight and 100 affection, once.
+  await playDate(t, key, [1, 1, 1]);
+  const before = await t.state();
+  const done = await finish(t, key);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.deepEqual(
+    done.body.grants.map((grant: { source: string; starlight?: number; affection?: number }) => [
+      grant.source,
+      grant.starlight ?? grant.affection,
+    ]),
+    [
+      ["date", 120],
+      ["date", 100],
+    ],
+  );
+  const after = await t.state();
+  assert.equal(after.wallet.starlight - before.wallet.starlight, 120);
+  assert.equal(after.lis[KAI]!.points - before.lis[KAI]!.points, 100);
+  assert.equal((await finish(t, key)).body.counted, false, "counted once");
+});
+
+test("his date invitation: refused for no such invitation, an answered one, or while he holds a grievance", async () => {
+  const t = await dateWorld("r-invdate-aa0002");
+  await inviteFromKai(t);
+  const missing = await t.call("POST", "/runs/:run/dates/invited", {
+    li: KAI,
+    message: "m-nosuch-00000000",
+    herLook: "base",
+  });
+  assert.deepEqual([missing.status, missing.body.code], [404, "not-found"]);
+  // He holds a grievance with her (#2156): his dates wait, before anything is worn or planned.
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: {
+      ...state.lis,
+      [KAI]: {
+        ...state.lis[KAI]!,
+        grievances: [
+          { id: "g-y", li: KAI, by: "li", text: "She lied.", severity: "rupture", opened: "main-1/1", status: "open" },
+        ],
+        rupture: { grievanceId: "g-y", since: "2026-11-20T08:00:00.000Z", space: 0 },
+      },
+    },
+  }));
+  const held = await t.call("POST", "/runs/:run/dates/invited", { li: KAI, message: INVITED, herLook: "base" });
+  assert.deepEqual([held.status, held.body.code], [409, "locked"]);
+  assert.equal(t.calls.length, 0, "nothing planned");
+  // Declined in his thread: no date from it.
+  await t.store.mutateDoc(runDocTarget("chat", chatId(t.runId, KAI)), normalizeThread, (current) => ({
+    ...current,
+    messages: current.messages.map((message) => ({ ...message, invite: { status: "declined", kind: "date" } })),
+  }));
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, rupture: null, grievances: [] } },
+  }));
+  const answered = await t.call("POST", "/runs/:run/dates/invited", { li: KAI, message: INVITED, herLook: "base" });
+  assert.deepEqual([answered.status, answered.body.code], [409, "conflict"]);
 });

@@ -225,8 +225,8 @@ export const ConfrontationSchema: ZodType<Confrontation> = z.union([
 
 /**
  * A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. #2128's `gift`,
- * #2156's `clearAir`, #2283's `second` and #2303's pulled date (`item`, `cast`, `newcomers`, `grand`) are optional, as
- * every date planned before them has none.
+ * #2156's `clearAir`, #2283's `second`, #2303's pulled date (`item`, `cast`, `newcomers`, `grand`) and #2424's `invited`
+ * are optional, as every date planned before them has none.
  */
 const DatePlanSchema: ZodType<DatePlan> = z.object({
   li: z.string(),
@@ -248,6 +248,8 @@ const DatePlanSchema: ZodType<DatePlan> = z.object({
   cast: z.array(short(80)).min(1).max(20).optional(),
   newcomers: z.array(short(80)).max(20).optional(),
   grand: z.literal(true).optional(),
+  // #2424: the date he asked her on in Messages, by his message's id.
+  invited: short(60).optional(),
 });
 
 const SCORE_VALUES: ReadonlySet<unknown> = new Set([-1, 0, 1]);

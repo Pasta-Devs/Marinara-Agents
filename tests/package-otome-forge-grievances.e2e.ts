@@ -56,7 +56,8 @@ function createStub({
   images = false,
   ask = false,
   arc = null,
-}: { images?: boolean; ask?: boolean; arc?: Json | null } = {}) {
+  dateInvite = false,
+}: { images?: boolean; ask?: boolean; arc?: Json | null; dateInvite?: boolean } = {}) {
   const calls: Call[] = [];
   // 0.34.8: with an image connection, a won 4★ date's first open paints its place in the background.
   let placeArt: Json | null = null;
@@ -112,13 +113,22 @@ function createStub({
   let eveningCounted = false;
   const messages: Json[] = [
     { id: "m-mine-0001", who: "player", text: "You didn't even look at me.", at: now() },
-    {
-      id: INVITE,
-      who: "li",
-      text: "I know you're upset with me. Let me make it up to you. Dinner, my choice?",
-      at: now(),
-      invite: { status: "pending" },
-    },
+    // #2424: with `dateInvite`, her invitation is to a date of her own choosing instead.
+    dateInvite
+      ? {
+          id: INVITE,
+          who: "li",
+          text: "Come out with me tonight. I'll choose where.",
+          at: now(),
+          invite: { status: "pending", kind: "date" },
+        }
+      : {
+          id: INVITE,
+          who: "li",
+          text: "I know you're upset with me. Let me make it up to you. Dinner, my choice?",
+          at: now(),
+          invite: { status: "pending" },
+        },
   ];
   const look = (owner: string) => ({
     id: "base",
@@ -253,7 +263,7 @@ function createStub({
       }
       if (action === "seen") return { status: 200, json: {} };
       const accept = !!call.body!.accept;
-      messages[1]!.invite = { status: accept ? "accepted" : "declined" };
+      messages[1]!.invite = { ...messages[1]!.invite, status: accept ? "accepted" : "declined" };
       if (!accept) return { status: 200, json: { status: "declined" } };
       asked = true;
       messages[1]!.invite.scene = SCENE;
@@ -334,7 +344,7 @@ function createStub({
     if (path === `${base}/art/keepsake`) {
       return { status: 503, json: { error: "This world has no image connection.", code: "no-connection" } };
     }
-    if (path === `${base}/dates/pulled`) {
+    if (path === `${base}/dates/pulled` || path === `${base}/dates/invited`) {
       return { status: 503, json: { error: "No connection.", code: "no-connection" } };
     }
     // The scene her acceptance registered (S/items/character-story.ts clearAirStoryChapter), saved under its English
@@ -598,6 +608,51 @@ test("Otome Hearth grievances: his invitation to clear the air, accepted in Mess
   await press(accepted.getByRole("button", { name: "Clear the air with Mireille" }));
   await expect(root.getByRole("heading", { level: 1, name: /Clearing the Air with Mireille/u })).toBeVisible();
   expect(posts(stub, "/invite")).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth date invitations: Accept opens the date's looks step, Begin sends it, and Decline stays in Messages", async ({
+  page,
+}, testInfo) => {
+  // #2424.
+  test.setTimeout(150_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "dark" : "light", reducedMotion: "reduce" });
+  const stub = createStub({ dateInvite: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+
+  await press(root.locator(".of-home-rail").getByRole("button", { name: /Messages/u }));
+  await press(root.locator(".of-threads").getByRole("button", { name: /Mireille/u }));
+  const invite = root.getByRole("group", { name: "Mireille’s invitation" });
+  await expect(invite).toContainText("Mireille asked you on a date.");
+  await tallEnough(invite.getByRole("button", { name: "Accept" }));
+  await page.screenshot({ path: testInfo.outputPath("01-date-invite.png") });
+
+  // Accept answers nothing yet: it opens the date's only step, what she wears, with her as the company.
+  await press(invite.getByRole("button", { name: "Accept" }));
+  await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
+  expect(posts(stub, "/invite")).toHaveLength(0);
+  await expect(root.getByText("Mireille asked you out")).toBeVisible();
+  await expect(root.getByText("A date Mireille planned")).toBeVisible();
+  await expect(root.getByText(/Mireille chooses where you go and what you do\. 3 scenes/u)).toBeVisible();
+  await expect(root.getByText(/Step \d of/u)).toHaveCount(0);
+  await noWider(page);
+  await page.screenshot({ path: testInfo.outputPath("02-looks.png"), fullPage: true });
+  await press(root.getByRole("button", { name: "Begin the date" }));
+  expect(posts(stub, "/dates/invited").map(fields)).toEqual([{ li: MIR, message: INVITE, herLook: "base" }]);
+  await expect(root.getByRole("alert").first()).toBeVisible();
+
+  // Back, then Back again, returns to her thread, where Decline answers it.
+  await press(root.getByRole("button", { name: /Back to the looks/u }));
+  await press(root.getByRole("button", { name: /Back to Messages/u }));
+  await expect(root.getByRole("group", { name: "Mireille’s invitation" })).toBeVisible();
+  await press(root.getByRole("group", { name: "Mireille’s invitation" }).getByRole("button", { name: "Decline" }));
+  expect(posts(stub, "/invite").map(fields)).toEqual([{ message: INVITE, accept: false }]);
+  await expect(root.getByRole("group", { name: "Mireille’s invitation" })).toContainText("You said no.");
   expect(pageErrors).toEqual([]);
 });
 
