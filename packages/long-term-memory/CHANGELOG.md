@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.7 — 2026-11-20
 
 - Chat summaries get a story date when they say which messages they cover, and Conversation day and week summaries get their own days. Find story dates dates the ones imported before.
 
