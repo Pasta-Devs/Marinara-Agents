@@ -18,6 +18,7 @@ import { getPackagePersistence, logger, type PackageLanguageModel } from "../pac
 import type { LongTermMemoryStorage } from "../persistence/storage.js";
 import {
   chatPieceWalk,
+  shownWalkResult,
   countStoryDays,
   currentStoryTime,
   currentStoryTimeScan,
@@ -516,7 +517,7 @@ function withReaches(pieces: StoryPiece[], rows: PreviewRowDraft[]): LtmStoryDat
       walks.set(key, [...(walks.get(key) ?? []), piece]);
     }
   for (const walk of walks.values())
-    for (const result of countStoryDays(
+    for (const counted of countStoryDays(
       walk.map((piece) => {
         const row = byId.get(piece.note.id),
           existing = currentStoryTime({ ...piece.note, sourceHash: piece.sourceHash }),
@@ -539,8 +540,10 @@ function withReaches(pieces: StoryPiece[], rows: PreviewRowDraft[]): LtmStoryDat
           ...(storyTimeScan ? { storyTimeScan } : {}),
         };
       }),
-    ))
+    )) {
+      const result = shownWalkResult(chatPieceWalk(walk[0].note), counted);
       steps.set(result.id, result.steps);
+    }
   return rows.map((row) => {
     if (row.kind === "engine") return row;
     const after = steps.get(row.noteId) ?? [];

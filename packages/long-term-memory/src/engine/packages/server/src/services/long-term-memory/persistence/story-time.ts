@@ -277,6 +277,13 @@ export function chatPieceWalk(note: LtmChatPiece) {
       : `summary:${note.id}`;
 }
 
+/** What a walk's result shows: a rangeless summary counted with no date behind it has no place, so it shows none. */
+export function shownWalkResult(walk: string, result: LtmStoryDayResult): LtmStoryDayResult {
+  return walk.startsWith("summary:") && result.start.kind === "counted" && result.start.anchor === null
+    ? { id: result.id, start: UNKNOWN, end: UNKNOWN, steps: [] }
+    : result;
+}
+
 function countChat(chatId: string, notes: Iterable<LtmNote>) {
   const walks = new Map<string, LtmChatPiece[]>();
   for (const note of notes) {
@@ -296,13 +303,7 @@ function countChat(chatId: string, notes: Iterable<LtmNote>) {
         ...(note.storyTimeScan ? { storyTimeScan: note.storyTimeScan } : {}),
       })),
     );
-    for (const result of days)
-      results.set(
-        result.id,
-        key.startsWith("summary:") && result.start.kind === "counted" && result.start.anchor === null
-          ? { id: result.id, start: UNKNOWN, end: UNKNOWN, steps: [] }
-          : result,
-      );
+    for (const result of days) results.set(result.id, shownWalkResult(key, result));
   }
   return results;
 }

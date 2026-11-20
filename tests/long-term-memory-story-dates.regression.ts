@@ -946,6 +946,26 @@ async function findStoryDates({ hash, resolveStoryTime, formatStoryPosition }: a
         "a summary and the pieces over its messages are counted apart in the preview",
       );
 
+      // A rangeless summary shows only a date it holds, so the preview gives it a reach only when it names one.
+      const undatedText = "The ship left the quay. Three days later it docked, with no word of the date.";
+      const datedText = "On the 3rd of Frostfall the ship left. Three days later it docked.";
+      const undatedSummary = await createSummary("chat-rangeless", "sum-undated", "last 20", undatedText);
+      const datedSummary = await createSummary("chat-rangeless", "sum-dated", "last 30", datedText);
+      answers[undatedText] = { stated: null, jumps: [jump("Three days later", 3, "day")] };
+      answers[datedText] = {
+        stated: { date: "the 3rd of Frostfall", quote: "the 3rd of Frostfall" },
+        jumps: [jump("Three days later", 3, "day")],
+      };
+      const rangelessPreview = await previewLtmStoryDates({ root, storage, languageModel: model, complete: answering });
+      const rangelessReach = (id: string) =>
+        (rangelessPreview.pieces.find((row: any) => row.noteId === id) as any)?.reaches;
+      assert.deepEqual(rangelessReach(undatedSummary.id), [null], "a rangeless summary with no date has no reach");
+      assert.deepEqual(
+        rangelessReach(datedSummary.id),
+        ["3 days after the 3rd of Frostfall"],
+        "one that names a date keeps its reach",
+      );
+
       assert.ok(!ltmStoryDatesApplyRequestSchema.safeParse({ rows: [] }).success);
       const row = { kind: "engine", noteId: talk.id, sourceHash: hash(kitchen) };
       assert.ok(!ltmStoryDatesApplyRequestSchema.safeParse({ rows: [row, row] }).success);
