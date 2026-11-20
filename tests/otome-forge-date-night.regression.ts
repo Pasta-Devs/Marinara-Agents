@@ -1487,6 +1487,14 @@ test("his date invitation: accepting plans three scenes he chooses, accepts it o
       .content.includes("Kai asked the protagonist out, and chooses where to take them and what they do there"),
   );
   assert.equal(plan.at(-1)!.content.includes("won from Wish"), false);
+  // What he wrote to ask goes with it, so the date keeps to anything he promised.
+  assert.ok(
+    plan
+      .at(-1)!
+      .content.includes(
+        'Kai asked with these words, and the date keeps to anything they promised: "Come out with me tonight. I\'ll choose where."',
+      ),
+  );
   assert.deepEqual((await thread(t))!.messages.at(-1)!.invite, { status: "accepted", kind: "date", scene: key });
 
   // Accepted already: the same date again, planned once.

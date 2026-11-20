@@ -330,9 +330,11 @@ export interface MessageHurt {
   severity: GrievanceSeverity;
 }
 
-/** What applyMessageHurts did: the state, and those whose grievance with her it opened. */
+/** What applyMessageHurts did: the state, those a hurt was kept for, and those whose grievance with her it opened. */
 export interface HurtOutcome {
   state: RunState;
+  /** Love interests a hurt was kept for (their affection may have fallen). */
+  hurt: LiId[];
   /** Love interests whose grievance with her (#2156) the hurts opened. */
   opened: LiId[];
 }
@@ -342,7 +344,8 @@ export interface HurtOutcome {
  * grievance he holds, at most once for each message and love interest: a hurt whose grievance is already kept is a
  * replay. A rupture-severity hurt opens his grievance when mayOpenHis allows (no trust test), and is kept as major when
  * it does not; a hurt in words not already held costs 15 affection, stopping at his level's floor, as a hostile pick's
- * does. Pure.
+ * does. One who already holds GRIEVANCES_MAX unresolved grievances keeps no more from messages (open ones are never
+ * trimmed, and the stored list has a limit of its own). Pure.
  */
 export function applyMessageHurts(
   state: RunState,
@@ -351,10 +354,12 @@ export function applyMessageHurts(
 ): HurtOutcome {
   const lis: Record<LiId, LiState> = { ...state.lis };
   const opened: LiId[] = [];
+  const kept: LiId[] = [];
   for (const hurt of hurts) {
     const current = lis[hurt.li];
     const text = clip(hurt.text);
     if (!current || !text) continue;
+    if (current.grievances.filter(isUnresolved).length >= GRIEVANCES_MAX) continue;
     const id = `g-msg-${createHash("sha256").update(`${ref}\n${hurt.li}`).digest("hex").slice(0, 16)}`;
     if (current.grievances.some((grievance) => grievance.id === id)) continue;
     const opens = hurt.severity === "rupture" && mayOpenHis(lis, hurt.li, current, arc);
@@ -376,6 +381,7 @@ export function applyMessageHurts(
     }
     if (fresh) li.points = Math.max(floorOf(hurt.li, li, state), li.points - 15);
     lis[hurt.li] = li;
+    kept.push(hurt.li);
   }
-  return { state: { ...state, lis }, opened };
+  return { state: { ...state, lis }, hurt: kept, opened };
 }

@@ -189,7 +189,8 @@ async function writeInvite(
         writeFirstMessage(deps, runId, li, { connectionId, debugMode, reason: "date" }),
       );
     } catch (error) {
-      if (error instanceof OtomeForgeError && error.code === "busy") continue;
+      // Busy, or no longer free to ask (an invitation of his started waiting meanwhile): the next one may ask.
+      if (error instanceof OtomeForgeError && (error.code === "busy" || error.code === "locked")) continue;
       if (error instanceof OtomeForgeError && error.code === "conflict") {
         deps.runtime.logger.info("[otome-forge] A date invitation from %s was dropped: %s", li, error.message);
         return;
@@ -226,7 +227,8 @@ export interface InvitedDateInput {
  * His date invitation as the run has it now, before anything is worn, given or planned, and again inside the run's
  * queue: a love interest the story has (404), holding no grievance with her (409 `locked`), an invitation on a date
  * of his in his thread (404), still waiting (409 `conflict`), and a gift she may give (S/minigames/date-night.ts
- * giveGift). One accepted already answers with its date (`open`).
+ * giveGift). One accepted already answers with its date (`open`). `invitation` is what he wrote to ask: the messages
+ * of his reply that carried it (they share its time), so the date keeps to anything he promised.
  */
 async function checkInvited(
   store: Pick<OtomeStore, "readDoc">,
@@ -237,17 +239,23 @@ async function checkInvited(
   const unit = partnerOf(run, input.li);
   assertNotHeld(run.state, input.li);
   const thread = await readThread(store, runId, input.li);
-  const invite = thread?.messages.find(
+  const asked = thread?.messages.find(
     (message) => message.id === input.message && message.who === "li" && message.invite?.kind === "date",
-  )?.invite;
-  if (!invite) throw notFound("invitation");
+  );
+  const invite = asked?.invite;
+  if (!asked || !invite) throw notFound("invitation");
   if (invite.status === "accepted" && invite.scene) {
     const open = await readChapter(store, runId, invite.scene);
-    if (open?.date) return { unit, open };
+    if (open?.date) return { unit, open, invitation: "" };
   }
   if (invite.status !== "pending") throw conflict("That invitation was answered already.");
   if (input.gift) giveGift(run.state, run.world.content, input.gift);
-  return { unit, open: null };
+  const invitation = thread!.messages
+    .filter((message) => message.who === "li" && message.at === asked.at)
+    .map((message) => message.text.trim())
+    .filter(Boolean)
+    .join("\n");
+  return { unit, open: null, invitation };
 }
 
 /** POST /dates/invited's first check: a refusal before the route wears her look or anything is planned. */
@@ -285,13 +293,19 @@ export async function startInvitedDate(
     // Read again inside the queue: a request queued behind the one that planned it goes on with that date.
     const run = await readRun(deps.store, runId);
     if (!run) throw runNotFound();
-    const { unit, open } = await checkInvited(deps.store, run, runId, input);
+    const { unit, open, invitation } = await checkInvited(deps.store, run, runId, input);
     if (open) return resume(open);
     const planned = await planDate(
       deps,
       runId,
       run,
-      { units: [unit], cast: [unit.id], herLook: input.herLook, gift: input.gift, invited: input.message },
+      {
+        units: [unit],
+        cast: [unit.id],
+        herLook: input.herLook,
+        gift: input.gift,
+        invited: { message: input.message, text: invitation },
+      },
       { debugMode, signal },
     );
     // ponytail: a Decline that lands while the date is planned leaves the date planned (she still has it to read); the

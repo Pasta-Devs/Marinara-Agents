@@ -748,9 +748,11 @@ export interface PhoneHistoryPage {
 export interface PhoneSendResult {
   /** What this request added or found: the player's message (when it was new or named by `id`), then his reply. */
   messages: PhoneMessage[];
+  /** #2424: the love interests what she wrote hurt, as the reply said (their affection may have fallen); absent: none. */
+  hurt?: LiId[];
   /**
-   * #2424: the love interests whose grievance with her (#2156) what she wrote opened, as the reply said it hurt them:
-   * they need space until she makes it right in Routes. Absent when it opened none.
+   * #2424: those of them whose grievance with her (#2156) the hurt opened: they need space until she makes it right in
+   * Routes. Absent when it opened none.
    */
   held?: LiId[];
 }

@@ -1322,6 +1322,30 @@ test("date invitations: off by default, weekly, each love interest once a week, 
   assert.equal((await t.thread(SOL))!.messages.at(-1)!.invite?.kind, "date");
 });
 
+test("date invitations: one whose invitation started waiting after the heartbeat is passed over for the next", async () => {
+  // The review of #2427: the job read the candidates at the heartbeat; Kai's clear-air invitation lands before it runs.
+  const t = await inviteWorld("r-invit3-aaaaaa", 1);
+  assert.equal((await t.due(T0)).status, "scheduled");
+  assert.equal((await t.due(T0 + 60_000)).status, "queued");
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    li: KAI,
+    messages: [
+      {
+        id: "m-clear-0001abcd",
+        who: "li" as const,
+        text: "Let me make it up to you.",
+        at: new Date(T0).toISOString(),
+        invite: { status: "pending" as const },
+      },
+    ],
+  }));
+  await t.drain();
+  assert.equal((await t.thread(KAI))!.messages.length, 1, "Kai, no longer free, writes nothing");
+  assert.deepEqual((await t.thread(MIR))!.messages.at(-1)!.invite, { status: "pending", kind: "date" });
+  assert.equal(t.calls.length, 1, "Kai's refusal cost no call");
+});
+
 test("date invitations: never from one who holds a grievance with her, and Decline is the thread's own", async () => {
   const t = await inviteWorld("r-invit2-aaaaaa", 1);
   // Kai holds a grievance with her (#2156): his dates wait, so he never asks.
@@ -1406,6 +1430,7 @@ test("a hurtful message: his reply names the hurt, and a serious one opens his g
   assert.equal(sharedState(kai).grievances.length, 0);
 
   // Another serious hurt in the same arc is remembered, as major: his grievance opens at most once an arc.
+  assert.deepEqual(sent.body.hurt, [KAI], "the client reads the run again: his affection fell");
   const mir = await t.phone("POST", send, { li: MIR, body: { text: "Leave me alone.", id: "c-hurt-0002" } });
   assert.deepEqual(mir.body.held, [MIR]);
   severity = "minor";
@@ -1422,6 +1447,33 @@ test("a hurtful message: his reply names the hurt, and a serious one opens his g
   assert.deepEqual(outcome.opened, [], "his grievance opens at most once an arc, and one stands");
   assert.equal(outcome.state.lis[KAI]!.grievances.at(-1)!.severity, "major", "remembered as major");
   assert.equal(outcome.state.lis[KAI]!.rupture!.grievanceId, kai.rupture!.grievanceId, "the first still stands");
+  // Past GRIEVANCES_MAX (60) unresolved ones he keeps no more from messages, so none is lost on save, nor a rupture
+  // left naming a grievance the state no longer holds.
+  const before = (await t.state())!;
+  const crowded = {
+    ...before,
+    lis: {
+      ...before.lis,
+      [SOL]: {
+        ...before.lis[SOL]!,
+        grievances: Array.from({ length: 60 }, (_, n) => ({
+          id: `g-old-${n}`,
+          li: SOL,
+          by: "li" as const,
+          text: `Old hurt ${n}.`,
+          severity: "minor" as const,
+          opened: `main-1/${n}`,
+          status: "open" as const,
+        })),
+      },
+    },
+  };
+  const full = applyMessageHurts(crowded, [{ li: SOL, text: "One more.", severity: "rupture" }], {
+    ref: "chat/c-hurt-0010",
+    at: "2026-11-20T10:00:00.000Z",
+    arc: 9,
+  });
+  assert.deepEqual([full.hurt, full.opened, full.state.lis[SOL]!.grievances.length], [[], [], 60]);
 });
 
 test("a hurt is read only from a reply to her, and in the group chat for members by name", () => {

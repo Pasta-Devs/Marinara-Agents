@@ -521,7 +521,8 @@ export interface DateToPlan {
   herLook: string;
   gift?: GiftId;
   pulled?: { item: Item; newcomers: LiId[] };
-  invited?: string;
+  /** #2424: his invitation: its message's id, and what he wrote to ask. */
+  invited?: { message: string; text: string };
 }
 
 /**
@@ -585,6 +586,7 @@ export async function planDate(
       makeItRight: null,
       memory: memory.text,
       gift: gift ?? null,
+      ...(invited?.text ? { invitation: invited.text } : {}),
     }),
     memory,
     schema: DatePlanReplySchema,
@@ -611,7 +613,7 @@ export async function planDate(
     ...(gift ? { gift } : {}),
     ...(item ? { item: item.id, cast: input.cast, newcomers: pulled!.newcomers } : {}),
     ...(grand ? { grand: true as const } : {}),
-    ...(invited ? { invited } : {}),
+    ...(invited ? { invited: invited.message } : {}),
   };
   const chapter: Chapter = {
     key,

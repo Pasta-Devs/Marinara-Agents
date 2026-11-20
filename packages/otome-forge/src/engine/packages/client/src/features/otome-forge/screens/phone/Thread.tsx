@@ -236,13 +236,13 @@ export function Thread({
       const held = li && haptics && hapticsOn(view.world) ? haptics.remoteMinutes(li.id) : 0;
       const result = await otome.post<PhoneSendResult>(`${path}/send`, held ? { ...body, remote: held } : body);
       const rows = Array.isArray(result.messages) ? result.messages : [];
-      const hurtNow = Array.isArray(result.held) ? result.held : [];
-      setHurt(hurtNow);
-      if (hurtNow.length) {
-        // Routes, the Dates hub and Home show his grievance now.
+      const heldNow = Array.isArray(result.held) ? result.held : [];
+      setHurt(heldNow);
+      // A hurt costs affection, which the run view shows; one that opened a grievance shows in Routes and Dates too.
+      if (result.hurt?.length || heldNow.length) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+      if (heldNow.length) {
         void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
         void queryClient.invalidateQueries({ queryKey: playQueryKey(runKey) });
-        void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
       }
       setIncoming({
         mine: rows.filter((row) => row.who === "player"),

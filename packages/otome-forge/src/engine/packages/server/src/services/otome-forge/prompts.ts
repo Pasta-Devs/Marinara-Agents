@@ -3622,7 +3622,7 @@ export function chatReplyMessages({
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "..."}]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
-    `- hurt: only when what ${them} just wrote truly hurts you, as ${name} would take it: {"text": "...", "severity": "minor|major|rupture"}, the text one short line in your own words on what hurt, rupture only for words that break something between you. Omit it otherwise.`,
+    `- hurt: beside "messages" in the JSON object, never inside a message, only when what ${them} just wrote truly hurts you, as ${name} would take it: {"text": "...", "severity": "minor|major|rupture"}, the text one short line in your own words on what hurt, rupture only for words that break something between you. Omit it otherwise.`,
     stickerRule,
     hapticsOn(world) ? CHAT_HAPTICS_RULE : "",
     `- Write every message in ${world.language}.`,
@@ -3804,7 +3804,7 @@ export function groupChatMessages({
     `{"messages": [{"speaker": "<exact name>", "text": "..."}]}`,
     `- speaker: the exact name of the one who sends it, one of ${everyone}. Never ${them}.`,
     "- text: each message short, a line or a few, the way people text.",
-    `- hurt: only when what ${them} just wrote truly hurts one of them, as they would take it: [{"speaker": "<exact name>", "text": "...", "severity": "minor|major|rupture"}], one for each one it hurts, the text one short line in their own words on what hurt, rupture only for words that break something between them and ${them}. Omit it otherwise.`,
+    `- hurt: beside "messages" in the JSON object, never inside a message, only when what ${them} just wrote truly hurts one of them, as they would take it: [{"speaker": "<exact name>", "text": "...", "severity": "minor|major|rupture"}], one for each one it hurts, the text one short line in their own words on what hurt, rupture only for words that break something between them and ${them}. Omit it otherwise.`,
     `- Stickers: one of them may send a sticker by writing its name in square brackets in a message, their own or ${them}'s, only from the lists under STICKERS, the way people do in a group chat: to react, tease, sulk or answer without words. At most one sticker from each of them in a reply; it may stand alone.`,
     `- Write every message in ${world.language}.`,
     "",
@@ -4818,6 +4818,8 @@ export interface DatePlanInput {
   gift?: GiftId | null;
   /** #2156: he asked her out on this evening to clear the air (DatePlan.clearAir); absent leaves the prompt as before. */
   clearAir?: boolean;
+  /** #2424: with place PARTNER_CHOICE, what he wrote to ask her out (S/phone/invite.ts); absent leaves it as before. */
+  invitation?: string;
 }
 
 /** "Kai", "Kai and Sol", "Kai, Sol and Mira". */
@@ -4838,6 +4840,7 @@ export function datePlanMessages({
   memory,
   gift = null,
   clearAir = false,
+  invitation = "",
 }: DatePlanInput): OtomeMessage[] {
   const name = unit.name;
   const group = others.length > 0;
@@ -4945,7 +4948,7 @@ export function datePlanMessages({
     pulled
       ? `"${pulled.placeName}"${pulled.placeTags.trim() ? ` (${pulled.placeTags.trim()})` : ""}. The date goes there: keep that name for it.`
       : place === PARTNER_CHOICE
-        ? `${name} asked the protagonist out, and chooses where to take them and what they do there: somewhere that says something true about ${name} (from their likes, their past or their world).`
+        ? `${name} asked the protagonist out, and chooses where to take them and what they do there: somewhere that says something true about ${name} (from their likes, their past or their world).${invitation.trim() ? ` ${name} asked with these words, and the date keeps to anything they promised: ${JSON.stringify(invitation.trim())}` : ""}`
         : place === STORY_PLACE
           ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
           : place === PULLED_PLACE

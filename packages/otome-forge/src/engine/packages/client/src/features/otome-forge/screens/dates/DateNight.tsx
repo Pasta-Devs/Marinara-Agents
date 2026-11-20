@@ -383,7 +383,9 @@ export function DateNight({
   }
 
   const newcomers = pulled ? newcomersOf(cast, pulled.playedBy) : cast;
-  const subtitle = pulled ? pulled.item.title : t("ui.otomeForge.dateNight.invitedSubtitle", { name: together });
+  // #2424: his name even while his grievance leaves him off the company.
+  const inviter = invited ? (view.lis.find((li) => li.id === invited.li)?.name ?? "") : "";
+  const subtitle = pulled ? pulled.item.title : t("ui.otomeForge.dateNight.invitedSubtitle", { name: inviter });
   const sameCompany = (play: DateEntry) => {
     const own = dateCast(play);
     return own.length === cast.length && own.every((li) => cast.includes(li));
@@ -437,7 +439,21 @@ export function DateNight({
         </>
       ) : null}
 
-      {step.kind === "looks" && (pulled || invited) ? (
+      {/* #2424: he came to hold a grievance with her after he asked: his date waits, as every date with him does. */}
+      {step.kind === "looks" && invited && held(invited.li) ? (
+        <>
+          <StepHead subtitle={subtitle} company={[]} title={t("ui.otomeForge.dateNight.looksTitlePulled")} />
+          <p className="of-notice" role="status">
+            {t("ui.otomeForge.dates.heldNote", { name: inviter })}
+          </p>
+          <div className="of-dates-actions">
+            <button type="button" className="of-button of-button--quiet of-glass" onClick={leave}>
+              <ChevronLeft className="of-back-icon" size={16} strokeWidth={2} aria-hidden="true" />
+              {exitLabel}
+            </button>
+          </div>
+        </>
+      ) : step.kind === "looks" && (pulled || invited) ? (
         <>
           <StepHead
             subtitle={subtitle}

@@ -392,7 +392,7 @@ export interface Written {
  * message hurt in him, for a reply to her only. The reply to her waits in the run's foreground queue (answer); a daily
  * message (`first`) runs in a background job on that job's connection (`connectionId`, S/phone/daily.ts). Both recall
  * as his own reader, with his knowledge boundary. `reason` "date" (#2424) is his invitation on a date, refused with a
- * 409 `conflict` before any call while he holds a grievance with her or an invitation of his waits.
+ * 409 `locked` before any call while he holds a grievance with her or an invitation of his waits.
  */
 async function writeReply(
   deps: PhoneDeps,
@@ -410,7 +410,8 @@ async function writeReply(
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
   const dating = reason === "date";
   if (dating && (heldAgainst(run.state.lis[li]) || inviteWaiting(thread))) {
-    throw conflict("He holds a grievance with her, or an invitation of his still waits.");
+    // `locked`, not `conflict`: nothing was written, so the invitation job may try the next one (S/phone/invite.ts).
+    throw new OtomeForgeError(409, "He holds a grievance with her, or an invitation of his still waits.", "locked");
   }
   // A date invitation is his whole message: it never also asks her out to clear the air.
   const invite = !dating && inviteOffered(run.state.lis[li]!, thread);
@@ -478,7 +479,8 @@ export type ChatReason = "upset" | "date";
 
 /**
  * #2424: the hurts a landed reply named, kept in one revision-checked write of the state (applyMessageHurts) against
- * her message `messageId` in thread `key`; the love interests whose grievance with her (#2156) they opened. A write
+ * her message `messageId` in thread `key`: those a hurt was kept for, and those whose grievance with her (#2156) they
+ * opened. A write
  * that fails after the reply is saved is logged and lost, as Close and remember's grant is (S/phone/memory.ts): the
  * reply is never written again for it.
  */
@@ -488,26 +490,26 @@ async function applyHurts(
   key: string,
   messageId: string,
   hurts: readonly MessageHurt[],
-): Promise<LiId[]> {
-  if (!hurts.length) return [];
+): Promise<Pick<Answered, "hurt" | "held">> {
+  if (!hurts.length) return { hurt: [], held: [] };
   const ref = `${key === GROUP_THREAD ? "group" : "chat"}/${messageId}`;
   try {
     const arc = (await listArcs(deps.store, runId)).at(-1)?.number ?? 0;
     const at = new Date().toISOString();
-    let opened: LiId[] = [];
+    let kept: Pick<Answered, "hurt" | "held"> = { hurt: [], held: [] };
     await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
       const outcome = applyMessageHurts(current, hurts, { ref, at, arc });
-      opened = outcome.opened;
+      kept = { hurt: outcome.hurt, held: outcome.opened };
       return outcome.state;
     });
-    return opened;
+    return kept;
   } catch (error) {
     deps.runtime.logger.warn(
       "[otome-forge] A hurt from her message in %s was not kept: %s",
       key,
       error instanceof Error ? error.message : String(error),
     );
-    return [];
+    return { hurt: [], held: [] };
   }
 }
 
@@ -547,14 +549,15 @@ export function answerIn<T>(
       return { ...current, messages: [...current.messages, ...written] };
     });
     // Only this request's reply brings its hurts: one that lost to another reply keeps that one's.
-    const held = kept === written ? await applyHurts(deps, runId, key, last.id, hurt) : [];
-    return { messages: kept, held };
+    const hurts = kept === written ? await applyHurts(deps, runId, key, last.id, hurt) : { hurt: [], held: [] };
+    return { messages: kept, ...hurts };
   });
 }
 
-/** What answerIn appended or found, and (#2424) whose grievance with her the reply's hurts opened. */
+/** What answerIn appended or found, and (#2424) whom the reply's hurts were kept for and whose grievance they opened. */
 export interface Answered {
   messages: PhoneMessage[];
+  hurt: LiId[];
   held: LiId[];
 }
 
@@ -692,8 +695,9 @@ export async function sendIn(
 }
 
 /** The send's result: what it saved, then the reply, and (#2424) whose grievance with her the reply opened. */
-const answered = (before: PhoneMessage[], { messages, held }: Answered): PhoneSendResult => ({
+const answered = (before: PhoneMessage[], { messages, hurt, held }: Answered): PhoneSendResult => ({
   messages: [...before, ...messages],
+  ...(hurt.length ? { hurt } : {}),
   ...(held.length ? { held } : {}),
 });
 
