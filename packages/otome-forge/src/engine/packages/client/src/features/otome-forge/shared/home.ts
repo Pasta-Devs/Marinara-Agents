@@ -56,6 +56,8 @@ export const NOTE_TEXT_MAX = 600;
  * so any number above its cast means all of them (S/phone/daily.ts).
  */
 export const DAILY_MESSAGES_MAX = 24;
+/** Settings → Connections (#2424): the most date invitations a week the player may let love interests send. */
+export const DATE_INVITES_MAX = 7;
 /**
  * #2154: the group chat's thread name (`${R}:chat:group`, and the phone's `open` for it). LI ids always start with
  * "li-", so it never names a love interest. Settings → Connections' squabbles a day share DAILY_MESSAGES_MAX.

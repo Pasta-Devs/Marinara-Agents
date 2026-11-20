@@ -7,6 +7,10 @@
 //                                                               her look is BASE_LOOK or one she owns, worn as Wear at
 //                                                               home does before the date is planned; `gift` (#2128)
 //                                                               one she owns from the Shop
+// POST /runs/:run/dates/invited {li, message, herLook, gift?}  → {chapter: ChapterView, date: DateEntry, resumed}:
+//                                                               #2424, the date he asked her on in Messages (his
+//                                                               message's id), its invitation still waiting; her look
+//                                                               is worn first, as for a pulled date (S/phone/invite.ts)
 // POST /runs/:run/dates/:key/finish                             → DateFinishResult
 // POST /runs/:run/art/keepsake/prompt {key}                     → {prompt, negativePrompt}
 // POST /runs/:run/art/keepsake {key, prompt?, negativePrompt?}  → {paint}
@@ -47,6 +51,8 @@ import {
   startPulledDate,
 } from "../minigames/date-night.js";
 import { PhotoSetupSchema, deletePhoto, photoPromptFor, takePhoto } from "../minigames/photo-shoot.js";
+import { MESSAGE_ID } from "../phone/chat.js";
+import { checkInvitedDate, startInvitedDate } from "../phone/invite.js";
 import { PHOTO_ID, isPhotoId } from "../../../../../client/src/features/otome-forge/shared/photos.js";
 import { toChapterView } from "../schemas/story.js";
 import { cancellable } from "../story/beats.js";
@@ -56,6 +62,13 @@ const LOOK_ID = z.string().min(1).max(80);
 const PulledBody = z.object({
   item: z.string().min(1).max(80),
   cast: z.array(z.string().min(1).max(80)).min(1).max(20),
+  herLook: LOOK_ID,
+  gift: z.enum(GIFT_IDS).optional(),
+});
+// #2424: the date he asked her on in Messages.
+const InvitedBody = z.object({
+  li: z.string().min(1).max(80),
+  message: z.string().regex(MESSAGE_ID),
   herLook: LOOK_ID,
   gift: z.enum(GIFT_IDS).optional(),
 });
@@ -112,6 +125,23 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
       await wearLook(deps, runId, { owner: "me", look: input.herLook }, { debugMode });
       const { chapter, date, resumed } = await cancellable(deps, runId, (signal) =>
         startPulledDate(deps, runId, input, { debugMode, signal }),
+      );
+      return { chapter: toChapterView(chapter), date, resumed };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/dates/invited",
+    handle(async (request) => {
+      const input = parseBody(InvitedBody, request.body);
+      const { runId } = runParam(request);
+      if (!isLiId(input.li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
+      const debugMode = debugModeOf(request);
+      // Refused before anything is worn, given or planned, as a pulled date is (his grievance with her included).
+      await checkInvitedDate(deps.store, runId, input);
+      await wearLook(deps, runId, { owner: "me", look: input.herLook }, { debugMode });
+      const { chapter, date, resumed } = await cancellable(deps, runId, (signal) =>
+        startInvitedDate(deps, runId, input, { debugMode, signal }),
       );
       return { chapter: toChapterView(chapter), date, resumed };
     }),

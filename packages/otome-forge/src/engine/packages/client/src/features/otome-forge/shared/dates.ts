@@ -143,6 +143,8 @@ export interface DatePlan {
   newcomers?: LiId[];
   /** #2303: a 5★ date: one of its scenes holds its key image. */
   grand?: true;
+  /** #2424: the date he asked her on in Messages: his message's id; he chose the place (PARTNER_CHOICE). */
+  invited?: string;
 }
 
 /** Everyone on a date: a pulled date's cast, else Date Night's love interest and, on a double date, the second. */

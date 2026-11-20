@@ -26,6 +26,7 @@ import {
   emptyDraft,
   isBlankDraft,
   readDraft,
+  stepProblem,
   toSetupInput,
   type DraftLi,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/setup/draft.ts";
@@ -1207,4 +1208,31 @@ test("a draft keeps the player's banned phrases on this device and sends them tr
   assert.equal(readDraft({ ...draft, bannedPhrases: "x".repeat(3000) }).bannedPhrases.length, OWN_BANNED_PHRASES_MAX);
   assert.equal(toSetupInput(draft).bannedPhrases, "wet heat, slick folds");
   assert.ok(!("bannedPhrases" in toSetupInput({ ...draft, bannedPhrases: "   " })));
+});
+
+test("a draft asks how often they write: three numbers, 0 by default, checked on the connections step (#2424)", () => {
+  const draft = { ...emptyDraft(), connections: { ...emptyDraft().connections, narration: "conn-a" } };
+  assert.deepEqual(draft.messages, { daily: "0", squabbles: "0", invites: "0" });
+  assert.deepEqual(
+    [toSetupInput(draft).dailyMessages, toSetupInput(draft).groupSquabbles, toSetupInput(draft).dateInvites],
+    [0, 0, 0],
+  );
+  const typed = { ...draft, messages: { daily: "3", squabbles: "24", invites: "7" } };
+  assert.equal(stepProblem(typed, "connections", 1), null);
+  assert.deepEqual(
+    [toSetupInput(typed).dailyMessages, toSetupInput(typed).groupSquabbles, toSetupInput(typed).dateInvites],
+    [3, 24, 7],
+  );
+  for (const messages of [
+    { daily: "", squabbles: "0", invites: "0" },
+    { daily: "25", squabbles: "0", invites: "0" },
+    { daily: "0", squabbles: "1.5", invites: "0" },
+    { daily: "0", squabbles: "0", invites: "8" },
+  ]) {
+    assert.equal(stepProblem({ ...draft, messages }, "connections", 1), "ui.otomeForge.setup.needMessageNumbers");
+  }
+  // A draft saved before #2424 starts at 0, as a story then did.
+  const { messages: _messages, ...older } = typed;
+  assert.deepEqual(readDraft(older).messages, { daily: "0", squabbles: "0", invites: "0" });
+  assert.deepEqual(readDraft(JSON.parse(JSON.stringify(typed))).messages, typed.messages);
 });

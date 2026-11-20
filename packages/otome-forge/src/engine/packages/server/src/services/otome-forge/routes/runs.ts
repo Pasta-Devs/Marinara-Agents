@@ -15,9 +15,10 @@
 //                                             someone new mid-story gets his forge steps (setup/forge.ts forgeCast)
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
-// POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?}
+// POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?, dateInvites?}
 //      → {world: WorldView}; with an image connection, each paint step the world lacks is added, waiting for the tap.
-//      dailyMessages and groupSquabbles are 0–24 (Settings → Connections, S/phone/daily.ts, S/phone/group.ts). A new
+//      dailyMessages and groupSquabbles are 0–24 and dateInvites 0–7 (Settings → Connections, S/phone/daily.ts,
+//      S/phone/group.ts, S/phone/invite.ts). A new
 //      `connections.embeddings` (Memory recall embeddings) must name a connection with an embedding model (400
 //      `no-embeddings`), and rebuilds long-term recall's index with it (S/memory/recall-index.ts). Turning
 //      images.sideSprites on starts the qualifying side characters' looks and sprites in the background.
@@ -37,7 +38,7 @@ import type { Presentation, Unit } from "../../../../../client/src/features/otom
 import { LIS_MAX, LIS_MIN } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/shared/archetypes.js";
 import { OWN_BANNED_PHRASES_MAX } from "../../../../../client/src/features/otome-forge/shared/banned-phrases.js";
-import { DAILY_MESSAGES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
@@ -154,6 +155,10 @@ const SetupBody = z.object({
       style: ImageStyleSchema.optional(),
     }),
     connections: ConnectionsSchema,
+    // #2424: Settings → Connections' numbers, asked at setup.
+    dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+    groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+    dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
   }),
 });
 const AgeGateBody = z.object({ confirm: z.literal(true) });
@@ -177,6 +182,7 @@ const SettingsBody = z.object({
   bannedPhrases: z.string().max(OWN_BANNED_PHRASES_MAX).optional(),
   dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
   groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+  dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AppearanceBody = z.object({ identityLine: z.string() });
@@ -315,6 +321,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         images: { ...current.images, ...setup.images },
         connections: normalizeConnections(setup.connections),
         forge: initialForge(liIds, paints, paints && !setup.images.ask && !reviewModeOf(request)),
+        // Absent or 0 stays off, as a story set up before #2424 has them.
+        ...(setup.dailyMessages ? { dailyMessages: setup.dailyMessages } : {}),
+        ...(setup.groupSquabbles ? { groupSquabbles: setup.groupSquabbles } : {}),
+        ...(setup.dateInvites ? { dateInvites: setup.dateInvites } : {}),
       }));
       await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
         ...index,
@@ -548,6 +558,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           bannedPhrases: body.bannedPhrases !== undefined ? body.bannedPhrases.trim() : current.bannedPhrases,
           ...(body.dailyMessages !== undefined ? { dailyMessages: body.dailyMessages } : {}),
           ...(body.groupSquabbles !== undefined ? { groupSquabbles: body.groupSquabbles } : {}),
+          ...(body.dateInvites !== undefined ? { dateInvites: body.dateInvites } : {}),
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },

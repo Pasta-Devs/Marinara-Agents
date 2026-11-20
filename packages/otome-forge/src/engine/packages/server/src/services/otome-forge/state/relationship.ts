@@ -16,9 +16,14 @@
 // with him in this story arc yet, and someone else could still lead a chapter. Otherwise, and for any rupture the
 // protagonist would hold, the grievance is saved as major (still remembered, still −15). While his stands he gains no
 // affection here either (a side-with backing); losses still apply.
+// #2424: what the protagonist writes in Messages can hurt him too (applyMessageHurts, S/phone/hurt.ts): the reply that
+// answers her message names the hurt, and it is his grievance with her by the same rule, without the trust test (the
+// model judges how badly a message hurt; the maintainer's, 2026-11-20). Its `opened` is `chat/<her message>` in his
+// thread, private to him, or `group/<her message>` in the group chat, which every love interest in it saw.
 //
 // Every function is pure. The choose route applies a pick inside one revision-checked write of `${R}:state`, and the
 // pick's `${i}/${choiceId}` in `chapters[key].applied` makes a replay, or a request that lost a race, change nothing.
+import { createHash } from "node:crypto";
 import { z, type ZodType } from "zod";
 import type {
   AffectionChange,
@@ -26,6 +31,7 @@ import type {
   ChapterShift,
   Effect,
   Grievance,
+  GrievanceSeverity,
   LiId,
   LiState,
   RunState,
@@ -125,6 +131,16 @@ export interface ChoiceOutcome {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+/**
+ * #2156: whether his grievance with her may open now, but for a pick's trust test: no rupture stands with him, none
+ * opened with him in this story arc, and someone else could still lead a chapter.
+ */
+function mayOpenHis(lis: Readonly<Record<LiId, LiState>>, id: LiId, li: LiState, arc: number): boolean {
+  return (
+    !li.rupture && li.grievanceArc !== arc && Object.entries(lis).some(([other, s]) => other !== id && !heldAgainst(s))
+  );
+}
+
 function clip(text: string): string {
   const characters = [...text.replace(/\s+/g, " ").trim()];
   return characters.length > TEXT_MAX ? `${characters.slice(0, TEXT_MAX - 1).join("")}…` : characters.join("");
@@ -220,10 +236,8 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
       const opens =
         effect.grievance.by === "li" &&
         effect.grievance.severity === "rupture" &&
-        !li.rupture &&
         li.trust <= WALKOUT_RUPTURE_TRUST &&
-        li.grievanceArc !== arc &&
-        Object.entries(lis).some(([id, other]) => id !== effect.li && !heldAgainst(other));
+        mayOpenHis(lis, effect.li, li, arc);
       const grievance: Grievance = {
         id: `g-${key}-${i}-${opened}`,
         li: effect.li,
@@ -307,4 +321,61 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     affection,
     replay: false,
   };
+}
+
+/** #2424: one hurt a message of hers gave a love interest, as his reply named it (S/phone/replies.ts). */
+export interface MessageHurt {
+  li: LiId;
+  text: string;
+  severity: GrievanceSeverity;
+}
+
+/** What applyMessageHurts did: the state, and those whose grievance with her it opened. */
+export interface HurtOutcome {
+  state: RunState;
+  /** Love interests whose grievance with her (#2156) the hurts opened. */
+  opened: LiId[];
+}
+
+/**
+ * #2424: `state` with the hurts her message `ref` (`chat/<id>` or `group/<id>`, see the header) gave, each kept as a
+ * grievance he holds, at most once for each message and love interest: a hurt whose grievance is already kept is a
+ * replay. A rupture-severity hurt opens his grievance when mayOpenHis allows (no trust test), and is kept as major when
+ * it does not; a hurt in words not already held costs 15 affection, stopping at his level's floor, as a hostile pick's
+ * does. Pure.
+ */
+export function applyMessageHurts(
+  state: RunState,
+  hurts: readonly MessageHurt[],
+  { ref, at, arc }: { ref: string; at: string; arc: number },
+): HurtOutcome {
+  const lis: Record<LiId, LiState> = { ...state.lis };
+  const opened: LiId[] = [];
+  for (const hurt of hurts) {
+    const current = lis[hurt.li];
+    const text = clip(hurt.text);
+    if (!current || !text) continue;
+    const id = `g-msg-${createHash("sha256").update(`${ref}\n${hurt.li}`).digest("hex").slice(0, 16)}`;
+    if (current.grievances.some((grievance) => grievance.id === id)) continue;
+    const opens = hurt.severity === "rupture" && mayOpenHis(lis, hurt.li, current, arc);
+    const fresh = !current.grievances.some((item) => item.by === "li" && isUnresolved(item) && item.text === text);
+    const grievance: Grievance = {
+      id,
+      li: hurt.li,
+      by: "li",
+      text,
+      severity: hurt.severity === "rupture" && !opens ? "major" : hurt.severity,
+      opened: ref,
+      status: "open",
+    };
+    const li: LiState = { ...current, grievances: boundGrievances([...current.grievances, grievance]) };
+    if (opens) {
+      li.rupture = { grievanceId: id, since: at, space: 0 };
+      li.grievanceArc = arc;
+      opened.push(hurt.li);
+    }
+    if (fresh) li.points = Math.max(floorOf(hurt.li, li, state), li.points - 15);
+    lis[hurt.li] = li;
+  }
+  return { state: { ...state, lis }, opened };
 }

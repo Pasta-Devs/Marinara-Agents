@@ -379,6 +379,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         open={phoneOpen}
         onOpenChange={setPhoneOpen}
         onOpenScene={openReader("phone")}
+        onOpenDate={openDate("phone")}
       />
     ) : screen === "remind" && activeRun && view ? (
       <RemindMe

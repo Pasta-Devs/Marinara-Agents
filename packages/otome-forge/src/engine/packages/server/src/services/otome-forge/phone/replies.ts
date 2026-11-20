@@ -10,7 +10,7 @@
 // one speaker alone, or a reply with nothing from a member the protagonist's newest message names (the maintainer's
 // rule: whoever is named answers). Each speaker sends at most one sticker in a reply, their own or the protagonist's.
 import { z, type ZodType } from "zod";
-import type { HapticCue } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { GrievanceSeverity, HapticCue } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { normalizeHapticCues } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { NOTE_TEXT_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
@@ -97,12 +97,31 @@ export function stickerMatcher(listed: readonly ReplySticker[]): (token: string)
   return (token) => byToken.get(stickerToken(token)) ?? null;
 }
 
+// ── #2424: a hurt her message gave, as P17 and P17g report it (S/state/relationship.ts applyMessageHurts) ──
+
+const SEVERITIES = ["minor", "major", "rupture"] as const satisfies readonly GrievanceSeverity[];
+/** The stored limit of a grievance's words (S/schemas/state.ts). */
+const HURT_TEXT_MAX = 600;
+const HurtSchema = z.object({
+  text: z.string().max(4000).nullable().optional(),
+  severity: z.string().max(20).nullable().optional(),
+});
+type HurtRaw = z.infer<typeof HurtSchema>;
+
+/** A hurt as the reply names it, or null when it names none that can be kept (no words, or a severity not listed). */
+function readHurt(raw: HurtRaw | null | undefined): { text: string; severity: GrievanceSeverity } | null {
+  const text = (raw?.text ?? "").replace(/\s+/g, " ").trim().slice(0, HURT_TEXT_MAX);
+  const severity = SEVERITIES.find((value) => value === raw?.severity?.trim().toLowerCase());
+  return text && severity ? { text, severity } : null;
+}
+
 // ── P17's reply: his chat reply (the prompt: S/prompts.ts chatReplyMessages) ──
 
 /** P17's reply as the model sends it (nulls allowed); normalizeChatReply makes it a ChatReply. */
 export interface ChatReplyRaw {
   messages: Array<{ text?: string | null; sticker?: string | null; haptic?: unknown }>;
   invite?: boolean | null;
+  hurt?: HurtRaw | null;
 }
 
 export interface ChatReply {
@@ -110,6 +129,8 @@ export interface ChatReply {
   messages: Array<{ text: string; sticker?: string; haptic?: HapticCue[] }>;
   /** #2156: his last message asks her out to clear the air (kept only when P17 offered it). */
   invite?: true;
+  /** #2424: what her message he answers hurt in him (kept only for a reply to her, never a message he writes first). */
+  hurt?: { text: string; severity: GrievanceSeverity };
 }
 
 export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
@@ -124,6 +145,7 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
     .min(1)
     .max(8),
   invite: z.boolean().nullable().optional(),
+  hurt: HurtSchema.nullable().optional(),
 });
 
 /**
@@ -133,6 +155,7 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
  * first bracketed name of `listed` in the reply (either order; a `sticker` field is read the same way); every other
  * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays. `invite` (#2156) is kept
  * only when P17 offered it (`offered`); a message's haptic cues (0.34.0) only while he holds the remote (`remote`).
+ * `hurt` (#2424) only when the reply answers her message (`answering`); one with no words or no listed severity goes.
  */
 export function normalizeChatReply(
   raw: ChatReplyRaw,
@@ -140,6 +163,7 @@ export function normalizeChatReply(
   listed: readonly ReplySticker[] = [],
   offered = false,
   remote = false,
+  answering = false,
 ): ChatReply | string {
   const messages: ChatReply["messages"] = [];
   const match = stickerMatcher(listed);
@@ -155,9 +179,11 @@ export function normalizeChatReply(
     messages.push(haptic.length ? { ...message, haptic } : message);
   }
   if (!messages.length) return `the reply had no message from ${names.li}`;
+  const hurt = answering ? readHurt(raw.hurt) : null;
   return {
     messages: messages.slice(0, REPLY_MESSAGES_MAX),
     ...(offered && raw.invite === true ? { invite: true } : {}),
+    ...(hurt ? { hurt } : {}),
   };
 }
 
@@ -213,6 +239,8 @@ export const GROUP_SQUABBLE_MAX = 8;
 
 export interface GroupReplyRaw {
   messages: Array<{ speaker?: string | null; text?: string | null; sticker?: string | null }>;
+  /** #2424: whom her message hurt, each by their exact name. */
+  hurt?: Array<HurtRaw & { speaker?: string | null }> | null;
 }
 
 export const GroupReplySchema: ZodType<GroupReplyRaw> = z.object({
@@ -226,6 +254,11 @@ export const GroupReplySchema: ZodType<GroupReplyRaw> = z.object({
     )
     .min(1)
     .max(16),
+  hurt: z
+    .array(HurtSchema.extend({ speaker: z.string().max(200).nullable().optional() }))
+    .max(16)
+    .nullable()
+    .optional(),
 });
 
 /** A member as P17g's parser reads them: their id, name, and the stickers of their own they may send. */
@@ -257,12 +290,18 @@ function namedIn(text: string, members: readonly GroupSpeaker[]): GroupSpeaker[]
  * The members' messages (see the header): each read as normalizeChatReply reads his, with its speaker's own stickers
  * and the protagonist's (`yours`), at most GROUP_REPLY_MAX (a squabble GROUP_SQUABBLE_MAX), or the repair turn's reason.
  * `answering` is the protagonist's newest message a reply answers: each member it names must have a message in it.
+ * `hurt` (#2424): whom that message hurt, members only, each once; never in a squabble, which answers nothing of hers.
  */
 export function normalizeGroupReply(
   raw: GroupReplyRaw,
   { player, members, yours }: { player: string; members: readonly GroupSpeaker[]; yours: readonly ReplySticker[] },
   { squabble = false, answering = "" }: { squabble?: boolean; answering?: string } = {},
-): { messages: Array<{ li: string; text: string; sticker?: string }> } | string {
+):
+  | {
+      messages: Array<{ li: string; text: string; sticker?: string }>;
+      hurt?: Array<{ li: string; text: string; severity: GrievanceSeverity }>;
+    }
+  | string {
   const messages: Array<{ li: string; text: string; sticker?: string }> = [];
   const sent = new Set<string>();
   const everyone = members.map((member) => member.name).join(", ");
@@ -291,7 +330,15 @@ export function normalizeGroupReply(
   const silent = squabble ? [] : namedIn(answering, members).filter((member) => !speaking.has(member.id));
   const names = silent.map((member) => member.name).join(", ");
   if (names) return `${player} named ${names}: each one named answers with at least one message`;
-  return { messages: kept };
+  const hurt = squabble
+    ? []
+    : (raw.hurt ?? []).flatMap((entry) => {
+        const member = members.find((candidate) => sameName((entry.speaker ?? "").trim(), candidate.name));
+        const read = member ? readHurt(entry) : null;
+        return member && read ? [{ li: member.id, ...read }] : [];
+      });
+  const once = hurt.filter((entry, index) => hurt.findIndex((other) => other.li === entry.li) === index);
+  return { messages: kept, ...(once.length ? { hurt: once } : {}) };
 }
 
 // ── P18's reply: his chat memory (the prompt: S/prompts.ts chatMemoryMessages) ──

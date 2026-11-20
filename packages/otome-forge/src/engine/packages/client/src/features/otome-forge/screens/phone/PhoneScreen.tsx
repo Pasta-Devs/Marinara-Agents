@@ -20,6 +20,7 @@ import { runQueryKey } from "../../hooks/use-run";
 import type { LiId, PhoneDueResult, RunView } from "../../shared/api-types";
 import { GROUP_THREAD } from "../../shared/home";
 import { homeQueryKey } from "../home/HomeScreen";
+import type { DateOpen } from "../dates/DateNight";
 import { Thread } from "./Thread";
 import { ThreadList } from "./ThreadList";
 
@@ -39,8 +40,9 @@ export const phonePath = (runKey: string, li?: LiId) =>
 export const DAILY_POLL_MS = 60_000;
 /** Each run's newest daily message as this page last heard it, kept across remounts and restarts of the heartbeat. */
 const heardDaily = new Map<string, string | null>();
-/** The same for each run's newest group chat squabble (#2154). */
+/** The same for each run's newest group chat squabble (#2154), and its newest date invitation (#2424). */
 const heardGroup = new Map<string, string | null>();
+const heardInvite = new Map<string, string | null>();
 
 /** Whether `latest` is new beside the mark `heard` keeps for this run (see useDailyMessages); keeps it as the mark. */
 function heardNew(heard: Map<string, string | null>, runKey: string, latest: { li: LiId; at: string } | null) {
@@ -51,8 +53,8 @@ function heardNew(heard: Map<string, string | null>, runKey: string, latest: { l
 }
 
 /**
- * Settings → Connections' daily messages (S/phone/daily.ts) and group chat squabbles (#2154, S/phone/group.ts): while
- * the story is forged, either number is above 0 and the page is visible, asks POST .../phone/due every minute (the first
+ * Settings → Connections' daily messages (S/phone/daily.ts), group chat squabbles (#2154, S/phone/group.ts) and date
+ * invitations (#2424, S/phone/invite.ts): while the story is forged, any of the numbers is above 0 and the page is visible, asks POST .../phone/due every minute (the first
  * a minute after it starts), naming the thread the player has open, which never gets one. A new squabble reads the
  * list, Home's unread count and the group chat again, as a daily message does his thread. When a new daily message has landed, the thread list, Home's unread count
  * and his thread are read again, so it shows unread like a reply that landed after she left. A message is new when it
@@ -70,7 +72,7 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
   const on =
     !!runKey &&
     view?.forge.phase === "ready" &&
-    ((view.world.dailyMessages ?? 0) > 0 || (view.world.groupSquabbles ?? 0) > 0);
+    ((view.world.dailyMessages ?? 0) > 0 || (view.world.groupSquabbles ?? 0) > 0 || (view.world.dateInvites ?? 0) > 0);
   useEffect(() => {
     if (!on || !runKey) return;
     let stopped = false;
@@ -83,6 +85,8 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
           const landed = [
             heardNew(heardDaily, runKey, due.latest) ? due.latest!.li : null,
             heardNew(heardGroup, runKey, due.group?.latest ?? null) ? GROUP_THREAD : null,
+            // #2424: a date invitation lands in his thread as a daily message does.
+            heardNew(heardInvite, runKey, due.invite?.latest ?? null) ? due.invite!.latest!.li : null,
           ].filter((thread) => thread !== null);
           if (landed.length) {
             void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
@@ -112,6 +116,8 @@ interface PhoneScreenProps {
   onOpenChange: (open: PhoneOpen | null) => void;
   /** #2156, #2303: opens the scene to clear the air with him, once she accepts his invitation in his thread. */
   onOpenScene?: (key: string) => void;
+  /** #2424: opens his date invitation's looks step, or the date it opened. */
+  onOpenDate?: (open: DateOpen) => void;
 }
 
 /** Starts the protagonist's stickers once, the first time the phone opens with images on (#2044). */
@@ -132,7 +138,7 @@ function useStartStickers(runKey: string, view: RunView) {
   }, [due, otome, queryClient, runKey]);
 }
 
-export function PhoneScreen({ runKey, view, open, onOpenChange, onOpenScene }: PhoneScreenProps) {
+export function PhoneScreen({ runKey, view, open, onOpenChange, onOpenScene, onOpenDate }: PhoneScreenProps) {
   useStartStickers(runKey, view);
   // Focus follows the player inside the phone: into a thread they opened here, back to its row when they leave it.
   // A thread opened from Home's Reply leaves for a list read for the first time, whose rows come after it loads: the
@@ -190,6 +196,7 @@ export function PhoneScreen({ runKey, view, open, onOpenChange, onOpenScene }: P
           if ((open.quote?.trim() || null) !== quote) onOpenChange({ li: li.id, ...(quote ? { quote } : {}) });
         }}
         onOpenScene={onOpenScene}
+        onOpenDate={onOpenDate}
       />
     );
   }

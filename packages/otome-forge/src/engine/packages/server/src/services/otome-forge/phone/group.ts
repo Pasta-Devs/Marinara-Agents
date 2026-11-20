@@ -78,7 +78,9 @@ import {
   LISTED_SESSIONS,
   type PhoneDeps,
   type SendInput,
+  type Written,
 } from "./chat.js";
+import type { MessageHurt } from "../state/relationship.js";
 import {
   dailyDecision,
   metLis,
@@ -194,14 +196,14 @@ function groupStickers(runId: string, run: RunDocuments, members: readonly LiId[
 /**
  * The members' messages for the group as read (`thread`, with `run` and its `members`), not saved yet: a reply to the
  * player in the run's foreground queue, or a squabble (`squabble`, the two who start it) in a background job on
- * `connectionId`.
+ * `connectionId`. A reply also names (#2424) whom her message hurt, kept once it lands (S/phone/chat.ts answerIn).
  */
 async function writeGroup(
   deps: PhoneDeps,
   runId: string,
   { run, members, thread }: { run: RunDocuments; members: readonly LiId[]; thread: PhoneThread },
   { debugMode, squabble, connectionId }: { debugMode: boolean; squabble?: readonly LiId[]; connectionId?: string },
-): Promise<PhoneMessage[]> {
+): Promise<Written> {
   const units = unitsOf(run, members);
   const player = run.player.name || "the protagonist";
   const tail = openMessages(thread).slice(-GROUP_TAIL_MESSAGES);
@@ -257,9 +259,12 @@ async function writeGroup(
     ...(connectionId ? { lane: "background" as const, connectionId } : { lane: "foreground" as const }),
   });
   // generateJson returns what normalizeGroupReply made of the reply.
-  const written = value as unknown as { messages: Array<{ li: LiId; text: string; sticker?: string }> };
+  const written = value as unknown as {
+    messages: Array<{ li: LiId; text: string; sticker?: string }>;
+    hurt?: MessageHurt[];
+  };
   const at = new Date().toISOString();
-  return written.messages.map((message) => ({
+  const messages = written.messages.map((message): PhoneMessage => ({
     id: newMessageId(),
     who: "li",
     text: message.text,
@@ -267,6 +272,7 @@ async function writeGroup(
     at,
     li: message.li,
   }));
+  return { messages, ...(written.hurt?.length ? { hurt: written.hurt } : {}) };
 }
 
 /** POST /runs/:run/phone/group/send {text?, sticker?, id?, retry?}: the player's message, then the members' reply. */
@@ -404,13 +410,15 @@ async function writeSquabble(
           if (!run || members.length < GROUP_MIN_MEMBERS) throw conflict("the group is open or has too few members");
           return { run, members };
         },
-        ({ run, members }, thread) =>
-          writeGroup(
-            deps,
-            runId,
-            { run, members, thread },
-            { debugMode, connectionId, squabble: shuffled(members, random).slice(0, 2) },
-          ),
+        async ({ run, members }, thread) =>
+          (
+            await writeGroup(
+              deps,
+              runId,
+              { run, members, thread },
+              { debugMode, connectionId, squabble: shuffled(members, random).slice(0, 2) },
+            )
+          ).messages,
       ),
     );
   } catch (error) {

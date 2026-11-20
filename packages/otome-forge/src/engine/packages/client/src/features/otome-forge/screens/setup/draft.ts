@@ -15,6 +15,7 @@ import {
 import type { Pronouns, SetupInput } from "../../shared/api-types";
 import { ARCHETYPE_IDS, type ArchetypeId } from "../../shared/archetypes";
 import { OWN_BANNED_PHRASES_MAX } from "../../shared/banned-phrases";
+import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../shared/home";
 
 export const SETUP_DRAFT_KEY = "otome-forge:setup-draft:v1";
 
@@ -103,6 +104,34 @@ export interface DraftConnections {
   compress: string;
 }
 
+/**
+ * #2424: Settings → Connections' numbers as typed, asked at setup too: love interests who write first each day, group
+ * chat squabbles each day, and date invitations each week.
+ */
+export interface DraftMessages {
+  daily: string;
+  squabbles: string;
+  invites: string;
+}
+
+/** A number as typed, when it is a whole number from 0 to `max`; otherwise null. */
+export function wholeOf(text: string, max: number): number | null {
+  const value = text.trim() === "" ? Number.NaN : Number(text);
+  return Number.isInteger(value) && value >= 0 && value <= max ? value : null;
+}
+
+/** The three numbers as POST /runs and POST /runs/:run/settings take them, or null while one is not a valid number. */
+export function messageNumbersOf(
+  text: DraftMessages,
+): { dailyMessages: number; groupSquabbles: number; dateInvites: number } | null {
+  const dailyMessages = wholeOf(text.daily, DAILY_MESSAGES_MAX);
+  const groupSquabbles = wholeOf(text.squabbles, DAILY_MESSAGES_MAX);
+  const dateInvites = wholeOf(text.invites, DATE_INVITES_MAX);
+  return dailyMessages === null || groupSquabbles === null || dateInvites === null
+    ? null
+    : { dailyMessages, groupSquabbles, dateInvites };
+}
+
 export interface SetupDraft {
   version: 1;
   step: SetupStep;
@@ -120,6 +149,7 @@ export interface SetupDraft {
   content: ContentSettings;
   images: DraftImages;
   connections: DraftConnections;
+  messages: DraftMessages;
 }
 
 /** A pronoun choice nobody made yet: the picker starts blank. */
@@ -150,6 +180,7 @@ export function emptyDraft(): SetupDraft {
       styleProfileId: "",
     },
     connections: { narration: "", structured: "", chat: "", compress: "" },
+    messages: { daily: "0", squabbles: "0", invites: "0" },
   };
 }
 
@@ -206,6 +237,7 @@ export function readDraft(value: unknown): SetupDraft {
   const protagonist = isRecord(value.protagonist) ? value.protagonist : {};
   const images = isRecord(value.images) ? value.images : {};
   const connections = isRecord(value.connections) ? value.connections : {};
+  const messages = isRecord(value.messages) ? value.messages : {};
   const step = oneOf(SETUP_STEPS, value.step, draft.step);
   return {
     version: 1,
@@ -242,6 +274,12 @@ export function readDraft(value: unknown): SetupDraft {
       structured: str(connections.structured, 200),
       chat: str(connections.chat, 200),
       compress: str(connections.compress, 200),
+    },
+    // A draft saved before #2424 has none: each starts at 0, as a story then did.
+    messages: {
+      daily: str(messages.daily, 3, draft.messages.daily),
+      squabbles: str(messages.squabbles, 3, draft.messages.squabbles),
+      invites: str(messages.invites, 3, draft.messages.invites),
     },
   };
 }
@@ -353,6 +391,7 @@ export function stepProblem(draft: SetupDraft, step: SetupStep, textConnections:
     case "connections":
       if (textConnections === 0) return "ui.otomeForge.setup.needTextConnection";
       if (!draft.connections.narration) return "ui.otomeForge.setup.needNarration";
+      if (!messageNumbersOf(draft.messages)) return "ui.otomeForge.setup.needMessageNumbers";
       return null;
     case "review":
       for (const earlier of SETUP_STEPS) {
@@ -403,5 +442,6 @@ export function toSetupInput(draft: SetupDraft): SetupInput {
       ...(optional(draft.connections.chat) ? { chat: draft.connections.chat } : {}),
       ...(optional(draft.connections.compress) ? { compress: draft.connections.compress } : {}),
     },
+    ...messageNumbersOf(draft.messages),
   };
 }
