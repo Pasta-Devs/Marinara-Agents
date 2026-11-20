@@ -13,10 +13,12 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { lexicalOverlap, sourceTokenSet } from "../extraction/evidence-unit-validation.js";
 import { textHashForLtmSourceMaterial } from "../extraction/source-hash.js";
-import { ltmSourceMessageRange } from "../identity/chat-scope.js";
+import { ltmSourceMessageRange, parseLtmChatMetadata } from "../identity/chat-scope.js";
 import { getPackagePersistence, logger, type PackageLanguageModel } from "../package-runtime.js";
 import type { LongTermMemoryStorage } from "../persistence/storage.js";
 import {
+  chatPieceWalk,
+  shownWalkResult,
   countStoryDays,
   currentStoryTime,
   currentStoryTimeScan,
@@ -31,7 +33,13 @@ import {
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { rebuildAfterMutation } from "../routes/shared.js";
 import { LtmServiceError } from "../service-error.js";
-import { loadChatStoryTimeSources, stampPieceStoryTime, type LtmChatStoryTimeSources } from "../sources/interop.js";
+import {
+  loadChatStoryTimeSources,
+  stampPieceStoryTime,
+  stampSummaryStoryTime,
+  summaries,
+  type LtmChatStoryTimeSources,
+} from "../sources/interop.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
 import {
   byPlan,
@@ -88,7 +96,7 @@ type ScanAnswer = { stated: { date: string; time?: string; quote: string } | nul
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
-// A piece's place in the check's order: its chat, its last message number, its part, its id.
+// A piece's place in the check's order: its chat, its last message number (a summary's first), its part, its id.
 function piecePosition(note: LtmChatPiece) {
   const [message, part] = pieceOrder(note);
   return planPosition(
@@ -153,9 +161,11 @@ export async function scopeLtmStoryDates(options: { storage: LongTermMemoryStora
   return { count: processed.reduce((sum, batch) => sum + batch.length, 0), chats: [...chats.values()] };
 }
 
+type ChatStorySources = LtmChatStoryTimeSources & { summaries: ReturnType<typeof summaries> };
+
 /** Reads each chat's Engine data once, on first use. A chat that cannot be read dates nothing. */
 function chatSourcesLoader() {
-  const cache = new Map<string, Promise<LtmChatStoryTimeSources | undefined>>();
+  const cache = new Map<string, Promise<ChatStorySources | undefined>>();
   return (chatId: string) => {
     let pending = cache.get(chatId);
     if (!pending) {
@@ -163,7 +173,9 @@ function chatSourcesLoader() {
         try {
           const persistence = getPackagePersistence(),
             chat = await persistence.getChat(chatId);
-          return chat ? await loadChatStoryTimeSources(chat, await persistence.listMessages(chatId)) : undefined;
+          if (!chat) return undefined;
+          const sources = await loadChatStoryTimeSources(chat, await persistence.listMessages(chatId));
+          return { ...sources, summaries: summaries(parseLtmChatMetadata(chat.metadata), sources.mode) };
         } catch (error) {
           logger.warn("[ltm] Could not read chat %s for story dates: %s", chatId, String(error));
           return undefined;
@@ -182,9 +194,10 @@ function chatSourcesLoader() {
  * used only while the piece's first message still sits at its first number; a piece that starts at a now hidden
  * message, or a chat edited before the piece, goes to the model instead. Upgrade path: store message ids on the piece.
  */
-function engineStamp(piece: { note: LtmChatPiece; text: string }, sources: LtmChatStoryTimeSources | undefined) {
+function engineStamp(piece: { note: LtmChatPiece; text: string }, sources: ChatStorySources | undefined) {
   const range = ltmSourceMessageRange(piece.note),
     entry = piece.note.provenance.entryId?.replace(/:part:\d+$/, "");
+  if (piece.note.provenance.kind === "chat_summary") return summaryStamp(piece, sources);
   if (!sources || !range || !entry || sources.messages[range.first - 1]?.id !== entry) return undefined;
   const messages = sources.messages.slice(range.first - 1, range.last);
   if (messages.length !== range.last - range.first + 1) return undefined;
@@ -192,6 +205,27 @@ function engineStamp(piece: { note: LtmChatPiece; text: string }, sources: LtmCh
     { messageIds: messages.map((message) => message.id), sourceText: piece.text },
     sources,
   );
+  return stamp?.start.date ? stamp : undefined;
+}
+
+/**
+ * A chat summary's Engine date, while the chat still holds that summary with the same text and the same message range.
+ * A summary whose entry was removed, rewritten or renumbered goes to the model, or stays as it is. ponytail: unlike a
+ * message piece, the range is not checked against message ids, so a message deleted before the range shifts the numbers
+ * and dates the summary from its neighbours. Upgrade path: the Engine's `entry.messageIds`, when an entry has them.
+ */
+function summaryStamp(piece: { note: LtmChatPiece; text: string }, sources: ChatStorySources | undefined) {
+  const entry = sources?.summaries.find((candidate) => candidate.id === piece.note.provenance.entryId),
+    range = ltmSourceMessageRange(piece.note);
+  if (
+    !sources ||
+    !entry ||
+    textHashForLtmSourceMaterial({ sourceText: entry.content }) !==
+      textHashForLtmSourceMaterial({ sourceText: piece.text })
+  )
+    return undefined;
+  if (entry.first !== undefined && (entry.first !== range?.first || entry.last !== range?.last)) return undefined;
+  const stamp = stampSummaryStoryTime(entry, piece.text, sources);
   return stamp?.start.date ? stamp : undefined;
 }
 
@@ -474,34 +508,42 @@ type PreviewRowDraft = Extract<LtmStoryDatesPreviewRow, { kind: "engine" }> | Sc
 function withReaches(pieces: StoryPiece[], rows: PreviewRowDraft[]): LtmStoryDatesPreviewRow[] {
   const byId = new Map(rows.map((row) => [row.noteId, row])),
     steps = new Map<string, ReturnType<typeof countStoryDays>[number]["steps"]>();
+  // Each chat's walks are counted apart, as the Vault counts them, so a jump in a summary and in the pieces over the same
+  // messages is not counted twice.
+  const walks = new Map<string, StoryPiece[]>();
   for (const chatId of new Set(rows.flatMap((row) => (row.kind === "scan" && row.jumps.length ? [row.chatId] : []))))
-    for (const result of countStoryDays(
-      pieces
-        .filter((piece) => piece.chatId === chatId)
-        .map((piece) => {
-          const row = byId.get(piece.note.id),
-            existing = currentStoryTime({ ...piece.note, sourceHash: piece.sourceHash }),
-            storyTime =
-              row?.kind === "engine"
-                ? mergeStoryTime(existing, row.storyTime)
-                : row?.stated
-                  ? mergeStoryTime(existing, {
-                      start: { date: row.stated.date, ...(row.stated.time ? { time: row.stated.time } : {}) },
-                      origin: "stated",
-                      sourceHash: piece.sourceHash,
-                    })
-                  : existing,
-            storyTimeScan =
-              row?.kind === "scan" ? { sourceHash: piece.sourceHash, jumps: row.jumps } : piece.note.storyTimeScan;
-          return {
-            id: piece.note.id,
-            sourceHash: piece.sourceHash,
-            ...(storyTime ? { storyTime } : {}),
-            ...(storyTimeScan ? { storyTimeScan } : {}),
-          };
-        }),
-    ))
+    for (const piece of pieces.filter((candidate) => candidate.chatId === chatId)) {
+      const key = `${chatId}\u0000${chatPieceWalk(piece.note)}`;
+      walks.set(key, [...(walks.get(key) ?? []), piece]);
+    }
+  for (const walk of walks.values())
+    for (const counted of countStoryDays(
+      walk.map((piece) => {
+        const row = byId.get(piece.note.id),
+          existing = currentStoryTime({ ...piece.note, sourceHash: piece.sourceHash }),
+          storyTime =
+            row?.kind === "engine"
+              ? mergeStoryTime(existing, row.storyTime)
+              : row?.stated
+                ? mergeStoryTime(existing, {
+                    start: { date: row.stated.date, ...(row.stated.time ? { time: row.stated.time } : {}) },
+                    origin: "stated",
+                    sourceHash: piece.sourceHash,
+                  })
+                : existing,
+          storyTimeScan =
+            row?.kind === "scan" ? { sourceHash: piece.sourceHash, jumps: row.jumps } : piece.note.storyTimeScan;
+        return {
+          id: piece.note.id,
+          sourceHash: piece.sourceHash,
+          ...(storyTime ? { storyTime } : {}),
+          ...(storyTimeScan ? { storyTimeScan } : {}),
+        };
+      }),
+    )) {
+      const result = shownWalkResult(chatPieceWalk(walk[0].note), counted);
       steps.set(result.id, result.steps);
+    }
   return rows.map((row) => {
     if (row.kind === "engine") return row;
     const after = steps.get(row.noteId) ?? [];

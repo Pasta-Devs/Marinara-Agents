@@ -230,6 +230,8 @@ async function main() {
   const onSwipe = (chatId: string) => (gameStates.get(chatId) ?? []).map((row) => ({ swipeIndex: 0, ...row }));
   let hostListsGameStates = true;
   let gameStatesFail = false;
+  // A chat whose messages cannot be read.
+  let messagesFailFor: string | undefined;
   // Runs while an import reads World State, after it listed the vault's notes and before it writes them.
   let duringImport: (() => Promise<void>) | undefined;
   let releaseRuntime: (() => void) | undefined;
@@ -278,6 +280,7 @@ async function main() {
             return chats;
           },
           async listMessages(chatId: string) {
+            if (chatId === messagesFailFor) throw new Error("Message table is locked");
             messageReads += 1;
             return messages.get(chatId) ?? [];
           },
@@ -1995,6 +1998,125 @@ async function main() {
           },
         ],
         "Conversation pieces carry the real date",
+      );
+
+      // A chat summary takes the date its messages carry, by the rules of a message piece, when it says which messages
+      // it covers; a summary with no range, or a range the chat no longer has, imports undated.
+      const summaryChat = async (
+        chatId: string,
+        mode: string,
+        metadata: Record<string, unknown>,
+        entries: string[],
+      ) => {
+        chats.push({ ...roleplayChat, id: chatId, name: chatId, mode, metadata });
+        return importPackageInterop(
+          {
+            source: "chats",
+            chatId,
+            sourceIds: entries.map((entry) => `${chatId}:${entry}`),
+            extract: false,
+            limit: 100,
+          },
+          storyRoot,
+          new AbortController().signal,
+        );
+      };
+      const summaryEntries = [
+        { id: "sum-a", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 2 },
+        { id: "sum-b", content: "The tide turned.", rangeStartIndex: 3, rangeEndIndex: 4 },
+        { id: "sum-gone", content: "A range the chat lost.", rangeStartIndex: 5, rangeEndIndex: 9 },
+        { id: "sum-last", content: "A last-N summary.", messageCount: 20 },
+      ];
+      messages.set(
+        "chat-story-sum",
+        ["ss1", "ss2", "ss3", "ss4"].map((id, index) => message("chat-story-sum", id, "user", `Line ${index}.`)),
+      );
+      gameStates.set("chat-story-sum", [
+        { messageId: "ss1", date: "14 Frostmonth", time: null },
+        { messageId: "ss2", date: "15 Frostmonth", time: null },
+        { messageId: "ss4", date: "20 Frostmonth", time: null },
+      ]);
+      const summaryResult = await summaryChat(
+        "chat-story-sum",
+        "roleplay",
+        { summaryEntries },
+        summaryEntries.map((entry) => entry.id),
+      );
+      assert.equal(summaryResult.writeFailures.length, 0);
+      assert.deepEqual(
+        await datesOf("chat-story-sum"),
+        [
+          { start: { date: "14 Frostmonth" }, end: { date: "15 Frostmonth" }, origin: "world_state" },
+          { start: { date: "20 Frostmonth" }, origin: "world_state" },
+          undefined,
+          undefined,
+        ],
+        "a numbered summary takes the World State dates of its messages; one without a usable range stays undated",
+      );
+      // A World State that cannot be read leaves a summary undated but imported, and a later import dates it.
+      gameStatesFail = true;
+      messages.set("chat-story-sum-late", messages.get("chat-story-sum")!);
+      gameStates.set("chat-story-sum-late", gameStates.get("chat-story-sum")!);
+      const lateResult = await summaryChat(
+        "chat-story-sum-late",
+        "roleplay",
+        { summaryEntries: summaryEntries.slice(0, 1) },
+        ["sum-a"],
+      );
+      gameStatesFail = false;
+      assert.deepEqual(
+        [lateResult.writeFailures.length, await datesOf("chat-story-sum-late")],
+        [0, [undefined]],
+        "a failed read still imports the summary",
+      );
+      await importPackageInterop(
+        {
+          source: "chats",
+          chatId: "chat-story-sum-late",
+          sourceIds: ["chat-story-sum-late:sum-a"],
+          extract: false,
+          limit: 100,
+        },
+        storyRoot,
+        new AbortController().signal,
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-sum-late"),
+        [{ start: { date: "14 Frostmonth" }, end: { date: "15 Frostmonth" }, origin: "world_state" }],
+        "a re-import dates a summary imported undated",
+      );
+      // A chat whose messages cannot be read imports its summary undated, without a write failure.
+      messages.set("chat-story-sum-nomsg", messages.get("chat-story-sum")!);
+      messagesFailFor = "chat-story-sum-nomsg";
+      const noMessagesResult = await summaryChat(
+        "chat-story-sum-nomsg",
+        "roleplay",
+        { summaryEntries: summaryEntries.slice(0, 1) },
+        ["sum-a"],
+      );
+      messagesFailFor = undefined;
+      assert.deepEqual(
+        [noMessagesResult.writeFailures.length, await datesOf("chat-story-sum-nomsg")],
+        [0, [undefined]],
+        "an unreadable chat still imports its summary",
+      );
+      // Conversation: a day summary takes its day, a week summary the seven days from the Monday in its key.
+      await summaryChat(
+        "chat-story-days",
+        "conversation",
+        {
+          daySummaries: { "28.10.2026": { summary: "Tea in the kitchen." } },
+          weekSummaries: { "26.10.2026": "A week of tea." },
+        },
+        ["day:28.10.2026", "week:26.10.2026"],
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-days"),
+        [
+          { start: { date: "2026-10-26" }, end: { date: "2026-11-01" }, origin: "message_time" },
+          { start: { date: "2026-10-28" }, origin: "message_time" },
+        ],
+        "Conversation day and week summaries carry their own days",
       );
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],

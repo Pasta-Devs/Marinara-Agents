@@ -83,12 +83,15 @@ type Candidate = {
   // Chats whose history holds this chat_transcript piece, set when identical branch pieces merge.
   branchChatIds?: string[];
   title: string;
-  // Chat Messages pieces only; the title string stays the source note title.
+  // Chat Messages pieces and numbered chat summaries; the title string stays the source note title.
   messageRange?: { chatName: string; first: number; last: number };
   // Chat Messages pieces only: the ids of the messages the piece reads.
   messageIds?: string[];
-  // Chat Messages pieces only: the chat and its messages, for the piece's story date at import.
-  storyTimeChat?: { chat: StoryTimeChat; messages: TranscriptMessage[] };
+  // Chat Messages pieces and numbered chat summaries: the chat and its messages, for the story date at import. A
+  // summary reads the messages only if it is imported, so it carries a loader.
+  storyTimeChat?: { chat: StoryTimeChat; messages: TranscriptMessage[] | (() => Promise<TranscriptMessage[]>) };
+  // Chat summaries: the entry the story date comes from.
+  summaryEntry?: ReturnType<typeof summaries>[number];
   // Chat Summaries without a numbered range: the label is the range text from the title.
   summaryRange?: { chatName: string; label: string };
   sourceText: string;
@@ -377,6 +380,9 @@ export function stampPieceStoryTime(
 function boundedId(value: string, prefix: string) {
   return value.length <= 120 ? value : `${prefix}_${hash(value, 32)}`;
 }
+function isoDay(date: Date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
 function conversationDate(value: string) {
   const match = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/u);
   if (!match) return null;
@@ -385,6 +391,21 @@ function conversationDate(value: string) {
   return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
     ? date
     : null;
+}
+/** A Conversation day summary's own day; a week summary's seven days, from the Monday its key names. */
+function conversationSummaryStoryTime(
+  entry: { id: string; range: string },
+  sourceText: string,
+): LtmStoryTime | undefined {
+  const first = conversationDate(entry.range);
+  if (!first) return undefined;
+  const last = new Date(first.getFullYear(), first.getMonth(), first.getDate() + 6);
+  return {
+    start: { date: isoDay(first) },
+    ...(entry.id.startsWith("week:") ? { end: { date: isoDay(last) } } : {}),
+    origin: "message_time",
+    sourceHash: textHashForLtmSourceMaterial({ sourceText }),
+  };
 }
 function conversationSummaryEntries(raw: unknown, kind: "day" | "week") {
   return Object.entries(object(raw))
@@ -517,6 +538,22 @@ export function summaries(
         })
       : [];
   return [...ordinary, ...sessions];
+}
+/**
+ * The Engine's story date for a chat summary entry, or undefined: a Conversation day or week summary takes its own days,
+ * a numbered summary takes the date of the messages it covers, and a summary with no range stays undated.
+ */
+export function stampSummaryStoryTime(
+  entry: ReturnType<typeof summaries>[number],
+  sourceText: string,
+  sources: LtmChatStoryTimeSources | undefined,
+): LtmStoryTime | undefined {
+  if (entry.origin === "conversation_summary") return conversationSummaryStoryTime(entry, sourceText);
+  if (!sources || entry.first === undefined || entry.last === undefined) return undefined;
+  const messages = sources.messages.slice(entry.first - 1, entry.last);
+  return messages.length === entry.last - entry.first + 1
+    ? stampPieceStoryTime({ messageIds: messages.map((message) => message.id), sourceText }, sources)
+    : undefined;
 }
 function mode(candidate: Candidate, value?: LtmMode, availabilityModes?: LtmMode[]) {
   const modes =
@@ -805,6 +842,16 @@ async function candidates(
           ...(entry.first !== undefined && entry.last !== undefined
             ? { messageRange: { chatName: chatDisplayName.slice(0, 240), first: entry.first, last: entry.last } }
             : { summaryRange: { chatName: chatDisplayName.slice(0, 240), label: entry.range.slice(0, 80) } }),
+          summaryEntry: entry,
+          // A numbered summary is dated from the Engine's data for its messages, read once per chat if imported.
+          ...(entry.first !== undefined
+            ? {
+                storyTimeChat: {
+                  chat,
+                  messages: () => getPackagePersistence().listMessages(chat.id),
+                },
+              }
+            : {}),
           sourceText: entry.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: legacy,
@@ -1933,8 +1980,26 @@ export async function importPackageInterop(
   const chatStoryTimeSources = new Map<string, Promise<LtmChatStoryTimeSources>>();
   const storyTimeSources = ({ chat, messages }: NonNullable<Candidate["storyTimeChat"]>) => {
     let sources = chatStoryTimeSources.get(chat.id);
-    if (!sources) chatStoryTimeSources.set(chat.id, (sources = loadChatStoryTimeSources(chat, messages)));
+    if (!sources)
+      chatStoryTimeSources.set(
+        chat.id,
+        (sources = (async () =>
+          loadChatStoryTimeSources(chat, typeof messages === "function" ? await messages() : messages))()),
+      );
     return sources;
+  };
+  // A summary's date is extra: a chat that cannot be read leaves the summary undated, and it still imports.
+  const summaryStoryTime = async (row: Candidate) => {
+    try {
+      return stampSummaryStoryTime(
+        row.summaryEntry!,
+        row.sourceText,
+        row.storyTimeChat ? await storyTimeSources(row.storyTimeChat) : undefined,
+      );
+    } catch (error) {
+      logger.warn("[ltm] Could not read the messages of %s for its story date: %s", row.sourceId, String(error));
+      return undefined;
+    }
   };
   for (const row of rows) {
     if (conflictingSourceIds.has(row.sourceId)) continue;
@@ -1962,8 +2027,9 @@ export async function importPackageInterop(
             },
           },
         },
-        stamp =
-          row.messageIds && row.storyTimeChat
+        stamp = row.summaryEntry
+          ? await summaryStoryTime(row)
+          : row.messageIds && row.storyTimeChat
             ? stampPieceStoryTime(
                 { messageIds: row.messageIds, sourceText: row.sourceText },
                 await storyTimeSources(row.storyTimeChat),

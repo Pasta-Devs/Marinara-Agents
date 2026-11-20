@@ -428,6 +428,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.7",
+          "date": "2026-11-20",
+          "notes": "- Chat summaries get a story date when they say which messages they cover, and Conversation day and week summaries get their own days. Find story dates dates the ones imported before.",
+          "highlight": false
+        },
+        {
           "version": "1.6.6",
           "date": "2026-11-20",
           "notes": "- The Vault and Sources open and respond quickly with a very large character library (tens of thousands of cards) instead of freezing for minutes.",
@@ -539,12 +545,6 @@
           "version": "1.5.18",
           "date": "2026-10-30",
           "notes": "- The memory page now uses the same header as every other agent page: store banner, logo, name, the Active switch for the open chat and Manage package. Add memories and the setup guide stay in that header. This needs a Marinara version with Capability API 1.390; on older versions nothing changes.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.17",
-          "date": "2026-10-30",
-          "notes": "- Other packages can no longer read Long-Term Memory's internal runtime service, which only Marinara itself uses. This needs a Marinara version with Capability API 1.388; on older versions nothing changes. Recall for Slurp and Noodle is unaffected.",
           "highlight": false
         }
       ]

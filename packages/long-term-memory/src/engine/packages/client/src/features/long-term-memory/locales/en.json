@@ -1706,7 +1706,7 @@
   "ui.longTermMemory.lastinjectionsummary.raiseLimit": "Raise limit",
   "ui.longTermMemory.storyDates.title": "Find story dates",
   "ui.longTermMemory.storyDates.text": "Dates chat memories in the story, from what Marinara saved or from the text. You choose what to keep.",
-  "ui.longTermMemory.storyDates.confirm": "This sends the text of your chat pieces to your extraction model. Pieces dated from World State, the game clock or message dates are not sent.",
+  "ui.longTermMemory.storyDates.confirm": "This sends the text of your chat pieces and chat summaries to your extraction model. Anything dated from World State, the game clock or message dates is not sent.",
   "ui.longTermMemory.storyDates.checking": "Reading your chats…",
   "ui.longTermMemory.storyDates.scopeOne": "{{count}} chat piece not checked yet.",
   "ui.longTermMemory.storyDates.scopeOther": "{{count}} chat pieces not checked yet.",

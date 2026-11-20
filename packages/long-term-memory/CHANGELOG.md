@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.6.7 — 2026-11-20
+
+- Chat summaries get a story date when they say which messages they cover, and Conversation day and week summaries get their own days. Find story dates dates the ones imported before.
+
 ## 1.6.6 — 2026-11-20
 
 - The Vault and Sources open and respond quickly with a very large character library (tens of thousands of cards) instead of freezing for minutes.
