@@ -394,10 +394,11 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
 // 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and
 // plot, so every prompt that carries them moved.
+// 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
 const STAGING_OTHERS: Record<string, string> = {
   scene: "20243d11f7629c2f",
   callScene: "0629ea8913bfaf1a",
-  confrontation: "fcaf498eea9aae69",
+  confrontation: "54b9a5747e3a476f",
   closer: "c80272bd02b5979b",
   bible: "033410c8c8bd0655",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
