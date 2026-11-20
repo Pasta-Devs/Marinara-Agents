@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.38.3 — 2026-11-20
+
+- In a Confrontation, no stance wins by default. Press works when they lied or are in the wrong, Yield when they argue out of worry for you, Hold when you are in the right, and Reveal when what you tell them is what the argument is really about. A Reveal that answers their pain with your own makes them close off. Before, Reveal got through almost every time.
+
 ## 0.38.2 — 2026-11-19
 
 - Characters talk more plainly. The writing rules now say that most of what people say means what it says, even behind a mask, and that a face which contradicts the words is only an occasional beat. A spoken line can be a single word as well as a few sentences, and anyone may joke when it fits them. Some models, Claude among them, wrote nearly every line as hidden meaning that was hard to follow.

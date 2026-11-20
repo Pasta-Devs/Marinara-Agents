@@ -482,6 +482,28 @@ test("in Dark romance her stances include refusing him", async () => {
   assert.doesNotMatch(line, /honours|\b(?:she|her|hers)\b/);
 });
 
+test("no stance gets through by default: each has its situation, and P12 shows no example disclosure", async () => {
+  // 0.38.3 (#2425): the maintainer's rule. A confrontation is the protagonist making a case for themselves, so press,
+  // yield, hold and reveal each get through in their own situation. Reveal had no such line, and the model scored the
+  // protagonist's own trauma, offered back against his, as the stance that wins.
+  const t = await fightWorld("r-rvel-aaaaaa");
+  const [fight] = t.calls.filter((call) => isConfrontationPrompt(call.messages));
+  const composure = system(fight!.messages)
+    .split("\n")
+    .find((line) => line.startsWith("- composure:"))!;
+  assert.match(composure, /no stance gets through by default/);
+  assert.match(
+    composure,
+    /press when Kai lied or is in the wrong, yield when Kai argues out of worry for the protagonist/,
+  );
+  assert.match(composure, /hold when .*reveal when /);
+  assert.match(composure, /A reveal that answers Kai's pain with the protagonist's own.*makes Kai close off\./);
+  const disclosure = system(fight!.messages)
+    .split("\n")
+    .find((line) => line.includes("disclosure: what the protagonist tells Kai in reveal"))!;
+  assert.doesNotMatch(disclosure, /\(".*"\)/, "no quoted example to copy");
+});
+
 test("a love interest thinks at most once on any path through a Confrontation", async () => {
   const state = { lis: { [KAI]: { ...defaultLiState(), stage: 3 } } } as never;
   const lists = segmentLists({
