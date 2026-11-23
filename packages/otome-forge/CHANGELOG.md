@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.39.1 — 2026-11-23
+
+- The bottom bar's **Dates** is now **Games**, and so is its page, with "Just the two of you." still under the title. Read Them, Read Me and Tarot night name it above their title too. **Dates** now means only the dates you win on Wish's Dates banner and plan from Album → Dates.
+
 ## 0.39.0 — 2026-11-20
 
 - Love interests can ask you on dates in Messages. **Settings → Connections → Date invitations each week** sets how often (0, the default, turns it off). The one you've spent the fewest scenes with lately asks. **Accept** lets you pick your look and a gift, then they choose where you go and what you do: three scenes, paid as any new date.

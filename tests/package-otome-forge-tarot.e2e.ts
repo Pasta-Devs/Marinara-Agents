@@ -356,8 +356,8 @@ async function openOtome(page: Page): Promise<Locator> {
 
 /** Opens Dates from Home, then Tarot night with Kai Ardent. */
 async function openTarot(root: Locator) {
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await root.getByRole("button", { name: "Play: Tarot night with Kai Ardent" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Tarot night with Kai Ardent" })).toBeFocused();
 }
@@ -390,7 +390,7 @@ test("Otome Hearth Tarot night: Kai Ardent reads my cards, picked by tap or clic
   const press = (target: Locator) => (mobile ? target.tap() : target.click());
 
   // Dates lists Tarot night after Read Me, with its pay and its one call (no image connection: no images).
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
   expect(
     await activities
@@ -610,7 +610,7 @@ test("Otome Hearth Tarot night: I read Kai Ardent's cards, by fate or keys, in m
   await press(next);
   await expect(root.getByRole("heading", { name: "Present: The Lovers" })).toBeFocused();
   await root.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await press(root.getByRole("button", { name: "Play: Tarot night with Kai Ardent" }));
   await expect(root.getByRole("group", { name: "How do you read it?" })).toBeVisible();
   await expect(line(root)).toHaveText("Card 2 turns, and Kai Ardent smiles at it.");
@@ -653,7 +653,7 @@ test("Otome Hearth Tarot night: with Ask before painting, Paint these cards pain
   await stubRoutes(page, stub);
   const root = await openOtome(page);
   const press = (target: Locator) => (mobile ? target.tap() : target.click());
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   await expect(root.locator('.of-activity[data-activity="tarot"] .of-cost')).toHaveText(
     "1 model call · up to 3 images, only for cards not painted yet",
   );

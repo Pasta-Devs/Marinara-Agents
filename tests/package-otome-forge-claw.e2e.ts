@@ -475,8 +475,8 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   await expect(root.getByRole("heading", { level: 1, name: "Kai Ardent" })).toBeVisible();
 
   // Dates: who Home is about is picked first; each activity names them, with its pay and its cost.
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  const title = root.getByRole("heading", { level: 1, name: "Dates" });
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  const title = root.getByRole("heading", { level: 1, name: "Games" });
   await expect(title).toBeFocused();
   await expect(root.getByRole("radio", { name: /Kai Ardent/ })).toBeChecked();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
@@ -606,8 +606,8 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
 
 /** Opens Dates from Home; Home's own requests are over once its heading has focus. */
 async function openDates(root: Locator) {
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
 }
 
 /** From Dates, opens the Claw Machine with Kai Ardent, lets him go first, and cheers until his cheat goes off. */
@@ -686,8 +686,8 @@ test("Otome Hearth Dates on a narrow phone with six love interests: their cards 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub);
   const root = await openOtome(page);
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   const cards = root.locator(".of-partner-list .of-partner");
   await expect(cards).toHaveCount(6);
   // A row that scrolled sideways once made the whole screen slide on a phone: the cards wrap onto rows instead.
@@ -715,7 +715,7 @@ test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, dr
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub);
   const root = await openOtome(page);
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   await root.getByRole("button", { name: "Play: Claw Machine with Kai Ardent" }).click();
   await root.getByRole("button", { name: "Me first" }).click();
 
@@ -777,7 +777,7 @@ test("Otome Forge Read Kai Ardent at phone width: no answer before the pick, key
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub);
   const root = await openOtome(page);
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   await root.getByRole("button", { name: "Play: Read Kai Ardent" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Read Kai Ardent" })).toBeFocused();
   await recordSpeech(page);

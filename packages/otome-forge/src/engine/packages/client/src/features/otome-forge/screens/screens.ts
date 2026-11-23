@@ -65,6 +65,7 @@ export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   home: "ui.otomeForge.common.screenHome",
   story: "ui.otomeForge.common.screenStory",
   reader: "ui.otomeForge.common.screenReader",
+  // #2429: shown as "Games"; "Dates" now names only the dates won in Wish. The id and key stay "dates".
   dates: "ui.otomeForge.common.screenDates",
   "read-him": "ui.otomeForge.common.screenReadHim",
   "read-me": "ui.otomeForge.common.screenReadMe",

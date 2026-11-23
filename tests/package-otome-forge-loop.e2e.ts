@@ -1521,13 +1521,16 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("07-album");
   });
 
-  await test.step("Dates: Read Them by keyboard", async () => {
-    await dock(root, "Dates").click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await test.step("Games: Read Them by keyboard", async () => {
+    // #2429: the dock's Games (Dates are the ones won in Wish) keeps its line under the title, and names Read Them's eyebrow.
+    await dock(root, "Games").click();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
+    await expect(root.getByText("Just the two of you.", { exact: true })).toBeVisible();
     await expect(root.getByRole("radio", { name: /Ilvar Thorne/u })).toBeChecked();
     await auditScreen(page, root, "dates");
     await root.getByRole("button", { name: "Play: Read Ilvar Thorne" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Read Ilvar Thorne" })).toBeFocused();
+    await expect(root.locator(".of-rh-eyebrow")).toHaveText("Games");
     await auditScreen(page, root, "read them: intro");
     await root.getByRole("button", { name: "Begin" }).click();
     for (const [round, truth] of READ_ROUNDS.entries()) {
@@ -1544,7 +1547,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await auditScreen(page, root, "read them: done", score);
     await shot("08-read-them");
     await root.getByRole("button", { name: "Back" }).first().click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
     await expect(starlight(root)).toContainText(amount(2190));
   });
 
@@ -1625,8 +1628,8 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await root.getByRole("button", { name: "Back to Album" }).first().click();
     await expect(root.getByRole("tab", { name: "Dates", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(root.locator(".of-album-date")).toContainText("Been on it: Ilvar Thorne");
-    await dock(root, "Dates").click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+    await dock(root, "Games").click();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
     await expect(starlight(root)).toContainText(amount(2310));
   });
 
@@ -1662,7 +1665,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await auditScreen(page, root, "claw: result", result);
     await shot("10-claw");
     await root.getByRole("button", { name: "Back" }).first().click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
     await expect(starlight(root)).toContainText(amount(2310 + 20 + 30 * caught));
   });
 
