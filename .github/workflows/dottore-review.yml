@@ -1,4 +1,6 @@
 name: Dottore Review
+# The pull request in the run's title lets coderabbit-review-gate.yml see a review already running for it.
+run-name: "Dottore Review: PR #${{ inputs.pr_number }} (${{ inputs.review_mode }})"
 
 # The reviewer lives in Marinara-Engine. This wrapper runs it against this repository:
 # the status, comments, token and secrets belong here, and .github/dottore-review/rules.json
