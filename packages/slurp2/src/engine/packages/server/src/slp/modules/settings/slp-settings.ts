@@ -372,15 +372,14 @@ export const slurpSettingsSchema = z.object({
   /** Share of a fan's payment that reaches the viewer's own creator, as a percentage. */
   walletCreatorRevenueSharePercent: z.number().int().min(0).max(100),
   /**
-   * Creators answer a message you left unanswered while you were away.
-   *
-   * On by default, because a chat nobody ever answers is not a chat. Off leaves the whole
-   * background reply loop asleep: a creator then answers only while you are in the conversation.
-   * Commissions and the later bubbles of a reply already sent still arrive — those are owed.
+   * Creators answer a message you left unanswered while you were away. On by default, because a chat nobody ever
+   * answers is not a chat. Off leaves the whole background reply loop asleep: a creator then answers only while you are
+   * in the conversation. Commissions and the later bubbles of a reply already sent still arrive — those are owed.
    */
   messagesAwayRepliesEnabled: z.boolean(),
   /** One unsolicited text, then none until a real reply. See `slurpAllowsUnsolicitedText`. */
   messagesPauseFollowUpsUntilReply: z.boolean(),
+  messagesCreatorDmsPaused: z.boolean(),
   /** Messages one reply is broken into. One keeps a reply in a single bubble. */
   messagesReplyBubbleLimit: z.number().int().min(1).max(4),
   /** Where a creator nobody has configured by hand starts. */
@@ -620,6 +619,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   },
   messagesAwayRepliesEnabled: true,
   messagesPauseFollowUpsUntilReply: false,
+  messagesCreatorDmsPaused: false,
   messagesReplyBubbleLimit: 3,
   messagesDefaultDmPolicy: SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
   messagesDefaultRequestFee: SLURP_DEFAULT_CREATOR_MESSAGING.requestFee,

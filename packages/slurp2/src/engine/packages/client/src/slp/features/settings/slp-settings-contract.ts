@@ -162,6 +162,8 @@ export type SlurpSettings = {
   messagesAwayRepliesEnabled: boolean;
   /** A Creator writes first once, then waits for a real reply before writing first again. */
   messagesPauseFollowUpsUntilReply: boolean;
+  /** No Creator writes first while on, for example during a roleplay outside Slurp. */
+  messagesCreatorDmsPaused: boolean;
   messagesReplyBubbleLimit: number;
   messagesDefaultDmPolicy: "open" | "subscribers" | "paid" | "closed";
   messagesDefaultRequestFee: number;

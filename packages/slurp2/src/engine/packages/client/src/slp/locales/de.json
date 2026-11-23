@@ -2249,6 +2249,8 @@
   "ui.slurp.profile.offer.ppv": "Gesperrte Fotos im Chat kosten je {{count}} <coin/>.",
   "ui.slurp.settings.messaging.pauseFollowUpsUntilReply": "Nach einer unbeantworteten Nachricht stoppen",
   "ui.slurp.settings.messaging.pauseFollowUpsUntilReplyDetail": "Ein Creator darf einmal von sich aus schreiben, dann wartet er auf deine Antwort, bevor er erneut von sich aus schreibt. Antworten auf deine Nachrichten und alles, was dir ein Creator bereits schuldet (ein Versprechen, eine Erinnerung, eine fertige Auftragsarbeit), kommen trotzdem an.",
+  "ui.slurp.settings.messaging.pauseCreatorDms": "Creator-DMs pausieren",
+  "ui.slurp.settings.messaging.pauseCreatorDmsDetail": "Solange das an ist, schreibt dir kein Creator von sich aus, zum Beispiel während du außerhalb von Slurp mit einem Creator ein Rollenspiel spielst. Ungefragte Nachrichten fallen weg und kommen nicht später nach. Antworten auf deine Nachrichten kommen trotzdem an, und was dir ein Creator schuldet (ein Versprechen, eine Erinnerung), wartet, bis du das wieder ausschaltest.",
   "ui.slurp.settings.messaging.bubbleLimit": "So viele Nachrichten je Antwort, höchstens",
   "ui.slurp.settings.messaging.bubbleLimitDetail": "Die meisten Nachrichten, in die eine Antwort aufgeteilt werden kann, so wie ein Mensch tippt. Eine Antwort kann weniger nutzen, und kurze, müde oder gereizte tun das. Setze es auf 1, um immer eine Nachricht zu bekommen.",
   "ui.slurp.settings.messaging.clearHint": "Um eine Unterhaltung zu leeren, öffne sie und wähle ⋮ › Unterhaltung löschen.",

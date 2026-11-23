@@ -2287,6 +2287,8 @@
   "ui.slurp.profile.offer.ppv": "Zablokowane zdjęcia na czacie kosztują {{count}} <coin/> każde.",
   "ui.slurp.settings.messaging.pauseFollowUpsUntilReply": "Zatrzymaj po jednej wiadomości bez odpowiedzi",
   "ui.slurp.settings.messaging.pauseFollowUpsUntilReplyDetail": "Kreator może napisać pierwszy raz sam, a potem czeka na twoją prawdziwą odpowiedź, zanim napisze ponownie z własnej inicjatywy. Odpowiedzi na twoje wiadomości i wszystko, co kreator już ci obiecał (obietnica, przypomnienie, gotowe zamówienie), wciąż docierają.",
+  "ui.slurp.settings.messaging.pauseCreatorDms": "Wstrzymaj wiadomości od kreatorów",
+  "ui.slurp.settings.messaging.pauseCreatorDmsDetail": "Gdy to jest włączone, żaden kreator nie pisze do ciebie pierwszy, na przykład gdy prowadzisz z nim roleplay poza Slurpem. Wiadomości, o które nikt nie prosił, przepadają i nie przychodzą później. Odpowiedzi na twoje wiadomości wciąż docierają, a to, co kreator ci obiecał (obietnica, przypomnienie), czeka, aż to wyłączysz.",
   "ui.slurp.settings.messaging.bubbleLimit": "Maksymalna liczba wiadomości w jednej odpowiedzi",
   "ui.slurp.settings.messaging.bubbleLimitDetail": "Największa liczba wiadomości, na które można podzielić jedną odpowiedź, tak jak ktoś pisze SMS-y. Odpowiedź może użyć mniej, a krótkie, zmęczone albo napięte tak robią. Ustaw na 1, aby zawsze dostawać jedną wiadomość.",
   "ui.slurp.settings.messaging.clearHint": "Aby wyczyścić jedną rozmowę, otwórz ją i wybierz ⋮ › Wyczyść rozmowę.",

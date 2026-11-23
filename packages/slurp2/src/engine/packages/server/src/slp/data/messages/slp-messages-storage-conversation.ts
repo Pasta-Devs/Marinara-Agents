@@ -101,9 +101,10 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
       // every send path shares — including the ones that call `sendCreatorMessage` directly and
       // never pass through the follow-up scheduler's own, earlier, AI-spend-saving check.
       const checkUnsolicitedGate = isUnsolicitedCreatorMessage({ role: input.role, kind, metadata: input.metadata });
-      const pauseUntilReply = checkUnsolicitedGate
-        ? (await slurp.getSettings()).messagesPauseFollowUpsUntilReply
-        : false;
+      const gateSettings = checkUnsolicitedGate ? await slurp.getSettings() : null;
+      // Settings › Messaging "Pause Creator DMs": an unasked text is dropped, never held for later.
+      if (gateSettings?.messagesCreatorDmsPaused) return null;
+      const pauseUntilReply = gateSettings?.messagesPauseFollowUpsUntilReply ?? false;
       let stored = false;
       try {
         await db.transaction(async (tx) => {

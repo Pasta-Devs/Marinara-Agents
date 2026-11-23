@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.29 — 2026-11-23
+
+- Added: Backstage > Messaging > "Pause Creator DMs". While it is on, no Creator writes to you first: openers, check-ins, recurring updates, partner texts and drama questions are dropped, not saved for later, so nothing arrives in a burst when you switch it off. Promises, reminders and task updates a Creator owes you wait and arrive after the pause. Replies to your own messages and finished commissions still arrive.
+
 ## 0.4.28 — 2026-11-19
 
 - Changed: the search fields on the Backstage Creators, Prompts and Continuity pages are now Marinara's own search field. Escape clears the text first, and a button clears it.
