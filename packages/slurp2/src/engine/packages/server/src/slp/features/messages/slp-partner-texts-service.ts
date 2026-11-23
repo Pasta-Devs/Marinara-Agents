@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
+import { slurpInEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
 import { readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import {
@@ -39,7 +40,8 @@ export async function textSlurpPartners(db: DB, at = slurpWorldNow()): Promise<v
   for (const couple of live) {
     const members = [couple.aId, couple.bId, ...(couple.moreIds ?? [])];
     for (const pageId of members.filter((id) => viewerOf.has(id)))
-      for (const creatorId of members.filter((id) => !viewerOf.has(id))) {
+      // A Creator busy in a Marinara chat roleplay writes nothing first (`slp-engine-roleplay-storage.ts`).
+      for (const creatorId of members.filter((id) => !viewerOf.has(id) && !slurpInEngineRoleplay(id))) {
         try {
           const viewer = viewerOf.get(pageId)!;
           let thread = await messages.getThread(viewer, creatorId);

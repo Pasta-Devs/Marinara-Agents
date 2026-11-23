@@ -58,8 +58,13 @@ function main() {
       "SLURP_MAX_CREATOR_OPENERS_PER_TICK || settings.messagesCreatorDmsPaused) break;",
       "planSlurpCreatorCheckIn(input)",
     ],
-    ["features/world/slp-drama-service.ts", 'messagesCreatorDmsPaused) return "drop";', "openThread("],
+    ["features/world/slp-drama-service.ts", 'slurpInEngineRoleplay(job.actorId)) return "drop";', "openThread("],
     ["features/messages/slp-partner-texts-service.ts", "messagesCreatorDmsPaused) return;", "openThread("],
+    [
+      "features/messages/slp-partner-texts-service.ts",
+      "!viewerOf.has(id) && !slurpInEngineRoleplay(id)",
+      "openThread(",
+    ],
   ]) {
     const source = slurp2Source(`${server}/${file}`);
     const at = source.indexOf(guard);

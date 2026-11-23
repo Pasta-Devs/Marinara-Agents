@@ -4559,8 +4559,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "bc8aaac1ce1f009d3a3b95439f803a3ab67634402390fb1285812ad5e988b1f0",
-            "bytes": 2164165
+            "sha256": "38beda318e4f7ac31be2f73af2e25080aaefd481ecb7160378a06ed5d226eb57",
+            "bytes": 2164198
           },
           {
             "path": "client.js",
@@ -4620,8 +4620,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.29.zip",
-        "sha256": "364fa25d4c33a41c3bcee95ebbedddaa1d74c6df96b0ef723733262a5a314a99",
-        "bytes": 6160250
+        "sha256": "fa67e4f66b15b1cedb184baee549ccf942bc88a2715e1059a2663f311d4c9241",
+        "bytes": 6160283
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },
