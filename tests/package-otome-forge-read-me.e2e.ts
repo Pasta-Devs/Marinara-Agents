@@ -339,8 +339,8 @@ async function openOtome(page: Page): Promise<Locator> {
 /** Opens Dates from Home, then Read Me with Kai Ardent. */
 async function openReadMe(root: Locator) {
   await expect(root.getByRole("heading", { level: 1, name: "Kai Ardent" })).toBeVisible();
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await root.getByRole("button", { name: "Play: Let Kai Ardent read you" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Let Kai Ardent read you" })).toBeFocused();
 }
@@ -376,7 +376,7 @@ test("Otome Hearth Read Me: four guesses answered by button, key and words, paid
   await expect(root).toHaveAttribute("data-look", mobile ? "pearl" : "midnight");
 
   // Dates lists Read Me beside Read Kai Ardent, with its pay (more for each guess spot on or close) and its one call.
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
   // #2303: no Date Night among them; the Photo Shoot waits for an image connection.
   await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(5);

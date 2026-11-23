@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.39.1",
+          "date": "2026-11-23",
+          "notes": "- The bottom bar's **Dates** is now **Games**, and so is its page, with \"Just the two of you.\" still under the title. Read Them, Read Me and Tarot night name it above their title too. **Dates** now means only the dates you win on Wish's Dates banner and plan from Album → Dates.",
+          "highlight": false
+        },
+        {
           "version": "0.39.0",
           "date": "2026-11-20",
           "notes": "- Love interests can ask you on dates in Messages. **Settings → Connections → Date invitations each week** sets how often (0, the default, turns it off). The one you've spent the fewest scenes with lately asks. **Accept** lets you pick your look and a gift, then they choose where you go and what you do: three scenes, paid as any new date.\n- What you write in Messages can hurt them, in their thread or in **Everyone**. A serious hurt is their grievance against you, as one from the story is, and they need space until you make it right in Routes. A milder one is remembered and costs 15 affection.\n- Setup's **Connections** step asks how often they write on their own: messages each day, group chat squabbles each day and date invitations each week.",
@@ -827,12 +833,6 @@
           "version": "0.34.12",
           "date": "2026-11-17",
           "notes": "- **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as \"Modern AU version\") under its name, so you can tell them apart. Searching the pickers finds a title too.",
-          "highlight": false
-        },
-        {
-          "version": "0.34.11",
-          "date": "2026-11-17",
-          "notes": "- **Open named sits under the hearts.** On the Story screen's **Between you**, a love interest with a bond story waiting showed its **Open** button beside his picture, which pushed his name to the middle and wrapped his hearts into three short rows. His row now lines up with the others: his name where theirs is, his ten hearts on one line, and the button on a row of its own under them.",
           "highlight": false
         }
       ]

@@ -550,8 +550,8 @@ test("Otome Hearth grievances: his space, paused affection and waiting dates; I'
   ]);
 
   // Dates: every activity with him waits, and says why; with her, Play is back.
-  await press(dock(root, "Dates"));
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await press(dock(root, "Games"));
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await expect(root.locator(".of-notice").filter({ hasText: "Kai Ardent needs space." })).toBeVisible();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
   await expect(activities.locator(".of-activity")).toHaveCount(6);

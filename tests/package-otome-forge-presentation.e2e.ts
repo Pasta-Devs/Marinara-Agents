@@ -4269,7 +4269,7 @@ test("Otome Hearth fullscreen fills the whole mode across navigation and restore
     const look = index === 0 ? "midnight" : "pearl";
     await page.emulateMedia({ colorScheme: index === 0 ? "dark" : "light" });
     await expect(root).toHaveAttribute("data-look", look);
-    for (const screen of ["Wish", "Wardrobe", "Album", "Dates", "Story"]) {
+    for (const screen of ["Wish", "Wardrobe", "Album", "Games", "Story"]) {
       await root
         .getByRole("navigation", { name: "Game menu" })
         .getByRole("button", { name: screen, exact: true })

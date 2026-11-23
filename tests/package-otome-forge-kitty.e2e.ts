@@ -437,8 +437,8 @@ async function playOut(page: Page, root: Locator, plan: Plan, onMoment: (event: 
 
 /** Opens Dates, then Kitty Cards with Kai Ardent. */
 async function openKitty(root: Locator) {
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await root.getByRole("button", { name: "Play: Kitty Cards with Kai Ardent" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Kitty Cards" })).toBeFocused();
 }
@@ -474,7 +474,7 @@ test("Otome Hearth Kitty Cards from Dates: a whole game, his nudge caught, the l
   await expect(root).toHaveAttribute("data-look", mobile ? "pearl" : "midnight");
 
   // Dates lists Kitty Cards after the Claw Machine, with its pay and cost.
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
   expect(
     await activities
@@ -580,7 +580,7 @@ test("Otome Hearth Kitty Cards from Dates: a whole game, his nudge caught, the l
   await root.getByRole("button", { name: "Play again" }).click();
   await expect(root.locator(".of-kitty-hand-card").first()).toBeFocused();
   await root.getByRole("button", { name: "Back" }).first().click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await expect(root.getByRole("progressbar", { name: "Starlight from activities" })).toHaveAttribute(
     "aria-valuenow",
     String(pay),
@@ -696,7 +696,7 @@ test("Otome Hearth Kitty Cards' other cheats: a freeze, an extra, a calculate an
     const finished = stub.calls.indexOf(finishes(stub)[index]!);
     await expect.poll(() => stub.calls.slice(finished).some((call) => call.path.endsWith("/play"))).toBe(true);
     await root.getByRole("button", { name: "Back" }).first().click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
     await root.getByRole("button", { name: "Play: Kitty Cards with Kai Ardent" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Kitty Cards" })).toBeFocused();
   }
