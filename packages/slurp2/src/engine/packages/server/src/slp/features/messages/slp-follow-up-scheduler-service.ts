@@ -129,21 +129,21 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             // reply path obeys: a cool-off she started, night quiet, and her own offline schedule.
             const coolingOff = Boolean(thread.coolUntil && thread.coolUntil > slurpWorldNow().toISOString());
             // Settings › Messaging "Pause Creator DMs": nothing that was never asked for piles up for
-        // later, so an opener, check-in or recurring update is cancelled; an owed promise, reminder
-        // or task update waits a quarter hour at a time and arrives once the pause is off.
-        if (settings.messagesCreatorDmsPaused) {
-          if (followUp.type === "opener" || followUp.type === "check_in" || followUp.type === "recurring") {
-            await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
-          } else {
-            await messages.postponeScheduledFollowUp(
-              threadRow.id,
-              followUp.id,
-              new Date(slurpWorldNowMs() + 15 * 60_000).toISOString(),
-            );
-          }
-          continue;
-        }
-        // In a roleplay scene: the follow-up waits a quarter hour at a time until it ends.
+            // later, so an opener, check-in or recurring update is cancelled; an owed promise, reminder
+            // or task update waits a quarter hour at a time and arrives once the pause is off.
+            if (settings.messagesCreatorDmsPaused) {
+              if (followUp.type === "opener" || followUp.type === "check_in" || followUp.type === "recurring") {
+                await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
+              } else {
+                await messages.postponeScheduledFollowUp(
+                  threadRow.id,
+                  followUp.id,
+                  new Date(slurpWorldNowMs() + 15 * 60_000).toISOString(),
+                );
+              }
+              continue;
+            }
+            // In a roleplay scene: the follow-up waits a quarter hour at a time until it ends.
             // A paid sexting session waits the same way: nothing else interrupts it.
             if (slurpSextingPhase(thread.sexting) || (await slurpCreatorInScene(app.db, creator.id))) {
               await messages.postponeScheduledFollowUp(

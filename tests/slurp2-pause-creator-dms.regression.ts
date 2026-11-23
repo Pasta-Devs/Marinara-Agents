@@ -20,7 +20,7 @@ function main() {
   );
 
   const scheduler = slurp2Source(`${PACKAGES}/server/src/slp/features/messages/slp-follow-up-scheduler-service.ts`);
-  const branch = scheduler.match(/if \(settings\.messagesCreatorDmsPaused\) \{([\s\S]*?)\n {10}continue;/u);
+  const branch = scheduler.match(/if \(settings\.messagesCreatorDmsPaused\) \{([\s\S]*?)\n\s*continue;/u);
   assert.ok(branch, "the follow-up scheduler checks the pause");
   assert.match(
     branch[1],
