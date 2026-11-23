@@ -28,7 +28,7 @@ function main() {
   for (const [file, guard, opens] of [
     [
       "features/world/slp-world-operation.ts",
-      "!messaging.proactiveMessages || settings.messagesCreatorDmsPaused",
+      "SLURP_MAX_CREATOR_OPENERS_PER_TICK || settings.messagesCreatorDmsPaused) break;",
       "planSlurpCreatorCheckIn(input)",
     ],
     ["features/world/slp-drama-service.ts", 'messagesCreatorDmsPaused) return "drop";', "openThread("],
