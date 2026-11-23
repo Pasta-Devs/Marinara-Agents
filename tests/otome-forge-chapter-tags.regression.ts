@@ -171,7 +171,7 @@ test("Character Stories are numbered in story order, and every other chapter say
   // In a prompt, for any cast: the last Character Story by its number, the figurine scene before it never counted.
   const t = await inProgress("r-tagsstories-aaaaaa");
   const { text } = await recallText({ store: t.store }, t.runId, { ...plan, cast: [SOL] });
-  const last = `"The Lamp Room" (private between Ines and Kai; nobody else knows what happened in it)`;
+  const last = `"The Lamp Room" (a side story set between main chapters, now in the past, which the main story does not pick up from; private between Ines and Kai; nobody else knows what happened in it)`;
   assert.ok(
     text.includes(`# Last Character Story, by its summary: [Character Story 2, after chapter 4] ${last}\nLAMP-SUMMARY`),
     text,

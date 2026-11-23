@@ -758,7 +758,7 @@ test("a later arc planned through planArc is told what earlier arcs revealed, an
   // This world holds no pieces, so with the truth told nothing is left to reveal.
   assert.match(asked, /- reveals: leave it empty\. Every piece of the mystery and its truth are already revealed\./u);
   assert.match(asked, /The truth \(ALREADY TOLD: the protagonist knows it\)/u);
-  assert.match(asked, /The mystery's truth was already told in an earlier arc: never schedule it again\./u);
+  assert.match(asked, /The central mystery's truth was already told in an earlier arc: never schedule it again\./u);
   assert.doesNotMatch(asked, /reveal it only where you schedule it/u);
 });
 

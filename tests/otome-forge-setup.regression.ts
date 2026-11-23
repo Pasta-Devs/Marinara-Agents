@@ -1021,7 +1021,10 @@ test("POST /runs takes 2–5 love interests, enforces the 18+ gate, keeps the pl
   // The world plan and every bible avoid them, beside the built-in list.
   assert.equal(calls.length, 4);
   for (const forged of calls) assert.ok(text(forged.messages).includes(bannedPhrasesRule(banned)));
-  assert.match(bannedPhrasesRule(banned), /; "wet heat"; "slick folds"\.$/);
+  assert.match(
+    bannedPhrasesRule(banned),
+    /; "wet heat"; "slick folds"\. In narration, never use these sentence patterns/,
+  );
 
   // With the gate confirmed, the same NSFW setup is accepted.
   assert.equal((await call("POST", "/age-gate", { confirm: true })).status, 200);

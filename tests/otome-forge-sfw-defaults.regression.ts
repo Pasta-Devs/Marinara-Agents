@@ -261,18 +261,18 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerDates: "01f3dc79244629d2",
-  bannerHis: "5e0147516776dea9",
-  bannerMemories: "82e4d56fca0925e4",
-  bannerMine: "0876b3a1ebcc0b4f",
-  beat: "9395573543e22ca9",
-  beatWithCg: "29d3ed3746b16e02",
-  chapterPlan: "54a53fee39e780d5",
-  closer: "9462aa7b3173c75b",
+  bannerDates: "daa12ef467c5d8e5",
+  bannerHis: "6c34f696884762e4",
+  bannerMemories: "c41c5b7a8c4a075f",
+  bannerMine: "c32edc5d7d61a2f9",
+  beat: "150cfba167c2c56b",
+  beatWithCg: "7a4d0cd9ad2d935e",
+  chapterPlan: "607c8fd50b4aa763",
+  closer: "74c05b001a346729",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
-  confrontation: "8c9105c584885eda",
-  repairPlan: "b917b2bf278dcfaa",
-  routePlan: "2b9d3d8beee73239",
+  confrontation: "4e4183d86fbb6d1a",
+  repairPlan: "4d790858200b8efa",
+  routePlan: "918b9939f0410fe0",
 };
 // 0.18.1: the canon writing rule names an existing world's characters, so both sets of digests moved.
 // 0.20.2: P10 and P11 open with the story context their chapter's scenes cache, so both sets' routePlan and
@@ -287,19 +287,24 @@ const EXPECTED_ANGST: Record<string, string> = {
 // bannerMine moved; bannerMemories is unchanged, and bannerDates (the Dates banner) is new.
 // 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and
 // plot, so both sets moved.
+// 2026-11-23: the story context names the central mystery, and the affection line asks for tension, then smaller
+// intimate scenes past level 10, so both sets moved.
+// 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
+// protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
+// banned in narration only, so every prompt with them moved.
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerDates: "525ca99788af7d01",
-  bannerHis: "5be343ef2b74ce56",
-  bannerMemories: "e76821810c1d044c",
-  bannerMine: "728d54ea0384a36f",
-  beat: "c1e4dd59d09b13e2",
-  beatWithCg: "001fc1632a0a18c3",
-  chapterPlan: "977ee28a883673db",
-  closer: "4e85a2bff89c2178",
+  bannerDates: "128950b2f59505b7",
+  bannerHis: "a35ada9ecdc9ffa4",
+  bannerMemories: "cd98913c2ae53bb3",
+  bannerMine: "830c704474d2f33c",
+  beat: "39c2ac9fdfdcefe7",
+  beatWithCg: "52e9fbe675e6be0b",
+  chapterPlan: "bdde01fd59c33d4b",
+  closer: "3a4b87444e836b9b",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
-  confrontation: "d49c03b6a98a703c",
-  repairPlan: "c68deaab0d42743c",
-  routePlan: "60aa992a4c671fdb",
+  confrontation: "c7daffaea4096796",
+  repairPlan: "7fd70b2802e3e4db",
+  routePlan: "feab7039fbf60941",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

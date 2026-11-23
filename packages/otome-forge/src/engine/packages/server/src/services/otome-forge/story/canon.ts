@@ -75,11 +75,13 @@
 //   timeline, and could contradict it. By its summary (the kit's one record of it, pieces joined), or in full while it
 //   has none, as above; it goes in even when the timeline covers it, its entry left out of the timeline, or beside the
 //   condensed head that holds it;
-// - the hand-off (`handOff`, the maintainer's, 2026-11-09): when that last Character Story is the newest thing that
-//   happened (no chapter but his side or a figurine, birthday or clear-the-air scene completed after it) and its block
-//   went in, the main story's prompts get its title, so a main chapter's plan and first scene pick up from how it
-//   ended, as chapter 1 picks up from the prologue (S/prompts.ts storyHandOff). A figurine, birthday or clear-the-air scene is
-//   never the last Character Story (isFigurineOrBirthday);
+// - the hand-off (`handOff`, the maintainer's, 2026-11-09): when that last Character Story is a bond story and the
+//   newest thing that happened (no chapter but his side or a figurine, birthday or clear-the-air scene completed after
+//   it) and its block went in, the main story's prompts get its title, so a main chapter's plan and first scene pick up
+//   from how it ended, as chapter 1 picks up from the prologue (S/prompts.ts storyHandOff). A figurine, birthday or
+//   clear-the-air scene is never the last Character Story (isFigurineOrBirthday). A Memory's story, a Moment or a
+//   first-wear scene never hands off (the maintainer's, 2026-11-23): it is a side story set between main chapters, in
+//   the past, and its block says so (lastStoryTitle);
 // - the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k tokens, each date the
 //   timeline covers by its summary among them, and #2430's few older ones closest in meaning to its query), after the
 //   timeline or, when `cached`, as a context of its own that the prompt sends after its cached part. With `apart`
@@ -406,12 +408,16 @@ const lastStoryOf = (chapters: readonly Completed[]) =>
  * The last Character Story's title in the storyline chapters' prompts (#2126): private between the protagonist and its
  * love interest, naming anyone else who appears in it (cameosOf), and nobody else knows what happened in it. Its own
  * words, not titleOf's: that title is also its memory source's, which the summary prompt and the kit's fingerprints
- * read.
+ * read. One that is no bond story is a side story set between main chapters, now in the past, which the main story
+ * does not pick up from (the maintainer's, 2026-11-23); a bond story hands off instead (`handOff`).
  */
 function lastStoryTitle({ chapter, owner, guests }: Completed, protagonist: string): string {
   const also = guests?.length ? `; ${guests.join(" and ")} also appear${guests.length === 1 ? "s" : ""} in it` : "";
   const between = `${protagonist || "the protagonist"} and ${owner ?? "a love interest"}`;
-  return `"${chapter.title || chapter.key}" (private between ${between}${also}; nobody else knows what happened in it)`;
+  const past = chapter.bond
+    ? ""
+    : "a side story set between main chapters, now in the past, which the main story does not pick up from; ";
+  return `"${chapter.title || chapter.key}" (${past}private between ${between}${also}; nobody else knows what happened in it)`;
 }
 
 /**
@@ -1019,10 +1025,10 @@ export async function recallText(
   if (!unread && !saved?.rebuilding) context.settled = true;
   // Only a pool that was read: one that failed sends none, and is chosen again on the next call.
   if (chapterPool && result && !result.poolFailed) context.memories = recalls.map(({ id }) => id).reverse();
-  // The hand-off (see the header): only when nothing but his side, a figurine or a birthday scene came after the last
-  // Character Story.
+  // The hand-off (see the header): only from a bond story, and only when nothing but his side, a figurine or a birthday
+  // scene came after it.
   const newest = chapters.filter(({ chapter }) => !chapter.hisSide && !isFigurineOrBirthday(chapter.key)).at(-1);
-  if (continues === "main" && lastStory && lastStory === newest && lastStoryKey) {
+  if (continues === "main" && lastStory?.chapter.bond && lastStory === newest && lastStoryKey) {
     context.handOff = lastStory.chapter.title || lastStory.chapter.key;
   }
   return context;

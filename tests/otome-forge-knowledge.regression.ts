@@ -395,24 +395,29 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and
 // plot, so every prompt that carries them moved.
 // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
+// 2026-11-23: the story context names the central mystery, and the affection line asks for tension, then smaller
+// intimate scenes past level 10, so every prompt with a love interest's card moved (the bible, which has none, did not).
+// 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
+// protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
+// banned in narration only, so every prompt with them moved.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "20243d11f7629c2f",
-  callScene: "0629ea8913bfaf1a",
-  confrontation: "54b9a5747e3a476f",
-  closer: "c80272bd02b5979b",
-  bible: "033410c8c8bd0655",
+  scene: "2f53640d9acb6a96",
+  callScene: "2b0aab2239091b50",
+  confrontation: "499d8eb3d0a7ff46",
+  closer: "eca3035029fe4af0",
+  bible: "78c5ff4d4a24d58f",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
   // 2026-11-14 (0.29.0): P17's HARD RULES gained the no-echo line and the plain-texting line, so both moved again.
   // 0.36.8 (#2394): P17's HARD RULES gained the chat-habits line (capitals, emoji and so on), so both moved again.
   // 0.39.0 (#2424): P17 gained the hurt field (beside "messages"), its no-story-effect line names the hurt, and its one
   // exception names his date invitations too, so both moved again.
-  chat: "f4266a7a1fb1484d",
-  daily: "e69714087ccb9889",
-  note: "0ac1c06bf21e99b0",
+  chat: "d8193a29138d8463",
+  daily: "d24cf787da4598a6",
+  note: "815cfb529ef3e8f9",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "84fc84fc8856a4cd",
+  datePlan: "d6066f5c0b023879",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {
@@ -553,7 +558,7 @@ test("only the arc and chapter planners read the premise, for its world alone; t
   const plan = text(withPremise.worldPlan);
   assert.ok(
     plan.includes(
-      "- setting: 2 to 4 sentences: the place, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous.",
+      "- setting: 2 to 4 sentences: the world and where in it the story starts, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous.",
     ),
   );
   assert.ok(

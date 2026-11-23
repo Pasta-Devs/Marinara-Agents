@@ -5,14 +5,19 @@
 
 /**
  * Copied from Marinara Engine packages/server/src/services/game/gm-prompts.ts:1864 (the narrator's "zero tolerance
- * for lazy AI writing" line) and :2560 (the world overview's cliché list), Engine a3ceb0162.
+ * for lazy AI writing" line) and :2560 (the world overview's cliché list), Engine a3ceb0162. Its sentence patterns are
+ * banned in narration only (the maintainer's, 2026-11-23): people say them all the time, and a model that kept them
+ * out of speech twisted its dialogue around them.
  */
-export const ENGINE_BANNED_PHRASES = [
+export const NARRATION_BANNED_PATTERNS = [
   "doesn't X, doesn't Y",
   "not X, not Y",
   "not X, but Y",
   "if X, then Y",
   "negative parallelisms",
+] as const;
+
+export const ENGINE_BANNED_PHRASES = [
   "jaw working",
   "mechanical precision",
   "ozone",

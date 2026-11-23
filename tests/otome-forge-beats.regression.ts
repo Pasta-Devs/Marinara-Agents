@@ -4084,7 +4084,8 @@ const lastStoryHeading = (
   between: string,
   also = "",
 ) =>
-  `# Last Character Story${how}: [${where}] "${title}" (private between ${between}${also}; nobody else knows what happened in it)`;
+  // 2026-11-23: a Character Story that is no bond story is a past side story the main story does not pick up from.
+  `# Last Character Story${how}: [${where}] "${title}" (a side story set between main chapters, now in the past, which the main story does not pick up from; private between ${between}${also}; nobody else knows what happened in it)`;
 
 test("the last Character Story reaches every cast of a storyline chapter's prompts, private between her and him (#2126)", async () => {
   // The maintainer's (2026-11-06): a chapter led by another love interest dropped the last Character Story until its
@@ -4267,9 +4268,11 @@ test("a chapter another love interest leads plans and writes its scenes with the
   }
 });
 
-test("the next main chapter's plan and first scene pick up from the last Character Story (the hand-off)", async () => {
+test("the next main chapter's plan and first scene pick up from a bond story (the hand-off), never a Memory's", async () => {
   // The maintainer's (2026-11-09): after a Character Story, the main story did not carry on its last choice. Its plan
   // and first scene now pick up from it, as chapter 1's first scene picks up from the prologue, with the task only.
+  // 2026-11-23: only from a bond story. A Memory's story, a Moment or a first-wear scene is a side story set between
+  // main chapters, in the past, which the main story never picks up from (the end of this test).
   const t = await storyWorld({ runKey: "r-handoff-aaaaaa", replies: router() });
   await completeChapter(
     t,
@@ -4279,7 +4282,14 @@ test("the next main chapter's plan and first scene pick up from the last Charact
   );
   await completeChapter(
     t,
-    { key: "story-item-ledger-0001", kind: "story", li: MIR, lead: MIR, title: "The Ledger Room" },
+    {
+      key: `story-bond-${MIR}-11`,
+      kind: "story",
+      li: MIR,
+      lead: MIR,
+      title: "The Ledger Room",
+      bond: { rank: 11, reveal: "She keeps every page she ever forged." },
+    },
     "MIR-STORY: she shows her the forged page.",
     "2026-10-28T10:00:00.000Z",
   );
@@ -4365,6 +4375,27 @@ test("the next main chapter's plan and first scene pick up from the last Charact
     "2026-10-28T11:00:00.000Z",
   );
   assert.equal(await handOff(), undefined, "the date came after it");
+  // A Memory's story read last is the last Character Story, told as a past side story, and hands nothing off.
+  await completeChapter(
+    t,
+    { key: "story-item-ledger-0001", kind: "story", li: MIR, lead: MIR, title: "Evening Ledger" },
+    "MIR-MEMORY: she reads her the ledger by lamplight.",
+    "2026-10-28T12:00:00.000Z",
+  );
+  assert.equal(await handOff(), undefined, "a Memory's story never hands off");
+  const context = await recallText({ store: t.store }, t.runId, {
+    job: "narration",
+    cast: [SOL],
+    continues: "main",
+    cached: {},
+    lastStory: true,
+  });
+  assert.ok(
+    context.text.includes(
+      '"Evening Ledger" (a side story set between main chapters, now in the past, which the main story does not pick up from; private between',
+    ),
+    context.text,
+  );
 });
 
 // ── 0.24.2 (the maintainer's rule): what the chapter was planned with is what each of its scenes gets ──
@@ -4589,7 +4620,11 @@ test("0.36.4 (#2384): spoken lines say what the person would say, and every scen
       } as Parameters<typeof confrontationMessages>[0]),
     );
     assert.ok(prompt.includes(`one piece of narration. ${SPOKEN_LINE_RULE}`), `${kind}: the spoken-line rule`);
-    assert.ok(prompt.includes("Speech uses everyday words."), `${kind}: everyday words`);
+    // 2026-11-23: a conversation runs as between real people (the maintainer: natural dialogue).
+    assert.ok(
+      prompt.includes("Speech uses everyday words, and a conversation runs as it does between real people:"),
+      `${kind}: everyday words`,
+    );
     assert.doesNotMatch(prompt, /fragments, abandoned sentences|The line itself must convey/u, `${kind}: no fragments`);
     assert.ok(
       prompt.includes(

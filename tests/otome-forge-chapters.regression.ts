@@ -335,7 +335,7 @@ test("POST /chapters/next plans once, with the boundary, the contract and one re
   // #1980: the truth leaves the chapter planner; it is the arc planner's, and a chapter sees it only on the page it is
   // scheduled to reveal it (the fake arc schedules it in chapter 12, so chapter 1 gets none of it).
   assert.doesNotMatch(user!.content, /MYSTERY-TRUTH/, "no unscheduled chapter sees the hidden truth");
-  assert.match(system.content, /The mystery: Who puts out the lanterns\?/, "it still knows the question");
+  assert.match(system.content, /The central mystery: Who puts out the lanterns\?/, "it still knows the question");
   assert.match(user!.content, /HIDDEN-TRUTH/, "and the Lead's full bible");
   assert.equal(user!.content.split("BIBLE: ").length - 1, 3, "and every Foil candidate's full bible too");
   assert.match(user!.content, /Keep to the CONTENT CONTRACT above, silently\.$/);

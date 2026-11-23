@@ -270,7 +270,10 @@ test("#2279: an SFW round trip of the Heat control brings an Allow consent limit
 
 test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throughout, a longer node", () => {
   const explicit = beatPrompt(stored("explicit", "angst"), "sfw");
-  assert.match(explicit, /never summarized, sanitized or rushed\. Give it room, from the build-up through the act/);
+  assert.match(
+    explicit,
+    /never summarized, sanitized or rushed\. Give it room, from the build-up and foreplay through the act/,
+  );
   assert.match(explicit, /may talk throughout, ask for a change of position, say what they feel, or simply give in/);
   // The maintainer's, 2026-11-13: the act itself is written out like explicit erotic fanfiction, never a few lines.
   assert.match(explicit, /Write the act itself as explicit erotic fanfiction would: linger on it moment by moment/);

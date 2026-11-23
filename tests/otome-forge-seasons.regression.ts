@@ -167,11 +167,15 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so these moved.
 // 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so theirs moved; Memories is
 // unchanged, and the Dates banner's is new.
+// 2026-11-23: the affection line asks for tension, then smaller intimate scenes past level 10, so these moved.
+// 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
+// protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
+// banned in narration only, so every prompt with them moved.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "82b477373a298bb8",
-  "his-wardrobe": "0eb0938c01fd19af",
-  "my-wardrobe": "02da0200c0a462d4",
-  dates: "0d19316b74168a67",
+  memories: "2e2a390e36a53e06",
+  "his-wardrobe": "4a096e378bb714e6",
+  "my-wardrobe": "1956d894b71c6b9d",
+  dates: "e3adbfd1128c3f0c",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

@@ -225,7 +225,17 @@ test("0.38.2: the writing rules balance subtext and allow jokes by rewording lin
       !rules.includes("\n- A face may contradict the words it speaks.\n"),
       "the old line is reworded, not kept",
     );
-    assert.ok(rules.includes("\n- Write in plain, everyday words: say what happens and what it means without ornate"));
+    // 2026-11-23: narration in whole sentences, in the order things happen, and a protagonist who may be silly or wrong.
+    assert.ok(
+      rules.includes(
+        "\n- Write in plain, everyday words and whole sentences, in the order things happen: say what happens and what it means without ornate",
+      ),
+    );
+    assert.ok(
+      rules.includes(
+        "The protagonist is just as human: they can be silly, clumsy with words, flustered or plain wrong",
+      ),
+    );
     assert.doesNotMatch(rules, /always knows where they are/u, "no line asks the model to spell everything out");
     assert.ok(
       rules.includes("never the same polished voice for all of them, and anyone may joke when it fits them."),
