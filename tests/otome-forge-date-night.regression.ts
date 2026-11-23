@@ -1364,11 +1364,15 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 0.36.4 (#2384): the writing rules drop the dialogue rule, and scenes ask for spoken lines in its place, so these moved.
 // 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
 // 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and plot, so every prompt that carries them moved.
+// 2026-11-23: the story context names the central mystery, and the affection line asks for tension, then smaller intimate scenes past level 10, so these moved.
+// 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
+// protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
+// banned in narration only, so every prompt with them moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "a7d796e415470793",
-  scene1: "08c8f08e9390501b",
-  scene2: "9e2da27cf1e76186",
-  scene3: "139995c9c56c098f",
+  plan: "02f48c02dff26113",
+  scene1: "84e3d863a3d29804",
+  scene2: "f52fe4de1b4ed7e4",
+  scene3: "f462e195007591f1",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

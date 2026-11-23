@@ -187,6 +187,7 @@ import {
 } from "../../../../client/src/features/otome-forge/shared/arcs.js";
 import {
   BANNED_PHRASES,
+  NARRATION_BANNED_PATTERNS,
   parseBannedPhrases,
 } from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import { MIN_AGE } from "../../../../client/src/features/otome-forge/shared/bible.js";
@@ -407,8 +408,8 @@ export const WRITING_RULES = [
   // was: the maintainer found "the reader always knows where they are…" would make models say too much. The voice line
   // gained "and anyone may joke when it fits them", so jokes are allowed, behind a mask too.
   "Now and then a face may contradict the words it speaks, but most of what people say, behind a mask or not, means what it says.",
-  "Write in plain, everyday words: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
-  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them, and anyone may joke when it fits them. The choices the protagonist is offered are plain too, not riddles.",
+  "Write in plain, everyday words and whole sentences, in the order things happen: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
+  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them, and anyone may joke when it fits them. The protagonist is just as human: they can be silly, clumsy with words, flustered or plain wrong, and the choices they are offered are plain too, not riddles, and not always the sensible one.",
   "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   // 0.36.3: the maintainer removed "Write what the protagonist feels in their body when something happens to them, not
   // only the action." (0.6.6, #1978). With the rule on thought lines, it made the protagonist's thoughts open with a
@@ -437,12 +438,12 @@ export const STORY_PACING_INSTRUCTION =
   'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs and twists only if they have proper build-ups between more mundane scenes; the plot always makes sense to an ordinary reader.';
 
 /**
- * The banned-phrases line: the built-in list, then the player's own (Settings → Content), each quoted as typed. With no
- * list of their own it is the line every prompt carried before, byte for byte.
+ * The banned-phrases line: the built-in list, then the player's own (Settings → Content), each quoted as typed, and last
+ * the sentence patterns banned in narration only (2026-11-23), so speech may use them as people do.
  */
 export function bannedPhrasesRule(own?: string): string {
   const theirs = parseBannedPhrases(own).map((phrase) => JSON.stringify(phrase));
-  return `- Never use these overused phrases or patterns: ${[...BANNED_PHRASES, ...theirs].join("; ")}.`;
+  return `- Never use these overused phrases or patterns: ${[...BANNED_PHRASES, ...theirs].join("; ")}. In narration, never use these sentence patterns either: ${NARRATION_BANNED_PATTERNS.join("; ")}.`;
 }
 
 /** The banned-phrases line on its own, for prompts that write prose but no story (premise, world plan). */
@@ -507,7 +508,7 @@ const HEAT_TEXT: Record<Heat, string> = {
   sfw: "Heat: SFW. Romance goes as far as kisses, touch and closeness; anything sexual fades to black before it starts.",
   fade: "Heat: NSFW, fade to black. Desire, sexual tension, groping, undressing and the build-up are written openly in adult terms; the sex itself happens off the page: cut at the threshold and pick up in the aftermath, with what it changed between them.",
   explicit:
-    "Heat: NSFW, explicit. Desire, groping and undressing are written openly. When a scene reaches sex between the adult characters involved, it is written on the page: explicit, anatomically grounded, emotionally reactive and detailed, in each character's voice; never summarized, sanitized or rushed. Give it room, from the build-up through the act to the aftermath, with dialogue woven through the intimate description: the characters are people who may talk throughout, ask for a change of position, say what they feel, or simply give in to the sensation. Write the act itself as explicit erotic fanfiction would: linger on it moment by moment, in graphic detail and plain explicit words, on what each body does and feels (hands and mouths, skin, wetness, thrusts, rhythm, sounds, the pleasure building). Let it build, shift and escalate before anyone climaxes; it never jumps from the first touch or thrust to the finish in a few lines. Add holistic body engagement and tactile degradation. Treat the characters' entire bodies as a canvas for sensory overload. Actively incorporate primary and secondary body surfaces and orifices into the scene. Ensure the contact reinforces the power dynamic and serves as a physical conduit.",
+    "Heat: NSFW, explicit. Desire, groping and undressing are written openly. When a scene reaches sex between the adult characters involved, it is written on the page: explicit, anatomically grounded, emotionally reactive and detailed, in each character's voice; never summarized, sanitized or rushed. Give it room, from the build-up and foreplay through the act to the aftermath, with dialogue woven through the intimate description: the characters are people who may talk throughout, ask for a change of position, say what they feel, or simply give in to the sensation. Write the act itself as explicit erotic fanfiction would: linger on it moment by moment, in graphic detail and plain explicit words, on what each body does and feels (hands and mouths, skin, wetness, thrusts, rhythm, sounds, the pleasure building). Let it build, shift and escalate before anyone climaxes; it never jumps from the first touch or thrust to the finish in a few lines. Add holistic body engagement and tactile degradation. Treat the characters' entire bodies as a canvas for sensory overload. Actively incorporate primary and secondary body surfaces and orifices into the scene. Ensure the contact reinforces the power dynamic and serves as a physical conduit.",
 };
 
 const DARKNESS_TEXT: Record<Darkness, string> = {
@@ -985,7 +986,7 @@ export function worldPlanMessages({
     '{"title": "...", "setting": "...", "mystery": {"question": "...", "truth": "..."}, "pieces": [{"li": "<love interest id>", "piece": "...", "reasonToHide": "..."}], "web": [{"a": "<love interest id>", "b": "<love interest id>", "history": "...", "stance": "allies|uneasy|rivals|enemies", "debt": "...", "secret": "..."}], "openingSituation": "..."}',
     "FIELDS",
     "- title: the story's name, 2 to 6 words.",
-    "- setting: 2 to 4 sentences: the place, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous. When the premise or a love interest's card sets the story in an existing world from a game, book, film or show (such as Teyvat from Genshin Impact), the setting is that world, named as it is, with its canon intact; only this story's situation is new.",
+    "- setting: 2 to 4 sentences: the world and where in it the story starts, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous. When the premise or a love interest's card sets the story in an existing world from a game, book, film or show (such as Teyvat from Genshin Impact), the setting is that world, named as it is, with its canon intact; only this story's situation is new.",
     "- mystery.question: the question the protagonist will chase, one sentence. mystery.truth: the full hidden answer, 2 to 4 sentences, in plain cause and effect that makes sense once told.",
     "- pieces: exactly one per love interest, with that love interest's exact id. piece: the part of the truth that love interest holds. reasonToHide: that love interest's own reason to keep it from the protagonist.",
     "- web: one row for each pair of love interests: their shared history, their stance, what one owes the other, and optionally a secret between them the protagonist does not know (omit it when there is none).",
@@ -1487,7 +1488,7 @@ function affectionLine(name: string, liState: LiState, played = 0): string {
   const settled = rank
     ? ` They are together, past their confession, at bond rank ${rank.level} of 20 ("${rank.name}"): ${rank.focus}`
     : "";
-  return `Affection level ${level} of 20: how drawn ${name} is to the protagonist. The higher it is, the more it shows in what ${name} does and says, within what their stage allows.${settled}`;
+  return `Affection level ${level} of 20: how drawn ${name} is to the protagonist. The higher it is, the more it shows in what ${name} does and says, within what their stage allows: scenes of tension at first, and past level 10 smaller intimate scenes too, such as a massage, touching the protagonist's whole body or bathing together.${settled}`;
 }
 
 /**
@@ -1811,7 +1812,7 @@ export function storyContext({ world, player, units, number, arc, memory }: Stor
     "",
     "WORLD",
     world.setting.trim() || world.premise.trim(),
-    world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
+    world.mystery.question ? `The central mystery: ${world.mystery.question}` : "",
     "",
     "PROTAGONIST",
     protagonistBlock(player),
@@ -1928,9 +1929,9 @@ export function arcPlanMessages(
     ? `${BREATHING_LENGTH_MIN} to ${BREATHING_LENGTH_MAX}`
     : `${ARC_LENGTH_MIN} to ${ARC_LENGTH_MAX}`;
   const system = [
-    "You are the arc planner of an otome visual novel: a character-driven romance mystery. You plan one story arc: a run of main chapters with one goal, one big event near its end, and the mystery's reveals placed where they land. Each chapter is planned later from your outline, one at a time.",
+    "You are the arc planner of an otome visual novel: a character-driven romance mystery. You plan one story arc: a run of main chapters with one goal (a happening, an adventure, a problem to deal with, or a mystery of its own, solved in its last chapter), one big event near its end, and the central mystery's reveals placed where they land. Each chapter is planned later from your outline, one at a time.",
     "Reply with ONLY a JSON object of this shape:",
-    '{"kind": "<the kind asked for>", "label": "<2–5 words, spoiler-free; the player sees this>", "theme": "<one short sentence>", "goal": "<one short sentence: what the protagonist is after in this arc>", "chapters": ["<one short sentence per chapter, in play order>"], "endsWith": {"what": "<one short sentence: the big event the last chapter carries>", "chapter": 0}, "reveals": [{"chapter": 0, "kind": "piece|truth", "li": "<love interest id, piece only>", "what": "<one sentence: what the protagonist learns>"}], "antagonist": {"name": "<name>", "want": "<one short sentence>", "whyNow": "<one short sentence>"}' +
+    '{"kind": "<the kind asked for>", "label": "<2–5 words, spoiler-free; the player sees this>", "theme": "<one short sentence>", "goal": "<one short sentence: what the protagonist is after in this arc>", "chapters": ["<one short sentence per chapter, in play order>"], "endsWith": {"what": "<one short sentence: the big event the last chapter carries, and the answer when the goal is a mystery>", "chapter": 0}, "reveals": [{"chapter": 0, "kind": "piece|truth", "li": "<love interest id, piece only>", "what": "<one sentence: what the protagonist learns>"}], "antagonist": {"name": "<name>", "want": "<one short sentence>", "whyNow": "<one short sentence>"}' +
       (newcomer ? ', "newcomer": {"how": "<one short sentence: the scene they are met in>"}' : "") +
       ', "judgment": {"question": "<one short question>", "answers": ["<plausible answer>", "<plausible answer>"], "chapters": [0]}}',
     "FIELDS",
@@ -1946,7 +1947,7 @@ export function arcPlanMessages(
     "RULES",
     "- One arc, one goal: every chapter moves toward it and none resolves it before the arc's last.",
     "- Do not repeat an earlier arc: not its antagonist, its theme, its ending shape, its mystery question or a reveal already played.",
-    "- Every love interest keeps a stake in the arc; none is written out of it.",
+    "- Every love interest keeps a stake in the arc, even when its goal takes the protagonist far from where the story began (another city or land of its world, or a journey), whether they come along or stay behind; none is written out of it.",
     ...(breathing
       ? [
           "- This is a BREATHING arc: no antagonist, no big event, no reveal and no new mystery. Its chapters are days with the people the protagonist loves, each one deepening a different person, and its last chapter lands warm, never on a cliffhanger.",
@@ -1959,8 +1960,8 @@ export function arcPlanMessages(
         ]
       : []),
     revealed.truth
-      ? "- The mystery's truth was already told in an earlier arc: never schedule it again."
-      : "- The mystery's truth is yours to schedule, never to spend early: it is revealed in the last chapter, after the pieces.",
+      ? "- The central mystery's truth was already told in an earlier arc: never schedule it again."
+      : "- The central mystery's truth is yours to schedule, never to spend early: it is revealed in the last chapter, after the pieces.",
     `- Be brief. One sentence per field. No preamble, no restating the world, no explaining the outline. Every purpose over ${ARC_PURPOSE_WORDS} words is refused.`,
     `- Write the label, theme, goal, purposes, endsWith, reveals and the judgment's question and answers in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
@@ -1974,7 +1975,7 @@ export function arcPlanMessages(
     "WORLD",
     world.setting.trim() || world.premise.trim(),
     ...plannerPremise(world),
-    questionOf(world) ? `The mystery: ${questionOf(world)}` : "",
+    questionOf(world) ? `The central mystery: ${questionOf(world)}` : "",
     world.mystery.truth
       ? revealed.truth
         ? `The truth (ALREADY TOLD: the protagonist knows it): ${world.mystery.truth}`
@@ -2151,7 +2152,7 @@ export function chapterPlanMessages({
       ? `- If this chapter has a climax, it is a ${climax}: the last two climaxes were both ${climax === "closer" ? "confrontation" : "closer"}s.`
       : `- If it has one, choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
     "- The Lead is in most nodes and in the climax, if any; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
-    `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}, and its guide says the scene ends on that choice for the player; never plan a decision the protagonist puts off until later.`,
+    `- Never plan a chapter on the template of the ones before it: vary what drives it, where it is set and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}, and its guide says the scene ends on that choice for the player; never plan a decision the protagonist puts off until later.`,
     ONLY_CHOICES_MADE,
     // #2047: a climax-last plan has no big choice at its end, so it could never close on the judgment.
     ...(judgment
@@ -2257,7 +2258,7 @@ export const BEAT_WORDS_MAX = 950;
  * may also be a single word, as people really react, so a surprise need not be wrapped in a sentence.
  */
 export const SPOKEN_LINE_RULE =
-  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words.";
+  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words, and a conversation runs as it does between real people: they react to what was just said, chat about small things or say something silly, and lines may follow one another with no narration between them.";
 
 // Under NSFW: Explicit, sex is never rushed (HEAT_TEXT, Shared blocks), so a node or a Closer's opened ending that
 // reaches it gets more room (CLOSER_INTIMATE_ENDING_MAX is in S/story/replies.ts). Each fits the reply's budget
@@ -2495,7 +2496,7 @@ export function beatMessages({
     pov
       ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
       : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
@@ -2789,8 +2790,8 @@ function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Uni
 function storyFraming(name: string, nodes: number): string[] {
   return [
     nodes > 1
-      ? `This is ${name}'s CHARACTER STORY: a ${nodes}-scene side story between ${name} and the protagonist, outside the main plot. Each node is one of its scenes; it has its own small arc and ends on its last.`
-      : `This is a ONE-SCENE side story of ${name}'s: one complete scene between ${name} and the protagonist, outside the main plot, with its own small beginning and end.`,
+      ? `This is ${name}'s CHARACTER STORY: a ${nodes}-scene side story between ${name} and the protagonist, outside the main plot and set between main chapters, never straight on from the previous chapter's last scene. Each node is one of its scenes; it has its own small arc and ends on its last.`
+      : `This is a ONE-SCENE side story of ${name}'s: one complete scene between ${name} and the protagonist, outside the main plot and set between main chapters, never straight on from the previous chapter's last scene, with its own small beginning and end.`,
     `It is ${name}'s: another love interest may appear only when the story truly calls for it, as themselves, and then knows only what happened while they were there. It does not move ${name}'s stage: how close they are follows the scene card. It never resolves the mystery or reveals a secret before its stage, and it never contradicts the story so far.`,
   ];
 }
@@ -3148,7 +3149,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
@@ -3254,7 +3255,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
@@ -5553,7 +5554,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     "RULES",
     `- ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes of kind beat or moment (no confrontation, no gate). ${name} is in every node. It is ${name}'s story: another love interest appears only when the story truly calls for it, and then knows only what happened while they were there.`,
     `- The Memory's premise is a situation, never a plot turn. How close they are follows where ${name} is now, stage ${stage} (${row.name}, ${row.balance}): it may deepen the bond, but it does not move the stage.`,
-    "- Continue from the story so far: everything already played is canon and is never undone, contradicted or staged again.",
+    "- It is set between main chapters, apart from the main plot, never straight on from the previous chapter's last scene: everything already played is canon and is never undone, contradicted or staged again.",
     "- Never reveal a secret before its stage, and never resolve the mystery. An open grievance stays open.",
     `- A new conflict seed never repeats one of ${name}'s last two kinds of angst (listed below).`,
     `- Write every text field in ${world.language}.`,

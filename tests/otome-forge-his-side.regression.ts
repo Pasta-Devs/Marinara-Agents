@@ -839,10 +839,14 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 0.36.4 (#2384): the writing rules drop the dialogue rule; the scene asks for spoken lines in its place.
   // Retaken 0.36.9: the writing rules ask not to fall into patterns.
   // Retaken 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech.
-  assert.equal(sha(mainMessages), "202fb84a6cd21067d839c7bd91cf3f471c536814b240eb207993e06e7c914119", "a main chapter");
+  // Retaken 2026-11-23: the story context names the central mystery, and the affection line asks for intimate scenes.
+  // Retaken 2026-11-23 (the Character Story): it is set between main chapters, never straight on from the previous one.
+  // Retaken 2026-11-23 (dialogue): spoken lines run like real conversation; narration in whole sentences, in order.
+  // Retaken 2026-11-23 (bans): the built-in sentence patterns are banned in narration only.
+  assert.equal(sha(mainMessages), "75c656e625973187b17939205378cb76afad46d9fb9e1f793f320aff4bc97987", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "9ec097251ad9066dadf576f3db5ccc8b12d37ab73e182e80804f59df6d330848",
+    "9f7f51c45b51a0f2985dac4d688bc658b66eec4bd84398b35d83b874ddade13f",
     "a Character Story, even with a scene handed to it",
   );
 });
