@@ -2086,6 +2086,8 @@ export interface ChapterPlanInput {
   sideWith?: boolean;
   /** This chapter's end may close on the arc's judgment (#2047, judgmentFor): only that, never its question or truth. */
   judgment?: boolean;
+  /** This chapter's last node ends on the arc's riddle (S/story/chapters.ts riddleChapter). */
+  riddle?: boolean;
   /** Your thoughts… waiting on Home (#2127), or "": sent with the task, after the cached part. */
   thoughts?: string;
   /**
@@ -2114,6 +2116,7 @@ export function chapterPlanMessages({
   arc: plannedArc = null,
   sideWith = false,
   judgment = false,
+  riddle = false,
   thoughts = "",
   sharesCache = true,
   handOff = "",
@@ -2154,6 +2157,11 @@ export function chapterPlanMessages({
     "- The Lead is in most nodes and in the climax, if any; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it, where it is set and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}, and its guide says the scene ends on that choice for the player; never plan a decision the protagonist puts off until later.`,
     ONLY_CHOICES_MADE,
+    ...(riddle
+      ? [
+          "- This chapter's last node ends on a riddle the player answers in one word: put any climax second-to-last, and let the nodes before it give the clues.",
+        ]
+      : []),
     // #2047: a climax-last plan has no big choice at its end, so it could never close on the judgment.
     ...(judgment
       ? [
@@ -2574,13 +2582,17 @@ export function beatMessages({
     ONLY_CHOICES_MADE,
     // A planned chapter's last node; the prologue offers its own choices, a date never ends on a big one, and his side
     // offers none.
-    ...(last && !date && !pov && chapter.kind !== "prologue"
+    ...(node.riddle && last
       ? [
-          `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
-          DECIDED_HERE,
-          ...(node.judgment ? [judgmentLine(node.judgment)] : []),
+          `- End this node on a riddle instead of a big choice: a small mystery, riddle or suspect to name that the clues lead to, answered in ONE word. Its last segment puts the question to the protagonist; add "riddle": {"question": "<the question, short>", "answer": "<the one-word answer>"} to the JSON object, both in ${world.language}.`,
         ]
-      : []),
+      : last && !date && !pov && chapter.kind !== "prologue"
+        ? [
+            `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
+            DECIDED_HERE,
+            ...(node.judgment ? [judgmentLine(node.judgment)] : []),
+          ]
+        : []),
     ...(node.cg
       ? [
           `- cg: this node MAY carry one key image, only when it holds a story-defining moment: add ${cgShape(world).slice(2)} to the JSON object. at: the index of the segment it opens on. brief: one to four plain English sentences on where and how the moment is shot (place, light, framing, what the bodies do), never anyone's looks. ${BRIEF_STAGING} cast: the exact names of at most ${CG_PEOPLE_MAX} people in the frame. Omit "cg" when the node has no such moment.`,

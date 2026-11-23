@@ -219,3 +219,11 @@ export const climaxOf = (game: { kind?: "closer" }): ClimaxKind => game.kind ?? 
  */
 export const OWN_OPTION = "own";
 export const OWN_ANSWER_MAX = 280;
+
+/**
+ * The arc's riddle (S/story/chapters.ts riddleChapter): a big choice with no offered options, answered in one word
+ * through Write your own…, its id, and how long that word and the question may be.
+ */
+export const RIDDLE_CHOICE = "riddle";
+export const RIDDLE_ANSWER_MAX = 40;
+export const RIDDLE_QUESTION_MAX = 200;

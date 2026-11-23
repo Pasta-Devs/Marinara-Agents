@@ -39,6 +39,7 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import {
   leadCandidates,
   normalizeChapterPlan,
+  riddleChapter,
   sideWithOpen,
   type PlanContext,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/chapters.ts";
@@ -88,6 +89,37 @@ const parse = (reply: Record<string, unknown>) => {
   assert.ok(parsed.success, "the reply matches the schema");
   return parsed.data as ChapterPlanReply;
 };
+
+test("an arc's middle chapter ends on a riddle, any kind of arc, with its climax moved off the last node", () => {
+  // The maintainer's (2026-11-23): at least once an arc, story, breathing room or someone new alike.
+  const arc = (from: number, length: number) => ({
+    from,
+    plan: Array.from({ length }, (_, i) => ({ n: from + i, purpose: "" })),
+  });
+  assert.deepEqual(
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter((n) => riddleChapter(arc(1, 10), n)),
+    [6],
+    "one in a ten-chapter arc",
+  );
+  assert.deepEqual(
+    [11, 12, 13].filter((n) => riddleChapter(arc(11, 3), n)),
+    [12],
+    "one in a three-chapter breather",
+  );
+  const judgment = { question: "Who rang the bell?", answers: ["Kai", "Mireille"] };
+  const plan = normalizeChapterPlan(parse(planReply()), context({ riddle: true, judgment }));
+  assert.equal(typeof plan, "object", String(plan));
+  if (typeof plan === "string") return;
+  assert.equal(plan.nodes.at(-1)!.riddle, true);
+  assert.equal(plan.nodes.at(-1)!.judgment, undefined, "the riddle takes the judgment's place");
+  assert.equal(plan.nodes.filter((entry) => entry.riddle).length, 1);
+  // A climax-last plan goes back for its climax to move, since a stance game holds no riddle.
+  const nodes = planReply().nodes;
+  const climaxLast = planReply({ nodes: [...nodes.slice(0, 5), nodes[6], nodes[5]] });
+  assert.match(String(normalizeChapterPlan(parse(climaxLast), context({ riddle: true }))), /riddle: put any climax/);
+  const plain = normalizeChapterPlan(parse(planReply()), context());
+  assert.ok(typeof plain === "object" && !plain.nodes.some((entry) => entry.riddle), "no riddle elsewhere");
+});
 
 test("Lead candidates: the least recent (never led first, ties by cast order) and the ripest conflict", () => {
   const cast = CAST.map((li) => li.id);

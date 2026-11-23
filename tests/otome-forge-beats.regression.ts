@@ -52,6 +52,7 @@ import type { NotebookEntry } from "../packages/otome-forge/src/engine/packages/
 import {
   OWN_ANSWER_MAX,
   OWN_OPTION,
+  RIDDLE_CHOICE,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
 import { birthdaySceneKey } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/birthdays.ts";
 import { figurineSceneKey } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/shop.ts";
@@ -90,6 +91,7 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import {
   normalizeBeatReply,
   repeatsLine,
+  riddleKey,
   segmentLists,
   withoutCues,
   withoutMaskedThoughts,
@@ -1809,6 +1811,109 @@ test("a chapter's closing decision takes the player's own words (#2146)", async 
   assert.equal(scene[0]!.cacheBreakpoint, true);
   assert.equal(scene[0]!.content, plan[0]!.content, "the scene's cached story context is the plan's");
   await t.settle();
+});
+
+test("the arc's riddle takes one word, whatever its case or accents, and the next chapter knows if it was right", async () => {
+  // The maintainer's (2026-11-23): once an arc, a chapter ends on a riddle answered in one word through Write your
+  // own…; case and accents never count ("nozka" is "nóżka"), and what follows depends on whether it was right.
+  for (const [typed, answer] of [
+    ["nozka", "Nóżka"],
+    ["NOZKA", "nóżka"],
+    ["lodz", "Łódź"],
+    ["kai.", "Kai"],
+    ["Strasse", "Straße"],
+  ] as const) {
+    assert.equal(riddleKey(typed), riddleKey(answer), `${typed} is ${answer}`);
+  }
+  assert.notEqual(riddleKey("noga"), riddleKey("nóżka"));
+
+  const riddle = { question: "What did the bell-ringer lose on the stairs?", answer: "Nóżka" };
+  const replies = Array.from({ length: 60 }, () => (messages: CapabilityLanguageModelMessage[]) => {
+    if (isPlanner(messages)) return json(planReply({ ledger: { relationship: [], conflict: [], offscreen: [] } }));
+    if (isConfrontationPrompt(messages)) return json(confrontationReply());
+    const i = Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
+    // The closing scene writes a big choice too: the riddle takes its place.
+    return json(i === 6 ? { ...markedBeat(1, i, true), riddle } : markedBeat(1, i, false));
+  });
+  const t = await storyWorld({ runKey: "r-riddle-aaaaaa", replies });
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  // Its last node ends on the riddle, as the arc's middle chapter's does (S/story/chapters.ts riddleChapter).
+  await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, "main-1")), normalizeChapter, (chapter) => ({
+    ...chapter!,
+    nodes: chapter!.nodes.map((entry, i, all) => (i === all.length - 1 ? { ...entry, riddle: true as const } : entry)),
+  }));
+  await readThrough(t, 0, 5);
+  await t.settle();
+  const served = await t.call("POST", beatPath, {}, node(6));
+  assert.equal(served.status, 200, JSON.stringify(served.body));
+  const scene = t.calls.filter((call) => /Narrate node 7 of/.test(call.messages.at(-1)!.content)).at(-1)!.messages;
+  assert.ok(scene.at(-1)!.content.includes('add "riddle": {"question"'), "the narrator is asked for it");
+  assert.ok(!scene.at(-1)!.content.includes("if it ends on a big choice"), "in place of the closing decision");
+  // One big choice with no offered options, on the last segment; the client gets the question, never the answer.
+  const lastAt = served.body.beat.segments.length - 1;
+  assert.deepEqual(served.body.beat.choices, [{ id: RIDDLE_CHOICE, kind: "big", at: lastAt, options: [] }]);
+  assert.deepEqual(served.body.beat.riddle, { question: riddle.question });
+  assert.ok(!JSON.stringify(served.body).includes("Nóżka"), "the answer stays on the server");
+
+  const answer = (text: string) =>
+    t.call(
+      "POST",
+      `${beatPath}/choose`,
+      { choice: RIDDLE_CHOICE, option: OWN_OPTION, own: { kind: "action", text } },
+      node(6),
+    );
+  for (const text of ["two words", "   ", "!!"]) {
+    const refused = await answer(text);
+    assert.equal(refused.status, 400, text);
+  }
+  const right = await answer("  NOZKA ");
+  assert.equal(right.status, 200, JSON.stringify(right.body));
+  // The player sees the word they gave; the canon says it was right.
+  assert.equal(right.body.beat.choices[0].options[0].text, "NOZKA");
+  const stored = (await t.store.readDoc(beatId(t.runId, "main-1", 6), normalizeBeat))!;
+  assert.deepEqual(stored.choices[0]!.options[0], {
+    id: OWN_OPTION,
+    text: "Answered the riddle: right.",
+    selection: { kind: "dialogue", text: "NOZKA" },
+    segments: [],
+  });
+  assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(6))).body.chapterDone, true);
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  const plan = t.calls.filter((call) => isPlanner(call.messages)).at(-1)!.messages;
+  assert.ok(
+    plan[0]!.content.includes("[Canonical player choice by Ines: Answered the riddle: right.]\nInes: NOZKA"),
+    "the next chapter's plan knows it was right",
+  );
+
+  // A wrong word is canon too, with the right answer the protagonist does not know.
+  const wrong = await storyWorld({ runKey: "r-riddle-bbbbbb", replies });
+  assert.equal((await wrong.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  await wrong.store.mutateDoc(
+    runDocTarget("chapter", chapterId(wrong.runId, "main-1")),
+    normalizeChapter,
+    (chapter) => ({
+      ...chapter!,
+      nodes: chapter!.nodes.map((entry, i, all) =>
+        i === all.length - 1 ? { ...entry, riddle: true as const } : entry,
+      ),
+    }),
+  );
+  await readThrough(wrong, 0, 5);
+  await wrong.settle();
+  assert.equal((await wrong.call("POST", beatPath, {}, node(6))).status, 200);
+  const missed = await wrong.call(
+    "POST",
+    `${beatPath}/choose`,
+    { choice: RIDDLE_CHOICE, option: OWN_OPTION, own: { kind: "dialogue", text: "noga" } },
+    node(6),
+  );
+  assert.equal(missed.status, 200);
+  assert.equal(
+    (await wrong.store.readDoc(beatId(wrong.runId, "main-1", 6), normalizeBeat))!.choices[0]!.options[0]!.text,
+    'Answered the riddle: wrong. The right answer was "Nóżka"; Ines does not know it yet.',
+  );
+  await t.settle();
+  await wrong.settle();
 });
 
 /** The fake summarizer: a detail keeps only its source's MARKERS (never the prose around them), a condensing joins. */

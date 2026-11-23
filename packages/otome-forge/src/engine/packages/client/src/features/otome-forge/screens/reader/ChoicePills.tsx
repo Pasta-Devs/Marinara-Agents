@@ -10,6 +10,7 @@ import { forwardRef, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { Heart, HeartHandshake, Lock, PencilLine, Scale } from "lucide-react";
 import type { ChoiceOption, ForgeChoice } from "../../shared/api-types";
+import { RIDDLE_CHOICE } from "../../shared/arcs";
 
 interface ChoicePillsProps {
   choice: ForgeChoice;
@@ -92,7 +93,11 @@ export const ChoicePills = forwardRef<HTMLButtonElement, ChoicePillsProps>(funct
               }}
             >
               <PencilLine className="of-choice-pill-mark" size={13} strokeWidth={2} aria-hidden="true" />
-              <span className="of-choice-pill-text">{t("ui.otomeForge.reader.ownAnswer")}</span>
+              <span className="of-choice-pill-text">
+                {t(
+                  choice.id === RIDDLE_CHOICE ? "ui.otomeForge.reader.riddleAnswer" : "ui.otomeForge.reader.ownAnswer",
+                )}
+              </span>
             </button>
           </li>
         ) : null}

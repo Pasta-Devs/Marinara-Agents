@@ -32,6 +32,9 @@ import {
   FIRST_STAGE,
   HIS_SIDE_MOMENTS,
   LAST_STAGE,
+  RIDDLE_ANSWER_MAX,
+  RIDDLE_CHOICE,
+  RIDDLE_QUESTION_MAX,
   STANCES,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
@@ -150,6 +153,7 @@ const NodeSchema: ZodType<ChapterNode> = z.object({
   judgment: z
     .object({ question: short(JUDGMENT_QUESTION), answers: z.array(short(JUDGMENT_ANSWER)).min(2).max(4) })
     .optional(),
+  riddle: z.literal(true).optional(),
 });
 
 const LedgerSchema: ZodType<ChapterLedger> = z.object({
@@ -393,6 +397,7 @@ export function normalizeBeat(data: unknown): Beat | null {
       shown: z.literal(true).optional(),
       confrontation: ConfrontationSchema.optional(),
       sideWith: z.object({ choice: short(40), backs: z.record(z.string(), z.string()) }).optional(),
+      riddle: z.object({ question: short(RIDDLE_QUESTION_MAX), answer: short(RIDDLE_ANSWER_MAX) }).optional(),
       undo: (value) => {
         const entries = validItems(UndoSchema, value, UNDO_MAX);
         return entries.length ? entries : undefined;
@@ -458,7 +463,8 @@ export function toChapterView(chapter: Chapter): ChapterView {
 
 /**
  * The beat as the client sees it: without its effects, its stored confrontation (it gets a view) or a date beat's
- * scores.
+ * scores. A riddle goes without its answer, and the word the player answered it with is that option's label, never
+ * the canon's (S/story/beats.ts chooseOption), which says whether it was right.
  */
 export function toBeatView(beat: Beat): BeatView {
   const {
@@ -467,8 +473,20 @@ export function toBeatView(beat: Beat): BeatView {
     confrontation: _confrontation,
     scores: _scores,
     undo: _undo,
+    riddle,
     ...rest
   } = beat;
+  const view: BeatView = riddle
+    ? {
+        ...rest,
+        riddle: { question: riddle.question },
+        choices: rest.choices.map((choice) =>
+          choice.id === RIDDLE_CHOICE
+            ? { ...choice, options: choice.options.map((option) => ({ ...option, text: option.selection.text })) }
+            : choice,
+        ),
+      }
+    : rest;
   // 0.38.0: only a scene a Rewrite cannot take back says so.
-  return rewriteBlock(beat) ? { ...rest, rewritable: false } : rest;
+  return rewriteBlock(beat) ? { ...view, rewritable: false } : view;
 }
