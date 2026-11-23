@@ -56,8 +56,12 @@
 //   already lists in full (`listed`, P17's newest conversations). A date (the kit's `character-story`) never joins the
 //   timeline's text: it is its love interest's own, and until its summary is folded (the timeline covers it) it goes
 //   in as recent canon, by its summary or in full while it has none (S/story/canon.ts). The pool is the same in every
-//   phase. No embeddings are made, so none are paid for. Long-term recall (0.19.0) embeds the saved summaries apart from
-//   this: each upkeep job hands its run to `afterUpkeep`, which indexes what is new (S/memory/recall-index.ts).
+//   phase. Long-term recall (0.19.0) embeds the saved summaries apart from this: each upkeep job hands its run to
+//   `afterUpkeep`, which indexes what is new (S/memory/recall-index.ts). #2430: it indexes the `chat` sources too, and
+//   when the pool leaves some of those this prompt may know out, the few closest in meaning to its query (`recall`'s
+//   choose, among all of them) go in first, then the newest as before, so an older small exchange with a love interest
+//   comes back when the scene or message is about it. Their room is the pool's: the newest give way. A chapter's
+//   saved `ids` keep them, as they keep the rest. No index, no embedding model or none close enough: the pool as before.
 //   0.20.4, a chapter's small memories (`pool`): a story chapter's scenes recall the pool for everyone in the chapter
 //   (`cast`), chosen once and then sent as those exact memories (`ids`), so it never changes from scene to scene
 //   (S/story/beats.ts saves them on the chapter). Each is titled with who knows it.
@@ -78,6 +82,7 @@
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import {
   createForgeStoryMemory,
+  forgeRecallQuery,
   type ForgeMemorySource,
   type ForgeMemoryStatus,
   type ForgeRecallOptions,
@@ -111,6 +116,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { mayKnow, tagText, type StorySource } from "../story/canon.js";
+import { MEMORY_RECALL_MARGIN, memoryKey, memoryText, type RecallIndex } from "./recall-index.js";
 import { readMemorySources } from "./sources.js";
 import {
   HEADROOM_TOKENS,
@@ -143,6 +149,11 @@ const TIMELINE_OUTPUT_TOKENS = 24576;
  * HEADROOM_TOKENS of leeway (S/memory/timeline.ts).
  */
 export const RECALL_TOKENS = 5000;
+/**
+ * #2430: the longest a prompt waits for its query's vectors before its recall pool goes as the newest alone, as the
+ * kit's own recall never holds a generation up for more than 1.5 s (forgeQueryVectors).
+ */
+const MEMORY_QUERY_MS = 1500;
 /**
  * The context the kit is told every reader has (#2066). The kit sizes its overview at a tenth of it, so the timeline's
  * size never follows the model; the timeline's own ceiling keeps it within 14k, and this only bounds one that keeps
@@ -265,6 +276,8 @@ export interface OtomeMemoryDeps {
   readSources?: (runId: string) => Promise<ForgeMemorySource[]>;
   /** Called once each upkeep job ends, so new summaries are indexed for long-term recall (S/memory/recall-index.ts). */
   afterUpkeep?: (runId: string) => void;
+  /** #2430: long-term recall's index, which chooses older small memories by meaning (see the header). */
+  recall?: Pick<RecallIndex, "choose">;
 }
 
 /** A chapter's small memories (see the header): the pool for `cast`, or exactly `ids` of it, in their order. */
@@ -273,7 +286,7 @@ export interface RecallPoolOptions {
   ids?: readonly string[];
 }
 
-export type OtomeRecallOptions = ForgeRecallOptions & { pool?: RecallPoolOptions };
+export type OtomeRecallOptions = ForgeRecallOptions & { pool?: RecallPoolOptions; debugMode?: boolean };
 
 export interface OtomeMemory {
   /**
@@ -393,6 +406,7 @@ export function createOtomeMemory({
   background,
   readSources = keptSources(store),
   afterUpkeep,
+  recall: recallIndex,
 }: OtomeMemoryDeps): OtomeMemory {
   const documents = runtime.persistence.documents;
   const queue = background ?? createBackgroundQueue(runtime);
@@ -687,8 +701,9 @@ export function createOtomeMemory({
    * sets of the love interests this recall is for (S/prompts.ts notebookMemories; live, never stored, so a deleted
    * entry never comes back). What the caller lists in full (`listed`) is left out. Each is counted as the prompt shows
    * it (S/story/canon.ts renderMemory); one that alone could never fit is passed over, and the first other that does
-   * not fit ends the pool, so only the oldest are left out. With `ids` (a chapter's, see the header), exactly those
-   * that still exist, in that order.
+   * not fit ends the pool, so only the oldest are left out. #2430: when it leaves out a `chat` source, those closest
+   * in meaning go in first (see the header). With `ids` (a chapter's, see the header), exactly those that still exist,
+   * in that order.
    */
   async function recallPool(
     options: OtomeRecallOptions,
@@ -697,10 +712,10 @@ export function createOtomeMemory({
     told: readonly RecallItem[],
   ): Promise<RecallItem[]> {
     const listed = new Set(options.listed ?? []);
-    const items: RecallItem[] = sources
-      .filter((source) => source.kind === "chat" && mayKnow(knowing, source.audience) && source.content.trim())
-      .map(({ id, title, content, order }) => ({ id, title, content: content.trim(), order: order ?? 0 }));
-    items.push(...told);
+    const exchanges: RecallItem[] = sources
+      .filter((source) => source.kind === "chat" && mayKnow(knowing, source.audience) && memoryText(source))
+      .map((source) => ({ id: source.id, title: source.title, content: memoryText(source), order: source.order ?? 0 }));
+    const items = [...exchanges, ...told];
     const lis = knowing.reader ? [knowing.reader] : (knowing.cast ?? []);
     const state = lis.length ? await store.readDoc(stateId(options.runId), normalizeState) : null;
     for (const li of new Set(lis)) {
@@ -714,20 +729,58 @@ export function createOtomeMemory({
     }
     const ids = options.pool?.ids;
     if (ids) return ids.flatMap((id) => items.filter((item) => item.id === id).slice(0, 1));
-    const kept: RecallItem[] = [];
     const limit = RECALL_TOKENS + HEADROOM_TOKENS;
-    let used = 0;
+    const costs = new Map(
+      items.map((item) => [item, estimateTextTokens(`\n\n# Recalled memory: ${item.title}\n${item.content}`)]),
+    );
+    const cost = (item: RecallItem) => costs.get(item)!;
     // Newest first; items of the same moment keep the order they were listed in once turned back.
     const newestFirst = items.filter((item) => !listed.has(item.id)).map((item, index) => ({ item, index }));
     newestFirst.sort((a, b) => b.item.order - a.item.order || b.index - a.index);
-    for (const { item } of newestFirst) {
-      const cost = estimateTextTokens(`\n\n# Recalled memory: ${item.title}\n${item.content}`);
-      if (cost > limit) continue;
-      if (used + cost > limit) break;
-      used += cost;
-      kept.push(item);
+    /** `pinned`, then the newest that fit beside them. */
+    const fill = (pinned: readonly RecallItem[]) => {
+      const kept = new Set(pinned);
+      let used = pinned.reduce((total, item) => total + cost(item), 0);
+      for (const { item } of newestFirst) {
+        if (kept.has(item) || cost(item) > limit) continue;
+        if (used + cost(item) > limit) break;
+        used += cost(item);
+        kept.add(item);
+      }
+      return kept;
+    };
+    let kept = fill([]);
+    const offered = exchanges.filter((item) => !listed.has(item.id));
+    const { cues, plan, window } = forgeRecallQuery(options.query);
+    const query = [...new Set([plan, ...cues])].filter(Boolean).join("\n") || window;
+    if (recallIndex && query && offered.some((item) => !kept.has(item))) {
+      const deadline = AbortSignal.timeout(MEMORY_QUERY_MS);
+      const chosen = await recallIndex.choose(options.runId, {
+        query,
+        candidates: offered.map((item) => ({
+          item,
+          key: memoryKey(item.id),
+          title: `${item.id}: ${item.content.slice(0, 80)}`,
+          summary: item.content,
+        })),
+        margin: MEMORY_RECALL_MARGIN,
+        label: "recall-memories",
+        debugMode: options.debugMode === true,
+        signal: options.signal ? AbortSignal.any([options.signal, deadline]) : deadline,
+      });
+      const pinned: RecallItem[] = [];
+      let room = limit;
+      for (const { item } of chosen) {
+        if (cost(item) > room) continue;
+        room -= cost(item);
+        pinned.push(item);
+      }
+      if (pinned.length) kept = fill(pinned);
     }
-    return kept.reverse();
+    return newestFirst
+      .filter(({ item }) => kept.has(item))
+      .map(({ item }) => item)
+      .reverse();
   }
 
   return {
@@ -737,7 +790,7 @@ export function createOtomeMemory({
       const sources = await readSources(options.runId);
       const knowing = options.reader || options.cast ? options : { cast: [] };
       // A chapter's small memories are everyone's in it (see the header); the rest of the recall stays the call's own.
-      const { pool, ...kit } = options;
+      const { pool, debugMode: _debug, ...kit } = options;
       const pooled = pool ? { cast: [...pool.cast] } : knowing;
       // The caller sends the story's chapters itself (S/story/canon.ts), so the newest of all (the kit's `latest`) is
       // never ranked as a detail.

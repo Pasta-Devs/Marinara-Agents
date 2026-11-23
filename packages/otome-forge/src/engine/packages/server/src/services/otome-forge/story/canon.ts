@@ -81,8 +81,9 @@
 //   ended, as chapter 1 picks up from the prologue (S/prompts.ts storyHandOff). A figurine, birthday or clear-the-air scene is
 //   never the last Character Story (isFigurineOrBirthday);
 // - the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k tokens, each date the
-//   timeline covers by its summary among them), after the timeline or, when `cached`, as a context of its own that the
-//   prompt sends after its cached part. A recall that fails is the same story context without it.
+//   timeline covers by its summary among them, and #2430's few older ones closest in meaning to its query), after the
+//   timeline or, when `cached`, as a context of its own that the prompt sends after its cached part. A recall that fails
+//   is the same story context without it.
 // When the prompt does not fit, the recalls give way first; then, only while the reply would get less than its floor,
 // the older storyline chapter summaries, oldest first, then the chapters in full, oldest first, then the previous
 // chapter's earliest scenes. As in GF, the timeline, the previous chapter's last scene, the newest chapter summary and
@@ -871,6 +872,7 @@ export async function recallText(
           ...recall,
           runId,
           excludeChapterIds: [...(recall.excludeChapterIds ?? []), ...(previousKey ? [previousKey] : []), ...sideKeys],
+          debugMode: debugMode === true,
         })
         .then((recalled) => {
           const phase = recalled.status?.phase;

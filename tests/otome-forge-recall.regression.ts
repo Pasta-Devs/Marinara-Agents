@@ -5,13 +5,17 @@
 // the condensed head holds, that every scene of it may know, at least RECALL_MIN_SIMILARITY alike, and saves them; each
 // of its scenes sends exactly those, between the head and the newest entries, so its cached story context stays the
 // same. No embeddings: the prompt is as before. A failed index waits for Retry indexing; no prompt ever carries the
-// index; a deleted story keeps none.
+// index; a deleted story keeps none. #2430: the small memories (`chat` sources) are indexed too, and when the recall pool
+// leaves some out, the few that stand out in meaning from the others go in first, in the pool's own room, only where
+// they may be known; a deleted one never comes back, and nothing is embedded when nothing is left out.
 import {
   embeddingOptions,
   embeddingsChoosable,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/recall-choice.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
+import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import type { CapabilityEmbeddingHost, CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type {
   Beat,
@@ -27,16 +31,21 @@ import {
   stateId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
+import {
+  RECALL_TOKENS,
+  createOtomeMemory,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import {
   EMBED_CHARACTERS_MAX,
   EMBED_TEXTS_MAX,
   LOCAL_LANE,
+  MEMORY_RECALL_MARGIN,
   RECALL_CHUNK_WORDS,
   RECALL_MIN_SIMILARITY,
   chapterScore,
   createRecallIndex,
+  memoryKey,
   normalizeRecallIndex,
   recallChunks,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/recall-index.ts";
@@ -49,6 +58,7 @@ import {
   toChapterView,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { HEADROOM_TOKENS } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import { recallText } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
 import { routesOf } from "./fixtures/otome-forge-art.ts";
 import { createFakeEmbedder } from "./fixtures/otome-forge-fakes.ts";
@@ -896,4 +906,125 @@ test("Settings offers an embedding connection only once the recall status confir
     "loading: the saved one, never Missing",
   );
   assert.deepEqual(embeddingOptions(null, all, ""), [], "failed, with Built-in saved: nothing new offered");
+});
+
+test("#2430: an older small memory comes back by meaning, in the recall pool's own room, only where it may be known", async () => {
+  const embedder = createFakeEmbedder({ vectorOf: topicVector });
+  const t = await storyWorld({ runKey: "r-recallchat-aaaaaa", model: { embeddingsFor: async () => embedder.host } });
+  // Kai's twelve newest conversations, of about 600 tokens each and about none of the topics, fill the pool. Older
+  // still: one of his about the lighthouse, one of Mireille's and one of the group chat with him and Sol in it.
+  const talk = (n: number) => `TALK-${n} ${words(300, (w) => `lamp${(n + w) % 83}`)}`;
+  const chat = (id: string, content: string, order: number, audience: string[]): ForgeMemorySource => ({
+    id,
+    kind: "chat",
+    title: `${id} (private)`,
+    content,
+    order,
+    audience,
+  });
+  const kaiOld = chat("kai-old", "KAI-OLD: he showed her the lighthouse stairs.", 9000, [KAI]);
+  const groupOld = chat("group-old", "GROUP-OLD: they argued about the lighthouse.", 9002, [KAI, SOL, "group"]);
+  let sources: ForgeMemorySource[] = [
+    kaiOld,
+    chat("mir-old", "MIR-OLD: she kept the lighthouse ledger.", 9001, [MIR]),
+    groupOld,
+    ...Array.from({ length: 12 }, (_, n) => chat(`kai-${n}`, talk(n), 10000 + n, [KAI])),
+  ];
+  const readSources = async () => sources;
+  const background = createBackgroundQueue(t.runtime);
+  const recall = createRecallIndex({ runtime: t.runtime, store: t.store, background, readSources });
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store, background, readSources, recall });
+  const lighthouse = { cues: ["Do you still think about the lighthouse?"] };
+  const pool = async (who: { reader?: string; cast?: string[] }, query: unknown) =>
+    (await memory.recall({ runId: t.runId, job: "chat", query, ...who })).recalls ?? [];
+  const ids = async (who: { reader?: string; cast?: string[] }, query: unknown) =>
+    (await pool(who, query)).map((item) => item.id);
+  const newest = (count: number) => Array.from({ length: count }, (_, n) => `kai-${12 - count + n}`);
+  try {
+    // Before anything is indexed: the newest only, as before, and nothing is embedded.
+    const before = await ids({ reader: KAI }, lighthouse);
+    assert.ok(before.length > 3 && before.length < 12, before.join());
+    assert.deepEqual(before, newest(before.length));
+    assert.equal(embedder.calls.length, 0);
+
+    // Indexed in the background beside the chapter summaries (none here): every small memory, by its text as written.
+    assert.equal(await recall.ensure(t.runId), true);
+    assert.deepEqual(await settled(recall, t.runId), { phase: "ready", indexed: 15, total: 15, choosable: true });
+    assert.ok(embedder.calls.flatMap((call) => call.texts).includes(kaiOld.content));
+    assert.ok(embedder.calls.every((call) => call.inputType === "document"));
+
+    // The two older ones about the lighthouse that he may know go in first, then the newest that fit beside them, all
+    // in story order, within the pool's own room. Mireille's never does.
+    const recalled = await pool({ reader: KAI }, lighthouse);
+    const got = recalled.map((item) => item.id);
+    assert.deepEqual(got, ["kai-old", "group-old", ...newest(got.length - 2)]);
+    assert.ok(got.length - 2 <= before.length && got.length - 2 >= before.length - 1, got.join());
+    const shown = recalled.map((item) => `\n\n# Recalled memory: ${item.title}\n${item.content}`).join("");
+    assert.ok(estimateTextTokens(shown) <= RECALL_TOKENS + HEADROOM_TOKENS, `${estimateTextTokens(shown)} tokens`);
+    assert.equal(embedder.calls.at(-1)!.inputType, "query");
+    // Each prompt's story context carries it, and debug mode logs the scores.
+    const story = await recallText({ store: t.store, memory }, t.runId, {
+      job: "chat",
+      reader: KAI,
+      query: lighthouse,
+      debugMode: true,
+    });
+    assert.ok(story.text.includes(`# Recalled memory: kai-old (private)\n${kaiOld.content}`), story.text.slice(0, 400));
+    const logged = t.logs.find((entry) => entry.level === "debugOverride" && entry.args[0] === "recall-memories");
+    assert.ok(logged && logged.override === true, "logged in debug mode");
+
+    // Only where it may be known: Mireille's for her alone, the group chat's for its members, Kai's for him.
+    assert.deepEqual(await ids({ reader: MIR }, lighthouse), ["mir-old"]);
+    assert.deepEqual(await ids({ cast: [SOL] }, lighthouse), ["group-old"]);
+    assert.deepEqual(await ids({ cast: [] }, lighthouse), []);
+    // A query about none of them, or no vectors for it: the pool as before.
+    assert.deepEqual(await ids({ reader: KAI }, { cues: ["Shall we ring the bell?"] }), before);
+    embedder.fail("throw");
+    assert.deepEqual(await ids({ reader: KAI }, lighthouse), before);
+    embedder.fail(false);
+    // Chosen by how far they stand out from the others offered: two equally close to the query, offered alone, do not.
+    const candidate = (source: ForgeMemorySource) => ({
+      key: memoryKey(source.id),
+      title: source.id,
+      summary: source.content,
+    });
+    const alone = { query: "the lighthouse", margin: MEMORY_RECALL_MARGIN, label: "test" };
+    assert.deepEqual(await recall.choose(t.runId, { ...alone, candidates: [kaiOld, groupOld].map(candidate) }), []);
+
+    // A chapter's saved pool keeps them for its later scenes, with nothing embedded again.
+    const chapter = await memory.recall({
+      runId: t.runId,
+      job: "narration",
+      cast: [KAI],
+      query: lighthouse,
+      pool: { cast: [KAI] },
+    });
+    const saved = (chapter.recalls ?? []).map((item) => item.id);
+    assert.ok(saved.includes("kai-old"), saved.join());
+    embedder.calls.length = 0;
+    const later = await memory.recall({
+      runId: t.runId,
+      job: "narration",
+      cast: [SOL],
+      query: { cues: ["the bell"] },
+      pool: { cast: [KAI], ids: saved },
+    });
+    assert.deepEqual(
+      (later.recalls ?? []).map((item) => item.id),
+      saved,
+    );
+    assert.equal(embedder.calls.length, 0);
+
+    // A deleted one never comes back, though its vector waits for the next job to let it go.
+    sources = sources.filter((source) => source !== kaiOld);
+    assert.deepEqual((await ids({ reader: KAI }, lighthouse))[0], "group-old");
+    sources = [...sources, chat("kai-12", talk(12), 10012, [KAI])];
+    assert.equal(await recall.ensure(t.runId), true);
+    await settled(recall, t.runId);
+    const index = (await t.store.readDoc(recallId(t.runId), normalizeRecallIndex))!;
+    assert.ok(!(memoryKey("kai-old") in index.chapters) && memoryKey("kai-12") in index.chapters);
+  } finally {
+    memory.dispose();
+    recall.dispose();
+  }
 });

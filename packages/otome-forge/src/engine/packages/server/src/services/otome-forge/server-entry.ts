@@ -10,7 +10,7 @@ import { createBackgroundQueue } from "./background-queue.js";
 import { createOtomeHaptics } from "./haptics.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
-import { createOtomeMemory } from "./memory/memory.js";
+import { createOtomeMemory, keptSources } from "./memory/memory.js";
 import { createRecallIndex } from "./memory/recall-index.js";
 import { registerAlbumRoutes } from "./routes/album.js";
 import { registerArcRoutes } from "./routes/arcs.js";
@@ -58,7 +58,9 @@ export async function activate({ api }: ActivationContext) {
   // One background lane (memory summaries and line packs), one story memory with its long-term recall index, one Cancel
   // and one art service (faces, places, CGs; M2b) per activation.
   const background = createBackgroundQueue(runtime);
-  const recall = createRecallIndex({ runtime, store, background });
+  // #2430: the index reads the story's small memories through the memory's own kept sources.
+  const readSources = keptSources(store);
+  const recall = createRecallIndex({ runtime, store, background, readSources });
   // What each memory upkeep job summarized is indexed for long-term recall after it, in the background.
   const afterUpkeep = (runId: string) =>
     void recall
@@ -66,7 +68,7 @@ export async function activate({ api }: ActivationContext) {
       .catch((error: unknown) =>
         runtime.logger.warn("[otome-forge] Recall index: %s", error instanceof Error ? error.message : String(error)),
       );
-  const memory = createOtomeMemory({ runtime, store, background, afterUpkeep });
+  const memory = createOtomeMemory({ runtime, store, background, afterUpkeep, recall, readSources });
   const cancellation = createForgeStoryCancellation();
   const art = createOtomeArt({ runtime, store });
   const haptics = createOtomeHaptics(runtime);
