@@ -18,7 +18,8 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.4.29",
     date: "2026-11-23",
     notes: [
-      "New switch: Backstage > Messaging > Pause Creator DMs. While it is on, no Creator writes to you first, so a roleplay outside Slurp stays undisturbed.",
+      "While you roleplay with a Creator in a Marinara chat that carries Slurp activity, they no longer text you first on Slurp or remark on texts you left unanswered.",
+      "New switch: Backstage > Messaging > Pause Creator DMs. While it is on, no Creator writes to you first.",
     ],
   },
   {

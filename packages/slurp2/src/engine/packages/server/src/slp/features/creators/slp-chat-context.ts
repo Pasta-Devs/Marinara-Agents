@@ -25,6 +25,8 @@ import { slurpChatBridgeCoupleLine, slurpChatBridgeLoveLines } from "../../modul
 import { slurpRunsItself } from "../projects/slp-projects-contract.js";
 import { slurpArcLifeLine } from "../../modules/projects/slp-arc-progress.js";
 import { slurpChatBridgeRapportLine } from "../../modules/messages/slp-rapport.js";
+import { markSlurpEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
+import { isUnsolicitedCreatorMessage } from "../../modules/messages/slp-follow-up.js";
 import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
 import { SLURP_CONTINUITY_FACT_LABELS } from "../../modules/continuity/slp-continuity-prompt.js";
 import { slpArcsLive } from "../../../../../shared/src/slp/slp-extensions.js";
@@ -147,6 +149,8 @@ export async function buildSlurpChatContext(db: DB, request: SlurpChatContextReq
     (account) => account.sourceKind === "character" && characterIds.has(account.sourceEntityId),
   );
   if (creators.length === 0) return null;
+  // The Engine is writing a reply with these Creators right now, so they are busy with the player.
+  for (const creator of creators) markSlurpEngineRoleplay(creator.id);
 
   const since = sinceHoursIso(settings.carryoverHours);
   const entries: SlurpChatContextEntry[] = [];
@@ -227,8 +231,11 @@ export async function buildSlurpChatContext(db: DB, request: SlurpChatContextReq
         messages.listMessages(thread.id, Math.max(settings.carryoverMaxItems, 10)),
         messages.listCommissionsForThread(thread.id, since, settings.carryoverMaxItems),
       ]);
+      // An unasked text the player has not answered yet stays out: the Creator would read it as being ignored.
+      const lastReply = [...threadMessages].reverse().find((m) => m.role === "viewer" && m.kind !== "system");
       for (const message of threadMessages) {
         if (message.createdAt <= since) continue;
+        if (message.createdAt > (lastReply?.createdAt ?? "") && isUnsolicitedCreatorMessage(message)) continue;
         const from = message.role === "creator" ? creator.displayName : persona.displayName;
         const to = message.role === "creator" ? persona.displayName : creator.displayName;
         const line =

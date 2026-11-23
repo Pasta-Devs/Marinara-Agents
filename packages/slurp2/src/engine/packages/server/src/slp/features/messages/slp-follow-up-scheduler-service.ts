@@ -25,6 +25,7 @@ import { isCreatorNightQuietTime } from "../feed/slp-feed-contract.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { incrementFollowUpCount } from "../../modules/messages/slp-thread-notes.js";
+import { slurpInEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 import { slurpSextingPhase } from "../../modules/messages/slp-sexting.js";
 import { slurpRapportDoorTier } from "../../modules/messages/slp-rapport.js";
@@ -131,7 +132,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
             // Settings › Messaging "Pause Creator DMs": nothing that was never asked for piles up for
             // later, so an opener, check-in or recurring update is cancelled; an owed promise, reminder
             // or task update waits a quarter hour at a time and arrives once the pause is off.
-            if (settings.messagesCreatorDmsPaused) {
+            if (settings.messagesCreatorDmsPaused || slurpInEngineRoleplay(threadRow.creatorAccountId)) {
               if (followUp.type === "opener" || followUp.type === "check_in" || followUp.type === "recurring") {
                 await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
               } else {
