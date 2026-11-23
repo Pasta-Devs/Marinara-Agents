@@ -72,7 +72,7 @@ import {
 } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, LiId, RunLiView, RunView } from "../../shared/api-types";
-import { OWN_OPTION } from "../../shared/arcs";
+import { OWN_OPTION, RIDDLE_CHOICE } from "../../shared/arcs";
 import { FACES, MUSIC_MOODS, type MusicMood } from "../../shared/faces";
 import { Backlog } from "./Backlog";
 import { ChoicePills, RememberToast } from "./ChoicePills";
@@ -647,6 +647,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           onDraft={(next) => setOwnDraft({ ...next, at: ownAt })}
           busy={reader.choosing === pending.id}
           error={reader.choiceError}
+          riddle={pending.id === RIDDLE_CHOICE ? beat?.riddle?.question : undefined}
           onSend={(selection) =>
             void reader.choose(pending, { id: OWN_OPTION, text: "", selection, segments: [] }).then((chosen) => {
               if (!chosen) return;

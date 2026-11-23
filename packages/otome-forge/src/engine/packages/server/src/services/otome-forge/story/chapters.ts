@@ -162,7 +162,16 @@ export interface PlanContext {
   sideWith?: boolean;
   /** The arc's judgment this chapter may close on (#2047, judgmentFor): its question and answers, never which is true. */
   judgment?: ArcJudgment;
+  /** This chapter's last node ends on the arc's riddle (riddleChapter), in place of the judgment. */
+  riddle?: boolean;
 }
+
+/**
+ * The maintainer's (2026-11-23): once an arc, of any kind, a chapter ends on a riddle the player answers in one word.
+ * It is the arc's middle chapter, so a story in progress gets one in its next arc whose middle is still to come.
+ */
+export const riddleChapter = (arc: Pick<StoryArc, "from" | "plan">, number: number) =>
+  number === arc.from + Math.floor(arc.plan.length / 2);
 
 /** How many climaxes in a row may be the same kind (the maintainer's 2, so the two alternate often). */
 export const CLIMAX_STREAK = 2;
@@ -403,14 +412,22 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
     climax.arcEvent = true;
   }
   // #2046: one side-with scene at most, on the first marked node it fits, and only while one may come. Any other mark
-  // is dropped, never repaired, so the scene is never forced.
+  // is dropped, never repaired, so the scene is never forced. Never the riddle's node: the riddle takes its last
+  // segment, where the side-with choice may be.
+  const final = nodes.at(-1)!;
   const side = context.sideWith
-    ? nodes.find((node) => reply.nodes[node.i]?.sideWith === true && sideWithFits(node, units))
+    ? nodes.find(
+        (node) =>
+          !(context.riddle && node === final) && reply.nodes[node.i]?.sideWith === true && sideWithFits(node, units),
+      )
     : undefined;
   if (side) side.sideWith = true;
   // #2047: the last node may close on the arc's judgment, unless it is the climax: a stance game holds no big choice.
-  const final = nodes.at(-1)!;
-  if (context.judgment && final.kind !== "confrontation" && final.kind !== "closer") {
+  const climaxLast = final.kind === "confrontation" || final.kind === "closer";
+  if (context.riddle) {
+    if (climaxLast) return "this chapter's last node ends on a riddle: put any climax second-to-last";
+    final.riddle = true;
+  } else if (context.judgment && !climaxLast) {
     final.judgment = { question: context.judgment.question, answers: [...context.judgment.answers] };
   }
   const tags = planTags(reply, context.world);
@@ -536,7 +553,8 @@ export async function planNextChapter(
         },
         { debugMode, ...(signal ? { signal } : {}), memory: arcMemory! },
       ));
-    const judgment = await judgmentFor(deps.store, runId, arc, mains, number);
+    const riddle = riddleChapter(arc, number);
+    const judgment = riddle ? null : await judgmentFor(deps.store, runId, arc, mains, number);
     // #2127: the thoughts waiting now, after the arc's plan: `run.state` was read before this task was queued.
     const thoughts = (await deps.store.readDoc(stateId(runId), normalizeState))?.thoughts ?? null;
     // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
@@ -577,6 +595,7 @@ export async function planNextChapter(
       sideWith,
       ...(climax ? { climax } : {}),
       ...(judgment ? { judgment } : {}),
+      ...(riddle ? { riddle } : {}),
     };
     const { value, connectionId } = await generateJson(deps, {
       runId,
@@ -596,6 +615,7 @@ export async function planNextChapter(
         arc,
         sideWith,
         judgment: !!judgment,
+        riddle,
         thoughts: thoughts?.text ?? "",
         // It picks up from the last Character Story when that is the newest thing that happened (S/story/canon.ts).
         handOff: memory.handOff ?? "",

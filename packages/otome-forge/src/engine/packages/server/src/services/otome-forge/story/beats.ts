@@ -90,6 +90,9 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
   OWN_OPTION,
+  RIDDLE_ANSWER_MAX,
+  RIDDLE_CHOICE,
+  RIDDLE_QUESTION_MAX,
   hisSideKey,
   stageRow,
   type ClimaxEnding,
@@ -213,6 +216,8 @@ export interface BeatContext {
   last: boolean;
   /** The beat must end on one big choice (a stage-5 route chapter's gate). */
   mustChoose?: boolean;
+  /** The beat ends on the arc's riddle (the chapter's last node, S/story/chapters.ts riddleChapter). */
+  riddle?: boolean;
   /** A date's beat (M5): one scored choice, no big choice, and a grievance only when the date was planned to go wrong. */
   date?: { goesWrong: boolean };
   /** #2046: a side-with node's love interests (S/story/replies.ts sideWithCast): one small choice, an option backing each. */
@@ -527,7 +532,57 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
   return body;
 }
 
-type NormalizedBeat = BeatBody & { choices: ForgeChoice[]; sideWith?: Beat["sideWith"] };
+type NormalizedBeat = BeatBody & { choices: ForgeChoice[]; sideWith?: Beat["sideWith"]; riddle?: Beat["riddle"] };
+
+/** Letters that keep no accent to strip (ł is no l with a mark), as their plain spelling. */
+const PLAIN_LETTERS: Record<string, string> = {
+  ł: "l",
+  đ: "d",
+  ð: "d",
+  ø: "o",
+  ħ: "h",
+  ı: "i",
+  ß: "ss",
+  æ: "ae",
+  œ: "oe",
+  þ: "th",
+};
+
+/**
+ * A riddle's answer as it is compared: case, accents and anything but letters and digits never count, so "NOZKA" and
+ * "nóżka." are "nozka".
+ */
+export const riddleKey = (word: string) =>
+  word
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[łđðøħıßæœþ]/gu, (letter) => PLAIN_LETTERS[letter]!)
+    .replace(/[^\p{L}\p{N}]/gu, "");
+
+/** One word: no space inside it, and something left to compare. */
+const oneWord = (word: string) => !/\s/u.test(word.trim()) && !!riddleKey(word);
+
+/**
+ * The reply's riddle as the beat keeps it, and its choice: a big choice with no offered options on the last segment,
+ * answered through Write your own… (chooseOption), in place of any choice the reply put there. Or why it is refused.
+ */
+function riddleOf(reply: BeatReply, beat: NormalizedBeat): NormalizedBeat | string {
+  const raw = (reply.riddle ?? {}) as { question?: unknown; answer?: unknown };
+  const question = typeof raw.question === "string" ? raw.question.trim().slice(0, RIDDLE_QUESTION_MAX) : "";
+  const answer = typeof raw.answer === "string" ? raw.answer.trim() : "";
+  if (!question || !oneWord(answer) || answer.length > RIDDLE_ANSWER_MAX) {
+    return 'this node ends on the riddle: add "riddle": {"question": "...", "answer": "..."}, its answer ONE word';
+  }
+  const at = beat.segments.length - 1;
+  // A stored beat keeps three choices (S/schemas/story.ts normalizeBeat), so at most two small ones go before it.
+  const choices = beat.choices.filter((choice) => choice.kind !== "big" && choice.at !== at).slice(0, 2);
+  return {
+    ...beat,
+    choices: [...choices, { id: RIDDLE_CHOICE, kind: "big", at, options: [] }],
+    riddle: { question, answer },
+  };
+}
 
 /**
  * The reply with every masked love interest's thought line, and (#2306) every line that repeats the one before it,
@@ -653,7 +708,8 @@ export function normalizeBeatReply(written: BeatReply, context: BeatContext): No
   if (dateProblem) return dateProblem;
   const sideWith = context.sideWith ? readSideWith(reply, choices, context) : undefined;
   if (typeof sideWith === "string") return sideWith;
-  return { ...beat, choices, ...(sideWith ? { sideWith } : {}) };
+  const normalized: NormalizedBeat = { ...beat, choices, ...(sideWith ? { sideWith } : {}) };
+  return context.riddle ? riddleOf(reply, normalized) : normalized;
 }
 
 /** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
@@ -1055,6 +1111,7 @@ async function generateBeat(
     state: run.state,
     last,
     mustChoose,
+    ...(last && node.riddle ? { riddle: true } : {}),
     cgExplicit,
     ...(hapticsOn(run.world) ? { haptics: true } : {}),
     ...(run.world.audio.emotionCues && run.world.audio.tts ? { cues: true } : {}),
@@ -1167,6 +1224,7 @@ async function generateBeat(
           },
       ...(context.date ? { scores: scoresOf(value, scene.choices) } : {}),
       ...(scene.sideWith ? { sideWith: scene.sideWith } : {}),
+      ...(scene.riddle ? { riddle: scene.riddle } : {}),
       musicMood: scene.musicMood,
       ...(scene.cg ? { cg: scene.cg } : {}),
     };
@@ -1551,7 +1609,9 @@ async function applyPick(
  * POST .../beats/:i/choose {choice, option, own?}. The first pick of the first pending choice on the beat being read
  * is canon; its effects reach the state once. A replay of a small choice changes nothing; a big choice never changes.
  * `own` (#2146, with option OWN_OPTION) answers a big choice in the player's own words: a 400 on any other choice or
- * when blank, appended to the choice as its own option in the write that makes it canon, with no effects.
+ * when blank, appended to the choice as its own option in the write that makes it canon, with no effects. The arc's
+ * riddle (RIDDLE_CHOICE) takes one word, and its option's label says whether it was right, for the canon: the next
+ * chapter plays out what follows (the client sees only the word, toBeatView).
  */
 export async function chooseOption(
   deps: BeatDeps,
@@ -1569,11 +1629,21 @@ export async function chooseOption(
   if (choice && own && choice.kind !== "big") {
     throw new OtomeForgeError(400, "Only a chapter's closing decision takes your own words.", "bad-request");
   }
+  const riddle = choiceId === RIDDLE_CHOICE ? beat.riddle : undefined;
+  if (riddle && own && (!oneWord(own.text) || own.text.trim().length > RIDDLE_ANSWER_MAX)) {
+    throw new OtomeForgeError(400, "Answer in one word.", "bad-request");
+  }
+  const right = !!riddle && !!own && riddleKey(own.text) === riddleKey(riddle.answer);
+  const who = run.player.name || "the protagonist";
   const words: ChoiceOption | null = own
     ? {
         id: OWN_OPTION,
-        text: OWN_ANSWER_LABEL,
-        selection: { kind: own.kind, text: own.text.replace(/\s+/gu, " ").trim() },
+        text: riddle
+          ? right
+            ? "Answered the riddle: right."
+            : `Answered the riddle: wrong. The right answer was "${riddle.answer}"; ${who} does not know it yet.`
+          : OWN_ANSWER_LABEL,
+        selection: { kind: riddle ? "dialogue" : own.kind, text: own.text.replace(/\s+/gu, " ").trim() },
         segments: [],
       }
     : null;

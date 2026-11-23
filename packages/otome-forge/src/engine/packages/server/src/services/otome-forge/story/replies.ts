@@ -151,6 +151,7 @@ export interface BeatReply {
   musicMood?: unknown;
   cg?: unknown;
   voices?: unknown;
+  riddle?: unknown;
 }
 
 export const BeatReplySchema: ZodType<BeatReply> = z.object({
@@ -160,6 +161,7 @@ export const BeatReplySchema: ZodType<BeatReply> = z.object({
   musicMood: z.unknown().optional(),
   cg: z.unknown().optional(),
   voices: z.unknown().optional(),
+  riddle: z.unknown().optional(),
 });
 
 // ── P12's and P12c's reply (the prompts: S/prompts.ts confrontationMessages, closerMessages) ──

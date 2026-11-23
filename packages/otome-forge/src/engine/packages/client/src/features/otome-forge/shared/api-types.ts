@@ -1067,6 +1067,8 @@ export interface ChapterNode {
   sideWith?: true;
   /** The chapter's last node may close on the arc's judgment (#2047), never knowing which answer is true (hidden). */
   judgment?: ArcJudgment;
+  /** The chapter's last node ends on the arc's riddle (S/story/chapters.ts riddleChapter). */
+  riddle?: true;
 }
 
 /** A question the protagonist may answer wrong (#2047), and its plausible answers, the true one among them, unmarked. */
@@ -1300,6 +1302,8 @@ export interface Beat {
   confrontation?: Confrontation;
   /** #2046: this beat's side-with choice, and the love interest each of its options backs (optionId → LiId). */
   sideWith?: { choice: string; backs: Record<string, LiId> };
+  /** The arc's riddle this beat ends on (its choice RIDDLE_CHOICE), with its one-word answer (hidden from the client). */
+  riddle?: { question: string; answer: string };
   /**
    * 0.38.0: what this scene's picks and its read to the end changed in the story state, oldest first, so a Rewrite can
    * take them back (S/story/rewrite-undo.ts). Hidden from the client.
@@ -1441,7 +1445,9 @@ export type ChapterView = Omit<
  * A beat as the client sees it: without its effects, its stored confrontation (POST .../beats/:i sends a view) or a
  * date's scores.
  */
-export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation" | "scores" | "undo"> & {
+export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation" | "scores" | "undo" | "riddle"> & {
+  /** The riddle's question alone. */
+  riddle?: { question: string };
   /** 0.38.0: false when a Rewrite cannot take this scene's picks or read back (S/story/rewrite-undo.ts rewriteBlock). */
   rewritable?: boolean;
 };

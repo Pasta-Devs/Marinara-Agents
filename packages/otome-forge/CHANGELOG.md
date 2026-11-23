@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.42.0 — 2026-11-23
+
+- Once in every arc, the middle chapter's last scene ends on a riddle, a small mystery or a suspect to name. Tap **Answer…** and type one word. Capitals, accents and punctuation don't matter, so "nozka" counts for "nóżka". The next chapter plays out what follows from a right or a wrong answer.
+
 ## 0.41.0 — 2026-11-23
 
 - An arc can take you far from where the story began, to another city or land of its world. Its goal is an event, an adventure, a problem or a mystery of its own, solved in its last chapter, and love interests still reveal the central mystery arc by arc.
