@@ -216,6 +216,8 @@ async function sendDramaJob(
       });
       return sent ? true : "drop";
     }
+    // "Pause Creator DMs": no unasked text, and no empty chat opened for one.
+    if ((await createSlurpStorage(db).getSettings()).messagesCreatorDmsPaused) return "drop";
     let thread = await messages.getThread(viewer, job.actorId);
     if (!thread) {
       const opened = await messages.openThread(viewer, job.actorId, "creator", "waive");

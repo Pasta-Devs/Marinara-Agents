@@ -447,6 +447,9 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
         Boolean(await slurp.getNoodlerAccountById(viewerAccountId)) ||
         Boolean(await createSlurpPopulationStorage(db).get(viewerAccountId));
       if (!counterpartExists) return null;
+      // "Pause Creator DMs": an unasked text must not even open an empty chat before the gate drops it.
+      const unasked = isUnsolicitedCreatorMessage({ role: "creator", kind: input.kind, metadata: input.metadata });
+      if (unasked && (await slurp.getSettings()).messagesCreatorDmsPaused) return null;
       const opened = await context.storage.openThread(viewerAccountId, creatorAccountId, "creator");
       if (opened.status !== "ok") return null;
       return context.storage.appendMessage(opened.thread.id, {

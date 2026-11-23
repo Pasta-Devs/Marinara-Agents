@@ -19,6 +19,27 @@ function main() {
     "every unasked send path (openers, drama questions, check-ins) is dropped at write time",
   );
 
+  assert.match(
+    storage,
+    /if \(unasked && \(await slurp\.getSettings\(\)\)\.messagesCreatorDmsPaused\) return null;\s*const opened = await context\.storage\.openThread/u,
+    "sendCreatorMessage drops an unasked text before it opens an empty chat",
+  );
+  const server = `${PACKAGES}/server/src/slp`;
+  for (const [file, guard, opens] of [
+    [
+      "features/world/slp-world-operation.ts",
+      "!messaging.proactiveMessages || settings.messagesCreatorDmsPaused",
+      "planSlurpCreatorCheckIn(input)",
+    ],
+    ["features/world/slp-drama-service.ts", 'messagesCreatorDmsPaused) return "drop";', "openThread("],
+    ["features/messages/slp-partner-texts-service.ts", "messagesCreatorDmsPaused) return;", "openThread("],
+  ]) {
+    const source = slurp2Source(`${server}/${file}`);
+    const at = source.indexOf(guard);
+    assert.ok(at >= 0, `${file} checks the pause`);
+    assert.ok(at < source.indexOf(opens), `${file} checks the pause before it opens a chat`);
+  }
+
   const scheduler = slurp2Source(`${PACKAGES}/server/src/slp/features/messages/slp-follow-up-scheduler-service.ts`);
   const branch = scheduler.match(/if \(settings\.messagesCreatorDmsPaused\) \{([\s\S]*?)\n\s*continue;/u);
   assert.ok(branch, "the follow-up scheduler checks the pause");

@@ -24,6 +24,8 @@ export async function textSlurpPartners(db: DB, at = slurpWorldNow()): Promise<v
   const { couples } = await readSlurpCreatorTiesDocument(db);
   const live = couples.filter((couple) => couple.stage !== "split");
   if (!live.length) return;
+  // "Pause Creator DMs": a partner text is never asked for, so none is planned and no chat is opened.
+  if ((await createSlurpStorage(db).getSettings()).messagesCreatorDmsPaused) return;
   const accounts = await createSlurpStorage(db).listNoodlerAccounts();
   // The player's pages, and the persona behind each: her texts go to that persona's inbox.
   const viewerOf = new Map(

@@ -725,7 +725,7 @@ export async function advanceSlurpWorld(db: DB, until = slurpWorldNow()): Promis
         await yieldToEngine();
         if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
         const messaging = await messages.getCreatorMessaging(account.id);
-        if (!messaging.proactiveMessages) continue;
+        if (!messaging.proactiveMessages || settings.messagesCreatorDmsPaused) continue; // "Pause Creator DMs"
         for (const tie of await population.listTiesForCreator(account.id)) {
           if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
           // Generated fans never read or answer, so an opener to one is a thread nobody sees.
