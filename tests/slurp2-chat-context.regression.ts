@@ -15,6 +15,8 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-couple-lines.ts";
 import { slurpCoupleOf } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-creator-couples.ts";
 import { slurpChatBridgeRapportLine } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport.ts";
+import { markSlurpEngineRoleplay } from "../packages/slurp2/src/engine/packages/server/src/slp/data/messages/slp-engine-roleplay-storage.ts";
+import { isUnsolicitedCreatorMessage } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-follow-up.ts";
 import { SLURP_CONTINUITY_FACT_LABELS } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/continuity/slp-continuity-prompt.ts";
 
 const worldClockStubs = { slurpWorldNow: () => new Date(), slurpWorldNowMs: () => Date.now() };
@@ -92,6 +94,8 @@ const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContextWithClock(
       !(account.kind === "persona" && account.sourceKind === "persona"),
     slurpChatBridgeRapportLine,
     SLURP_CONTINUITY_FACT_LABELS,
+    markSlurpEngineRoleplay,
+    isUnsolicitedCreatorMessage,
     readSlurpCreatorTiesDocument: async () => ({ couples }),
     listSlurpContinuityFor: async (
       _db: unknown,
