@@ -65,6 +65,11 @@ function main() {
       "!viewerOf.has(id) && !slurpInEngineRoleplay(id)",
       "openThread(",
     ],
+    [
+      "features/world/slp-creator-check-in.ts",
+      "if (slurpInEngineRoleplay(input.creatorAccountId)) return false;",
+      "addScheduledFollowUps(",
+    ],
   ]) {
     const source = slurp2Source(`${server}/${file}`);
     const at = source.indexOf(guard);

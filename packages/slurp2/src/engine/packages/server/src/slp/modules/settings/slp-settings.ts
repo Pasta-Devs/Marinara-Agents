@@ -379,6 +379,7 @@ export const slurpSettingsSchema = z.object({
   messagesAwayRepliesEnabled: z.boolean(),
   /** One unsolicited text, then none until a real reply. See `slurpAllowsUnsolicitedText`. */
   messagesPauseFollowUpsUntilReply: z.boolean(),
+  /** No Creator writes first while on; owed texts wait, unasked ones are dropped. */
   messagesCreatorDmsPaused: z.boolean(),
   /** Messages one reply is broken into. One keeps a reply in a single bubble. */
   messagesReplyBubbleLimit: z.number().int().min(1).max(4),

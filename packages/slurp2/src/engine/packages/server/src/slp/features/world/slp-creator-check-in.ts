@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { slurpCreatorCheckIn } from "../../../../../shared/src/slp/slp-world.js";
 import type { SlurpThread } from "../../data/messages/slp-messages-storage-types.js";
 import type { createSlurpMessagesStorage } from "../../data/slp-storage.js";
+import { slurpInEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
 import { slurpAllowsUnsolicitedText } from "../../modules/messages/slp-follow-up.js";
 import { localDayKey } from "./slp-world-actions.js";
 import { logger } from "../../../lib/logger.js";
@@ -27,6 +28,8 @@ export async function planSlurpCreatorCheckIn(input: {
 }): Promise<boolean> {
   const { thread, tie, until, unit } = input;
   if (thread.state !== "active" || (thread.coolUntil && thread.coolUntil > until.toISOString())) return false;
+  // A Creator busy in a Marinara chat roleplay would only see this cancelled; keep the tick's opener slot.
+  if (slurpInEngineRoleplay(input.creatorAccountId)) return false;
   const day = `${input.creatorAccountId}:${tie.memberId}:${localDayKey(until)}`;
   const reason = slurpCreatorCheckIn({
     stage: tie.stage,
