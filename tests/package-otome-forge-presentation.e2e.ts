@@ -1761,6 +1761,7 @@ test("Otome Hearth backgrounds: reading waits for the current place paint and im
     calls,
   );
   const root = await openStory(page);
+  await recordSpeech(page);
   await root.getByRole("button", { name: "Continue" }).first().click();
   const preparing = root.getByRole("status").filter({ hasText: "Preparing the background…" });
   await expect(preparing).toBeVisible();
@@ -1777,7 +1778,8 @@ test("Otome Hearth backgrounds: reading waits for the current place paint and im
   ).toHaveCount(0);
   await page.getByRole("dialog", { name: "Backlog" }).getByRole("button", { name: "Close" }).click();
   expect(posts(calls, "/read")).toHaveLength(0);
-  expect(posts(calls, "/api/tts/speak")).toHaveLength(0);
+  // 0.37.0: the held line's voice may be made ahead, but nothing is spoken before its place paints.
+  expect(await spoken(page)).toEqual([]);
   painted = true;
   await expect.poll(() => decodeRequested).toBe(true);
   await expect(preparing).toBeVisible();
@@ -1791,6 +1793,8 @@ test("Otome Hearth backgrounds: reading waits for the current place paint and im
     new RegExp("background-preparation\\.svg"),
   );
   await expect.poll(() => posts(calls, "/read").length).toBe(1);
+  // Spoken once it shows, with the clip made ahead: one request in all.
+  await expect.poll(async () => (await spoken(page)).length).toBe(1);
   await expect.poll(() => posts(calls, "/api/tts/speak").length).toBe(1);
   expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
     [],
@@ -2636,7 +2640,10 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
     characterId: "card-ilvar",
   });
   expect(first.cacheKey).toBe(`otome-forge:${RUN}:main-1/0r0/1`);
-  await expect.poll(() => posts(calls, "/api/tts/speak").length).toBe(1);
+  // 0.37.0: his later line is made ahead too; this one is asked for once, ahead and played alike.
+  await expect
+    .poll(() => posts(calls, "/api/tts/speak").filter((call) => call.body!.text === first.text).length)
+    .toBe(1);
 
   // Stock music plays for the beat's cue, and the cue is generated once on the audio connection.
   await expect
