@@ -1693,7 +1693,7 @@ export interface MemoryStatus {
  */
 export interface RecallIndexStatus {
   phase: "indexing" | "ready" | "failed";
-  /** How many of the chapter summaries (`total`) are indexed for the story's embedding model. */
+  /** How many chapter summaries and small memories (`total`, #2430) are indexed for the story's embedding model. */
   indexed: number;
   total: number;
   message?: string;

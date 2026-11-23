@@ -27,9 +27,17 @@
 // - Choosing (`choose`, a chapter's plan): the query's pieces are embedded and averaged, each candidate scores its best
 //   piece, and the best RECALL_MAX at RECALL_MIN_SIMILARITY or more are chosen. No index, an index of another model, or
 //   no vectors chooses none, and the prompt is as it would be without this. Debug mode logs each candidate's score.
+// - #2430, the small memories: every `chat` memory source (a Messages conversation, the group chat's too, a Snapshot, a
+//   Read Him set, a Claw round, a Tarot reading, a Kitty Cards game; S/memory/sources.ts) is indexed beside the chapter
+//   summaries, by its text as written (P18 and the games already write it as a short memory), in the same map under its
+//   own source key, so it is fingerprinted, rebuilt and let go of the same way: one whose source is gone is dropped by
+//   the next job. The recall pool (S/memory/memory.ts) chooses among the ones its prompt may know, so the index decides
+//   nothing about who knows what. A small memory is chosen by how far it stands above the others (MEMORY_RECALL_MARGIN),
+//   not by RECALL_MIN_SIMILARITY: short texts that share the story's names all score alike.
 // A deleted story keeps no index: it is a run document (RUN_DOC_KINDS), and a job's write for a story gone is refused or
 // removed again.
 import { createHash } from "node:crypto";
+import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import type { CapabilityEmbeddingHost, CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { RecallIndexStatus } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { BackgroundQueue } from "../background-queue.js";
@@ -49,6 +57,14 @@ export const RECALL_MAX = 3;
  * 0.25–0.45 (they share its names and places), and a query about nothing in it at most 0.38.
  */
 export const RECALL_MIN_SIMILARITY = 0.45;
+/**
+ * #2430: how far above the mean similarity of the small memories offered one must score to be recalled. Measured on the
+ * built-in MiniLM over 37 short memories of one couple: a message or scene about what a memory is about put it 0.09–0.40
+ * above the mean (21 of 25 past 0.15), the other memories at most 0.23 above it (those mostly about the same thing),
+ * and a message or scene about nothing in them at most 0.14. Its absolute similarity says little: a scene naming the
+ * couple gave unrelated memories up to 0.58, a short message gave the right one as little as 0.15.
+ */
+export const MEMORY_RECALL_MARGIN = 0.15;
 /** The Engine's caps on one embed call (capability-embedding.service.ts). */
 export const EMBED_TEXTS_MAX = 128;
 export const EMBED_CHARACTERS_MAX = 200_000;
@@ -190,6 +206,10 @@ function inTimeline(key: string): boolean {
 export const indexedSummaries = (memory: unknown) =>
   new Map([...savedStory(memory).summaries].filter(([key]) => inTimeline(key)));
 
+/** #2430: a small memory's source key, and its text as the index holds it and the recall pool sends it. */
+export const memoryKey = (id: string) => JSON.stringify(["chat", id]);
+export const memoryText = (source: Pick<ForgeMemorySource, "content">) => source.content.trim();
+
 type EmbeddingsFor = (connectionId: string | null) => Promise<CapabilityEmbeddingHost | null>;
 
 /** Capability API 1.818's embeddingsFor, on an Engine that has it. */
@@ -238,9 +258,14 @@ export interface RecallIndexDeps {
   runtime: Pick<CapabilityRuntimeHost, "logger" | "isDebugAgentsEnabled">;
   store: Pick<OtomeStore, "readDoc" | "mutateDoc" | "removeDoc">;
   background: Pick<BackgroundQueue, "ensure" | "has" | "waiting">;
+  /**
+   * #2430: the run's memory sources (S/memory/sources.ts, shared with the memory's own), whose small memories are
+   * indexed too; without it only the chapter summaries are.
+   */
+  readSources?: (runId: string) => Promise<ForgeMemorySource[]>;
 }
 
-export function createRecallIndex({ runtime, store, background }: RecallIndexDeps) {
+export function createRecallIndex({ runtime, store, background, readSources }: RecallIndexDeps) {
   /** Runs asked to index again while their job waited or ran. */
   const again = new Set<string>();
   let disposed = false;
@@ -248,13 +273,19 @@ export function createRecallIndex({ runtime, store, background }: RecallIndexDep
   const runExists = async (runId: string) => !!(await store.readDoc(worldId(runId), normalizeWorld));
   const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+  /** The story's model choice, its index and every text the index holds (see the header), by source key. */
   async function read(runId: string) {
-    const [world, summaries, index] = await Promise.all([
+    const [world, summaries, index, sources] = await Promise.all([
       store.readDoc(worldId(runId), normalizeWorld),
       store.readDoc(memoryId(runId), indexedSummaries),
       store.readDoc(recallId(runId), normalizeRecallIndex),
+      readSources?.(runId) ?? [],
     ]);
-    return { world, summaries: summaries ?? new Map<string, string>(), index };
+    const texts = new Map<string, string>(summaries ?? []);
+    for (const source of sources) {
+      if (source.kind === "chat" && memoryText(source)) texts.set(memoryKey(source.id), memoryText(source));
+    }
+    return { world, summaries: texts, index };
   }
 
   /** Saves the index unless the story is gone; one deleted meanwhile keeps none. */
@@ -369,7 +400,8 @@ export function createRecallIndex({ runtime, store, background }: RecallIndexDep
 
     /**
      * The candidates to recall for `query` (see the header), best first; [] without an index of the story's model or
-     * vectors for the query. Never throws: a chapter's plan goes on without them.
+     * vectors for the query. With `margin` (#2430's small memories), each needs that much above the mean score of the
+     * candidates indexed, instead of RECALL_MIN_SIMILARITY. Never throws: a prompt goes on without them.
      */
     async choose<T extends RecallCandidate>(
       runId: string,
@@ -379,14 +411,30 @@ export function createRecallIndex({ runtime, store, background }: RecallIndexDep
         signal,
         debugMode = false,
         label,
-      }: { query: string; candidates: readonly T[]; signal?: AbortSignal; debugMode?: boolean; label: string },
+        margin,
+      }: {
+        query: string;
+        candidates: readonly T[];
+        signal?: AbortSignal;
+        debugMode?: boolean;
+        label: string;
+        margin?: number;
+      },
     ): Promise<T[]> {
       const pieces = recallChunks(query).slice(0, EMBED_TEXTS_MAX);
       if (!candidates.length || !pieces.length) return [];
       try {
-        const { world, index } = await read(runId);
+        const [world, index] = await Promise.all([
+          store.readDoc(worldId(runId), normalizeWorld),
+          store.readDoc(recallId(runId), normalizeRecallIndex),
+        ]);
         const connectionId = world?.connections.embeddings ?? null;
         if (!index || index.connectionId !== connectionId) return [];
+        const indexed = candidates.flatMap((candidate) => {
+          const entry = index.chapters[candidate.key];
+          return entry?.fingerprint === fingerprintOf(candidate.summary) ? [{ candidate, entry }] : [];
+        });
+        if (!indexed.length) return [];
         const host = await embeddingHost(runtime, connectionId);
         if (!host || host.spaceId !== index.spaceId) return [];
         // The query's pieces, averaged: one direction for the whole query.
@@ -394,21 +442,24 @@ export function createRecallIndex({ runtime, store, background }: RecallIndexDep
         const sum = vectors?.reduce((total, vector) => total.map((value, at) => value + vector[at]!));
         const mean = sum && unitVector(Array.from(sum));
         if (!mean) return [];
-        const scored = candidates.flatMap((candidate) => {
-          const entry = index.chapters[candidate.key];
-          if (entry?.fingerprint !== fingerprintOf(candidate.summary)) return [];
-          return [{ candidate, score: chapterScore(mean, entry.vectors.map(unpackVector)) }];
-        });
+        const scored = indexed.map(({ candidate, entry }) => ({
+          candidate,
+          score: chapterScore(mean, entry.vectors.map(unpackVector)),
+        }));
         scored.sort((a, b) => b.score - a.score);
-        const chosen = scored.filter(({ score }) => score >= RECALL_MIN_SIMILARITY).slice(0, RECALL_MAX);
+        const least =
+          margin === undefined
+            ? RECALL_MIN_SIMILARITY
+            : scored.reduce((total, { score }) => total + score, 0) / scored.length + margin;
+        const chosen = scored.filter(({ score }) => score >= least).slice(0, RECALL_MAX);
         const debug = debugMode || runtime.isDebugAgentsEnabled();
         if (debug || runtime.logger.isLevelEnabled?.("debug") !== false) {
           runtime.logger.debugOverride(
             debug,
-            "[debug/otome-forge/%s] Earlier chapters recalled in detail (at most %d, similarity at least %s): %s",
+            "[debug/otome-forge/%s] Recalled by meaning (at most %d, similarity at least %s): %s",
             label,
             RECALL_MAX,
-            RECALL_MIN_SIMILARITY,
+            Math.round(least * 1000) / 1000,
             JSON.stringify(
               scored.map(({ candidate, score }) => ({
                 title: candidate.title,

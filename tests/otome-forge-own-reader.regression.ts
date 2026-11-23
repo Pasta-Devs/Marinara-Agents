@@ -321,13 +321,10 @@ test("another love interest's route or repair chapter never reaches a note, a li
       note.includes("KAI-MAIN-GRIEVANCE") && note.includes("KAI-MAIN-DISCLOSURE"),
       "his own grievance and disclosure",
     );
-    const noteRecall = t.recalls[0] as { reader?: string; query?: { cues?: string[] } };
+    const noteRecall = t.recalls[0] as { reader?: string; query?: unknown };
     assert.equal(noteRecall.reader, KAI, "the note recalls as Kai's own reader");
-    assert.deepEqual(
-      noteRecall.query?.cues,
-      ["MAIN-RELATIONSHIP-KAI: he let her hold the lamp.", "MAIN-OFFSCREEN-KAI: Kai rewired the bell."],
-      "recall is cued by the rows his own reader may know",
-    );
+    // #2430: it reads only the newest memory he holds, so nothing cues it: no row of anyone's goes to an embedder.
+    assert.equal(noteRecall.query, undefined, "recall is cued by nothing");
 
     // P15: Kai's line pack reads only his card and stage.
     assert.deepEqual(await ensureLinePacks(t.deps, t.runId, [KAI], { debugMode: false }), [KAI]);

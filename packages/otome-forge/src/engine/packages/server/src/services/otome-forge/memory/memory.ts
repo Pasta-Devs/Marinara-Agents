@@ -56,8 +56,16 @@
 //   already lists in full (`listed`, P17's newest conversations). A date (the kit's `character-story`) never joins the
 //   timeline's text: it is its love interest's own, and until its summary is folded (the timeline covers it) it goes
 //   in as recent canon, by its summary or in full while it has none (S/story/canon.ts). The pool is the same in every
-//   phase. No embeddings are made, so none are paid for. Long-term recall (0.19.0) embeds the saved summaries apart from
-//   this: each upkeep job hands its run to `afterUpkeep`, which indexes what is new (S/memory/recall-index.ts).
+//   phase. Long-term recall (0.19.0) embeds the saved summaries apart from this: each upkeep job hands its run to
+//   `afterUpkeep`, which indexes what is new (S/memory/recall-index.ts). #2430: it indexes the `chat` sources too, and
+//   when the pool leaves some of those this prompt may know out, the few closest in meaning to its query (`recall`'s
+//   choose, among all of them) go in first, then the newest as before, so an older small exchange with a love interest
+//   comes back when the scene or message is about it. Their room is the pool's: the newest give way. A chapter's
+//   saved `ids` keep them, as they keep the rest. No index, no embedding model or none close enough: the pool as before.
+//   A prompt that caches the pool while its query changes from call to call (P17 and the group chat's, whose query is
+//   the newest messages) asks for them `apart`: the pool stays the newest alone, the same through a conversation, and
+//   the few chosen it leaves out come back beside it (`pinned`), for the prompt to send after its cached part. The wait
+//   for the query's vectors is capped at MEMORY_QUERY_MS, whatever the embedder does with its signal.
 //   0.20.4, a chapter's small memories (`pool`): a story chapter's scenes recall the pool for everyone in the chapter
 //   (`cast`), chosen once and then sent as those exact memories (`ids`), so it never changes from scene to scene
 //   (S/story/beats.ts saves them on the chapter). Each is titled with who knows it.
@@ -78,6 +86,7 @@
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import {
   createForgeStoryMemory,
+  forgeRecallQuery,
   type ForgeMemorySource,
   type ForgeMemoryStatus,
   type ForgeRecallOptions,
@@ -111,6 +120,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { mayKnow, tagText, type StorySource } from "../story/canon.js";
+import { MEMORY_RECALL_MARGIN, memoryKey, memoryText, type RecallIndex } from "./recall-index.js";
 import { readMemorySources } from "./sources.js";
 import {
   HEADROOM_TOKENS,
@@ -143,6 +153,11 @@ const TIMELINE_OUTPUT_TOKENS = 24576;
  * HEADROOM_TOKENS of leeway (S/memory/timeline.ts).
  */
 export const RECALL_TOKENS = 5000;
+/**
+ * #2430: the longest a prompt waits for its query's vectors before its recall pool goes as the newest alone, as the
+ * kit's own recall never holds a generation up for more than 1.5 s (forgeQueryVectors).
+ */
+const MEMORY_QUERY_MS = 1500;
 /**
  * The context the kit is told every reader has (#2066). The kit sizes its overview at a tenth of it, so the timeline's
  * size never follows the model; the timeline's own ceiling keeps it within 14k, and this only bounds one that keeps
@@ -265,6 +280,8 @@ export interface OtomeMemoryDeps {
   readSources?: (runId: string) => Promise<ForgeMemorySource[]>;
   /** Called once each upkeep job ends, so new summaries are indexed for long-term recall (S/memory/recall-index.ts). */
   afterUpkeep?: (runId: string) => void;
+  /** #2430: long-term recall's index, which chooses older small memories by meaning (see the header). */
+  recall?: Pick<RecallIndex, "choose">;
 }
 
 /** A chapter's small memories (see the header): the pool for `cast`, or exactly `ids` of it, in their order. */
@@ -273,7 +290,12 @@ export interface RecallPoolOptions {
   ids?: readonly string[];
 }
 
-export type OtomeRecallOptions = ForgeRecallOptions & { pool?: RecallPoolOptions };
+export type OtomeRecallOptions = ForgeRecallOptions & {
+  pool?: RecallPoolOptions;
+  debugMode?: boolean;
+  /** #2430: the memories chosen by meaning come back apart (`pinned`), the pool the newest alone (see the header). */
+  apart?: boolean;
+};
 
 export interface OtomeMemory {
   /**
@@ -351,6 +373,8 @@ export interface RecallItem {
  */
 export type OtomeRecallResult = Omit<ForgeRecallResult, "recent"> & {
   recalls?: RecallItem[];
+  /** With `apart` (#2430), the older memories chosen by meaning that the pool leaves out, in story order. */
+  pinned?: RecallItem[];
   /** The recall pool could not be read: it is empty this once (a chapter's is chosen again next time). */
   poolFailed?: true;
 };
@@ -393,6 +417,7 @@ export function createOtomeMemory({
   background,
   readSources = keptSources(store),
   afterUpkeep,
+  recall: recallIndex,
 }: OtomeMemoryDeps): OtomeMemory {
   const documents = runtime.persistence.documents;
   const queue = background ?? createBackgroundQueue(runtime);
@@ -687,20 +712,21 @@ export function createOtomeMemory({
    * sets of the love interests this recall is for (S/prompts.ts notebookMemories; live, never stored, so a deleted
    * entry never comes back). What the caller lists in full (`listed`) is left out. Each is counted as the prompt shows
    * it (S/story/canon.ts renderMemory); one that alone could never fit is passed over, and the first other that does
-   * not fit ends the pool, so only the oldest are left out. With `ids` (a chapter's, see the header), exactly those
-   * that still exist, in that order.
+   * not fit ends the pool, so only the oldest are left out. #2430: when it leaves out a `chat` source, those closest
+   * in meaning go in first (see the header), or with `apart` beside it as `pinned`. With `ids` (a chapter's, see the
+   * header), exactly those that still exist, in that order.
    */
   async function recallPool(
     options: OtomeRecallOptions,
     sources: readonly ForgeMemorySource[],
     knowing: Pick<ForgeRecallOptions, "reader" | "cast">,
     told: readonly RecallItem[],
-  ): Promise<RecallItem[]> {
+  ): Promise<{ recalls: RecallItem[]; pinned: RecallItem[] }> {
     const listed = new Set(options.listed ?? []);
-    const items: RecallItem[] = sources
-      .filter((source) => source.kind === "chat" && mayKnow(knowing, source.audience) && source.content.trim())
-      .map(({ id, title, content, order }) => ({ id, title, content: content.trim(), order: order ?? 0 }));
-    items.push(...told);
+    const exchanges: RecallItem[] = sources
+      .filter((source) => source.kind === "chat" && mayKnow(knowing, source.audience) && memoryText(source))
+      .map((source) => ({ id: source.id, title: source.title, content: memoryText(source), order: source.order ?? 0 }));
+    const items = [...exchanges, ...told];
     const lis = knowing.reader ? [knowing.reader] : (knowing.cast ?? []);
     const state = lis.length ? await store.readDoc(stateId(options.runId), normalizeState) : null;
     for (const li of new Set(lis)) {
@@ -713,21 +739,68 @@ export function createOtomeMemory({
       }
     }
     const ids = options.pool?.ids;
-    if (ids) return ids.flatMap((id) => items.filter((item) => item.id === id).slice(0, 1));
-    const kept: RecallItem[] = [];
+    if (ids) return { recalls: ids.flatMap((id) => items.filter((item) => item.id === id).slice(0, 1)), pinned: [] };
     const limit = RECALL_TOKENS + HEADROOM_TOKENS;
-    let used = 0;
+    const costs = new Map(
+      items.map((item) => [item, estimateTextTokens(`\n\n# Recalled memory: ${item.title}\n${item.content}`)]),
+    );
+    const cost = (item: RecallItem) => costs.get(item)!;
     // Newest first; items of the same moment keep the order they were listed in once turned back.
     const newestFirst = items.filter((item) => !listed.has(item.id)).map((item, index) => ({ item, index }));
     newestFirst.sort((a, b) => b.item.order - a.item.order || b.index - a.index);
-    for (const { item } of newestFirst) {
-      const cost = estimateTextTokens(`\n\n# Recalled memory: ${item.title}\n${item.content}`);
-      if (cost > limit) continue;
-      if (used + cost > limit) break;
-      used += cost;
-      kept.push(item);
+    /** `pinned`, then the newest that fit beside them. */
+    const fill = (pinned: readonly RecallItem[]) => {
+      const kept = new Set(pinned);
+      let used = pinned.reduce((total, item) => total + cost(item), 0);
+      for (const { item } of newestFirst) {
+        if (kept.has(item) || cost(item) > limit) continue;
+        if (used + cost(item) > limit) break;
+        used += cost(item);
+        kept.add(item);
+      }
+      return kept;
+    };
+    let kept = fill([]);
+    const pinned: RecallItem[] = [];
+    const offered = exchanges.filter((item) => !listed.has(item.id));
+    const { cues, plan, window } = forgeRecallQuery(options.query);
+    const query = [...new Set([plan, ...cues])].filter(Boolean).join("\n") || window;
+    if (recallIndex && query && offered.some((item) => !kept.has(item))) {
+      const deadline = AbortSignal.timeout(MEMORY_QUERY_MS);
+      // The signal alone caps nothing: the built-in model loads and embeds without heeding it, so the wait is raced
+      // too, as the kit's forgeQueryVectors does.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<[]>((resolve) => (timer = setTimeout(() => resolve([]), MEMORY_QUERY_MS)));
+      const chosen = await Promise.race([
+        recallIndex.choose(options.runId, {
+          query,
+          candidates: offered.map((item) => ({
+            item,
+            key: memoryKey(item.id),
+            title: `${item.id}: ${item.content.slice(0, 80)}`,
+            summary: item.content,
+          })),
+          margin: MEMORY_RECALL_MARGIN,
+          label: "recall-memories",
+          debugMode: options.debugMode === true,
+          signal: options.signal ? AbortSignal.any([options.signal, deadline]) : deadline,
+        }),
+        late,
+      ]).finally(() => clearTimeout(timer));
+      let room = limit;
+      for (const { item } of chosen) {
+        if ((options.apart && kept.has(item)) || cost(item) > room) continue;
+        room -= cost(item);
+        pinned.push(item);
+      }
+      if (pinned.length && !options.apart) kept = fill(pinned);
     }
-    return kept.reverse();
+    const inOrder = (chosen: ReadonlySet<RecallItem>) =>
+      newestFirst
+        .filter(({ item }) => chosen.has(item))
+        .map(({ item }) => item)
+        .reverse();
+    return { recalls: inOrder(kept), pinned: options.apart ? inOrder(new Set(pinned)) : [] };
   }
 
   return {
@@ -737,7 +810,7 @@ export function createOtomeMemory({
       const sources = await readSources(options.runId);
       const knowing = options.reader || options.cast ? options : { cast: [] };
       // A chapter's small memories are everyone's in it (see the header); the rest of the recall stays the call's own.
-      const { pool, ...kit } = options;
+      const { pool, debugMode: _debug, apart: _apart, ...kit } = options;
       const pooled = pool ? { cast: [...pool.cast] } : knowing;
       // The caller sends the story's chapters itself (S/story/canon.ts), so the newest of all (the kit's `latest`) is
       // never ranked as a detail.
@@ -773,12 +846,19 @@ export function createOtomeMemory({
         return [{ id: source.id, title, content: summary, order: source.order ?? 0, ...(tag ? { tag } : {}) }];
       });
       // A recall pool that fails only loses its memories; the prompt still goes out with everything else.
-      const recalls = await recallPool(options, sources, pooled, told).catch((error): null => {
+      const recalled = await recallPool(options, sources, pooled, told).catch((error): null => {
         runtime.logger.warn("[otome-forge] Recall pool: %s", error instanceof Error ? error.message : String(error));
         return null;
       });
       const { recent: _recent, ...rest } = result;
-      return { ...rest, details: [], text: "", recalls: recalls ?? [], ...(recalls ? {} : { poolFailed: true }) };
+      return {
+        ...rest,
+        details: [],
+        text: "",
+        recalls: recalled?.recalls ?? [],
+        ...(recalled?.pinned.length ? { pinned: recalled.pinned } : {}),
+        ...(recalled ? {} : { poolFailed: true }),
+      };
     },
 
     async maintain({ runId, debugMode = false, retry = false }) {

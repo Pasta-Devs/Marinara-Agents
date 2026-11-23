@@ -167,7 +167,6 @@ async function recalledLine(
   memory: Pick<OtomeMemory, "recall" | "maintain"> | undefined,
   runId: string,
   unit: Pick<Unit, "id" | "name">,
-  cues: string[],
   debugMode: boolean,
 ): Promise<string> {
   if (!memory) return "";
@@ -176,9 +175,9 @@ async function recalledLine(
       runId,
       job: "chat",
       reader: unit.id,
-      // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts).
+      // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts). No query: only the newest is
+      // read, which no older memory chosen by meaning (#2430) ever replaces, so nothing is embedded for it.
       ownStories: true,
-      query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
     // #2066: the newest small memory he holds (recalls come in story order); a chapter's says which it is (its tag).
@@ -225,9 +224,9 @@ export async function serveNote(
     const unit = run.units.find((entry) => entry.id === li);
     if (!unit || !run.state.lis[li]) throw new OtomeForgeError(404, "No such love interest.", "not-found");
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
-    const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
+    const { liState, offscreen, bondPlayed } = ownView(run.state, li);
     const [recalled, recent] = await Promise.all([
-      recalledLine(deps.memory, runId, unit, [relationship, offscreen].filter(Boolean), debugMode),
+      recalledLine(deps.memory, runId, unit, debugMode),
       recentNotes(deps.store, runId, li, dayKey),
     ]);
     const curt = liState.rupture !== null;

@@ -5,7 +5,8 @@
 // its own and not as the connection's, when the memory model is too small). The status and Retry are
 // hooks/use-memory.ts's, shared with the banner every screen of the story shows (components/MemoryBanner.tsx). The
 // memory section is also under Settings → Connections, beside the connection that writes the summaries. Below it,
-// long-term recall's index (0.19.0): indexing, how many chapter summaries it holds, or its failure with Retry indexing.
+// long-term recall's index (0.19.0): indexing, how many chapter summaries and memories it holds, or its failure with
+// Retry indexing.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

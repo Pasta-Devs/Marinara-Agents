@@ -371,7 +371,7 @@ export async function startReadMe(
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
     const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
     const lately = [relationship, offscreen].filter((line) => !!line.trim());
-    const recalled = await recalledLine(deps.memory, runId, unit, lately, debugMode);
+    const recalled = await recalledLine(deps.memory, runId, unit, debugMode);
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
       job: "narration",

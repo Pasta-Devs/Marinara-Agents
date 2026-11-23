@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.40.0 — 2026-11-23
+
+- Love interests can bring back older moments you shared with them outside the story. Conversations you closed in Messages (the group chat's too), Snapshots, Tarot night readings and your Read Them, Claw Machine and Kitty Cards games are now indexed by meaning, as chapter summaries are, with the story's **Memory recall embeddings** (Built-in by default, with no model calls). Before, a prompt carried only the newest of them. When a story has more than fit, the few older ones closest to the scene or message now go in first. In Messages they go in beside the newest, after the part of the prompt that is cached, so a conversation's replies still read it from the cache.
+- They reach only the prompts they reached before: a love interest's own only theirs and scenes they're in, the group chat's only those of who was in it.
+- With a connection chosen for **Memory recall embeddings**, those memories are sent to it too, and so is what a prompt is about when it looks for them.
+
 ## 0.39.1 — 2026-11-23
 
 - The bottom bar's **Dates** is now **Games**, and so is its page, with "Just the two of you." still under the title. Read Them, Read Me and Tarot night name it above their title too. **Dates** now means only the dates you win on Wish's Dates banner and plan from Album → Dates.

@@ -81,8 +81,10 @@
 //   ended, as chapter 1 picks up from the prologue (S/prompts.ts storyHandOff). A figurine, birthday or clear-the-air scene is
 //   never the last Character Story (isFigurineOrBirthday);
 // - the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k tokens, each date the
-//   timeline covers by its summary among them), after the timeline or, when `cached`, as a context of its own that the
-//   prompt sends after its cached part. A recall that fails is the same story context without it.
+//   timeline covers by its summary among them, and #2430's few older ones closest in meaning to its query), after the
+//   timeline or, when `cached`, as a context of its own that the prompt sends after its cached part. With `apart`
+//   (P17 and the group chat's), those older ones are such a context (`recalls`) and the pool after the timeline is the
+//   newest alone. A recall that fails is the same story context without it.
 // When the prompt does not fit, the recalls give way first; then, only while the reply would get less than its floor,
 // the older storyline chapter summaries, oldest first, then the chapters in full, oldest first, then the previous
 // chapter's earliest scenes. As in GF, the timeline, the previous chapter's last scene, the newest chapter summary and
@@ -133,7 +135,7 @@ import { birthdayOfKey } from "../../../../../client/src/features/otome-forge/sh
 import { clearAirOfKey, dateCast } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { figurineLiOf } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { beatId, chapterId, isItemStoryKey, mainChapterNumber, memoryId, playerId, stateId, unitId } from "../ids.js";
-import type { OtomeMemory, RecallPoolOptions } from "../memory/memory.js";
+import type { OtomeMemory, RecallItem, RecallPoolOptions } from "../memory/memory.js";
 import { lastWords, type RecallIndex } from "../memory/recall-index.js";
 import { OVERVIEW_STYLE, parseTimeline, renderTimeline, savedStory } from "../memory/timeline.js";
 import { normalizePlayer } from "../schemas/player.js";
@@ -592,6 +594,12 @@ export type RecallTextOptions = Omit<ForgeRecallOptions, "runId"> & {
    * `ids`. With `cached` they are the context's `pool`, and the ones sent come back as its `memories`.
    */
   pool?: RecallPoolOptions;
+  /**
+   * #2430, for a prompt that caches its story context without `cached` (P17 and the group chat's): the older memories
+   * chosen by meaning are the context's `recalls`, which the prompt sends after its cached part, and the recall pool in
+   * `text` is the newest alone, so it stays the same through a conversation (S/memory/memory.ts). Never with `cached`.
+   */
+  apart?: boolean;
 };
 
 /**
@@ -871,6 +879,7 @@ export async function recallText(
           ...recall,
           runId,
           excludeChapterIds: [...(recall.excludeChapterIds ?? []), ...(previousKey ? [previousKey] : []), ...sideKeys],
+          debugMode: debugMode === true,
         })
         .then((recalled) => {
           const phase = recalled.status?.phase;
@@ -992,15 +1001,20 @@ export async function recallText(
   const overview = earlier.length
     ? [head, ...earlier.map(inDetail), rest ? `# Canon to date, continued\n${rest}` : ""].filter(Boolean).join("\n\n")
     : renderTimeline(told, ...without);
-  const recalls = (result?.recalls ?? [])
-    .map(({ id, title, content }) => ({ id, kind: "recall", title, content }))
-    .reverse();
+  const details = (items: readonly RecallItem[] = []) =>
+    items.map(({ id, title, content }) => ({ id, kind: "recall", title, content })).reverse();
+  const recalls = details(result?.recalls);
   const context = storyContext(
     { overview, details: recalls, maxContext: result?.maxContext ?? null },
     [...previous, ...sideBlocks, ...others],
     [...full, ...earliestScenes],
     summaries,
   );
+  // #2430 (`apart`): the older memories chosen by meaning, a context of their own after the cached part.
+  const pinned = details(result?.pinned);
+  if (pinned.length) {
+    context.recalls = contextOf({ overview: "", details: pinned, maxContext: result?.maxContext ?? null }, [], []);
+  }
   if (earlier.length) context.recalled = earlier.map(({ chapter }) => chapter.key);
   if (!unread && !saved?.rebuilding) context.settled = true;
   // Only a pool that was read: one that failed sends none, and is chosen again on the next call.

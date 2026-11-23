@@ -348,7 +348,6 @@ export async function recalledLine(
   memory: ReadHimDeps["memory"],
   runId: string,
   unit: Pick<Unit, "id" | "name">,
-  cues: string[],
   debugMode: boolean,
 ): Promise<string> {
   if (!memory) return "";
@@ -357,9 +356,9 @@ export async function recalledLine(
       runId,
       job: "narration",
       reader: unit.id,
-      // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts).
+      // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts). No query: only the newest is
+      // read, which no older memory chosen by meaning (#2430) ever replaces, so nothing is embedded for it.
       ownStories: true,
-      query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
     // #2066: the newest small memory he holds (recalls come in story order); a chapter's says which it is (its tag).
@@ -401,7 +400,7 @@ export async function startReadHim(
     const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
     const lately = [relationship, offscreen].filter((line) => !!line.trim());
     const [recalled, sets] = await Promise.all([
-      recalledLine(deps.memory, runId, unit, lately, debugMode),
+      recalledLine(deps.memory, runId, unit, debugMode),
       listSets(deps.store, runId),
     ]);
     const recent = sets

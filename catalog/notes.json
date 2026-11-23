@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.40.0",
+          "date": "2026-11-23",
+          "notes": "- Love interests can bring back older moments you shared with them outside the story. Conversations you closed in Messages (the group chat's too), Snapshots, Tarot night readings and your Read Them, Claw Machine and Kitty Cards games are now indexed by meaning, as chapter summaries are, with the story's **Memory recall embeddings** (Built-in by default, with no model calls). Before, a prompt carried only the newest of them. When a story has more than fit, the few older ones closest to the scene or message now go in first. In Messages they go in beside the newest, after the part of the prompt that is cached, so a conversation's replies still read it from the cache.\n- They reach only the prompts they reached before: a love interest's own only theirs and scenes they're in, the group chat's only those of who was in it.\n- With a connection chosen for **Memory recall embeddings**, those memories are sent to it too, and so is what a prompt is about when it looks for them.",
+          "highlight": true
+        },
+        {
           "version": "0.39.1",
           "date": "2026-11-23",
           "notes": "- The bottom bar's **Dates** is now **Games**, and so is its page, with \"Just the two of you.\" still under the title. Read Them, Read Me and Tarot night name it above their title too. **Dates** now means only the dates you win on Wish's Dates banner and plan from Album → Dates.",
@@ -827,12 +833,6 @@
           "version": "0.34.13",
           "date": "2026-11-17",
           "notes": "- **Ten hearts on one line.** On the Story screen's **Between you**, a love interest's ten hearts could wrap the last one onto a line of its own on a phone, with a larger text size or a long level and counter. They now always stay on one line. Where there is no room for them at full size, they get a little smaller.",
-          "highlight": false
-        },
-        {
-          "version": "0.34.12",
-          "date": "2026-11-17",
-          "notes": "- **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as \"Modern AU version\") under its name, so you can tell them apart. Searching the pickers finds a title too.",
           "highlight": false
         }
       ]

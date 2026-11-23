@@ -214,6 +214,8 @@ async function writeGroup(
   const story = await recallText(deps, runId, {
     job: "chat",
     reader: GROUP_THREAD,
+    // #2430: older memories chosen by meaning go after the cached part, which stays the same through a conversation.
+    apart: true,
     query: forgeChatRecallQuery(tail, { speakers: [...units.map((unit) => unit.name), run.player.name] }),
     listed: memories.map((session) => sessionSourceId(GROUP_THREAD, session)),
     debugMode,
@@ -244,6 +246,7 @@ async function writeGroup(
       tail,
       memories,
       story: story.text,
+      recalls: story.recalls?.text ?? "",
       ...(squabble ? { squabble: squabble.map(name) } : {}),
     }),
     memory: story,

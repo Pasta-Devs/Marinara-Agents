@@ -1810,7 +1810,9 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect(memory).toContainText("FAKE-EMBEDDINGS-DOWN");
         await memory.getByRole("button", { name: "Retry indexing" }).click();
         await expect.poll(() => posts(stub, "/memory/recall/retry").length).toBe(1);
-        await expect(memory).toContainText("Long-term recall: indexing chapter summaries (2 of 5 so far)…");
+        await expect(memory).toContainText(
+          "Long-term recall: indexing chapter summaries and memories (2 of 5 so far)…",
+        );
         await expect(memory.getByRole("button", { name: "Retry indexing" })).toHaveCount(0);
         // This Engine offers the connections with an embedding model of their own.
         await expect(embeddings.locator("option")).toHaveText(["Built-in (local)", "Story fixture · fixture"]);
@@ -1855,7 +1857,9 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect
           .poll(() => posts(stub, "/settings").at(-1)?.body)
           .toMatchObject({ connections: { narration: "conn-text", embeddings: "conn-text" } });
-        await expect(panel.getByText("Saved. Your chapter summaries are indexed again with it.")).toBeVisible();
+        await expect(
+          panel.getByText("Saved. Your chapter summaries and memories are indexed again with it."),
+        ).toBeVisible();
         await expect(panel.getByRole("combobox", { name: "Memory recall embeddings" })).toHaveValue("conn-text");
       }
     }
