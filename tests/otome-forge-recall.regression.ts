@@ -7,7 +7,9 @@
 // same. No embeddings: the prompt is as before. A failed index waits for Retry indexing; no prompt ever carries the
 // index; a deleted story keeps none. #2430: the small memories (`chat` sources) are indexed too, and when the recall pool
 // leaves some out, the few that stand out in meaning from the others go in first, in the pool's own room, only where
-// they may be known; a deleted one never comes back, and nothing is embedded when nothing is left out.
+// they may be known; a deleted one never comes back, and nothing is embedded when nothing is left out. P17 and the group
+// chat's take them apart, after their cached part, which stays the same through a conversation; a query's vectors are
+// waited for 1.5 s at most; a reader of the newest memory alone embeds nothing.
 import {
   embeddingOptions,
   embeddingsChoosable,
@@ -29,6 +31,7 @@ import {
   recallId,
   runDocTarget,
   stateId,
+  unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
@@ -36,6 +39,8 @@ import {
   createOtomeMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
+import { recalledLine } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts";
+import { chatReplyMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   EMBED_CHARACTERS_MAX,
   EMBED_TEXTS_MAX,
@@ -52,6 +57,7 @@ import {
 import { registerMemoryRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/memory.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import {
   normalizeBeat,
   normalizeChapter,
@@ -910,7 +916,16 @@ test("Settings offers an embedding connection only once the recall status confir
 
 test("#2430: an older small memory comes back by meaning, in the recall pool's own room, only where it may be known", async () => {
   const embedder = createFakeEmbedder({ vectorOf: topicVector });
-  const t = await storyWorld({ runKey: "r-recallchat-aaaaaa", model: { embeddingsFor: async () => embedder.host } });
+  // Query vectors that take `slow` ms, as the built-in model's while it loads: it never heeds the signal.
+  let slow = 0;
+  const host: CapabilityEmbeddingHost = {
+    ...embedder.host,
+    embed: async (texts, signal, inputType) => {
+      if (slow && inputType === "query") await new Promise((resolve) => setTimeout(resolve, slow));
+      return embedder.host.embed(texts, signal, inputType);
+    },
+  };
+  const t = await storyWorld({ runKey: "r-recallchat-aaaaaa", model: { embeddingsFor: async () => host } });
   // Kai's twelve newest conversations, of about 600 tokens each and about none of the topics, fill the pool. Older
   // still: one of his about the lighthouse, one of Mireille's and one of the group chat with him and Sol in it.
   const talk = (n: number) => `TALK-${n} ${words(300, (w) => `lamp${(n + w) % 83}`)}`;
@@ -930,7 +945,11 @@ test("#2430: an older small memory comes back by meaning, in the recall pool's o
     groupOld,
     ...Array.from({ length: 12 }, (_, n) => chat(`kai-${n}`, talk(n), 10000 + n, [KAI])),
   ];
-  const readSources = async () => sources;
+  let broken = false;
+  const readSources = async () => {
+    if (broken) throw new Error("SOURCES-DOWN");
+    return sources;
+  };
   const background = createBackgroundQueue(t.runtime);
   const recall = createRecallIndex({ runtime: t.runtime, store: t.store, background, readSources });
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store, background, readSources, recall });
@@ -972,6 +991,54 @@ test("#2430: an older small memory comes back by meaning, in the recall pool's o
     assert.ok(story.text.includes(`# Recalled memory: kai-old (private)\n${kaiOld.content}`), story.text.slice(0, 400));
     const logged = t.logs.find((entry) => entry.level === "debugOverride" && entry.args[0] === "recall-memories");
     assert.ok(logged && logged.override === true, "logged in debug mode");
+    // Each candidate by its id and first words, only those this prompt may know: never Mireille's.
+    const scores = JSON.parse(String(logged.args[3])) as Array<{ title: string; recalled: boolean }>;
+    assert.ok(scores.some((entry) => entry.title === `kai-old: ${kaiOld.content}` && entry.recalled));
+    assert.equal(scores.length, 14, "his twelve, his own older one and the group chat's");
+    assert.ok(!scores.some((entry) => entry.title.includes("MIR-OLD")), "never a memory this prompt may not know");
+
+    // P17 and the group chat's cache the story context through a conversation, so they ask for them `apart`: the pool
+    // is the newest alone, the same from reply to reply, and what each reply's newest messages bring back follows it,
+    // in the turn that is not cached.
+    const unit = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+    const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
+    const liState = (await t.store.readDoc(stateId(t.runId), normalizeState))!.lis[KAI]!;
+    const player = {
+      name: "Ines",
+      pronouns: { subject: "she", object: "her", possessive: "her" },
+      traits: [],
+      about: "",
+    };
+    const reply = async (cue: string) => {
+      const context = await recallText({ store: t.store, memory }, t.runId, {
+        job: "chat",
+        reader: KAI,
+        apart: true,
+        query: { cues: [cue] },
+      });
+      const input = { world, player, unit, liState, tail: [], memories: [], story: context.text };
+      const messages = chatReplyMessages({ ...input, recalls: context.recalls?.text ?? "" });
+      return { context, messages, without: chatReplyMessages(input) };
+    };
+    const asked = await reply(lighthouse.cues[0]!);
+    const bye = await reply("ok, good night");
+    assert.equal(asked.messages[1]!.content, bye.messages[1]!.content, "the cached part is the same");
+    assert.equal(asked.context.text, bye.context.text);
+    assert.ok(!asked.context.text.includes("KAI-OLD") && !asked.context.text.includes("GROUP-OLD"));
+    assert.ok(asked.context.text.includes("# Recalled memory: kai-11 (private)"), "the newest stay in the cached part");
+    assert.ok(asked.messages[2]!.content.startsWith("OLDER MEMORIES THE THREAD BRINGS BACK"));
+    assert.ok(asked.messages[2]!.content.includes(asked.context.recalls!.text), "the fitter finds it as it is");
+    assert.ok(
+      asked.context.recalls!.text.includes(kaiOld.content) && asked.context.recalls!.text.includes("GROUP-OLD"),
+    );
+    assert.equal(bye.context.recalls, undefined, "nothing stands out: nothing follows");
+    assert.equal(bye.messages[2]!.content, bye.without[2]!.content, "and the turn is as it was");
+    assert.ok(bye.messages[2]!.content.startsWith("THE THREAD NOW"));
+
+    // The Home note, Read Him and Read Me read only the newest he holds, which no older one replaces: nothing embedded.
+    embedder.calls.length = 0;
+    await recalledLine(memory, t.runId, { id: KAI, name: "Kai" }, false);
+    assert.equal(embedder.calls.length, 0);
 
     // Only where it may be known: Mireille's for her alone, the group chat's for its members, Kai's for him.
     assert.deepEqual(await ids({ reader: MIR }, lighthouse), ["mir-old"]);
@@ -1023,6 +1090,19 @@ test("#2430: an older small memory comes back by meaning, in the recall pool's o
     await settled(recall, t.runId);
     const index = (await t.store.readDoc(recallId(t.runId), normalizeRecallIndex))!;
     assert.ok(!(memoryKey("kai-old") in index.chapters) && memoryKey("kai-12") in index.chapters);
+    // Sources that cannot be read let go of nothing: no job is queued (opening the story logs it) and every vector stays.
+    broken = true;
+    await assert.rejects(recall.ensure(t.runId), /SOURCES-DOWN/);
+    assert.deepEqual(await t.store.readDoc(recallId(t.runId), normalizeRecallIndex), index);
+    broken = false;
+
+    // A query's vectors that come late never hold the prompt up past 1.5 s: the pool goes as the newest alone.
+    const newestOnly = await ids({ reader: KAI }, { cues: ["Shall we ring the bell?"] });
+    assert.notDeepEqual(await ids({ reader: KAI }, lighthouse), newestOnly);
+    slow = 4000;
+    const started = performance.now();
+    assert.deepEqual(await ids({ reader: KAI }, lighthouse), newestOnly);
+    assert.ok(performance.now() - started < 3000, `${Math.round(performance.now() - started)} ms`);
   } finally {
     memory.dispose();
     recall.dispose();

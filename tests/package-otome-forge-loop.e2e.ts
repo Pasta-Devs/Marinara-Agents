@@ -1854,7 +1854,9 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect
           .poll(() => posts(stub, "/settings").at(-1)?.body)
           .toMatchObject({ connections: { narration: "conn-text", embeddings: "conn-text" } });
-        await expect(panel.getByText("Saved. Your chapter summaries are indexed again with it.")).toBeVisible();
+        await expect(
+          panel.getByText("Saved. Your chapter summaries and memories are indexed again with it."),
+        ).toBeVisible();
         await expect(panel.getByRole("combobox", { name: "Memory recall embeddings" })).toHaveValue("conn-text");
       }
     }

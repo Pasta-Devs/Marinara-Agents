@@ -3567,6 +3567,8 @@ export interface ChatReplyInput {
   memories: readonly PhoneSession[];
   /** The story as he may know it (recall for `reader: li`), or "". */
   story: string;
+  /** #2430: the older memories the newest messages bring back (recallText's `recalls` with `apart`), or "". */
+  recalls?: string;
   /** His latest off-screen line from the ledgers, or "". */
   offscreen?: string;
   /** He writes first, on his own (a daily message): his message answers nothing she sent. */
@@ -3595,6 +3597,7 @@ export function chatReplyMessages({
   tail,
   memories,
   story,
+  recalls = "",
   offscreen = "",
   first = false,
   stickers,
@@ -3683,8 +3686,12 @@ export function chatReplyMessages({
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");
-  // 0.20.2: everything above stays the same through a conversation, so it is cached; the thread and the task follow.
+  // 0.20.2: everything above stays the same through a conversation, so it is cached; the thread and the task follow,
+  // after the older memories its newest messages bring back (#2430), which change from reply to reply.
   const now = [
+    ...(recalls.trim()
+      ? [`OLDER MEMORIES THE THREAD BRINGS BACK (part of what you know of the story)\n${recalls.trim()}`, ""]
+      : []),
     "THE THREAD NOW (oldest first)",
     tail.length ? renderThread(tail, { li: name, player: them }, "his", stickers?.name) : "(no messages yet)",
     "",
@@ -3780,6 +3787,8 @@ export interface GroupChatInput {
   memories: readonly PhoneSession[];
   /** The story as the group may know it (recall for reader "group"), or "". */
   story: string;
+  /** #2430: the older memories the newest messages bring back (recallText's `recalls` with `apart`), or "". */
+  recalls?: string;
   /** A squabble: the two who start it, by name; absent, a reply to the protagonist. */
   squabble?: readonly string[];
 }
@@ -3793,6 +3802,7 @@ export function groupChatMessages({
   tail,
   memories,
   story,
+  recalls = "",
   squabble,
 }: GroupChatInput): OtomeMessage[] {
   const them = player.name || "the protagonist";
@@ -3877,6 +3887,9 @@ export function groupChatMessages({
     ? `On their own, with nothing from ${them} to answer, ${nameList(squabble)} start squabbling in the group chat; the others may join where it is in character. Pick something from the story they share, their ties, or ${them}. Write 3 to ${GROUP_SQUABBLE_MAX} messages from at least two of them. They may draw ${them} in, but never write for ${them}. Never a topic already in the thread.`
     : `Write the next messages now, answering ${them}'s newest message: whoever it is addressed to, or concerns most, answers first; anyone ${them} names answers; the others join only where it is in character. 1 to ${GROUP_REPLY_MAX} messages in all.`;
   const now = [
+    ...(recalls.trim()
+      ? [`OLDER MEMORIES THE GROUP CHAT BRINGS BACK (part of what everyone knows of the story)\n${recalls.trim()}`, ""]
+      : []),
     "THE GROUP CHAT NOW (oldest first)",
     tail.length
       ? renderThread(tail, { li: "Someone", player: them }, "his", stickerName, speaker)

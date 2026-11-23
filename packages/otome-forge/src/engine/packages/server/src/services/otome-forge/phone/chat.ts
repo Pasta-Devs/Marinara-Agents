@@ -422,6 +422,8 @@ async function writeReply(
   const story = await recallText(deps, runId, {
     job: "chat",
     reader: li,
+    // #2430: older memories chosen by meaning go after the cached part, which stays the same through a conversation.
+    apart: true,
     query: forgeChatRecallQuery(tail, { speakers: [unit.name, run.player.name] }),
     listed: memories.map((session) => sessionSourceId(li, session)),
     debugMode,
@@ -441,6 +443,7 @@ async function writeReply(
       tail,
       memories,
       story: story.text,
+      recalls: story.recalls?.text ?? "",
       offscreen,
       first,
       stickers,

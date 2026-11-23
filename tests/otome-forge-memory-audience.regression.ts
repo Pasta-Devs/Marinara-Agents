@@ -1058,9 +1058,9 @@ test("the Home note, Read Him and Read Me draw on the newest small memory he hol
   assert.equal(await memory.maintain({ runId: RUN }), true);
   assert.equal((await settle(memory)).phase, "ready");
   // Kai holds his private conversation; Mireille her Character Story, by its summary.
-  assert.match(await recalledLine(memory, RUN, { id: KAI, name: "Kai" }, ["the key"], false), /brass lighthouse key/u);
+  assert.match(await recalledLine(memory, RUN, { id: KAI, name: "Kai" }, false), /brass lighthouse key/u);
   assert.match(
-    await recalledLine(memory, RUN, { id: MIR, name: "Mireille" }, ["the ledger"], false),
+    await recalledLine(memory, RUN, { id: MIR, name: "Mireille" }, false),
     /Mireille's Ledger: Mireille showed Ava the forged ledger/u,
   );
 });
