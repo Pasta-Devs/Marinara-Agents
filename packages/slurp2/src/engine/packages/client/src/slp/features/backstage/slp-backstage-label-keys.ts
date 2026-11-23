@@ -129,6 +129,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   storyAutomation: "ui.slurp.settings.strip.often",
   messagesAwayRepliesEnabled: "ui.slurp.settings.messaging.awayReplies",
   messagesPauseFollowUpsUntilReply: "ui.slurp.settings.messaging.pauseFollowUpsUntilReply",
+  messagesCreatorDmsPaused: "ui.slurp.settings.messaging.pauseCreatorDms",
   messagesReplyBubbleLimit: "ui.slurp.settings.messaging.bubbleLimit",
   messagesDefaultDmPolicy: "ui.slurp.settings.strip.away",
   messagesDefaultRequestFee: "ui.slurp.settings.messaging.requestFee",

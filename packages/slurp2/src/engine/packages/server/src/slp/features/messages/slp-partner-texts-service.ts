@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
+import { slurpInEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
 import { readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import {
@@ -24,6 +25,8 @@ export async function textSlurpPartners(db: DB, at = slurpWorldNow()): Promise<v
   const { couples } = await readSlurpCreatorTiesDocument(db);
   const live = couples.filter((couple) => couple.stage !== "split");
   if (!live.length) return;
+  // "Pause Creator DMs": a partner text is never asked for, so none is planned and no chat is opened.
+  if ((await createSlurpStorage(db).getSettings()).messagesCreatorDmsPaused) return;
   const accounts = await createSlurpStorage(db).listNoodlerAccounts();
   // The player's pages, and the persona behind each: her texts go to that persona's inbox.
   const viewerOf = new Map(
@@ -37,7 +40,8 @@ export async function textSlurpPartners(db: DB, at = slurpWorldNow()): Promise<v
   for (const couple of live) {
     const members = [couple.aId, couple.bId, ...(couple.moreIds ?? [])];
     for (const pageId of members.filter((id) => viewerOf.has(id)))
-      for (const creatorId of members.filter((id) => !viewerOf.has(id))) {
+      // A Creator busy in a Marinara chat roleplay writes nothing first (`slp-engine-roleplay-storage.ts`).
+      for (const creatorId of members.filter((id) => !viewerOf.has(id) && !slurpInEngineRoleplay(id))) {
         try {
           const viewer = viewerOf.get(pageId)!;
           let thread = await messages.getThread(viewer, creatorId);

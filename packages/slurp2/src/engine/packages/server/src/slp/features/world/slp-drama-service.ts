@@ -9,6 +9,7 @@ import { logger } from "../../../lib/logger.js";
 import { newId } from "../../../utils/id-generator.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { randomUUID } from "node:crypto";
+import { slurpInEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
@@ -216,6 +217,9 @@ async function sendDramaJob(
       });
       return sent ? true : "drop";
     }
+    // "Pause Creator DMs": no unasked text, and no empty chat opened for one.
+    const paused = (await createSlurpStorage(db).getSettings()).messagesCreatorDmsPaused;
+    if (paused || slurpInEngineRoleplay(job.actorId)) return "drop";
     let thread = await messages.getThread(viewer, job.actorId);
     if (!thread) {
       const opened = await messages.openThread(viewer, job.actorId, "creator", "waive");

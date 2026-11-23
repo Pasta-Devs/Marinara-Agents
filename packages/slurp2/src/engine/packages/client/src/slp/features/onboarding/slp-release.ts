@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.28";
+export const SLURP2_VERSION = "0.4.29";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,14 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.29",
+    date: "2026-11-23",
+    notes: [
+      "While you roleplay with a Creator in a Marinara chat that carries Slurp activity, they no longer text you first on Slurp or remark on texts you left unanswered.",
+      "New switch: Backstage > Messaging > Pause Creator DMs. While it is on, no Creator writes to you first.",
+    ],
+  },
   {
     version: "0.4.28",
     date: "2026-11-19",

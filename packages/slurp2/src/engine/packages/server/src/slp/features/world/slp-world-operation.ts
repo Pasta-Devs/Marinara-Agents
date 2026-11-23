@@ -723,7 +723,7 @@ export async function advanceSlurpWorld(db: DB, until = slurpWorldNow()): Promis
       let opened = 0;
       for (const account of automaticCreators) {
         await yieldToEngine();
-        if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
+        if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK || settings.messagesCreatorDmsPaused) break; // "Pause Creator DMs"
         const messaging = await messages.getCreatorMessaging(account.id);
         if (!messaging.proactiveMessages) continue;
         for (const tie of await population.listTiesForCreator(account.id)) {

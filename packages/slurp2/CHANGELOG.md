@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 0.4.29 — 2026-11-23
+
+- Changed: when a Marinara chat with a Creator carries Slurp activity, that Creator stops writing to you first on Slurp while you roleplay. The quiet ends 20 minutes after the last reply in that chat.
+- Fixed: the Slurp activity carried into a Marinara chat no longer lists texts a Creator sent first that you have not answered yet, so the Creator no longer remarks that you ignore their DMs.
+- Added: Backstage > Messaging > "Pause Creator DMs". While it is on, no Creator writes to you first.
+- During both pauses, openers, check-ins, recurring updates, partner texts and drama questions are dropped, not saved for later, so nothing arrives in a burst afterwards. Promises, reminders and task updates a Creator owes you wait and arrive after the pause. Replies to your own messages and finished commissions still arrive.
+
 ## 0.4.28 — 2026-11-19
 
 - Changed: the search fields on the Backstage Creators, Prompts and Continuity pages are now Marinara's own search field. Escape clears the text first, and a button clears it.

@@ -3074,6 +3074,8 @@
   "ui.slurp.profile.offer.ppv": "채팅의 잠긴 사진은 개당 {{count}} <coin/>입니다.",
   "ui.slurp.settings.messaging.pauseFollowUpsUntilReply": "답장이 없으면 한 번만 먼저 연락",
   "ui.slurp.settings.messaging.pauseFollowUpsUntilReplyDetail": "크리에이터는 먼저 한 번 메시지를 보낸 뒤, 당신이 실제로 답장할 때까지 다시 먼저 메시지를 보내지 않습니다. 당신의 메시지에 대한 답장과, 크리에이터가 이미 약속한 것(약속, 알림, 완료된 커미션)은 그대로 도착합니다.",
+  "ui.slurp.settings.messaging.pauseCreatorDms": "크리에이터 DM 일시 중지",
+  "ui.slurp.settings.messaging.pauseCreatorDmsDetail": "이 설정이 켜져 있는 동안에는 크리에이터가 먼저 메시지를 보내지 않습니다. 예를 들어 Slurp 밖에서 크리에이터와 롤플레이할 때 사용하세요. 요청하지 않은 메시지는 나중에 보내지 않고 버려집니다. 당신의 메시지에 대한 답장은 그대로 도착하고, 크리에이터가 이미 약속한 것(약속, 알림)은 이 설정을 끌 때까지 기다립니다.",
   "ui.slurp.settings.messaging.bubbleLimit": "답장당 최대 메시지 수",
   "ui.slurp.settings.messaging.bubbleLimitDetail": "한 답장이 나뉘어 보낼 수 있는 최대 메시지 수로, 실제 사람이 문자를 보내는 방식과 같습니다. 답장은 이보다 적게 나뉠 수 있으며, 짧거나 지치거나 긴장된 답장은 그렇습니다. 1로 설정하면 항상 메시지 하나만 받습니다.",
   "ui.slurp.settings.messaging.clearHint": "대화 하나를 비우려면 열어서 ⋮ › 대화 지우기를 선택하세요.",

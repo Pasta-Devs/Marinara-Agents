@@ -195,6 +195,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
     "opener",
     "follow-up",
   ),
+  messagesCreatorDmsPaused: slurp("messaging", "pause creator DMs", "pause DMs", "do not disturb", "roleplay"),
   messagesReplyBubbleLimit: slurp("messaging", "reply bubbles", "message length"),
   messagesDefaultDmPolicy: slurp("messaging", "DM policy", "message access"),
   messagesDefaultRequestFee: slurp("messaging", "message request fee"),
