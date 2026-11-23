@@ -8,7 +8,7 @@ Release 1, **0.1.0 "First Date"**, holds the whole first loop:
 - main chapters and a route for each love interest, with confrontations, warm Closers and grievances;
 - Home and Messages;
 - Wish, the Wardrobe and the Album;
-- four games in Dates, among them Read Me, where a love interest learns about you;
+- four games in Games, then called Dates, among them Read Me, where a love interest learns about you;
 - Remind Me with an opt-in period tracker;
 - content settings with Lines & Veils and an 18+ gate.
 
