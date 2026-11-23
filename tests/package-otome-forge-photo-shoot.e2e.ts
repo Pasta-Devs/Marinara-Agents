@@ -370,8 +370,8 @@ async function openOtome(page: Page, { review = false } = {}): Promise<Locator> 
 
 async function openDates(root: Locator) {
   await expect(root.getByRole("heading", { level: 1, name: "Kai Ardent" })).toBeVisible();
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
 }
 
 async function openPhotoShoot(root: Locator) {
@@ -629,7 +629,7 @@ test("Otome Hearth Album: a photo that lands while Delete asks never takes the p
   await root.getByRole("button", { name: "Take picture" }).click();
   await expect.poll(() => posts(stub, "/photos").length).toBe(1);
   await root.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Album", exact: true }).click();
   await root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Photos", exact: true }).click();
   await root.getByRole("button", { name: "View: The Glass Conservatory" }).click();

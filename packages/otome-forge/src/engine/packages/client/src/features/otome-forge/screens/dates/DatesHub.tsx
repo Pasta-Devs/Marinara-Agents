@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Dates. Pick who to spend time with, then one of the six activities: Read {{name}}, Read Me (#1945),
+// Otome Forge: Games, the dock's screen with id "dates" (titled Dates before #2429, which left that name to the dates
+// won in Wish). Pick who to spend time with, then one of the six activities: Read {{name}}, Read Me (#1945),
 // Tarot night (#2151), the Photo Shoot (#2087: only with an image connection, and it pays nothing), (0.35.0) Kitty Cards
 // and the Claw Machine (last since 0.36.7, the maintainer's call), each with what it pays and what it costs; today's
 // capped rewards; and the plush shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).

@@ -1834,7 +1834,7 @@ test("Otome Hearth Album: an empty Cards tab says how to get cards", async ({ pa
   await openDock(root, "Album");
   await root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Cards", exact: true }).click();
   await expect(root.getByRole("tabpanel")).toHaveText(
-    "No cards yet. Each card you draw at Tarot night in Dates is painted once and kept here.",
+    "No cards yet. Each card you draw at Tarot night in Games is painted once and kept here.",
   );
 });
 
@@ -1970,7 +1970,7 @@ for (const images of [true, false]) {
     await root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Kittens", exact: true }).click();
     await expect(root.getByRole("tabpanel")).toHaveText(
       images
-        ? "No kittens yet. Kitty Cards in Dates paints you and each love interest as a kitten, and they’re kept here."
+        ? "No kittens yet. Kitty Cards in Games paints you and each love interest as a kitten, and they’re kept here."
         : "You play this story without images, so no kittens are painted. With an image connection, Kitty Cards paints you and each love interest as a kitten.",
     );
     await expect(root.getByRole("tabpanel").getByRole("button")).toHaveCount(0);

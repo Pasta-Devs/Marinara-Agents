@@ -3330,7 +3330,7 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
 
   // The same banner on Home and on each of the dock's screens.
   const dock = root.getByRole("navigation", { name: "Game menu" });
-  for (const name of ["Dates", "Wish", "Wardrobe", "Album"]) {
+  for (const name of ["Games", "Wish", "Wardrobe", "Album"]) {
     await dock.getByRole("button", { name, exact: true }).click();
     await expect(dock.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "page");
     await expect(banner.getByRole("alert")).toContainText(CONTEXT_ERROR);
