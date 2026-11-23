@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.41.0 — 2026-11-23
+
+- An arc can take you far from where the story began, to another city or land of its world. Its goal is an event, an adventure, a problem or a mystery of its own, solved in its last chapter, and love interests still reveal the central mystery arc by arc.
+- At any Heat, a love interest's affection brings scenes of tension at first and, past level 10, smaller intimate scenes too, such as a massage or a bath together.
+- Memories, Moments, first-wear and figurine scenes are side stories set between main chapters. The next main chapter carries on from the previous one, not from them; only a bond story is picked up from.
+- Dialogue and narration read more naturally: conversations run like real ones, and your protagonist may be silly or wrong. Sentence patterns such as "not X, but Y" are banned in narration only.
+
 ## 0.40.0 — 2026-11-23
 
 - Love interests can bring back older moments you shared with them outside the story. Conversations you closed in Messages (the group chat's too), Snapshots, Tarot night readings and your Read Them, Claw Machine and Kitty Cards games are now indexed by meaning, as chapter summaries are, with the story's **Memory recall embeddings** (Built-in by default, with no model calls). Before, a prompt carried only the newest of them. When a story has more than fit, the few older ones closest to the scene or message now go in first. In Messages they go in beside the newest, after the part of the prompt that is cached, so a conversation's replies still read it from the cache.

@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.41.0",
+          "date": "2026-11-23",
+          "notes": "- An arc can take you far from where the story began, to another city or land of its world. Its goal is an event, an adventure, a problem or a mystery of its own, solved in its last chapter, and love interests still reveal the central mystery arc by arc.\n- At any Heat, a love interest's affection brings scenes of tension at first and, past level 10, smaller intimate scenes too, such as a massage or a bath together.\n- Memories, Moments, first-wear and figurine scenes are side stories set between main chapters. The next main chapter carries on from the previous one, not from them; only a bond story is picked up from.\n- Dialogue and narration read more naturally: conversations run like real ones, and your protagonist may be silly or wrong. Sentence patterns such as \"not X, but Y\" are banned in narration only.",
+          "highlight": true
+        },
+        {
           "version": "0.40.0",
           "date": "2026-11-23",
           "notes": "- Love interests can bring back older moments you shared with them outside the story. Conversations you closed in Messages (the group chat's too), Snapshots, Tarot night readings and your Read Them, Claw Machine and Kitty Cards games are now indexed by meaning, as chapter summaries are, with the story's **Memory recall embeddings** (Built-in by default, with no model calls). Before, a prompt carried only the newest of them. When a story has more than fit, the few older ones closest to the scene or message now go in first. In Messages they go in beside the newest, after the part of the prompt that is cached, so a conversation's replies still read it from the cache.\n- They reach only the prompts they reached before: a love interest's own only theirs and scenes they're in, the group chat's only those of who was in it.\n- With a connection chosen for **Memory recall embeddings**, those memories are sent to it too, and so is what a prompt is about when it looks for them.",
@@ -828,12 +834,6 @@
           "date": "2026-11-17",
           "notes": "- **Kitty Cards.** A new date in Dates, our version of Love and Deep Space's kitty card game. Take turns putting kittens into eight cups: a kitten in a cup of its own colour scores twice its number, and in a white cup its number. In some games your love interest cheats once, in their own way: they swap two cups, doze off, look away while you sneak a card, offer a trade face down, or let you take a card back. You can catch some of these. A game makes no model call and pays 20 Starlight and 30 affection, and a win 20 Starlight more, within the day's limits. Their lines are written ahead with their other lines, and a story from before this version gets them in the background.\n- **Your own kittens.** With an image connection, you and each love interest are painted once as a kitten, which shows on one of the value-5 cards. **Ask before painting** and prompt review hold them for **Paint our kittens**.",
           "highlight": true
-        },
-        {
-          "version": "0.34.13",
-          "date": "2026-11-17",
-          "notes": "- **Ten hearts on one line.** On the Story screen's **Between you**, a love interest's ten hearts could wrap the last one onto a line of its own on a phone, with a larger text size or a long level and counter. They now always stay on one line. Where there is no room for them at full size, they get a little smaller.",
-          "highlight": false
         }
       ]
     },
