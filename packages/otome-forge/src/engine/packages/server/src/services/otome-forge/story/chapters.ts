@@ -412,13 +412,17 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
     climax.arcEvent = true;
   }
   // #2046: one side-with scene at most, on the first marked node it fits, and only while one may come. Any other mark
-  // is dropped, never repaired, so the scene is never forced.
+  // is dropped, never repaired, so the scene is never forced. Never the riddle's node: the riddle takes its last
+  // segment, where the side-with choice may be.
+  const final = nodes.at(-1)!;
   const side = context.sideWith
-    ? nodes.find((node) => reply.nodes[node.i]?.sideWith === true && sideWithFits(node, units))
+    ? nodes.find(
+        (node) =>
+          !(context.riddle && node === final) && reply.nodes[node.i]?.sideWith === true && sideWithFits(node, units),
+      )
     : undefined;
   if (side) side.sideWith = true;
   // #2047: the last node may close on the arc's judgment, unless it is the climax: a stance game holds no big choice.
-  const final = nodes.at(-1)!;
   const climaxLast = final.kind === "confrontation" || final.kind === "closer";
   if (context.riddle) {
     if (climaxLast) return "this chapter's last node ends on a riddle: put any climax second-to-last";

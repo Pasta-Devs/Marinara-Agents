@@ -575,7 +575,8 @@ function riddleOf(reply: BeatReply, beat: NormalizedBeat): NormalizedBeat | stri
     return 'this node ends on the riddle: add "riddle": {"question": "...", "answer": "..."}, its answer ONE word';
   }
   const at = beat.segments.length - 1;
-  const choices = beat.choices.filter((choice) => choice.kind !== "big" && choice.at !== at);
+  // A stored beat keeps three choices (S/schemas/story.ts normalizeBeat), so at most two small ones go before it.
+  const choices = beat.choices.filter((choice) => choice.kind !== "big" && choice.at !== at).slice(0, 2);
   return {
     ...beat,
     choices: [...choices, { id: RIDDLE_CHOICE, kind: "big", at, options: [] }],

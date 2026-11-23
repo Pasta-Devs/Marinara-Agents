@@ -1826,6 +1826,34 @@ test("the arc's riddle takes one word, whatever its case or accents, and the nex
     assert.equal(riddleKey(typed), riddleKey(answer), `${typed} is ${answer}`);
   }
   assert.notEqual(riddleKey("noga"), riddleKey("nóżka"));
+  // At most two small choices go before it (CodeRabbit on #2447): a stored beat keeps three, so with three small ones
+  // the riddle, saved last, was dropped the next time the beat was read.
+  const option = (text: string) => ({
+    text,
+    selection: { kind: "action", text: `You ${text}.` },
+    segments: [{ speaker: "", text: "Rain." }],
+  });
+  const crowded = normalizeBeatReply(
+    {
+      segments: [1, 2, 3, 4].map((n) => ({ speaker: "", text: `Line ${n} of the dawn.` })),
+      choices: [0, 1, 2].map((at) => ({ kind: "small", at, options: [option("wave"), option("wait")] })),
+      riddle: { question: "Who rang the bell?", answer: "Kai" },
+    },
+    {
+      node: { i: 6, kind: "beat", guide: "Dawn.", cast: [KAI] } as ChapterNode,
+      units: [{ id: KAI, name: "Kai Arden" }],
+      state: normalizeState({ lis: { [KAI]: {} } }),
+      last: true,
+      riddle: true,
+    },
+  );
+  assert.equal(typeof crowded, "object", String(crowded));
+  const reread = normalizeBeat({ key: "main-1", i: 6, ...(crowded as object) })!;
+  assert.deepEqual(
+    reread.choices.map((choice) => choice.id),
+    ["choice-1", "choice-2", RIDDLE_CHOICE],
+    "the riddle survives a read",
+  );
 
   const riddle = { question: "What did the bell-ringer lose on the stairs?", answer: "Nóżka" };
   const replies = Array.from({ length: 60 }, () => (messages: CapabilityLanguageModelMessage[]) => {

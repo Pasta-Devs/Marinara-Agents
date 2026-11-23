@@ -119,6 +119,15 @@ test("an arc's middle chapter ends on a riddle, any kind of arc, with its climax
   assert.match(String(normalizeChapterPlan(parse(climaxLast), context({ riddle: true }))), /riddle: put any climax/);
   const plain = normalizeChapterPlan(parse(planReply()), context());
   assert.ok(typeof plain === "object" && !plain.nodes.some((entry) => entry.riddle), "no riddle elsewhere");
+  // The riddle's node is never the side-with scene too (CodeRabbit on #2447): the riddle takes its last segment, where
+  // the side-with choice may be. The same mark holds on a chapter with no riddle.
+  const marked = planReply({
+    nodes: planReply().nodes.map((entry: object, n: number) => (n === 6 ? { ...entry, sideWith: true } : entry)),
+  });
+  const onRiddle = normalizeChapterPlan(parse(marked), context({ riddle: true, sideWith: true }));
+  assert.ok(typeof onRiddle === "object" && !onRiddle.nodes.some((entry) => entry.sideWith), "not on the riddle");
+  const noRiddle = normalizeChapterPlan(parse(marked), context({ sideWith: true }));
+  assert.ok(typeof noRiddle === "object" && noRiddle.nodes[6]!.sideWith, "the mark holds without a riddle");
 });
 
 test("Lead candidates: the least recent (never led first, ties by cast order) and the ripest conflict", () => {
