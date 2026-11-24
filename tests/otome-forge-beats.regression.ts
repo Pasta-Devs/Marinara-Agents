@@ -888,6 +888,9 @@ test("0.34.0: Emotion cues go to a spoken line's `voiced`, never its text; off, 
     ["I— [gasps] —can't.", "I—can't."],
     ["Please[gasps]stop", "Please stop"],
     ["Stay [softly], please.", "Stay, please."],
+    // 0.44.1: a line's own opening ellipsis stays; only a cue that opens the line takes the punctuation after it.
+    ["…and something [sighs].", "…and something."],
+    ["...and then [whispers] nothing.", "...and then nothing."],
   ]) {
     assert.equal(withoutCues(written!), shown, written);
   }
