@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.45.0 — 2026-11-24
+
+- **Friends:** on **Story**, **Add a friend** takes someone you've met, one of your characters or someone new: platonic, five levels shown as stars, as many as your love interests, one each story arc. Each gets a bible, a painted portrait and faces, a voice and a **Messages** thread.
+- Chapters bring friends in, and they earn friendship there, in Messages and on hangouts, planned in **Album → Hangouts**, with a memento to paint. Each level from 2 to 5 opens a story with them; level 5's gives you a look and their card, and they can talk to a love interest for you.
+- Friends can be hurt, and a make-up story clears it. **Settings → Connections** sets how often they write or invite you each week.
+- **End the Story:** once every love interest reaches level 20, play a finale, then an epilogue. Afterwards every chapter can still be read.
+
 ## 0.44.1 — 2026-11-24
 
 - Stories have more friction. People in the world want their own things, so they clash with you and with each other, and the love interests clash among themselves too. Most story arcs now have an antagonist; breathing-room arcs still don't.

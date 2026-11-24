@@ -906,17 +906,21 @@ function EndingCard({
       </section>
     );
   }
-  if (!ending.offered || reading) return null;
+  if (!ending.offered) return null;
   return (
     <section className="of-section of-glass of-story-ending" aria-labelledby="of-story-ending">
       <h2 id="of-story-ending" className="of-section-title">
         {t("ui.otomeForge.ending.offerTitle")}
       </h2>
       <p className="of-body">{t("ui.otomeForge.ending.offerText")}</p>
-      <button type="button" className="of-button of-button--quiet of-glass" onClick={() => setAsking(true)}>
-        <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
-        {t("ui.otomeForge.ending.offerButton")}
-      </button>
+      {reading ? (
+        <p className="of-hint">{t("ui.otomeForge.ending.offerReading")}</p>
+      ) : (
+        <button type="button" className="of-button of-button--quiet of-glass" onClick={() => setAsking(true)}>
+          <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.ending.offerButton")}
+        </button>
+      )}
       {asking ? (
         <Dialog
           title={t("ui.otomeForge.ending.confirmTitle")}
@@ -1309,18 +1313,18 @@ const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: stri
   rank: {
     title: "ui.otomeForge.friends.rankDialogTitle",
     planning: "ui.otomeForge.friends.planningRank",
-    locked: "ui.otomeForge.arcs.lockedNow",
+    locked: "ui.otomeForge.friends.lockedNow",
   },
   mend: {
     title: "ui.otomeForge.friends.mendDialogTitle",
     planning: "ui.otomeForge.friends.planningMend",
-    locked: "ui.otomeForge.arcs.lockedNow",
+    locked: "ui.otomeForge.friends.lockedNow",
   },
   // #2459: the finale, then the epilogue.
   ending: {
     title: "ui.otomeForge.ending.dialogTitle",
     planning: "ui.otomeForge.ending.planning",
-    locked: "ui.otomeForge.arcs.lockedNow",
+    locked: "ui.otomeForge.ending.lockedNow",
   },
 };
 
