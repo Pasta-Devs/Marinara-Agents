@@ -281,6 +281,38 @@ test("a saved chapter theme held from the Album plays its own track with chapter
   assert.equal(f.calls.api.length + f.calls.brief.length, 0);
 });
 
+test("0.44.0: Home plays the Soundtrack row chosen for it, a screen's own music still wins, and nothing is made", async (t) => {
+  const theme = {
+    cue: "chapter-main-1",
+    connectionId: "connection-1",
+    tag: "music:contexts:otome-forge:theme",
+    path: "music/contexts/otome-forge/theme.mp3",
+  };
+  const f = fixture(() => ({ assets: { ...manifest.assets, [theme.tag]: { path: theme.path } } }));
+  t.after(() => f.controller.dispose());
+  f.controller.configure(f.settings({ generate: false }));
+  f.controller.setBaseCue("home");
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag);
+  f.controller.configure(f.settings({ homeCue: theme.cue, homeTrack: theme }));
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, theme.tag, "the chosen theme plays on Home as soon as it is saved");
+  const held = f.controller.claim("tense");
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag, "a screen holding its own music still plays it");
+  held.release();
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, theme.tag);
+  f.controller.setBaseCue(null);
+  await settle();
+  assert.equal(f.calls.stop > 0, true, "silence is still silence");
+  f.controller.setBaseCue("home");
+  f.controller.configure(f.settings({ homeCue: "", homeTrack: null }));
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag, "pressed again, Home plays its own music");
+  assert.equal(f.calls.api.length + f.calls.brief.length, 0);
+});
+
 test("0.34.0: with Emotion cues on, a line's cues are what the voice reads, under a clip key of their own", async (t) => {
   const f = fixture();
   t.after(() => f.controller.dispose());

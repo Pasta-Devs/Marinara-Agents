@@ -172,6 +172,13 @@ export interface AudioSettings {
    * (Segment.voiced); the reader never shows them.
    */
   emotionCues: boolean;
+  /**
+   * 0.44.0: the Album → Soundtrack row Home plays instead of its own music: a mood's cue, or a chapter's theme
+   * (`chapter-<key>`, its saved track in `homeTrack`); "" plays Home's own.
+   */
+  homeCue: string;
+  homeTrack: SoundtrackTrack | null;
+  /** The kit's (Gacha Forge's Home song); Otome chooses with `homeCue`. */
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;

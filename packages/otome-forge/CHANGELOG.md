@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.44.0 — 2026-11-24
+
+- You can choose Home's music. In **Album → Soundtrack**, press the house beside a track to play it on Home and the other story screens instead of Home's own music. A mood or a chapter's theme can be chosen. Press the house again to go back.
+
 ## 0.43.1 — 2026-11-24
 
 - A side character's sprite can be painted again. While they speak, **Repaint** with their name sits beside the place's own **Repaint**, for 1 image. Their sprite stays on screen while the new one paints, and stays if that paint fails.

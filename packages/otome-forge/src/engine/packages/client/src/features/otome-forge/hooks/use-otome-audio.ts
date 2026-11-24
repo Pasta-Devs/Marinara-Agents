@@ -10,7 +10,8 @@
 //   settings change; stock music plays meanwhile. Nothing is generated while generation is off, muted or silent as
 //   saved: Settings → Audio's unsaved preview of Mute and the volumes changes only what is heard. A chapter's theme is
 //   held with its chapter: its saved track plays wherever it is held (the reader, the Album's Soundtrack), never a
-//   chosen music folder in its place, and a new one is made only while chapter themes are on.
+//   chosen music folder in its place, and a new one is made only while chapter themes are on. 0.44.0: Home's music is
+//   the Album → Soundtrack row the player chose for it (a mood, or a chapter's saved theme), Home's own otherwise.
 // - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win, and anyone outside the
 //   cast takes the voice assigned to their name, lib/audio.ts lineVoice; the protagonist uses her persona's voice or
 //   stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool voice for their
@@ -58,7 +59,7 @@ import {
 } from "../lib/audio";
 import { useOtomeProps } from "../props";
 import type { AudioSettings, Player, RunLiView, RunView, Segment, SoundtrackTrack } from "../shared/api-types";
-import type { MusicMood } from "../shared/faces";
+import { MUSIC_MOODS, type MusicMood } from "../shared/faces";
 import { patchRun } from "./use-run";
 
 // ── The Engine's audio service, as Otome reads it (lib/audio-service.ts, capability API 1.381) ──
@@ -281,6 +282,8 @@ export class OtomeAudioController {
     // A save that opens or closes generation plays the cue again (a preview only changes the levels it plays at).
     if (source || before.muted !== saved.muted || before.musicVolume <= 0 !== saved.musicVolume <= 0) {
       void this.applyCue(true);
+    } else if (before.homeCue !== saved.homeCue || before.homeTrack?.tag !== saved.homeTrack?.tag) {
+      void this.applyCue();
     }
     const voices = (value: AudioSettings) =>
       [value.tts, value.otherVoices, value.muted, value.dialogueVolume > 0].join();
@@ -330,7 +333,11 @@ export class OtomeAudioController {
       const held = this.claims[index]!.cue;
       if (held !== undefined) return held;
     }
-    return this.baseCue;
+    if (this.baseCue !== "home") return this.baseCue;
+    // 0.44.0: the Album → Soundtrack row chosen for Home, as the Album plays it.
+    const { homeCue, homeTrack } = this.saved;
+    if (homeTrack) return { chapterKey: homeCue.slice(chapterMusicCue("").length), mood: "home", track: homeTrack };
+    return (MUSIC_MOODS as readonly string[]).includes(homeCue) ? (homeCue as MusicMood) : "home";
   }
 
   /** A stock sound from the Engine's library (`sfx:ui:<name>`) at the effects volume; silent while muted (M4). */

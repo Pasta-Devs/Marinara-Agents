@@ -4082,6 +4082,74 @@ test("Otome Hearth selects a saved music folder without generating music", async
   expect(posts(calls, "/audio/track")).toEqual([]);
 });
 
+test("0.44.0: Otome Hearth plays a Soundtrack row chosen in the Album on Home, until it is pressed again", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = expressionRepaintFixture();
+  Object.assign(fixture.view.world.audio, { tts: false, generate: false, chapterThemes: false, musicFolder: "" });
+  fixture.view.world.images.connectionId = null;
+  const stock = "music:dialogue:slice_of_life:calm:morning-tea";
+  const theme = {
+    cue: "chapter-main-1",
+    connectionId: "audio-1",
+    tag: "music:contexts:otome-forge:masquerade",
+    path: "music/contexts/otome-forge/masquerade.mp3",
+  };
+  const assets = {
+    [stock]: { path: "music/dialogue/slice_of_life/calm/morning-tea.mp3" },
+    [theme.tag]: { path: theme.path },
+  };
+  const soundtrack = [
+    { cue: "home", track: null },
+    { cue: theme.cue, track: theme, chapter: { key: "main-1", title: "The Masquerade" } },
+  ];
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined =>
+    call.path === "/api/game-assets/manifest"
+      ? { status: 200, json: { scannedAt: now(), count: 2, assets, byCategory: {} } }
+      : call.path.endsWith("/album")
+        ? { status: 200, json: { cgs: [], memories: [], timeline: [], favorites: [], soundtrack, tells: {} } }
+        : fixture.answer(call);
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page, { recordMusic: true });
+  const lastPlayed = () => page.evaluate(() => ((globalThis as any).__otomeMusicEvents as string[]).at(-1));
+  await expect.poll(lastPlayed).toBe(stock);
+  const openSoundtrack = async () => {
+    await root
+      .getByRole("navigation", { name: "Game menu" })
+      .getByRole("button", { name: "Album", exact: true })
+      .click();
+    await root.getByRole("tab", { name: "Soundtrack", exact: true }).click();
+    return root.getByRole("button", { name: /The Masquerade on Home$/u });
+  };
+  let house = await openSoundtrack();
+  await expect(house).toHaveAttribute("aria-pressed", "false");
+  let saved = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/audio/settings"));
+  await house.click();
+  await (await saved).finished();
+  expect(posts(calls, "/audio/settings").map((call) => call.body!.audio)).toEqual([
+    { homeCue: theme.cue, homeTrack: theme },
+  ]);
+  await expect(house).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: testInfo.outputPath("soundtrack-home-chosen.png") });
+  await root.getByRole("button", { name: "Home with Ilvar Thorne", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Ilvar Thorne", exact: true, level: 1 })).toBeVisible();
+  await expect.poll(lastPlayed).toBe(theme.tag);
+  house = await openSoundtrack();
+  await expect(house).toHaveAttribute("aria-pressed", "true");
+  saved = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/audio/settings"));
+  await house.click();
+  await (await saved).finished();
+  expect(posts(calls, "/audio/settings").at(-1)!.body!.audio).toEqual({ homeCue: "", homeTrack: null });
+  await expect(house).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(lastPlayed).toBe(stock);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(posts(calls, "/audio/brief")).toEqual([]);
+});
+
 test("Otome Hearth retains an unavailable saved music folder and uses stock without paying", async ({
   page,
   isMobile,
