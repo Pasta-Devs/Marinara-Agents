@@ -748,16 +748,28 @@ test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, dr
   expect(await clawX()).toBeLessThan(moved);
   await page.screenshot({ path: testInfo.outputPath("05-aim.png") });
 
-  // Drop: the cable runs out, then the claw comes home over the chute.
+  // Drop: the cable runs out, then the claw comes home over the chute. It waits there about 2 s, through his turn's
+  // banner and his thinking, and the phone-sized screenshot below took longer than that in CI (#2470). So the page
+  // notes where the claw is when the drop ends, and the test reads that note instead of racing his turn.
+  const game = root.locator(".of-claw-game");
+  await game.evaluate((element) => {
+    new MutationObserver((_, observer) => {
+      if (element.getAttribute("data-stage") === "drop") return;
+      observer.disconnect();
+      const x = getComputedStyle(element.querySelector(".of-claw-glass")!).getPropertyValue("--cx");
+      (window as unknown as { __clawDropEndX: number }).__clawDropEndX = Number(x);
+    }).observe(element, { attributeFilter: ["data-stage"] });
+  });
   await action.focus();
   await page.keyboard.press(" ");
-  await expect(root.locator(".of-claw-game")).toHaveAttribute("data-stage", "drop");
+  await expect(game).toHaveAttribute("data-stage", "drop");
   await page.waitForTimeout(650);
   const cable = Number(await glass.evaluate((element) => getComputedStyle(element).getPropertyValue("--cc")));
   expect(cable).toBeGreaterThan(0.5);
   await page.screenshot({ path: testInfo.outputPath("06-drop.png") });
-  await expect(root.locator(".of-claw-game")).not.toHaveAttribute("data-stage", "drop", { timeout: 6_000 });
-  expect(Math.abs((await clawX()) - 0.11)).toBeLessThan(0.02);
+  await expect(game).not.toHaveAttribute("data-stage", "drop", { timeout: 6_000 });
+  const dropEndX = await page.evaluate(() => (window as unknown as { __clawDropEndX?: number }).__clawDropEndX);
+  expect(Math.abs(Number(dropEndX) - 0.11)).toBeLessThan(0.02);
   // His turn follows; he moves the claw himself.
   await expect(action).toHaveAttribute("data-mode", "cheer", { timeout: 6_000 });
   await page.waitForTimeout(2_200);
