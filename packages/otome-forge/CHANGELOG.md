@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.44.1 — 2026-11-24
+
+- Stories have more friction. People in the world want their own things, so they clash with you and with each other, and the love interests clash among themselves too. Most story arcs now have an antagonist; breathing-room arcs still don't.
+- With **Emotion cues** on, a line that starts with "…" keeps it in the dialogue box. "…and something" no longer shows as "and something".
+
 ## 0.44.0 — 2026-11-24
 
 - You can choose Home's music. In **Album → Soundtrack**, press the house beside a track to play it on Home and the other story screens instead of Home's own music. A mood or a chapter's theme can be chosen. Press the house again to go back.

@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.44.1",
+          "date": "2026-11-24",
+          "notes": "- Stories have more friction. People in the world want their own things, so they clash with you and with each other, and the love interests clash among themselves too. Most story arcs now have an antagonist; breathing-room arcs still don't.\n- With **Emotion cues** on, a line that starts with \"…\" keeps it in the dialogue box. \"…and something\" no longer shows as \"and something\".",
+          "highlight": false
+        },
+        {
           "version": "0.44.0",
           "date": "2026-11-24",
           "notes": "- You can choose Home's music. In **Album → Soundtrack**, press the house beside a track to play it on Home and the other story screens instead of Home's own music. A mood or a chapter's theme can be chosen. Press the house again to go back.",
@@ -827,12 +833,6 @@
           "version": "0.36.4",
           "date": "2026-11-18",
           "notes": "- Characters no longer talk in short, clipped one-liners that make little sense in the scene. Each line now says what that person would really say right then, in everyday words, and can run to a few sentences.",
-          "highlight": false
-        },
-        {
-          "version": "0.36.3",
-          "date": "2026-11-18",
-          "notes": "- Your thoughts in a scene no longer open with how your body feels every time, such as \"My stomach knots\" or \"My heart is pounding in my chest\". The story no longer asks for a bodily feeling each time something happens to you.",
           "highlight": false
         }
       ]
