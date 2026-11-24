@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.44.0",
+          "date": "2026-11-24",
+          "notes": "- You can choose Home's music. In **Album → Soundtrack**, press the house beside a track to play it on Home and the other story screens instead of Home's own music. A mood or a chapter's theme can be chosen. Press the house again to go back.",
+          "highlight": true
+        },
+        {
           "version": "0.43.1",
           "date": "2026-11-24",
           "notes": "- A side character's sprite can be painted again. While they speak, **Repaint** with their name sits beside the place's own **Repaint**, for 1 image. Their sprite stays on screen while the new one paints, and stays if that paint fails.",
@@ -827,12 +833,6 @@
           "version": "0.36.3",
           "date": "2026-11-18",
           "notes": "- Your thoughts in a scene no longer open with how your body feels every time, such as \"My stomach knots\" or \"My heart is pounding in my chest\". The story no longer asks for a bodily feeling each time something happens to you.",
-          "highlight": false
-        },
-        {
-          "version": "0.36.2",
-          "date": "2026-11-18",
-          "notes": "- Scrollbars in Otome Hearth, such as the one in a scene's narration and dialogue box, now use your Midnight or Pearl look's colours instead of Marinara Engine's accent.",
           "highlight": false
         }
       ]
