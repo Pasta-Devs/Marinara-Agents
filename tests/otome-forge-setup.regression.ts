@@ -26,6 +26,8 @@ import {
   emptyDraft,
   isBlankDraft,
   readDraft,
+  savedConnections,
+  setupAudioOf,
   stepProblem,
   toSetupInput,
   type DraftLi,
@@ -264,9 +266,12 @@ async function setup({
     lis: Object.fromEntries(cast.map((li) => [li.id, { points: 0, stage: 1 }])),
   }));
 
+  // #2448: the forge asks for the high lane, so a love interest's faces paint right after his portrait.
   const art = {
-    queueExpressions: (_runId: string, beat: ExpressionBeat) =>
-      void faces?.push(...beat.segments.map((segment) => (segment as { speaker: string }).speaker)),
+    queueExpressions: (_runId: string, beat: ExpressionBeat, options: { lane?: string }) =>
+      void faces?.push(
+        ...beat.segments.map((segment) => `${(segment as { speaker: string }).speaker} (${options.lane ?? "low"})`),
+      ),
   } as Pick<OtomeArt, "queueExpressions"> as OtomeArt;
   const deps = { runtime, store, handle: createHandle(runtime.logger), images, art };
   const call = routeHarness(deps);
@@ -670,7 +675,11 @@ test("with neither Ask before painting nor prompt review, each look paints by it
     ],
   );
   assert.equal(t.paid.length, 3, "each look once; his failed one waits for Retry");
-  assert.deepEqual(faces, ["Mireille"], "faces for a love interest's painted look only, never the protagonist's");
+  assert.deepEqual(
+    faces,
+    ["Mireille (high)"],
+    "faces for a love interest's painted look only, never the protagonist's, right after it (#2448)",
+  );
   await settleForge(t.deps, t.runId);
   assert.equal(t.paid.length, 3);
 });
@@ -683,7 +692,7 @@ test("someone new mid-story gets his steps on the next read: painting by itself,
     ),
   };
   for (const [why, runKey, images, review, expected] of [
-    ["by itself", "r-newauto-aaaaaa", { connectionId: "conn-image", ask: false }, false, ["done", 1, ["Sol"]]],
+    ["by itself", "r-newauto-aaaaaa", { connectionId: "conn-image", ask: false }, false, ["done", 1, ["Sol (high)"]]],
     [
       "Ask before painting",
       "r-newask-aaaaaa",
@@ -1037,6 +1046,27 @@ test("POST /runs takes 2–5 love interests, enforces the 18+ gate, keeps the pl
   assert.equal((nsfw.body.view as RunView).world.content.heat, "explicit");
   assert.equal(await stored(String(nsfw.body.run)), undefined, "none given, none stored");
   await forgeSettled(runIdOf(String(nsfw.body.run))).catch(() => undefined);
+
+  // #2448: the voices and music chosen at setup are the story's before its prologue is written.
+  const chosen = {
+    ...setupAudioOf(undefined),
+    tts: true,
+    emotionCues: true,
+    generate: true,
+    audioConnectionId: "conn-music",
+  };
+  const voiced = await call("POST", "/runs", setupInput({ audio: chosen }));
+  assert.equal(voiced.status, 200);
+  const audioOf = async (key: string) => (await store.readDoc(worldId(runIdOf(key)), normalizeWorld))!.audio;
+  const audio = await audioOf(String(voiced.body.run));
+  assert.deepEqual(setupAudioOf(audio), chosen);
+  assert.deepEqual(
+    [audio.dialogueVolume, audio.haptics, audio.tracks],
+    [1, false, []],
+    "the rest as Settings → Audio starts it",
+  );
+  assert.deepEqual(setupAudioOf(await audioOf(runKey)), setupAudioOf(undefined), "none given: all off, as before");
+  await forgeSettled(runIdOf(String(voiced.body.run))).catch(() => undefined);
 });
 
 test("the world plan keeps the world document's limits, so an over-long field gets the repair turn", () => {
@@ -1201,6 +1231,46 @@ test("a kept draft drops a persona or card the Engine no longer has, and keeps e
   assert.equal(dropMissingPicks(draft, null, null), draft, "lists still loading, failed or cut off change nothing");
   const kept = dropMissingPicks(draft, [{ id: "persona-gone" }], [{ id: "card-kai" }, { id: "card-gone" }]);
   assert.equal(kept, draft, "nothing missing returns the same draft, so the wizard does not re-render");
+});
+
+test("#2448: a job keeps the connection picked for it, even the story's own, when the story connection changes", () => {
+  const form = { narration: "conn-a", structured: "conn-b", chat: "conn-b", compress: "" };
+  const shown = (saved: ReturnType<typeof savedConnections>) => ({
+    narration: saved.narration,
+    structured: saved.structured ?? "",
+    chat: saved.chat ?? "",
+    compress: saved.compress ?? "",
+  });
+  // The story moves to the connection Planning and Messages use, then on to a third: they keep theirs throughout.
+  const moved = savedConnections({ ...form, narration: "conn-b" });
+  assert.deepEqual(moved, { narration: "conn-b", structured: "conn-b", chat: "conn-b" });
+  assert.deepEqual(savedConnections({ ...shown(moved), narration: "conn-c" }), {
+    narration: "conn-c",
+    structured: "conn-b",
+    chat: "conn-b",
+  });
+  assert.equal(savedConnections(form, "conn-embed").embeddings, "conn-embed");
+  const draft = { ...emptyDraft(), connections: { ...form, narration: "conn-b" } };
+  assert.deepEqual(toSetupInput(draft).connections, moved, "setup saves them the same way");
+});
+
+test("#2448: setup asks for the voices and music, all off by default, and sends them with the story", () => {
+  const draft = emptyDraft();
+  assert.deepEqual(draft.audio, {
+    tts: false,
+    otherVoices: false,
+    emotionCues: false,
+    generate: false,
+    chapterThemes: false,
+    musicFolder: "",
+    audioConnectionId: "",
+  });
+  const chosen = { ...draft, audio: { ...draft.audio, tts: true, emotionCues: true } };
+  assert.deepEqual(toSetupInput(chosen).audio, chosen.audio);
+  assert.equal(isBlankDraft(chosen), false, "a voice choice is the player's work, so the draft is kept");
+  assert.deepEqual(readDraft(JSON.parse(JSON.stringify(chosen))).audio, chosen.audio);
+  const { audio: _audio, ...older } = chosen;
+  assert.deepEqual(readDraft(older).audio, draft.audio, "a draft saved before #2448 starts with everything off");
 });
 
 test("a draft keeps the player's banned phrases on this device and sends them trimmed; none sends nothing", () => {

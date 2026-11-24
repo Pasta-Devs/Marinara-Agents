@@ -16,7 +16,7 @@ import { useConnections, useMusicFolders } from "../../hooks/use-engine-resource
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { patchRun } from "../../hooks/use-run";
 import { useOtomeProps } from "../../props";
-import type { AudioSettings, RunView } from "../../shared/api-types";
+import type { AudioSettings, RunView, SetupAudio } from "../../shared/api-types";
 import { MUSIC_MOODS } from "../../shared/faces";
 import { ConnectionSelect, Section, Switch } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
@@ -175,40 +175,20 @@ function MusicFolderSelect({ value, onChange }: { value: string; onChange: (valu
   );
 }
 
-function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof useSaveAudio> }) {
+/**
+ * #2448: the Voices and Music sections, shared by Settings → Audio and the setup's connections step (which asks for
+ * them before the prologue is written).
+ */
+export function VoicesAndMusic({
+  value: form,
+  onChange: set,
+}: {
+  value: SetupAudio;
+  onChange: (change: Partial<SetupAudio>) => void;
+}) {
   const { t } = useTranslation();
-  const audio = useOtomeAudio();
   const { locale } = useOtomeProps().localization;
   const connections = useConnections();
-  const saved = storedAudio(run);
-  const savedRef = useRef(saved);
-  savedRef.current = saved;
-  const [form, setForm] = useState(() => toForm(saved));
-  // A save (or another story) starts the form again from the stored settings, in place: the focused Save button and
-  // the status that says "Saved." stay where they are.
-  const stored = storedKey(run.runKey, toForm(saved));
-  const [formFor, setFormFor] = useState(stored);
-  if (formFor !== stored) {
-    setFormFor(stored);
-    setForm(toForm(saved));
-  }
-  const changed = JSON.stringify(form) !== JSON.stringify(toForm(saved));
-  const set = (change: Partial<AudioForm>) => setForm((current) => ({ ...current, ...change }));
-
-  // Only the volumes and Mute apply while they change, as a preview beside the saved settings (which alone decide
-  // whether music is generated); leaving without saving puts back what is saved.
-  const { muted, musicVolume, dialogueVolume } = form;
-  useEffect(() => {
-    audio?.configure({ ...savedRef.current, muted, musicVolume, dialogueVolume }, savedRef.current);
-  }, [audio, muted, musicVolume, dialogueVolume, stored]);
-  useEffect(
-    () => () => {
-      audio?.configure(savedRef.current);
-    },
-    // On leaving only.
-    [audio],
-  );
-
   const number = new Intl.NumberFormat(locale);
   return (
     <>
@@ -305,6 +285,45 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
           <MusicFolderSelect value={form.musicFolder} onChange={(musicFolder) => set({ musicFolder })} />
         ) : null}
       </Section>
+    </>
+  );
+}
+
+function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof useSaveAudio> }) {
+  const { t } = useTranslation();
+  const audio = useOtomeAudio();
+  const saved = storedAudio(run);
+  const savedRef = useRef(saved);
+  savedRef.current = saved;
+  const [form, setForm] = useState(() => toForm(saved));
+  // A save (or another story) starts the form again from the stored settings, in place: the focused Save button and
+  // the status that says "Saved." stay where they are.
+  const stored = storedKey(run.runKey, toForm(saved));
+  const [formFor, setFormFor] = useState(stored);
+  if (formFor !== stored) {
+    setFormFor(stored);
+    setForm(toForm(saved));
+  }
+  const changed = JSON.stringify(form) !== JSON.stringify(toForm(saved));
+  const set = (change: Partial<AudioForm>) => setForm((current) => ({ ...current, ...change }));
+
+  // Only the volumes and Mute apply while they change, as a preview beside the saved settings (which alone decide
+  // whether music is generated); leaving without saving puts back what is saved.
+  const { muted, musicVolume, dialogueVolume } = form;
+  useEffect(() => {
+    audio?.configure({ ...savedRef.current, muted, musicVolume, dialogueVolume }, savedRef.current);
+  }, [audio, muted, musicVolume, dialogueVolume, stored]);
+  useEffect(
+    () => () => {
+      audio?.configure(savedRef.current);
+    },
+    // On leaving only.
+    [audio],
+  );
+
+  return (
+    <>
+      <VoicesAndMusic value={form} onChange={set} />
       {run.world.content.heat === "explicit" ? (
         <HapticsSection
           runKey={run.runKey}

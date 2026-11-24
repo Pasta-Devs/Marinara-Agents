@@ -6,6 +6,7 @@ import type { Unit } from "../packages/otome-forge/src/engine/packages/client/sr
 import { FACES } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { expressionPrompt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import {
   runDocTarget,
   unitId,
@@ -163,6 +164,32 @@ test("a speaking love interest gets his five faces once, nonsexual adult edits o
   const warnings = t.logs.filter((entry) => entry.level === "warn").map((entry) => entry.message);
   assert.ok(!warnings.some((message) => /ReferenceError|is not defined/.test(message)), warnings.join("\n"));
   t.art.dispose();
+});
+
+test("#2448: the forge's faces (lane high) paint before scene art queued after them; a beat's wait behind it", async () => {
+  for (const lane of ["high", "low"] as const) {
+    const order: string[] = [];
+    const t = await facesWorld(
+      lane === "high" ? "r-m2bexprhi-aaaaaa" : "r-m2bexprlo-aaaaaa",
+      () => void order.push("face"),
+    );
+    // A paint holds the connection, so what is queued next waits in its lane.
+    let release = () => {};
+    const held = paintSlot("conn-image", () => new Promise<void>((resolve) => (release = resolve)));
+    t.art.queueExpressions(t.runId, beat(0), { debugMode: false, ...(lane === "high" ? { lane } : {}) });
+    await until(async () => (await t.set())?.state === "pending", "the set to start");
+    const scene = paintSlot("conn-image", async () => void order.push("scene"));
+    release();
+    await Promise.all([held, scene]);
+    await until(async () => settled(await t.set()), "Kai's faces");
+    assert.equal(order.length, 6);
+    assert.deepEqual(
+      order.slice(0, 2),
+      lane === "high" ? ["face", "scene"] : ["scene", "face"],
+      lane === "high" ? "his first face goes before the scene art" : "a beat's faces wait for the scene art",
+    );
+    t.art.dispose();
+  }
 });
 
 test("a newcomer kept out of the cast never makes a cast member's first name ambiguous to the faces", async () => {

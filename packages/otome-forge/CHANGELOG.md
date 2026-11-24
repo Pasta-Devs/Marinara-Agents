@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.43.0 — 2026-11-24
+
+- Setup's **Connections** step now asks for **Voices** and **Music**, as in **Settings → Audio**: **Voice the dialogue**, **Voice everyone else**, **Emotion cues** and music generation. The prologue is written and played with what you choose there.
+- A new story paints each love interest's expressions right after their portrait, before the prologue's places and key moments.
+- Changing the **Story** connection no longer turns **Planning**, **Messages** or **Memory** into **Same as Story** when they used the same connection. Each keeps the connection you picked for it.
+- With **Emotion cues** on, voiced lines no longer repeat words. Scenes no longer ask for stammering, stuttering or hesitation cues, which ElevenLabs performs by saying words twice, and such cues in older scenes are left out when their lines are voiced.
+
 ## 0.42.0 — 2026-11-23
 
 - Once in every arc, the middle chapter's last scene ends on a riddle, a small mystery or a suspect to name. Tap **Answer…** and type one word. Capitals, accents and punctuation don't matter, so "nozka" counts for "nóżka". The next chapter plays out what follows from a right or a wrong answer.

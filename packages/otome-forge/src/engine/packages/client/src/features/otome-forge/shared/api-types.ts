@@ -1796,7 +1796,15 @@ export interface SetupInput {
   dailyMessages?: number;
   groupSquabbles?: number;
   dateInvites?: number;
+  /** #2448: Settings → Audio's voices and music, asked at setup so the prologue starts with them; absent: all off. */
+  audio?: SetupAudio;
 }
+
+/** The voices and music the setup asks for (Settings → Audio keeps the rest at its defaults until changed there). */
+export type SetupAudio = Pick<
+  AudioSettings,
+  "tts" | "otherVoices" | "emotionCues" | "generate" | "chapterThemes" | "musicFolder" | "audioConnectionId"
+>;
 
 /** POST /runs/:run/settings. Raising a gated setting needs the 18+ gate; lowering one never does. */
 export interface SettingsInput {

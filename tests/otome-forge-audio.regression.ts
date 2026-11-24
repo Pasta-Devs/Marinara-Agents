@@ -399,6 +399,24 @@ test("a line made ahead is sent as it is played: same text, voice, speaker and c
   );
 });
 
+test("#2448: hesitation and rhythm cues never reach the voice, which would say the words twice", () => {
+  const kai = { name: "Kai", characterId: "card-kai", cast: true };
+  const said = (voiced: string) =>
+    lineVoiceRequest("run-1", "ch1/0r0/3", { speaker: "Kai", text: "I— I can't.", voiced }, kai, "kai-voice", {
+      emotionCues: true,
+    });
+  assert.deepEqual(
+    said("[nervous, stammering] I— I can't. [stutters] [sighs]"),
+    { ...said("[nervous] I— I can't. [sighs]"), cacheKey: "otome-forge:run-1:ch1/0r0/3~cues2" },
+    "the rest of a cue stays, a cue of nothing else goes, and the line gets a key of its own",
+  );
+  assert.equal(said("[nervous] I— I can't. [sighs]").cacheKey, "otome-forge:run-1:ch1/0r0/3~cues", "others as before");
+  assert.equal(said("[hesitantly and softly] I— I can't.").text, "[softly] I— I can't.");
+  assert.equal(said("[Repeating himself] I— [stammers] I can't.").text, "I— I can't.");
+  assert.equal(said("[stammering]").text, "I— I can't.", "nothing left: the line as shown");
+  assert.equal(said("[repetition, low] I— I can't. [repetitive]").text, "[low] I— I can't.");
+});
+
 test("a scene's voices are made ahead one at a time, in order; a newer list replaces the rest, and a failure stops it", async () => {
   const line = (ref: string): PrepLine => ({ segment: { speaker: "Kai", text: ref }, ref });
   // Each line's request waits until the test settles it, so the order and "one at a time" are checked at every step.

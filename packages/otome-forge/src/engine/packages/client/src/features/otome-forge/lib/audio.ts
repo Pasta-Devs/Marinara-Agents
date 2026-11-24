@@ -172,9 +172,29 @@ export interface LineVoiceRequest {
   cacheKey?: string;
 }
 
+/** A cue's part that asks for hesitation or rhythm ("stammering", "stutters", "hesitantly", "repeating", "repetitive"). */
+const REPEATING_CUE = /\b(?:stammer|stutter|hesita|repe(?:at|tit))/iu;
+
 /**
- * What a line is voiced with. 0.34.0: with Emotion cues on, the line as written, cues and all, kept apart from the
- * plain clip. `cache` false voices it with no cache key.
+ * #2448: the cued line as the voice model gets it. ElevenLabs performs a hesitation or rhythm cue ([stammers],
+ * [repeats]) by saying words twice, on top of any stammer the words already carry, so those parts of a cue are left
+ * out: "[nervous, stammering]" is voiced as "[nervous]", and a cue with nothing else in it goes.
+ */
+export function voicedText(voiced: string): string {
+  return voiced
+    .replace(/\[([^\[\]\n]{1,80})\]/gu, (cue, inner: string) => {
+      if (!REPEATING_CUE.test(inner)) return cue;
+      const kept = inner.split(/\s*,\s*|\s+and\s+/u).filter((part) => part.trim() && !REPEATING_CUE.test(part));
+      return kept.length ? `[${kept.join(", ")}]` : "";
+    })
+    .replace(/[ \t]{2,}/gu, " ")
+    .trim();
+}
+
+/**
+ * What a line is voiced with. 0.34.0: with Emotion cues on, the line as written, cues and all (but voicedText's), kept
+ * apart from the plain clip. A line voicedText changed has a key of its own, so a clip made with the cue it drops
+ * before #2448 is never replayed. `cache` false voices it with no cache key.
  */
 export function lineVoiceRequest(
   runKey: string,
@@ -186,12 +206,14 @@ export function lineVoiceRequest(
   cache = true,
 ): LineVoiceRequest {
   const voiced = settings.emotionCues ? segment.voiced : undefined;
+  const text = voiced ? voicedText(voiced) || segment.text : segment.text;
+  const key = !voiced ? ref : text === voiced ? `${ref}~cues` : `${ref}~cues2`;
   return {
-    text: voiced ?? segment.text,
+    text,
     speaker: segment.speaker,
     voice,
     ...(speaker.characterId ? { characterId: speaker.characterId } : {}),
-    ...(cache ? { cacheKey: voiceCacheKey(runKey, voiced ? `${ref}~cues` : ref) } : {}),
+    ...(cache ? { cacheKey: voiceCacheKey(runKey, key) } : {}),
   };
 }
 
