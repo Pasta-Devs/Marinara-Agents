@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.43.1 — 2026-11-24
+
+- A side character's sprite can be painted again. While they speak, **Repaint** with their name sits beside the place's own **Repaint**, for 1 image. Their sprite stays on screen while the new one paints, and stays if that paint fails.
+
 ## 0.43.0 — 2026-11-24
 
 - Setup's **Connections** step now asks for **Voices** and **Music**, as in **Settings → Audio**: **Voice the dialogue**, **Voice everyone else**, **Emotion cues** and music generation. The prologue is written and played with what you choose there.

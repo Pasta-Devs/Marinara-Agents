@@ -306,16 +306,20 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const sideUrl = side?.url && !failedArt.has(side.url) ? side.url : null;
   const speaker = useSpeakerSprite(cg || sideUrl ? null : otherSpeaker, reader.lineKey);
   const sideState = side?.art?.state;
+  // A painted sprite on screen (not under a key image) can be painted again, as the place can; it stays until the new
+  // one is saved.
+  const sideRepaint = sideState === "ready" && !!sideUrl && !cg;
   const sidePaint =
     canPaint &&
     side &&
     otherSpeaker &&
-    (sideState === "waiting-consent" || sideState === "failed" || sideState === "stopped")
+    (sideState === "waiting-consent" || sideState === "failed" || sideState === "stopped" || sideRepaint)
       ? {
           name: otherSpeaker,
-          retry: sideState !== "waiting-consent",
+          repaint: sideRepaint,
+          retry: sideState === "failed" || sideState === "stopped",
           busy: reader.painting,
-          onPaint: () => void reader.paintSide(side.key, otherSpeaker),
+          onPaint: () => void reader.paintSide(side.key, otherSpeaker, sideRepaint),
         }
       : undefined;
   const stageArt = forgeStoryExpressionArt(

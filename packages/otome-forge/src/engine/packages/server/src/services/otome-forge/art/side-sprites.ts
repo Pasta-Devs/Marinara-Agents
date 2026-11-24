@@ -14,7 +14,9 @@
 //   revision-checked write of `${R}:sides`; checked again right before the paid call (still the record this paint
 //   claimed, the image connection unchanged, the toggle still on, consent still given); saved only onto that record. A
 //   failure is kept and repainted only by a tap (POST /runs/:run/art/side: consent, a reviewed prompt or Retry, which
-//   never pays twice); a `pending` record with no live paint in this process reads as `stopped`.
+//   never pays twice); a `pending` record with no live paint in this process reads as `stopped`. A ready sprite is
+//   painted again only by the reader's Repaint tap (`repaint`), which keeps the picture on screen until the new one is
+//   saved, and keeps it if that paint fails (S/art/paint.ts repainting).
 // - The reader gets it with the scene's art (GET /runs/:run/art/scene `sides`, S/story/side-cast.ts sceneSides): its
 //   cut-out once ready, the painted image where cleanup failed, nothing while it is still being cut out.
 import type {
@@ -35,9 +37,12 @@ import {
   imagesOf,
   paintRecord,
   paintView,
+  releaseReplacedImage,
+  repainting,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -82,15 +87,18 @@ function withPerson(key: string, change: (person: SidePerson) => SidePerson | un
 /** Their sprite as the reader shows it (see the header). */
 export function sideSpriteView(runId: string, person: SidePerson): SideSpriteView {
   const art = paintView(runId, sideOwner(person.key), person.art) ?? null;
-  const painted = art?.state === "ready" ? art.url : undefined;
-  if (!painted) return { key: person.key, art, ...(art?.state === "pending" ? { coming: true as const } : {}) };
+  // A repaint keeps the picture it replaces on the record (pending while it paints, or beside a failure), so that one
+  // still shows; a first paint has no picture until it is ready.
+  const painted = art?.url;
+  const coming = art?.state === "pending" ? { coming: true as const } : {};
+  if (!painted) return { key: person.key, art, ...coming };
   const { state, cutout } = cutoutView(runId, cutoutOwner(person), painted);
   if (state === "pending") {
     return { key: person.key, art, ...(cutout ? { url: cutout, cut: true as const } : {}), coming: true };
   }
   return state === "ready" && cutout
-    ? { key: person.key, art, url: cutout, cut: true }
-    : { key: person.key, art, url: painted };
+    ? { key: person.key, art, url: cutout, cut: true, ...coming }
+    : { key: person.key, art, url: painted, ...coming };
 }
 
 /** Queues the free cut-out of each painted sprite without one; the people as shown meanwhile. */
@@ -199,17 +207,21 @@ async function paintSprite(
     },
     // Built now, so their look and the rating are the ones in force at the paid call.
     paint: async () => (await buildSprite(deps, runId, key, edited)).paint(connectionId, debugMode),
-    save: async (art) =>
-      !!(
-        await updateIfChanged(
-          deps.store,
-          sidesTarget(runId),
-          normalizeSideCast,
-          withPerson(key, (person) =>
-            person.art?.state === "pending" && person.art.at === at ? { ...person, art } : undefined,
-          ),
-        )
-      )?.changed,
+    save: async (art) => {
+      let replaced: Paint | undefined;
+      const saved = await updateIfChanged(
+        deps.store,
+        sidesTarget(runId),
+        normalizeSideCast,
+        withPerson(key, (person) => {
+          if (person.art?.state !== "pending" || person.art.at !== at) return undefined;
+          replaced = person.art;
+          return { ...person, art: withKeptPicture(art, replaced) };
+        }),
+      );
+      if (saved?.changed && art.state === "ready") await releaseReplacedImage(deps, replaced, art);
+      return !!saved?.changed;
+    },
   });
   if (left?.state === "ready") {
     const person = (await readSides(deps, runId))?.people[key];
@@ -268,26 +280,31 @@ export async function queueSideSprite(
 
 /**
  * POST /runs/:run/art/side: the tap that paints a side character's sprite now (Ask's consent, a reviewed prompt, or
- * Retry). Waits for the paint and resolves the record as left; a ready one is returned as it is, and a tap while it
- * paints waits for that paint, so no tap pays twice. 404 for no such qualifying person, 409 `locked` while the toggle is
- * off, 409 `conflict` while their look is still being written, 503 `no-connection` without an image connection.
+ * Retry). Waits for the paint and resolves the record as left; a ready one is returned as it is unless `repaint` (the
+ * reader's Repaint tap) asks for a new picture, and a tap while it paints waits for that paint, so no tap pays twice.
+ * 404 for no such qualifying person, 409 `locked` while the toggle is off, 409 `conflict` while their look is still
+ * being written, 503 `no-connection` without an image connection.
  */
 export async function paintSideNow(
   deps: SideSpriteDeps,
   runId: string,
   key: string,
-  { debugMode, edited }: { debugMode: boolean; edited?: Partial<ImagePrompt> },
+  { debugMode, edited, repaint = false }: { debugMode: boolean; edited?: Partial<ImagePrompt>; repaint?: boolean },
 ): Promise<Paint | null> {
   const shown = async () => {
     const person = (await readSides(deps, runId))?.people[key];
     return person ? sideSpriteView(runId, person).art : null;
   };
+  // The record as this tap found it, so a repaint can tell one another tap's refused paint left untouched.
+  const first = (await readSides(deps, runId))?.people[key]?.art;
   return tapPaint(
     runId,
     async () => sideOwner(key),
-    async () => {
+    async ({ threw }) => {
       const art = await shown();
-      return { value: art, art: art ?? undefined };
+      // #2299: a paint that was refused (it threw) left the sprite as this repaint found it, which is no answer to it.
+      const untouched = threw && repaint && art?.state === first?.state && art?.at === first?.at;
+      return { value: art, ...(art && !untouched ? { art } : {}) };
     },
     async () => {
       const [world, sides] = await Promise.all([
@@ -300,7 +317,7 @@ export async function paintSideNow(
       if (!world.images.sideSprites) {
         throw new OtomeForgeError(409, "Side character sprites are off in Settings → Images.", "locked");
       }
-      if (person.art?.state === "ready") {
+      if (person.art?.state === "ready" && !repaint) {
         await queueSideCutouts(deps, runId, [person]);
         return person.art;
       }
@@ -314,9 +331,11 @@ export async function paintSideNow(
         deps.store,
         sidesTarget(runId),
         normalizeSideCast,
-        withPerson(key, (current) =>
-          current.art?.state === "ready" ? undefined : { ...current, art: { state: "pending", at } },
-        ),
+        withPerson(key, (current) => {
+          if (current.art?.state === "ready" && !repaint) return undefined;
+          // A picture already there (a ready sprite, or one a failed repaint kept) stays on screen while this paints.
+          return { ...current, art: current.art?.url ? repainting(current.art, at) : { state: "pending", at } };
+        }),
       );
       if (!claimed) throw notFound("Otome Hearth story");
       if (claimed.changed) await paintSprite(deps, runId, key, at, connectionId, { debugMode, consent: true, edited });

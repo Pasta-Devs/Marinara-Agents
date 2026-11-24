@@ -135,8 +135,9 @@ interface ReaderControlsProps {
   imageDescription?: string;
   /** The place's picture waits for a tap (consent, a retry after a failure), or a painted one can be repainted. */
   placePaint?: { retry: boolean; repaint: boolean; busy: boolean; onPaint: () => void };
-  /** 0.20.0: the speaking side character's sprite waits for a tap (Ask before painting) or a Retry. */
-  sidePaint?: { name: string; retry: boolean; busy: boolean; onPaint: () => void };
+  /** 0.20.0: the speaking side character's sprite waits for a tap (Ask before painting) or a Retry, or a painted one
+   * can be repainted. */
+  sidePaint?: { name: string; retry: boolean; repaint: boolean; busy: boolean; onPaint: () => void };
   /** 0.24.0: the key image on screen is painted, so it can be painted again (or, if that failed, tried again). */
   cgPaint?: { retry: boolean; busy: boolean; onPaint: () => void };
   /** #2147: opens the Engine's backgrounds for the place, with or without an image connection. */
@@ -415,7 +416,11 @@ export function ReaderControls(props: ReaderControlsProps) {
                 className="of-reader-chip of-reader-chip--paint"
                 aria-disabled={props.sidePaint.busy}
                 aria-label={t(
-                  props.sidePaint.retry ? "ui.otomeForge.reader.sideRetryLabel" : "ui.otomeForge.reader.sidePaintLabel",
+                  props.sidePaint.repaint
+                    ? "ui.otomeForge.reader.sideRepaintLabel"
+                    : props.sidePaint.retry
+                      ? "ui.otomeForge.reader.sideRetryLabel"
+                      : "ui.otomeForge.reader.sidePaintLabel",
                   { name: props.sidePaint.name },
                 )}
                 onClick={(event) => {
@@ -424,9 +429,14 @@ export function ReaderControls(props: ReaderControlsProps) {
                 }}
               >
                 <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
-                {t(props.sidePaint.retry ? "ui.otomeForge.reader.sideRetry" : "ui.otomeForge.reader.sidePaint", {
-                  name: props.sidePaint.name,
-                })}
+                {t(
+                  props.sidePaint.repaint
+                    ? "ui.otomeForge.reader.sideRepaint"
+                    : props.sidePaint.retry
+                      ? "ui.otomeForge.reader.sideRetry"
+                      : "ui.otomeForge.reader.sidePaint",
+                  { name: props.sidePaint.name },
+                )}
               </button>
             </li>
           ) : null}

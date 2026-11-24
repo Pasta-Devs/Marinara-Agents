@@ -187,7 +187,7 @@ const AFTER_VOICE_MS = 900;
 type PaintTarget =
   | { kind: "cg"; key: string; i: number }
   | { kind: "place"; place: string }
-  | { kind: "side"; key: string; name: string };
+  | { kind: "side"; key: string; name: string; repaint?: boolean };
 
 /** A paint whose prompt is shown for editing before it is sent. */
 export interface PaintReview {
@@ -701,6 +701,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         } else if (target.kind === "side") {
           const result = await otome.post<{ art?: Paint | null }>(`${runPath(runKey)}/art/side`, {
             key: target.key,
+            ...(target.repaint ? { repaint: true } : {}),
             ...edited,
           });
           const art = result?.art;
@@ -778,8 +779,11 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     [chapterKey, node, paint],
   );
   const paintPlace = useCallback((place: string) => paint({ kind: "place", place }), [paint]);
-  /** 0.20.0: a recurring side character's sprite, on the tap (its consent, or Retry). */
-  const paintSide = useCallback((key: string, name: string) => paint({ kind: "side", key, name }), [paint]);
+  /** 0.20.0: a recurring side character's sprite, on the tap (its consent, or Retry); `repaint` paints a ready one again. */
+  const paintSide = useCallback(
+    (key: string, name: string, repaint = false) => paint({ kind: "side", key, name, ...(repaint ? { repaint } : {}) }),
+    [paint],
+  );
   /** #2147: a background from the Engine's library as the place's picture (nothing painted); rejects on failure. */
   const chooseBackground = useCallback(
     async (place: string, url: string) => {
