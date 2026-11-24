@@ -255,6 +255,44 @@ Also manually install or update affected packages through **Agents → Download 
 - Include the generated package and catalog outputs when payloads change.
 - Never commit credentials, private user data, local model files, or unreviewed executable archives.
 
+## Package user documentation
+
+Keep the maintained user guide with its package. Someone browsing the catalog should be able to learn what a package does, what it needs and how to get a useful result without reading its source or release history. The same guidance will support the planned Engine reader and Professor Mari integration; those consumers are separate work and are not available through this convention alone.
+
+### README and topic guides
+
+Every new package needs `packages/<id>/README.md`. Start from the [package README template](.github/PACKAGE_README_TEMPLATE.md), then remove sections that do not apply. Explain:
+
+- What the package does, when to use it and any important limitations.
+- Supported modes and prerequisites, including any connection, model, external service or hardware users must configure. Keep compatibility claims consistent with the manifest.
+- How to install, activate and open it. Distinguish a Home app from an agent added to a chat, and mention a restart only when required.
+- A first useful task, with the actual UI labels and an observable result.
+- How to change common settings, recover from likely problems and find further help. Explain data retention or deletion where it affects the user's choices.
+
+A simple agent can fit its entire guide in the README. For a larger app, keep the README as a short entry page and link focused guides under `packages/<id>/docs/`, such as `getting-started.md`, `settings.md` or a named feature guide. Choose topics that match the package; do not create empty files to fill a standard list. Each topic should have a descriptive title, enough context to read on its own and a link back to the README. Use relative Markdown links and stable filenames so GitHub readers and future Engine consumers can follow them.
+
+Use direct instructions and the labels users see. Keep UI labels in **bold** and identifiers in `code`. Describe the current workflow rather than the PR that added it. Keep the canonical guide in English; maintain translations only when someone can verify them. Do not translate model prompts or user-authored content as documentation.
+
+### Development notes and release history
+
+Keep architecture, build instructions, implementation plans and contributor-only notes in a clearly labeled development area, such as `docs/development/`. Link it separately from user help. Keep release entries in the package's `CHANGELOG.md`, following [Release notes](#release-notes). A README should explain how to use the current package without requiring users to reconstruct its behavior from past updates.
+
+When reorganizing existing material, preserve useful content and inbound links. Check references before moving or removing a guide or an old plan. Do not delete historical notes or rewrite another package's manual just to make its folder match this example.
+
+### Screenshots and catalog artwork
+
+Use the existing [store layout](#store-data) for Organizer previews: `store/previews/<id>-1.webp` through `-4.webp`, numbered without gaps. Add real screenshots that help explain the package, with readable UI and demo content suitable for the public repository. Link relevant previews from guides with descriptive alt text. Screenshots supplement written steps; they should not be the only explanation of an action.
+
+`store/` owns Organizer banners, icons and previews. The older square covers under `artwork/agent-covers/` still supply catalog `iconUrl` values, so do not remove them as abandoned assets. Follow the store rebuild instructions when changing store images; a guide-only change does not require repackaging executable payloads.
+
+### Adoption and verification
+
+Apply this convention to new packages and update the relevant guidance alongside material user-visible changes. Existing packages can adopt it incrementally; an unrelated fix does not require a complete manual migration. Missing READMEs are documentation work to track, not a reason to invent usage claims or block every existing package build.
+
+Verify the instructions by following the user flow on a compatible Engine, or have someone familiar with the package check them. Source code and the original PR can establish behavior, but do not substitute for a first-use walkthrough. For a complex package, coordinate with its creator or a user who knows it before reorganizing the manual. Record what was checked and what still needs manual verification in the PR.
+
+Keep package-specific usage here and Engine-wide setup in the linked Engine guides. Do not add documentation fields to strict catalog entries or manifests: publishing richer guides requires coordinated, backwards-compatible Engine support, as described for [release-note sidecars](#release-notes).
+
 ## Adding a New Package
 
 A new package must include:
@@ -264,7 +302,7 @@ A new package must include:
 3. Correct category, modes, entrypoints, permissions, compatibility, and restart requirement.
 4. Reproducible package payloads and a generated ZIP artifact.
 5. A catalog entry with valid hashes, sizes, and documentation URL.
-6. A row in the correct README category and detailed Engine documentation.
+6. A row in the matching README store section and a package README following [Package user documentation](#package-user-documentation). Update linked Engine documentation when host setup or integration changes.
 7. Validation and manual installation evidence in the PR.
 
 Security-sensitive permissions and executable client/server entrypoints must be narrowly scoped and justified in the PR description.
