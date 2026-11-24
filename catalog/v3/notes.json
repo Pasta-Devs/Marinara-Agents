@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.43.1",
+          "date": "2026-11-24",
+          "notes": "- A side character's sprite can be painted again. While they speak, **Repaint** with their name sits beside the place's own **Repaint**, for 1 image. Their sprite stays on screen while the new one paints, and stays if that paint fails.",
+          "highlight": false
+        },
+        {
           "version": "0.43.0",
           "date": "2026-11-24",
           "notes": "- Setup's **Connections** step now asks for **Voices** and **Music**, as in **Settings → Audio**: **Voice the dialogue**, **Voice everyone else**, **Emotion cues** and music generation. The prologue is written and played with what you choose there.\n- A new story paints each love interest's expressions right after their portrait, before the prologue's places and key moments.\n- Changing the **Story** connection no longer turns **Planning**, **Messages** or **Memory** into **Same as Story** when they used the same connection. Each keeps the connection you picked for it.\n- With **Emotion cues** on, voiced lines no longer repeat words. Scenes no longer ask for stammering, stuttering or hesitation cues, which ElevenLabs performs by saying words twice, and such cues in older scenes are left out when their lines are voiced.",
@@ -827,12 +833,6 @@
           "version": "0.36.2",
           "date": "2026-11-18",
           "notes": "- Scrollbars in Otome Hearth, such as the one in a scene's narration and dialogue box, now use your Midnight or Pearl look's colours instead of Marinara Engine's accent.",
-          "highlight": false
-        },
-        {
-          "version": "0.36.1",
-          "date": "2026-11-18",
-          "notes": "- On **Between you**, the small hearts for ranks 11 to 20 now show the ranks you've reached in their colour, and the ones still to come empty. They were the other way round.",
           "highlight": false
         }
       ]
