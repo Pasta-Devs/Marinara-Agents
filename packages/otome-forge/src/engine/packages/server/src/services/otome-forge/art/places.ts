@@ -20,7 +20,7 @@ import { runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
-import { GALLERY_REF_PREFIX, worldStyle } from "./image-client.js";
+import { GALLERY_REF_PREFIX, imageConnectionFor, worldStyle } from "./image-client.js";
 import { type ImagePrompt, SCENE_SIZE, placePrompt } from "../prompts.js";
 import {
   imagesOf,
@@ -167,7 +167,7 @@ export async function paintBeatPlaces(
           claimed = planned?.paints ?? [];
           return planned ? { ...current, places: planned.places } : undefined;
         });
-        connectionId = result?.value.images.connectionId ?? "";
+        connectionId = result ? (imageConnectionFor(result.value.images, "background") ?? "") : "";
         if (!result?.changed || !connectionId) claimed = [];
       }
     });
@@ -234,7 +234,7 @@ async function paintPlace(
     async check(): Promise<PaintCheck> {
       latest = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!latest || !ours(latest)) return "gone";
-      if (latest.images.connectionId !== connectionId) return "stopped";
+      if (imageConnectionFor(latest.images, "background") !== connectionId) return "stopped";
       // An automatic paint waits for the tap once Ask before painting is turned on.
       if (!options.consent && latest.images.ask) return "waiting-consent";
       return "paint";
@@ -307,14 +307,14 @@ export async function paintPlaceNow(
       if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       if (!world.places[key]) throw notFound();
       if (!world.places[key].tags.trim()) throw untagged();
-      const connectionId = world.images.connectionId;
+      const connectionId = imageConnectionFor(world.images, "background");
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
       const claim = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
         const place = current.places[key];
         if (!place) throw notFound();
         if (!place.tags.trim()) throw untagged();
-        return current.images.connectionId === connectionId
+        return imageConnectionFor(current.images, "background") === connectionId
           ? { ...current, places: { ...current.places, [key]: { ...place, art: repainting(place.art, at) } } }
           : undefined;
       });

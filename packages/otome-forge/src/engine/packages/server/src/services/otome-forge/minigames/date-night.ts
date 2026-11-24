@@ -108,7 +108,7 @@ import {
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { cgReferences, cgSubjects, outfitCutouts } from "../art/cg.js";
-import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
+import { galleryRef, imageConnectionFor, worldStyle, type ImageClient } from "../art/image-client.js";
 import { imagesOf, updateIfChanged, type ArtDeps } from "../art/paint.js";
 import { placeKey } from "../art/places.js";
 import {
@@ -922,7 +922,7 @@ export async function paintKeepsake(
 ): Promise<Paint> {
   const { run, plan, unit, people, units, references } = await keepsakeSubject(deps, runId, key);
   if (plan.keepsake.art?.state === "ready") return plan.keepsake.art;
-  const connectionId = run.world.images.connectionId;
+  const connectionId = imageConnectionFor(run.world.images, "scene");
   if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
   const claim = paintKey(runId, key);
   if (painting.has(claim)) throw new OtomeForgeError(409, "This keepsake is already being painted.", "busy");

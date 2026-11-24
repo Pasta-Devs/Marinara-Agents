@@ -1112,3 +1112,32 @@ test("a repaint keeps the picture it paints over on screen, keeps it again if it
   assert.deepEqual([failed.body.art.url, failed.body.art.ref], [done.body.art.url, done.body.art.ref]);
   assert.equal(t.paid.length, 4, "the failed repaint was paid for once and is not retried by itself");
 });
+
+test("backgrounds and scene art paint on their own connections when chosen; Settings sets and clears them", async () => {
+  const runKey = "r-imgkinds-aaaaaa";
+  const t = await sceneWorld(runKey, {
+    runKey,
+    images: { backgroundConnectionId: "conn-bg", sceneConnectionId: "conn-scene" },
+  });
+  await t.write(1, { cg: CG });
+  await until(() => t.paid.length === 2, "the place and the CG painted");
+  const cg = t.paid.find((paid) => paid.method === "generateBannerArt");
+  const place = t.paid.find((paid) => paid.method !== "generateBannerArt");
+  assert.equal(place?.request.connectionId, "conn-bg");
+  assert.equal(cg?.request.connectionId, "conn-scene");
+
+  // A repaint tap follows the choice made now; "" goes back to the image connection.
+  const settings = routesOf(registerRunRoutes, t.deps, runKey);
+  const saved = await settings("POST", "/runs/:run/settings", { images: { sceneConnectionId: "" } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const images = (await t.world()).images;
+  assert.equal(images.sceneConnectionId, undefined);
+  assert.equal(images.backgroundConnectionId, "conn-bg", "the other choice stays");
+  const repaint = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(repaint.status, 200, JSON.stringify(repaint.body));
+  assert.equal(t.paid.at(-1)?.request.connectionId, "conn-image");
+  // Without the image connection nothing is painted, whatever the other two say.
+  await setImages(t.store, t.runId, { connectionId: null });
+  const none = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
+  assert.equal(none.status, 503, JSON.stringify(none.body));
+});

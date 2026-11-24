@@ -620,3 +620,21 @@ export function imageClientFor(runtime: Pick<CapabilityRuntimeHost, "logger">): 
   }
   return client;
 }
+
+/** What a picture is, for the connection that paints it (Settings → Images). */
+export type ImageKind = "background" | "scene" | "art";
+
+/**
+ * The connection that paints a `kind` of picture: a background (a place) or scene art (a story CG, a date's keepsake, a
+ * hangout's memento, a photo) by its own choice when one is made, anything else and an unchosen kind by the image
+ * connection. Null for a world played without images: the image connection turns pictures on, never the other two.
+ */
+export function imageConnectionFor(
+  images: { connectionId: string | null; backgroundConnectionId?: string; sceneConnectionId?: string },
+  kind: ImageKind,
+): string | null {
+  if (!images.connectionId) return null;
+  const own =
+    kind === "background" ? images.backgroundConnectionId : kind === "scene" ? images.sceneConnectionId : undefined;
+  return own || images.connectionId;
+}

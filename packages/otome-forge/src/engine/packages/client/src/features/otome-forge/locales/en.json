@@ -2317,5 +2317,10 @@
   "ui.otomeForge.phone.hangoutInvitePlay": "Hang out with {{name}}",
   "ui.otomeForge.hangouts.mementoAskTitle": "Paint this memento?",
   "ui.otomeForge.hangouts.mementoAskText": "A picture of you with {{names}} from this hangout, painted with your image connection.",
-  "ui.otomeForge.hangouts.mementoSubject": "A memento with {{names}}"
+  "ui.otomeForge.hangouts.mementoSubject": "A memento with {{names}}",
+  "ui.otomeForge.settings.backgroundConnection": "Backgrounds",
+  "ui.otomeForge.settings.backgroundConnectionHint": "The connection that paints places. The image connection paints them unless you choose another.",
+  "ui.otomeForge.settings.sceneConnection": "Scene art",
+  "ui.otomeForge.settings.sceneConnectionHint": "The connection that paints story CGs, date keepsakes, hangout mementos and photos. The image connection paints them unless you choose another.",
+  "ui.otomeForge.settings.sameImageConnection": "Same as the image connection"
 }
