@@ -1499,6 +1499,11 @@ ${R} .of-song-play {
 }
 ${R} .of-song-play:hover { color: ${PALETTE.ink}; background: linear-gradient(135deg, #f8e6bd, ${PALETTE.rose}); }
 ${R} .of-song-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+${R} .of-song-end { display: flex; align-items: center; gap: 10px; }
+${R} .of-song-home { width: 36px; height: 36px; color: var(--of-text-soft); }
+${R} .of-song-home[aria-pressed="true"] {
+  color: ${PALETTE.ink}; background: linear-gradient(135deg, #f3dcaa 0%, ${PALETTE.champagne} 30%, ${PALETTE.rose} 100%);
+}
 ${R} .of-song-name { font-family: var(--of-font-display); font-weight: 600; font-size: 1.14rem; line-height: 1.1; }
 ${R} .of-song-source { font-size: 0.74rem; color: var(--of-text-soft); }
 ${R} .of-song-bars {

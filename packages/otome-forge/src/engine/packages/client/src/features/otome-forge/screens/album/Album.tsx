@@ -50,6 +50,7 @@ import { runPath } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
 import { albumMemories, isUnplayedMemory, type MemoryRarityFilter } from "../../lib/album-memories";
 import type { RunView } from "../../shared/api-types";
+import { normalizeOtomeAudio } from "../../shared/audio";
 import { useDates, type DateOpen } from "../dates/DateNight";
 import { Dates } from "./Dates";
 import { albumKeepsakes } from "../../lib/album-keepsakes";
@@ -279,7 +280,14 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = ALBU
     ) : tab === "favorites" ? (
       <Favorites view={view} favorites={data.favorites} />
     ) : tab === "soundtrack" ? (
-      <Soundtrack entries={data.soundtrack} playing={playing} onPlay={setPlaying} lis={view.lis} />
+      <Soundtrack
+        runKey={runKey}
+        entries={data.soundtrack}
+        homeCue={normalizeOtomeAudio(view.world.audio).homeCue}
+        playing={playing}
+        onPlay={setPlaying}
+        lis={view.lis}
+      />
     ) : (
       <Tells view={view} tells={data.tells} />
     );

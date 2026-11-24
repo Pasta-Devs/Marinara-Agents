@@ -185,6 +185,41 @@ test("0.34.0: Emotion cues start off, are on only when saved as true, and surviv
   assert.equal(t.calls.length, 0, "the switch alone calls no model");
 });
 
+test("0.44.0: Home plays the Soundtrack row chosen for it, a mood or a chapter's own theme, and keeps it", async () => {
+  const theme = { cue: "chapter-main-2", connectionId: "c1", tag: "music:contexts:otome-forge:theme", path: "m/t.mp3" };
+  assert.deepEqual(
+    [normalizeOtomeAudio(undefined).homeCue, normalizeOtomeAudio(undefined).homeTrack],
+    ["", null],
+    "a story saved before 0.44.0 plays Home's own music",
+  );
+  assert.equal(normalizeOtomeAudio({ homeCue: "tender", homeTrack: theme }).homeTrack, null, "a mood needs no track");
+  for (const [homeCue, homeTrack] of [
+    ["chapter-main-2", null],
+    ["chapter-main-2", { ...theme, cue: "chapter-main-3" }],
+    ["chapter-main-2", { ...theme, tag: "sfx:ui:click" }],
+    ["chapter-main-2", { ...theme, path: "m/line\nfeed.mp3" }],
+    ["sad", null],
+    [7, null],
+  ]) {
+    assert.deepEqual(
+      normalizeOtomeAudio({ homeCue, homeTrack }),
+      { ...normalizeOtomeAudio({}), homeCue: "", homeTrack: null },
+      JSON.stringify(homeCue),
+    );
+  }
+  const t = await audioWorld("r-homemusic-ffffff");
+  const saved = await t.call("POST", "/runs/:run/audio/settings", {
+    audio: { homeCue: theme.cue, homeTrack: { ...theme, extra: "dropped" } },
+  });
+  assert.equal(saved.status, 200);
+  assert.deepEqual([saved.body.audio.homeCue, saved.body.audio.homeTrack], [theme.cue, theme]);
+  const next = await t.call("POST", "/runs/:run/audio/settings", { audio: { muted: true } });
+  assert.deepEqual([next.body.audio.homeCue, next.body.audio.homeTrack], [theme.cue, theme], "other saves keep it");
+  const back = await t.call("POST", "/runs/:run/audio/settings", { audio: { homeCue: "", homeTrack: null } });
+  assert.deepEqual([back.body.audio.homeCue, (await t.world()).audio.homeTrack], ["", null]);
+  assert.equal(t.calls.length, 0, "choosing Home's music calls no model");
+});
+
 test("an uploaded music folder is saved without generation and survives unrelated audio saves", async () => {
   assert.equal(normalizeOtomeAudio(undefined).musicFolder, "");
   const t = await audioWorld("r-foldermusic1-dddddd");
