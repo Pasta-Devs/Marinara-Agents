@@ -117,21 +117,21 @@ export async function buildDocumentationDocument(repoRoot, directory, entries) {
   );
   for (const { manifest } of sorted) {
     const id = assertPortableFilenameComponent(manifest.id, "Documentation package id");
-    const configPath = await resolveContainedPortablePath(
-      repoRoot,
-      `packages/${id}/documentation.json`,
-      "Documentation index",
-      { allowMissing: true },
-    );
     let raw;
+    let packageRoot;
     try {
+      packageRoot = await resolveContainedPortablePath(repoRoot, `packages/${id}`, "Documentation package", {
+        allowMissing: true,
+      });
+      const configPath = await resolveContainedPortablePath(packageRoot, "documentation.json", "Documentation index", {
+        allowMissing: true,
+      });
       raw = await readBoundedFile(configPath, MAX_CONFIG_BYTES);
     } catch (error) {
       if (error?.code === "ENOENT") continue;
       throw error;
     }
     const config = packageDocumentationSchema.parse(JSON.parse(raw.toString("utf8")));
-    const packageRoot = await resolveContainedPortablePath(repoRoot, `packages/${id}`, "Documentation package");
     const compile = async (reference) => {
       const selectedHeading = reference.heading ? { heading: reference.heading } : {};
       if (reference.source === "engine") return { source: "engine", path: reference.path, ...selectedHeading };

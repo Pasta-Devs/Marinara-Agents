@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "overview": { "source": "engine", "path": "agents/built-in-agents.md", "heading": "3D Avatars" },
+  "guides": [
+    { "id": "avatars", "title": "2D and 3D Avatars", "source": "engine", "path": "agents/avatars.md" }
+  ]
+}

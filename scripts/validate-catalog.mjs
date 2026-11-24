@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { AVATAR_PACKAGE_IDS, assertAvatarPackageContract } from "./avatar-package-checks.mjs";
 import { CATALOG_ARTWORK_SIZE, catalogArtworkRelativePath, catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { buildStoreDocument } from "./catalog-store.mjs";
+import { buildDocumentationDocument } from "./catalog-documentation.mjs";
 import {
   LEGACY_CATALOG_MAJOR,
   assertManifestBuildProvenance,
@@ -195,23 +196,39 @@ async function assertStoreSidecar(path, entries) {
   }
 }
 
+async function assertDocumentationSidecar(path, entries) {
+  const document = await buildDocumentationDocument(repoRoot, dirname(path), entries);
+  const expected = Object.keys(document.packages).length > 0 ? document : null;
+  if (JSON.stringify(await readCommittedNotes(path)) !== JSON.stringify(expected)) {
+    throw new Error(`${path} does not match package documentation — run node scripts/build-documentation.mjs`);
+  }
+}
+
 for (const [major, lane] of expectedCatalogsByMajor) {
   await assertNotesSidecar(`catalog/v${major}/notes.json`, lane.packages);
   await assertStoreSidecar(`catalog/v${major}/store.json`, lane.packages);
+  await assertDocumentationSidecar(`catalog/v${major}/docs.json`, lane.packages);
 }
 await assertNotesSidecar("catalog/notes.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
 await assertStoreSidecar("catalog/store.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
+await assertDocumentationSidecar("catalog/docs.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
 if (previewCatalog.packages.length > 0) {
   const expectedPreviewLanes = createCatalogLanes(previewCatalog);
   for (const [major, lane] of expectedPreviewLanes) {
     await assertNotesSidecar(`catalog/preview/v${major}/notes.json`, lane.packages);
     await assertStoreSidecar(`catalog/preview/v${major}/store.json`, lane.packages);
+    await assertDocumentationSidecar(`catalog/preview/v${major}/docs.json`, lane.packages);
   }
   await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
   await assertStoreSidecar("catalog/preview/store.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
+  await assertDocumentationSidecar(
+    "catalog/preview/docs.json",
+    expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages,
+  );
 } else if (
   (await readCommittedNotes("catalog/preview/notes.json")) !== null ||
-  (await readCommittedNotes("catalog/preview/store.json")) !== null
+  (await readCommittedNotes("catalog/preview/store.json")) !== null ||
+  (await readCommittedNotes("catalog/preview/docs.json")) !== null
 ) {
   // The overlay directory is removed when nothing is staging-only, so a surviving
   // sidecar means a stale generated payload that no rebuild would produce.
