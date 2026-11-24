@@ -42,6 +42,7 @@ import type {
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { friendBlock } from "../../../../../client/src/features/otome-forge/shared/friends.js";
+import { endingView, readEpilogue } from "./ending.js";
 import { friendCards } from "./friends.js";
 import { LAST_STAGE, type ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { bondStoriesPlayed, bondStoryKey } from "../../../../../client/src/features/otome-forge/shared/bond.js";
@@ -442,7 +443,7 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
 // ── Planning ──
 
 /** The main chapters planned so far, by number. */
-async function mainChapters(store: OtomeStore, runId: string): Promise<Chapter[]> {
+export async function mainChapters(store: OtomeStore, runId: string): Promise<Chapter[]> {
   return (await store.listRun("chapter", runId))
     .map((record) => normalizeChapter(record.data))
     .filter((chapter): chapter is Chapter => !!chapter && chapter.kind === "main")
@@ -494,7 +495,16 @@ export async function planNextChapter(
   deps: ChapterDeps,
   runId: string,
   lead: LiId,
-  { debugMode, signal }: { debugMode: boolean; signal?: AbortSignal },
+  {
+    debugMode,
+    signal,
+    finale = false,
+  }: {
+    debugMode: boolean;
+    signal?: AbortSignal;
+    /** #2459: the story's finale (S/story/ending.ts): planned outside any arc, with no riddle or judgment. */
+    finale?: boolean;
+  },
 ): Promise<Chapter> {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Hearth story");
@@ -505,6 +515,10 @@ export async function planNextChapter(
     throw new OtomeForgeError(409, "They need space, and can't lead a chapter until you make it right.", "locked");
   }
   const mains = await mainChapters(deps.store, runId);
+  // #2459: after the finale, the story goes on only to its epilogue.
+  if (!finale && (run.state.ended || mains.some((chapter) => chapter.ending === "finale"))) {
+    throw new OtomeForgeError(409, "The story is ending: no more chapters come.", "locked");
+  }
   const { number, open } = nextMain(mains, run.state);
   const key = mainChapterKey(number);
   if (!open) {
@@ -524,21 +538,25 @@ export async function planNextChapter(
     // #1983 M2: an arc that has ended waits for the player's choice before the next chapter is planned. The first arc
     // of a run, and an arc still being played, plan here as they do; a finished one does not.
     const latest = arcs.at(-1);
-    if (!covering && latest && nextMain(mains, run.state).number > latest.endsAt) {
+    if (!finale && !covering && latest && nextMain(mains, run.state).number > latest.endsAt) {
       throw new OtomeForgeError(409, "Choose how the story goes on.", "conflict");
     }
-    const arcMemory = covering
-      ? null
-      : await recallText(deps, runId, {
-          job: "structured",
-          cast: [],
-          continues: "main",
-          query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
-          signal,
-          debugMode,
-        });
+    // #2459: the finale ends the arc in progress, or follows the last one; it never plans an arc of its own.
+    const finaleArc = finale ? (covering ?? latest ?? null) : null;
+    const arcMemory =
+      covering || finale
+        ? null
+        : await recallText(deps, runId, {
+            job: "structured",
+            cast: [],
+            continues: "main",
+            query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+            signal,
+            debugMode,
+          });
     const arc: StoryArc =
       covering ??
+      finaleArc ??
       (await planArc(
         deps,
         runId,
@@ -555,8 +573,10 @@ export async function planNextChapter(
         },
         { debugMode, ...(signal ? { signal } : {}), memory: arcMemory! },
       ));
-    const riddle = riddleChapter(arc, number);
-    const judgment = riddle ? null : await judgmentFor(deps.store, runId, arc, mains, number);
+    const riddle = finale ? false : riddleChapter(arc, number);
+    const judgment = riddle || finale ? null : await judgmentFor(deps.store, runId, arc, mains, number);
+    // #2459: the finale tells the mystery's truth if no arc has yet.
+    const truthTold = finale && revealedSoFar(arcs, mains, run.state, number).truth;
     // #2127: the thoughts waiting now, after the arc's plan: `run.state` was read before this task was queued.
     const thoughts = (await deps.store.readDoc(stateId(runId), normalizeState))?.thoughts ?? null;
     // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
@@ -624,6 +644,7 @@ export async function planNextChapter(
         // The scenes read the story context it caches only on the same connection (#2091).
         sharesCache: resolveConnectionId(run.world, "structured") === resolveConnectionId(run.world, "narration"),
         friends: friendCards(run, "main"),
+        ...(finale ? { finale: { truth: truthTold ? "" : run.world.mystery.truth } } : {}),
       }),
       memory,
       schema: ChapterPlanSchema,
@@ -638,6 +659,11 @@ export async function planNextChapter(
     });
     signal?.throwIfAborted();
     const plan = normalizeChapterPlan(value, context) as PlannedChapter;
+    // #2459: the finale's last node tells the truth when no arc has, as an arc's last chapter would.
+    if (finale && !truthTold && !!run.world.mystery.truth.trim()) {
+      const last = plan.nodes.at(-1);
+      if (last && !last.reveal) plan.nodes = [...plan.nodes.slice(0, -1), { ...last, reveal: { kind: "truth" } }];
+    }
     const chapter: Chapter = {
       key,
       kind: "main",
@@ -645,6 +671,7 @@ export async function planNextChapter(
       lead,
       arc: arc.number,
       ...plan,
+      ...(finale ? { ending: "finale" as const } : {}),
       plannedAt: new Date().toISOString(),
       connectionId,
       ...(thoughts ? { thoughts: thoughts.text } : {}),
@@ -705,6 +732,10 @@ export async function startArc(
     const latest = arcs.at(-1);
     if (!latest) throw new OtomeForgeError(409, "This story has no arc yet: plan a chapter first.", "conflict");
     const mains = await mainChapters(deps.store, runId);
+    // #2459: after the finale, no arc comes.
+    if (run.state.ended || mains.some((chapter) => chapter.ending === "finale")) {
+      throw new OtomeForgeError(409, "The story is ending: no more arcs come.", "locked");
+    }
     if (arcRead(latest, mains, run.state) < latest.plan.length) {
       throw new OtomeForgeError(409, "Finish the current arc before choosing the next one.", "conflict");
     }
@@ -810,11 +841,18 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
   const arc = current ? toArcView(current, arcReading) : null;
   // #1983 M2: once an arc ends, the next one waits for the player's choice; until it is made there is no next chapter.
   const ended = !!arc?.done && !arcs.some((entry) => entry.number === current!.number + 1);
-  const arcChoice = ended ? arcChoiceFor(run.state) : null;
+  // #2459: once the finale is planned, no other main chapter or arc comes.
+  const ending = endingView(
+    run,
+    chapters.filter((chapter) => chapter.kind === "main"),
+    await readEpilogue(deps, runId),
+  );
+  const closing = !!ending.finale || !!run.state.ended;
+  const arcChoice = ended && !closing ? arcChoiceFor(run.state) : null;
   return {
     chapters: entries,
     next:
-      ready && open && cast.length && !ended
+      ready && open && cast.length && !ended && !closing
         ? { kind: "main", number, candidates: leadCandidates(run.state, cast) }
         : null,
     routes: ready ? routeEntries(run.state, cast) : [],
@@ -853,7 +891,9 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     // #2155: each love interest's side waiting in Routes, or being read (S/story/his-side.ts).
     hisSides: ready ? hisSideOffers(chapters, run.state, cast) : [],
     // #2458: why no friend may join now, or null when one may.
-    friendBlock: ready ? friendBlock(cast.length, Object.values(run.state.friends), current?.number ?? 0) : "full",
+    friendBlock:
+      ready && !closing ? friendBlock(cast.length, Object.values(run.state.friends), current?.number ?? 0) : "full",
+    ending,
   };
 }
 

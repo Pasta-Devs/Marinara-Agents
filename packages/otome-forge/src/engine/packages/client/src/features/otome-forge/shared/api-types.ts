@@ -1179,7 +1179,16 @@ export interface Chapter {
    * #2458: a friend's own story (kind "story"): its kind, the friends in it (by id; the first is the one it is about),
    * a rank story's level, and the place a hangout was asked for. Shown to the client, which names the chapter by it.
    */
-  friendStory?: { kind: FriendStoryKind; friends: LiId[]; level?: number; place?: string };
+  friendStory?: {
+    kind: FriendStoryKind;
+    friends: LiId[];
+    level?: number;
+    place?: string;
+    /** A rank-5 finale's look the friend picked out for her (her reward; outfitLine is English image tags). */
+    look?: { name: string; outfitLine: string };
+    /** A hangout's memento: its English picture brief, and its paint once she asked for it (POST .../memento). */
+    memento?: { brief: string; art?: Paint };
+  };
   /** #2459: the story's finale (a main chapter) or its epilogue (kind "story", key `story-epilogue`). */
   ending?: "finale" | "epilogue";
   /**
@@ -1632,6 +1641,13 @@ export interface StoryView {
    * null when one may. Absent from an older server.
    */
   friendBlock?: "full" | "arc" | null;
+  /** #2459: End the Story: on offer, the finale's and the epilogue's keys once planned, and when it ended. */
+  ending?: {
+    offered: boolean;
+    finale?: string;
+    epilogue?: string;
+    ended?: string;
+  };
 }
 
 /** A bond rank whose story is waiting to be opened (0.23.0). */

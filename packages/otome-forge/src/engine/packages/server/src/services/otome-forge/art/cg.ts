@@ -482,7 +482,7 @@ function castSubjects(
           name: unit.name,
           identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
           outfitLine: worn?.outfitLine || unit.outfitLine || unit.bible?.look.outfitLine || "",
-          presentation: unit.bible?.look.presentation ?? "person",
+          presentation: (unit.bible ?? unit.friend)?.look.presentation ?? "person",
         },
         image: {
           kind: "character",

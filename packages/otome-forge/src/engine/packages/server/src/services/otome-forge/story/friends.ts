@@ -64,12 +64,16 @@ const notNow = (message: string) => new OtomeForgeError(409, message, "conflict"
 /** The chapters her friends come into: the story's own (main), and the love interests' route and repair chapters. */
 const FRIENDS_IN: ReadonlySet<ChapterKind> = new Set(["main", "route", "repair"]);
 
-/** #2458: her friends as the story prompts see them, for a chapter of `kind`; none for any other kind. */
+/**
+ * #2458: her friends as the story prompts see them, for a chapter of `kind`; none for any other kind, unless the
+ * chapter is a friend's own story or the story's ending (`theirs`).
+ */
 export function friendCards(
   run: { friends?: readonly Unit[]; state: Pick<RunState, "friends"> },
   kind: ChapterKind,
+  theirs = false,
 ): FriendCard[] | undefined {
-  if (!FRIENDS_IN.has(kind)) return undefined;
+  if (!FRIENDS_IN.has(kind) && !theirs) return undefined;
   const cards = (run.friends ?? []).flatMap((unit) => {
     const friend = run.state.friends[unit.id];
     return friend && unit.friend ? [{ unit, level: friendLevelOf(friend.points) }] : [];

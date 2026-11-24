@@ -136,6 +136,7 @@ import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome
 import { birthdayOfKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
 import { clearAirOfKey, dateCast } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { figurineLiOf } from "../../../../../client/src/features/otome-forge/shared/shop.js";
+import { EPILOGUE_KEY } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { beatId, chapterId, isItemStoryKey, mainChapterNumber, memoryId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory, RecallItem, RecallPoolOptions } from "../memory/memory.js";
 import { lastWords, type RecallIndex } from "../memory/recall-index.js";
@@ -280,7 +281,12 @@ interface Completed {
 
 /** Who may know a chapter: anyone for a main chapter, only its own love interest for any other kind. */
 const audienceOf = (chapter: Chapter): string[] | undefined =>
-  chapter.kind === "main" ? undefined : [chapter.li ?? chapter.lead];
+  // #2458: a friend's own story is theirs (a hangout, everyone's who came); #2459: the epilogue is everyone's.
+  chapter.kind === "main" || chapter.ending === "epilogue"
+    ? undefined
+    : chapter.friendStory
+      ? [...chapter.friendStory.friends]
+      : [chapter.li ?? chapter.lead];
 
 /**
  * A Character Story (kind "story") is also known to every other love interest who speaks in it (a cameo): its summary
@@ -388,7 +394,12 @@ function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }):
  * last Character Story, and the hand-off looks past it. It stays its love interest's own chapter, as before.
  */
 const isFigurineOrBirthday = (key: string) =>
-  figurineLiOf(key) !== null || birthdayOfKey(key) !== null || clearAirOfKey(key) !== null;
+  figurineLiOf(key) !== null ||
+  birthdayOfKey(key) !== null ||
+  clearAirOfKey(key) !== null ||
+  // #2458, #2459: a friend's story, a hangout and the epilogue are no love interest's Character Story either.
+  /^story-(?:friend-|hangout-)/u.test(key) ||
+  key === EPILOGUE_KEY;
 
 /**
  * The last Character Story (#2126, see the header): the newest completed `story-<itemId>` chapter (a Memory's
@@ -400,7 +411,13 @@ const isFigurineOrBirthday = (key: string) =>
 const lastStoryOf = (chapters: readonly Completed[]) =>
   chapters
     .filter(
-      ({ chapter }) => chapter.kind === "story" && isItemStoryKey(chapter.key) && !isFigurineOrBirthday(chapter.key),
+      ({ chapter }) =>
+        chapter.kind === "story" &&
+        isItemStoryKey(chapter.key) &&
+        !isFigurineOrBirthday(chapter.key) &&
+        // #2458, #2459: a friend's story and the epilogue are no love interest's Character Story.
+        !chapter.friendStory &&
+        !chapter.ending,
     )
     .at(-1);
 

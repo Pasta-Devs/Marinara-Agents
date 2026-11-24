@@ -1151,7 +1151,7 @@ async function generateBeat(
     ...(told ? { hisSide: told.text } : {}),
     ...(hapticsOn(run.world) ? { toys: deps.haptics?.devicesText() ?? "" } : {}),
     // #2458: her friends, in the chapters they come into (S/story/friends.ts friendCards).
-    friends: pov ? undefined : friendCards(run, chapter.kind),
+    friends: pov ? undefined : friendCards(run, chapter.kind, !!chapter.friendStory || !!chapter.ending),
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };

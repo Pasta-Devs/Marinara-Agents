@@ -317,6 +317,8 @@ export function normalizeChapter(data: unknown): Chapter | null {
           friends: z.array(z.string().refine(isLiId)).min(1).max(LIS_MAX),
           level: z.number().int().min(2).max(FRIEND_MAX_LEVEL).optional(),
           place: short(200).optional(),
+          look: z.object({ name: short(80), outfitLine: short(600) }).optional(),
+          memento: z.object({ brief: short(1200), art: PaintSchema.optional() }).optional(),
         })
         .optional(),
       ending: z.enum(["finale", "epilogue"]).optional(),
