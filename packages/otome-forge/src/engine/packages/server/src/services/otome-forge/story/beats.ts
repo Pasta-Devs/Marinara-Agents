@@ -343,10 +343,10 @@ export function withoutCues(text: string): string {
     } else if (/\S$/u.test(shown) && /^[^\s.!?,;:…—–-]/u.test(next)) shown += " ";
   }
   shown += text.slice(at);
-  return shown
-    .replace(/ {2,}/gu, " ")
-    .replace(/^[\s.!?,;:…]+/u, "")
-    .trim();
+  shown = shown.replace(/ {2,}/gu, " ");
+  // Punctuation left at the start goes only when a cue opened the line ("[softly], you came back."); a line's own
+  // opening ("…and then [sighs] nothing.") stays.
+  return (/^\s*\[[^\[\]\n]{1,80}\]/u.test(text) ? shown.replace(/^[\s.!?,;:…]+/u, "") : shown).trim();
 }
 
 /** A line's letters and digits, lower case: what two lines are compared by (spaces, punctuation and cues aside). */

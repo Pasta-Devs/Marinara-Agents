@@ -267,7 +267,7 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "c32edc5d7d61a2f9",
   beat: "150cfba167c2c56b",
   beatWithCg: "7a4d0cd9ad2d935e",
-  chapterPlan: "607c8fd50b4aa763",
+  chapterPlan: "fe5ac3d3b2a934fa",
   closer: "74c05b001a346729",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
   confrontation: "4e4183d86fbb6d1a",
@@ -292,6 +292,8 @@ const EXPECTED_ANGST: Record<string, string> = {
 // 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
 // protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
 // banned in narration only, so every prompt with them moved.
+// 2026-11-24: the chapter plan says people want their own things and clash with the protagonist, each other and
+// among the love interests, so both chapterPlan digests moved.
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerDates: "128950b2f59505b7",
   bannerHis: "a35ada9ecdc9ffa4",
@@ -299,7 +301,7 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "830c704474d2f33c",
   beat: "39c2ac9fdfdcefe7",
   beatWithCg: "52e9fbe675e6be0b",
-  chapterPlan: "bdde01fd59c33d4b",
+  chapterPlan: "fee16182501052b6",
   closer: "3a4b87444e836b9b",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
   confrontation: "c7daffaea4096796",
