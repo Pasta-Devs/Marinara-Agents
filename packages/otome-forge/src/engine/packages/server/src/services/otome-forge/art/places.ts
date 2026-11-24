@@ -207,7 +207,7 @@ export async function placePromptFor(
   if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const place = world.places[placeKey(name)];
   if (!place) throw notFound();
-  const style = await worldStyle(imagesOf(deps), world.images);
+  const style = await worldStyle(imagesOf(deps), world.images, "background");
   return placePrompt({ name: place.name, tags: place.tags, world, style }, edited);
 }
 
@@ -243,7 +243,7 @@ async function paintPlace(
       // Built now, so the rating and the 18+ gate are the ones in force at the paid call.
       const world = latest!;
       const place = world.places[key]!;
-      const style = await worldStyle(images, world.images);
+      const style = await worldStyle(images, world.images, "background");
       const { prompt, negativePrompt } = placePrompt(
         { name: place.name, tags: place.tags, world, style },
         options.edited,

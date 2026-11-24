@@ -142,6 +142,8 @@ export interface StyleProfile {
   negativeTags: string;
   /** The profile writes tag prompts (its promptMode is "tagged" or "danbooru"), not sentences. */
   tagged?: boolean;
+  /** #2465: NovelAI paints it, so the prompt leads with its people counts (S/prompts.ts novelAiCounts). */
+  novelai?: boolean;
 }
 
 /** An Engine image style profile as Settings → Images lists it (GET /image-style-profiles). */
@@ -171,6 +173,8 @@ export interface ImageClient {
   }): Promise<{ id: string; url: string }>;
   /** The chosen image style profile, else the Engine's default, else the first; empty when there is none. */
   styleProfile(profileId?: string): Promise<StyleProfile>;
+  /** #2465: the connection paints with NovelAI (paintsWithNovelAi); false when it cannot be read. */
+  novelAi?(connectionId: string): Promise<boolean>;
   /** The Engine's image style profiles and its default, for the picker (empty when they cannot be read). */
   styleProfiles?(): Promise<{ defaultProfileId: string; profiles: StyleProfileOption[] }>;
   /** #2147: the card's or persona's Engine sprites, as file paths built here (S/art/engine-art.ts). Throws. */
@@ -200,13 +204,33 @@ const IMAGE_TYPES: Record<string, string> = {
  * (Settings → Images) in place of the profile's style words when they have written one.
  */
 export async function worldStyle(
-  images: Pick<ImageClient, "styleProfile">,
-  settings: { styleProfileId?: string; style?: string },
+  images: Pick<ImageClient, "styleProfile" | "novelAi">,
+  settings: { styleProfileId?: string; style?: string } & Partial<ImageConnections>,
+  kind: ImageKind = "art",
 ): Promise<StyleProfile> {
   const profile = await images.styleProfile(settings.styleProfileId);
   const own = str(settings.style);
-  return own ? { ...profile, styleText: own } : profile;
+  const styled = own ? { ...profile, styleText: own } : profile;
+  // #2465: NovelAI paints this kind of picture, so its prompt is in NovelAI's style whatever the profile says: tags,
+  // its quality tags and its negative preset's words (the API adds neither), and for people its people counts.
+  const connectionId = imageConnectionFor({ connectionId: null, ...settings }, kind);
+  if (!connectionId || !(await images.novelAi?.(connectionId))) return styled;
+  const tags = (...parts: string[]) => parts.map(str).filter(Boolean).join(", ");
+  return {
+    ...styled,
+    tagged: true,
+    novelai: true,
+    positiveTags: tags(styled.positiveTags, NOVELAI_QUALITY),
+    negativeTags: tags(styled.negativeTags, NOVELAI_NEGATIVE, kind === "background" ? "" : NOVELAI_PEOPLE_NEGATIVE),
+  };
 }
+
+/** #2465: NovelAI's quality tags (its app adds them; the API does not), which end the prompt. */
+export const NOVELAI_QUALITY = "very aesthetic, masterpiece, no text";
+/** #2465: V5's Heavy negative preset, in words (the API takes only its number), and its human focus for people. */
+export const NOVELAI_NEGATIVE =
+  "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page";
+export const NOVELAI_PEOPLE_NEGATIVE = "@_@, mismatched pupils, glowing eyes, bad anatomy";
 
 /** The Engine sends at most this many references to the provider (characters.routes.ts avatar-generation). */
 export const REFERENCES_MAX = 4;
@@ -350,6 +374,10 @@ export function createImageClient({
 
   const client: ImageClient = {
     async generateImage({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
+      // #2465: NovelAI V5 blends several character references into one person, so it gets the first alone (the
+      // picture's focus: the love interest), and since every prompt here names what people wear, the prompt dresses
+      // them rather than the reference (the Engine's preferReferenceOutfit, which an Engine before it ignores).
+      const novelai = !!referenceImages?.length && !!(await client.novelAi?.(connectionId));
       const result = (await request("/api/characters/avatar-generation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -361,7 +389,8 @@ export function createImageClient({
           width,
           height,
           debugMode,
-          referenceImages: referenceImages?.length ? referenceImages.slice(0, REFERENCES_MAX) : undefined,
+          referenceImages: referenceImages?.length ? referenceImages.slice(0, novelai ? 1 : REFERENCES_MAX) : undefined,
+          ...(novelai ? { preferReferenceOutfit: false } : {}),
           promptOverrides: [{ id: avatarOverrideId(name), prompt, negativePrompt }],
         }),
       })) as { image?: unknown; prompt?: unknown } | null;
@@ -448,6 +477,20 @@ export function createImageClient({
       } catch (error) {
         logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));
         return empty;
+      }
+    },
+
+    async novelAi(connectionId) {
+      try {
+        const rows: unknown = await request("/api/connections");
+        const row = (Array.isArray(rows) ? rows : []).find(
+          (entry): entry is Record<string, unknown> =>
+            !!entry && typeof entry === "object" && str((entry as Record<string, unknown>).id) === connectionId,
+        );
+        return !!row && paintsWithNovelAi(row);
+      } catch (error) {
+        logger?.warn("[otome-forge] could not read the image connection %s: %s", connectionId, String(error));
+        return false;
       }
     },
 
@@ -621,6 +664,25 @@ export function imageClientFor(runtime: Pick<CapabilityRuntimeHost, "logger">): 
   return client;
 }
 
+/**
+ * #2465: an Engine image connection that paints with NovelAI, as the Engine resolves its backend (@marinara-engine/shared
+ * resolveImageBackend): its named service when it has one, else a NovelAI model or address.
+ * ponytail: a copy of that rule's NovelAI branch, since a package cannot import the Engine's code; a proxy the Engine
+ * reaches NovelAI through reads as not NovelAI. Upgrade path: the Engine telling packages a connection's backend.
+ */
+export function paintsWithNovelAi(row: Record<string, unknown>): boolean {
+  const model = str(row.model).toLowerCase();
+  const service = (str(row.imageService) || str(row.imageGenerationSource)).toLowerCase();
+  if (service && service !== model) return service === "novelai";
+  let host = "";
+  try {
+    host = new URL(str(row.baseUrl)).hostname.toLowerCase();
+  } catch {
+    // No address: the model decides.
+  }
+  return model.includes("nai-diffusion") || host === "novelai.net" || host.endsWith(".novelai.net");
+}
+
 /** What a picture is, for the connection that paints it (Settings → Images). */
 export type ImageKind = "background" | "scene" | "art";
 
@@ -629,10 +691,13 @@ export type ImageKind = "background" | "scene" | "art";
  * hangout's memento, a photo) by its own choice when one is made, anything else and an unchosen kind by the image
  * connection. Null for a world played without images: the image connection turns pictures on, never the other two.
  */
-export function imageConnectionFor(
-  images: { connectionId: string | null; backgroundConnectionId?: string; sceneConnectionId?: string },
-  kind: ImageKind,
-): string | null {
+export interface ImageConnections {
+  connectionId: string | null;
+  backgroundConnectionId?: string;
+  sceneConnectionId?: string;
+}
+
+export function imageConnectionFor(images: ImageConnections, kind: ImageKind): string | null {
   if (!images.connectionId) return null;
   const own =
     kind === "background" ? images.backgroundConnectionId : kind === "scene" ? images.sceneConnectionId : undefined;

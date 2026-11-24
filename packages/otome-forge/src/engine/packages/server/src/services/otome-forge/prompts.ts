@@ -6605,6 +6605,7 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
     ? withTags(edited.prompt, required)
     : [
         [
+          style.novelai ? novelAiCounts([{ presentation: input.presentation }]) : "",
           style.styleText,
           // Appearance may be the player's own prose: keep it whole, including repeated details, instead of tag deduplication.
           input.identityLine.trim(),
@@ -6648,6 +6649,21 @@ export const BRIEF_STAGING =
   "Stage one clear interaction with the fewest people it needs (two is best): who is where (left or right, in front or behind), where each person's hands and arms are, and a framing (waist-up or knee-up whenever they touch).";
 
 const COUNT_WORDS = ["no one", "one person", "two people", "three people"] as const;
+
+/** #2465: NovelAI's people counts, which lead its prompts ("1girl, 1boy", "2boys", "1other"); "" for no one. */
+export function novelAiCounts(people: ReadonlyArray<{ presentation?: Presentation }>): string {
+  const tags: Array<[string, Presentation]> = [
+    ["girl", "woman"],
+    ["boy", "man"],
+    ["other", "person"],
+  ];
+  return tags
+    .flatMap(([tag, presentation]) => {
+      const n = people.filter((person) => (person.presentation ?? "person") === presentation).length;
+      return n ? [`${n}${tag}${n > 1 ? "s" : ""}`] : [];
+    })
+    .join(", ");
+}
 
 /**
  * What an image prompt calls each of these people: their first name, or their whole name when someone else in the
@@ -6699,7 +6715,12 @@ export function placePrompt(input: PlaceInput, edited: Partial<ImagePrompt> = {}
   return finish(
     world,
     () => ({
-      prompt: [style.styleText, mergeTags(input.tags, PLACE_FRAMING, required, style.positiveTags)]
+      // #2465: NovelAI's scenery-only pictures lead with its background tag.
+      prompt: [
+        style.novelai ? "background dataset" : "",
+        style.styleText,
+        mergeTags(input.tags, PLACE_FRAMING, required, style.positiveTags),
+      ]
         .filter(Boolean)
         .join(", "),
       negativePrompt: mergeTags(PLACE_NEGATIVE, negative, style.negativeTags),
@@ -6792,6 +6813,7 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
       // The Image style ends with a comma, as in every other picture's prompt (lookPrompt); the sentences after it
       // run on with spaces.
       prompt: [
+        style.novelai ? novelAiCounts(people) : "",
         style.styleText.trim().replace(/[,\s]+$/, ""),
         [
           sentence(input.brief),

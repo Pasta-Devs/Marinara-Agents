@@ -43,7 +43,13 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/photos.js";
 import { BASE_LOOK, type AlbumImage } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { loadedCutouts, type CutoutOwner } from "../art/cg.js";
-import { galleryRefIds, hasLikenessSource, imageConnectionFor, MissingLikenessError, worldStyle } from "../art/image-client.js";
+import {
+  galleryRefIds,
+  hasLikenessSource,
+  imageConnectionFor,
+  MissingLikenessError,
+  worldStyle,
+} from "../art/image-client.js";
 import {
   imagesOf,
   paintIsLive,
@@ -316,7 +322,7 @@ async function buildPhoto(
     outfitLine: herLook.outfitLine,
     presentation: player.look.presentation,
   };
-  const style = await worldStyle(images, run.world.images);
+  const style = await worldStyle(images, run.world.images, "scene");
   const prompt = photoPrompt(
     {
       li,

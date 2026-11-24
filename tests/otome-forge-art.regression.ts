@@ -5,7 +5,17 @@ import test from "node:test";
 import { queueScenePaints } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
 import { createCutoutClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
-import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
+import {
+  NOVELAI_NEGATIVE,
+  NOVELAI_QUALITY,
+  createImageClient,
+  paintsWithNovelAi,
+  worldStyle,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
+import {
+  cgPrompt,
+  placePrompt,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   paintSlot,
   startPaint,
@@ -1140,4 +1150,59 @@ test("backgrounds and scene art paint on their own connections when chosen; Sett
   await setImages(t.store, t.runId, { connectionId: null });
   const none = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
   assert.equal(none.status, 503, JSON.stringify(none.body));
+});
+
+test("a NovelAI connection paints in NovelAI's style, with one reference that the prompt dresses (#2465)", async () => {
+  // The Engine's rule: a named service decides, else a NovelAI model or address.
+  assert.equal(paintsWithNovelAi({ imageService: "novelai", model: "nai-diffusion-5-full" }), true);
+  assert.equal(paintsWithNovelAi({ model: "nai-diffusion-5", baseUrl: "" }), true);
+  assert.equal(paintsWithNovelAi({ model: "custom", baseUrl: "https://image.novelai.net" }), true);
+  assert.equal(paintsWithNovelAi({ imageService: "openai", model: "nai-diffusion-5" }), false);
+  assert.equal(paintsWithNovelAi({ model: "gpt-image-1", baseUrl: "https://api.openai.com/v1" }), false);
+
+  const connections = [
+    { id: "conn-gpt", provider: "image_generation", model: "gpt-image-1", baseUrl: "https://api.openai.com/v1" },
+    { id: "conn-nai", provider: "image_generation", model: "nai-diffusion-5-full", imageService: "novelai" },
+  ];
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetch = (async (url: string | URL, init?: RequestInit) => {
+    const path = String(url).replace("http://127.0.0.1:7860", "");
+    if (path === "/api/connections") return Response.json(connections);
+    if (path === "/api/app-settings/ui") return Response.json({ value: {} });
+    if (path === "/api/characters/avatar-generation") {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ image: "data:image/png;base64,iVBORw0KGgo=", prompt: "p" });
+    }
+    return new Response("{}", { status: 404 });
+  }) as typeof globalThis.fetch;
+  const images = createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+  const settings = { connectionId: "conn-gpt", sceneConnectionId: "conn-nai" };
+
+  const background = await worldStyle(images, settings, "background");
+  assert.equal(background.novelai, undefined, "GPT paints the places as the profile says");
+  const scene = await worldStyle(images, settings, "scene");
+  assert.equal(scene.tagged, true);
+  assert.equal(scene.novelai, true);
+  assert.match(scene.positiveTags, new RegExp(`${NOVELAI_QUALITY}$`, "u"));
+  assert.ok(scene.negativeTags.startsWith(NOVELAI_NEGATIVE) && scene.negativeTags.includes("mismatched pupils"));
+
+  const world = normalizeWorld({ images: { connectionId: "conn-gpt", rating: "sfw" } });
+  const people = [
+    { name: "Kai", identityLine: "tall", outfitLine: "coat", presentation: "man" as const },
+    { name: "Ines", identityLine: "short", outfitLine: "oilskin", presentation: "woman" as const },
+  ];
+  const cg = cgPrompt({ brief: "They share an umbrella.", people, world, style: scene, use: "cg" });
+  assert.ok(cg.prompt.startsWith("1girl, 1boy, "), cg.prompt);
+  assert.ok(cg.prompt.endsWith(NOVELAI_QUALITY), cg.prompt);
+  const place = placePrompt({ name: "Pier", tags: "harbour pier, night", world, style: scene });
+  assert.ok(place.prompt.startsWith("background dataset, "), place.prompt);
+
+  const request = { name: "Kai", prompt: "p", negativePrompt: "n", width: 1216, height: 832, debugMode: false };
+  const refs = ["/a.png", "/b.png", "/c.png"];
+  await images.generateImage({ ...request, connectionId: "conn-nai", referenceImages: refs });
+  await images.generateImage({ ...request, connectionId: "conn-gpt", referenceImages: refs });
+  assert.deepEqual(bodies[0]!.referenceImages, ["/a.png"], "NovelAI gets the focus alone");
+  assert.equal(bodies[0]!.preferReferenceOutfit, false, "and the prompt dresses them");
+  assert.deepEqual(bodies[1]!.referenceImages, refs);
+  assert.equal("preferReferenceOutfit" in bodies[1]!, false);
 });

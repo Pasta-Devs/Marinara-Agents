@@ -898,7 +898,7 @@ export async function keepsakePromptFor(
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
   const { run, plan, people, references } = await keepsakeSubject(deps, runId, key);
-  const style = await worldStyle(imagesOf(deps), run.world.images);
+  const style = await worldStyle(imagesOf(deps), run.world.images, "scene");
   return keepsakePrompt({ brief: plan.keepsake.brief, people, world: run.world, style, references }, edited);
 }
 
@@ -932,7 +932,7 @@ export async function paintKeepsake(
     const latest = (await readChapter(deps.store, runId, key))?.date?.keepsake.art;
     if (latest?.state === "ready") return latest;
     const images = imagesOf(deps);
-    const style = await worldStyle(images, run.world.images);
+    const style = await worldStyle(images, run.world.images, "scene");
     const built = keepsakePrompt(
       { brief: plan.keepsake.brief, people, world: run.world, style, references },
       { prompt, negativePrompt },

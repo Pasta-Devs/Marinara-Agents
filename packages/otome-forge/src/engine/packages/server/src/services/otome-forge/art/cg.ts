@@ -544,7 +544,7 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
     runId,
     cgSubjects(cg.cast, run.units, run.player, { present, brief: cg.brief }),
   );
-  const style = await worldStyle(imagesOf(deps), run.world.images);
+  const style = await worldStyle(imagesOf(deps), run.world.images, "scene");
   const prompt = cgPrompt(
     {
       brief: cg.brief,
