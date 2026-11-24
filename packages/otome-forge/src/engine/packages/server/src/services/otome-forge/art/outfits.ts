@@ -273,20 +273,16 @@ async function buildItemArt(
       : item.cg!;
     // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
     const subjects = await outfitCutouts(deps, runId, cgSubjects(cg.cast, li ? [li] : run.units, run.player));
-    // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story; only a
-    // Memory whose brief the banner plan marked explicit goes further, while the world allows it (as banner art does),
-    // and a lowered one paints the clothed brief written beside it.
-    const { brief, explicit } = privateScene
-      ? { brief: cg.brief, explicit: false }
-      : memoryArtBrief(item.cg, item.title, run.world);
+    // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story, a
+    // Memory's cover too (#2467).
+    const brief = privateScene ? cg.brief : memoryArtBrief(item.cg, item.title);
     const prompt = cgPrompt(
       {
         brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        use: explicit ? "cg" : "clothed",
-        explicit,
+        use: "clothed",
         references: cgReferences(subjects).labels,
       },
       edited,

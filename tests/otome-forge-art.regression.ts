@@ -960,6 +960,22 @@ test("Settings → Images lists the Engine's image style profiles, and the one p
   // Unpicked, the Engine's default writes tags; picking Auto makes the story's prompts sentences.
   assert.equal((await images.styleProfile(undefined)).tagged, true);
   assert.equal((await images.styleProfile("auto")).tagged, false);
+  // #2467: a tag profile's style text describes it, so only its tags reach the prompts; a sentence profile keeps it.
+  assert.equal((await images.styleProfile("anime")).styleText, "");
+  assert.equal((await images.styleProfile("anime")).positiveTags, "anime");
+  const prose = createImageClient({
+    baseUrl: "http://127.0.0.1:7860",
+    fetch: (async () =>
+      Response.json({
+        value: JSON.stringify({
+          imageStyleProfiles: {
+            defaultProfileId: "paint",
+            profiles: [{ id: "paint", baseStyle: "painterly", promptMode: "hybrid", styleText: "Soft brushwork." }],
+          },
+        }),
+      })) as typeof globalThis.fetch,
+  });
+  assert.equal((await prose.styleProfile("paint")).styleText, "Soft brushwork.");
   // A list the Engine cannot give reads as empty, never as an error.
   const broken = createImageClient({
     baseUrl: "http://127.0.0.1:7860",
@@ -1210,7 +1226,8 @@ test("a NovelAI connection paints in NovelAI's style, with one reference that th
   assert.match(sex.prompt, /nsfw, explicit, uncensored/u, sex.prompt);
   assert.match(sex.negativePrompt, /mosaic censoring, bar censor/u);
   const place = placePrompt({ name: "Pier", tags: "harbour pier, night", world, style: scene });
-  assert.ok(place.prompt.startsWith("background dataset, "), place.prompt);
+  // #2467: no "background dataset", which would replace the player's Image style with NovelAI's scenery style.
+  assert.ok(!place.prompt.includes("background dataset"), place.prompt);
 
   const request = { name: "Kai", prompt: "p", negativePrompt: "n", width: 1216, height: 832, debugMode: false };
   const refs = ["/a.png", "/b.png", "/c.png"];

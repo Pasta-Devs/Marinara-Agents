@@ -77,7 +77,6 @@ import {
   SCENE_SIZE,
   bannerPlanMessages,
   cgPrompt,
-  explicitMemoryArt,
   lookPrompt,
   memoryArtBrief,
   momentBriefs,
@@ -470,7 +469,6 @@ async function createBanner(
     featured,
     playerName: run.player.name,
     moments: momentBriefs(kind, run.world),
-    explicitArt: explicitMemoryArt(kind, run.world),
   };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
@@ -633,17 +631,15 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
   if (banner.kind === "memories") {
     // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
     const subjects = await outfitCutouts(deps, runId, cgSubjects(five.cg?.cast ?? [], run.units, run.player));
-    // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;
-    // a lowered world paints the clothed brief written beside it.
-    const { brief, explicit } = memoryArtBrief(five.cg, five.title, run.world);
+    // Banner art stays clothed (at most Suggestive), a Memory's cover too (#2467).
+    const brief = memoryArtBrief(five.cg, five.title);
     const prompt = cgPrompt(
       {
         brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        use: explicit ? "cg" : "clothed",
-        explicit,
+        use: "clothed",
         references: cgReferences(subjects).labels,
       },
       edited,
