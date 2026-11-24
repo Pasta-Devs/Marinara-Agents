@@ -489,31 +489,17 @@ test("the cg brief learns what the rating lets it show; only Explicit Heat with 
   assert.doesNotMatch(plan(stored("sfw", "dark")), /first night/);
 });
 
-test("P20: premises span the Heat; Memory art may be explicit only under Explicit Heat and rating; looks stay clothed", () => {
+test("P20: premises span the Heat; a Memory's cover stays at most Suggestive (#2467); looks stay clothed", () => {
   const banner = (heat: Heat, rating: ImageRating, kind: "memories" | "his-wardrobe" = "memories") => {
     const input = storyInputs(stored(heat, heat === "sfw" ? "angst" : "dark"), rating);
     return systemOf(bannerPlanMessages({ kind, ...input, featured: input.units[0]!, earlierTitles: [], memory: "" }));
   };
-  // #1951: Explicit Heat and the Explicit rating: explicit premises, and a key image the brief may mark explicit.
+  // Explicit Heat and the Explicit rating: explicit premises, but the cover is never explicit (#2467, was #1951).
   const explicit = banner("explicit", "explicit");
   assert.match(explicit, /SFW ones, suggestive ones \(desire, tension, a near miss\) and explicit ones \(sex between/);
-  assert.match(
-    explicit,
-    /The key image at this rating: when the moment shown is sex or nudity[^\n]*set "explicit": true/,
-  );
-  assert.match(
-    explicit,
-    /"cgCast": \[[^\]]*\], "explicit": false, "clothedBrief": "<English, 1–4 sentences, only when explicit is true>"\}, "four"/,
-    "the shape carries the mark and its clothed twin",
-  );
-  assert.match(
-    explicit,
-    /When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed/,
-  );
-  assert.match(
-    explicit,
-    /IMAGE TAGS every outfit line and 4★ brief must fit: [^\n]*\. The featured key image brief follows its rule above\./,
-  );
+  assert.match(explicit, /The key image at this rating: follow the actual scene; neutral moments stay neutral/);
+  assert.doesNotMatch(explicit, /set "explicit"|"explicit": false|clothedBrief/, "no explicit cover, no clothed twin");
+  assert.match(explicit, /IMAGE TAGS every outfit line, key image brief and 4★ brief must fit: [^\n]*\.$/m);
   // Each 4★ Moment gets its own brief, held to clothed art whatever its premise holds.
   assert.match(explicit, /"premise": "<1–2 sentences>", "cgBrief": "<English, 1–4 sentences>", "cgCast"/);
   assert.match(

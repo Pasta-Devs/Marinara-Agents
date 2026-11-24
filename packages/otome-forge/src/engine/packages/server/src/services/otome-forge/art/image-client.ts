@@ -469,11 +469,14 @@ export function createImageClient({
         const profile = find(str(profileId)) ?? find(defaultProfileId) ?? list[0];
         if (!profile) return empty;
         const mode = str(profile.promptMode);
+        const tagged = mode === "tagged" || mode === "danbooru";
         return {
-          styleText: str(profile.baseStyle) === "auto" ? "" : str(profile.styleText),
+          // #2467: a tag profile's style text describes the profile ("Danbooru-tagged anime generation for SDXL…"), and
+          // its tags carry the style: the Engine leaves it out of tag prompts, and so does Otome. Auto's is an instruction.
+          styleText: str(profile.baseStyle) === "auto" || tagged ? "" : str(profile.styleText),
           positiveTags: str(profile.positiveTags),
           negativeTags: str(profile.negativeTags),
-          tagged: mode === "tagged" || mode === "danbooru",
+          tagged,
         };
       } catch (error) {
         logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));

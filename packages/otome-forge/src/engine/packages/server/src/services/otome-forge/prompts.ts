@@ -5610,17 +5610,14 @@ const KIND_TEXT: Record<BannerKind, string> = {
 
 const LOOK_SHAPE = `{"name": "<look name>", "outfitLine": "<English outfit tags>"}`;
 const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>", "cgBrief": "<English illustration of this vignette, 1–4 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]}`;
-/**
- * The Memories shape. `explicit` adds the key image's mark where the world allows an explicit one; `moments` gives each
- * 4★ its own illustration brief (momentBriefs).
- */
-const memoriesShape = ({ explicit, moments }: { explicit: boolean; moments: boolean }) =>
-  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false, "clothedBrief": "<English, 1–4 sentences, only when explicit is true>"' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
+/** The Memories shape. `moments` gives each 4★ its own illustration brief (momentBriefs). */
+const memoriesShape = ({ moments }: { moments: boolean }) =>
+  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
 /** #2303: a wardrobe banner's 3★ looks. */
 const LOOKS3_SHAPE = `"looks": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×${WARDROBE_LOOKS3}]`;
 const PLACE_SHAPE = `"place": {"name": "<the place's name>", "tags": "<English place tags>"}`;
 const SHAPES: Record<BannerKind, string> = {
-  memories: memoriesShape({ explicit: false, moments: false }),
+  memories: memoriesShape({ moments: false }),
   "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], ${LOOKS3_SHAPE}, "snapshots": [${SNAPSHOT_SHAPE} ×${snapshotsOf("his-wardrobe")}]}`,
   "my-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×3], ${LOOKS3_SHAPE}, "snapshots": [${SNAPSHOT_SHAPE} ×${snapshotsOf("my-wardrobe")}]}`,
   dates: `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", ${PLACE_SHAPE}, "scenes": ${DATE_SCENES.five.min}}, "four": [{"title": "<title>", "premise": "<1–2 sentences>", ${PLACE_SHAPE}, "scenes": ${DATE_SCENES.four.min}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
@@ -5649,10 +5646,6 @@ const DATE_HEAT: Partial<Record<World["content"]["heat"], string>> = {
  */
 export const momentBriefs = (kind: BannerKind, world: Pick<World, "content">) =>
   kind === "memories" && world.content.heat !== "sfw";
-
-/** Whether a Memory's key image may be explicit: where a story CG may be (Explicit Heat and the Explicit rating). */
-export const explicitMemoryArt = (kind: BannerKind, world: Pick<World, "content" | "images">) =>
-  kind === "memories" && explicitCgAllowed(world);
 
 /** A contract block under its own heading (the contract's text starts with "CONTENT CONTRACT"). */
 const relabel = (contract: string, heading: string) => contract.replace(/^CONTENT CONTRACT/, heading);
@@ -5726,20 +5719,18 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
     lis: [...lis, { name: player.name, presentation: player.look.presentation }],
     kind: "image",
   });
-  const explicitArt = explicitMemoryArt(kind, world);
-  const briefRule = kind === "memories" ? imageBriefRule(world, explicitArt ? "cg" : "clothed") : "";
+  // #2467: a Memory's cover stays clothed (at most Suggestive), as banner art and looks do; only story CGs go further.
+  const briefRule = kind === "memories" ? imageBriefRule(world, "clothed") : "";
   const moments = momentBriefs(kind, world);
   // A Moment's illustration stays clothed (at most Suggestive) whatever its premise holds.
   const momentRule = moments ? imageBriefRule(world, "clothed").replace(/^The key image at this rating: /, "") : "";
-  const tagged = explicitArt
-    ? "every outfit line and 4★ brief must fit"
-    : moments
-      ? "every outfit line, key image brief and 4★ brief must fit"
-      : "every outfit line and key image brief must fit";
+  const tagged = moments
+    ? "every outfit line, key image brief and 4★ brief must fit"
+    : "every outfit line and key image brief must fit";
   const system = [
     "You plan one banner of Wish in an otome game: the collectible side stories, looks and Snapshots the player pulls for with Starlight they earned. Nothing on a banner changes the main story.",
     KIND_TEXT[kind],
-    `Reply with ONLY this JSON object:\n${kind === "memories" ? memoriesShape({ explicit: explicitArt, moments }) : SHAPES[kind]}`,
+    `Reply with ONLY this JSON object:\n${kind === "memories" ? memoriesShape({ moments }) : SHAPES[kind]}`,
     [
       "RULES",
       "- A premise is a situation: where they are, what is happening, what each of them wants from it. Never a plot turn, a reveal, a confession or anything the main story has not reached. How close they are follows their current stage; the scene itself is written later, when the item is first opened.",
@@ -5758,9 +5749,6 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
         : "- Every look stays a complete clothed look: it may be revealing (lingerie, swimwear), never nude.",
       `- The key image brief is one to four English sentences on where and how the moment is framed (place, light, what they are doing), never anyone's looks. ${BRIEF_STAGING}`,
       briefRule ? `- ${briefRule}` : "",
-      explicitArt
-        ? `- When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed, in one to four English sentences. ${BRIEF_STAGING} It is painted instead if the image settings are lowered first.`
-        : "",
       moments
         ? `- Each 4★'s cgBrief is one to four English sentences for its Moment's illustration: the place, light and what they are doing, never anyone's looks. ${BRIEF_STAGING} Whatever its premise holds, the picture follows this: ${momentRule} cgCast names only that love interest and, when shown, the protagonist.`
         : "",
@@ -5778,7 +5766,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       otomeContentContract({ world, lis, kind: "home" }),
       "CONTENT CONTRACT FOR SNAPSHOTS (they show on the Love Timeline)",
     ),
-    `IMAGE TAGS ${tagged}: ${imageTags}.${explicitArt ? " The featured key image brief follows its rule above." : ""}`,
+    `IMAGE TAGS ${tagged}: ${imageTags}.`,
   ].join("\n\n");
 
   const cast = units.map((unit) => {
@@ -6374,19 +6362,11 @@ export interface ImageTagsInput {
 export const ADULT_SENTENCE = "Everyone shown is an adult over 18 with an adult face and body";
 
 /**
- * A Memory's art brief as it is painted now (#1951): its explicit brief only while the world allows explicit art,
- * otherwise the clothed brief the plan wrote beside it (or the title), so a lowered world never paints from text written
- * for an explicit picture. A brief never marked explicit is painted as it is.
+ * A Memory's cover brief, for its banner art and its item's art: always painted clothed (#2467, at most Suggestive). A
+ * brief an older plan marked explicit (#1951) paints the clothed brief written beside it (or the title), never itself.
  */
-export function memoryArtBrief(
-  cg: { brief: string; explicit?: true; clothed?: string } | undefined,
-  title: string,
-  world: Pick<World, "content" | "images">,
-): { brief: string; explicit: boolean } {
-  if (cg?.explicit !== true) return { brief: cg?.brief || title, explicit: false };
-  return explicitCgAllowed(world)
-    ? { brief: cg.brief, explicit: true }
-    : { brief: cg.clothed || title, explicit: false };
+export function memoryArtBrief(cg: { brief: string; explicit?: true; clothed?: string } | undefined, title: string) {
+  return (cg?.explicit === true ? cg.clothed : cg?.brief) || title;
 }
 
 /** Explicit Heat and the Explicit rating: only then may a key image's brief be explicit. */
@@ -6718,12 +6698,8 @@ export function placePrompt(input: PlaceInput, edited: Partial<ImagePrompt> = {}
   return finish(
     world,
     () => ({
-      // #2465: NovelAI's scenery-only pictures lead with its background tag.
-      prompt: [
-        style.novelai ? "background dataset" : "",
-        style.styleText,
-        mergeTags(input.tags, PLACE_FRAMING, required, style.positiveTags),
-      ]
+      // #2467: never NovelAI's "background dataset" tag, which switches to its own scenery style over the Image style.
+      prompt: [style.styleText, mergeTags(input.tags, PLACE_FRAMING, required, style.positiveTags)]
         .filter(Boolean)
         .join(", "),
       negativePrompt: mergeTags(PLACE_NEGATIVE, negative, style.negativeTags),
