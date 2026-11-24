@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -93,6 +93,20 @@ try {
   );
   await put("packages/demo/documentation.json", { ...config, overview: { source: "package", path: "docs/guide.md" } });
   await assert.rejects(build("demo"), /stay within.*resolving symlinks/i);
+  await unlink(join(root, "packages/demo/docs"));
+  await put("packages/demo/actual-docs/guide.md", "A guide in the same package\n");
+  await symlink(
+    join(root, "packages/demo/actual-docs"),
+    join(root, "packages/demo/docs"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  await assert.rejects(build("demo"), /must not use symlinks/);
+  await symlink(
+    join(root, "packages/another"),
+    join(root, "packages/linked"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  await assert.rejects(build("linked"), /must not use symlinks/);
 
   // Real writer: published/preview and v2/v3 visibility, aliases, determinism and removal.
   const laneEntry = (id, min, maxExclusive) => ({

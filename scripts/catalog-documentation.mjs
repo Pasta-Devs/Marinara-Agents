@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { lstat, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { z } from "zod";
 import {
@@ -109,6 +109,22 @@ async function readBoundedFile(path, maximum) {
   return bytes;
 }
 
+async function resolveDocumentationPath(root, path, label, options = {}) {
+  const candidate = await resolveContainedPortablePath(root, path, label, options);
+  let component = root;
+  // Repository URLs serve tracked paths; they do not promise filesystem link dereferencing.
+  for (const segment of path.split("/")) {
+    component = join(component, segment);
+    try {
+      if ((await lstat(component)).isSymbolicLink()) throw new Error(`${label} must not use symlinks`);
+    } catch (error) {
+      if (options.allowMissing && error?.code === "ENOENT") break;
+      throw error;
+    }
+  }
+  return candidate;
+}
+
 /** Build an optional index for exactly one catalog lane. No Markdown is copied. */
 export async function buildDocumentationDocument(repoRoot, directory, entries) {
   const packages = {};
@@ -120,10 +136,10 @@ export async function buildDocumentationDocument(repoRoot, directory, entries) {
     let raw;
     let packageRoot;
     try {
-      packageRoot = await resolveContainedPortablePath(repoRoot, `packages/${id}`, "Documentation package", {
+      packageRoot = await resolveDocumentationPath(repoRoot, `packages/${id}`, "Documentation package", {
         allowMissing: true,
       });
-      const configPath = await resolveContainedPortablePath(packageRoot, "documentation.json", "Documentation index", {
+      const configPath = await resolveDocumentationPath(packageRoot, "documentation.json", "Documentation index", {
         allowMissing: true,
       });
       raw = await readBoundedFile(configPath, MAX_CONFIG_BYTES);
@@ -135,7 +151,7 @@ export async function buildDocumentationDocument(repoRoot, directory, entries) {
     const compile = async (reference) => {
       const selectedHeading = reference.heading ? { heading: reference.heading } : {};
       if (reference.source === "engine") return { source: "engine", path: reference.path, ...selectedHeading };
-      const path = await resolveContainedPortablePath(packageRoot, reference.path, "Package user guide");
+      const path = await resolveDocumentationPath(packageRoot, reference.path, "Package user guide");
       const content = await readBoundedFile(path, MAX_DOCUMENTATION_BYTES);
       return {
         source: "catalog",
