@@ -38,6 +38,7 @@ import { normalizeChapter } from "../schemas/story.js";
 import { needsSpace, repairOffers } from "../state/stages.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { recallText } from "./canon.js";
+import { friendCards } from "./friends.js";
 import {
   clean,
   planLedger,
@@ -257,6 +258,7 @@ export async function planRouteChapter(
         memory: memory.text,
         recalls: memory.recalls?.text ?? "",
         sharesCache: sharesScenesCache(run.world),
+        friends: friendCards(run, "route"),
       }),
       memory,
       schema: ChapterPlanSchema,
@@ -355,6 +357,7 @@ export async function planRepairChapter(
         memory: memory.text,
         recalls: memory.recalls?.text ?? "",
         sharesCache: sharesScenesCache(run.world),
+        friends: friendCards(run, "repair"),
       }),
       memory,
       schema: ChapterPlanSchema,

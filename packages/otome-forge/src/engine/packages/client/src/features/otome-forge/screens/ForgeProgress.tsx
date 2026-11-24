@@ -120,14 +120,16 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const base = `/runs/${encodeURIComponent(runKey)}`;
   const steps = view.forge.steps;
   const ready = view.forge.phase === "ready";
+  // #2458: her friends' portraits are painted here too, after the love interests'.
+  const people = [...view.lis, ...(view.friends ?? [])];
   // The look a paint step paints: its record carries the image connection's reason for a failure.
   const paintOf = (step: ForgeStep): Paint | undefined =>
-    step.id === "paint:player" ? view.player.art : view.lis.find((li) => `paint:${li.id}` === step.id)?.art;
+    step.id === "paint:player" ? view.player.art : people.find((li) => `paint:${li.id}` === step.id)?.art;
   const nameOfStep = (step: ForgeStep): string => {
     if (step.id === "world-plan") return t("ui.otomeForge.setup.forgeStepWorld");
     if (step.id === "paint:player") return t("ui.otomeForge.setup.forgeStepPaintPlayer");
     const [kind, li] = step.id.split(":");
-    const name = view.lis.find((item) => item.id === li)?.name ?? li ?? "";
+    const name = people.find((item) => item.id === li)?.name ?? li ?? "";
     if (kind === "bible") return t("ui.otomeForge.setup.forgeStepBible", { name });
     if (kind === "paint") return t("ui.otomeForge.setup.forgeStepPaint", { name });
     return step.id;

@@ -27,6 +27,7 @@ import { registerKittyRoutes } from "./routes/kitty.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
 import { registerPhoneRoutes } from "./routes/phone.js";
 import { registerQuizRoutes } from "./routes/quiz.js";
+import { registerFriendRoutes } from "./routes/friends.js";
 import { registerReadHimRoutes } from "./routes/read-him.js";
 import { registerReadMeRoutes } from "./routes/read-me.js";
 import { registerRunRoutes } from "./routes/runs.js";
@@ -85,6 +86,7 @@ export async function activate({ api }: ActivationContext) {
       registerRunRoutes(router, deps);
       registerSetupRoutes(router, deps);
       registerStoryRoutes(router, deps);
+      registerFriendRoutes(router, deps);
       registerArcRoutes(router, deps);
       registerArtRoutes(router, deps);
       registerAudioRoutes(router, deps);

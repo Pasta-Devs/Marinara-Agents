@@ -8,6 +8,7 @@ import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Prestige, PrestigeKind } from "./economy";
 import type { Face, MusicMood } from "./faces";
+import type { FriendBible, FriendState } from "./friends";
 import type { ClawRound } from "./claw";
 import type { KittyRound } from "./kitty";
 import type { ReadHimPaid } from "./read-him";
@@ -457,6 +458,11 @@ export interface Unit {
   stickers?: StickerSet;
   /** 0.35.0: their Kitty Cards kitten's paint (S/art/kittens.ts), claimed once GET /play is read with images on. */
   kitten?: Paint;
+  /**
+   * #2458: a friend's bible, for a friend's unit only (`state.friends`); a friend's `bible` stays null, so nothing that
+   * means the love interests ever counts them.
+   */
+  friend?: FriendBible;
 }
 
 /**
@@ -1020,6 +1026,8 @@ export interface RunState {
    * that registers it (S/story/chapters.ts). Null while none wait.
    */
   thoughts: PlayerThoughts | null;
+  /** #2458: her friends, in the order they joined (their units are `${R}:unit:<id>`, with `friend` and no bible). */
+  friends: Record<LiId, FriendState>;
 }
 
 /** One Shop purchase as the state keeps it (S/routes/shop.ts): what it bought, a gift id or `figurine:<li>`. */
@@ -1499,6 +1507,12 @@ export interface SideSpriteView {
   cut?: true;
   /** It is being painted or cut out: the reader polls. */
   coming?: true;
+  /**
+   * #2458: a friend's own sprite (`key` is `friend:<id>`): repainted from Your cast, never from the reader, and shown
+   * in the line's face from `faces` (cut-outs only) once those are painted.
+   */
+  friend?: true;
+  faces?: Partial<Record<Face, string>>;
 }
 
 export interface StoryChapterEntry {
@@ -1603,6 +1617,11 @@ export interface StoryView {
   bond?: BondEntry[];
   /** #2155: each love interest's side waiting in Routes, or being read. Optional while an older view is cached. */
   hisSides?: HisSideEntry[];
+  /**
+   * #2458: why no friend may join now (`full`: as many friends as love interests; `arc`: one joined in this arc), or
+   * null when one may. Absent from an older server.
+   */
+  friendBlock?: "full" | "arc" | null;
 }
 
 /** A bond rank whose story is waiting to be opened (0.23.0). */
@@ -1627,8 +1646,11 @@ export interface ChapterDetail {
 
 /** What one request earned. */
 export interface Grant {
-  /** #2153: `gift` is a birthday scene's gift, paid when it is read to its end, never capped. */
-  source: "beat" | "chapter" | "lead" | "foil" | "gift";
+  /**
+   * #2153: `gift` is a birthday scene's gift, paid when it is read to its end, never capped. #2458: `friend` is a
+   * friend's affection for speaking in a main chapter (`li` names the friend).
+   */
+  source: "beat" | "chapter" | "lead" | "foil" | "gift" | "friend";
   starlight?: number;
   li?: LiId;
   affection?: number;
@@ -1781,7 +1803,29 @@ export interface RunView {
   unseen?: UnseenCounts;
   /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
   prologue?: boolean;
+  /** #2458: her friends, in the order they joined; absent from an older server. */
+  friends?: RunFriendView[];
 }
+
+/** #2458: a friend as the client sees them: their looks, as a love interest's, and their level, 1–5 (stars). */
+export type RunFriendView = Pick<
+  RunLiView,
+  | "id"
+  | "name"
+  | "pronouns"
+  | "source"
+  | "cardId"
+  | "voiceGender"
+  | "accent"
+  | "accentSampler"
+  | "portrait"
+  | "look"
+  | "art"
+  | "cut"
+  | "expressions"
+  | "worn"
+  | "level"
+> & { affectionProgress: { current: number; required: number }; arc: number };
 
 export type SetupLi =
   | { source: "card"; cardId: string; pronouns: Pronouns }

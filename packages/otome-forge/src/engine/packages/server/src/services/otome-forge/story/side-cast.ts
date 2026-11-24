@@ -83,7 +83,7 @@ const spritesOn = (world: Pick<World, "images"> | null) => !!world?.images.sideS
 const NOT_ONE_NAME = /[&/+,]|^\P{L}*$/u;
 
 /** True when `speaker` names `name` as the reader does, or by its core words, or by its first core word alone. */
-function namesPerson(speaker: string, name: string): boolean {
+export function namesPerson(speaker: string, name: string): boolean {
   if (sameName(speaker, name)) return true;
   const key = nameKey(speaker);
   const theirs = nameCore(name);
@@ -107,7 +107,7 @@ export interface SideSpeaker {
 type ReadBeat = Pick<Beat, "segments" | "choices" | "choiceCanon" | "easedOff">;
 
 /** The beat's lines as it was read: its lines up to an Ease off's cut, then each picked option's branch. */
-function readLines(beat: ReadBeat): Beat["segments"] {
+export function readLines(beat: ReadBeat): Beat["segments"] {
   const end = beat.easedOff ? beat.easedOff.at : Infinity;
   return [
     ...beat.segments.slice(0, end + 1),
@@ -286,7 +286,11 @@ function normalizeLook(reply: LookReply): LookReply | string {
  * The text of the read scenes they spoke in (readBeats, readLines: never a scene written ahead or cut by Ease off), in
  * the order first heard, each around their lines, at most SIDE_SCENES_MAX.
  */
-async function sideScenes(deps: Pick<SideCastDeps, "store">, runId: string, person: SidePerson): Promise<string> {
+export async function sideScenes(
+  deps: Pick<SideCastDeps, "store">,
+  runId: string,
+  person: SidePerson,
+): Promise<string> {
   const beats = ((await readBeats(deps, runId))?.beats ?? [])
     .filter((beat) => person.chapters.includes(beat.key))
     .sort((a, b) => person.chapters.indexOf(a.key) - person.chapters.indexOf(b.key) || a.i - b.i);

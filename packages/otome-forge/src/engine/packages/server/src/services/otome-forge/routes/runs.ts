@@ -207,10 +207,10 @@ const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
 /** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
-function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
+function runView(runKey: string, runId: string, { world, player, units, state, friends = [] }: RunDocuments) {
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  const lis = units.map((unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit));
-  return toRunView(runKey, withPlaceViews(runId, world), shown, lis, state);
+  const viewed = (unit: Unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit);
+  return toRunView(runKey, withPlaceViews(runId, world), shown, units.map(viewed), state, friends.map(viewed));
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
@@ -239,12 +239,25 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
     runId: string,
     mode: { debugMode: boolean; review: boolean },
   ): Promise<RunDocuments> => {
-    const looks = await ensureEngineLooks(deps, runId, read, read.world.images.ask, !!read.world.images.connectionId);
-    const world = await forgeCast(deps, runId, looks, mode);
+    // #2458: her friends are painted, or wear their Engine art, as the love interests are; they stay in `friends`.
+    const castCount = read.units.length;
+    const everyone = await ensureEngineLooks(
+      deps,
+      runId,
+      { ...read, units: [...read.units, ...(read.friends ?? [])] },
+      read.world.images.ask,
+      !!read.world.images.connectionId,
+    );
+    const world = await forgeCast(deps, runId, everyone, mode);
+    const looks = {
+      ...everyone,
+      units: everyone.units.slice(0, castCount),
+      friends: everyone.units.slice(castCount),
+    };
     const run = world === looks.world ? looks : { ...looks, world };
-    if (withEngineSteps(run.world.forge, run) === run.world.forge) return run;
+    if (withEngineSteps(run.world.forge, everyone) === run.world.forge) return run;
     const saved = await updateIfChanged(store, runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
-      const forge = withEngineSteps(current.forge, run);
+      const forge = withEngineSteps(current.forge, everyone);
       return forge === current.forge ? undefined : { ...current, forge };
     });
     return saved ? { ...run, world: saved.value } : run;

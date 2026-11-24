@@ -33,6 +33,7 @@ import {
   type TimelineEntry,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import { registerArcRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/arcs.ts";
+import { registerFriendRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/friends.ts";
 import { registerStoryRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
 import { normalizeIndex } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/index.ts";
 import { normalizePlayer } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
@@ -194,6 +195,7 @@ export function storyRoutes(deps: RouteDeps, runKey: string) {
   };
   registerStoryRoutes(router, deps);
   registerArcRoutes(router, deps);
+  registerFriendRoutes(router, deps);
   return async (method: "GET" | "POST", path: string, body: object = {}, params: Record<string, string> = {}) => {
     const handler = routes.get(`${method} ${path}`);
     assert.ok(handler, `${method} ${path} is registered`);

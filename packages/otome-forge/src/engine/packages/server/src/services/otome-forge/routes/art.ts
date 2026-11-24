@@ -40,7 +40,11 @@
 // scene does not pay for one he may never wear. Worn now, it is his stage look already and needs nothing. A her-look5's
 // first-wear scene pins nothing: the protagonist is never on stage, and he stands in the look he wears now.
 import { z } from "zod";
-import type { SceneArt, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type {
+  SceneArt,
+  SideSpriteView,
+  Unit,
+} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 import { cgPromptFor, cgView, markCgSeen, paintCgNow } from "../art/cg.js";
 import { itemArtView, outfitOf } from "../art/outfits.js";
@@ -52,11 +56,12 @@ import { paintSideNow, sidePromptFor } from "../art/side-sprites.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isChapterKey, isItemStoryKey } from "../ids.js";
 import { readItem } from "../items/open.js";
+import { wornLookUrl } from "../schemas/common.js";
 import { cleanedFaces, facesComing, readRun, readyCutout, stageArtUrls } from "../schemas/state.js";
 import { toWorldView } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { readBeat } from "../story/canon.js";
-import { sceneSides } from "../story/side-cast.js";
+import { namesPerson, sceneSides } from "../story/side-cast.js";
 import { SIDE_NAME_MAX } from "../schemas/side-cast.js";
 
 const PROMPT_MAX = 4000;
@@ -148,7 +153,33 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
       const lookComing =
         (!!item && !painted && itemArtView(runId, item)?.state === "pending") ||
         units.some((unit) => !!looks[unit.id] && cutoutsPending(runId, [unit]));
-      const sides = await sceneSides(deps, runId, run, beat);
+      // #2458: her friends who speak in this scene stand in their own sprites and faces, whatever the side toggle says.
+      const speakers = [
+        ...beat.segments,
+        ...beat.choices.flatMap((choice) => choice.options.flatMap((o) => o.segments)),
+      ]
+        .filter((line) => !line.thought)
+        .map((line) => line.speaker.trim());
+      const friendSides: Record<string, SideSpriteView> = {};
+      for (const friend of run.friends ?? []) {
+        const names = [...new Set(speakers.filter((name) => namesPerson(name, friend.name)))];
+        if (!names.length) continue;
+        const unit = await queueCutouts(deps, runId, friend, stageArtUrls(run.world, friend));
+        const base = wornLookUrl(unit);
+        const cutout = readyCutout(unit, base);
+        const sprite: SideSpriteView = {
+          key: `friend:${unit.id}`,
+          art: unit.art ?? null,
+          ...(base ? { url: cutout ?? base } : {}),
+          ...(cutout ? { cut: true as const } : {}),
+          ...(cutoutsPending(runId, [unit]) || facesComing(run.world, unit) ? { coming: true as const } : {}),
+          friend: true,
+          faces: cleanedFaces(run.world, unit) ?? {},
+        };
+        for (const name of names) friendSides[name] = sprite;
+      }
+      const sideSprites = await sceneSides(deps, runId, run, beat);
+      const sides = sideSprites || Object.keys(friendSides).length ? { ...sideSprites, ...friendSides } : undefined;
       const scene: SceneArt = {
         places: beat.places.map((place) => readPlace(run.world, runId, place.name) ?? place),
         cg: cgView(runId, beat),

@@ -431,12 +431,14 @@ export async function readSubject(
   const li = owner.slice(3);
   const unit = await deps.store.readDoc(unitId(runId, li), normalizeUnit);
   if (!unit) throw new OtomeForgeError(404, "No such love interest.", "not-found");
-  if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
+  // #2458: a friend's look is in their friend bible.
+  const look = unit.bible?.look ?? unit.friend?.look;
+  if (!look) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
   return {
     name: unit.name,
-    identityLine: unit.identityLine || unit.bible.look.identityLine,
-    outfitLine: unit.outfitLine || unit.bible.look.outfitLine,
-    presentation: unit.bible.look.presentation,
+    identityLine: unit.identityLine || look.identityLine,
+    outfitLine: unit.outfitLine || look.outfitLine,
+    presentation: look.presentation,
     image: {
       kind: "character",
       ...(unit.cardId ? { cardId: unit.cardId } : {}),

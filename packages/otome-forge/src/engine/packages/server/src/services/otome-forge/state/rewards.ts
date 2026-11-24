@@ -41,6 +41,7 @@ import {
   isStoryReward,
   type RewardSource,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { FRIEND_CHAPTER_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { GIFT_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { mainChapterNumber } from "../ids.js";
 import { STATE_LIMITS, keepNewest } from "../schemas/state.js";
@@ -298,4 +299,20 @@ export function readBeatToEnd(
     next = { ...next, lis: { ...next.lis, [chapter.lead]: { ...lead, lastLead: chapter.number } } };
   }
   return { state: next, grants, chapterDone: true };
+}
+
+/**
+ * #2458: her friends who spoke in a main chapter just finished each earn FRIEND_CHAPTER_AFFECTION, as a story earning
+ * (never capped). A friend no longer in `state.friends` earns nothing.
+ */
+export function payFriends(state: RunState, heard: readonly LiId[]): { state: RunState; grants: Grant[] } {
+  const friends = { ...state.friends };
+  const grants: Grant[] = [];
+  for (const id of new Set(heard)) {
+    const friend = friends[id];
+    if (!friend) continue;
+    friends[id] = { ...friend, points: friend.points + FRIEND_CHAPTER_AFFECTION };
+    grants.push({ source: "friend", li: id, affection: FRIEND_CHAPTER_AFFECTION });
+  }
+  return grants.length ? { state: { ...state, friends }, grants } : { state, grants };
 }

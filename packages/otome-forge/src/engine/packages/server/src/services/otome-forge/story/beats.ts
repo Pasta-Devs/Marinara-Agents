@@ -112,6 +112,7 @@ import { hapticsOn, normalizeHapticCues } from "../../../../../client/src/featur
 import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
 import type { OtomeHaptics } from "../haptics.js";
+import { friendCards, friendsHeard } from "./friends.js";
 import { beatMessages, closerMessages, confrontationMessages, explicitCgAllowed, prologueEnding } from "../prompts.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
@@ -121,7 +122,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { applyChoiceEffects } from "../state/relationship.js";
-import { payClearing, readBeatToEnd } from "../state/rewards.js";
+import { payClearing, payFriends, readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
@@ -1149,6 +1150,8 @@ async function generateBeat(
     handOff: memory.handOff ?? "",
     ...(told ? { hisSide: told.text } : {}),
     ...(hapticsOn(run.world) ? { toys: deps.haptics?.devicesText() ?? "" } : {}),
+    // #2458: her friends, in the chapters they come into (S/story/friends.ts friendCards).
+    friends: pov ? undefined : friendCards(run, chapter.kind),
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };
@@ -1856,6 +1859,11 @@ async function finishBeat(
   const arc = candidate ? hisSideArc(chapter, await listArcs(deps.store, runId)) : 0;
   const spent = !candidate || !!(await readChapter(deps.store, runId, hisSideKey(candidate, arc)));
   const climax = await climaxEnding(deps, runId, chapter, beat);
+  // #2458: her friends who spoke in a main chapter this read may finish earn their friendship (payFriends).
+  const heard =
+    chapter.kind === "main" && beat.i === chapter.nodes.length - 1
+      ? await friendsHeard(deps, runId, chapter, beat)
+      : [];
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     // A pick saved on the beat whose effects never reached the state (its request stopped between the two writes, and
     // a reload shows it as made) lands in this same write, so no beat counts as read with a canon pick unapplied.
@@ -1897,6 +1905,11 @@ async function finishBeat(
       }
     }
     completedNow = !current.chapters[chapter.key]?.completed && !!next.chapters[chapter.key]?.completed;
+    if (completedNow && heard.length) {
+      const paid = payFriends(next, heard);
+      next = paid.state;
+      outcome = { ...outcome, grants: [...outcome.grants, ...paid.grants] };
+    }
     // #2155: the read that finishes the chapter says when a side of it waits, though its moment came on an earlier node
     // (the reader may have been left in between). A side is written only once its chapter is finished, so none is yet.
     if (completedNow && !hisSide) {

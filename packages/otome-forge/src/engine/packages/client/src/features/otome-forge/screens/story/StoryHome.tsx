@@ -70,6 +70,7 @@ import {
 } from "../../shared/economy";
 import { BOND_RANKS, bondStepOf } from "../../shared/bond";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
+import { Friends } from "./Friends";
 import { PersonalityQuiz } from "./PersonalityQuiz";
 
 const STATE_KEYS: Record<StoryChapterEntry["state"], string> = {
@@ -258,6 +259,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         bondStories={bond}
         onBond={(entry) => openArc({ kind: "bond", li: entry.li, key: entry.key })}
       />
+      <Friends runKey={runKey} view={view} block={story.data.friendBlock} />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
       {arcPlan && (arcPlan.kind !== "side" || sideDialog === arcPlan) ? (
         <ArcPlanDialog

@@ -73,6 +73,7 @@ import {
 import { useOtomeProps } from "../../props";
 import type { Grant, LiId, RunLiView, RunView } from "../../shared/api-types";
 import { OWN_OPTION, RIDDLE_CHOICE } from "../../shared/arcs";
+import { FRIEND_MAX_LEVEL } from "../../shared/friends";
 import { FACES, MUSIC_MOODS, type MusicMood } from "../../shared/faces";
 import { Backlog } from "./Backlog";
 import { ChoicePills, RememberToast } from "./ChoicePills";
@@ -157,7 +158,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const [ownDraft, setOwnDraft] = useState<OwnAnswer & { at: string }>({ at: "", kind: "dialogue", text: "" });
   // Each love interest's level (and extra stories unlocked, #2025) when the chapter opened, so the end card can say
   // which one rose.
-  const [levelsBefore] = useState<LevelsBefore>(() => new Map(view.lis.map((li) => [li.id, li])));
+  const [levelsBefore] = useState<LevelsBefore>(
+    () => new Map([...view.lis, ...(view.friends ?? [])].map((li) => [li.id, li])),
+  );
   const rootRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const choiceRef = useRef<HTMLButtonElement>(null);
@@ -303,15 +306,19 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
   // 0.20.0: a recurring side character's own sprite (SceneArt.sides) comes first; else an Engine card's, as before.
   const side = otherSpeaker ? reader.sceneArt?.sides?.[otherSpeaker] : undefined;
-  const sideUrl = side?.url && !failedArt.has(side.url) ? side.url : null;
+  // #2458: a friend stands in the line's face once their faces are painted.
+  const sideFace = side?.friend && current?.segment.expression ? side.faces?.[current.segment.expression] : undefined;
+  const sideArt = sideFace ?? side?.url;
+  const sideUrl = sideArt && !failedArt.has(sideArt) ? sideArt : null;
   const speaker = useSpeakerSprite(cg || sideUrl ? null : otherSpeaker, reader.lineKey);
   const sideState = side?.art?.state;
   // A painted sprite on screen (not under a key image) can be painted again, as the place can; it stays until the new
   // one is saved.
-  const sideRepaint = sideState === "ready" && !!sideUrl && !cg;
+  const sideRepaint = sideState === "ready" && !!sideUrl && !cg && !side?.friend;
   const sidePaint =
     canPaint &&
     side &&
+    !side.friend &&
     otherSpeaker &&
     (sideState === "waiting-consent" || sideState === "failed" || sideState === "stopped" || sideRepaint)
       ? {
@@ -1023,6 +1030,29 @@ function ChapterEnd({
           ) : null}
           {affection.map(({ li: id, amount }) => {
             const li = view.lis.find((item) => item.id === id);
+            // #2458: a friend who spoke in the chapter, with the friendship's stars.
+            const friend = li ? undefined : view.friends?.find((item) => item.id === id);
+            if (friend) {
+              const rose = friend.level > (levelsBefore.get(friend.id)?.level ?? friend.level);
+              return (
+                <li
+                  key={id}
+                  className="of-grant"
+                  style={{ "--of-li-accent": accentOf(friend) } as CSSProperties}
+                  data-rose={rose}
+                >
+                  <Avatar name={friend.name} url={friend.portrait} accent={accentOf(friend)} size={30} />
+                  <span>
+                    {t("ui.otomeForge.reader.grantFriendship", { name: friend.name, amount: number(amount) })}
+                  </span>
+                  <span className="of-badge of-badge--soft">
+                    {rose
+                      ? t("ui.otomeForge.friends.rankUp", { level: friend.level })
+                      : t("ui.otomeForge.friends.rank", { level: friend.level, max: FRIEND_MAX_LEVEL })}
+                  </span>
+                </li>
+              );
+            }
             if (!li) return null;
             const before = levelsBefore.get(li.id);
             const rose = li.level > (before?.level ?? li.level);

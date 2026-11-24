@@ -41,6 +41,8 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { friendBlock } from "../../../../../client/src/features/otome-forge/shared/friends.js";
+import { friendCards } from "./friends.js";
 import { LAST_STAGE, type ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { bondStoriesPlayed, bondStoryKey } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
@@ -621,6 +623,7 @@ export async function planNextChapter(
         handOff: memory.handOff ?? "",
         // The scenes read the story context it caches only on the same connection (#2091).
         sharesCache: resolveConnectionId(run.world, "structured") === resolveConnectionId(run.world, "narration"),
+        friends: friendCards(run, "main"),
       }),
       memory,
       schema: ChapterPlanSchema,
@@ -849,6 +852,8 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
       : [],
     // #2155: each love interest's side waiting in Routes, or being read (S/story/his-side.ts).
     hisSides: ready ? hisSideOffers(chapters, run.state, cast) : [],
+    // #2458: why no friend may join now, or null when one may.
+    friendBlock: ready ? friendBlock(cast.length, Object.values(run.state.friends), current?.number ?? 0) : "full",
   };
 }
 
