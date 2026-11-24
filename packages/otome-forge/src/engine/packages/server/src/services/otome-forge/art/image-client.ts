@@ -201,7 +201,7 @@ const IMAGE_TYPES: Record<string, string> = {
 
 /**
  * The style every picture of a world is painted in: the Engine's style profile, with the player's own image style
- * (Settings → Images) in place of the profile's style words when they have written one.
+ * (Settings → Images) before the profile's style words when they have written one.
  */
 export async function worldStyle(
   images: Pick<ImageClient, "styleProfile" | "novelAi">,
@@ -210,7 +210,8 @@ export async function worldStyle(
 ): Promise<StyleProfile> {
   const profile = await images.styleProfile(settings.styleProfileId);
   const own = str(settings.style);
-  const styled = own ? { ...profile, styleText: own } : profile;
+  // The player's own words lead, and the profile's style words follow: they add to it, never replace it.
+  const styled = own ? { ...profile, styleText: [own, profile.styleText].filter(Boolean).join(", ") } : profile;
   // #2465: NovelAI paints this kind of picture, so its prompt is in NovelAI's style whatever the profile says: tags,
   // its quality tags and its negative preset's words (the API adds neither), and for people its people counts.
   const connectionId = imageConnectionFor({ connectionId: null, ...settings }, kind);

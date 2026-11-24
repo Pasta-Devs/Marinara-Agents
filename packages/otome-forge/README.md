@@ -152,6 +152,17 @@ In **Your cast**, edit **Image appearance** above each love interest’s spoiler
 
 **Settings → Images** also has **Backgrounds** and **Scene art**, each set to **Same as the image connection** until you choose another. Places paint on the **Backgrounds** connection. Story CGs, date keepsakes and photos paint on the **Scene art** connection. Everything else (portraits, faces, outfits, banners, cards, stickers) paints on the image connection. So one service can paint the places and another the scenes. Without an image connection nothing is painted, whatever the other two say.
 
+Your **Image style** goes first in every picture's prompt, and your Engine image style profile's words follow it.
+
+With a NovelAI connection, Otome Hearth writes every picture it paints in NovelAI's style, whatever your style profile says:
+- tags, with the people counts first (`1girl, 1boy`);
+- NovelAI's quality tags;
+- the words of V5's Heavy negative preset;
+- `background dataset` before a place;
+- explicit key images tagged uncensored.
+
+A picture with people sends NovelAI one reference, its main character, as a Character & Style reference, because NovelAI blends several character references into one person. The prompt decides what everyone wears. The reference needs a Marinara Engine with NovelAI V5 Precise Reference; an older Engine paints without it.
+
 You can add an image connection later in **Settings → Images**. Saving it paints nothing, unless you also turn on **Side character sprites** (below). Open **Your cast** to paint missing base portraits, open owned items from **Wardrobe** or **Album** to add their missing artwork, or use **Paint** beside a reached story location or key moment. Each action shows its image cost and uses the existing prompt-review setting. Existing artwork, story text, progress and Starlight stay intact.
 
 - **Your Engine art without an image connection:** in a story with no image connection, a love interest from a character card stands in the card's **Full Body → Neutral** sprite (else its **Neutral** sprite, else its avatar), and you in your persona's avatar, from the moment the story is made. With an image connection, everyone is painted instead, from a new story's start and for anyone new who arrives; a story made before 0.22.0 keeps the Engine art it already shows, and anyone in it still waiting for a portrait waits for **Paint the cast**. Their sprites become their faces: love, happy or tender for tender; blushing, embarrassed or flustered for flustered; smirk, disgusted or cold for cold; sad, crying, worried or hurt for hurt; angry or determined for angry. Once you add an image connection, with **Expressions** on and **Ask before painting** off, only the faces they lack are painted, as edits of their sprite, the first time they speak; with **Ask before painting** on, and on an avatar, no face is painted unless you choose **Repaint expressions**, which paints all five. A story in progress with no image connection gives Engine art to anyone who has no portrait yet, and looks already painted stay. **Repaint** still paints over Engine art, and no Engine file is ever changed or deleted. A sprite you change in the Engine later is not picked up by a story that already shows it. A new card or persona avatar is, the next time the Engine starts, unless faces were painted on the old one; Home's **Me** shows your persona's avatar as it is now.

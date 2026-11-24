@@ -1697,7 +1697,7 @@
   "ui.otomeForge.setup.imageAppearanceOf": "Image appearance for {{name}}",
   "ui.otomeForge.setup.imageAppearanceSaved": "Image appearance saved.",
   "ui.otomeForge.setup.imageConnections": "Images",
-  "ui.otomeForge.setup.imageStyleHint": "Words for how every picture looks: looks, outfits, scenes, places and faces. Leave it empty to use the Engine’s image style. A new style shows on new pictures; Repaint redoes a look.",
+  "ui.otomeForge.setup.imageStyleHint": "Words for how every picture looks: looks, outfits, scenes, places and faces. They go first, and the Engine’s image style follows them. A new style shows on new pictures; Repaint redoes a look.",
   "ui.otomeForge.setup.imageProfileDanbooru": "Danbooru tags",
   "ui.otomeForge.setup.imageProfileDefault": "Engine default",
   "ui.otomeForge.setup.imageProfileDefaultNamed": "Engine default ({{name}})",

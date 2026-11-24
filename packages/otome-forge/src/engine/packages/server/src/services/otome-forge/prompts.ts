@@ -672,7 +672,7 @@ const BRIEF_RATING: Record<ImageRating, string> = {
   suggestive:
     "follow the actual scene; neutral moments stay neutral; allure, embraces, bare shoulders and implied intimacy are permitted only when the scene calls for them; never exposed nipples, genitals or a sex act",
   explicit:
-    'when the moment shown is sex or nudity on the page, say plainly who is undressed and how the bodies are posed and touching, and set "explicit": true',
+    'when the moment shown is sex or nudity on the page, say it in plain explicit words: who is naked, their breasts and genitals as the frame shows them, the sex act and position, and how the bodies are posed and touching; set "explicit": true',
 };
 
 /**
@@ -6422,7 +6422,9 @@ export function otomeImageTags(input: ImageTagsInput): string {
   if (use === "place") return "";
   // A higher ceiling does not change an otherwise neutral image.
   const explicit = effectiveImageRating(input) === "explicit";
-  const rating = explicit ? [tagged ? "nsfw, explicit" : "explicit adult scene"] : [use === "clothed" ? "clothed" : ""];
+  const rating = explicit
+    ? [tagged ? "nsfw, explicit, uncensored" : "explicit adult scene"]
+    : [use === "clothed" ? "clothed" : ""];
   return [...rating, ...people, explicit && !tagged ? ADULT_SENTENCE : ""].filter(Boolean).join(", ");
 }
 
@@ -6513,7 +6515,8 @@ const ADULT_NEGATIVE_ABOVE_SFW = "loli, shota, teenager";
 const RATING_NEGATIVE: Record<ImageRating, string> = {
   sfw: "nudity, nsfw, sexual content, lingerie",
   suggestive: "nudity, explicit sexual activity",
-  explicit: "",
+  // An explicit picture is drawn uncensored: tag models otherwise add the bars and mosaics their data has.
+  explicit: "censored, mosaic censoring, bar censor",
 };
 /** A part of a prompt that names or describes a minor (English: image prompts are always English). */
 const MINOR_TERMS =

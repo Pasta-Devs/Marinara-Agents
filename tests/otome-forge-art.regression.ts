@@ -1194,6 +1194,21 @@ test("a NovelAI connection paints in NovelAI's style, with one reference that th
   const cg = cgPrompt({ brief: "They share an umbrella.", people, world, style: scene, use: "cg" });
   assert.ok(cg.prompt.startsWith("1girl, 1boy, "), cg.prompt);
   assert.ok(cg.prompt.endsWith(NOVELAI_QUALITY), cg.prompt);
+  // An explicit key image is drawn uncensored.
+  const adult = normalizeWorld({
+    content: { heat: "explicit" },
+    images: { connectionId: "conn-gpt", rating: "explicit" },
+  });
+  const sex = cgPrompt({
+    brief: "Naked in the lamp room.",
+    people,
+    world: adult,
+    style: scene,
+    use: "cg",
+    explicit: true,
+  });
+  assert.match(sex.prompt, /nsfw, explicit, uncensored/u, sex.prompt);
+  assert.match(sex.negativePrompt, /mosaic censoring, bar censor/u);
   const place = placePrompt({ name: "Pier", tags: "harbour pier, night", world, style: scene });
   assert.ok(place.prompt.startsWith("background dataset, "), place.prompt);
 
