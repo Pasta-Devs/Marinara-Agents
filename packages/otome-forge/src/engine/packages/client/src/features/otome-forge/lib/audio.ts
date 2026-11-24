@@ -172,8 +172,8 @@ export interface LineVoiceRequest {
   cacheKey?: string;
 }
 
-/** A cue's part that asks for hesitation or rhythm ("stammering", "stutters", "hesitantly", "repeating himself"). */
-const REPEATING_CUE = /\b(?:stammer|stutter|hesita|repeat)/iu;
+/** A cue's part that asks for hesitation or rhythm ("stammering", "stutters", "hesitantly", "repeating", "repetitive"). */
+const REPEATING_CUE = /\b(?:stammer|stutter|hesita|repe(?:at|tit))/iu;
 
 /**
  * #2448: the cued line as the voice model gets it. ElevenLabs performs a hesitation or rhythm cue ([stammers],

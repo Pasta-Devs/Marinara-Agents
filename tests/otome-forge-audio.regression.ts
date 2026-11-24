@@ -414,6 +414,7 @@ test("#2448: hesitation and rhythm cues never reach the voice, which would say t
   assert.equal(said("[hesitantly and softly] I— I can't.").text, "[softly] I— I can't.");
   assert.equal(said("[Repeating himself] I— [stammers] I can't.").text, "I— I can't.");
   assert.equal(said("[stammering]").text, "I— I can't.", "nothing left: the line as shown");
+  assert.equal(said("[repetition, low] I— I can't. [repetitive]").text, "[low] I— I can't.");
 });
 
 test("a scene's voices are made ahead one at a time, in order; a newer list replaces the rest, and a failure stops it", async () => {
