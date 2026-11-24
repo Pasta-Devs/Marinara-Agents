@@ -208,6 +208,7 @@
   "ui.otomeForge.friends.fromNew": "Someone new",
   "ui.otomeForge.friends.hint": "Friends are platonic. They earn friendship when they speak in a chapter, and one can join in each story arc, up to as many as your love interests.",
   "ui.otomeForge.friends.metLoading": "Finding the people you’ve met…",
+  "ui.otomeForge.friends.metFailed": "The people you’ve met couldn’t be loaded.",
   "ui.otomeForge.friends.metNone": "No one else has spoken in your story yet.",
   "ui.otomeForge.friends.none": "No friends yet.",
   "ui.otomeForge.friends.notes": "Who they are",

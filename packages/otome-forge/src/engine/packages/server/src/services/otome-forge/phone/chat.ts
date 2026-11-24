@@ -672,6 +672,8 @@ export async function writeFirstIn<T>(
   load: () => Promise<T>,
   write: (loaded: T, thread: PhoneThread) => Promise<PhoneMessage[]>,
 ): Promise<PhoneMessage[] | null> {
+  // #2459: a job queued before the story ended writes nothing once it has (no model call, nothing saved).
+  if ((await deps.store.readDoc(stateId(runId), normalizeState))?.ended) return null;
   const loaded = await load();
   const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
   if (openMessages(thread).at(-1)?.who === "player") return null;

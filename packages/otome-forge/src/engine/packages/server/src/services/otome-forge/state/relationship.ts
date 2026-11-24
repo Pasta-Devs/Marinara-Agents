@@ -230,15 +230,15 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     li.chapterDelta = withDelta(current, state, key, delta);
     if (trust || tension) rememberedBy.add(effect.li);
 
-    if (effect.grievance && effect.grievance.text.trim()) {
+    // #2459: the finale settled every grievance, and none opens after it.
+    if (effect.grievance && effect.grievance.text.trim() && !state.finale) {
       const arc = context.arc ?? 0;
       // #2156: only a serious break opens his grievance (the header); anything milder is a major one.
       const opens =
         effect.grievance.by === "li" &&
         effect.grievance.severity === "rupture" &&
         li.trust <= WALKOUT_RUPTURE_TRUST &&
-        mayOpenHis(lis, effect.li, li, arc) &&
-        !state.finale; // #2459: the finale settled every grievance, and none opens after it
+        mayOpenHis(lis, effect.li, li, arc);
       const grievance: Grievance = {
         id: `g-${key}-${i}-${opened}`,
         li: effect.li,
@@ -363,7 +363,6 @@ export function applyMessageHurts(
     if (current.grievances.filter(isUnresolved).length >= GRIEVANCES_MAX) continue;
     const id = `g-msg-${createHash("sha256").update(`${ref}\n${hurt.li}`).digest("hex").slice(0, 16)}`;
     if (current.grievances.some((grievance) => grievance.id === id)) continue;
-    // #2459: the finale settled every grievance, and none opens after it.
     const opens = hurt.severity === "rupture" && mayOpenHis(lis, hurt.li, current, arc) && !state.finale;
     const fresh = !current.grievances.some((item) => item.by === "li" && isUnresolved(item) && item.text === text);
     const grievance: Grievance = {
@@ -375,7 +374,10 @@ export function applyMessageHurts(
       opened: ref,
       status: "open",
     };
-    const li: LiState = { ...current, grievances: boundGrievances([...current.grievances, grievance]) };
+    // #2459: the finale settled every grievance and none opens after it: the hurt costs what a fresh one does, unkept.
+    const li: LiState = state.finale
+      ? { ...current }
+      : { ...current, grievances: boundGrievances([...current.grievances, grievance]) };
     if (opens) {
       li.rupture = { grievanceId: id, since: at, space: 0 };
       li.grievanceArc = arc;

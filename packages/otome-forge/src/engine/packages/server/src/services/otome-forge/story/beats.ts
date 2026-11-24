@@ -1994,8 +1994,9 @@ async function finishBeat(
       current ? { ...current, undo: [...(current.undo ?? []), recorded] } : current,
     );
   }
-  await noteSideSpeakers(deps, runId, chapter.key, beat, { debugMode, review });
-  if (completedNow && deps.memory) {
+  // #2459: the read that ends the story (the epilogue's last) starts no side sprites and no memory upkeep.
+  if (!state.ended) await noteSideSpeakers(deps, runId, chapter.key, beat, { debugMode, review });
+  if (completedNow && deps.memory && !state.ended) {
     void Promise.resolve(deps.memory.maintain({ runId, debugMode })).catch((error: unknown) =>
       deps.runtime.logger.warn(
         "[otome-forge] Memory upkeep after %s stopped: %s",

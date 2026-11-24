@@ -169,6 +169,7 @@ async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: 
   const prompt = tarotCardPrompt(
     {
       card: entry.card,
+      figure: entry.figure,
       people: subjects.map((subject) => subject.person),
       references: labels,
       world: run.world,

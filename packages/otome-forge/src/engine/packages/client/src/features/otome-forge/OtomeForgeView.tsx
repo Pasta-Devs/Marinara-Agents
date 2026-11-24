@@ -112,7 +112,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // The Album's tab when it opens again after a date or a story it opened (#2303), else its own first.
   const [albumTab, setAlbumTab] = useState<AlbumTab | undefined>();
   /** #2458: a friend's invitation to hang out, accepted in Messages, waiting in Album → Hangouts. */
-  const [hangoutInvite, setHangoutInvite] = useState<HangoutInvite | null>(null);
+  // #2458: a friend's invitation accepted in Messages, kept with its story so another story never opens it.
+  const [hangoutInvite, setHangoutInvite] = useState<(HangoutInvite & { runKey: string }) | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -364,7 +365,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOpenDate={openDate("album")}
         initialTab={albumTab}
         onTabChange={setAlbumTab}
-        hangoutInvite={hangoutInvite}
+        hangoutInvite={hangoutInvite?.runKey === activeRun ? hangoutInvite : null}
         onHangoutInviteDone={() => setHangoutInvite(null)}
       />
     ) : screen === "home" && activeRun && view ? (
@@ -386,7 +387,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOpenScene={openReader("phone")}
         onOpenDate={openDate("phone")}
         onOpenHangout={(invite) => {
-          setHangoutInvite(invite);
+          setHangoutInvite({ ...invite, runKey: activeRun });
           setAlbumTab("hangouts");
           go("album");
         }}

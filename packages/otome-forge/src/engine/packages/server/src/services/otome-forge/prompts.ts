@@ -7099,6 +7099,8 @@ export const TAROT_FRAMING =
 const TAROT_NEGATIVE = "text, letters, numbers, caption, watermark, border, frame";
 
 export interface TarotCardInput {
+  /** Who the card shows as the deck keeps it; absent, its arcana's (#2458: a friend's own card shows them, whatever it is). */
+  figure?: (typeof ARCANA_FIGURES)[keyof typeof ARCANA_FIGURES];
   card: Arcana;
   /** Who the card shows (S/art/tarot-deck.ts, by ARCANA_FIGURES): none for a card of nobody. */
   people: readonly CgPerson[];
@@ -7117,7 +7119,7 @@ export interface TarotCardInput {
 export function tarotCardPrompt(input: TarotCardInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
   const { card, world, style } = input;
   const brief = ARCANA_BRIEFS[card];
-  if (ARCANA_FIGURES[card] === "none" || !input.people.length) {
+  if ((input.figure ?? ARCANA_FIGURES[card]) === "none" || !input.people.length) {
     const required = otomeImageTags({ world, people: [], use: "place", tagged: style.tagged === true });
     const negative = requiredNegative(world, "place");
     return finish(

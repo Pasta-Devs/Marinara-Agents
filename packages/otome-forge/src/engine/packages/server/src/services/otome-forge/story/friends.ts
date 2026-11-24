@@ -38,7 +38,7 @@ import { FriendBibleSchema, normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
 import { listArcs } from "./arc.js";
 import { mainChapters } from "./chapters.js";
-import { readBeat } from "./canon.js";
+import { canonicalSegments, readBeat } from "./canon.js";
 import { namesClash, namesPerson, readLines, sideScenes } from "./side-cast.js";
 
 /** Who joins: someone she has met (by their side-cast key), one of the player's cards, or someone new. */
@@ -254,10 +254,19 @@ export async function friendsHeard(
   const beats = await Promise.all(
     chapter.nodes.map((_, i) => (i === last.i ? last : readBeat(deps.store, runId, chapter.key, i))),
   );
+  // A climax game's lines as played: the answers picked, never the others (canonicalSegments).
+  const lines = (beat: Beat) => (beat.confrontation ? (canonicalSegments(beat, "") ?? []) : readLines(beat));
   const speakers = beats.flatMap((beat) =>
-    beat ? readLines(beat).flatMap((line) => (line.thought ? [] : [line.speaker])) : [],
+    beat ? lines(beat).flatMap((line) => (line.thought ? [] : [line.speaker])) : [],
   );
-  return friends.filter((friend) => speakers.some((name) => namesPerson(name, friend.name))).map((friend) => friend.id);
+  // A line that could be two friends' ("Kai" for Kai Moreno and Kai Tan) credits neither.
+  const heard = new Set(
+    speakers.flatMap((name) => {
+      const them = friends.filter((friend) => namesPerson(name, friend.name));
+      return them.length === 1 ? [them[0]!.id] : [];
+    }),
+  );
+  return friends.filter((friend) => heard.has(friend.id)).map((friend) => friend.id);
 }
 
 /**

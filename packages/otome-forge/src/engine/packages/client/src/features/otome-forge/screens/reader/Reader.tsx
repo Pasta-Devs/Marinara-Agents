@@ -308,8 +308,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const side = otherSpeaker ? reader.sceneArt?.sides?.[otherSpeaker] : undefined;
   // #2458: a friend stands in the line's face once their faces are painted.
   const sideFace = side?.friend && current?.segment.expression ? side.faces?.[current.segment.expression] : undefined;
-  const sideArt = sideFace ?? side?.url;
-  const sideUrl = sideArt && !failedArt.has(sideArt) ? sideArt : null;
+  // A face that fails to load gives way to their base sprite, which may still load.
+  const sideUrl = [sideFace, side?.url].find((url): url is string => !!url && !failedArt.has(url)) ?? null;
   const speaker = useSpeakerSprite(cg || sideUrl ? null : otherSpeaker, reader.lineKey);
   const sideState = side?.art?.state;
   // A painted sprite on screen (not under a key image) can be painted again, as the place can; it stays until the new

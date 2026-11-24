@@ -564,27 +564,30 @@ export async function planNextChapter(
             signal,
             debugMode,
           });
-    const arc: StoryArc =
+    // #2459: a finale in a story that never had an arc (one from before arcs) is planned with none.
+    const arc: StoryArc | null =
       covering ??
       finaleArc ??
-      (await planArc(
-        deps,
-        runId,
-        {
-          world: run.world,
-          player: await withPersonaStoryAbout(deps.runtime, run.player),
-          units,
-          state: run.state,
-          memory: arcMemory!.text,
-          previous: arcs,
-          chapters: mains,
-          number: arcs.length + 1,
-          from: number,
-        },
-        { debugMode, ...(signal ? { signal } : {}), memory: arcMemory! },
-      ));
-    const riddle = finale ? false : riddleChapter(arc, number);
-    const judgment = riddle || finale ? null : await judgmentFor(deps.store, runId, arc, mains, number);
+      (finale
+        ? null
+        : await planArc(
+            deps,
+            runId,
+            {
+              world: run.world,
+              player: await withPersonaStoryAbout(deps.runtime, run.player),
+              units,
+              state: run.state,
+              memory: arcMemory!.text,
+              previous: arcs,
+              chapters: mains,
+              number: arcs.length + 1,
+              from: number,
+            },
+            { debugMode, ...(signal ? { signal } : {}), memory: arcMemory! },
+          ));
+    const riddle = finale || !arc ? false : riddleChapter(arc, number);
+    const judgment = riddle || finale || !arc ? null : await judgmentFor(deps.store, runId, arc, mains, number);
     // #2459: the finale tells the mystery's truth if no arc has yet, nor schedules it for this very chapter.
     const truthTold =
       finale &&
@@ -613,7 +616,7 @@ export async function planNextChapter(
       // saved below for its scenes.
       recallLed: lead,
       chooseBy: [
-        arc.plan.find((entry) => entry.n === number)?.purpose ?? "",
+        arc?.plan.find((entry) => entry.n === number)?.purpose ?? "",
         others.length ? `${leadName} leads, with ${others.join(", ")}.` : `${leadName} leads.`,
         thoughts?.text ?? "",
       ],
@@ -689,7 +692,7 @@ export async function planNextChapter(
       kind: "main",
       number,
       lead,
-      arc: arc.number,
+      ...(arc ? { arc: arc.number } : {}),
       ...plan,
       ...(finale ? { ending: "finale" as const } : {}),
       plannedAt: new Date().toISOString(),

@@ -290,7 +290,10 @@ export async function answerInvite(
         return withScene({ ...current, lis: { ...current.lis, [li]: { ...his, upset: null, asked: at } } }, key);
       })
       .catch(async (error: unknown) => {
-        await deps.store.removeDoc(chapterId(runId, key)).catch(() => false);
+        // Another Accept can share this scene (the same key from the same state) and have registered it: only a
+        // scene the story does not refer to goes.
+        const now = await deps.store.readDoc(stateId(runId), normalizeState).catch(() => null);
+        if (!now?.chapters[key]) await deps.store.removeDoc(chapterId(runId, key)).catch(() => false);
         throw error;
       });
     if (!state) throw notFound("Otome Hearth story");

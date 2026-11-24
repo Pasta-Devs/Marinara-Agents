@@ -46,11 +46,12 @@ import {
 import { applyMessageHurts } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
 import { namesClash } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/side-cast.ts";
 import { endedGuard } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/ended.ts";
+import { listArcs } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";
 import { endingView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/ending.ts";
 import { askWingman } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-rewards.ts";
 import { waitingRank } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-stories.ts";
 import { friendCards } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friends.ts";
-import { CAST, HE, KAI, MIR, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { CAST, HE, KAI, MIR, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 function friendBible(changes: Partial<FriendBible> = {}): FriendBible {
   return {
@@ -341,6 +342,23 @@ test("End the Story is offered once every love interest stands at level 20, and 
   const refused = await t.call("POST", "/runs/:run/ending");
   assert.equal(refused.status, 409);
   assert.equal(t.calls.length, 0);
+
+  // A story from before arcs, every love interest at 20: the finale is planned with no arc, never planning one.
+  const old = await storyWorld({ runKey: "r-ending-bbbbbb", replies: [json(planReply())] });
+  await old.store.updateDoc(runDocTarget("state", stateIdOf(old.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: Object.fromEntries(Object.entries(state.lis).map(([id, li]) => [id, { ...li, ...at20 }])),
+    chapters: Object.fromEntries(
+      Object.keys(state.lis).flatMap((id) =>
+        Array.from({ length: 10 }, (_, i) => [`story-bond-${id}-${11 + i}`, { beatsRead: 1, completed: "x" }]),
+      ),
+    ),
+  }));
+  const finale = await old.call("POST", "/runs/:run/ending");
+  assert.equal(finale.status, 200, JSON.stringify(finale.body));
+  assert.equal(finale.body.chapter.ending, "finale");
+  assert.equal(finale.body.chapter.arc, undefined, "in no arc");
+  assert.deepEqual(await listArcs(old.store, old.runId), [], "and none planned");
 });
 
 test("an ended story refuses what plays and keeps what only looks", async () => {
@@ -402,6 +420,7 @@ test("the finale read to its end settles every grievance, both ways, and none op
           ],
           rupture: { grievanceId: "g1", since: "x", space: 0 },
           upset: { since: "x" },
+          points: 500,
         },
         [MIR]: {},
       },
@@ -431,4 +450,6 @@ test("the finale read to its end settles every grievance, both ways, and none op
     arc: 9,
   });
   assert.equal(hisHurt.state.lis[KAI]!.rupture, null, "nor his");
+  assert.equal(hisHurt.state.lis[KAI]!.grievances.length, read.lis[KAI]!.grievances.length, "nor any grievance");
+  assert.equal(hisHurt.state.lis[KAI]!.points, read.lis[KAI]!.points - 15, "though it still hurts");
 });

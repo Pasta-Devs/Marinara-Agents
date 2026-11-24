@@ -7,7 +7,7 @@
 // text call) and, with an image connection, paints their portrait (Your cast), so the dialog says what it costs. The
 // server refuses a friend when the story has as many friends as love interests, or one joined in this arc already
 // (StoryView.friendBlock); the button then explains why it waits.
-import { useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookHeart, Check, Handshake, HeartHandshake, Star, UserPlus } from "lucide-react";
@@ -15,6 +15,7 @@ import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { CostHint, usePaintsByItself } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useCharacterOptions } from "../../hooks/use-engine-resources";
 import { runPath, storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
@@ -287,6 +288,8 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
     queryFn: () => otome.get<{ met: Met[] }>(`${runPath(runKey)}/friends/met`),
   });
   const people = met.data?.met ?? [];
+  // One native radio group for the source, apart from the pronoun radios, so the arrow keys move within it.
+  const source = useId();
   const [mode, setMode] = useState<"met" | "card" | "new">("met");
   const [metKey, setMetKey] = useState("");
   const [cardId, setCardId] = useState("");
@@ -382,21 +385,27 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
           ) : null}
           <fieldset className="of-field">
             <label>
-              <input type="radio" checked={mode === "met"} onChange={() => setMode("met")} />{" "}
+              <input type="radio" name={source} checked={mode === "met"} onChange={() => setMode("met")} />{" "}
               {t("ui.otomeForge.friends.fromMet")}
             </label>
             <label>
-              <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
+              <input type="radio" name={source} checked={mode === "card"} onChange={() => setMode("card")} />{" "}
               {t("ui.otomeForge.story.newcomerCard")}
             </label>
             <label>
-              <input type="radio" checked={mode === "new"} onChange={() => setMode("new")} />{" "}
+              <input type="radio" name={source} checked={mode === "new"} onChange={() => setMode("new")} />{" "}
               {t("ui.otomeForge.friends.fromNew")}
             </label>
           </fieldset>
           <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
           {mode === "met" ? (
-            people.length ? (
+            met.isError ? (
+              <RetryNotice
+                message={t("ui.otomeForge.friends.metFailed")}
+                onRetry={() => void met.refetch()}
+                retrying={met.isFetching}
+              />
+            ) : people.length ? (
               <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.friends.fromMet")}>
                 {people.map((person) =>
                   tile(person.key, person.name, metKey === person.key, () => setMetKey(person.key)),
