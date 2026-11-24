@@ -4,7 +4,8 @@
 // Steps: `world-plan`, then `bible:<li>` for each love interest, then (with an image connection) `paint:<li>` and
 // `paint:player`. A new world paints them by itself once the text steps are through, unless Ask before painting or
 // prompt review holds them for the player's consent; a world that gains its connection later always waits for it.
-// After a love interest's look is painted here, his faces are queued (art/expressions.ts; only while Expressions is on).
+// After a love interest's look is painted here, his faces are queued next, in the high lane (art/expressions.ts; only
+// while Expressions is on).
 // A love interest who arrives mid-story (S/story/introduce.ts) gets his steps on the next read (forgeCast).
 // - Text steps run on the foreground lane, in the run's serial queue (runForeground), while the player watches the
 //   progress screen. Each re-reads its step inside the queue and runs only while it is still `pending`.
@@ -459,12 +460,13 @@ async function runPaintSteps(deps: ForgeDeps, runId: string, debugMode: boolean)
     }
     try {
       const paint = await paintWithStep(deps, runId, owner, { debugMode });
-      // His faces for the look just painted, in the background, as a change of look queues them (routes/wardrobe.ts).
+      // His faces for the look just painted, as a change of look queues them (routes/wardrobe.ts), but in the high lane
+      // (#2448), so they come right after his portrait rather than behind the scene art painted meanwhile.
       if (paint.state === "ready" && unit) {
         deps.art?.queueExpressions(
           runId,
           { segments: [{ speaker: unit.name, text: "…" }], choices: [] },
-          { debugMode },
+          { debugMode, lane: "high" },
         );
       }
     } catch (error) {

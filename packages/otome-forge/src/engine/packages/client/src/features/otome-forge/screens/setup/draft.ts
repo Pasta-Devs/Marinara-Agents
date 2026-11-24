@@ -12,7 +12,8 @@ import {
   type ContentSettings,
   type ImageRating,
 } from "../../shared/content";
-import type { Pronouns, SetupInput } from "../../shared/api-types";
+import type { Connections, Pronouns, SetupAudio, SetupInput } from "../../shared/api-types";
+import { normalizeOtomeAudio } from "../../shared/audio";
 import { ARCHETYPE_IDS, type ArchetypeId } from "../../shared/archetypes";
 import { OWN_BANNED_PHRASES_MAX } from "../../shared/banned-phrases";
 import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../shared/home";
@@ -150,6 +151,15 @@ export interface SetupDraft {
   images: DraftImages;
   connections: DraftConnections;
   messages: DraftMessages;
+  /** #2448: Settings → Audio's voices and music, chosen before the prologue is written. */
+  audio: SetupAudio;
+}
+
+/** The setup's voices and music from any stored or default audio settings (the kit bounds each field). */
+export function setupAudioOf(value: unknown): SetupAudio {
+  const { tts, otherVoices, emotionCues, generate, chapterThemes, musicFolder, audioConnectionId } =
+    normalizeOtomeAudio(value);
+  return { tts, otherVoices, emotionCues, generate, chapterThemes, musicFolder, audioConnectionId };
 }
 
 /** A pronoun choice nobody made yet: the picker starts blank. */
@@ -181,6 +191,7 @@ export function emptyDraft(): SetupDraft {
     },
     connections: { narration: "", structured: "", chat: "", compress: "" },
     messages: { daily: "0", squabbles: "0", invites: "0" },
+    audio: setupAudioOf(undefined),
   };
 }
 
@@ -281,6 +292,8 @@ export function readDraft(value: unknown): SetupDraft {
       squabbles: str(messages.squabbles, 3, draft.messages.squabbles),
       invites: str(messages.invites, 3, draft.messages.invites),
     },
+    // A draft saved before #2448 has none: everything starts off, as a story then did.
+    audio: setupAudioOf(value.audio),
   };
 }
 
@@ -404,13 +417,27 @@ export function stepProblem(draft: SetupDraft, step: SetupStep, textConnections:
 }
 
 /**
+ * The connections as POST /runs and Settings → Connections save them ("" for a job is Same as Story; `embeddings` ""
+ * the built-in embedding model). A job keeps the connection picked for it, even the story's own, so a later change of
+ * the story connection never turns it into Same as Story.
+ */
+export function savedConnections(form: DraftConnections, embeddings = ""): Connections {
+  return {
+    narration: form.narration,
+    ...(form.structured ? { structured: form.structured } : {}),
+    ...(form.chat ? { chat: form.chat } : {}),
+    ...(form.compress ? { compress: form.compress } : {}),
+    ...(embeddings ? { embeddings } : {}),
+  };
+}
+
+/**
  * The POST /runs body. Call only once stepProblem(draft, "review") is null. Content and the image rating are sent as
  * chosen (custom limits trimmed, fixed limits as Lines), never quietly lowered: without the 18+ gate the server refuses
  * gated settings (403 `age-gate`) and the wizard says so, so the world made is the one the Review step showed.
  */
 export function toSetupInput(draft: SetupDraft): SetupInput {
   const pronouns = (choice: PronounChoice) => resolvePronouns(choice) ?? { ...PRONOUN_PRESETS.they };
-  const optional = (id: string) => (id && id !== draft.connections.narration ? id : undefined);
   return {
     ...(draft.title.trim() ? { title: draft.title.trim() } : {}),
     ...(draft.writingStyle.trim() ? { writingStyle: draft.writingStyle.trim() } : {}),
@@ -436,12 +463,8 @@ export function toSetupInput(draft: SetupDraft): SetupInput {
     ),
     content: enforceContent(draft.content, true),
     images: { ...draft.images },
-    connections: {
-      narration: draft.connections.narration,
-      ...(optional(draft.connections.structured) ? { structured: draft.connections.structured } : {}),
-      ...(optional(draft.connections.chat) ? { chat: draft.connections.chat } : {}),
-      ...(optional(draft.connections.compress) ? { compress: draft.connections.compress } : {}),
-    },
+    connections: savedConnections(draft.connections),
     ...messageNumbersOf(draft.messages),
+    audio: { ...draft.audio },
   };
 }

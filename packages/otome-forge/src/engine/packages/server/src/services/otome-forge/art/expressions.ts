@@ -3,17 +3,19 @@
 // ──────────────────────────────────────────────
 // The kit's createForgeStoryExpressions paints, for each love interest who speaks in a beat, his five faces (SH/faces.ts:
 // tender, flustered, cold, hurt, angry) as edits of his look, in the background and in the image connection's low
-// lane, so places, CGs and taps go first. Its rules hold as they are: a set is marked pending before its first paid
-// image and each face is filed as it lands; a failed set, or one a restart left pending, is never repainted until
-// expressions are turned on again after it (images.expressionsSince), and then only its missing faces; turning
-// expressions off parks the set as stopped before the next paid call. Only love interests get faces in R1, so the
-// cast holds no protagonist. Every face carries the world's image rating and an adult tag (S/prompts.ts expressionPrompt).
+// lane, so places, CGs and taps go first; a new story's (the forge's, #2448) take the high lane, so each love interest's
+// faces come right after his portrait instead of behind the prologue's scene art. Its rules hold as they are: a set is
+// marked pending before its first paid image and each face is filed as it lands; a failed set, or one a restart left
+// pending, is never repainted until expressions are turned on again after it (images.expressionsSince), and then only
+// its missing faces; turning expressions off parks the set as stopped before the next paid call. Only love interests
+// get faces in R1, so the cast holds no protagonist. Every face carries the world's image rating and an adult tag (S/prompts.ts expressionPrompt).
 //
 // The kit builds one paint per unit; its client is made per run here, so each face's prompt reads that run's world
 // (rating, style) right before the call. createOtomeArt is created once per activation: queueExpressions after each
 // beat is served, queueScenePaints for a beat's places and CG once written and prepareSceneCg for a CG still without
 // a record once served (art/cg.ts), dispose on teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs
 // each run's sticker chain from GET /runs/:run.
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
 import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FACE_LOOKS, FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -26,7 +28,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt, startBeatCg } from "./cg.js";
 import { engineArtPath } from "./engine-art.js";
 import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
-import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
+import { imagesOf, paintSlot, updateIfChanged, type ArtDeps, type PaintLane } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
 import { type ImagePrompt, LOOK_SIZE, expressionPrompt } from "../prompts.js";
 import { queueStickers, type StickerQueueOptions } from "./stickers.js";
@@ -66,8 +68,10 @@ export interface OtomeArt {
   /**
    * Queues the five faces of every love interest who speaks in `beat` whose current look has no ready set. Returns at
    * once; painting happens in the background. Call it each time a beat is served (written or read from the store).
+   * Faces wait in the `low` lane behind places and CGs; #2448: the forge asks for `high`, so a new story's love
+   * interests get their faces right after their portraits.
    */
-  queueExpressions(runId: string, beat: ExpressionBeat, options: { debugMode: boolean }): void;
+  queueExpressions(runId: string, beat: ExpressionBeat, options: { debugMode: boolean; lane?: PaintLane }): void;
   /**
    * Paints the beat's new places and its CG in the background, or leaves them waiting for the tap (Ask before
    * painting, or `review`). The beat writer calls it with the places once a beat is written or rewritten; do not await
@@ -116,6 +120,14 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
   /** The debugMode of each run's latest request: the faces it queued log their prompts in debug mode. */
   const debugMode = new Map<string, boolean>();
   const running = new Map<string, Promise<unknown>>();
+  /**
+   * The sets (by the kit's dedupe key) queued in the `high` lane, until their job starts. ponytail: a set the kit then
+   * declines to paint (already ready, or failed) keeps its mark, so that unit's next set paints high once; a mark per
+   * look is the upgrade if that ever matters.
+   */
+  const urgent = new Set<string>();
+  /** The lane of the set being painted, read by each of its faces' slots. */
+  const lane = new AsyncLocalStorage<PaintLane>();
   let disposed = false;
   const active = () => !disposed;
   const images = imagesOf(deps);
@@ -180,11 +192,12 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
         return id ? { id, provider: "image_generation", model: "" } : null;
       },
       client: () => client,
-      slot: (target, task) => paintSlot(target.id, task, "low"),
+      slot: (target, task) => paintSlot(target.id, task, lane.getStore() ?? "low"),
       dedupe(key, task) {
+        const high = urgent.delete(key);
         const current = running.get(key) as ReturnType<typeof task> | undefined;
         if (current) return current;
-        const started = task().finally(() => running.delete(key));
+        const started = lane.run(high ? "high" : "low", task).finally(() => running.delete(key));
         running.set(key, started);
         return started;
       },
@@ -231,8 +244,18 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
         const run = await readRun(runId);
         if (!run || disposed) return;
         // Love interests only: the kit matches each line's speaker to these names.
-        const cast = (await readCastUnits(store, runId)).map((unit) => ({ name: unit.name }));
-        expressionsOf(runId).queue(runId, run, cast, beat);
+        const units = await readCastUnits(store, runId);
+        if (options.lane === "high" && run.world.images.expressions) {
+          const speakers = new Set(beat.segments.map((segment) => segment.speaker));
+          // The kit's dedupe key for a unit's set (createForgeStoryExpressions schedule).
+          for (const unit of units) if (speakers.has(unit.name)) urgent.add(`${unitId(runId, unit.id)}:expressions`);
+        }
+        expressionsOf(runId).queue(
+          runId,
+          run,
+          units.map((unit) => ({ name: unit.name })),
+          beat,
+        );
       })().catch((error: unknown) =>
         runtime.logger.warn(
           "[otome-forge] expression portraits not queued: %s",

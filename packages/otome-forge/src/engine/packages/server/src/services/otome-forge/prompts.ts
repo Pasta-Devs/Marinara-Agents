@@ -2391,9 +2391,10 @@ const EXITS_RULE =
 /**
  * 0.34.0: the world's Emotion cues (Settings, Audio, Voices). S/story/beats.ts withoutCues keeps them from the reader and
  * sends the line with them to the voice model (Segment.voiced). The scene prompts carry it only while the setting is on.
+ * #2448: no hesitation or rhythm cues, which ElevenLabs performs by repeating words (C/lib/audio.ts voicedText).
  */
 const EMOTION_CUES_RULE =
-  "- Emotion cues: in every spoken line (a segment with a speaker that is not a thought), write in square brackets how the line is said and the sounds made while saying it: the emotion, the delivery, and sounds such as gasps, sighs, laughs, sobs or moans, e.g. \"[hushed, breathless whisper] I love you. [gasps]\". Put a cue before the words it colours, or where the sound happens; keep each cue a few English words. Everything outside the brackets is spoken aloud as written. Never use square brackets in narration, thoughts, a choice's label or the protagonist's selection.";
+  "- Emotion cues: in every spoken line (a segment with a speaker that is not a thought), write in square brackets how the line is said and the sounds made while saying it: the emotion, the tone of voice, and sounds such as gasps, sighs, laughs, sobs or moans, e.g. \"[hushed, breathless whisper] I love you. [gasps]\". Put a cue before the words it colours, or where the sound happens; keep each cue a few English words, and never cue stammering, stuttering, hesitation or repetition, which the voice performs by saying words twice. Everything outside the brackets is spoken aloud as written. Never use square brackets in narration, thoughts, a choice's label or the protagonist's selection.";
 
 /** Only while the dialogue is voiced: nothing performs a cue otherwise (Dottore on #2325). */
 const emotionCues = (world: Pick<World, "audio">) =>

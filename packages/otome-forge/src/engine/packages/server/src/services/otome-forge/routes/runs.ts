@@ -6,7 +6,8 @@
 // POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge (with
 //                                             an image connection, the cast's looks paint by themselves unless Ask
 //                                             before painting or prompt review holds them); #2424: `setup` may set
-//                                             Settings → Connections' dailyMessages, groupSquabbles and dateInvites
+//                                             Settings → Connections' dailyMessages, groupSquabbles and dateInvites,
+//                                             and #2448 Settings → Audio's voices and music (`audio`)
 // GET  /runs/:run                          → {view: RunView}; with the stickers the player has (#2044), whose owed
 //                                             sets and paints it queues in the background, as it queues the love
 //                                             interests' missing personality quiz answers (#2174), long-term recall's
@@ -40,6 +41,7 @@ import { LIS_MAX, LIS_MIN } from "../../../../../client/src/features/otome-forge
 import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/shared/archetypes.js";
 import { OWN_BANNED_PHRASES_MAX } from "../../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { normalizeOtomeAudio } from "../../../../../client/src/features/otome-forge/shared/audio.js";
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
@@ -160,6 +162,8 @@ const SetupBody = z.object({
     dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
     groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
     dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+    // #2448: Settings → Audio's voices and music; the kit bounds and defaults each field, as POST /runs/:run/audio/settings.
+    audio: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 const AgeGateBody = z.object({ confirm: z.literal(true) });
@@ -326,6 +330,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         ...(setup.dailyMessages ? { dailyMessages: setup.dailyMessages } : {}),
         ...(setup.groupSquabbles ? { groupSquabbles: setup.groupSquabbles } : {}),
         ...(setup.dateInvites ? { dateInvites: setup.dateInvites } : {}),
+        // The prologue is written with the voices and cues chosen here.
+        ...(setup.audio ? { audio: { ...current.audio, ...normalizeOtomeAudio(setup.audio) } } : {}),
       }));
       await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
         ...index,

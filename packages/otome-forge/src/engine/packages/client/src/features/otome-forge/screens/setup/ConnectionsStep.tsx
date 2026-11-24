@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge setup, step 5: connections. One text connection for the story, optional ones for planning, the phone
-// and memory, and an optional image connection (the game is fully playable without one). "Edit" opens the Engine's
+// and memory, an optional image connection (the game is fully playable without one), and (#2448) Settings → Audio's
+// voices and music, so the prologue is written and played with them. "Edit" opens the Engine's
 // own connection editor. The same controls serve Settings → Connections and Settings → Images. A text connection set
 // to a context window under STORY_CONTEXT_MIN gets a warning (#2066): a story prompt carries the story's timeline and
 // the previous chapter in full, so a smaller one soon runs out of room. It is never refused. The memory banner's way
@@ -24,6 +25,7 @@ import {
   type SetupDraft,
 } from "./draft";
 import { ConnectionSelect, Section, Switch, TextField } from "./parts";
+import { VoicesAndMusic } from "../settings/Audio";
 
 /** The context window, in tokens, a story's text connections should have (#2066). */
 const STORY_CONTEXT_MIN = 32_000;
@@ -358,6 +360,10 @@ export function ConnectionsStep({ draft, update }: ConnectionsStepProps) {
           onChange={(value) => update((current) => ({ ...current, images: { ...current.images, ...value } }))}
         />
       </Section>
+      <VoicesAndMusic
+        value={draft.audio}
+        onChange={(change) => update((current) => ({ ...current, audio: { ...current.audio, ...change } }))}
+      />
     </div>
   );
 }

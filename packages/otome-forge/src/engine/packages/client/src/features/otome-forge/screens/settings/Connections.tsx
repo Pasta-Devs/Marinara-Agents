@@ -19,7 +19,7 @@ import { useRecallIndex } from "../../hooks/use-memory";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { Connections, RunView } from "../../shared/api-types";
 import { ConnectionControls, MessageNumbers } from "../setup/ConnectionsStep";
-import { messageNumbersOf, type DraftConnections, type DraftMessages } from "../setup/draft";
+import { messageNumbersOf, savedConnections, type DraftConnections, type DraftMessages } from "../setup/draft";
 import { ConnectionSelect } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 import { embeddingOptions } from "../../lib/recall-choice";
@@ -31,18 +31,6 @@ const toForm = (connections: Connections): DraftConnections => ({
   chat: connections.chat ?? "",
   compress: connections.compress ?? "",
 });
-
-/** The connections as saved; `embeddings` "" is the built-in embedding model. */
-function toConnections(form: DraftConnections, embeddings: string): Connections {
-  const own = (id: string) => (id && id !== form.narration ? id : undefined);
-  return {
-    narration: form.narration,
-    ...(own(form.structured) ? { structured: form.structured } : {}),
-    ...(own(form.chat) ? { chat: form.chat } : {}),
-    ...(own(form.compress) ? { compress: form.compress } : {}),
-    ...(embeddings ? { embeddings } : {}),
-  };
-}
 
 /** The story's three numbers, as the fields show them. */
 const messagesOf = (world: RunView["world"]): DraftMessages => ({
@@ -77,8 +65,8 @@ function StoryConnections({
   const numbers = messageNumbersOf(messagesText);
   const moved = (field: keyof typeof stored) => !!numbers && numbers[field] !== stored[field];
   const connectionsChanged =
-    JSON.stringify(toConnections(form, storedEmbeddings)) !==
-    JSON.stringify(toConnections(toForm(run.world.connections), storedEmbeddings));
+    JSON.stringify(savedConnections(form, storedEmbeddings)) !==
+    JSON.stringify(savedConnections(toForm(run.world.connections), storedEmbeddings));
   const embeddingsChanged = embeddings !== storedEmbeddings;
   const changed =
     connectionsChanged ||
@@ -131,7 +119,7 @@ function StoryConnections({
           if (!numbers) return;
           // The connections' note is about scenes; the embedding model and each number get their own.
           void settings.save(
-            { connections: toConnections(form, embeddings), ...numbers },
+            { connections: savedConnections(form, embeddings), ...numbers },
             t(
               connectionsChanged
                 ? "ui.otomeForge.settings.saved"
