@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind, RunLiView } from "../../shared/api-types";
 import { hisSideLiOf } from "../../shared/arcs";
+import { friendAirOfKey } from "../../shared/friends";
 import { birthdayOfKey } from "../../shared/birthdays";
 import { clearAirOfKey } from "../../shared/dates";
 import { figurineLiOf } from "../../shared/shop";
@@ -56,7 +57,13 @@ export function chapterTitle(
   lis: ReadonlyArray<Pick<RunLiView, "id" | "name">>,
 ): string {
   const birthday = birthdayOfKey(chapter.key);
-  const clearAir = clearAirOfKey(chapter.key);
+  // #2458: a friend's scene to clear the air is named as a love interest's is.
+  const clearAir =
+    clearAirOfKey(chapter.key) ??
+    (() => {
+      const friend = friendAirOfKey(chapter.key);
+      return friend ? { li: friend.id } : null;
+    })();
   const li = birthday?.li ?? clearAir?.li ?? figurineLiOf(chapter.key);
   const name = li ? lis.find((entry) => entry.id === li)?.name : undefined;
   if (name && birthday) return t("ui.otomeForge.birthday.sceneTitle", { name, year: birthday.year });
@@ -68,10 +75,29 @@ export function chapterTitle(
   return his ? t("ui.otomeForge.arcs.sideChapterTitle", { name: his, title }) : title;
 }
 
-/** A chapter's eyebrow: "Chapter 3", or its kind. */
+/** #2458: a friend's own story's eyebrow, by its kind. */
+const FRIEND_KIND_KEYS = {
+  rank: "ui.otomeForge.friends.eyebrowRank",
+  mend: "ui.otomeForge.friends.eyebrowMend",
+  "clear-air": "ui.otomeForge.friends.eyebrowAir",
+  hangout: "ui.otomeForge.friends.eyebrowHangout",
+} as const;
+
+/** A chapter's eyebrow: "Chapter 3", or its kind; #2458 a friend's story by its kind; #2459 the finale or epilogue. */
 export function chapterEyebrowKey(
-  chapter: Pick<ChapterView, "kind" | "number"> & { arc?: number },
-): [string, { number?: number; arc?: number }] {
+  chapter: Pick<ChapterView, "kind" | "number"> & {
+    arc?: number;
+    friendStory?: { kind: keyof typeof FRIEND_KIND_KEYS; friends: readonly string[]; level?: number };
+    ending?: "finale" | "epilogue";
+  },
+  people: ReadonlyArray<Pick<RunLiView, "id" | "name">> = [],
+): [string, { number?: number; arc?: number; name?: string; level?: number }] {
+  if (chapter.ending === "finale") return ["ui.otomeForge.ending.eyebrowFinale", {}];
+  if (chapter.ending === "epilogue") return ["ui.otomeForge.ending.eyebrowEpilogue", {}];
+  if (chapter.friendStory) {
+    const name = people.find((person) => person.id === chapter.friendStory!.friends[0])?.name ?? "";
+    return [FRIEND_KIND_KEYS[chapter.friendStory.kind], { name, level: chapter.friendStory.level ?? 1 }];
+  }
   if (chapter.kind !== "main") return [KIND_KEYS[chapter.kind], {}];
   // #1983 M4: a main chapter in an arc names it beside its number.
   return chapter.arc
@@ -215,7 +241,9 @@ export function ReaderControls(props: ReaderControlsProps) {
     };
   }, [expanded]);
   const { chapter, node, nodeCount, replay, place, tags, reading } = props;
-  const [eyebrowKey, eyebrowValues] = chapter ? chapterEyebrowKey(chapter) : ["ui.otomeForge.common.screenStory", {}];
+  const [eyebrowKey, eyebrowValues] = chapter
+    ? chapterEyebrowKey(chapter, props.lis)
+    : ["ui.otomeForge.common.screenStory", {}];
   const frameKey = frameLabelKey(chapter && node !== null ? chapter.nodes[node] : null);
   const tagKeys = tags.flatMap((tag) => tagLabelKey(tag) ?? []);
   const exitLabel = t("ui.otomeForge.reader.exit");

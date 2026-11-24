@@ -478,7 +478,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       {showUi ? (
         <ReaderControls
           chapter={chapter}
-          lis={view.lis}
+          lis={[...view.lis, ...(view.friends ?? [])]}
           node={reader.node}
           nodeCount={reader.nodeCount}
           replay={!!reader.position?.replay && reading}
@@ -774,7 +774,7 @@ function BottomPanel(props: BottomPanelProps) {
   if (reader.finished && chapter) {
     return (
       <ChapterEnd
-        title={chapterTitle(t, chapter, view.lis)}
+        title={chapterTitle(t, chapter, [...view.lis, ...(view.friends ?? [])])}
         prologue={chapter.kind === "prologue"}
         grants={reader.chapterGrants}
         arcNews={reader.arcNews}

@@ -21,6 +21,7 @@ import type { LiId, PhoneDueResult, RunView } from "../../shared/api-types";
 import { GROUP_THREAD } from "../../shared/home";
 import { homeQueryKey } from "../home/HomeScreen";
 import type { DateOpen } from "../dates/DateNight";
+import type { HangoutInvite } from "../album/Hangouts";
 import { Thread } from "./Thread";
 import { ThreadList } from "./ThreadList";
 
@@ -43,6 +44,8 @@ const heardDaily = new Map<string, string | null>();
 /** The same for each run's newest group chat squabble (#2154), and its newest date invitation (#2424). */
 const heardGroup = new Map<string, string | null>();
 const heardInvite = new Map<string, string | null>();
+const heardFriend = new Map<string, string | null>();
+const heardHangout = new Map<string, string | null>();
 
 /** Whether `latest` is new beside the mark `heard` keeps for this run (see useDailyMessages); keeps it as the mark. */
 function heardNew(heard: Map<string, string | null>, runKey: string, latest: { li: LiId; at: string } | null) {
@@ -72,7 +75,13 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
   const on =
     !!runKey &&
     view?.forge.phase === "ready" &&
-    ((view.world.dailyMessages ?? 0) > 0 || (view.world.groupSquabbles ?? 0) > 0 || (view.world.dateInvites ?? 0) > 0);
+    !view.ended &&
+    ((view.world.dailyMessages ?? 0) > 0 ||
+      (view.world.groupSquabbles ?? 0) > 0 ||
+      (view.world.dateInvites ?? 0) > 0 ||
+      // #2458: her friends' weekly messages and hangout invitations.
+      (view.world.friendMessages ?? 0) > 0 ||
+      (view.world.friendInvites ?? 0) > 0);
   useEffect(() => {
     if (!on || !runKey) return;
     let stopped = false;
@@ -87,6 +96,9 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
             heardNew(heardGroup, runKey, due.group?.latest ?? null) ? GROUP_THREAD : null,
             // #2424: a date invitation lands in his thread as a daily message does.
             heardNew(heardInvite, runKey, due.invite?.latest ?? null) ? due.invite!.latest!.li : null,
+            // #2458: so does a friend's message or invitation to hang out.
+            heardNew(heardFriend, runKey, due.friend?.latest ?? null) ? due.friend!.latest!.li : null,
+            heardNew(heardHangout, runKey, due.hangout?.latest ?? null) ? due.hangout!.latest!.li : null,
           ].filter((thread) => thread !== null);
           if (landed.length) {
             void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
@@ -118,6 +130,8 @@ interface PhoneScreenProps {
   onOpenScene?: (key: string) => void;
   /** #2424: opens his date invitation's looks step, or the date it opened. */
   onOpenDate?: (open: DateOpen) => void;
+  /** #2458: a friend's invitation to hang out, accepted: Album → Hangouts plans it with them. */
+  onOpenHangout?: (invite: HangoutInvite) => void;
 }
 
 /** Starts the protagonist's stickers once, the first time the phone opens with images on (#2044). */
@@ -138,7 +152,15 @@ function useStartStickers(runKey: string, view: RunView) {
   }, [due, otome, queryClient, runKey]);
 }
 
-export function PhoneScreen({ runKey, view, open, onOpenChange, onOpenScene, onOpenDate }: PhoneScreenProps) {
+export function PhoneScreen({
+  runKey,
+  view,
+  open,
+  onOpenChange,
+  onOpenScene,
+  onOpenDate,
+  onOpenHangout,
+}: PhoneScreenProps) {
   useStartStickers(runKey, view);
   // Focus follows the player inside the phone: into a thread they opened here, back to its row when they leave it.
   // A thread opened from Home's Reply leaves for a list read for the first time, whose rows come after it loads: the
@@ -178,7 +200,8 @@ export function PhoneScreen({ runKey, view, open, onOpenChange, onOpenScene, onO
       />
     );
   }
-  const li = open ? (view.lis.find((item) => item.id === open.li) ?? null) : null;
+  // #2458: one of her friends has a thread too.
+  const li = open ? ([...view.lis, ...(view.friends ?? [])].find((item) => item.id === open.li) ?? null) : null;
   if (open && li) {
     return (
       <Thread
@@ -197,6 +220,7 @@ export function PhoneScreen({ runKey, view, open, onOpenChange, onOpenScene, onO
         }}
         onOpenScene={onOpenScene}
         onOpenDate={onOpenDate}
+        {...(onOpenHangout ? { onOpenHangout } : {})}
       />
     );
   }

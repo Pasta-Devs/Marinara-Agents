@@ -822,8 +822,7 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     .map((record) => normalizeChapter(record.data))
     // #2458: hangouts are played from the Album's Hangouts tab, as dates are from theirs.
     .filter(
-      (chapter): chapter is Chapter =>
-        !!chapter && chapter.kind !== "date" && chapter.friendStory?.kind !== "hangout",
+      (chapter): chapter is Chapter => !!chapter && chapter.kind !== "date" && chapter.friendStory?.kind !== "hangout",
     )
     .sort(byStoryOrder);
   const arcs = await listArcs(deps.store, runId);

@@ -12,13 +12,18 @@ interface DockProps {
   onSelect: (screen: DockScreen) => void;
   /** How many unseen items the Wardrobe and the Album hold (absent from an older server). */
   unseen?: UnseenCounts;
+  /** #2459: the story has ended: Games and Wish, where only playing happens, leave the menu. */
+  ended?: boolean;
 }
 
-export function Dock({ active, onSelect, unseen }: DockProps) {
+/** #2459: the screens an ended story no longer offers. */
+const PLAY_ONLY = new Set<DockScreen>(["dates", "wish"]);
+
+export function Dock({ active, onSelect, unseen, ended = false }: DockProps) {
   const { t } = useTranslation();
   return (
     <nav className="of-dock of-glass of-glass--strong" aria-label={t("ui.otomeForge.common.dockLabel")}>
-      {DOCK_SCREENS.map((screen) => {
+      {DOCK_SCREENS.filter((screen) => !ended || !PLAY_ONLY.has(screen)).map((screen) => {
         const Icon = SCREEN_ICONS[screen];
         const current = active === screen ? "page" : undefined;
         const label = <span className="of-dock-label">{t(SCREEN_NAME_KEYS[screen])}</span>;

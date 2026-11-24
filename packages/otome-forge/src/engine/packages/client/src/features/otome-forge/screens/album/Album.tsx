@@ -32,6 +32,7 @@ import {
   Sticker as StickerIcon,
   Wine,
   type LucideIcon,
+  PartyPopper,
 } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
@@ -53,6 +54,7 @@ import type { RunView } from "../../shared/api-types";
 import { normalizeOtomeAudio } from "../../shared/audio";
 import { useDates, type DateOpen } from "../dates/DateNight";
 import { Dates } from "./Dates";
+import { Hangouts, type HangoutInvite } from "./Hangouts";
 import { albumKeepsakes } from "../../lib/album-keepsakes";
 import { PLAYER_STICKER_OWNER } from "../../shared/stickers";
 import type { KittenView } from "../../shared/kitty";
@@ -75,6 +77,8 @@ const ALBUM_TABS = [
   "memories",
   // #2303: the dates won from Wish, and Date Night's earlier evenings.
   "dates",
+  // #2458: hangouts with her friends.
+  "hangouts",
   "cgs",
   "stickers",
   // 0.36.0: Kitty Cards' painted kittens, beside the other cut-out art.
@@ -95,6 +99,7 @@ const TAB_META: Record<AlbumTab, { labelKey: string; Icon: LucideIcon }> = {
   photos: { labelKey: "ui.otomeForge.album.tabPhotos", Icon: Camera },
   cards: { labelKey: "ui.otomeForge.album.tabCards", Icon: MoonStar },
   dates: { labelKey: "ui.otomeForge.album.tabDates", Icon: Wine },
+  hangouts: { labelKey: "ui.otomeForge.album.tabHangouts", Icon: PartyPopper },
   memories: { labelKey: "ui.otomeForge.album.tabMemories", Icon: BookHeart },
   timeline: { labelKey: "ui.otomeForge.album.tabTimeline", Icon: CalendarHeart },
   favorites: { labelKey: "ui.otomeForge.album.tabFavorites", Icon: Quote },
@@ -142,9 +147,21 @@ interface AlbumProps {
   /** The tab it opens on (#2303: the one left for a date); the first, Memories, by default (0.36.0). */
   initialTab?: AlbumTab;
   onTabChange?: (tab: AlbumTab) => void;
+  /** #2458: a friend's invitation to hang out, accepted in Messages: Hangouts opens its plan with them chosen. */
+  hangoutInvite?: HangoutInvite | null;
+  onHangoutInviteDone?: () => void;
 }
 
-export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = ALBUM_TABS[0], onTabChange }: AlbumProps) {
+export function Album({
+  runKey,
+  view,
+  onOpenStory,
+  onOpenDate,
+  initialTab = ALBUM_TABS[0],
+  onTabChange,
+  hangoutInvite,
+  onHangoutInviteDone,
+}: AlbumProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const id = useId();
@@ -271,6 +288,14 @@ export function Album({ runKey, view, onOpenStory, onOpenDate, initialTab = ALBU
       </>
     ) : tab === "dates" ? (
       <Dates runKey={runKey} view={view} actions={actions} onOpenDate={onOpenDate} />
+    ) : tab === "hangouts" ? (
+      <Hangouts
+        runKey={runKey}
+        view={view}
+        onOpenStory={onOpenStory}
+        invite={hangoutInvite ?? null}
+        {...(onHangoutInviteDone ? { onInviteDone: onHangoutInviteDone } : {})}
+      />
     ) : tab === "cards" ? (
       <CardGrid runKey={runKey} view={view} cards={cards} actions={actions} onView={setViewingCard} />
     ) : tab === "memories" ? (

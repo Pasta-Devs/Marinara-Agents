@@ -23,7 +23,8 @@ export function useCardImages(view: RunView, cards: readonly AlbumCard[]) {
   const { t } = useTranslation();
   const tiles = cards.map((card) => {
     const name = t(ARCANA_NAME_KEYS[card.card]);
-    const li = card.li ? view.lis.find((item) => item.id === card.li) : undefined;
+    // #2458: a friend's own card is theirs, as a love interest's is.
+    const li = card.li ? [...view.lis, ...(view.friends ?? [])].find((item) => item.id === card.li) : undefined;
     return { card, title: li ? t("ui.otomeForge.album.cardOf", { card: name, name: li.name }) : name };
   });
   const images = tiles.flatMap(({ card, title }): AlbumImage[] => {

@@ -31,6 +31,7 @@ import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
 import { ClawMachine } from "./screens/dates/ClawMachine";
 import { DateNight, type DateOpen } from "./screens/dates/DateNight";
+import type { HangoutInvite } from "./screens/album/Hangouts";
 import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
 import { KittyCards } from "./screens/dates/KittyCards";
 import { PhotoShoot } from "./screens/dates/PhotoShoot";
@@ -110,6 +111,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const [dateAt, setDateAt] = useState<DateOpen | null>(null);
   // The Album's tab when it opens again after a date or a story it opened (#2303), else its own first.
   const [albumTab, setAlbumTab] = useState<AlbumTab | undefined>();
+  /** #2458: a friend's invitation to hang out, accepted in Messages, waiting in Album → Hangouts. */
+  const [hangoutInvite, setHangoutInvite] = useState<HangoutInvite | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -361,6 +364,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOpenDate={openDate("album")}
         initialTab={albumTab}
         onTabChange={setAlbumTab}
+        hangoutInvite={hangoutInvite}
+        onHangoutInviteDone={() => setHangoutInvite(null)}
       />
     ) : screen === "home" && activeRun && view ? (
       <HomeScreen
@@ -380,6 +385,11 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOpenChange={setPhoneOpen}
         onOpenScene={openReader("phone")}
         onOpenDate={openDate("phone")}
+        onOpenHangout={(invite) => {
+          setHangoutInvite(invite);
+          setAlbumTab("hangouts");
+          go("album");
+        }}
       />
     ) : screen === "remind" && activeRun && view ? (
       <RemindMe
@@ -484,7 +494,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         {view && activeRun ? <StickerNotice view={view} /> : null}
         {/* 0.34.0: Stop the toys, over whichever screen is open while they play. */}
         <HapticsStop />
-        {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} unseen={view?.unseen} /> : null}
+        {DOCKED.has(screen) ? (
+          <Dock active={screen} onSelect={selectDockScreen} unseen={view?.unseen} ended={!!view?.ended} />
+        ) : null}
       </OtomeHapticsProvider>
     </OtomeAudioProvider>
   );

@@ -1873,6 +1873,8 @@ export interface RunView {
   prologue?: boolean;
   /** #2458: her friends, in the order they joined; absent from an older server. */
   friends?: RunFriendView[];
+  /** #2459: when the story ended (its epilogue read): it only opens to look at. */
+  ended?: string;
 }
 
 /** #2458: a friend as the client sees them: their looks, as a love interest's, and their level, 1–5 (stars). */
@@ -1893,7 +1895,12 @@ export type RunFriendView = Pick<
   | "expressions"
   | "worn"
   | "level"
-> & { affectionProgress: { current: number; required: number }; arc: number };
+> & {
+  affectionProgress: { current: number; required: number };
+  arc: number;
+  /** Who they are and how you know each other, from their bible (never a secret: friends have none). */
+  about?: string;
+};
 
 export type SetupLi =
   | { source: "card"; cardId: string; pronouns: Pronouns }
@@ -1941,4 +1948,7 @@ export interface SettingsInput {
   groupSquabbles?: number;
   /** #2424: date invitations a week, 0 to DATE_INVITES_MAX. */
   dateInvites?: number;
+  /** #2458: her friends' messages and hangout invitations a week, each 0 to DATE_INVITES_MAX. */
+  friendMessages?: number;
+  friendInvites?: number;
 }

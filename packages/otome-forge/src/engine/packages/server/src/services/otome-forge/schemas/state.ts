@@ -806,6 +806,7 @@ export function toRunView(
     forge: world.forge,
     starlight: state.wallet.starlight,
     unseen: unseenCounts(state.owned.unseen),
+    ...(state.ended ? { ended: state.ended.at } : {}),
     friends: friends.flatMap((unit) => {
       const friend = state.friends[unit.id];
       return friend
@@ -815,6 +816,7 @@ export function toRunView(
               level: friendLevelOf(friend.points),
               affectionProgress: friendProgressOf(friend.points),
               arc: friend.arc,
+              ...(unit.friend ? { about: `${unit.friend.role}. ${unit.friend.howWeMet}`.slice(0, 600) } : {}),
             },
           ]
         : [];
