@@ -3736,6 +3736,74 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
   expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
 });
 
+test("#2458: Otome Hearth's Story lists her friends with stars, and Add a friend takes someone she has met", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  const view = fixture.stub.view as Json;
+  view.friends = [];
+  let block: "arc" | null = null;
+  const kaveh = {
+    ...(view.lis as Json[])[0]!,
+    id: "li-kaveh-0009",
+    name: "Kaveh",
+    level: 2,
+    affectionProgress: { current: 50, required: 250 },
+    arc: 1,
+  };
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    const path = call.path.replace(/^\/api\/otome-forge/u, "");
+    if (path === `/runs/${RUN}/friends/met`) {
+      return { status: 200, json: { met: [{ key: "kaveh", name: "Kaveh" }], block } };
+    }
+    if (path === `/runs/${RUN}/friends` && call.method === "POST") {
+      view.friends = [kaveh];
+      block = "arc";
+      return { status: 200, json: { friend: { id: kaveh.id, name: kaveh.name } } };
+    }
+    const reply = fixture.answer(call);
+    if (path === `/runs/${RUN}/story` && reply?.json) return { ...reply, json: { ...reply.json, friendBlock: block } };
+    return reply;
+  };
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const section = root.getByRole("region", { name: "Friends", exact: true });
+  await expect(section.getByText("No friends yet.", { exact: true })).toBeVisible();
+  await section.getByRole("button", { name: "Add a friend", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add a friend" });
+  await expect(dialog.getByRole("radio", { name: "Someone you’ve met", exact: true })).toBeChecked();
+  const add = dialog.getByRole("button", { name: "Add them", exact: true });
+  await expect(add).toBeDisabled();
+  await dialog.getByRole("button", { name: "Kaveh", exact: true }).click();
+  await dialog.getByText("he/him", { exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "he/him", exact: true })).toBeChecked();
+  await page.screenshot({ path: testInfo.outputPath("friends-add.png") });
+  await add.click();
+  await expect(dialog).toBeHidden();
+  expect(posts(calls, "/friends").map((call) => call.body)).toEqual([
+    expect.objectContaining({
+      source: "met",
+      key: "kaveh",
+      pronouns: { subject: "he", object: "him", possessive: "his" },
+    }),
+  ]);
+  const row = section.getByRole("listitem").filter({ hasText: "Kaveh" });
+  await expect(row.getByRole("img", { name: "Kaveh: friendship 2 of 5", exact: true })).toBeVisible();
+  await expect(row.getByRole("meter", { name: "Friendship with Kaveh", exact: true })).toHaveText("50 / 250");
+  await expect(section.getByRole("button", { name: "Add a friend", exact: true })).toBeDisabled();
+  await expect(
+    section.getByText("A friend has already joined in this story arc. Another can join in the next one.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await section.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("friends-list.png") });
+});
+
 test("Otome Hearth affection shows per-level progress below Level beside its hearts", async ({
   page,
   isMobile,
