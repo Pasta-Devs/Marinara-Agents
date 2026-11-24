@@ -459,7 +459,11 @@ test("the cg brief learns what the rating lets it show; only Explicit Heat with 
   for (const kind of ["beat", "confrontation"] as const) {
     const both = beatPrompt(stored("explicit", "dark"), "explicit", kind);
     assert.match(both, /"cg": \{"at": 0, "brief": "\.\.\.", "cast": \["\.\.\."\], "explicit": false\}/, kind);
-    assert.match(both, /in plain explicit words: who is naked, their breasts and genitals[^\n]*set "explicit": true\./, kind);
+    assert.match(
+      both,
+      /in plain explicit words: who is naked, their breasts and genitals[^\n]*set "explicit": true\./,
+      kind,
+    );
     assert.match(both, /Never draw a Line; a Veil only as its before or after\. Everyone in the frame is an adult\./);
     // Fade Heat keeps the sex off the page, so its key image stays suggestive even at the Explicit rating.
     const fade = beatPrompt(stored("fade", "dark"), "explicit", kind);

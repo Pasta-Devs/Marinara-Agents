@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.46.0",
+          "date": "2026-11-24",
+          "notes": "- **Settings → Images** has **Backgrounds** and **Scene art**: another image connection for places, and for story CGs, date keepsakes, hangout mementos and photos. Both use your image connection until you choose.\n- With a NovelAI connection, pictures are written in NovelAI's style: tags with the people counts first, its quality tags and its negative preset. A scene sends NovelAI one character reference, and the prompt decides what everyone wears.\n- **Image style** now adds to your Engine image style instead of replacing it.\n- Explicit key images name what they show plainly and are drawn uncensored.",
+          "highlight": true
+        },
+        {
           "version": "0.45.0",
           "date": "2026-11-24",
           "notes": "- **Friends:** on **Story**, **Add a friend** takes someone you've met, one of your characters or someone new: platonic, five levels shown as stars, as many as your love interests, one each story arc. Each gets a bible, a painted portrait and faces, a voice and a **Messages** thread.\n- Chapters bring friends in, and they earn friendship there, in Messages and on hangouts, planned in **Album → Hangouts**, with a memento to paint. Each level from 2 to 5 opens a story with them; level 5's gives you a look and their card, and they can talk to a love interest for you.\n- Friends can be hurt, and a make-up story clears it. **Settings → Connections** sets how often they write or invite you each week.\n- **End the Story:** once every love interest reaches level 20, play a finale, then an epilogue. Afterwards every chapter can still be read.",
@@ -827,12 +833,6 @@
           "version": "0.36.6",
           "date": "2026-11-18",
           "notes": "- Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.\n- When a love interest's linked character card can't be read, the server log now tags the warning as Otome Hearth's instead of Gacha Forge's.",
-          "highlight": false
-        },
-        {
-          "version": "0.36.5",
-          "date": "2026-11-18",
-          "notes": "- Pictures of people in a scene (story pictures, date keepsakes, Wish art, banners and tarot cards) now show everyone in the outfit they wear. Each person's picture is sent as the outfit they have on, or their painted base look, instead of their card's or persona's picture. Until an outfit has a picture, their avatar is sent and the outfit is described in words.\n- That outfit picture is sent cut out, with no background. One that isn't cut out yet is cut first, for free. If that fails, the avatar is sent instead.\n- Scene pictures no longer ask for \"two arms, two legs and five fingers\", which pulled legs into close-up shots. They now tell the image model to avoid bad anatomy, merged bodies, extra or missing limbs and malformed hands.",
           "highlight": false
         }
       ]
