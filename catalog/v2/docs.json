@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "2d-avatars": {
+      "version": "0.1.2",
+      "overview": {
+        "source": "engine",
+        "path": "agents/built-in-agents.md",
+        "heading": "2D Avatars"
+      },
+      "guides": [
+        {
+          "id": "avatars",
+          "title": "2D and 3D Avatars",
+          "source": "engine",
+          "path": "agents/avatars.md"
+        }
+      ]
+    },
+    "3d-avatars": {
+      "version": "0.1.2",
+      "overview": {
+        "source": "engine",
+        "path": "agents/built-in-agents.md",
+        "heading": "3D Avatars"
+      },
+      "guides": [
+        {
+          "id": "avatars",
+          "title": "2D and 3D Avatars",
+          "source": "engine",
+          "path": "agents/avatars.md"
+        }
+      ]
+    }
+  }
+}

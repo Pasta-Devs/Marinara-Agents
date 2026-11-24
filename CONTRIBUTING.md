@@ -291,7 +291,30 @@ Apply this convention to new packages and update the relevant guidance alongside
 
 Verify the instructions by following the user flow on a compatible Engine, or have someone familiar with the package check them. Source code and the original PR can establish behavior, but do not substitute for a first-use walkthrough. For a complex package, coordinate with its creator or a user who knows it before reorganizing the manual. Record what was checked and what still needs manual verification in the PR.
 
-Keep package-specific usage here and Engine-wide setup in the linked Engine guides. Do not add documentation fields to strict catalog entries or manifests: publishing richer guides requires coordinated, backwards-compatible Engine support, as described for [release-note sidecars](#release-notes).
+Keep package-specific usage here and Engine-wide setup in the linked Engine guides. Do not add documentation fields to strict catalog entries or manifests.
+
+### Optional catalog documentation index
+
+Add `packages/<id>/documentation.json` to select the user help that future Engine readers and Professor Mari can retrieve. Adoption is optional; existing `documentationUrl` links remain available. Engine consumption is separate work. This index can point to an existing Engine guide during migration, without copying its content.
+
+```json
+{
+  "schemaVersion": 1,
+  "overview": { "source": "package", "path": "README.md" },
+  "guides": [
+    { "id": "settings", "title": "Settings", "source": "package", "path": "docs/settings.md" },
+    { "id": "connections", "title": "Engine connections", "source": "engine", "path": "connections/connecting-to-a-provider.md" }
+  ]
+}
+```
+
+The overview is required; `guides` defaults to an empty list. Package paths are relative to the package directory and must select `README.md` or Markdown under `docs/`, excluding `docs/development/`. Engine paths are relative to Engine's `docs/`, excluding `development/`. Check an Engine reference against the intended Engine branch; this repository cannot validate a file in another repository. Either source can include a `heading` with the visible heading text to select one section of a longer page. Paths must use forward slashes, with no traversal, URL encoding, query or fragment. Package directories, documentation indexes and selected Markdown paths must not use symlinks: repository URLs may serve the link itself instead of its target.
+
+Use unique guide IDs containing lowercase letters, digits and hyphens, starting with a letter or digit; `overview` is reserved. Limits: 32 guides, 64 characters per ID, 120 per title, 200 per heading, 32 KiB for the index and 256 KiB per package Markdown file. Publish user help explicitly; do not list architecture notes, prompts or historical plans.
+
+Run `node scripts/build-documentation.mjs` after changing the index or a selected package guide, then commit the generated `docs.json` sidecars. All package builders also use this writer. Each sidecar includes only packages visible in its catalog lane; empty sidecars are removed. Package references become paths relative to the sidecar, with a SHA-256 and byte count for the complete Markdown file. Engine references retain their docs-relative path and optional heading. The recorded package version identifies the catalog entry; it does not establish that current docs match an older installed version.
+
+Run `node scripts/tests/catalog-documentation.regression.mjs` and the normal validation commands. `validate-catalog.mjs` rejects stale sidecars and selected package files that are missing, too large or outside the allowed directory. This metadata does not change executable archives, permissions or package versions.
 
 ## Adding a New Package
 
