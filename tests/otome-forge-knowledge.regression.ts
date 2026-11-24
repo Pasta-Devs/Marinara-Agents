@@ -401,10 +401,10 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
 // banned in narration only, so every prompt with them moved.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "2f53640d9acb6a96",
-  callScene: "2b0aab2239091b50",
-  confrontation: "499d8eb3d0a7ff46",
-  closer: "eca3035029fe4af0",
+  scene: "11af2a27caf2617a",
+  callScene: "76eac830aa1037df",
+  confrontation: "2b7c246d143fac93",
+  closer: "3f47354764841f30",
   bible: "78c5ff4d4a24d58f",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.

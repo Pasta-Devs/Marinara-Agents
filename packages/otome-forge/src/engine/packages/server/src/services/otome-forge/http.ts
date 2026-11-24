@@ -122,7 +122,7 @@ export interface RouteDeps {
 
 export type RegisterRoutes = (router: OtomeRouter, deps: RouteDeps) => void;
 
-function param(request: OtomeRequest, name: string): unknown {
+export function param(request: OtomeRequest, name: string): unknown {
   const params = request.params;
   return params && typeof params === "object" ? (params as Record<string, unknown>)[name] : undefined;
 }

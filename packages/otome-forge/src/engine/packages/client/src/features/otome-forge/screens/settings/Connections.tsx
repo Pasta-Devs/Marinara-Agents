@@ -19,8 +19,9 @@ import { useRecallIndex } from "../../hooks/use-memory";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { Connections, RunView } from "../../shared/api-types";
 import { ConnectionControls, MessageNumbers } from "../setup/ConnectionsStep";
-import { messageNumbersOf, savedConnections, type DraftConnections, type DraftMessages } from "../setup/draft";
-import { ConnectionSelect } from "../setup/parts";
+import { messageNumbersOf, savedConnections, wholeOf, type DraftConnections, type DraftMessages } from "../setup/draft";
+import { ConnectionSelect, TextField } from "../setup/parts";
+import { DATE_INVITES_MAX } from "../../shared/home";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 import { embeddingOptions } from "../../lib/recall-choice";
 import { MemorySection } from "./Debug";
@@ -62,6 +63,21 @@ function StoryConnections({
   const olderEngine = recallStatus?.choosable === false;
   const stored = messageNumbersOf(messagesOf(run.world))!;
   const [messagesText, setMessagesText] = useState(() => messagesOf(run.world));
+  // #2458: her friends' two weekly numbers, beside the love interests'.
+  const storedFriends = { friendMessages: run.world.friendMessages ?? 0, friendInvites: run.world.friendInvites ?? 0 };
+  const [friendText, setFriendText] = useState(() => ({
+    friendMessages: String(storedFriends.friendMessages),
+    friendInvites: String(storedFriends.friendInvites),
+  }));
+  const friendNumbers = (() => {
+    const friendMessages = wholeOf(friendText.friendMessages, DATE_INVITES_MAX);
+    const friendInvites = wholeOf(friendText.friendInvites, DATE_INVITES_MAX);
+    return friendMessages === null || friendInvites === null ? null : { friendMessages, friendInvites };
+  })();
+  const friendsMoved =
+    !!friendNumbers &&
+    (friendNumbers.friendMessages !== storedFriends.friendMessages ||
+      friendNumbers.friendInvites !== storedFriends.friendInvites);
   const numbers = messageNumbersOf(messagesText);
   const moved = (field: keyof typeof stored) => !!numbers && numbers[field] !== stored[field];
   const connectionsChanged =
@@ -74,7 +90,9 @@ function StoryConnections({
     !numbers ||
     moved("dailyMessages") ||
     moved("groupSquabbles") ||
-    moved("dateInvites");
+    moved("dateInvites") ||
+    !friendNumbers ||
+    friendsMoved;
   if (connections.isLoading) {
     return (
       <p className="of-hint" role="status">
@@ -111,15 +129,33 @@ function StoryConnections({
         onChange={setEmbeddings}
       />
       <MessageNumbers value={messagesText} onChange={setMessagesText} />
+      {(["friendMessages", "friendInvites"] as const).map((field) => {
+        const invalid = wholeOf(friendText[field], DATE_INVITES_MAX) === null;
+        return (
+          <TextField
+            key={field}
+            label={t(`ui.otomeForge.settings.${field}`)}
+            type="number"
+            min={0}
+            max={DATE_INVITES_MAX}
+            value={friendText[field]}
+            onChange={(text) => setFriendText((current) => ({ ...current, [field]: text }))}
+            invalid={invalid}
+            hint={t(invalid ? "ui.otomeForge.settings.dailyMessagesInvalid" : `ui.otomeForge.settings.${field}Hint`, {
+              max: DATE_INVITES_MAX,
+            })}
+          />
+        );
+      })}
       <SaveBar
-        changed={changed && !!form.narration && !!numbers}
+        changed={changed && !!form.narration && !!numbers && !!friendNumbers}
         busy={settings.busy}
         status={settings.status}
         onSave={() => {
-          if (!numbers) return;
+          if (!numbers || !friendNumbers) return;
           // The connections' note is about scenes; the embedding model and each number get their own.
           void settings.save(
-            { connections: savedConnections(form, embeddings), ...numbers },
+            { connections: savedConnections(form, embeddings), ...numbers, ...friendNumbers },
             t(
               connectionsChanged
                 ? "ui.otomeForge.settings.saved"
@@ -129,7 +165,9 @@ function StoryConnections({
                     ? "ui.otomeForge.settings.dailyMessagesSaved"
                     : moved("groupSquabbles")
                       ? "ui.otomeForge.settings.groupSquabblesSaved"
-                      : "ui.otomeForge.settings.dateInvitesSaved",
+                      : moved("dateInvites")
+                        ? "ui.otomeForge.settings.dateInvitesSaved"
+                        : "ui.otomeForge.settings.friendNumbersSaved",
             ),
           );
         }}

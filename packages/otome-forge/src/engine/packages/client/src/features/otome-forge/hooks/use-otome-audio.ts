@@ -58,7 +58,15 @@ import {
   type PrepLine,
 } from "../lib/audio";
 import { useOtomeProps } from "../props";
-import type { AudioSettings, Player, RunLiView, RunView, Segment, SoundtrackTrack } from "../shared/api-types";
+import type {
+  AudioSettings,
+  Player,
+  RunFriendView,
+  RunLiView,
+  RunView,
+  Segment,
+  SoundtrackTrack,
+} from "../shared/api-types";
 import { MUSIC_MOODS, type MusicMood } from "../shared/faces";
 import { patchRun } from "./use-run";
 
@@ -137,6 +145,8 @@ interface ControllerDeps {
   post: ReturnType<typeof useOtomeApi>["post"];
   debugMode: boolean;
   lis: readonly RunLiView[];
+  /** #2458: her friends, voiced as the love interests are; absent before a run view lists them. */
+  friends?: readonly RunFriendView[];
   player: Pick<Player, "name" | "personaId">;
   onTracks: (tracks: SoundtrackTrack[]) => void;
 }
@@ -621,7 +631,7 @@ export class OtomeAudioController {
   wouldSpeak(segment: Segment): boolean {
     const deps = this.deps;
     if (!deps || ttsUnavailableReason) return false;
-    return wouldVoice(this.settings, lineSpeaker(segment, deps.lis, deps.player));
+    return wouldVoice(this.settings, lineSpeaker(segment, deps.lis, deps.player, deps.friends));
   }
 
   private readTtsConfig(): Promise<unknown> {
@@ -666,7 +676,7 @@ export class OtomeAudioController {
   async speak(segment: Segment, ref: string, { cache = true }: { cache?: boolean } = {}): Promise<SpeakOutcome> {
     const deps = this.deps;
     const settings = this.settings;
-    const speaker = deps ? lineSpeaker(segment, deps.lis, deps.player) : null;
+    const speaker = deps ? lineSpeaker(segment, deps.lis, deps.player, deps.friends) : null;
     if (this.disposed || ttsUnavailableReason || !wouldVoice(settings, speaker)) return "silent";
     this.stopVoice();
     const abort = new AbortController();
@@ -723,7 +733,7 @@ export class OtomeAudioController {
   private async prepareLine(line: PrepLine, prepare: PrepareAudio) {
     const deps = this.deps;
     const settings = this.settings;
-    const speaker = deps ? lineSpeaker(line.segment, deps.lis, deps.player) : null;
+    const speaker = deps ? lineSpeaker(line.segment, deps.lis, deps.player, deps.friends) : null;
     if (this.disposed || !wouldVoice(settings, speaker)) return;
     const made = await this.voiceRequest(line.segment, line.ref, speaker, settings, true);
     if (!made || this.disposed || !wouldVoice(this.settings, speaker)) return;
@@ -787,6 +797,7 @@ function AudioScope({ run, cue = null, children }: ProviderProps) {
     post: otome.post,
     debugMode,
     lis: run?.lis ?? [],
+    friends: run?.friends ?? [],
     player: run?.player ?? { name: "", personaId: "" },
     onTracks: (tracks) => {
       if (!runKey) return;

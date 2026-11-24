@@ -112,7 +112,15 @@ import { hapticsOn, normalizeHapticCues } from "../../../../../client/src/featur
 import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
 import type { OtomeHaptics } from "../haptics.js";
-import { beatMessages, closerMessages, confrontationMessages, explicitCgAllowed, prologueEnding } from "../prompts.js";
+import { friendCards, friendsHeard } from "./friends.js";
+import {
+  beatMessages,
+  closerMessages,
+  confrontationMessages,
+  explicitCgAllowed,
+  prologueEnding,
+  type FriendCard,
+} from "../prompts.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
@@ -121,7 +129,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { applyChoiceEffects } from "../state/relationship.js";
-import { payClearing, readBeatToEnd } from "../state/rewards.js";
+import { payClearing, payFriends, readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
@@ -986,6 +994,37 @@ async function redoScene(deps: BeatDeps, runId: string, undone: StateUndo[]): Pr
 }
 
 /**
+ * #2458: her friends in a chapter (S/story/friends.ts friendCards), as its first scene told them: their ids and ranks
+ * are saved on the chapter then, and every later scene sends those, so the HER FRIENDS block in the cached story
+ * context never changes mid-chapter (a rank reached or a friend joining in between waits for the next chapter).
+ */
+async function chapterFriends(
+  deps: BeatDeps,
+  runId: string,
+  chapter: Chapter,
+  run: RunDocuments,
+): Promise<FriendCard[] | undefined> {
+  const cardsOf = (saved: NonNullable<Chapter["friends"]>) => {
+    const cards = saved.flatMap(({ id, level }) => {
+      const unit = run.friends?.find((entry) => entry.id === id && entry.friend);
+      return unit ? [{ unit, level }] : [];
+    });
+    return cards.length ? cards : undefined;
+  };
+  if (chapter.friends) return cardsOf(chapter.friends);
+  const chosen = (friendCards(run, chapter.kind, !!chapter.friendStory || !!chapter.ending) ?? []).map((card) => ({
+    id: card.unit.id,
+    level: card.level,
+  }));
+  const saved = await deps.store.updateDoc(
+    runDocTarget("chapter", chapterId(runId, chapter.key)),
+    normalizeChapter,
+    (current) => (!current || current.friends ? current : { ...current, friends: chosen }),
+  );
+  return cardsOf(saved?.friends ?? chosen);
+}
+
+/**
  * Writes beat `i` of the chapter from its node and the canon before it, and saves it. A rewrite (`replacing`, the beat
  * it was checked against) replaces it only while that beat is untouched and still the one being read.
  */
@@ -1034,13 +1073,16 @@ async function generateBeat(
   // A side chapter tells a scene of a chapter before it again, so the story's memory, which is the story as it is now,
   // would hand it chapters that came after the moment it retells: it gets the scene itself (hisSideSource) and none.
   // The chapter's small memories are everyone's in it, chosen by its first scene (see the header).
-  const everyone = [...new Set(chapter.nodes.flatMap((entry) => entry.cast))];
+  // #2458: a friend's own story (or a hangout) is theirs: they are in every scene of it, as a love interest is in his.
+  const friendly = chapter.friendStory?.friends ?? [];
+  const everyone = [...new Set([...chapter.nodes.flatMap((entry) => entry.cast), ...friendly])];
   const recall = (memories: readonly string[] | undefined): Promise<StoryContext> =>
     recallText(deps, runId, {
       job: "narration",
-      cast: node.cast,
+      cast: [...node.cast, ...friendly],
       ...(pov ? { reader: pov } : {}),
-      cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
+      // #2459: the epilogue is everyone's, as a main chapter is.
+      cached: chapter.kind === "main" || chapter.ending ? {} : { li: friendly[0] ?? chapter.li ?? chapter.lead },
       ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
       ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
       lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
@@ -1052,7 +1094,11 @@ async function generateBeat(
       query: {
         cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
         plan: node.guide,
-        speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
+        speakers: [
+          run.player.name,
+          ...present.map((unit) => unit.name),
+          ...(run.friends ?? []).filter((unit) => friendly.includes(unit.id)).map((unit) => unit.name),
+        ].filter(Boolean),
       },
       signal,
       debugMode,
@@ -1149,6 +1195,8 @@ async function generateBeat(
     handOff: memory.handOff ?? "",
     ...(told ? { hisSide: told.text } : {}),
     ...(hapticsOn(run.world) ? { toys: deps.haptics?.devicesText() ?? "" } : {}),
+    // #2458: her friends, in the chapters they come into, as its first scene told them (chapterFriends).
+    friends: pov ? undefined : await chapterFriends(deps, runId, chapter, run),
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };
@@ -1440,6 +1488,9 @@ export async function serveBeat(
   const { run, chapter } = await load(deps, runId, key);
   if (run.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
   if (!chapter.nodes[i]) throw beatNotFound();
+  // #2459: an ended story only replays what was written: no rewrite, no lookahead, no new art.
+  const ended = !!run.state.ended;
+  if (ended && rewrite) throw locked("This story has ended. It still opens to look at.");
   const stored = rewrite ? null : await readBeat(deps.store, runId, key, i);
   if (await ruptureHolds(deps, runId, chapter, run.state, i, stored)) throw locked(ROUTE_LOCKED);
   let beat: Beat | null;
@@ -1475,6 +1526,8 @@ export async function serveBeat(
   } else {
     beat = stored;
     if (!beat) {
+      // #2459: an ended story only replays what was written.
+      if (run.state.ended) throw locked("This story has ended. It still opens to look at.");
       if (!writable(run, chapter, i)) throw conflict("This beat cannot be written yet.");
       beat = await cancellable(deps, runId, (signal) =>
         readOrGenerate(
@@ -1494,14 +1547,14 @@ export async function serveBeat(
       )) ?? beat;
   }
   // A rewrite of the scene just read to its end took that read back, so it is the one being read again.
-  if (!run.state.chapters[key]?.completed && (rewrite || i >= (run.state.chapters[key]?.beatsRead ?? 0))) {
+  if (!ended && !run.state.chapters[key]?.completed && (rewrite || i >= (run.state.chapters[key]?.beatsRead ?? 0))) {
     // generateBeat may itself run inside the foreground queue. Await its place registration only after that lock
     // has been released; the reader's first art response must distinguish pending from no image/description.
     await deps.art?.prepareScenePlaces?.(runId, beat, { debugMode, review });
     beat = await prepareCg(deps, runId, beat, { debugMode, review });
   }
-  queueFaces(deps, runId, beat, debugMode);
-  if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });
+  if (!ended) queueFaces(deps, runId, beat, debugMode);
+  if (!ended && !run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });
   return beat;
 }
 
@@ -1856,6 +1909,11 @@ async function finishBeat(
   const arc = candidate ? hisSideArc(chapter, await listArcs(deps.store, runId)) : 0;
   const spent = !candidate || !!(await readChapter(deps.store, runId, hisSideKey(candidate, arc)));
   const climax = await climaxEnding(deps, runId, chapter, beat);
+  // #2458: her friends who spoke in a main chapter this read may finish earn their friendship (payFriends).
+  const heard =
+    chapter.kind === "main" && beat.i === chapter.nodes.length - 1
+      ? await friendsHeard(deps, runId, chapter, beat)
+      : [];
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     // A pick saved on the beat whose effects never reached the state (its request stopped between the two writes, and
     // a reload shows it as made) lands in this same write, so no beat counts as read with a canon pick unapplied.
@@ -1897,6 +1955,11 @@ async function finishBeat(
       }
     }
     completedNow = !current.chapters[chapter.key]?.completed && !!next.chapters[chapter.key]?.completed;
+    if (completedNow && heard.length) {
+      const paid = payFriends(next, heard);
+      next = paid.state;
+      outcome = { ...outcome, grants: [...outcome.grants, ...paid.grants] };
+    }
     // #2155: the read that finishes the chapter says when a side of it waits, though its moment came on an earlier node
     // (the reader may have been left in between). A side is written only once its chapter is finished, so none is yet.
     if (completedNow && !hisSide) {
@@ -1931,8 +1994,9 @@ async function finishBeat(
       current ? { ...current, undo: [...(current.undo ?? []), recorded] } : current,
     );
   }
-  await noteSideSpeakers(deps, runId, chapter.key, beat, { debugMode, review });
-  if (completedNow && deps.memory) {
+  // #2459: the read that ends the story (the epilogue's last) starts no side sprites and no memory upkeep.
+  if (!state.ended) await noteSideSpeakers(deps, runId, chapter.key, beat, { debugMode, review });
+  if (completedNow && deps.memory && !state.ended) {
     void Promise.resolve(deps.memory.maintain({ runId, debugMode })).catch((error: unknown) =>
       deps.runtime.logger.warn(
         "[otome-forge] Memory upkeep after %s stopped: %s",
@@ -1982,7 +2046,8 @@ export async function readTo(
   }
   // A Confrontation is read to its end once its ending is reached (the client reads the opening, then the rounds).
   const unsettled = beat.confrontation ? !beat.confrontation.ending : !settledThrough(beat, end);
-  if (reached < end || (!beat.easedOff && unsettled)) {
+  // #2459: once the story has ended, a chapter left unfinished is read again but never counted (no pay, no progress).
+  if (reached < end || (!beat.easedOff && unsettled) || run.state.ended) {
     return { grants: [], starlight: run.state.wallet.starlight, chapterDone: false };
   }
   return finishBeat(deps, runId, chapter, beat, mode);

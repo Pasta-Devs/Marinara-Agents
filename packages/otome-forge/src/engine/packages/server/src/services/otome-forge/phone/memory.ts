@@ -209,8 +209,12 @@ export async function phoneMemorySources(
   runId: string,
   state: RunState,
 ): Promise<ForgeMemorySource[]> {
+  // #2458: her friends' sessions are theirs alone, as a love interest's are.
   const threads = await Promise.all(
-    Object.keys(state.lis).map(async (li) => ({ li, thread: await store.readDoc(chatId(runId, li), normalizeThread) })),
+    [...Object.keys(state.lis), ...Object.keys(state.friends)].map(async (li) => ({
+      li,
+      thread: await store.readDoc(chatId(runId, li), normalizeThread),
+    })),
   );
   const sources: ForgeMemorySource[] = [];
   for (const { li, thread } of threads) {

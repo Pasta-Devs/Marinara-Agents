@@ -244,7 +244,8 @@ export const datePlacePaintable = (item: { kind: ItemKind; place?: { name: strin
  * An item's slot on its banner: `f` the 5★, `a1`–`a3` the 4★s, `s1`–`s6` the Snapshots, and (#2303) `l1`–`l3` a
  * wardrobe banner's 3★ looks.
  */
-export type ItemSlot = "f" | `a${1 | 2 | 3}` | `s${1 | 2 | 3 | 4 | 5 | 6}` | `l${1 | 2 | 3}`;
+/** #2458: `g1`–`g5` are gifts no banner writes: a friend's look for her, given at their rank-5 finale. */
+export type ItemSlot = "f" | `a${1 | 2 | 3}` | `s${1 | 2 | 3 | 4 | 5 | 6}` | `l${1 | 2 | 3}` | `g${1 | 2 | 3 | 4 | 5}`;
 
 /**
  * `${bannerKey}-${slot}` (e.g. `memories-3-f`): an item's id, the tail of its document id, and of its Character
@@ -253,14 +254,17 @@ export type ItemSlot = "f" | `a${1 | 2 | 3}` | `s${1 | 2 | 3 | 4 | 5 | 6}` | `l$
 export const itemIdOf = (key: string, slot: ItemSlot) => `${key}-${slot}`;
 
 // Only ever widened: a narrower pattern would drop owned items (S/schemas/state.ts normalizeOwned).
-const ITEM_ID = new RegExp(`^(?:${KIND_PATTERN})-(?:0|[1-9]\\d{0,5})-(?:f|a[1-3]|s[1-6]|l[1-3])$`);
+const ITEM_ID = new RegExp(`^(?:${KIND_PATTERN})-(?:0|[1-9]\\d{0,5})-(?:f|a[1-3]|s[1-6]|l[1-3]|g[1-5])$`);
 
 export function isItemId(value: unknown): value is string {
   return typeof value === "string" && ITEM_ID.test(value);
 }
 
 /** The banner key an item id belongs to. */
-export const bannerKeyOfItem = (itemId: string) => itemId.replace(/-(?:f|a[1-3]|s[1-6]|l[1-3])$/, "");
+export const bannerKeyOfItem = (itemId: string) => itemId.replace(/-(?:f|a[1-3]|s[1-6]|l[1-3]|g[1-5])$/, "");
+
+/** #2458: the look a friend gives her at their rank-5 finale (the `n`th friend to give one, 1–5). */
+export const friendGiftItemId = (n: number) => itemIdOf("my-wardrobe-0", `g${n}` as ItemSlot);
 
 /**
  * Where an owned item is kept (0.21.0): a wardrobe banner's looks (its 5★, 4★s and, #2303, 3★ `l` looks) in the
@@ -269,7 +273,7 @@ export const bannerKeyOfItem = (itemId: string) => itemId.replace(/-(?:f|a[1-3]|
 export type CollectionScreen = "wardrobe" | "album";
 
 export const collectionOf = (itemId: string): CollectionScreen =>
-  /^(?:his|my)-wardrobe-\d+-(?:f|a[1-3]|l[1-3])$/.test(itemId) ? "wardrobe" : "album";
+  /^(?:his|my)-wardrobe-\d+-(?:f|a[1-3]|l[1-3]|g[1-5])$/.test(itemId) ? "wardrobe" : "album";
 
 /** 0.21.0: how many items won from Wish wait unseen in each (the dock's dots). */
 export type UnseenCounts = Record<CollectionScreen, number>;

@@ -8,6 +8,7 @@ import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Prestige, PrestigeKind } from "./economy";
 import type { Face, MusicMood } from "./faces";
+import type { FriendBible, FriendState, FriendStoryKind } from "./friends";
 import type { ClawRound } from "./claw";
 import type { KittyRound } from "./kitty";
 import type { ReadHimPaid } from "./read-him";
@@ -263,6 +264,14 @@ export interface World {
    * interests who asked that week (S/phone/invite.ts); never sent to the client.
    */
   inviteWeekly?: PhoneDaily;
+  /**
+   * #2458: Settings → Connections: how many times each local week a friend writes to her first, and how many times one
+   * asks her to hang out (DATE_INVITES_MAX at most each); absent or 0: never. Their quotas are kept as `inviteWeekly`.
+   */
+  friendMessages?: number;
+  friendInvites?: number;
+  friendWeekly?: PhoneDaily;
+  friendInviteWeekly?: PhoneDaily;
 }
 
 /**
@@ -457,6 +466,11 @@ export interface Unit {
   stickers?: StickerSet;
   /** 0.35.0: their Kitty Cards kitten's paint (S/art/kittens.ts), claimed once GET /play is read with images on. */
   kitten?: Paint;
+  /**
+   * #2458: a friend's bible, for a friend's unit only (`state.friends`); a friend's `bible` stays null, so nothing that
+   * means the love interests ever counts them.
+   */
+  friend?: FriendBible;
 }
 
 /**
@@ -677,7 +691,8 @@ export interface PhoneMessage {
    * own choosing (S/phone/invite.ts), accepted from its date's looks step (POST /runs/:run/dates/invited), and its
    * `scene` is that date's chapter; absent, it is the invitation to clear the air.
    */
-  invite?: { status: PhoneInviteStatus; scene?: string; kind?: "date" };
+  /** #2458: `kind` "hangout" is a friend asking her to hang out. */
+  invite?: { status: PhoneInviteStatus; scene?: string; kind?: "date" | "hangout" };
   /** 0.34.0: his message drives the toys while he holds the remote (SH/haptics.ts); it loops until his next cue. */
   haptic?: HapticCue[];
 }
@@ -726,6 +741,9 @@ export interface PhoneDueResult {
   group?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
   /** #2424: the date invitations (S/phone/invite.ts), the same way; `latest` is the newest invitation's. */
   invite?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
+  /** #2458: her friends' messages and hangout invitations (S/phone/friends.ts), the same way. */
+  friend?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
+  hangout?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
 }
 
 /** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
@@ -851,7 +869,7 @@ export interface LiState {
    * aside), and his repair waits for GRIEVANCE_SPACE_CHAPTERS of them. A rupture saved without it (from before #2156,
    * or one still owed that it moved to) has its space waived.
    */
-  rupture: { grievanceId: string; since: string; space?: number } | null;
+  rupture: { grievanceId: string; since: string; space?: number; helper?: LiId } | null;
   /** #2156: the story arc his last grievance with her opened in (0 before arcs), so at most one opens an arc; null for none. */
   grievanceArc: number | null;
   /**
@@ -1020,6 +1038,12 @@ export interface RunState {
    * that registers it (S/story/chapters.ts). Null while none wait.
    */
   thoughts: PlayerThoughts | null;
+  /** #2458: her friends, in the order they joined (their units are `${R}:unit:<id>`, with `friend` and no bible). */
+  friends: Record<LiId, FriendState>;
+  /** #2459: when the finale was read to its end (every grievance then settled). Null until then. */
+  finale: { at: string } | null;
+  /** #2459: when the epilogue was read to its end: the story has ended and only opens to look at. Null until then. */
+  ended: { at: string } | null;
 }
 
 /** One Shop purchase as the state keeps it (S/routes/shop.ts): what it bought, a gift id or `figurine:<li>`. */
@@ -1165,6 +1189,22 @@ export interface Chapter {
    */
   hisSide?: HisSideNote;
   /**
+   * #2458: a friend's own story (kind "story"): its kind, the friends in it (by id; the first is the one it is about),
+   * a rank story's level, and the place a hangout was asked for. Shown to the client, which names the chapter by it.
+   */
+  friendStory?: {
+    kind: FriendStoryKind;
+    friends: LiId[];
+    level?: number;
+    place?: string;
+    /** A rank-5 finale's look the friend picked out for her (her reward; outfitLine is English image tags). */
+    look?: { name: string; outfitLine: string };
+    /** A hangout's memento: its English picture brief, and its paint once she asked for it (POST .../memento). */
+    memento?: { brief: string; art?: Paint };
+  };
+  /** #2459: the story's finale (a main chapter) or its epilogue (kind "story", key `story-epilogue`). */
+  ending?: "finale" | "epilogue";
+  /**
    * 0.19.0: a main chapter's earlier chapters recalled in detail, by chapter key, in the order they go, chosen once when
    * it was planned so every scene's story context is the same (S/story/canon.ts recallText; hidden from the client).
    */
@@ -1182,6 +1222,11 @@ export interface Chapter {
    * every scene sends the same ones; [] when it has none (S/story/beats.ts; hidden from the client).
    */
   memories?: string[];
+  /**
+   * #2458: her friends as its first scene told them (by id, with the rank the prompts gave), so every scene sends the
+   * same HER FRIENDS block; [] when none came into it (S/story/beats.ts; hidden from the client).
+   */
+  friends?: Array<{ id: LiId; level: number }>;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1442,10 +1487,14 @@ export type ChapterView = Omit<
   | "hisSide"
   | "recalled"
   | "memories"
+  | "friends"
   | "context"
+  | "friendStory"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
+  /** #2458: a friend's story without its plan's look or memento brief; a memento shows its paint once asked for. */
+  friendStory?: Omit<NonNullable<Chapter["friendStory"]>, "look" | "memento"> & { memento?: { art: Paint } };
 };
 
 /**
@@ -1499,6 +1548,12 @@ export interface SideSpriteView {
   cut?: true;
   /** It is being painted or cut out: the reader polls. */
   coming?: true;
+  /**
+   * #2458: a friend's own sprite (`key` is `friend:<id>`): repainted from Your cast, never from the reader, and shown
+   * in the line's face from `faces` (cut-outs only) once those are painted.
+   */
+  friend?: true;
+  faces?: Partial<Record<Face, string>>;
 }
 
 export interface StoryChapterEntry {
@@ -1515,6 +1570,10 @@ export interface StoryChapterEntry {
   nodes: number;
   /** The story arc a main chapter belongs to, for grouping the list; absent before arcs existed. */
   arc?: number;
+  /** #2458: a friend's own story (kind "story"): its kind, the friends in it and a rank story's level. */
+  friendStory?: { kind: FriendStoryKind; friends: LiId[]; level?: number };
+  /** #2459: the story's finale or epilogue. */
+  ending?: "finale" | "epilogue";
 }
 
 export type LeadReason = "least-recent" | "ripe-conflict";
@@ -1603,6 +1662,39 @@ export interface StoryView {
   bond?: BondEntry[];
   /** #2155: each love interest's side waiting in Routes, or being read. Optional while an older view is cached. */
   hisSides?: HisSideEntry[];
+  /**
+   * #2458: why no friend may join now (`full`: as many friends as love interests; `arc`: one joined in this arc), or
+   * null when one may. Absent from an older server.
+   */
+  friendBlock?: "full" | "arc" | "ending" | null;
+  /**
+   * #2458: each friend's story offers, in the order they joined: the rank story waiting (its level and key), a make-up
+   * story while their grievance stands (open once it has had its space), a clear-the-air scene she accepted, whether
+   * she told them she is upset, and the love interests their Wingman can talk to now.
+   */
+  friendStories?: FriendStoryEntry[];
+  /** #2459: End the Story: on offer, the finale's and the epilogue's keys once planned, and when it ended. */
+  ending?: {
+    offered: boolean;
+    finale?: string;
+    epilogue?: string;
+    ended?: string;
+  };
+}
+
+/** #2458: what the Story screen offers with one friend (StoryView.friendStories). */
+export interface FriendStoryEntry {
+  id: LiId;
+  rank: { level: number; key: string } | null;
+  /** Their grievance with her: its text, the space it has had of what it needs, and its make-up story once open. */
+  held: { text: string; space: number; need: number; key?: string } | null;
+  upset: boolean;
+  /** Her accepted invitation's scene to clear the air, while unread. */
+  air?: string;
+  /** Their rank-5 finale is read. */
+  finale: boolean;
+  /** The love interests whose grievance their Wingman can smooth over now (empty once used this arc). */
+  wingman: LiId[];
 }
 
 /** A bond rank whose story is waiting to be opened (0.23.0). */
@@ -1627,8 +1719,11 @@ export interface ChapterDetail {
 
 /** What one request earned. */
 export interface Grant {
-  /** #2153: `gift` is a birthday scene's gift, paid when it is read to its end, never capped. */
-  source: "beat" | "chapter" | "lead" | "foil" | "gift";
+  /**
+   * #2153: `gift` is a birthday scene's gift, paid when it is read to its end, never capped. #2458: `friend` is a
+   * friend's affection for speaking in a main chapter (`li` names the friend).
+   */
+  source: "beat" | "chapter" | "lead" | "foil" | "gift" | "friend";
   starlight?: number;
   li?: LiId;
   affection?: number;
@@ -1717,7 +1812,10 @@ export interface RecallIndexStatus {
 // ── Wire shapes ──
 
 /** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quotas. */
-export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily" | "inviteWeekly"> & {
+export type WorldView = Omit<
+  World,
+  "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily" | "inviteWeekly" | "friendWeekly" | "friendInviteWeekly"
+> & {
   mystery: { question: string };
   web: Omit<WebRow, "secret">[];
   audio: Omit<WorldAudio, "briefs">;
@@ -1781,7 +1879,36 @@ export interface RunView {
   unseen?: UnseenCounts;
   /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
   prologue?: boolean;
+  /** #2458: her friends, in the order they joined; absent from an older server. */
+  friends?: RunFriendView[];
+  /** #2459: when the story ended (its epilogue read): it only opens to look at. */
+  ended?: string;
 }
+
+/** #2458: a friend as the client sees them: their looks, as a love interest's, and their level, 1–5 (stars). */
+export type RunFriendView = Pick<
+  RunLiView,
+  | "id"
+  | "name"
+  | "pronouns"
+  | "source"
+  | "cardId"
+  | "voiceGender"
+  | "accent"
+  | "accentSampler"
+  | "portrait"
+  | "look"
+  | "art"
+  | "cut"
+  | "expressions"
+  | "worn"
+  | "level"
+> & {
+  affectionProgress: { current: number; required: number };
+  arc: number;
+  /** Who they are and how you know each other, from their bible (never a secret: friends have none). */
+  about?: string;
+};
 
 export type SetupLi =
   | { source: "card"; cardId: string; pronouns: Pronouns }
@@ -1829,4 +1956,7 @@ export interface SettingsInput {
   groupSquabbles?: number;
   /** #2424: date invitations a week, 0 to DATE_INVITES_MAX. */
   dateInvites?: number;
+  /** #2458: her friends' messages and hangout invitations a week, each 0 to DATE_INVITES_MAX. */
+  friendMessages?: number;
+  friendInvites?: number;
 }

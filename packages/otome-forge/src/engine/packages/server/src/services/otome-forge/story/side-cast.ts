@@ -70,10 +70,11 @@ export const SIDE_LOOK_RETRY_MS = 10 * 60_000;
 export const SIDE_SCENES_MAX = 12_000;
 const LOOK_LINE_MAX = 600;
 
-/** The love interests and the protagonist: never side characters. */
+/** The love interests, (#2458) her friends and the protagonist: never side characters. */
 interface Cast {
   player: Pick<Player, "name">;
   units: ReadonlyArray<Pick<Unit, "name">>;
+  friends?: ReadonlyArray<Pick<Unit, "name">>;
 }
 
 const sidesTarget = (runId: string) => runDocTarget("sides", sideCastId(runId));
@@ -83,18 +84,25 @@ const spritesOn = (world: Pick<World, "images"> | null) => !!world?.images.sideS
 const NOT_ONE_NAME = /[&/+,]|^\P{L}*$/u;
 
 /** True when `speaker` names `name` as the reader does, or by its core words, or by its first core word alone. */
-function namesPerson(speaker: string, name: string): boolean {
+export function namesPerson(speaker: string, name: string): boolean {
   if (sameName(speaker, name)) return true;
   const key = nameKey(speaker);
   const theirs = nameCore(name);
   return !!key && (key === theirs.join(" ") || key === theirs[0]);
 }
 
+/** #2458: either name names the other ("Kai" and "Kai Moreno"), so one would be credited with the other's lines. */
+export const namesClash = (a: string, b: string): boolean => namesPerson(a, b) || namesPerson(b, a);
+
 /** The record key of a side character speaking as `speaker`, or null for narration, the cast or no single name. */
 export function sideKeyOf(speaker: string, cast: Cast): string | null {
   const name = speaker.trim();
   if (!name || name.length > SIDE_NAME_MAX || NOT_ONE_NAME.test(name)) return null;
-  if (namesPerson(name, cast.player.name) || cast.units.some((unit) => namesPerson(name, unit.name))) return null;
+  if (
+    namesPerson(name, cast.player.name) ||
+    [...cast.units, ...(cast.friends ?? [])].some((unit) => namesPerson(name, unit.name))
+  )
+    return null;
   return nameKey(name) || null;
 }
 
@@ -107,7 +115,7 @@ export interface SideSpeaker {
 type ReadBeat = Pick<Beat, "segments" | "choices" | "choiceCanon" | "easedOff">;
 
 /** The beat's lines as it was read: its lines up to an Ease off's cut, then each picked option's branch. */
-function readLines(beat: ReadBeat): Beat["segments"] {
+export function readLines(beat: ReadBeat): Beat["segments"] {
   const end = beat.easedOff ? beat.easedOff.at : Infinity;
   return [
     ...beat.segments.slice(0, end + 1),
@@ -286,7 +294,11 @@ function normalizeLook(reply: LookReply): LookReply | string {
  * The text of the read scenes they spoke in (readBeats, readLines: never a scene written ahead or cut by Ease off), in
  * the order first heard, each around their lines, at most SIDE_SCENES_MAX.
  */
-async function sideScenes(deps: Pick<SideCastDeps, "store">, runId: string, person: SidePerson): Promise<string> {
+export async function sideScenes(
+  deps: Pick<SideCastDeps, "store">,
+  runId: string,
+  person: SidePerson,
+): Promise<string> {
   const beats = ((await readBeats(deps, runId))?.beats ?? [])
     .filter((beat) => person.chapters.includes(beat.key))
     .sort((a, b) => person.chapters.indexOf(a.key) - person.chapters.indexOf(b.key) || a.i - b.i);
@@ -388,7 +400,7 @@ export async function tendSideCast(deps: SideCastDeps, runId: string, mode: Side
       (person) => !person.cardId && !person.look && !person.art && !checked.has(`${runId}|${person.key}`),
     );
     if (unchecked.length) {
-      const linked = new Set(run.units.flatMap((unit) => unit.cardId ?? []));
+      const linked = new Set([...run.units, ...(run.friends ?? [])].flatMap((unit) => unit.cardId ?? []));
       const cards = (await listCardNames(deps.runtime)).filter((card) => !linked.has(card.id));
       for (const person of unchecked) checked.add(`${runId}|${person.key}`);
       const found = new Map(

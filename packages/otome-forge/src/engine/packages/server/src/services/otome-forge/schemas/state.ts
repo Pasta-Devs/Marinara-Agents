@@ -31,6 +31,7 @@ import type {
   Player,
   PlayerThoughts,
   RunState,
+  RunFriendView,
   RunLiView,
   RunView,
   ShopPurchaseRecord,
@@ -100,6 +101,8 @@ import {
   type BannerKind,
   type PityCounter,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
+import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
+import { friendLevelOf, friendProgressOf } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { isChapterKey, isLiId, playerId, stateId, unitId, worldId } from "../ids.js";
 import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
@@ -317,7 +320,13 @@ function normalizeLiState(raw: unknown): LiState {
       grievances: (value) => validItems(GrievanceSchema, value, LIST_MAX),
       // #2156: a rupture without `space` (saved before it) has its space waived.
       rupture: z
-        .object({ grievanceId: short(80), since: z.string(), space: z.number().int().min(0).optional() })
+        .object({
+          grievanceId: short(80),
+          since: z.string(),
+          space: z.number().int().min(0).optional(),
+          // #2458: the friend who talked to him for her (the rank-5 Wingman); they appear in his repair.
+          helper: z.string().max(80).optional(),
+        })
         .nullable(),
       grievanceArc: z.number().int().min(0).nullable(),
       upset: z.object({ since: z.string().max(40) }).nullable(),
@@ -424,6 +433,10 @@ function normalizeHome(raw: unknown, lis: RunState["lis"]): HomeState {
   };
 }
 
+/** #2459: a moment's record ({at}), or null. */
+const stamp = (value: unknown): { at: string } | null =>
+  isRecord(value) && typeof value.at === "string" ? { at: clipText(value.at, 40) } : null;
+
 /** Your thoughts… waiting (#2127), or null: none, a damaged one, or one longer than the player may write. */
 function normalizeThoughts(raw: unknown): PlayerThoughts | null {
   const parsed = ThoughtsSchema.safeParse(raw);
@@ -509,7 +522,45 @@ export function normalizeState(data: unknown): RunState {
       paid: keepNewest(validItems(TarotPaidSchema, field(field(data, "tarot"), "paid")), TAROT_PAID_KEPT),
     },
     thoughts: normalizeThoughts(field(data, "thoughts")),
+    friends: normalizeFriends(field(data, "friends"), lis),
+    // #2459: the finale read to its end, then the epilogue, after which the story only opens to look at.
+    finale: stamp(field(data, "finale")),
+    ended: stamp(field(data, "ended")),
   };
+}
+
+const FriendGrievanceSchema = z.object({
+  text: short(),
+  severity: z.enum(["major", "rupture"]),
+  opened: short(40),
+  space: z.number().int().min(0).max(1000),
+});
+
+/**
+ * #2458: her friends, in the order they joined, at most as many as love interests can be. A friend never shares an id
+ * with a love interest; a damaged entry is dropped.
+ */
+function normalizeFriends(raw: unknown, lis: RunState["lis"]): RunState["friends"] {
+  const friends: RunState["friends"] = {};
+  if (!isRecord(raw)) return friends;
+  for (const [id, entry] of Object.entries(raw)) {
+    if (!isLiId(id) || Object.hasOwn(lis, id) || !isRecord(entry)) continue;
+    if (Object.keys(friends).length >= LIS_MAX) break;
+    const grievance = FriendGrievanceSchema.safeParse(entry.grievance);
+    const upset = isRecord(entry.upset) && typeof entry.upset.since === "string" ? { since: entry.upset.since } : null;
+    const arcOrNull = (value: unknown) => (value === null || value === undefined ? null : wholeNumber(value, 0, 0));
+    friends[id] = {
+      points: wholeNumber(entry.points, 0, 0),
+      arc: wholeNumber(entry.arc, 0, 0),
+      joinedAt: typeof entry.joinedAt === "string" ? clipText(entry.joinedAt, 40) : "",
+      grievance: grievance.success ? grievance.data : null,
+      grievanceArc: arcOrNull(entry.grievanceArc),
+      upset,
+      asked: typeof entry.asked === "string" ? clipText(entry.asked, 40) : null,
+      wingmanArc: arcOrNull(entry.wingmanArc),
+    };
+  }
+  return friends;
 }
 
 /** Lists the state keeps bounded: the newest `max` entries (ledgers, timeline and favorites grow by appending). */
@@ -678,10 +729,58 @@ function bondView(
   };
 }
 
+/** A unit's pictures as the client sees them (each as its cut-out once one is ready), shared by love interests and friends. */
+function looksOf(world: World, unit: Unit): Omit<RunFriendView, "level" | "affectionProgress" | "arc"> {
+  // Each image as its cut-out once one is ready, so he stands on every screen without a backdrop; `cut` lists the
+  // cut-outs, which the client frames whole instead of cropping and fading.
+  const cut: string[] = [];
+  const shown = (url: string) => {
+    const cutout = readyCutout(unit, url);
+    if (cutout) cut.push(cutout);
+    return cutout ?? url;
+  };
+  // Phone stickers keep the original while cleanup waits or fails; only URLs in `cut` may stand on stage.
+  const faces = readyFaces(world, unit);
+  const expressions = faces
+    ? (Object.fromEntries(Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url])) as typeof faces)
+    : undefined;
+  const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
+  const portrait = unit.portrait ? shown(unit.portrait) : undefined;
+  const wornUrl = worn ? shown(worn.url) : undefined;
+  const look = unit.bible?.look ?? unit.friend?.look;
+  return {
+    id: unit.id,
+    name: unit.name,
+    pronouns: unit.pronouns,
+    source: unit.source,
+    ...(unit.cardId ? { cardId: unit.cardId } : {}),
+    voiceGender: unit.voiceGender,
+    accent: unit.accent,
+    ...(unit.accentSampler ? { accentSampler: unit.accentSampler } : {}),
+    look: {
+      identityLine: unit.identityLine || look?.identityLine || "",
+      outfitLine: unit.outfitLine || look?.outfitLine || "",
+    },
+    ...(portrait ? { portrait } : {}),
+    ...(unit.art ? { art: unit.art } : {}),
+    ...(expressions ? { expressions } : {}),
+    ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
+    ...(cut.length ? { cut } : {}),
+  };
+}
+
 /**
  * What GET /runs/:run returns. LIs follow the order of `state.lis` (setup order); a unit missing from it goes last.
+ * #2458: her friends follow `state.friends`, each with a level of 1–5.
  */
-export function toRunView(runKey: string, world: World, player: Player, units: Unit[], state: RunState): RunView {
+export function toRunView(
+  runKey: string,
+  world: World,
+  player: Player,
+  units: Unit[],
+  state: RunState,
+  friends: readonly Unit[] = [],
+): RunView {
   const order = Object.keys(state.lis);
   const rank = (unit: Unit) => {
     const index = order.indexOf(unit.id);
@@ -695,50 +794,35 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       .sort((a, b) => rank(a) - rank(b))
       .map((unit) => {
         const progress = state.lis[unit.id] ?? defaultLiState();
-        // Each image as its cut-out once one is ready, so he stands on every screen without a backdrop; `cut` lists the
-        // cut-outs, which the client frames whole instead of cropping and fading.
-        const cut: string[] = [];
-        const shown = (url: string) => {
-          const cutout = readyCutout(unit, url);
-          if (cutout) cut.push(cutout);
-          return cutout ?? url;
-        };
-        // Phone stickers keep the original while cleanup waits or fails; only URLs in `cut` may stand on stage.
-        const faces = readyFaces(world, unit);
-        const expressions = faces
-          ? (Object.fromEntries(
-              Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url]),
-            ) as typeof faces)
-          : undefined;
-        const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
-        const portrait = unit.portrait ? shown(unit.portrait) : undefined;
-        const wornUrl = worn ? shown(worn.url) : undefined;
+        const { expressions, worn, cut, ...looks } = looksOf(world, unit);
         return {
-          id: unit.id,
-          name: unit.name,
-          pronouns: unit.pronouns,
-          source: unit.source,
-          ...(unit.cardId ? { cardId: unit.cardId } : {}),
-          voiceGender: unit.voiceGender,
-          accent: unit.accent,
-          ...(unit.accentSampler ? { accentSampler: unit.accentSampler } : {}),
-          look: {
-            identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
-            outfitLine: unit.outfitLine || unit.bible?.look.outfitLine || "",
-          },
-          ...(portrait ? { portrait } : {}),
-          ...(unit.art ? { art: unit.art } : {}),
+          ...looks,
           ...(unit.bible?.intimacy ? { intimacy: true as const } : {}),
           ...bondView(unit.id, progress.points, progress.stage, state),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
-          ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
-          ...(cut.length ? { cut } : {}),
+          ...(worn ? { worn } : {}),
+          ...(cut ? { cut } : {}),
         };
       }),
     forge: world.forge,
     starlight: state.wallet.starlight,
     unseen: unseenCounts(state.owned.unseen),
+    ...(state.ended ? { ended: state.ended.at } : {}),
+    friends: friends.flatMap((unit) => {
+      const friend = state.friends[unit.id];
+      return friend
+        ? [
+            {
+              ...looksOf(world, unit),
+              level: friendLevelOf(friend.points),
+              affectionProgress: friendProgressOf(friend.points),
+              arc: friend.arc,
+              ...(unit.friend ? { about: `${unit.friend.role}. ${unit.friend.howWeMet}`.slice(0, 600) } : {}),
+            },
+          ]
+        : [];
+    }),
   };
 }
 
@@ -747,6 +831,8 @@ export interface RunDocuments {
   player: Player;
   units: Unit[];
   state: RunState;
+  /** #2458: her friends' units, in the order they joined (readFriendUnits); never counted among the love interests. */
+  friends?: Unit[];
 }
 
 /**
@@ -762,12 +848,22 @@ export async function readRun(store: Pick<OtomeStore, "readDoc">, runId: string)
   ]);
   if (!world) return null;
   const state = stored ?? normalizeState(undefined);
-  return {
-    world,
-    player: player ?? normalizePlayer(undefined),
-    units: await readCastUnits(store, runId, state),
-    state,
-  };
+  const [units, friends] = await Promise.all([
+    readCastUnits(store, runId, state),
+    readFriendUnits(store, runId, state),
+  ]);
+  return { world, player: player ?? normalizePlayer(undefined), units, state, friends };
+}
+
+/** #2458: her friends' units, in the order they joined; a unit without its friend bible is not one yet. */
+export async function readFriendUnits(
+  store: Pick<OtomeStore, "readDoc">,
+  runId: string,
+  state?: RunState | null,
+): Promise<Unit[]> {
+  const friends = (state ?? (await store.readDoc(stateId(runId), normalizeState)))?.friends ?? {};
+  const units = await Promise.all(Object.keys(friends).map((id) => store.readDoc(unitId(runId, id), normalizeUnit)));
+  return units.filter((unit): unit is Unit => !!unit?.friend);
 }
 
 /**

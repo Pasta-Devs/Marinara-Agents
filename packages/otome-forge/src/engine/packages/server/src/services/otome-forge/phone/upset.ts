@@ -23,12 +23,15 @@ import type {
   PhoneThread,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { clearAirOfKey, heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { friendAirOfKey, friendHeld } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import type { RunState } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { resolveConnectionId } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget, stateId, unitId } from "../ids.js";
 import { clearAirStoryChapter } from "../items/character-story.js";
 import { normalizeState } from "../schemas/state.js";
+import { setFriendUpset } from "../state/friends.js";
+import { friendAirChapter } from "../story/friends.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
@@ -76,6 +79,31 @@ export async function settleInvites(
       ),
     };
   });
+}
+
+/** #2458: a friend's clear-the-air scenes registered, by number, newest last. */
+const friendAirScenes = (state: Pick<RunState, "chapters">, id: LiId) =>
+  Object.keys(state.chapters)
+    .flatMap((key) => {
+      const scene = friendAirOfKey(key);
+      return scene?.id === id ? [{ key, n: scene.n }] : [];
+    })
+    .sort((a, b) => a.n - b.n);
+
+/** #2458: saves a friend's next clear-the-air scene (the first save winning) and returns its key. */
+async function saveFriendAirScene(
+  store: Pick<OtomeStore, "readDoc" | "mutateDoc">,
+  runId: string,
+  id: LiId,
+  state: Pick<RunState, "chapters">,
+): Promise<string> {
+  const unit = await store.readDoc(unitId(runId, id), normalizeUnit);
+  if (!unit) throw notFound("friend");
+  const chapter = friendAirChapter(unit, (friendAirScenes(state, id).at(-1)?.n ?? 0) + 1, new Date().toISOString());
+  await store.mutateDoc(runDocTarget("chapter", chapterId(runId, chapter.key)), normalizeChapter, (current) =>
+    current?.key ? current : chapter,
+  );
+  return chapter.key;
 }
 
 /** #2303: the clear-the-air scenes registered for `li`, by number, newest last. */
@@ -148,6 +176,12 @@ export async function setUpset(
   const since = new Date().toISOString();
   let told = false;
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+    // #2458: one of her friends, the same way (S/state/friends.ts).
+    const friend = current.friends[li];
+    if (friend) {
+      told = upset && !friend.upset;
+      return upset === !!friend.upset ? current : setFriendUpset(current, li, upset, since);
+    }
     const his = current.lis[li];
     if (!his) throw notFound("love interest");
     told = upset && !his.upset;
@@ -168,7 +202,9 @@ export async function setUpset(
     foreground: true,
     run: async () => {
       // She may have taken it back while the job waited.
-      if (!(await deps.store.readDoc(stateId(runId), normalizeState))?.lis[li]?.upset) return;
+      const now = await deps.store.readDoc(stateId(runId), normalizeState);
+      // #2458: a friend's upset is kept with the friends.
+      if (!(now?.friends[li]?.upset ?? now?.lis[li]?.upset)) return;
       try {
         const sent = await inThreadLock(runId, li, () =>
           writeFirstMessage(deps, runId, li, { connectionId, debugMode, reason: "upset" }),
@@ -204,8 +240,12 @@ export async function answerInvite(
   const answer: PhoneInviteStatus = accept ? "accepted" : "declined";
   // #2424: his date is accepted from its looks step (POST /runs/:run/dates/invited), which plans it; only a decline
   // comes here.
-  if (accept && invited.invite.kind === "date" && invited.invite.status === "pending") {
-    throw conflict("Accept his date from Messages, where you choose what to wear.");
+  if (accept && invited.invite.kind && invited.invite.status === "pending") {
+    throw conflict(
+      invited.invite.kind === "hangout"
+        ? "Accept their hangout from Messages, where you choose what to wear."
+        : "Accept his date from Messages, where you choose what to wear.",
+    );
   }
   if (invited.invite.status === answer) {
     return { status: answer, ...(invited.invite.scene ? { scene: invited.invite.scene } : {}) };
@@ -217,9 +257,26 @@ export async function answerInvite(
     let lapsed = false;
     const before = await deps.store.readDoc(stateId(runId), normalizeState);
     if (!before) throw notFound("Otome Hearth story");
-    const key = await saveClearAirScene(deps.store, runId, li, before);
+    const friendly = !!before.friends[li];
+    const key = friendly
+      ? await saveFriendAirScene(deps.store, runId, li, before)
+      : await saveClearAirScene(deps.store, runId, li, before);
     const state = await deps.store
       .updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+        // #2458: a friend's invitation to clear the air, the same way.
+        const friend = current.friends[li];
+        if (friendly) {
+          if (!friend) throw notFound("friend");
+          if (friendHeld(friend))
+            throw new OtomeForgeError(409, "They need space first: make it right on Story.", "locked");
+          lapsed = !friend.upset && !(friend.asked && Date.parse(friend.asked) >= Date.parse(invited.at));
+          if (friend.upset && Date.parse(friend.upset.since) > Date.parse(invited.at)) lapsed = true;
+          if (lapsed || !friend.upset) return current;
+          return withScene(
+            { ...current, friends: { ...current.friends, [li]: { ...friend, upset: null, asked: at } } },
+            key,
+          );
+        }
         const his = current.lis[li];
         if (!his) throw notFound("love interest");
         if (heldAgainst(his)) {
@@ -233,13 +290,16 @@ export async function answerInvite(
         return withScene({ ...current, lis: { ...current.lis, [li]: { ...his, upset: null, asked: at } } }, key);
       })
       .catch(async (error: unknown) => {
-        await deps.store.removeDoc(chapterId(runId, key)).catch(() => false);
+        // Another Accept can share this scene (the same key from the same state) and have registered it: only a
+        // scene the story does not refer to goes.
+        const now = await deps.store.readDoc(stateId(runId), normalizeState).catch(() => null);
+        if (!now?.chapters[key]) await deps.store.removeDoc(chapterId(runId, key)).catch(() => false);
         throw error;
       });
     if (!state) throw notFound("Otome Hearth story");
     // The scene this acceptance registered, or (an Accept sent again) the one already waiting; one saved for nothing
     // goes.
-    scene = state.chapters[key] ? key : clearAirScenes(state, li).at(-1)?.key;
+    scene = state.chapters[key] ? key : (friendly ? friendAirScenes : clearAirScenes)(state, li).at(-1)?.key;
     if (scene !== key) await deps.store.removeDoc(chapterId(runId, key)).catch(() => false);
     if (lapsed) {
       await settleInvites(deps, runId, li, "lapsed", message);

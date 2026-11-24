@@ -1370,9 +1370,9 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // banned in narration only, so every prompt with them moved.
 const BEFORE_GIFTS: Record<string, string> = {
   plan: "02f48c02dff26113",
-  scene1: "84e3d863a3d29804",
-  scene2: "f52fe4de1b4ed7e4",
-  scene3: "f462e195007591f1",
+  scene1: "52c65ae4219982ca",
+  scene2: "c1a7661adf048649",
+  scene3: "e640e980b0486caa",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */

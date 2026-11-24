@@ -19,11 +19,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
 import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FACE_LOOKS, FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { OTOME_FORGE_PACKAGE_ID, runDocTarget, unitId, worldId } from "../ids.js";
+import { OTOME_FORGE_PACKAGE_ID, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
 import { normalizeUnit } from "../schemas/unit.js";
-import { readCastUnits } from "../schemas/state.js";
+import { normalizeState, readCastUnits, readFriendUnits } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt, startBeatCg } from "./cg.js";
 import { engineArtPath } from "./engine-art.js";
@@ -179,8 +179,14 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
           const unit = await store.readDoc(id, normalizeUnit);
           return unit ? { id, data: unit } : null;
         },
+        // #2458: her friends' faces are painted as the love interests' are.
         async list() {
-          return (await readCastUnits(store, runId)).map((unit) => ({ id: unitId(runId, unit.id), data: unit }));
+          const state = await store.readDoc(stateId(runId), normalizeState);
+          const [cast, friends] = await Promise.all([
+            readCastUnits(store, runId, state),
+            readFriendUnits(store, runId, state),
+          ]);
+          return [...cast, ...friends].map((unit) => ({ id: unitId(runId, unit.id), data: unit }));
         },
       },
       packageId: OTOME_FORGE_PACKAGE_ID,
@@ -243,8 +249,8 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       void (async () => {
         const run = await readRun(runId);
         if (!run || disposed) return;
-        // Love interests only: the kit matches each line's speaker to these names.
-        const units = await readCastUnits(store, runId);
+        // The love interests and (#2458) her friends: the kit matches each line's speaker to these names.
+        const units = [...(await readCastUnits(store, runId)), ...(await readFriendUnits(store, runId))];
         if (options.lane === "high" && run.world.images.expressions) {
           const speakers = new Set(beat.segments.map((segment) => segment.speaker));
           // The kit's dedupe key for a unit's set (createForgeStoryExpressions schedule).

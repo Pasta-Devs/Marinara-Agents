@@ -96,6 +96,7 @@ import {
   stageArtUrls,
 } from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
+import { ensureFinaleRewards } from "../story/friend-rewards.js";
 import {
   ConnectionsSchema,
   ContentSchema,
@@ -116,6 +117,7 @@ import { ensureStickerSets, stickerArtUrls, stickerBook, stickersComing } from "
 import { fillIntimacy } from "../intimacy.js";
 import { cancellable } from "../story/beats.js";
 import { backfillSideCast, tendSideCast } from "../story/side-cast.js";
+import { runEnded } from "./ended.js";
 
 const NoFields = z.object({});
 const ID_MAX = 200;
@@ -188,6 +190,8 @@ const SettingsBody = z.object({
   dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
   groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
   dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+  friendMessages: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+  friendInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AppearanceBody = z.object({ identityLine: z.string() });
@@ -207,10 +211,10 @@ const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
 /** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
-function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
+function runView(runKey: string, runId: string, { world, player, units, state, friends = [] }: RunDocuments) {
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  const lis = units.map((unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit));
-  return toRunView(runKey, withPlaceViews(runId, world), shown, lis, state);
+  const viewed = (unit: Unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit);
+  return toRunView(runKey, withPlaceViews(runId, world), shown, units.map(viewed), state, friends.map(viewed));
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
@@ -239,12 +243,25 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
     runId: string,
     mode: { debugMode: boolean; review: boolean },
   ): Promise<RunDocuments> => {
-    const looks = await ensureEngineLooks(deps, runId, read, read.world.images.ask, !!read.world.images.connectionId);
-    const world = await forgeCast(deps, runId, looks, mode);
+    // #2458: her friends are painted, or wear their Engine art, as the love interests are; they stay in `friends`.
+    const castCount = read.units.length;
+    const everyone = await ensureEngineLooks(
+      deps,
+      runId,
+      { ...read, units: [...read.units, ...(read.friends ?? [])] },
+      read.world.images.ask,
+      !!read.world.images.connectionId,
+    );
+    const world = await forgeCast(deps, runId, everyone, mode);
+    const looks = {
+      ...everyone,
+      units: everyone.units.slice(0, castCount),
+      friends: everyone.units.slice(castCount),
+    };
     const run = world === looks.world ? looks : { ...looks, world };
-    if (withEngineSteps(run.world.forge, run) === run.world.forge) return run;
+    if (withEngineSteps(run.world.forge, everyone) === run.world.forge) return run;
     const saved = await updateIfChanged(store, runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
-      const forge = withEngineSteps(current.forge, run);
+      const forge = withEngineSteps(current.forge, everyone);
       return forge === current.forge ? undefined : { ...current, forge };
     });
     return saved ? { ...run, world: saved.value } : run;
@@ -395,27 +412,33 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       if (!read) throw runNotFound();
       // #2303: an invitation to clear the air accepted before its scene existed gets that scene, once (no model call).
       await ensureClearAirScenes(store, runId, read.state);
+      // #2459: an ended story starts no background work.
+      const ended = !!read.state.ended;
       // #2174: the love interests' personality quiz answers, once, in the background (a story from before the quiz
       // gets them here, by its first chapter-planning wait); nothing here waits for them.
-      void ensureQuizScores(deps, runId, read, { debugMode: debugModeOf(request) }).catch((error: unknown) =>
-        deps.runtime.logger.warn(
-          "[otome-forge] The quiz's answers were not queued: %s",
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
-      // Long-term recall: chapter summaries not indexed yet (a story from before it, too), in the background.
-      void deps.recall
-        ?.ensure(runId, { open: true })
-        .catch((error: unknown) =>
+      if (!ended)
+        void ensureQuizScores(deps, runId, read, { debugMode: debugModeOf(request) }).catch((error: unknown) =>
           deps.runtime.logger.warn(
-            "[otome-forge] The recall index was not queued: %s",
+            "[otome-forge] The quiz's answers were not queued: %s",
             error instanceof Error ? error.message : String(error),
           ),
         );
+      // Long-term recall: chapter summaries not indexed yet (a story from before it, too), in the background.
+      if (!ended)
+        void deps.recall
+          ?.ensure(runId, { open: true })
+          .catch((error: unknown) =>
+            deps.runtime.logger.warn(
+              "[otome-forge] The recall index was not queued: %s",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
       // 0.20.0: the side characters of scenes read before they were recorded, once; then, with Side character
       // sprites on, what the recurring ones are owed. Neither is waited for.
       const sideMode = { debugMode: debugModeOf(request), review: reviewModeOf(request) };
-      void backfillSideCast(deps, runId).then(() => tendSideCast(deps, runId, sideMode));
+      if (!ended) void backfillSideCast(deps, runId).then(() => tendSideCast(deps, runId, sideMode));
+      // #2458: a friend's rank-5 finale gives her their look and their card, once (no model call; the card paints).
+      if (!ended) await ensureFinaleRewards(deps, runId, read, sideMode);
       const run = await withPersonaAbout(await withEngineLooks(read, runId, sideMode), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.
@@ -435,9 +458,9 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // #2044: every read designs the sets and paints the stickers owed so far (a level reached since, or the levels a
       // story in progress had already reached), in the background; nothing here waits for them.
       const debugMode = debugModeOf(request);
-      const designing = ensureStickerSets(deps, runId, shown, { debugMode });
-      const painting = !!deps.art?.queueStickers;
-      void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
+      const designing = !ended && ensureStickerSets(deps, runId, shown, { debugMode });
+      const painting = !ended && !!deps.art?.queueStickers;
+      if (!ended) void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
       return {
         view: {
           ...runView(runKey, runId, shown),
@@ -566,6 +589,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           ...(body.dailyMessages !== undefined ? { dailyMessages: body.dailyMessages } : {}),
           ...(body.groupSquabbles !== undefined ? { groupSquabbles: body.groupSquabbles } : {}),
           ...(body.dateInvites !== undefined ? { dateInvites: body.dateInvites } : {}),
+          ...(body.friendMessages !== undefined ? { friendMessages: body.friendMessages } : {}),
+          ...(body.friendInvites !== undefined ? { friendInvites: body.friendInvites } : {}),
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },
@@ -574,12 +599,14 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!world) throw runNotFound();
+      // #2459: an ended story's settings are kept, but start no painting nor indexing.
+      const ended = await runEnded(store, runId);
       // Side character sprites turned on: the recurring ones' looks and sprites start in the background.
-      if (sideSpritesOn) {
+      if (sideSpritesOn && !ended) {
         void tendSideCast(deps, runId, { debugMode: debugModeOf(request), review: reviewModeOf(request) });
       }
       // Another embedding model, as this write saved it: the recall index is built again with it, in the background.
-      if (embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
+      if (!ended && embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
         void deps.recall
           ?.ensure(runId)
           .catch((error: unknown) =>

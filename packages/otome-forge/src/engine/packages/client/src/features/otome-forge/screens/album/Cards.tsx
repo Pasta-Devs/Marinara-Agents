@@ -23,7 +23,8 @@ export function useCardImages(view: RunView, cards: readonly AlbumCard[]) {
   const { t } = useTranslation();
   const tiles = cards.map((card) => {
     const name = t(ARCANA_NAME_KEYS[card.card]);
-    const li = card.li ? view.lis.find((item) => item.id === card.li) : undefined;
+    // #2458: a friend's own card is theirs, as a love interest's is.
+    const li = card.li ? [...view.lis, ...(view.friends ?? [])].find((item) => item.id === card.li) : undefined;
     return { card, title: li ? t("ui.otomeForge.album.cardOf", { card: name, name: li.name }) : name };
   });
   const images = tiles.flatMap(({ card, title }): AlbumImage[] => {
@@ -65,7 +66,7 @@ export function CardGrid({ runKey, view, cards, actions, onView }: CardGridProps
       {cards.tiles.map(({ card, title }) => {
         const url = readyArt(card.art);
         const li = card.li ?? asker;
-        const target = li ? tarotPaintTarget(runKey, li, card.card, title) : null;
+        const target = li ? tarotPaintTarget(runKey, li, card.card, title, card.key) : null;
         const busy = !!target && actions.busy.has(target.id);
         const error = target ? actions.errors[target.id] : undefined;
         const titleId = `${id}-${card.key}`;

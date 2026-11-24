@@ -1642,6 +1642,15 @@ ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
 /* A bond rank's "Open {{rank}}" button takes a row of its own under the hearts. With no place in the row's grid it fell
    into the avatar column, which grew to the button's width and squeezed the name and hearts (2026-11-17). */
 ${R} .of-bond-open { grid-column: 2 / -1; justify-self: start; margin-top: 4px; }
+/* #2458: a friend's "about" line and their actions take rows of their own under the stars, as a bond rank's button
+   does, so they never fall into the avatar column and squeeze the name and stars. */
+${R} .of-friend-about { grid-column: 2 / -1; margin: 2px 0 0; }
+${R} .of-friend-actions {
+  grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 4px; min-width: 0;
+}
+${R} .of-friend-actions > .of-hint, ${R} .of-friend-actions > .of-error, ${R} .of-friend-actions > .of-route-upset {
+  flex-basis: 100%;
+}
 /* Prestige past level 10 (#2025): three pips, and the extra story they unlock. */
 ${R} .of-affection:has(.of-prestige) {
   grid-template-areas: "avatar name name" "avatar hearts progress" "avatar prestige prestige";

@@ -46,8 +46,10 @@ import type {
   Beat,
   Chapter,
   ChapterNode,
+  Grant,
   Segment,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type { FriendBible } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/friends.ts";
 import type { NotebookEntry } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/read-me.ts";
 import {
   OWN_ANSWER_MAX,
@@ -118,9 +120,11 @@ import {
   playerId,
   runDocTarget,
   stateId,
+  unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
+  HE,
   KAI,
   MIR,
   SOL,
@@ -1275,6 +1279,63 @@ test("Cancel stops a write before anything is saved", async () => {
   release();
   await t.settle();
   assert.equal(await t.store.readDoc(beatId(t.runId, "main-1", 0), normalizeBeat), null);
+});
+
+/** #2458: a friend's bible, as S/story/friends.ts writes one. */
+const FRIEND_BIBLE: FriendBible = {
+  age: 24,
+  role: "Architect",
+  howWeMet: "Neighbours.",
+  publicFace: "Sharp.",
+  personality: "Proud and soft.",
+  wound: "A failed bridge.",
+  want: "To build.",
+  need: "Help.",
+  fear: "Being ordinary.",
+  flaws: [],
+  virtues: [],
+  voice: { register: "Dry.", tics: [], samples: { warm: "W", teasing: "T", worried: "R" } },
+  likes: [],
+  dislikes: [],
+  growth: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5" },
+  onLis: {},
+  onHer: "Worried.",
+  arcana: "star",
+  look: { identityLine: "tall", outfitLine: "coat", presentation: "man" },
+};
+
+test("#2458: a friend who speaks in a main chapter earns 50 friendship once it is read to its end, and only then", async () => {
+  const KAVEH = "li-kaveh-ab12";
+  const t = await plannedWorld("r-friend-aaaaaa", (i) =>
+    i === 2
+      ? beatReply({
+          segments: [...beatReply().segments, { speaker: "Kaveh", text: "Honestly, you two.", expression: "tender" }],
+        })
+      : beatReply(),
+  );
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAVEH)), normalizeUnit, (unit) => ({
+    ...unit,
+    id: KAVEH,
+    name: "Kaveh",
+    pronouns: HE,
+    friend: FRIEND_BIBLE,
+  }));
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    friends: { [KAVEH]: { points: 0, arc: 0, joinedAt: "2026-11-24T10:00:00.000Z" } },
+  }));
+  const reads = await readThrough(t, 0, 6);
+  assert.ok(
+    reads.slice(0, -1).every((read) => !read.body.grants.some((grant: Grant) => grant.source === "friend")),
+    "nothing before the chapter's end",
+  );
+  assert.deepEqual(
+    reads.at(-1)!.body.grants.filter((grant: Grant) => grant.source === "friend"),
+    [{ source: "friend", li: KAVEH, affection: 50 }],
+  );
+  assert.equal((await t.state()).friends[KAVEH]!.points, 50);
+  const again = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(6));
+  assert.deepEqual(again.body.grants, [], "paid once");
 });
 
 test("reading the last node completes the chapter once: Starlight, Lead and Foil affection, ledger, lastLead", async () => {

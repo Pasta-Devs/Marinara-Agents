@@ -9,12 +9,13 @@ import type {
   AudioSettings,
   Player,
   Pronouns,
+  RunFriendView,
   RunLiView,
   Segment,
   SoundtrackTrack,
   WorldView,
 } from "../shared/api-types";
-import type { MusicMood } from "../shared/faces";
+import { sameName, type MusicMood } from "../shared/faces";
 import { voiceOf } from "./reader-state";
 
 /** The Engine's stock cues (lib/audio-service.ts AudioMusicCue) Otome falls back on. */
@@ -43,8 +44,13 @@ export const runIdOf = (runKey: string) => `otome-forge:${runKey}`;
 
 /** A speaker as the kit's voice picker reads it, plus whether "voice everyone else" must be on to voice them. */
 export interface LineSpeaker extends ForgeVoiceSpeaker {
-  /** A love interest or the protagonist: voiced whenever voices are on. Anyone else needs "voice everyone else". */
+  /**
+   * A love interest, a friend (#2458) or the protagonist: voiced whenever voices are on. Anyone else needs "voice
+   * everyone else".
+   */
   cast: boolean;
+  /** #2458: one of her friends: with no card, the voice the Engine assigned to their name comes first, as anyone else's. */
+  friend?: true;
 }
 
 /** "male" or "female" from a love interest's pronouns, for the voice pool; "" when they say neither. */
@@ -55,13 +61,14 @@ export function pronounGender(pronouns: Pronouns | undefined): "male" | "female"
 
 /**
  * Who speaks a line, for the voice picker: a love interest (his Engine card's own voice when he has one, otherwise the
- * pool for his voice), the protagonist (her persona's voice, or silence), or anyone else (the pool for the line's
- * gender). Narration and thoughts are never voiced: null.
+ * pool for his voice), the protagonist (her persona's voice, or silence), one of her friends (#2458: voiced as a love
+ * interest is), or anyone else (the pool for the line's gender). Narration and thoughts are never voiced: null.
  */
 export function lineSpeaker(
   segment: Segment,
   lis: readonly RunLiView[],
   player: Pick<Player, "name" | "personaId">,
+  friends: readonly RunFriendView[] = [],
 ): LineSpeaker | null {
   if (segment.thought || !segment.text.trim()) return null;
   const voice = voiceOf(segment, lis, player.name);
@@ -82,6 +89,17 @@ export function lineSpeaker(
   // "You", "me", or her first name where the cast could not settle it: her own voice, never the pool.
   const persona = forgeStoryPersona({ name: player.name, personaId: player.personaId }, voice.name);
   if (persona) return { name: persona.name, characterId: persona.characterId, persona: true, cast: true };
+  const friend = friends.find((candidate) => sameName(voice.name, candidate.name));
+  if (friend) {
+    const gender = friend.voiceGender || segment.gender || pronounGender(friend.pronouns);
+    return {
+      name: friend.name,
+      characterId: friend.cardId || null,
+      ...(gender ? { gender } : {}),
+      cast: true,
+      friend: true,
+    };
+  }
   return { name: voice.name, ...(segment.gender ? { gender: segment.gender } : {}), cast: false };
 }
 
@@ -147,7 +165,7 @@ export async function lineVoice(
   others: boolean,
   listVoices: (config: unknown) => Promise<string[]>,
 ): Promise<string | null> {
-  const named = !speaker.cast && !speaker.characterId ? namedVoice(config, speaker.name) : null;
+  const named = (!speaker.cast || speaker.friend) && !speaker.characterId ? namedVoice(config, speaker.name) : null;
   return named ?? forgeSpeakerVoice(config, speaker, others, listVoices);
 }
 

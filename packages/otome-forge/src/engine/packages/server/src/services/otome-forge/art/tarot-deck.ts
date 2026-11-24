@@ -59,10 +59,15 @@ import {
 export interface DeckCard {
   card: Arcana;
   figure: ArcanaFigure;
-  /** The love interest a card of them (or of the two of them) was cast for. */
+  /** The love interest a card of them (or of the two of them) was cast for; #2458: or the friend it shows. */
   li?: LiId;
+  /** #2458: a friend's own card (their arcana, showing them), given at their rank-5 finale (`friendCardKey`). */
+  friend?: true;
   art: Paint;
 }
+
+/** #2458: a friend's own card's deck key: their arcana, showing them, whatever the card's usual figure. */
+export const friendCardKey = (card: Arcana, id: LiId) => `${card}@${id}`;
 
 /** `${R}:deck` */
 export interface TarotDeck {
@@ -84,6 +89,12 @@ export function normalizeDeck(data: unknown): TarotDeck {
     const card = value.card as Arcana;
     const li = typeof value.li === "string" && value.li.length <= 80 ? value.li : undefined;
     const art = PaintSchema.safeParse(value.art);
+    if (value.friend === true) {
+      if (art.success && li && key === friendCardKey(card, li)) {
+        cards[key] = { card, figure: "him", li, friend: true, art: art.data };
+      }
+      continue;
+    }
     const cast = ARCANA_FIGURES[card] === "him" || ARCANA_FIGURES[card] === "both";
     if (!art.success || (cast && !li) || key !== deckKey(card, li ?? "")) continue;
     cards[key] = { card, figure: ARCANA_FIGURES[card], ...(cast ? { li } : {}), art: art.data };
@@ -99,7 +110,7 @@ export async function readDeck(store: Pick<OtomeStore, "readDoc">, runId: string
 export function deckView(runId: string, deck: TarotDeck, li: LiId): Record<string, TarotDeckCard> {
   return Object.fromEntries(
     Object.entries(deck.cards)
-      .filter(([, entry]) => !entry.li || entry.li === li)
+      .filter(([, entry]) => !entry.friend && (!entry.li || entry.li === li))
       .map(([key, entry]) => [
         key,
         { card: entry.card, art: paintView(runId, tarotOwner(key), entry.art) ?? entry.art },
@@ -136,8 +147,15 @@ async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: 
   if (!run) throw notFound("Otome Hearth story");
   const entry = deck.cards[key];
   if (!entry) throw locked();
-  const unit: Unit | undefined = entry.li ? run.units.find((item) => item.id === entry.li) : undefined;
-  if (entry.li && (!unit?.bible || !run.state.lis[entry.li])) throw notFound("love interest");
+  // #2458: a friend's own card shows them.
+  const unit: Unit | undefined = entry.li
+    ? (entry.friend ? (run.friends ?? []) : run.units).find((item) => item.id === entry.li)
+    : undefined;
+  if (
+    entry.li &&
+    (entry.friend ? !unit?.friend || !run.state.friends[entry.li] : !unit?.bible || !run.state.lis[entry.li])
+  )
+    throw notFound(entry.friend ? "friend" : "love interest");
   // By id and role, never by name (S/art/cg.ts cgSubjects), as a keepsake names the two of them.
   const cast: string[] = { you: ["protagonist"], him: [entry.li!], both: [entry.li!, "protagonist"], none: [] }[
     entry.figure
@@ -151,6 +169,7 @@ async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: 
   const prompt = tarotCardPrompt(
     {
       card: entry.card,
+      figure: entry.figure,
       people: subjects.map((subject) => subject.person),
       references: labels,
       world: run.world,
@@ -284,12 +303,62 @@ export async function claimDeckCards(
   }
 }
 
+/**
+ * #2458: a friend's own card, given at their rank-5 finale: claimed once (pending, or waiting for consent under Ask
+ * before painting or prompt review) and painted in the background, as a drawn card is. Resolves its key, or null with
+ * no image connection, once torn down, or when it is claimed already.
+ */
+export async function claimFriendCard(
+  deps: ItemArtDeps,
+  runId: string,
+  id: LiId,
+  card: Arcana,
+  { debugMode, review }: ItemPaintOptions,
+): Promise<string | null> {
+  const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+  const connectionId = world?.images.connectionId;
+  if (!world || !connectionId || !activeOf(deps)()) return null;
+  const key = friendCardKey(card, id);
+  if ((await readDeck(deps.store, runId)).cards[key]) return null;
+  const release = startPaint(runId, tarotOwner(key));
+  if (!release) return null;
+  let handed = false;
+  try {
+    const wait = world.images.ask || review === true;
+    const at = new Date().toISOString();
+    let claimed = false;
+    await deps.store.mutateDoc(deckTarget(runId), normalizeDeck, (current) => {
+      claimed = !current.cards[key];
+      if (!claimed) return current;
+      const art: Paint = { state: wait ? "waiting-consent" : "pending", at };
+      const entry: DeckCard = { card, figure: "him", li: id, friend: true, art };
+      return { ...current, cards: { ...current.cards, [key]: entry } };
+    });
+    if (!claimed || wait) return claimed ? key : null;
+    handed = true;
+    void paintDeckCard(deps, runId, key, at, connectionId, { debugMode, consent: false })
+      .catch((error: unknown) =>
+        deps.runtime.logger.warn(
+          "[otome-forge] painting the friend card %s stopped: %s",
+          key,
+          error instanceof Error ? error.message : String(error),
+        ),
+      )
+      .finally(release);
+    return key;
+  } finally {
+    if (!handed) release();
+  }
+}
+
 /** A love interest the run has, or a 404; then their deck card for `card`, or 409 `locked` before it was drawn. */
 async function readEntry(deps: Pick<ItemArtDeps, "store">, runId: string, li: LiId, card: Arcana) {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Hearth story");
-  if (!run.state.lis[li] || !run.units.some((unit) => unit.id === li)) throw notFound("love interest");
-  const key = deckKey(card, li);
+  // #2458: one of her friends' own cards, by their id.
+  const friend = !!run.state.friends[li] && !!run.friends?.some((unit) => unit.id === li);
+  if (!friend && (!run.state.lis[li] || !run.units.some((unit) => unit.id === li))) throw notFound("love interest");
+  const key = friend ? friendCardKey(card, li) : deckKey(card, li);
   const entry = (await readDeck(deps.store, runId)).cards[key];
   if (!entry) throw locked();
   return { run, key, entry };
@@ -320,20 +389,20 @@ export async function paintTarotCardNow(
   card: Arcana,
   { debugMode, edited }: { debugMode: boolean; edited?: Partial<ImagePrompt> },
 ): Promise<Paint> {
-  const key = deckKey(card, li);
+  // #2458: the key readEntry resolves (a friend's own card has its own), so a friend's card never paints a shared one.
   const shown = async () => {
-    const { entry } = await readEntry(deps, runId, li, card);
+    const { key, entry } = await readEntry(deps, runId, li, card);
     return paintView(runId, tarotOwner(key), entry.art) ?? entry.art;
   };
   return tapPaint(
     runId,
-    async () => tarotOwner(key),
+    async () => tarotOwner((await readEntry(deps, runId, li, card)).key),
     async () => {
       const art = await shown();
       return { value: art, art };
     },
     async () => {
-      const { run } = await readEntry(deps, runId, li, card);
+      const { run, key } = await readEntry(deps, runId, li, card);
       const connectionId = run.world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();

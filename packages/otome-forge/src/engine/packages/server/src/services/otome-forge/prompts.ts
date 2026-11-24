@@ -191,6 +191,7 @@ import {
   parseBannedPhrases,
 } from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import { MIN_AGE } from "../../../../client/src/features/otome-forge/shared/bible.js";
+import type { FriendBible } from "../../../../client/src/features/otome-forge/shared/friends.js";
 import { PLUSH_INK } from "../../../../client/src/features/otome-forge/shared/claw.js";
 import {
   type ContentSettings,
@@ -265,6 +266,7 @@ import {
 } from "../../../../client/src/features/otome-forge/shared/read-me.js";
 import { GIFT_PROMPT_NAMES, type GiftId } from "../../../../client/src/features/otome-forge/shared/shop.js";
 import {
+  ARCANA,
   ARCANA_FIGURES,
   type Arcana,
   TAROT_CARDS,
@@ -1136,6 +1138,88 @@ export function bibleMessages({
   ];
 }
 
+// ── A friend's bible (#2458): structured, planner contract ──
+
+const FRIEND_BIBLE_SHAPE = `{
+  "age": 0, "role": "", "howWeMet": "", "publicFace": "", "personality": "",
+  "wound": "", "want": "", "need": "", "fear": "", "flaws": [""], "virtues": [""],
+  "voice": {"register": "", "tics": [""], "samples": {"warm": "", "teasing": "", "worried": ""}},
+  "likes": [""], "dislikes": [""],
+  "growth": {"1": "", "2": "", "3": "", "4": "", "5": ""},
+  "onLis": {"<love interest id>": {"stance": "ships|supports|wary|against", "why": ""}},
+  "onHer": "", "arcana": "${ARCANA.join("|")}",
+  "look": {"identityLine": "", "outfitLine": "", "presentation": "man|woman|person"}
+}`;
+
+/**
+ * #2458: the bible of one of the protagonist's friends: a platonic friend, never a love interest. `scenes` are the
+ * story's lines where someone already met spoke (S/story/side-cast.ts sideScenes); "" for someone new.
+ */
+export function friendBibleMessages({
+  world,
+  player,
+  member,
+  lis,
+  scenes,
+}: {
+  world: World;
+  player: Player;
+  member: CastMember;
+  lis: readonly Unit[];
+  scenes: string;
+}): OtomeMessage[] {
+  const { unit } = member;
+  const system = [
+    "You write the hidden character bible of one of the protagonist's close friends in an otome game: a platonic friend, never a love interest. Every scene with this friend is written from it.",
+    "Reply with ONLY a JSON object of this shape:",
+    FRIEND_BIBLE_SHAPE,
+    "FIELDS",
+    "- howWeMet: how they and the protagonist know each other. publicFace: how the world sees them. personality: who they are, in two or three sentences.",
+    "- wound, want, need, fear: the old hurt, what they chase, what would heal them, what they dread; their own growth comes from these.",
+    "- voice.register: how they speak. tics: verbal habits. samples: one line each, warm, teasing and worried, in their voice.",
+    '- growth: one entry for each rank "1" to "5" of the friendship: what that rank of it explores, about them and between the two of them. "5" is the finale of their story with her.',
+    "- onLis: one entry for each love interest, keyed by that love interest's exact id: stance is ships (wants her with them), supports, wary or against; why is their reason, in one sentence. onHer: how they feel about her love life as a whole, for example worried, cheering her on or protective.",
+    "- arcana: the Major Arcana card that fits them. look: English only, visual-only comma-separated tags. identityLine: face, hair, eyes, build, skin, marks, with adult features. outfitLine: their everyday clothing in this world. presentation: how to draw them, man, woman or person.",
+    "RULES",
+    unit.cardId
+      ? "- Derive everything from the CANONICAL CHARACTER CARD and never contradict it: the card wins over the premise."
+      : scenes
+        ? "- Build them from the scenes they have already been in and never contradict them; invent the rest to fit."
+        : "- Build them from the player's notes, if any, and the world.",
+    `- age: a whole number, ${MIN_AGE} or older. They are an adult, always.`,
+    `- Write every text field except look and arcana in ${world.language}.`,
+    "",
+    otomeWritingRules({ story: false, style: world.writingStyle, banned: world.bannedPhrases }),
+    "",
+    otomeContentContract({ world, lis: lis.map((li) => ({ name: li.name })), kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "WORLD",
+    world.setting.trim() || world.premise.trim(),
+    "",
+    "THIS FRIEND",
+    castEntry(member),
+    scenes ? `\nTHE SCENES THEY HAVE BEEN IN\n${scenes}` : "",
+    "",
+    "THE LOVE INTERESTS",
+    lis
+      .map((li) => `id ${li.id}: ${li.name} (${pronounText(li.pronouns)})${li.bible ? `, ${li.bible.role}` : ""}`)
+      .join("\n"),
+    "",
+    "PROTAGONIST",
+    protagonistEntry(player),
+    "",
+    `Write ${unit.name}'s bible now.`,
+    otomeContractReminder("planner"),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
 // ── A bible's missing intimacy block (#1936; structured, 0.8, planner contract) ──
 
 /** The prompt that writes only the block, for a bible written without it. */
@@ -1797,10 +1881,40 @@ export interface StoryContextInput {
   arc?: StoryArc | null;
   /** The story memory's text (S/story/canon.ts recallText), or "". */
   memory: string;
+  /** #2458: her friends, each with the friendship's level (1–5); absent or empty in prompts that leave them out. */
+  friends?: readonly FriendCard[];
+}
+
+/** #2458: one of her friends as the story prompts see them. */
+export interface FriendCard {
+  unit: Unit;
+  level: number;
+}
+
+/** #2458: her friends, from their bibles: who they are, their voice, the rank's theme and their stance on each love interest. */
+export function friendsBlock(friends: readonly FriendCard[], units: readonly Unit[]): string {
+  const lines = friends.flatMap(({ unit, level }) => {
+    const bible = unit.friend;
+    if (!bible) return [];
+    const stances = Object.entries(bible.onLis).flatMap(([id, view]) => {
+      const li = units.find((candidate) => candidate.id === id);
+      return li ? [`on ${li.name}: ${view.stance}, ${view.why}`] : [];
+    });
+    return [
+      `- ${unit.name} (${pronounText(unit.pronouns)}), friendship ${level} of 5: ${bible.role}. ${bible.personality} ` +
+        `How they know her: ${bible.howWeMet} Voice: ${bible.voice.register} On her love life: ${bible.onHer}` +
+        `${stances.length ? ` (${stances.join("; ")})` : ""} What the friendship explores now: ${
+          bible.growth[String(level) as keyof FriendBible["growth"]]
+        }`,
+    ];
+  });
+  return lines.length
+    ? `HER FRIENDS (close and platonic, never love interests; they come into the story where it suits them)\n${lines.join("\n")}`
+    : "";
 }
 
 /** The story context every story prompt opens with (see above), the same for each of a chapter's calls. */
-export function storyContext({ world, player, units, number, arc, memory }: StoryContextInput): string {
+export function storyContext({ world, player, units, number, arc, memory, friends = [] }: StoryContextInput): string {
   const purpose = arc && number ? (arc.plan.find((entry) => entry.n === number)?.purpose ?? arc.goal) : "";
   return [
     "THE STORY: an otome visual novel, a character-driven romance mystery. Your own task follows this context.",
@@ -1816,6 +1930,7 @@ export function storyContext({ world, player, units, number, arc, memory }: Stor
     "",
     "PROTAGONIST",
     protagonistBlock(player),
+    ...(friends.length ? ["", friendsBlock(friends, units)] : []),
     ...(arc && purpose
       ? [
           "",
@@ -1837,8 +1952,9 @@ function chapterTexts(
   units: readonly Unit[],
   storySoFar: readonly string[],
   opening: string,
+  friends: readonly FriendCard[] = [],
 ): string[] {
-  const head = `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units)})`;
+  const head = `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units, friends)})`;
   const scenes = storySoFar.map((scene) => scene.trim()).filter(Boolean);
   if (!scenes.length) return [`${head}\n${opening}`];
   return [`${head}\nThe chapter so far:\n${scenes[0]}`, ...scenes.slice(1)];
@@ -2065,6 +2181,13 @@ function thoughtsLines(player: Pick<Player, "name">, text: string | undefined, u
 // ── P5: chapter plan (structured, 0.8, planner contract) ──
 
 export interface ChapterPlanInput {
+  /** #2458: her friends in the story context (friendsBlock); absent leaves them out. */
+  friends?: readonly FriendCard[];
+  /**
+   * #2459: this chapter is the story's finale, which the player chose; `truth` is the mystery's hidden truth when no arc
+   * has told it yet (its last node tells it), else "".
+   */
+  finale?: { truth: string };
   world: World;
   player: Player;
   /** Every love interest, in cast order. */
@@ -2120,6 +2243,8 @@ export function chapterPlanMessages({
   thoughts = "",
   sharesCache = true,
   handOff = "",
+  friends,
+  finale,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
@@ -2182,7 +2307,9 @@ export function chapterPlanMessages({
       ? `- This chapter is scheduled to reveal one thing of the mystery (see THE ARC AHEAD). Put it in one node and set "revealNode" to that node's index; ${
           reveal.kind === "truth" ? "the Lead" : reveal.name
         } must be in that node's cast. Nothing else of the mystery surfaces here.`
-      : "- Nothing of the mystery is revealed in this chapter: never state or imply its answer, and never reveal a secret before its stage.",
+      : finale
+        ? `- This is the story's finale${finale.truth ? ", and the mystery's hidden truth comes out in it (see THE FINALE)" : ": the mystery's truth is already known"}.`
+        : "- Nothing of the mystery is revealed in this chapter: never state or imply its answer, and never reveal a secret before its stage.",
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
   ].join("\n");
@@ -2193,11 +2320,14 @@ export function chapterPlanMessages({
     arc
       ? [
           "THE ARC AHEAD (for this plan only)",
-          "Later purposes (do not play them yet): " +
-            arc.plan
-              .filter((entry) => entry.n > number)
-              .map((entry) => `${entry.n} — ${entry.purpose}`)
-              .join("; "),
+          // #2459: the finale is the last chapter of all, so nothing is left for later.
+          finale
+            ? ""
+            : "Later purposes (do not play them yet): " +
+              arc.plan
+                .filter((entry) => entry.n > number)
+                .map((entry) => `${entry.n} — ${entry.purpose}`)
+                .join("; "),
           lastChapter
             ? arc.endsWith
               ? `THIS IS THE ARC'S LAST CHAPTER. It has a climax, which carries its big event: ${arc.endsWith.what} Set "eventNode" to the climax node's index.`
@@ -2209,11 +2339,15 @@ export function chapterPlanMessages({
             ? `THIS CHAPTER REVEALS: ${reveal.what} Write the node's guide so it comes out there, on the page${
                 holder ? `, in ${holder.name}'s own way` : ""
               }, and set "revealNode" to that node's index.`
-            : "Nothing of the mystery is revealed in this chapter.",
+            : finale
+              ? ""
+              : "Nothing of the mystery is revealed in this chapter.",
         ]
           .filter(Boolean)
           .join("\n")
-      : "(no arc yet: this chapter is planned on its own; nothing of the mystery is revealed here.)",
+      : finale
+        ? ""
+        : "(no arc yet: this chapter is planned on its own; nothing of the mystery is revealed here.)",
     number === 1 && world.openingSituation ? `Opening situation: ${world.openingSituation}` : "",
     "",
     leadUnit
@@ -2244,13 +2378,25 @@ export function chapterPlanMessages({
     ...thoughtsLines(player, thoughts, "plan"),
     "",
     ...(number > 1 && handOff ? [storyHandOff(handOff, "plan")] : []),
+    ...(finale
+      ? [
+          `THE FINALE\nThis is the story's finale, which the player chose: it settles what is still open (the arc in progress, any grievance that stands, the central mystery) and ends happily, earned by everything before it. Every love interest has a part in it, and her friends where they fit.${finale.truth ? ` Its last node tells the mystery's hidden truth: ${finale.truth}` : ""}`,
+          "",
+        ]
+      : []),
     `Plan main chapter ${number} now, led by ${leadUnit?.name ?? lead} (id ${lead}).`,
     otomeContractReminder("planner"),
   ];
   const [instructions] = forgeChoicePlanMessages([{ role: "system" as const, content: system }], true);
-  return storyMessages(storyContext({ world, player, units, number, arc, memory }), instructions!.content, [], rest, {
-    marks: sharesCache ? "context" : "none",
-  });
+  return storyMessages(
+    storyContext({ world, player, units, number, arc, memory, friends }),
+    instructions!.content,
+    [],
+    rest,
+    {
+      marks: sharesCache ? "context" : "none",
+    },
+  );
 }
 
 // ── P6: beat narrator (narration, 0.9, scene contract) ──
@@ -2406,6 +2552,8 @@ SPEAKER VOICES (extend the JSON shape above with an optional top-level "voices" 
 - Map the exact "speaker" name of every minor character who speaks aloud (not a love interest, not the protagonist) to "male" or "female"; leave out anyone whose voice is unclear.`;
 
 export interface BeatMessagesInput {
+  /** #2458: her friends in the story context (friendsBlock); absent leaves them out. */
+  friends?: readonly FriendCard[];
   world: World;
   player: Player;
   /** Every love interest; the cast present is `node.cast`. */
@@ -2427,6 +2575,8 @@ export interface BeatMessagesInput {
     | "bond"
     | "thoughts"
     | "hisSide"
+    | "friendStory"
+    | "ending"
   >;
   node: ChapterNode;
   /** The canonical story so far in this chapter: each earlier node's scene, rendered ([] for its first node). */
@@ -2451,6 +2601,7 @@ export interface BeatMessagesInput {
 
 export function beatMessages({
   world,
+  friends,
   player,
   units,
   state,
@@ -2505,7 +2656,7 @@ export function beatMessages({
     pov
       ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
       : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line, or a dialogue line of one of her friends, only: ${FACES.join(", ")}, when the face shows it. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
@@ -2526,7 +2677,7 @@ export function beatMessages({
   const arcLines =
     chapter.kind === "prologue"
       ? prologueFraming(world.openingSituation, units)
-      : arcFraming({ chapter, node, units, state, world });
+      : arcFraming({ chapter, node, units, state, world, friends });
   const dateFraming = date && partner ? dateFramingText(date, partner, state, node, company) : "";
   const side = sideWithCast(chapter, node, units);
   const opening =
@@ -2611,9 +2762,17 @@ export function beatMessages({
     otomeContractReminder("scene"),
   ];
   return storyMessages(
-    storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
+    storyContext({
+      world,
+      player,
+      units,
+      number: chapter.kind === "main" ? chapter.number : null,
+      arc,
+      memory,
+      friends,
+    }),
     pov ? choices.shared + VOICES_INSTRUCTION : choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
-    chapterTexts(chapter, units, storySoFar, opening),
+    chapterTexts(chapter, units, storySoFar, opening, friends),
     rest,
     // Only a Rewrite of his side shares its instructions, so they are no cache write of their own (#2091).
     { ...(pov ? { marks: "context" as const } : {}), pool },
@@ -2779,10 +2938,28 @@ export function stageGoal(stage: number, name: string): string {
 const secretsOf = (unit: Unit | undefined, ids: readonly string[] = []) =>
   (unit?.bible?.secrets ?? []).filter((secret) => ids.includes(secret.id));
 
-function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Unit[]): string {
+function chapterLabel(
+  chapter: BeatMessagesInput["chapter"],
+  units: readonly Unit[],
+  friends: readonly FriendCard[] = [],
+): string {
   const owner = units.find((unit) => unit.id === (chapter.li ?? chapter.lead))?.name ?? "";
   if (chapter.kind === "prologue") return "the prologue, before chapter 1";
-  if (chapter.kind === "main") return `main chapter ${chapter.number ?? ""}`.trim();
+  if (chapter.kind === "main")
+    return `main chapter ${chapter.number ?? ""}${chapter.ending ? ", the story's finale" : ""}`;
+  // #2459, #2458: the epilogue and her friends' stories name themselves, never as a love interest's Character Story.
+  if (chapter.ending === "epilogue") return "the epilogue";
+  const story = chapter.friendStory;
+  if (story) {
+    const names = story.friends
+      .map((id) => friends.find((card) => card.unit.id === id)?.unit.name ?? "")
+      .filter(Boolean);
+    const name = names[0] ?? "a friend";
+    if (story.kind === "rank") return `${name}'s rank ${story.level ?? 2} story`;
+    if (story.kind === "mend") return `a make-up story with ${name}`;
+    if (story.kind === "clear-air") return `clearing the air with ${name}`;
+    return `a hangout with ${names.join(", ") || "her friends"}`;
+  }
   if (chapter.kind === "route" && chapter.stage) {
     return `${owner}'s route chapter, toward stage ${chapter.stage} (${stageTitle(chapter.stage)})`;
   }
@@ -2854,6 +3031,55 @@ function hisSideFraming(name: string): string[] {
   ];
 }
 
+/**
+ * #2458: what P6 adds to a node of a friend's own story in place of a Character Story's framing: their rank story,
+ * make-up story, clear-the-air scene or a hangout. Friends are platonic; love interests stay at the edges.
+ */
+function friendStoryFraming(
+  story: NonNullable<Chapter["friendStory"]>,
+  friends: readonly FriendCard[],
+  state: RunState,
+  nodes: number,
+): string[] {
+  const cards = story.friends.flatMap((id) => friends.filter((card) => card.unit.id === id));
+  const names = cards.map((card) => card.unit.name);
+  const name = names[0] ?? "her friend";
+  const level = String(story.level ?? cards[0]?.level ?? 1) as keyof FriendBible["growth"];
+  const edges = "A love interest appears only when the story truly calls for it, as themselves.";
+  if (story.kind === "rank") {
+    return [
+      `This is ${name}'s RANK ${story.level ?? level} STORY: a ${nodes}-scene side story between ${name} and the protagonist, two friends, set between main chapters, with its own small arc ending on its last scene. What this rank of their friendship explores: ${cards[0]?.unit.friend?.growth[level] ?? ""}`,
+      story.level === 5
+        ? `It is the finale of ${name}'s story with the protagonist: the friendship comes to where it was always heading, and ${name} grows through it.`
+        : `${name} grows a step through it.`,
+      `It is platonic. ${edges}`,
+    ];
+  }
+  if (story.kind === "mend") {
+    const grievance = state.friends[story.friends[0] ?? ""]?.grievance;
+    return [
+      `This is a MAKE-UP story: ${name} holds a grievance with the protagonist${grievance ? ` (${grievance.text})` : ""}. Making it right costs something; it does not erase what happened, and nobody apologizes on the spot. Its last scene settles it between them, as friends.`,
+      edges,
+    ];
+  }
+  if (story.kind === "clear-air") return [`It is a scene between friends. ${edges}`];
+  return [
+    `This is a HANGOUT: the protagonist and ${names.join(" and ") || "her friends"}, friends spending time together${story.place ? ` (${story.place})` : ""}, a ${nodes}-scene side story set between main chapters with its own small arc. Everyone who came has something of their own in every scene, and what passes between them is part of it.`,
+    `It is platonic. ${edges}`,
+  ];
+}
+
+/** #2459: what P6 adds to the story's finale (a main chapter) and to its epilogue. */
+function endingFraming(ending: NonNullable<Chapter["ending"]>, nodes: number): string[] {
+  return ending === "finale"
+    ? [
+        "This chapter is the STORY'S FINALE: the player chose to end the story here. Settle what is still open (the central mystery, any grievance that stands, the arc in progress) and give the story its happy ending, earned by everything before it.",
+      ]
+    : [
+        `This is the EPILOGUE, some time after the finale: a ${nodes}-scene happily ever after with every love interest and her friends, each with a moment of their own. Nothing new threatens it, and it ends warm, never on a cliffhanger.`,
+      ];
+}
+
 /** The lines P6 adds to a node of a route, repair or story chapter: its gate, what it reveals, the repair's rule. */
 function arcFraming({
   chapter,
@@ -2861,7 +3087,8 @@ function arcFraming({
   units,
   state,
   world,
-}: Pick<BeatMessagesInput, "chapter" | "node" | "units" | "state" | "world">): string[] {
+  friends = [],
+}: Pick<BeatMessagesInput, "chapter" | "node" | "units" | "state" | "world" | "friends">): string[] {
   const owner = units.find((unit) => unit.id === (chapter.li ?? chapter.lead));
   const name = owner?.name ?? "the love interest";
   const lines: string[] = [];
@@ -2887,7 +3114,10 @@ function arcFraming({
       `This is a REPAIR chapter: a rupture stands between ${name} and the protagonist${grievance ? ` (${grievance.text})` : ""}. The repair costs ${name} something; it does not erase what happened, and nobody apologizes on the spot.`,
     );
   }
-  if (chapter.kind === "story") {
+  if (chapter.ending) lines.push(...endingFraming(chapter.ending, chapter.nodes.length));
+  if (chapter.friendStory) {
+    lines.push(...friendStoryFraming(chapter.friendStory, friends, state, chapter.nodes.length));
+  } else if (chapter.kind === "story" && !chapter.ending) {
     const nodes = chapter.nodes.length;
     lines.push(
       ...(chapter.hisSide
@@ -2925,6 +3155,8 @@ function arcFraming({
 // ── P10: route plan (structured, 0.8, planner contract) and P11: repair plan (structured, 0.7, planner contract) ──
 
 export interface ArcPlanInput {
+  /** #2458: her friends in the story context (friendsBlock); absent leaves them out. */
+  friends?: readonly FriendCard[];
   world: World;
   player: Player;
   /** Every love interest, in cast order. */
@@ -3016,10 +3248,10 @@ function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): stri
  * instructions; then its own part.
  */
 function planInStoryLayout(input: ArcPlanInput, system: string, user: string): OtomeMessage[] {
-  const { world, player, units, memory, sharesCache = false } = input;
+  const { world, player, units, memory, sharesCache = false, friends } = input;
   const [instructions] = forgeChoicePlanMessages([{ role: "system" as const, content: system }], true);
   return storyMessages(
-    storyContext({ world, player, units, number: null, arc: null, memory }),
+    storyContext({ world, player, units, number: null, arc: null, memory, friends }),
     instructions!.content,
     [],
     [user],
@@ -3084,6 +3316,8 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
 export interface RepairPlanInput extends ArcPlanInput {
   /** The rupture grievance the repair's last node resolves. */
   grievance: Pick<LiState["grievances"][number], "id" | "text" | "by">;
+  /** #2458: the friend who talked to him for her (the Wingman), by name; they appear in the first node. */
+  helper?: string;
 }
 
 /** P11: a 2–3 node repair after a rupture; its last node resolves the grievance (S/story/routes-plan.ts checks it). */
@@ -3109,6 +3343,11 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
   ].join("\n");
   const user = arcPlanUser(input, `${name.toUpperCase()} (whose repair this is)`, [
     `The rupture (grievance ${grievance.id}, held by ${holder}): ${grievance.text}`,
+    ...(input.helper
+      ? [
+          `${input.helper}, her friend, talked to ${name} for her, which is why this comes now: ${input.helper} appears in the first node.`,
+        ]
+      : []),
     `Plan the repair between ${name} and the protagonist now (id ${li}).`,
   ]);
   return planInStoryLayout(input, system, user);
@@ -3128,6 +3367,7 @@ const SEGMENT_SHAPE = '{"speaker": "", "text": "...", "thought": false, "express
 export function confrontationMessages(input: ConfrontationMessagesInput): OtomeMessage[] {
   const {
     world,
+    friends,
     player,
     units,
     state,
@@ -3162,7 +3402,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line, or a dialogue line of one of her friends, only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
@@ -3208,14 +3448,22 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `Write the confrontation of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
-    ...arcFraming({ chapter, node, units, state, world }),
+    ...arcFraming({ chapter, node, units, state, world, friends }),
     ...toysLines(world, toys),
     otomeContractReminder("scene"),
   ];
   return storyMessages(
-    storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
+    storyContext({
+      world,
+      player,
+      units,
+      number: chapter.kind === "main" ? chapter.number : null,
+      arc,
+      memory,
+      friends,
+    }),
     system + VOICES_INSTRUCTION,
-    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
+    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)", friends),
     rest,
     { marks: "context", pool },
   );
@@ -3231,6 +3479,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
 export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[] {
   const {
     world,
+    friends,
     player,
     units,
     state,
@@ -3268,7 +3517,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line, or a dialogue line of one of her friends, only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
@@ -3310,14 +3559,22 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `Write the closer of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
-    ...arcFraming({ chapter, node, units, state, world }),
+    ...arcFraming({ chapter, node, units, state, world, friends }),
     ...toysLines(world, toys),
     otomeContractReminder("scene"),
   ];
   return storyMessages(
-    storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
+    storyContext({
+      world,
+      player,
+      units,
+      number: chapter.kind === "main" ? chapter.number : null,
+      arc,
+      memory,
+      friends,
+    }),
     system + VOICES_INSTRUCTION,
-    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
+    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)", friends),
     rest,
     { marks: "context", pool },
   );
@@ -3595,12 +3852,50 @@ export interface ChatReplyInput {
    * #2156: he writes first because she has just told him she is upset with him (S/phone/upset.ts); #2424 "date": to ask
    * her on a date of his own choosing (S/phone/invite.ts).
    */
-  reason?: "upset" | "date";
+  reason?: "upset" | "date" | "hangout";
   /** 0.34.0: he holds the remote of her toys for about this many more minutes (with haptics on), or none. */
   remote?: number;
   /** 0.34.0: her connected toys as S/haptics.ts devicesText lists them, while he holds the remote. */
   toys?: string;
+  /**
+   * #2458: the thread is one of her friends': their bible and level, the love interests (by id and name), and what
+   * stands between you. The love interest's card, stage and invitations give way to theirs.
+   */
+  friend?: ChatFriend;
 }
+
+/** #2458: one of her friends, as their Messages thread sees them. */
+export interface ChatFriend {
+  bible: FriendBible;
+  level: number;
+  lis: ReadonlyArray<{ id: string; name: string }>;
+  /** Their grievance with her, while it stands. */
+  grievance?: string;
+  /** She told them she is upset with them. */
+  upset?: boolean;
+}
+
+/** #2458: a friend's own card in their Messages thread: who they are, your friendship, and their view of her love life. */
+export function friendChatCard(name: string, friend: ChatFriend): string {
+  const { bible } = friend;
+  const stances = Object.entries(bible.onLis).flatMap(([id, view]) => {
+    const li = friend.lis.find((candidate) => candidate.id === id);
+    return li ? [`On ${li.name}: ${view.stance}, ${view.why}`] : [];
+  });
+  return [
+    `${name}: ${bible.role}. ${bible.personality}`,
+    `How you know each other: ${bible.howWeMet}`,
+    `What you want: ${bible.want} What you fear: ${bible.fear}`,
+    `Your voice: ${bible.voice.register}${bible.voice.tics.length ? ` Tics: ${bible.voice.tics.join("; ")}.` : ""}`,
+    `Likes: ${bible.likes.join(", ") || "—"}. Dislikes: ${bible.dislikes.join(", ") || "—"}.`,
+    `Her love life, as you see it: ${bible.onHer}`,
+    ...stances,
+  ].join("\n");
+}
+
+/** #2458: what a friend may ask in Messages, in place of the love interests' invitation rule. */
+const FRIEND_INVITE_RULE =
+  "- The one exception: when you are told below that you may ask them to clear the air, or that you are asking them to hang out, you may. That outing is kept by the game, not by your message.";
 
 export function chatReplyMessages({
   world,
@@ -3619,6 +3914,7 @@ export function chatReplyMessages({
   reason,
   remote = 0,
   toys = "",
+  friend,
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
@@ -3635,7 +3931,7 @@ export function chatReplyMessages({
         .join(" ")
     : "";
   const system = [
-    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
+    `You are ${name} (${pronounText(unit.pronouns)}), ${friend ? `one of ${them}'s close friends in an otome visual novel: a platonic friend, never a love interest` : "a love interest in an otome visual novel: a character-driven romance"}. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "..."}]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
@@ -3645,14 +3941,16 @@ export function chatReplyMessages({
     `- Write every message in ${world.language}.`,
     "",
     "HOW CLOSE YOU ARE",
-    CHAT_STAGE[liState.stage] ?? CHAT_STAGE[1]!,
-    liState.rupture ? RUPTURE_LINE : "",
+    friend
+      ? `Your friendship, ${friend.level} of 5: ${friend.bible.growth[String(friend.level) as keyof FriendBible["growth"]]}`
+      : (CHAT_STAGE[liState.stage] ?? CHAT_STAGE[1]!),
+    (friend ? friend.grievance : liState.rupture) ? RUPTURE_LINE : "",
     "",
     "HARD RULES",
     `- Write ONLY your own messages. Never write ${them}'s reply, and never narrate what they do or feel.`,
     "- It is a message, not a chapter: no scene headings, no narration, no third person about yourself, no actions in asterisks.",
     `- Nothing happens in the story because of this conversation, except that what ${them} writes can hurt you (hurt). You can talk about what has happened and what you feel; you cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret you are still hiding. No grievance or rupture is settled by text: only the story settles it.`,
-    CLEAR_AIR_RULE,
+    friend ? FRIEND_INVITE_RULE : CLEAR_AIR_RULE,
     "- Never invent shared history: what you two share is only what the story and these conversations hold.",
     `- Never mention how long it has been since ${them} last wrote, that they were away, or anything about their life outside the story, and never ask where they have been.`,
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
@@ -3669,11 +3967,21 @@ export function chatReplyMessages({
     .join("\n");
   const user = [
     "WHO YOU ARE",
-    otomeSceneCard(unit, { ...liState, bondPlayed }),
-    betweenYou(unit, { ...liState, bondPlayed }),
-    upsetLine(unit, liState),
-    // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
-    ...(known ? [known] : []),
+    ...(friend
+      ? [
+          friendChatCard(name, friend),
+          friend.grievance ? `What still hurts: ${friend.grievance}` : "",
+          friend.upset
+            ? `${them} told you they are upset with you. You know it, and work out why from what happened; it is not settled until it is cleared.`
+            : "",
+        ]
+      : [
+          otomeSceneCard(unit, { ...liState, bondPlayed }),
+          betweenYou(unit, { ...liState, bondPlayed }),
+          upsetLine(unit, liState),
+          // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
+          ...(known ? [known] : []),
+        ]),
     offscreen.trim()
       ? `What you were doing lately, away from ${them}: ${offscreen.trim()} You may hint at it in your own way; never give away what you are hiding.`
       : "",
@@ -3719,9 +4027,11 @@ export function chatReplyMessages({
       ? `Write ${name}'s next message now: ${them} has just told you they are upset with you, and you write to them about it first, on your own, in your own voice. One or two short messages.`
       : reason === "date"
         ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, to ask them out on a date. Where you take them and what you do together is yours to choose, from who you are; you may tell them or keep it a surprise. One or two short messages, the last one asking.`
-        : first
-          ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
-          : `Write ${name}'s next message now, answering ${them}.`,
+        : reason === "hangout"
+          ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, to ask them to hang out, as friends do. Where you go and what you do is yours to choose, from who you are; you may tell them or keep it a surprise. One or two short messages, the last one asking.`
+          : first
+            ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
+            : `Write ${name}'s next message now, answering ${them}.`,
     otomeContractReminder("chat"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
@@ -5800,6 +6110,109 @@ export function bondPlanMessages({ world, player, unit, state, rank, reveal, mem
   );
 }
 
+// ── #2458, #2459: a friend's own story (rank, make-up, hangout) and the epilogue, planned in one call ──
+
+/** What a friend's story or the epilogue is planned for. */
+export type FriendPlanFor =
+  | { kind: "rank"; friend: FriendCard; level: number; look: boolean }
+  | { kind: "mend"; friend: FriendCard; grievance: string }
+  | { kind: "hangout"; friends: readonly FriendCard[]; place: string }
+  | { kind: "epilogue"; friends: readonly FriendCard[] };
+
+export interface FriendPlanInput {
+  world: World;
+  player: Player;
+  /** The love interests, in cast order. */
+  units: readonly Unit[];
+  for: FriendPlanFor;
+  memory: string;
+  /** How many nodes: the planner writes exactly this many. */
+  nodes: number;
+}
+
+export function friendPlanMessages({
+  world,
+  player,
+  units,
+  for: plan,
+  memory,
+  nodes,
+}: FriendPlanInput): OtomeMessage[] {
+  const friends = plan.kind === "hangout" || plan.kind === "epilogue" ? plan.friends : [plan.friend];
+  const names = friends.map((card) => card.unit.name);
+  const name = names[0] ?? "her friend";
+  const look = plan.kind === "rank" && plan.look;
+  const memento = plan.kind === "hangout";
+  const shape = `{"title": "...", "tags": ["..."], "summary": "...", "nodes": [{"guide": "...", "place": "..."}]${look ? ', "look": {"name": "...", "outfitLine": "..."}' : ""}${memento ? ', "memento": "..."' : ""}}`;
+  const what =
+    plan.kind === "rank"
+      ? `${name}'s rank ${plan.level} story: ${name} and the protagonist are close, platonic friends, and this story is where their friendship reaches rank ${plan.level} of 5. What this rank explores: ${friends[0]?.unit.friend?.growth[String(plan.level) as keyof FriendBible["growth"]] ?? ""}${plan.level === 5 ? ` It is the finale of ${name}'s story: the friendship comes to where it was always heading.` : ""}`
+      : plan.kind === "mend"
+        ? `${name}'s make-up story: ${name} holds a grievance with the protagonist (${plan.grievance}). Its last node settles it between them; making it right costs something, and nobody apologizes on the spot.`
+        : plan.kind === "hangout"
+          ? `a hangout: the protagonist and ${names.join(" and ")}, friends spending time together${plan.place ? `, ${plan.place}` : ""}. Everyone who came has something of their own in every node.`
+          : `the EPILOGUE of the whole story, some time after its finale: the happily ever after with every love interest and her friends, each with a moment of their own. Nothing new threatens it, and it ends warm.`;
+  const system = [
+    "You are a story planner of an otome visual novel: a character-driven romance mystery.",
+    `Plan ${what}`,
+    "Reply with ONLY a JSON object of this shape:",
+    shape,
+    "FIELDS",
+    "- title: a short title. summary: one or two lines on it, without giving away its turns (the player reads it).",
+    `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the story really holds; [] when none apply.`,
+    "- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. place: where it opens (optional).",
+    ...(look
+      ? [
+          `- look: an outfit ${name} picks out for the protagonist, their parting gift: name is its name in ${world.language}; outfitLine is English, visual-only, comma-separated tags for one complete look (clothes, shoes, accessories), never the body, face or hair.`,
+        ]
+      : []),
+    ...(memento
+      ? [
+          "- memento: English, visual only: one picture from the hangout to keep, everyone who came and the protagonist in one moment of it, where it happens and what they are doing; never a word of text in the picture.",
+        ]
+      : []),
+    "RULES",
+    `- Exactly ${nodes} nodes, ordinary scenes, with their own small arc ending on the last.`,
+    plan.kind === "epilogue"
+      ? "- Every love interest is in it, and her friends; it never reopens the mystery or a grievance."
+      : `- ${names.join(" and ")} ${names.length > 1 ? "are" : "is"} in every node. Friends are platonic. A love interest appears only when the story truly calls for it.`,
+    "- Continue from the story so far: everything already played is canon and is never undone, contradicted or staged again.",
+    `- Write every text field in ${world.language}${look ? ", but the look's outfitLine in English" : ""}.`,
+    "",
+    STORY_PACING_INSTRUCTION,
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
+    "",
+    otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "WORLD",
+    world.setting.trim() || world.premise.trim(),
+    ...plannerPremise(world),
+    "",
+    "PROTAGONIST",
+    protagonistBlock(player),
+    "",
+    friendsBlock(friends, units),
+    "",
+    "THE LOVE INTERESTS",
+    units.map((unit) => `id ${unit.id}: ${unit.name}${unit.bible ? `, ${unit.bible.role}` : ""}`).join("\n"),
+    "",
+    memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
+    "",
+    "Plan it now.",
+    otomeContractReminder("planner"),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  return forgeChoicePlanMessages(
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    true,
+  );
+}
+
 // ── P19 (he noticed) and P24 (Show {{name}}): one line about the protagonist's look ──
 
 export interface LookLineInput {
@@ -6423,7 +6836,7 @@ export function keepsakePrompt(input: KeepsakeInput, edited: Partial<ImagePrompt
 
 export interface ExpressionInput {
   /** The love interest as stored: his name, identity and outfit lines, and his bible's presentation. */
-  unit: Pick<Unit, "name" | "identityLine" | "outfitLine" | "portrait" | "outfits" | "bible">;
+  unit: Pick<Unit, "name" | "identityLine" | "outfitLine" | "portrait" | "outfits" | "bible" | "friend">;
   /** The image the face is painted onto (his worn look, or his portrait). */
   base: string;
   face: Face;
@@ -6439,7 +6852,7 @@ export interface ExpressionInput {
  */
 export function expressionPrompt(input: ExpressionInput): ImagePrompt {
   const { world, style, unit } = input;
-  const presentation = unit.bible?.look.presentation ?? "person";
+  const presentation = (unit.bible ?? unit.friend)?.look.presentation ?? "person";
   const tagged = style.tagged === true;
   const required = tagged
     ? `safe for work, adult ${presentation}, facial expression edit, same body, same clothing coverage, same pose, same framing, same background, same lighting, same art style`
@@ -6450,7 +6863,7 @@ export function expressionPrompt(input: ExpressionInput): ImagePrompt {
     : style;
   const expressionUnit = unit.identityLine.trim()
     ? unit
-    : { ...unit, identityLine: unit.bible?.look.identityLine ?? "" };
+    : { ...unit, identityLine: (unit.bible ?? unit.friend)?.look.identityLine ?? "" };
   const { prompt } = forgeStoryExpressionPrompt(expressionUnit, input.base, input.face, profile, {
     tagged,
     looks: FACE_LOOKS,
@@ -6686,6 +7099,8 @@ export const TAROT_FRAMING =
 const TAROT_NEGATIVE = "text, letters, numbers, caption, watermark, border, frame";
 
 export interface TarotCardInput {
+  /** Who the card shows as the deck keeps it; absent, its arcana's (#2458: a friend's own card shows them, whatever it is). */
+  figure?: (typeof ARCANA_FIGURES)[keyof typeof ARCANA_FIGURES];
   card: Arcana;
   /** Who the card shows (S/art/tarot-deck.ts, by ARCANA_FIGURES): none for a card of nobody. */
   people: readonly CgPerson[];
@@ -6704,7 +7119,7 @@ export interface TarotCardInput {
 export function tarotCardPrompt(input: TarotCardInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
   const { card, world, style } = input;
   const brief = ARCANA_BRIEFS[card];
-  if (ARCANA_FIGURES[card] === "none" || !input.people.length) {
+  if ((input.figure ?? ARCANA_FIGURES[card]) === "none" || !input.people.length) {
     const required = otomeImageTags({ world, people: [], use: "place", tagged: style.tagged === true });
     const negative = requiredNegative(world, "place");
     return finish(

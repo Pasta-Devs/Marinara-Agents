@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { forgeStoryExpressionArt } from "@forge-kit/story-expressions.mjs";
 import { imagesOn } from "../../hooks/use-items";
-import type { RunLiView, RunView, StickerView } from "../../shared/api-types";
+import type { RunFriendView, RunLiView, RunView, StickerView } from "../../shared/api-types";
 import { FACES, isFace, type Face } from "../../shared/faces";
 import {
   PLAYER_STICKERS,
@@ -40,7 +40,7 @@ import {
 import { FACE_LABEL_KEYS } from "../reader/FacePlate";
 
 /** His painted face, or null while it isn't painted. */
-export function faceArt(li: RunLiView, face: Face): string | null {
+export function faceArt(li: Pick<RunLiView, "portrait" | "expressions" | "cut">, face: Face): string | null {
   const shown = forgeStoryExpressionArt(
     { art: li.portrait ?? "", expressions: li.expressions ?? {} },
     { expression: face },
@@ -244,7 +244,7 @@ export function StickerPicker({ stickers, name, disabled, onPick }: StickerPicke
 }
 
 /** A face sticker from before #2044 in a bubble: his painted face, else the face's icon and name. */
-export function Sticker({ li, face }: { li: RunLiView; face: Face }) {
+export function Sticker({ li, face }: { li: RunLiView | RunFriendView; face: Face }) {
   const { t } = useTranslation();
   const url = faceArt(li, face);
   const label = t("ui.otomeForge.phone.sticker", { face: t(FACE_LABEL_KEYS[face]) });

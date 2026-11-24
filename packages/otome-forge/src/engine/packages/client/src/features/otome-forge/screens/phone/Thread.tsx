@@ -38,6 +38,7 @@ import type {
   PhoneMessage,
   PhoneSendResult,
   PhoneSession,
+  RunFriendView,
   RunLiView,
   RunView,
 } from "../../shared/api-types";
@@ -45,6 +46,7 @@ import { isFace } from "../../shared/faces";
 import { hapticsOn } from "../../shared/haptics";
 import { GROUP_THREAD } from "../../shared/home";
 import type { DateOpen } from "../dates/DateNight";
+import type { HangoutInvite } from "../album/Hangouts";
 import { playQueryKey } from "../dates/DatesHub";
 import { homeQueryKey } from "../home/HomeScreen";
 import { CloseAndRemember } from "./CloseAndRemember";
@@ -91,9 +93,9 @@ interface Incoming {
 interface ThreadProps {
   runKey: string;
   /** The run, for its stickers and (in the group chat) who sent each message. */
-  view: Pick<RunView, "world" | "stickers" | "lis">;
-  /** His thread; absent, the group chat (#2154). */
-  li?: RunLiView;
+  view: Pick<RunView, "world" | "stickers" | "lis" | "ended" | "friends">;
+  /** His thread (#2458: or one of her friends'); absent, the group chat (#2154). */
+  li?: RunLiView | RunFriendView;
   quote?: string;
   /** Opened from the thread list: focus moves to the heading (a screen change already does). */
   focusHeading: boolean;
@@ -104,6 +106,8 @@ interface ThreadProps {
   onOpenScene?: (key: string) => void;
   /** #2424: opens his date invitation's looks step, or the date it opened. */
   onOpenDate?: (open: DateOpen) => void;
+  /** #2458: a friend's invitation to hang out: Album → Hangouts plans it with them. */
+  onOpenHangout?: (invite: HangoutInvite) => void;
 }
 
 export function Thread({
@@ -116,6 +120,7 @@ export function Thread({
   onQuoteChange,
   onOpenScene,
   onOpenDate,
+  onOpenHangout,
 }: ThreadProps) {
   const { t } = useTranslation();
   const stickers = useStickers(view, li);
@@ -437,7 +442,7 @@ export function Thread({
     void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
   };
 
-  const askAgain = latest.data?.retry === true && !busy && !incoming;
+  const askAgain = latest.data?.retry === true && !busy && !incoming && !view.ended;
   const activeCount = latest.data?.activeCount ?? 0;
   // The group chat's members now, as its page names them, and their names for the header and the log.
   const members = (latest.data?.members ?? []).flatMap((member) => view.lis.filter((entry) => entry.id === member));
@@ -478,20 +483,26 @@ export function Thread({
             </div>
           </>
         )}
-        {li && haptics && hapticsOn(view.world) ? <RemoteControl li={li} /> : null}
-        <CloseAndRemember
-          path={path}
-          text={
-            li
-              ? t("ui.otomeForge.phone.closeText", { name: li.name })
-              : t("ui.otomeForge.phone.groupCloseText", { names: memberNames })
-          }
-          waitText={
-            li ? t("ui.otomeForge.phone.closeWait", { name: li.name }) : t("ui.otomeForge.phone.groupCloseWait")
-          }
-          blocked={busy || incoming ? "waiting" : activeCount === 0 ? "empty" : null}
-          onClosed={closed}
-        />
+        {/* The toys' remote is a love interest's alone (#2458: never a friend's). */}
+        {li && haptics && hapticsOn(view.world) && view.lis.some((entry) => entry.id === li.id) ? (
+          <RemoteControl li={li as RunLiView} />
+        ) : null}
+        {/* #2459: an ended story's Messages only open to read. */}
+        {view.ended ? null : (
+          <CloseAndRemember
+            path={path}
+            text={
+              li
+                ? t("ui.otomeForge.phone.closeText", { name: li.name })
+                : t("ui.otomeForge.phone.groupCloseText", { names: memberNames })
+            }
+            waitText={
+              li ? t("ui.otomeForge.phone.closeWait", { name: li.name }) : t("ui.otomeForge.phone.groupCloseWait")
+            }
+            blocked={busy || incoming ? "waiting" : activeCount === 0 ? "empty" : null}
+            onClosed={closed}
+          />
+        )}
       </header>
 
       {latest.isError && !latest.data ? (
@@ -564,7 +575,15 @@ export function Thread({
                 group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
               />
               {li && row.invite && row.who === "li" ? (
-                <InviteCard runKey={runKey} li={li} row={row} onOpenScene={onOpenScene} onOpenDate={onOpenDate} />
+                <InviteCard
+                  runKey={runKey}
+                  li={li}
+                  row={row}
+                  ended={!!view.ended}
+                  onOpenScene={onOpenScene}
+                  onOpenDate={onOpenDate}
+                  {...(onOpenHangout ? { onOpenHangout } : {})}
+                />
               ) : null}
               {session ? (
                 <li className="of-thread-divider">
@@ -610,104 +629,110 @@ export function Thread({
       ) : null}
       {hurt.map((held) => (
         <p key={held} className="of-notice of-reader-notice" role="status">
-          {t("ui.otomeForge.phone.hurtHeld", { name: view.lis.find((entry) => entry.id === held)?.name ?? title })}
+          {t("ui.otomeForge.phone.hurtHeld", {
+            name: [...view.lis, ...(view.friends ?? [])].find((entry) => entry.id === held)?.name ?? title,
+          })}
         </p>
       ))}
-      <form
-        className="of-composer of-glass of-glass--strong"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        {quote ? (
-          <div className="of-quote-chip">
-            <span className="of-quote-text">
-              <span className="of-quote-label">{t("ui.otomeForge.phone.replyingTo", { name: title })}</span>
-              <q>{quote}</q>
-            </span>
-            <button
-              type="button"
-              className="of-icon-button"
-              aria-label={t("ui.otomeForge.phone.removeQuote")}
-              title={t("ui.otomeForge.phone.removeQuote")}
-              onClick={() => {
-                setQuote(null);
-                input.current?.focus({ preventScroll: true });
-              }}
-            >
-              <X size={15} strokeWidth={2.2} aria-hidden="true" />
-            </button>
-          </div>
-        ) : null}
-        {attached ? (
-          <div className="of-quote-chip of-attached-sticker">
-            {isFace(attached) && li ? (
-              <Sticker li={li} face={attached} />
-            ) : (
-              <StickerArt stickers={stickers} id={attached} />
-            )}
-            <span className="of-quote-text">
-              <span className="of-quote-label">
-                {t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, attached) })}
+      {view.ended ? (
+        <p className="of-hint of-composer of-glass">{t("ui.otomeForge.ending.messagesClosed")}</p>
+      ) : (
+        <form
+          className="of-composer of-glass of-glass--strong"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          {quote ? (
+            <div className="of-quote-chip">
+              <span className="of-quote-text">
+                <span className="of-quote-label">{t("ui.otomeForge.phone.replyingTo", { name: title })}</span>
+                <q>{quote}</q>
               </span>
-            </span>
-            <button
-              type="button"
-              className="of-icon-button"
-              aria-label={t("ui.otomeForge.phone.removeSticker")}
-              title={t("ui.otomeForge.phone.removeSticker")}
-              onClick={() => {
-                setAttached(null);
+              <button
+                type="button"
+                className="of-icon-button"
+                aria-label={t("ui.otomeForge.phone.removeQuote")}
+                title={t("ui.otomeForge.phone.removeQuote")}
+                onClick={() => {
+                  setQuote(null);
+                  input.current?.focus({ preventScroll: true });
+                }}
+              >
+                <X size={15} strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          {attached ? (
+            <div className="of-quote-chip of-attached-sticker">
+              {isFace(attached) && li ? (
+                <Sticker li={li} face={attached} />
+              ) : (
+                <StickerArt stickers={stickers} id={attached} />
+              )}
+              <span className="of-quote-text">
+                <span className="of-quote-label">
+                  {t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, attached) })}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="of-icon-button"
+                aria-label={t("ui.otomeForge.phone.removeSticker")}
+                title={t("ui.otomeForge.phone.removeSticker")}
+                onClick={() => {
+                  setAttached(null);
+                  input.current?.focus({ preventScroll: true });
+                }}
+              >
+                <X size={15} strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          <div className="of-composer-row">
+            <StickerPicker
+              stickers={stickers}
+              name={title}
+              disabled={busy}
+              onPick={(sticker) => {
+                setAttached(sticker);
+                setAnnounce(t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, sticker) }));
                 input.current?.focus({ preventScroll: true });
               }}
+            />
+            {/* No Enter shortcut: Enter starts a new line on a phone and on a computer alike, and only Send sends. */}
+            <textarea
+              ref={input}
+              className="of-input of-composer-input"
+              rows={1}
+              value={draft}
+              maxLength={TEXT_MAX}
+              aria-label={
+                li ? t("ui.otomeForge.phone.inputLabel", { name: li.name }) : t("ui.otomeForge.phone.groupInputLabel")
+              }
+              placeholder={
+                li ? t("ui.otomeForge.phone.placeholder", { name: li.name }) : t("ui.otomeForge.phone.groupPlaceholder")
+              }
+              onChange={(event) => setDraft(event.target.value)}
+            />
+            <button
+              type="submit"
+              className="of-icon-button of-send"
+              aria-label={t("ui.otomeForge.phone.send")}
+              title={t("ui.otomeForge.phone.send")}
+              aria-disabled={!canSend}
             >
-              <X size={15} strokeWidth={2.2} aria-hidden="true" />
+              <SendHorizontal size={18} strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
-        ) : null}
-        <div className="of-composer-row">
-          <StickerPicker
-            stickers={stickers}
-            name={title}
-            disabled={busy}
-            onPick={(sticker) => {
-              setAttached(sticker);
-              setAnnounce(t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, sticker) }));
-              input.current?.focus({ preventScroll: true });
-            }}
-          />
-          {/* No Enter shortcut: Enter starts a new line on a phone and on a computer alike, and only Send sends. */}
-          <textarea
-            ref={input}
-            className="of-input of-composer-input"
-            rows={1}
-            value={draft}
-            maxLength={TEXT_MAX}
-            aria-label={
-              li ? t("ui.otomeForge.phone.inputLabel", { name: li.name }) : t("ui.otomeForge.phone.groupInputLabel")
-            }
-            placeholder={
-              li ? t("ui.otomeForge.phone.placeholder", { name: li.name }) : t("ui.otomeForge.phone.groupPlaceholder")
-            }
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <button
-            type="submit"
-            className="of-icon-button of-send"
-            aria-label={t("ui.otomeForge.phone.send")}
-            title={t("ui.otomeForge.phone.send")}
-            aria-disabled={!canSend}
-          >
-            <SendHorizontal size={18} strokeWidth={2} aria-hidden="true" />
-          </button>
-        </div>
-        {draft.length >= COUNTER_FROM ? (
-          <span className="of-counter of-composer-counter">
-            {draft.length}/{TEXT_MAX}
-          </span>
-        ) : null}
-      </form>
+          {draft.length >= COUNTER_FROM ? (
+            <span className="of-counter of-composer-counter">
+              {draft.length}/{TEXT_MAX}
+            </span>
+          ) : null}
+        </form>
+      )}
 
       <p className="of-visually-hidden" aria-live="polite">
         {announce}
@@ -728,6 +753,12 @@ const DATE_INVITE_KEYS = {
   pending: "ui.otomeForge.phone.dateInvitePending",
   accepted: "ui.otomeForge.phone.dateInviteAccepted",
 } as const;
+/** #2458: the same for a friend's invitation to hang out. */
+const HANGOUT_INVITE_KEYS = {
+  ...INVITE_KEYS,
+  pending: "ui.otomeForge.phone.hangoutInvitePending",
+  accepted: "ui.otomeForge.phone.hangoutInviteAccepted",
+} as const;
 
 /**
  * #2156: his invitation to clear the air: Accept or Decline while it waits, then what became of it. #2424: his date
@@ -739,12 +770,17 @@ function InviteCard({
   row,
   onOpenScene,
   onOpenDate,
+  onOpenHangout,
+  ended,
 }: {
   runKey: string;
-  li: RunLiView;
+  li: RunLiView | RunFriendView;
   row: Row;
+  /** #2459: the story has ended, so an invitation still waiting is only shown. */
+  ended: boolean;
   onOpenScene?: (key: string) => void;
   onOpenDate?: (open: DateOpen) => void;
+  onOpenHangout?: (invite: HangoutInvite) => void;
 }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
@@ -761,10 +797,16 @@ function InviteCard({
     answered.current = false;
     cardRef.current?.focus();
   }, [status]);
+  // #2458: a friend asks her to hang out; accepting plans it in Album → Hangouts, where she picks what to wear.
+  const hangout = row.invite!.kind === "hangout";
   const answer = async (accept: boolean) => {
     if (busy) return;
     if (date && accept) {
       onOpenDate?.({ invite: { li: li.id, message: row.id } });
+      return;
+    }
+    if (hangout && accept) {
+      onOpenHangout?.({ friend: li.id, message: row.id });
       return;
     }
     setBusy(true);
@@ -796,9 +838,11 @@ function InviteCard({
       >
         <p className="of-invite-text" role="status">
           <HeartHandshake size={15} strokeWidth={2} aria-hidden="true" />
-          <span>{t((date ? DATE_INVITE_KEYS : INVITE_KEYS)[status], { name: li.name })}</span>
+          <span>
+            {t((date ? DATE_INVITE_KEYS : hangout ? HANGOUT_INVITE_KEYS : INVITE_KEYS)[status], { name: li.name })}
+          </span>
         </p>
-        {status === "pending" ? (
+        {ended ? null : status === "pending" ? (
           <div className="of-invite-actions">
             <button
               type="button"
@@ -834,7 +878,9 @@ function InviteCard({
               className="of-button of-button--quiet of-glass of-button--small"
               onClick={() => onOpenScene(row.invite!.scene!)}
             >
-              {t("ui.otomeForge.phone.invitePlay", { name: li.name })}
+              {t(hangout ? "ui.otomeForge.phone.hangoutInvitePlay" : "ui.otomeForge.phone.invitePlay", {
+                name: li.name,
+              })}
             </button>
           </div>
         ) : null}
@@ -862,7 +908,7 @@ function Bubble({
   group,
 }: {
   row: Row;
-  li: RunLiView | undefined;
+  li: RunLiView | RunFriendView | undefined;
   name: string;
   stickers: Stickers;
   pending: boolean;

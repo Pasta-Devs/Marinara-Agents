@@ -3736,6 +3736,198 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
   expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
 });
 
+test("#2458: Otome Hearth's Story lists her friends with stars, and Add a friend takes someone she has met", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  const view = fixture.stub.view as Json;
+  view.friends = [];
+  let block: "arc" | null = null;
+  const kaveh = {
+    ...(view.lis as Json[])[0]!,
+    id: "li-kaveh-0009",
+    name: "Kaveh",
+    level: 2,
+    affectionProgress: { current: 50, required: 250 },
+    arc: 1,
+  };
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    const path = call.path.replace(/^\/api\/otome-forge/u, "");
+    if (path === `/runs/${RUN}/friends/met`) {
+      return { status: 200, json: { met: [{ key: "kaveh", name: "Kaveh" }], block } };
+    }
+    if (path === `/runs/${RUN}/friends` && call.method === "POST") {
+      view.friends = [kaveh];
+      block = "arc";
+      return { status: 200, json: { friend: { id: kaveh.id, name: kaveh.name } } };
+    }
+    const reply = fixture.answer(call);
+    if (path === `/runs/${RUN}/story` && reply?.json) return { ...reply, json: { ...reply.json, friendBlock: block } };
+    return reply;
+  };
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const section = root.getByRole("region", { name: "Friends", exact: true });
+  await expect(section.getByText("No friends yet.", { exact: true })).toBeVisible();
+  await section.getByRole("button", { name: "Add a friend", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add a friend" });
+  await expect(dialog.getByRole("radio", { name: "Someone you’ve met", exact: true })).toBeChecked();
+  const add = dialog.getByRole("button", { name: "Add them", exact: true });
+  await expect(add).toBeDisabled();
+  await dialog.getByRole("button", { name: "Kaveh", exact: true }).click();
+  await dialog.getByText("he/him", { exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "he/him", exact: true })).toBeChecked();
+  await page.screenshot({ path: testInfo.outputPath("friends-add.png") });
+  await add.click();
+  await expect(dialog).toBeHidden();
+  expect(posts(calls, "/friends").map((call) => call.body)).toEqual([
+    expect.objectContaining({
+      source: "met",
+      key: "kaveh",
+      pronouns: { subject: "he", object: "him", possessive: "his" },
+    }),
+  ]);
+  const row = section.getByRole("listitem").filter({ hasText: "Kaveh" });
+  await expect(row.getByRole("img", { name: "Kaveh: friendship 2 of 5", exact: true })).toBeVisible();
+  await expect(row.getByRole("meter", { name: "Friendship with Kaveh", exact: true })).toHaveText("50 / 250");
+  await expect(section.getByRole("button", { name: "Add a friend", exact: true })).toBeDisabled();
+  await expect(
+    section.getByText("A friend has already joined in this story arc. Another can join in the next one.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await section.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("friends-list.png") });
+});
+
+test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from the Album, and End the Story", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  const view = fixture.stub.view as Json;
+  const lis = view.lis as Json[];
+  const kaveh = {
+    ...lis[0]!,
+    id: "li-kaveh-0009",
+    name: "Kaveh",
+    level: 5,
+    affectionProgress: { current: 350, required: 350 },
+    arc: 1,
+    about: "Architect. Your neighbour.",
+  };
+  view.friends = [kaveh];
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    const path = call.path.replace(/^\/api\/otome-forge/u, "");
+    if (path === `/runs/${RUN}/hangouts` && call.method === "GET") {
+      return { status: 200, json: { hangouts: [], free: [kaveh.id] } };
+    }
+    if (path === `/runs/${RUN}/album`) {
+      return { status: 200, json: { cgs: [], memories: [], timeline: [], favorites: [], soundtrack: [], tells: {} } };
+    }
+    if (path === `/runs/${RUN}/hangouts` && call.method === "POST") {
+      return { status: 409, json: { error: "Stop here.", code: "conflict" } };
+    }
+    if (path === `/runs/${RUN}/friends/${kaveh.id}/wingman`) {
+      return { status: 200, json: { li: lis[0]!.id, helper: kaveh.id } };
+    }
+    if (path === `/runs/${RUN}/ending` || path === `/runs/${RUN}/friends/${kaveh.id}/rank`) {
+      return { status: 409, json: { error: "Stop here.", code: "locked" } };
+    }
+    const reply = fixture.answer(call);
+    if (path === `/runs/${RUN}/story` && reply?.json) {
+      return {
+        ...reply,
+        json: {
+          ...reply.json,
+          // The chapter in progress is read, so End the Story can be pressed.
+          chapters: (reply.json.chapters as Json[]).map((chapter) => ({ ...chapter, state: "done" })),
+          friendBlock: "full",
+          friendStories: [
+            {
+              id: kaveh.id,
+              rank: { level: 5, key: `story-friend-${kaveh.id}-5` },
+              held: null,
+              upset: false,
+              finale: false,
+              wingman: [lis[0]!.id],
+            },
+          ],
+          ending: { offered: true },
+        },
+      };
+    }
+    return reply;
+  };
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const friends = root.getByRole("region", { name: "Friends", exact: true });
+  await expect(friends.getByText("Architect. Your neighbour.", { exact: true })).toBeVisible();
+  await friends.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("friends-actions.png") });
+  await friends.getByRole("button", { name: "Kaveh's finale", exact: true }).click();
+  await expect.poll(() => posts(calls, `/friends/${kaveh.id}/rank`).length).toBe(1);
+  await page.getByRole("dialog").getByRole("button", { name: "Not now", exact: true }).click();
+  await friends.getByRole("button", { name: `Ask Kaveh to talk to ${lis[0]!.name}`, exact: true }).click();
+  await expect
+    .poll(() => posts(calls, `/friends/${kaveh.id}/wingman`).map((call) => call.body))
+    .toEqual([expect.objectContaining({ li: lis[0]!.id })]);
+  // End the Story asks first, and says the game ends after the epilogue.
+  const ending = root.getByRole("region", { name: "Your ending", exact: true });
+  await ending.getByRole("button", { name: "End the Story", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "End the Story?" });
+  await expect(confirm.getByText(/the game is over/u)).toBeVisible();
+  await confirm.getByRole("button", { name: "End the Story", exact: true }).click();
+  await expect.poll(() => posts(calls, "/ending").length).toBe(1);
+  await page.getByRole("dialog").getByRole("button", { name: "Not now", exact: true }).click();
+  // A hangout: Kaveh, somewhere he chooses, in what she wears now.
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Album", exact: true }).click();
+  await root.getByRole("tab", { name: "Hangouts", exact: true }).click();
+  await root.getByRole("button", { name: "Plan a hangout", exact: true }).click();
+  const plan = page.getByRole("dialog", { name: "Plan a hangout" });
+  const go = plan.getByRole("button", { name: "Hang out", exact: true });
+  await expect(go).toBeDisabled();
+  await plan.getByRole("button", { name: "Kaveh", exact: true }).click();
+  await plan.getByText("Let Kaveh choose", { exact: true }).click();
+  await go.click();
+  await expect
+    .poll(() => posts(calls, "/hangouts").map((call) => call.body))
+    .toEqual([expect.objectContaining({ friends: [kaveh.id], place: "partner-choice", herLook: "base" })]);
+  await expect(plan.getByRole("alert")).toBeVisible();
+});
+
+test("#2459: an ended story keeps Story, Wardrobe and the Album, and its Messages can only be read", async ({
+  page,
+  isMobile,
+}) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  (fixture.stub.view as Json).ended = "2026-11-24T10:00:00.000Z";
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    const reply = fixture.answer(call);
+    if (call.path.endsWith("/story") && reply?.json) {
+      return { ...reply, json: { ...reply.json, ending: { offered: false, ended: "2026-11-24T10:00:00.000Z" } } };
+    }
+    return reply;
+  };
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  await expect(root.getByRole("region", { name: "The End", exact: true })).toBeVisible();
+  const menu = root.getByRole("navigation", { name: "Game menu" });
+  await expect(menu.getByRole("button", { name: "Wish", exact: true })).toHaveCount(0);
+  await expect(menu.getByRole("button", { name: "Games", exact: true })).toHaveCount(0);
+  await expect(menu.getByRole("button", { name: "Album", exact: true })).toBeVisible();
+});
+
 test("Otome Hearth affection shows per-level progress below Level beside its hearts", async ({
   page,
   isMobile,

@@ -21,6 +21,8 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { STICKER_EMOTION, STICKERS_PER_LI } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { FRIEND_STANCES, type FriendBible } from "../../../../../client/src/features/otome-forge/shared/friends.js";
+import { ARCANA } from "../../../../../client/src/features/otome-forge/shared/tarot.js";
 import {
   BIRTHDAY_PATTERN,
   MASK_TELLS_MAX,
@@ -211,6 +213,52 @@ const defaultBible = (): Bible => ({
 });
 
 /** A stored bible in its full shape, or null when there is none yet. */
+/**
+ * #2458: a friend's bible (S/story/friends.ts), checked as a whole when written; a damaged one read back drops the
+ * friend's bible, so they leave the friends until it is written again.
+ */
+const FriendStepSchema = text();
+export const FriendBibleSchema: ZodType<FriendBible> = z.object({
+  age: z.number().int().min(MIN_AGE),
+  role: text(300),
+  howWeMet: text(),
+  publicFace: text(),
+  personality: text(),
+  wound: text(),
+  want: text(),
+  need: text(),
+  fear: text(),
+  flaws: textList(),
+  virtues: textList(),
+  voice: z.object({
+    register: text(),
+    tics: textList(),
+    samples: z.object({ warm: text(), teasing: text(), worried: text() }),
+  }),
+  likes: textList(),
+  dislikes: textList(),
+  growth: z.object({
+    "1": FriendStepSchema,
+    "2": FriendStepSchema,
+    "3": FriendStepSchema,
+    "4": FriendStepSchema,
+    "5": FriendStepSchema,
+  }),
+  onLis: z.record(z.string(), z.object({ stance: z.enum(FRIEND_STANCES), why: text() })),
+  onHer: text(),
+  arcana: z.enum(ARCANA),
+  look: z.object({
+    identityLine: text(600),
+    outfitLine: text(600),
+    presentation: z.enum(["man", "woman", "person"]),
+  }),
+});
+
+function normalizeFriendBible(data: unknown): FriendBible | undefined {
+  const parsed = FriendBibleSchema.safeParse(data);
+  return parsed.success ? parsed.data : undefined;
+}
+
 export function normalizeBible(data: unknown): Bible | null {
   return isRecord(data) ? readFields<Bible>(BIBLE_FIELDS, defaultBible, data) : null;
 }
@@ -351,6 +399,8 @@ export function normalizeUnit(data: unknown): Unit {
       stickers: normalizeStickerSet,
       // 0.35.0: absent until GET /play is read with images on (S/art/kittens.ts).
       kitten: PaintSchema.optional(),
+      // #2458: a friend's unit only.
+      friend: normalizeFriendBible,
     },
     defaultUnit,
     isRecord(data) ? data : undefined,
@@ -361,6 +411,7 @@ export function normalizeUnit(data: unknown): Unit {
   if (!unit.plushArt) delete unit.plushArt;
   if (!unit.figurine) delete unit.figurine;
   if (!unit.stickers) delete unit.stickers;
+  if (!unit.friend) delete unit.friend;
   // A worn look that is not one of theirs (a damaged document) wears the base portrait.
   const { wornOutfit: _worn, ...rest } = unit;
   const worn = readWornOutfit(unit.outfits, field(data, "wornOutfit"));

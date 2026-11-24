@@ -322,7 +322,8 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
     const other = `${runKey} ${li.id} ${day} ${about.rupture ? "warm" : "curt"}`;
     noteRequests.delete(other);
     noteFailures.delete(other);
-    if (about.note || home.isFetching) return;
+    // #2459: an ended story writes no new note; one already written still shows.
+    if (about.note || home.isFetching || view.ended) return;
     const failure = noteFailures.get(noteKey);
     if (failure !== undefined) setNoteState({ key: noteKey, error: failure });
     else writeNote(noteKey, li.id, li.name);
@@ -350,7 +351,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
             writeNote(noteKey, li.id, li.name);
           },
         }
-      : about
+      : about && !view.ended
         ? { kind: "writing" }
         : null;
 

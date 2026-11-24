@@ -52,6 +52,11 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import {
+  friendHeld,
+  friendRankOf,
+  type FriendState,
+} from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { hapticsOn } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { GROUP_THREAD } from "../../../../../client/src/features/otome-forge/shared/home.js";
@@ -63,13 +68,14 @@ import { OtomeForgeError } from "../http.js";
 import { chatId, isLiId, runDocTarget, stateId, worldId } from "../ids.js";
 import { isRecord, readFields, validItems } from "../schemas/common.js";
 import { HapticCuesSchema } from "../schemas/story.js";
-import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { defaultLiState, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
+import { applyFriendHurts } from "../state/friends.js";
 import { applyMessageHurts, type MessageHurt } from "../state/relationship.js";
 import { listArcs } from "../story/arc.js";
 import { recallText, type StoryMemory } from "../story/canon.js";
-import { chatReplyMessages, ownView } from "../prompts.js";
+import { chatReplyMessages, ownView, type ChatFriend } from "../prompts.js";
 import { ChatReplySchema, normalizeChatReply, type ChatReply, type ReplyStickers } from "./replies.js";
 
 // ── The thread document (its wire shapes are in SH/api-types.ts) ──
@@ -104,7 +110,7 @@ const MESSAGE_DISPLAY = {
   invite: z.object({
     status: z.enum(["pending", "accepted", "declined", "lapsed"]),
     scene: z.string().max(120).optional(),
-    kind: z.literal("date").optional(),
+    kind: z.enum(["date", "hangout"]).optional(),
   }),
   haptic: HapticCuesSchema,
 };
@@ -213,14 +219,50 @@ export async function loadThreadRun(
   runId: string,
   li: LiId,
   { forged = true }: { forged?: boolean } = {},
-): Promise<{ run: RunDocuments; unit: Unit }> {
+): Promise<{ run: RunDocuments; unit: Unit; friend?: true }> {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Hearth story");
-  const unit = run.units.find((entry) => entry.id === li);
-  if (!unit || !run.state.lis[li]) throw notFound("love interest");
+  // #2458: one of her friends has a thread of their own too.
+  const friend = run.state.friends[li] ? run.friends?.find((entry) => entry.id === li) : undefined;
+  const unit = friend ?? run.units.find((entry) => entry.id === li);
+  if (!unit || (!friend && !run.state.lis[li])) throw notFound("love interest");
   if (forged && run.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
-  return { run, unit };
+  return friend ? { run, unit, friend: true } : { run, unit };
 }
+
+/** #2458: a friend's thread as P17 reads them: their bible and level, and what stands between you. */
+function chatFriend(run: RunDocuments, unit: Unit): ChatFriend | undefined {
+  const state = run.state.friends[unit.id];
+  if (!state || !unit.friend) return undefined;
+  return {
+    bible: unit.friend,
+    level: friendRankOf(state.points, run.state.chapters, unit.id),
+    lis: run.units.map(({ id, name }) => ({ id, name })),
+    ...(state.grievance ? { grievance: state.grievance.text } : {}),
+    ...(state.upset ? { upset: true } : {}),
+  };
+}
+
+/** #2458: a friend's state as the invitation to clear the air reads a love interest's (inviteOffered). */
+const friendInviteState = (friend: FriendState): Parameters<typeof inviteOffered>[0] => ({
+  upset: friend.upset,
+  asked: friend.asked,
+  rupture: friend.grievance ? { grievanceId: "friend", since: friend.grievance.opened } : null,
+  // Their grievance stands as a love interest's does, so a held friend never asks her to clear the air.
+  grievances: friend.grievance
+    ? [
+        {
+          id: "friend",
+          li: "",
+          by: "li",
+          text: friend.grievance.text,
+          severity: "rupture",
+          opened: friend.grievance.opened,
+          status: "open",
+        },
+      ]
+    : [],
+});
 
 /**
  * Applies `change` to his thread, creating it on the first message. A run deleted while this was written may have
@@ -268,14 +310,17 @@ export async function phoneList(
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Hearth story");
   const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li));
+  // #2458: her friends' threads follow the love interests'.
+  const friends = (run.friends ?? []).map((unit) => unit.id);
   const threads = await Promise.all(
-    cast.map(async (li) => {
+    [...cast, ...friends].map(async (li) => {
       const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
       return {
         li,
         last: thread.messages.at(-1) ?? null,
         unread: unreadCount(thread),
         busy: forgeChatReplyBusy(runId, li),
+        ...(friends.includes(li) ? { friend: true as const } : {}),
       };
     }),
   );
@@ -408,15 +453,21 @@ async function writeReply(
   }: { debugMode: boolean; first?: boolean; connectionId?: string; reason?: ChatReason; remote?: number },
 ): Promise<Written> {
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
-  const dating = reason === "date";
-  if (dating && (heldAgainst(run.state.lis[li]) || inviteWaiting(thread))) {
+  const friendState = run.state.friends[li];
+  const friend = friendState ? chatFriend(run, unit) : undefined;
+  const dating = reason === "date" || reason === "hangout";
+  if (
+    (dating && (friendState ? friendHeld(friendState) : heldAgainst(run.state.lis[li]))) ||
+    (dating && inviteWaiting(thread))
+  ) {
     // `locked`, not `conflict`: nothing was written, so the invitation job may try the next one (S/phone/invite.ts).
     throw new OtomeForgeError(409, "He holds a grievance with her, or an invitation of his still waits.", "locked");
   }
   // A date invitation is his whole message: it never also asks her out to clear the air.
-  const invite = !dating && inviteOffered(run.state.lis[li]!, thread);
-  // 0.34.0: only her reply while he holds the remote, never a message he writes first, may drive her toys.
-  const remote = !first && heldFor && hapticsOn(run.world) ? Math.round(heldFor) : 0;
+  const invite = !dating && inviteOffered(friendState ? friendInviteState(friendState) : run.state.lis[li]!, thread);
+  // 0.34.0: only her reply while he holds the remote, never a message he writes first, may drive her toys. Never a
+  // friend's (#2458).
+  const remote = !first && !friend && heldFor && hapticsOn(run.world) ? Math.round(heldFor) : 0;
   const tail = openMessages(thread).slice(-TAIL_MESSAGES);
   const memories = thread.sessions.slice(-LISTED_SESSIONS);
   const story = await recallText(deps, runId, {
@@ -428,7 +479,9 @@ async function writeReply(
     listed: memories.map((session) => sessionSourceId(li, session)),
     debugMode,
   });
-  const { liState, offscreen, bondPlayed } = ownView(run.state, li);
+  const { liState, offscreen, bondPlayed } = friend
+    ? { liState: defaultLiState(), offscreen: "", bondPlayed: 0 }
+    : ownView(run.state, li);
   const stickers = replyStickers(runId, run, li);
   const { value } = await generateJson(deps, {
     runId,
@@ -450,6 +503,7 @@ async function writeReply(
       invite,
       reason,
       ...(remote ? { remote, toys: deps.haptics?.devicesText() ?? "" } : {}),
+      ...(friend ? { friend } : {}),
     }),
     memory: story,
     // A conversation's replies come minutes apart, so the five-minute cache, at a cheaper write, carries it (0.20.2).
@@ -464,7 +518,9 @@ async function writeReply(
   // generateJson returns what normalizeChatReply made of the reply.
   const written = value as ChatReply;
   const at = new Date().toISOString();
-  const asks = dating ? { status: "pending" as const, kind: "date" as const } : { status: "pending" as const };
+  const asks = dating
+    ? { status: "pending" as const, kind: reason === "hangout" ? ("hangout" as const) : ("date" as const) }
+    : { status: "pending" as const };
   const messages = written.messages.map((message, index, all): PhoneMessage => ({
     id: newMessageId(),
     who: "li",
@@ -477,8 +533,11 @@ async function writeReply(
   return { messages, ...(written.hurt ? { hurt: [{ li, ...written.hurt }] } : {}) };
 }
 
-/** Why he writes first: she told him she is upset with him (#2156), or he asks her on a date (#2424). */
-export type ChatReason = "upset" | "date";
+/**
+ * Why he writes first: she told him she is upset with him (#2156), or he asks her on a date (#2424); #2458: a friend
+ * asks her to hang out.
+ */
+export type ChatReason = "upset" | "date" | "hangout";
 
 /**
  * #2424: the hurts a landed reply named, kept in one revision-checked write of the state (applyMessageHurts) against
@@ -502,8 +561,10 @@ async function applyHurts(
     let kept: Pick<Answered, "hurt" | "held"> = { hurt: [], held: [] };
     await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
       const outcome = applyMessageHurts(current, hurts, { ref, at, arc });
-      kept = { hurt: outcome.hurt, held: outcome.opened };
-      return outcome.state;
+      // #2458: a friend's hurt follows a friend's rules (S/state/friends.ts).
+      const friends = applyFriendHurts(outcome.state, hurts, { at, arc });
+      kept = { hurt: [...outcome.hurt, ...friends.hurt], held: [...outcome.opened, ...friends.opened] };
+      return friends.state;
     });
     return kept;
   } catch (error) {
@@ -611,6 +672,8 @@ export async function writeFirstIn<T>(
   load: () => Promise<T>,
   write: (loaded: T, thread: PhoneThread) => Promise<PhoneMessage[]>,
 ): Promise<PhoneMessage[] | null> {
+  // #2459: a job queued before the story ended writes nothing once it has (no model call, nothing saved).
+  if ((await deps.store.readDoc(stateId(runId), normalizeState))?.ended) return null;
   const loaded = await load();
   const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
   if (openMessages(thread).at(-1)?.who === "player") return null;

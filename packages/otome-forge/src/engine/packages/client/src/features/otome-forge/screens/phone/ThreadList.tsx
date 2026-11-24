@@ -58,8 +58,10 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
   // A server before #2154 sends no group.
   const group = threads.data?.group ?? null;
   const byLi = new Map((threads.data?.threads ?? []).map((thread) => [thread.li, thread]));
-  const order = (id: LiId) => view.lis.findIndex((li) => li.id === id);
-  const rows = [...view.lis].sort((a, b) => {
+  // #2458: her friends' threads sit among the love interests', newest first.
+  const people = [...view.lis, ...(view.friends ?? [])];
+  const order = (id: LiId) => people.findIndex((li) => li.id === id);
+  const rows = [...people].sort((a, b) => {
     const last = (id: LiId) => byLi.get(id)?.last?.at ?? "";
     return last(b.id).localeCompare(last(a.id)) || order(a.id) - order(b.id);
   });

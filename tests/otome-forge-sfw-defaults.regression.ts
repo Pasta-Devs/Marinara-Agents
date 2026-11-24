@@ -265,12 +265,12 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerHis: "6c34f696884762e4",
   bannerMemories: "c41c5b7a8c4a075f",
   bannerMine: "c32edc5d7d61a2f9",
-  beat: "150cfba167c2c56b",
-  beatWithCg: "7a4d0cd9ad2d935e",
+  beat: "1c81753065aaa3e0",
+  beatWithCg: "ab32857477439231",
   chapterPlan: "fe5ac3d3b2a934fa",
-  closer: "74c05b001a346729",
+  closer: "8383239f7cd600fd",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
-  confrontation: "4e4183d86fbb6d1a",
+  confrontation: "8ede56ecb34643b5",
   repairPlan: "4d790858200b8efa",
   routePlan: "918b9939f0410fe0",
 };
@@ -299,12 +299,12 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "a35ada9ecdc9ffa4",
   bannerMemories: "cd98913c2ae53bb3",
   bannerMine: "830c704474d2f33c",
-  beat: "39c2ac9fdfdcefe7",
-  beatWithCg: "52e9fbe675e6be0b",
+  beat: "9f082088d7945899",
+  beatWithCg: "66afe4a0f773c081",
   chapterPlan: "fee16182501052b6",
-  closer: "3a4b87444e836b9b",
+  closer: "686cd9770e2622dc",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
-  confrontation: "c7daffaea4096796",
+  confrontation: "c239217fa13d0169",
   repairPlan: "7fd70b2802e3e4db",
   routePlan: "feab7039fbf60941",
 };

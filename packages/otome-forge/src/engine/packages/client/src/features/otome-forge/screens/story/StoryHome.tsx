@@ -70,6 +70,7 @@ import {
 } from "../../shared/economy";
 import { BOND_RANKS, bondStepOf } from "../../shared/bond";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
+import { Friends } from "./Friends";
 import { PersonalityQuiz } from "./PersonalityQuiz";
 
 const STATE_KEYS: Record<StoryChapterEntry["state"], string> = {
@@ -173,11 +174,17 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
     ) ??
     null;
   /** Opens a route or repair chapter that is already planned; plans it (one model call) otherwise. */
+  // The ending and a friend's first make-up story have no key until planned: the planning id is never empty.
   const planArc = (target: ArcTarget) =>
-    void arcPlanning.plan(target.key, arcPath(target), target.kind === "side" ? { arc: target.arc } : {}, (key) => {
-      setArcPlan(null);
-      onOpenChapter(key);
-    });
+    void arcPlanning.plan(
+      target.key || `${target.kind}:${target.li}`,
+      arcPath(target),
+      target.kind === "side" ? { arc: target.arc } : {},
+      (key) => {
+        setArcPlan(null);
+        onOpenChapter(key);
+      },
+    );
   const openArc = (target: ArcTarget) => {
     const planned = chapters.find((chapter) => chapter.key === target.key);
     if (planned) onOpenChapter(planned.key);
@@ -212,6 +219,14 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         </p>
       ) : null}
       {reading ? <ContinueCard runKey={runKey} entry={reading} view={view} onOpen={onOpenChapter} /> : null}
+      {story.data.ending ? (
+        <EndingCard
+          ending={story.data.ending}
+          chapters={chapters}
+          reading={!!reading}
+          onEnd={() => openArc({ kind: "ending", li: "", key: "" })}
+        />
+      ) : null}
       {story.data.arcChoice && !reading ? (
         <ArcChoiceCard runKey={runKey} options={story.data.arcChoice} images={view.world.images} />
       ) : null}
@@ -247,6 +262,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
           bondStories={bond}
           planning={arcPlanning.planning}
           onReadSide={(entry) => openArc({ kind: "side", li: entry.li, key: entry.key, arc: entry.arc })}
+          ended={!!story.data.ending?.ended}
         />
       ) : null}
       <Affection
@@ -257,6 +273,15 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         onPrestige={(entry) => openArc({ kind: "prestige", li: entry.li, key: entry.key })}
         bondStories={bond}
         onBond={(entry) => openArc({ kind: "bond", li: entry.li, key: entry.key })}
+      />
+      <Friends
+        runKey={runKey}
+        view={view}
+        block={story.data.friendBlock}
+        entries={story.data.friendStories ?? []}
+        ended={!!story.data.ending?.ended}
+        onOpenArc={(target) => openArc(target)}
+        onOpenChapter={onOpenChapter}
       />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
       {arcPlan && (arcPlan.kind !== "side" || sideDialog === arcPlan) ? (
@@ -311,9 +336,9 @@ function ContinueCard({
       <div className="of-chapter-head">
         {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={46} /> : null}
         <div className="of-chapter-heading">
-          <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
+          <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead, view.friends)}</p>
           <h2 id="of-story-continue" className="of-chapter-title">
-            {chapterTitle(t, entry, view.lis)}
+            {chapterTitle(t, entry, [...view.lis, ...(view.friends ?? [])])}
           </h2>
         </div>
       </div>
@@ -326,8 +351,21 @@ function ContinueCard({
   );
 }
 
-function eyebrow(t: ReturnType<typeof useTranslation>["t"], entry: StoryChapterEntry, lead: RunLiView | null): string {
-  const [key, values] = chapterEyebrowKey({ kind: entry.kind, number: mainNumber(entry.key) });
+function eyebrow(
+  t: ReturnType<typeof useTranslation>["t"],
+  entry: StoryChapterEntry,
+  lead: RunLiView | null,
+  people: ReadonlyArray<Pick<RunLiView, "id" | "name">> = [],
+): string {
+  const [key, values] = chapterEyebrowKey(
+    {
+      kind: entry.kind,
+      number: mainNumber(entry.key),
+      ...(entry.friendStory ? { friendStory: entry.friendStory } : {}),
+      ...(entry.ending ? { ending: entry.ending } : {}),
+    },
+    people,
+  );
   const kind = t(key, values);
   return lead ? t("ui.otomeForge.story.withLead", { chapter: kind, name: lead.name }) : kind;
 }
@@ -605,7 +643,7 @@ function ChapterList({
       <ol className="of-chapters">
         {chapters.map((entry, index) => {
           const lead = view.lis.find((li) => li.id === (entry.li ?? entry.lead)) ?? null;
-          const title = chapterTitle(t, entry, view.lis);
+          const title = chapterTitle(t, entry, [...view.lis, ...(view.friends ?? [])]);
           const action =
             entry.state === "done"
               ? { key: "ui.otomeForge.story.replay", Icon: Repeat, primary: false }
@@ -639,7 +677,7 @@ function ChapterList({
                 <div className="of-chapter-head">
                   {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={34} /> : null}
                   <div className="of-chapter-heading">
-                    <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
+                    <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead, view.friends)}</p>
                     <h3 className="of-chapter-title">{title}</h3>
                   </div>
                   <span className="of-badge of-badge--soft">{t(STATE_KEYS[entry.state])}</span>
@@ -832,6 +870,93 @@ function StorySoFar({ runKey }: { runKey: string }) {
  * The end of an arc (#1983 M2/M3): three ways on, each explained, and the cost before the tap. Breathing room and the
  * story going on plan the next arc; someone new first writes them, then the arc that brings them in.
  */
+/**
+ * #2459: End the Story. Once every love interest stands at level 20 it is offered (never forced); its confirmation says
+ * what follows: a finale that settles what is still open and ends happily, then an epilogue some time later, after
+ * which the story only opens to look at. Once the finale is read, the epilogue waits here; once that is read, The End.
+ */
+function EndingCard({
+  ending,
+  chapters,
+  reading,
+  onEnd,
+}: {
+  ending: NonNullable<StoryView["ending"]>;
+  chapters: readonly StoryChapterEntry[];
+  reading: boolean;
+  onEnd: () => void;
+}) {
+  const { t } = useTranslation();
+  const [asking, setAsking] = useState(false);
+  const finaleDone = !!ending.finale && chapters.some((entry) => entry.key === ending.finale && entry.state === "done");
+  if (ending.ended) {
+    return (
+      <section className="of-section of-glass of-story-ending" aria-labelledby="of-story-ending">
+        <h2 id="of-story-ending" className="of-section-title">
+          {t("ui.otomeForge.ending.endTitle")}
+        </h2>
+        <p className="of-body">{t("ui.otomeForge.ending.endText")}</p>
+      </section>
+    );
+  }
+  if (finaleDone && !ending.epilogue && !reading) {
+    return (
+      <section className="of-section of-glass of-story-ending" aria-labelledby="of-story-ending">
+        <h2 id="of-story-ending" className="of-section-title">
+          {t("ui.otomeForge.ending.epilogueTitle")}
+        </h2>
+        <p className="of-body">{t("ui.otomeForge.ending.epilogueText")}</p>
+        <button type="button" className="of-button of-button--primary" onClick={onEnd}>
+          <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.ending.epilogueOpen")}
+        </button>
+      </section>
+    );
+  }
+  if (!ending.offered) return null;
+  return (
+    <section className="of-section of-glass of-story-ending" aria-labelledby="of-story-ending">
+      <h2 id="of-story-ending" className="of-section-title">
+        {t("ui.otomeForge.ending.offerTitle")}
+      </h2>
+      <p className="of-body">{t("ui.otomeForge.ending.offerText")}</p>
+      {reading ? (
+        <p className="of-hint">{t("ui.otomeForge.ending.offerReading")}</p>
+      ) : (
+        <button type="button" className="of-button of-button--quiet of-glass" onClick={() => setAsking(true)}>
+          <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.ending.offerButton")}
+        </button>
+      )}
+      {asking ? (
+        <Dialog
+          title={t("ui.otomeForge.ending.confirmTitle")}
+          onClose={() => setAsking(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="of-button of-button--primary"
+                onClick={() => {
+                  setAsking(false);
+                  onEnd();
+                }}
+              >
+                {t("ui.otomeForge.ending.confirm")}
+              </button>
+              <button type="button" className="of-button of-button--quiet of-glass" onClick={() => setAsking(false)}>
+                {t("ui.otomeForge.ending.keepPlaying")}
+              </button>
+            </>
+          }
+        >
+          <p className="of-body">{t("ui.otomeForge.ending.confirmText")}</p>
+        </Dialog>
+      ) : null}
+    </section>
+  );
+}
+
 function ArcChoiceCard({
   runKey,
   options,
@@ -1144,17 +1269,25 @@ function useDialogFocus(
  * when it has no plan yet.
  */
 type ArcTarget =
-  | { kind: "route" | "repair" | "prestige" | "bond"; li: string; key: string }
+  /** #2458: a friend's rank or make-up story (`li` is the friend); #2459: the ending's next step (`li` and `key` ""). */
+  | { kind: "route" | "repair" | "prestige" | "bond" | "rank" | "mend" | "ending"; li: string; key: string }
   /** His side of story arc `arc` (#2155): the route always needs the arc it belongs to. */
   | { kind: "side"; li: string; key: string; arc: number };
 
 const ARC_PATHS = { repair: "repairs", prestige: "prestige", bond: "bond", side: "sides" } as const;
 
-/** POST /runs/:run/routes/:li/next, /repairs/:li, /prestige/:li, /bond/:li or /sides/:li. */
+/**
+ * POST /runs/:run/routes/:li/next, /repairs/:li, /prestige/:li, /bond/:li or /sides/:li; #2458 /friends/:li/rank or
+ * /friends/:li/mend; #2459 /ending.
+ */
 const arcPath = (target: ArcTarget) =>
   target.kind === "route"
     ? `/routes/${encodeURIComponent(target.li)}/next`
-    : `/${ARC_PATHS[target.kind]}/${encodeURIComponent(target.li)}`;
+    : target.kind === "rank" || target.kind === "mend"
+      ? `/friends/${encodeURIComponent(target.li)}/${target.kind}`
+      : target.kind === "ending"
+        ? "/ending"
+        : `/${ARC_PATHS[target.kind]}/${encodeURIComponent(target.li)}`;
 
 const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: string; locked: string }> = {
   route: {
@@ -1183,10 +1316,27 @@ const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: stri
     planning: "ui.otomeForge.arcs.planningSide",
     locked: "ui.otomeForge.arcs.sideLocked",
   },
+  // #2458: a friend's stories, planned on the tap like the others.
+  rank: {
+    title: "ui.otomeForge.friends.rankDialogTitle",
+    planning: "ui.otomeForge.friends.planningRank",
+    locked: "ui.otomeForge.friends.lockedNow",
+  },
+  mend: {
+    title: "ui.otomeForge.friends.mendDialogTitle",
+    planning: "ui.otomeForge.friends.planningMend",
+    locked: "ui.otomeForge.friends.lockedNow",
+  },
+  // #2459: the finale, then the epilogue.
+  ending: {
+    title: "ui.otomeForge.ending.dialogTitle",
+    planning: "ui.otomeForge.ending.planning",
+    locked: "ui.otomeForge.ending.lockedNow",
+  },
 };
 
 /** Pronoun-safe text for a love interest: the name, and the pronouns stored in the bible (never assumed). */
-const pronounValues = (li: RunLiView) => ({
+const pronounValues = (li: Pick<RunLiView, "name" | "pronouns">) => ({
   name: li.name,
   subject: li.pronouns.subject,
   object: li.pronouns.object,
@@ -1304,6 +1454,7 @@ function Routes({
   bondStories,
   planning,
   onReadSide,
+  ended,
 }: {
   runKey: string;
   routes: RouteEntry[];
@@ -1318,6 +1469,8 @@ function Routes({
   /** The key being opened (usePlanChapter's `planning`), so a side's Read shows the wait. */
   planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
+  /** #2459: the story has ended, so no card offers anything to do. */
+  ended: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -1345,6 +1498,7 @@ function Routes({
               bondWaits={bondStories.some((entry) => entry.li === route.li)}
               planning={planning}
               onReadSide={onReadSide}
+              ended={ended}
             />
           );
         })}
@@ -1366,6 +1520,7 @@ function RouteCard({
   bondWaits,
   planning,
   onReadSide,
+  ended,
 }: {
   runKey: string;
   route: RouteEntry;
@@ -1381,6 +1536,7 @@ function RouteCard({
   bondWaits: boolean;
   planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
+  ended: boolean;
 }) {
   const { t } = useTranslation();
   const accent = accentOf(li);
@@ -1497,7 +1653,7 @@ function RouteCard({
           onRead={() => onReadSide(side)}
         />
       ))}
-      <UpsetToggle runKey={runKey} li={li} upset={!!route.upset} />
+      {ended ? null : <UpsetToggle runKey={runKey} li={li} upset={!!route.upset} />}
     </li>
   );
 }
@@ -1594,7 +1750,16 @@ function SideRow({
  * #2156: "I'm upset with them", beside each one's route at every stage. Pressing it asks first, then tells them (they
  * answer in Messages: 1 call); pressing it again takes it back at once. A toggle: its name stays, aria-pressed says it.
  */
-function UpsetToggle({ runKey, li, upset }: { runKey: string; li: RunLiView; upset: boolean }) {
+export function UpsetToggle({
+  runKey,
+  li,
+  upset,
+}: {
+  runKey: string;
+  /** #2458: a love interest, or one of her friends. */
+  li: Pick<RunLiView, "id" | "name" | "pronouns">;
+  upset: boolean;
+}) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -1700,7 +1865,7 @@ function ArcPlanDialog({
   const { t } = useTranslation();
   const actionRef = useRef<HTMLButtonElement>(null);
   useDialogFocus(actionRef, planning, failed);
-  const li = view.lis.find((item) => item.id === target.li) ?? null;
+  const li = [...view.lis, ...(view.friends ?? [])].find((item) => item.id === target.li) ?? null;
   const values = li ? pronounValues(li) : { name: "", subject: "", object: "", possessive: "" };
   const locked = failed && otomeErrorCode(failed.error) === "locked";
   return (

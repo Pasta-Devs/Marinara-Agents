@@ -480,9 +480,10 @@ function castSubjects(
       return {
         person: {
           name: unit.name,
-          identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
-          outfitLine: worn?.outfitLine || unit.outfitLine || unit.bible?.look.outfitLine || "",
-          presentation: unit.bible?.look.presentation ?? "person",
+          // #2458: a friend's look is in their friend bible, as a love interest's is in his.
+          identityLine: unit.identityLine || (unit.bible ?? unit.friend)?.look.identityLine || "",
+          outfitLine: worn?.outfitLine || unit.outfitLine || (unit.bible ?? unit.friend)?.look.outfitLine || "",
+          presentation: (unit.bible ?? unit.friend)?.look.presentation ?? "person",
         },
         image: {
           kind: "character",

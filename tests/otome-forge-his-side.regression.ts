@@ -843,10 +843,10 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 2026-11-23 (the Character Story): it is set between main chapters, never straight on from the previous one.
   // Retaken 2026-11-23 (dialogue): spoken lines run like real conversation; narration in whole sentences, in order.
   // Retaken 2026-11-23 (bans): the built-in sentence patterns are banned in narration only.
-  assert.equal(sha(mainMessages), "75c656e625973187b17939205378cb76afad46d9fb9e1f793f320aff4bc97987", "a main chapter");
+  assert.equal(sha(mainMessages), "e3ce8848617ba75c1a2ffc3ede2d1f7b389032720288701bafb00a524f0af602", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "9f7f51c45b51a0f2985dac4d688bc658b66eec4bd84398b35d83b874ddade13f",
+    "a76f295fd6810e8ecc03841ed9dbdf78ca72f55c33a5edfe2072f6d6247fe3ce",
     "a Character Story, even with a scene handed to it",
   );
 });

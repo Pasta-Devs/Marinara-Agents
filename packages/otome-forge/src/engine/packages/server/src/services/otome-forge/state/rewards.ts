@@ -39,11 +39,18 @@ import {
   OUTSIDE_AFFECTION_DAILY_CAP,
   STARLIGHT_EARNINGS,
   isStoryReward,
+  splitEvenly,
   type RewardSource,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import {
+  FRIEND_CHAPTER_AFFECTION,
+  FRIEND_RANK_STARLIGHT,
+  friendHeld,
+} from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { GIFT_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { mainChapterNumber } from "../ids.js";
 import { STATE_LIMITS, keepNewest } from "../schemas/state.js";
+import { clearFriendGrievance, settleAtFinale, withFriendSpace } from "./friends.js";
 
 export interface GrantRequest {
   source: RewardSource;
@@ -74,12 +81,15 @@ export function grant(
   const story = isStoryReward(request.source);
   const daily = state.daily.dayKey === dayKey ? state.daily : { dayKey, starlight: 0, affection: {} };
   const li = request.li && state.lis[request.li] ? request.li : null;
+  // #2458: one of her friends earns as a love interest does, within the same daily cap, kept in `state.friends`.
+  const friend = !li && request.li && state.friends[request.li] ? request.li : null;
+  const who = li ?? friend;
   const starlight = story
     ? whole(request.starlight)
     : Math.min(whole(request.starlight), Math.max(0, ACTIVITY_STARLIGHT_DAILY_CAP - daily.starlight));
-  const earned = li ? (daily.affection[li] ?? 0) : 0;
+  const earned = who ? (daily.affection[who] ?? 0) : 0;
   const affection =
-    !li || heldAgainst(state.lis[li])
+    !who || (li && heldAgainst(state.lis[li])) || (friend && friendHeld(state.friends[friend]))
       ? 0
       : story
         ? whole(request.affection)
@@ -93,12 +103,19 @@ export function grant(
         li && affection
           ? { ...state.lis, [li]: { ...state.lis[li]!, points: state.lis[li]!.points + affection } }
           : state.lis,
+      friends:
+        friend && affection
+          ? {
+              ...state.friends,
+              [friend]: { ...state.friends[friend]!, points: state.friends[friend]!.points + affection },
+            }
+          : state.friends,
       daily: story
         ? state.daily
         : {
             dayKey,
             starlight: daily.starlight + starlight,
-            affection: li && affection ? { ...daily.affection, [li]: earned + affection } : daily.affection,
+            affection: who && affection ? { ...daily.affection, [who]: earned + affection } : daily.affection,
           },
     },
     granted: { starlight, affection },
@@ -108,7 +125,7 @@ export function grant(
 /** The chapter fields reading a beat needs. */
 export type ReadChapter = Pick<
   Chapter,
-  "key" | "kind" | "number" | "lead" | "foil" | "nodes" | "ledger" | "gift" | "grievance"
+  "key" | "kind" | "number" | "lead" | "foil" | "nodes" | "ledger" | "gift" | "grievance" | "friendStory" | "ending"
 >;
 
 export interface ReadOutcome {
@@ -266,7 +283,9 @@ export function readBeatToEnd(
     if (result.granted.affection) grants.push({ source: wire, li: request.li, affection: result.granted.affection });
   };
 
-  if (PAYS_BEATS.has(chapter.kind)) pay("beat", { source: "beat", starlight: STARLIGHT_EARNINGS.beat });
+  // #2458: a hangout pays as a date does, at its end only.
+  if (PAYS_BEATS.has(chapter.kind) && chapter.friendStory?.kind !== "hangout")
+    pay("beat", { source: "beat", starlight: STARLIGHT_EARNINGS.beat });
   if (!finishing) return { state: next, grants, chapterDone: progress.completed !== null };
 
   // #2153: a birthday scene's gift, paid for in Starlight, so as a story earning it is never capped (as on a date).
@@ -288,6 +307,34 @@ export function readBeatToEnd(
   }
   next = saveLedger(next, chapter);
   if (chapter.kind === "main") next = withSpace(next, chapter.key);
+  // #2458: a main chapter counts toward each friend's make-up space; a friend's own story pays as its kind does.
+  if (chapter.kind === "main") next = withFriendSpace(next);
+  const friendly = chapter.friendStory;
+  if (friendly) {
+    const [id] = friendly.friends;
+    const friend = id ? next.friends[id] : undefined;
+    if (friendly.kind === "rank") {
+      pay("chapter", { source: "route-chapter", starlight: FRIEND_RANK_STARLIGHT });
+    } else if (friendly.kind === "mend" && id) {
+      const cleared = clearFriendGrievance(next, id);
+      if (cleared) {
+        next = cleared.state;
+        grants.push({ source: "friend", li: id, affection: cleared.affection });
+      }
+    } else if (friendly.kind === "clear-air" && id && friend?.asked) {
+      next = { ...next, friends: { ...next.friends, [id]: { ...friend, asked: null } } };
+    } else if (friendly.kind === "hangout") {
+      // A hangout pays as a date does, within the day's caps: Starlight once, affection split among those who came.
+      pay("chapter", { source: "date", starlight: STARLIGHT_EARNINGS.date });
+      const shares = splitEvenly(AFFECTION_EARNINGS.date, friendly.friends.length);
+      friendly.friends.forEach((friendId, index) =>
+        pay("friend", { source: "date", li: friendId, affection: shares[index] }),
+      );
+    }
+  }
+  // #2459: the finale read to its end settles every grievance; the epilogue's ends the story.
+  if (chapter.ending === "finale" && !next.finale) next = settleAtFinale(next, chapter.key, at);
+  if (chapter.ending === "epilogue" && !next.ended) next = { ...next, ended: { at } };
   // #2303: her accepted invitation to clear the air waits no longer once its scene is read to its end, so he may ask
   // again the next time she is upset with him.
   const clearing = clearAirOfKey(chapter.key);
@@ -298,4 +345,21 @@ export function readBeatToEnd(
     next = { ...next, lis: { ...next.lis, [chapter.lead]: { ...lead, lastLead: chapter.number } } };
   }
   return { state: next, grants, chapterDone: true };
+}
+
+/**
+ * #2458: her friends who spoke in a main chapter just finished each earn FRIEND_CHAPTER_AFFECTION, as a story earning
+ * (never capped). A friend no longer in `state.friends` earns nothing.
+ */
+export function payFriends(state: RunState, heard: readonly LiId[]): { state: RunState; grants: Grant[] } {
+  const friends = { ...state.friends };
+  const grants: Grant[] = [];
+  for (const id of new Set(heard)) {
+    const friend = friends[id];
+    // While their grievance with her stands they earn nothing (#2458), as a love interest's grievance holds his.
+    if (!friend || friendHeld(friend)) continue;
+    friends[id] = { ...friend, points: friend.points + FRIEND_CHAPTER_AFFECTION };
+    grants.push({ source: "friend", li: id, affection: FRIEND_CHAPTER_AFFECTION });
+  }
+  return grants.length ? { state: { ...state, friends }, grants } : { state, grants };
 }

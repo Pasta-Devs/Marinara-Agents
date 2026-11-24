@@ -26,6 +26,7 @@ import { castOf, readCard } from "../setup/cast.js";
 import { BibleSchema, normalizeUnit } from "../schemas/unit.js";
 import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { namesClash } from "./side-cast.js";
 
 /** What the player picked at the end of an arc: one of their cards, or someone invented. */
 export type Arrival =
@@ -75,6 +76,9 @@ export async function introduceLoveInterest(
   }
   if (CONTROL.test(name) || name.includes(".."))
     throw new OtomeForgeError(400, "That name cannot be used.", "bad-request");
+  // #2458: a friend stays a friend; the same person never also arrives as a love interest.
+  if ((run.friends ?? []).some((friend) => namesClash(name, friend.name)))
+    throw new OtomeForgeError(400, `${name} is already your friend.`, "bad-request");
 
   // A unit out of the cast for the same arrival (the same card, or archetype, name and notes, with the same pronouns) is
   // taken back with its bible, when it has one, instead of writing another.
@@ -83,6 +87,9 @@ export async function introduceLoveInterest(
   const kept = stored.find(
     (candidate) =>
       !Object.hasOwn(run.state.lis, candidate.id) &&
+      // #2458: never a friend's unit, which has no love interest's bible either.
+      !candidate.friend &&
+      !Object.hasOwn(run.state.friends, candidate.id) &&
       candidate.source === arrival.source &&
       candidate.name === name &&
       samePronouns(candidate.pronouns, arrival.pronouns) &&

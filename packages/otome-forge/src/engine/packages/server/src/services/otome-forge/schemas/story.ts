@@ -8,6 +8,8 @@
 // its scores) are stripped by
 // toChapterView and toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
+import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
+import { FRIEND_MAX_LEVEL, FRIEND_STORY_KINDS } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import type {
   Beat,
   BeatView,
@@ -58,7 +60,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
-import { isChapterKey } from "../ids.js";
+import { isChapterKey, isLiId } from "../ids.js";
 import { RECALL_MAX } from "../memory/recall-index.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
 import { ARCS_MAX, JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
@@ -309,6 +311,21 @@ export function normalizeChapter(data: unknown): Chapter | null {
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
       gift: z.enum(GIFT_IDS).optional(),
       hisSide: HisSideNoteSchema.optional(),
+      friendStory: z
+        .object({
+          kind: z.enum(FRIEND_STORY_KINDS),
+          friends: z.array(z.string().refine(isLiId)).min(1).max(LIS_MAX),
+          level: z.number().int().min(2).max(FRIEND_MAX_LEVEL).optional(),
+          place: short(200).optional(),
+          look: z.object({ name: short(80), outfitLine: short(600) }).optional(),
+          memento: z.object({ brief: short(1200), art: PaintSchema.optional() }).optional(),
+        })
+        .optional(),
+      ending: z.enum(["finale", "epilogue"]).optional(),
+      friends: z
+        .array(z.object({ id: z.string().refine(isLiId), level: z.number().int().min(1).max(FRIEND_MAX_LEVEL) }))
+        .max(LIS_MAX)
+        .optional(),
       recalled: z.array(z.string().refine(isChapterKey)).min(1).max(RECALL_MAX).optional(),
       // 0.24.2: the story context its plan or first scene read, sent by every scene (S/story/beats.ts). Bounded by no
       // length: recallText caps nothing, and a dropped-too-long context would read as never saved (Dottore, #2262).
@@ -444,12 +461,17 @@ export function toChapterView(chapter: Chapter): ChapterView {
     hisSide: _hisSide,
     recalled: _recalled,
     memories: _memories,
+    friends: _friends,
     context: _context,
     music,
+    friendStory,
     ...rest
   } = chapter;
+  // #2458: a friend's story shows its kind, friends, level, place and memento's paint; never the plan's look or brief.
+  const { look: _look, memento, ...story } = friendStory ?? { kind: "rank", friends: [] };
   return {
     ...rest,
+    ...(friendStory ? { friendStory: { ...story, ...(memento?.art ? { memento: { art: memento.art } } : {}) } } : {}),
     ...(music?.track ? { music: { track: music.track } } : {}),
     nodes: nodes.map(({ i, kind, moment, cg, gate }) => ({
       i,
