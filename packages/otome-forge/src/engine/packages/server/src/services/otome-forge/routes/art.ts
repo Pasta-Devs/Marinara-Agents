@@ -23,7 +23,7 @@
 //                                                            S/art/kittens.ts); 0.36.0: `repaint`, the Album's
 //                                                            Repaint, paints a painted one again
 // POST /runs/:run/art/kitten/prompt {owner}                → {prompt, negativePrompt}
-// POST /runs/:run/art/side {key, prompt?, negativePrompt?}  → {art}; 0.20.0: paints that side character's sprite now
+// POST /runs/:run/art/side {key, repaint?, prompt?, negativePrompt?} → {art}; 0.20.0: paints that side character's sprite now
 // POST /runs/:run/art/side/prompt {key}                    → {prompt, negativePrompt} (S/art/side-sprites.ts)
 // A tap is the consent Ask before painting waits for, and the Retry for a failed or stopped paint: it waits for the
 // paint and answers with the record as left (`ready`, or `failed` with Retry). A tap on a ready image changes nothing,
@@ -80,7 +80,8 @@ const KittenRef = { owner: z.string().min(1).max(80) };
 const KittenBody = z.object({ ...KittenRef, repaint: z.boolean().optional(), ...Edited });
 const KittenRefBody = z.object(KittenRef);
 const SideRef = { key: z.string().min(1).max(SIDE_NAME_MAX) };
-const SideBody = z.object({ ...SideRef, ...Edited });
+// `repaint` paints a sprite that is already there again (its Repaint chip); the other taps leave a ready one alone.
+const SideBody = z.object({ ...SideRef, repaint: z.boolean().optional(), ...Edited });
 const SideRefBody = z.object(SideRef);
 const NoFields = z.object({});
 
@@ -287,6 +288,7 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
       const art = await paintSideNow(deps, runParam(request).runId, body.key, {
         debugMode: debugModeOf(request),
         edited: { prompt: body.prompt, negativePrompt: body.negativePrompt },
+        repaint: body.repaint,
       });
       return { art };
     }),

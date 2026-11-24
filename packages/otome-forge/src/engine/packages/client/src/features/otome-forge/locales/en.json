@@ -1224,6 +1224,8 @@
   "ui.otomeForge.reader.showLine": "Show the whole line",
   "ui.otomeForge.reader.sidePaint": "Paint {{name}} · 1 image",
   "ui.otomeForge.reader.sidePaintLabel": "Paint a sprite of {{name}} (1 image)",
+  "ui.otomeForge.reader.sideRepaint": "Repaint {{name}} · 1 image",
+  "ui.otomeForge.reader.sideRepaintLabel": "Paint {{name}} again (1 image)",
   "ui.otomeForge.reader.sideRetry": "Paint {{name}} again · 1 image",
   "ui.otomeForge.reader.sideRetryLabel": "Try painting a sprite of {{name}} again (1 image)",
   "ui.otomeForge.reader.sideWith": "Side with one of them",

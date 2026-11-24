@@ -7,7 +7,8 @@
 // - The look call: once per person, on the Messages connection's background lane, logged in debug mode, with the
 //   setting, their scenes and the story's content contract; turning the toggle on in Settings starts it.
 // - The sprite: one full-body look on its chroma matte, held for the tap under Ask before painting, a failure kept for
-//   Retry, never paid twice for one tap; cut out for free, and GET .../art/scene carries it for the speaker.
+//   Retry, never paid twice for one tap; cut out for free, and GET .../art/scene carries it for the speaker. Repaint
+//   paints a ready one again, keeping the old sprite on screen while it paints and if that fails.
 // - Toggle off: nothing is called, matched or painted, and the scene carries no sprite.
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -471,6 +472,51 @@ test("a failed sprite is kept and painted again only by Retry", async () => {
   const retry = await t.call("POST", "/runs/:run/art/side", { key: "arlecchino" });
   assert.equal(retry.body.art.state, "ready");
   assert.equal(t.paid.length, 2, "Retry paints once");
+});
+
+test("Repaint paints a ready sprite again and keeps its picture on screen while it paints and if it fails", async () => {
+  const t = await sideWorld("r-side09-iiiiii", {
+    images: { ask: true },
+    replies: [json(ARLE_LOOK)],
+    before: (_call, n) => {
+      if (n === 2) throw new Error("provider refused");
+    },
+  });
+  await t.read(await t.scene(1, [ARLE_SAYS("One.")]));
+  await t.read(await t.scene(2, [ARLE_SAYS("Two.")]));
+  await until(async () => (await t.sides()).arlecchino?.art?.state === "waiting-consent", "held for the tap");
+  const painted = await t.call("POST", "/runs/:run/art/side", { key: "arlecchino" });
+  assert.equal(painted.body.art.state, "ready");
+  const first = painted.body.art.url as string;
+  await t.settle();
+  const sceneSide = async () =>
+    (await t.call("GET", "/runs/:run/art/scene", { key: "main-2", i: "0" })).body.sides["Lady Arlecchino"];
+  const shown = (await sceneSide()).url as string;
+  assert.ok(shown, "the cut-out sprite is on screen");
+
+  // Without `repaint` a tap on a ready sprite still pays nothing (Paint and Retry).
+  await t.call("POST", "/runs/:run/art/side", { key: "arlecchino" });
+  assert.equal(t.paid.length, 1);
+
+  // A repaint that fails keeps the sprite it was replacing, on its record and on screen.
+  const failed = await t.call("POST", "/runs/:run/art/side", { key: "arlecchino", repaint: true });
+  assert.equal(t.paid.length, 2, "Repaint pays for one new picture");
+  assert.equal(failed.body.art.state, "failed");
+  assert.equal(failed.body.art.url, first, "the failed repaint keeps the old picture");
+  assert.equal((await sceneSide()).url, shown, "the old sprite stays on screen");
+
+  // Painted again: a new picture, cut out, and the one it replaced is released.
+  const again = await t.call("POST", "/runs/:run/art/side", { key: "arlecchino", repaint: true });
+  assert.equal(t.paid.length, 3);
+  assert.equal(again.body.art.state, "ready");
+  assert.notEqual(again.body.art.url, first, "a new picture");
+  await t.settle();
+  const after = await sceneSide();
+  assert.ok(after.url && after.url !== shown, "the new sprite is cut out and shown");
+  assert.ok(
+    t.deleted.some((id) => first.includes(id)),
+    "the replaced picture is deleted from the gallery",
+  );
 });
 
 test("with the toggle off nothing is called, matched or painted; turning it on starts what is due", async () => {

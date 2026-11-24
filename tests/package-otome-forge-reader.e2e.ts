@@ -2927,6 +2927,40 @@ test("Otome Hearth a side character's sprite held by Ask before painting is pain
   await expect(paint).toHaveCount(0);
 });
 
+test("Otome Hearth a side character's painted sprite on screen can be repainted, named on its chip", async ({
+  page,
+}) => {
+  const stub = sideCharacterStub(() => ({ key: "arin vale", art: SIDE_PAINTED, url: SIDE_SPRITE, cut: true }));
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path.endsWith("/art/side")) {
+      stub.calls.push(call);
+      return { status: 200, json: { art: { ...SIDE_PAINTED, url: "/api/global-gallery/file/arin-2.png" } } };
+    }
+    return answer(call);
+  };
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await root.getByRole("button", { name: "Begin" }).click();
+  await (await scene).finished();
+  const repaint = root.getByRole("button", { name: "Paint Arin Vale again (1 image)" });
+  // Only while their sprite is on screen: not on Ilvar's line before them, nor on the narration after.
+  await expect(repaint).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("I keep turning up, don't I?");
+  await expect(repaint).toHaveText("Repaint Arin Vale · 1 image");
+  await repaint.click();
+  await expect
+    .poll(() => posts(stub, "/art/side").map((call) => call.body))
+    .toMatchObject([{ key: "arin vale", repaint: true }]);
+  await next(root);
+  await expect(line(root)).toContainText("The clocks tick on.");
+  await expect(repaint).toHaveCount(0);
+});
+
 test("Otome Hearth Settings → Images offers Side character sprites, off, with its cost, and saves it (0.20.0)", async ({
   page,
 }) => {
