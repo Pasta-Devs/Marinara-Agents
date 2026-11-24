@@ -301,7 +301,8 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       const liState = state?.lis[li];
       if (!unit || !liState || !world) throw liNotFound();
       const view = linesView(unit, liState, world.content);
-      if (!view.ready) {
+      // #2459: an ended story writes no more lines.
+      if (!view.ready && !state?.ended) {
         void ensureLinePacks(deps, runId, [li], { debugMode: debugModeOf(request) }).catch(
           warn("Line pack not queued"),
         );

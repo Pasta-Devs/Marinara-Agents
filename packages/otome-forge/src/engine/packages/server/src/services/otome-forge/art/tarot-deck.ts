@@ -388,20 +388,20 @@ export async function paintTarotCardNow(
   card: Arcana,
   { debugMode, edited }: { debugMode: boolean; edited?: Partial<ImagePrompt> },
 ): Promise<Paint> {
-  const key = deckKey(card, li);
+  // #2458: the key readEntry resolves (a friend's own card has its own), so a friend's card never paints a shared one.
   const shown = async () => {
-    const { entry } = await readEntry(deps, runId, li, card);
+    const { key, entry } = await readEntry(deps, runId, li, card);
     return paintView(runId, tarotOwner(key), entry.art) ?? entry.art;
   };
   return tapPaint(
     runId,
-    async () => tarotOwner(key),
+    async () => tarotOwner((await readEntry(deps, runId, li, card)).key),
     async () => {
       const art = await shown();
       return { value: art, art };
     },
     async () => {
-      const { run } = await readEntry(deps, runId, li, card);
+      const { run, key } = await readEntry(deps, runId, li, card);
       const connectionId = run.world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();

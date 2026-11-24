@@ -1040,6 +1040,8 @@ export interface RunState {
   thoughts: PlayerThoughts | null;
   /** #2458: her friends, in the order they joined (their units are `${R}:unit:<id>`, with `friend` and no bible). */
   friends: Record<LiId, FriendState>;
+  /** #2459: when the finale was read to its end (every grievance then settled). Null until then. */
+  finale: { at: string } | null;
   /** #2459: when the epilogue was read to its end: the story has ended and only opens to look at. Null until then. */
   ended: { at: string } | null;
 }
@@ -1220,6 +1222,11 @@ export interface Chapter {
    * every scene sends the same ones; [] when it has none (S/story/beats.ts; hidden from the client).
    */
   memories?: string[];
+  /**
+   * #2458: her friends as its first scene told them (by id, with the rank the prompts gave), so every scene sends the
+   * same HER FRIENDS block; [] when none came into it (S/story/beats.ts; hidden from the client).
+   */
+  friends?: Array<{ id: LiId; level: number }>;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1480,6 +1487,7 @@ export type ChapterView = Omit<
   | "hisSide"
   | "recalled"
   | "memories"
+  | "friends"
   | "context"
   | "friendStory"
 > & {
@@ -1658,7 +1666,7 @@ export interface StoryView {
    * #2458: why no friend may join now (`full`: as many friends as love interests; `arc`: one joined in this arc), or
    * null when one may. Absent from an older server.
    */
-  friendBlock?: "full" | "arc" | null;
+  friendBlock?: "full" | "arc" | "ending" | null;
   /**
    * #2458: each friend's story offers, in the order they joined: the rank story waiting (its level and key), a make-up
    * story while their grievance stands (open once it has had its space), a clear-the-air scene she accepted, whether

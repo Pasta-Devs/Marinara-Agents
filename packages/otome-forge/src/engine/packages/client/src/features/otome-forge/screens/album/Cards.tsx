@@ -66,7 +66,7 @@ export function CardGrid({ runKey, view, cards, actions, onView }: CardGridProps
       {cards.tiles.map(({ card, title }) => {
         const url = readyArt(card.art);
         const li = card.li ?? asker;
-        const target = li ? tarotPaintTarget(runKey, li, card.card, title) : null;
+        const target = li ? tarotPaintTarget(runKey, li, card.card, title, card.key) : null;
         const busy = !!target && actions.busy.has(target.id);
         const error = target ? actions.errors[target.id] : undefined;
         const titleId = `${id}-${card.key}`;

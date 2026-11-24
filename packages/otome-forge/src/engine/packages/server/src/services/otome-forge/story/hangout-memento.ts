@@ -25,6 +25,12 @@ type MementoDeps = ArtDeps & { store: OtomeStore };
 const notFound = () => new OtomeForgeError(404, "No such hangout.", "not-found");
 /** Mementos being painted in this process, by run and chapter. */
 const painting = new Set<string>();
+const paintKey = (runId: string, key: string) => `${runId}|memento:${key}`;
+
+/** The memento's record as the client should see it: pending with no live paint here (a restart) reads as stopped. */
+export function mementoView(runId: string, key: string, art: Paint | undefined): Paint | undefined {
+  return art?.state === "pending" && !painting.has(paintKey(runId, key)) ? { ...art, state: "stopped" } : art;
+}
 
 /** Who the memento shows and how: the hangout, its first two friends and the protagonist (three people at most). */
 async function mementoSubject(deps: MementoDeps, runId: string, key: string) {
@@ -106,7 +112,7 @@ export async function paintMemento(
   if (art?.state === "ready") return art;
   const connectionId = run.world.images.connectionId;
   if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
-  const claim = `${runId}|memento:${key}`;
+  const claim = paintKey(runId, key);
   if (painting.has(claim)) throw new OtomeForgeError(409, "This memento is already being painted.", "busy");
   painting.add(claim);
   try {

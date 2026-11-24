@@ -35,6 +35,7 @@ interface Met {
 const BLOCK_KEYS: Record<Block, string> = {
   full: "ui.otomeForge.friends.blockFull",
   arc: "ui.otomeForge.friends.blockArc",
+  ending: "ui.otomeForge.friends.blockEnding",
 };
 
 export function Friends({

@@ -202,7 +202,9 @@ export async function setUpset(
     foreground: true,
     run: async () => {
       // She may have taken it back while the job waited.
-      if (!(await deps.store.readDoc(stateId(runId), normalizeState))?.lis[li]?.upset) return;
+      const now = await deps.store.readDoc(stateId(runId), normalizeState);
+      // #2458: a friend's upset is kept with the friends.
+      if (!(now?.friends[li]?.upset ?? now?.lis[li]?.upset)) return;
       try {
         const sent = await inThreadLock(runId, li, () =>
           writeFirstMessage(deps, runId, li, { connectionId, debugMode, reason: "upset" }),

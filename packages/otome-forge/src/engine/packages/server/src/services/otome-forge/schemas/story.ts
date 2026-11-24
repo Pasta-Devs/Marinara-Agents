@@ -322,6 +322,10 @@ export function normalizeChapter(data: unknown): Chapter | null {
         })
         .optional(),
       ending: z.enum(["finale", "epilogue"]).optional(),
+      friends: z
+        .array(z.object({ id: z.string().refine(isLiId), level: z.number().int().min(1).max(FRIEND_MAX_LEVEL) }))
+        .max(LIS_MAX)
+        .optional(),
       recalled: z.array(z.string().refine(isChapterKey)).min(1).max(RECALL_MAX).optional(),
       // 0.24.2: the story context its plan or first scene read, sent by every scene (S/story/beats.ts). Bounded by no
       // length: recallText caps nothing, and a dropped-too-long context would read as never saved (Dottore, #2262).
@@ -457,6 +461,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     hisSide: _hisSide,
     recalled: _recalled,
     memories: _memories,
+    friends: _friends,
     context: _context,
     music,
     friendStory,

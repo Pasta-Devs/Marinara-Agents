@@ -585,8 +585,11 @@ export async function planNextChapter(
       ));
     const riddle = finale ? false : riddleChapter(arc, number);
     const judgment = riddle || finale ? null : await judgmentFor(deps.store, runId, arc, mains, number);
-    // #2459: the finale tells the mystery's truth if no arc has yet.
-    const truthTold = finale && revealedSoFar(arcs, mains, run.state, number).truth;
+    // #2459: the finale tells the mystery's truth if no arc has yet, nor schedules it for this very chapter.
+    const truthTold =
+      finale &&
+      (revealedSoFar(arcs, mains, run.state, number).truth ||
+        (!!covering && revealAt(covering, number)?.kind === "truth"));
     // #2127: the thoughts waiting now, after the arc's plan: `run.state` was read before this task was queued.
     const thoughts = (await deps.store.readDoc(stateId(runId), normalizeState))?.thoughts ?? null;
     // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
@@ -644,7 +647,8 @@ export async function planNextChapter(
         recalls: memory.recalls?.text ?? "",
         climax,
         lastClimax: climaxOfChapter(mains.at(-1)),
-        arc,
+        // #2459: a finale after the last arc ended is in none, as its scenes' story context has it (S/story/beats.ts).
+        arc: finale && !covering ? null : arc,
         sideWith,
         judgment: !!judgment,
         riddle,
@@ -669,10 +673,16 @@ export async function planNextChapter(
     });
     signal?.throwIfAborted();
     const plan = normalizeChapterPlan(value, context) as PlannedChapter;
-    // #2459: the finale's last node tells the truth when no arc has, as an arc's last chapter would.
-    if (finale && !truthTold && !!run.world.mystery.truth.trim()) {
-      const last = plan.nodes.at(-1);
-      if (last && !last.reveal) plan.nodes = [...plan.nodes.slice(0, -1), { ...last, reveal: { kind: "truth" } }];
+    // #2459: the finale tells the truth when no arc has, as an arc's last chapter would: on its last node free of a
+    // reveal, unless the plan already put it on one.
+    if (
+      finale &&
+      !truthTold &&
+      !!run.world.mystery.truth.trim() &&
+      !plan.nodes.some((n) => n.reveal?.kind === "truth")
+    ) {
+      const at = plan.nodes.map((node) => !node.reveal).lastIndexOf(true);
+      if (at >= 0) plan.nodes = plan.nodes.map((node, i) => (i === at ? { ...node, reveal: { kind: "truth" } } : node));
     }
     const chapter: Chapter = {
       key,
@@ -873,6 +883,8 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
   );
   const closing = !!ending.finale || !!run.state.ended;
   const arcChoice = ended && !closing ? arcChoiceFor(run.state) : null;
+  // #2459: an ended story offers nothing more to play: no repair, extra or bond story, nor his side.
+  const playable = ready && !run.state.ended;
   return {
     chapters: entries,
     next:
@@ -880,11 +892,11 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
         ? { kind: "main", number, candidates: leadCandidates(run.state, cast) }
         : null,
     routes: ready ? routeEntries(run.state, cast) : [],
-    repairs: ready ? repairOffers(chapters, run.state, cast) : [],
+    repairs: playable ? repairOffers(chapters, run.state, cast) : [],
     arc,
     arcChoice,
     // #2025: an extra story unlocked and not written yet, per love interest (S/items/prestige.ts writes it on the tap).
-    prestige: ready
+    prestige: playable
       ? cast.flatMap((li) => {
           const liState = run.state.lis[li];
           const played = bondStoriesPlayed(run.state.chapters, li);
@@ -901,7 +913,7 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
         })
       : [],
     // 0.23.0: each love interest's bond rank whose story is waiting, once his finale is read (S/story/bond.ts).
-    bond: ready
+    bond: playable
       ? cast.flatMap((li) => {
           const liState = run.state.lis[li];
           if (!liState) return [];
@@ -913,12 +925,15 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
         })
       : [],
     // #2155: each love interest's side waiting in Routes, or being read (S/story/his-side.ts).
-    hisSides: ready ? hisSideOffers(chapters, run.state, cast) : [],
+    hisSides: playable ? hisSideOffers(chapters, run.state, cast) : [],
     // #2458: why no friend may join now, or null when one may.
-    friendBlock:
-      ready && !closing ? friendBlock(cast.length, Object.values(run.state.friends), current?.number ?? 0) : "full",
+    friendBlock: !ready
+      ? "full"
+      : closing
+        ? "ending"
+        : friendBlock(cast.length, Object.values(run.state.friends), current?.number ?? 0),
     ending,
-    friendStories: ready && !run.state.ended ? friendStoryEntries(run.state, chapters, current?.number ?? 0) : [],
+    friendStories: playable ? friendStoryEntries(run.state, chapters, current?.number ?? 0) : [],
   };
 }
 

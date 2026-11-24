@@ -1952,8 +1952,9 @@ function chapterTexts(
   units: readonly Unit[],
   storySoFar: readonly string[],
   opening: string,
+  friends: readonly FriendCard[] = [],
 ): string[] {
-  const head = `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units)})`;
+  const head = `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units, friends)})`;
   const scenes = storySoFar.map((scene) => scene.trim()).filter(Boolean);
   if (!scenes.length) return [`${head}\n${opening}`];
   return [`${head}\nThe chapter so far:\n${scenes[0]}`, ...scenes.slice(1)];
@@ -2306,7 +2307,9 @@ export function chapterPlanMessages({
       ? `- This chapter is scheduled to reveal one thing of the mystery (see THE ARC AHEAD). Put it in one node and set "revealNode" to that node's index; ${
           reveal.kind === "truth" ? "the Lead" : reveal.name
         } must be in that node's cast. Nothing else of the mystery surfaces here.`
-      : "- Nothing of the mystery is revealed in this chapter: never state or imply its answer, and never reveal a secret before its stage.",
+      : finale
+        ? `- This is the story's finale${finale.truth ? ", and the mystery's hidden truth comes out in it (see THE FINALE)" : ": the mystery's truth is already known"}.`
+        : "- Nothing of the mystery is revealed in this chapter: never state or imply its answer, and never reveal a secret before its stage.",
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
   ].join("\n");
@@ -2317,11 +2320,14 @@ export function chapterPlanMessages({
     arc
       ? [
           "THE ARC AHEAD (for this plan only)",
-          "Later purposes (do not play them yet): " +
-            arc.plan
-              .filter((entry) => entry.n > number)
-              .map((entry) => `${entry.n} — ${entry.purpose}`)
-              .join("; "),
+          // #2459: the finale is the last chapter of all, so nothing is left for later.
+          finale
+            ? ""
+            : "Later purposes (do not play them yet): " +
+              arc.plan
+                .filter((entry) => entry.n > number)
+                .map((entry) => `${entry.n} — ${entry.purpose}`)
+                .join("; "),
           lastChapter
             ? arc.endsWith
               ? `THIS IS THE ARC'S LAST CHAPTER. It has a climax, which carries its big event: ${arc.endsWith.what} Set "eventNode" to the climax node's index.`
@@ -2333,11 +2339,15 @@ export function chapterPlanMessages({
             ? `THIS CHAPTER REVEALS: ${reveal.what} Write the node's guide so it comes out there, on the page${
                 holder ? `, in ${holder.name}'s own way` : ""
               }, and set "revealNode" to that node's index.`
-            : "Nothing of the mystery is revealed in this chapter.",
+            : finale
+              ? ""
+              : "Nothing of the mystery is revealed in this chapter.",
         ]
           .filter(Boolean)
           .join("\n")
-      : "(no arc yet: this chapter is planned on its own; nothing of the mystery is revealed here.)",
+      : finale
+        ? ""
+        : "(no arc yet: this chapter is planned on its own; nothing of the mystery is revealed here.)",
     number === 1 && world.openingSituation ? `Opening situation: ${world.openingSituation}` : "",
     "",
     leadUnit
@@ -2370,7 +2380,7 @@ export function chapterPlanMessages({
     ...(number > 1 && handOff ? [storyHandOff(handOff, "plan")] : []),
     ...(finale
       ? [
-          `THIS IS THE STORY'S FINALE, which the player chose: it settles what is still open (the arc in progress, any grievance that stands, the central mystery) and ends happily, earned by everything before it. Every love interest has a part in it, and her friends where they fit.${finale.truth ? ` Its last node tells the mystery's hidden truth: ${finale.truth}` : ""}`,
+          `THE FINALE\nThis is the story's finale, which the player chose: it settles what is still open (the arc in progress, any grievance that stands, the central mystery) and ends happily, earned by everything before it. Every love interest has a part in it, and her friends where they fit.${finale.truth ? ` Its last node tells the mystery's hidden truth: ${finale.truth}` : ""}`,
           "",
         ]
       : []),
@@ -2646,7 +2656,7 @@ export function beatMessages({
     pov
       ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
       : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line, or a dialogue line of one of her friends, only: ${FACES.join(", ")}, when the face shows it. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
@@ -2762,7 +2772,7 @@ export function beatMessages({
       friends,
     }),
     pov ? choices.shared + VOICES_INSTRUCTION : choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
-    chapterTexts(chapter, units, storySoFar, opening),
+    chapterTexts(chapter, units, storySoFar, opening, friends),
     rest,
     // Only a Rewrite of his side shares its instructions, so they are no cache write of their own (#2091).
     { ...(pov ? { marks: "context" as const } : {}), pool },
@@ -2928,10 +2938,28 @@ export function stageGoal(stage: number, name: string): string {
 const secretsOf = (unit: Unit | undefined, ids: readonly string[] = []) =>
   (unit?.bible?.secrets ?? []).filter((secret) => ids.includes(secret.id));
 
-function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Unit[]): string {
+function chapterLabel(
+  chapter: BeatMessagesInput["chapter"],
+  units: readonly Unit[],
+  friends: readonly FriendCard[] = [],
+): string {
   const owner = units.find((unit) => unit.id === (chapter.li ?? chapter.lead))?.name ?? "";
   if (chapter.kind === "prologue") return "the prologue, before chapter 1";
-  if (chapter.kind === "main") return `main chapter ${chapter.number ?? ""}`.trim();
+  if (chapter.kind === "main")
+    return `main chapter ${chapter.number ?? ""}${chapter.ending ? ", the story's finale" : ""}`;
+  // #2459, #2458: the epilogue and her friends' stories name themselves, never as a love interest's Character Story.
+  if (chapter.ending === "epilogue") return "the epilogue";
+  const story = chapter.friendStory;
+  if (story) {
+    const names = story.friends
+      .map((id) => friends.find((card) => card.unit.id === id)?.unit.name ?? "")
+      .filter(Boolean);
+    const name = names[0] ?? "a friend";
+    if (story.kind === "rank") return `${name}'s rank ${story.level ?? 2} story`;
+    if (story.kind === "mend") return `a make-up story with ${name}`;
+    if (story.kind === "clear-air") return `clearing the air with ${name}`;
+    return `a hangout with ${names.join(", ") || "her friends"}`;
+  }
   if (chapter.kind === "route" && chapter.stage) {
     return `${owner}'s route chapter, toward stage ${chapter.stage} (${stageTitle(chapter.stage)})`;
   }
@@ -3374,7 +3402,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line, or a dialogue line of one of her friends, only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
@@ -3435,7 +3463,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
       friends,
     }),
     system + VOICES_INSTRUCTION,
-    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
+    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)", friends),
     rest,
     { marks: "context", pool },
   );
@@ -3489,7 +3517,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker's line or one piece of narration. ${SPOKEN_LINE_RULE}`,
     ...emotionCues(world),
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
-    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- expression: on a love interest's dialogue or thought line, or a dialogue line of one of her friends, only: ${FACES.join(", ")}. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     ...hapticRules(world),
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
@@ -3546,7 +3574,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
       friends,
     }),
     system + VOICES_INSTRUCTION,
-    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
+    chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)", friends),
     rest,
     { marks: "context", pool },
   );

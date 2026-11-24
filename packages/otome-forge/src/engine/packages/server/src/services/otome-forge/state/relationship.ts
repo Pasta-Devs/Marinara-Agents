@@ -237,7 +237,8 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
         effect.grievance.by === "li" &&
         effect.grievance.severity === "rupture" &&
         li.trust <= WALKOUT_RUPTURE_TRUST &&
-        mayOpenHis(lis, effect.li, li, arc);
+        mayOpenHis(lis, effect.li, li, arc) &&
+        !state.finale; // #2459: the finale settled every grievance, and none opens after it
       const grievance: Grievance = {
         id: `g-${key}-${i}-${opened}`,
         li: effect.li,
@@ -362,7 +363,8 @@ export function applyMessageHurts(
     if (current.grievances.filter(isUnresolved).length >= GRIEVANCES_MAX) continue;
     const id = `g-msg-${createHash("sha256").update(`${ref}\n${hurt.li}`).digest("hex").slice(0, 16)}`;
     if (current.grievances.some((grievance) => grievance.id === id)) continue;
-    const opens = hurt.severity === "rupture" && mayOpenHis(lis, hurt.li, current, arc);
+    // #2459: the finale settled every grievance, and none opens after it.
+    const opens = hurt.severity === "rupture" && mayOpenHis(lis, hurt.li, current, arc) && !state.finale;
     const fresh = !current.grievances.some((item) => item.by === "li" && isUnresolved(item) && item.text === text);
     const grievance: Grievance = {
       id,

@@ -146,6 +146,20 @@ export function friendLevelOf(points: number): number {
   return level;
 }
 
+/**
+ * The rank the story has reached with a friend, as the prompts tell it: their level, but no further than their rank
+ * stories read (rank n is reached once its story is), as a love interest's bond rank follows his bond stories.
+ */
+export function friendRankOf(
+  points: number,
+  chapters: Readonly<Record<string, { completed: unknown } | undefined>>,
+  id: LiId,
+): number {
+  let played = 1;
+  while (played < FRIEND_MAX_LEVEL && chapters[friendRankKey(id, played + 1)]?.completed) played += 1;
+  return Math.min(friendLevelOf(points), played);
+}
+
 /** Progress within the current level; a full bar at level 5. */
 export function friendProgressOf(points: number): { current: number; required: number } {
   const safe = Number.isFinite(points) ? Math.max(0, points) : 0;

@@ -50,7 +50,7 @@ import {
 import { GIFT_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { mainChapterNumber } from "../ids.js";
 import { STATE_LIMITS, keepNewest } from "../schemas/state.js";
-import { clearFriendGrievance, withFriendSpace } from "./friends.js";
+import { clearFriendGrievance, settleAtFinale, withFriendSpace } from "./friends.js";
 
 export interface GrantRequest {
   source: RewardSource;
@@ -332,7 +332,8 @@ export function readBeatToEnd(
       );
     }
   }
-  // #2459: the epilogue read to its end ends the story.
+  // #2459: the finale read to its end settles every grievance; the epilogue's ends the story.
+  if (chapter.ending === "finale" && !next.finale) next = settleAtFinale(next, chapter.key, at);
   if (chapter.ending === "epilogue" && !next.ended) next = { ...next, ended: { at } };
   // #2303: her accepted invitation to clear the air waits no longer once its scene is read to its end, so he may ask
   // again the next time she is upset with him.

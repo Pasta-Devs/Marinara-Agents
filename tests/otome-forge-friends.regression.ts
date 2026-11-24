@@ -14,6 +14,7 @@ import {
   friendRankKey,
   friendLevelOf,
   friendProgressOf,
+  friendRankOf,
   type FriendBible,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/friends.ts";
 import {
@@ -42,6 +43,8 @@ import {
   mendOpen,
   withFriendSpace,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/friends.ts";
+import { applyMessageHurts } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
+import { namesClash } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/side-cast.ts";
 import { endedGuard } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/ended.ts";
 import { endingView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/ending.ts";
 import { askWingman } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-rewards.ts";
@@ -171,6 +174,8 @@ test("the story prompts carry her friends in main, route and repair chapters onl
   const state = normalizeState({
     lis: { [KAI]: {}, [MIR]: {} },
     friends: { "li-kaveh-ab12": { points: 300, arc: 0, joinedAt: "x" } },
+    // Their rank-2 story read, so the prompts tell rank 2 (friendRankOf).
+    chapters: { [friendRankKey("li-kaveh-ab12", 2)]: { beatsRead: 1, completed: "x" } },
   }) as RunState;
   const kaveh = { id: "li-kaveh-ab12", name: "Kaveh", pronouns: HE, friend: friendBible() } as never;
   const run = { friends: [kaveh], state };
@@ -371,4 +376,59 @@ test("an ended story refuses what plays and keeps what only looks", async () => 
   await routes.get("/runs/:run/chapters/:key/beats/:i/read")!(request, reply());
   await routes.get("/runs/:run/friends")!(request, reply());
   assert.deepEqual(handled, ["/runs/:run/chapters/:key/beats/:i/read"], "reading again still works");
+});
+
+test("the prompts tell a friend's rank no further than the rank stories read, and names clash either way", () => {
+  assert.equal(friendRankOf(760, {}, KAVEH), 1, "level 3, but no rank story read yet");
+  assert.equal(friendRankOf(760, { [friendRankKey(KAVEH, 2)]: { completed: "x" } }, KAVEH), 2);
+  assert.equal(
+    friendRankOf(100, { [friendRankKey(KAVEH, 2)]: { completed: "x" } }, KAVEH),
+    1,
+    "never above the level, should points fall",
+  );
+  assert.ok(namesClash("Kai", "Kai Moreno") && namesClash("Kai Moreno", "Kai"));
+  assert.equal(namesClash("Kaveh", "Kai"), false);
+});
+
+test("the finale read to its end settles every grievance, both ways, and none opens after it", () => {
+  const at = "2026-11-24T12:00:00.000Z";
+  const state = friendsState(
+    { grievance: { text: "Hurt.", severity: "major", opened: "x", space: 0 }, upset: { since: "x" } },
+    {
+      lis: {
+        [KAI]: {
+          grievances: [
+            { id: "g1", li: KAI, by: "li", text: "You left.", severity: "rupture", opened: "x", status: "open" },
+          ],
+          rupture: { grievanceId: "g1", since: "x", space: 0 },
+          upset: { since: "x" },
+        },
+        [MIR]: {},
+      },
+    },
+  );
+  const finale = {
+    key: "main-9",
+    kind: "main",
+    number: 9,
+    lead: KAI,
+    ending: "finale",
+    nodes: [{ i: 0, kind: "beat", guide: "g", cast: [KAI] }],
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+  } as never;
+  const read = readBeatToEnd(state, finale, 0, { at, dayKey: "2026-11-24" }).state;
+  assert.deepEqual(read.finale, { at });
+  assert.equal(read.lis[KAI]!.rupture, null);
+  assert.equal(read.lis[KAI]!.upset, null);
+  assert.equal(read.lis[KAI]!.grievances[0]!.status, "addressed");
+  assert.equal(read.friends[KAVEH]!.grievance, null);
+  assert.equal(read.friends[KAVEH]!.upset, null);
+  const friendHurt = applyFriendHurts(read, [{ li: KAVEH, text: "Rude.", severity: "major" }], { at, arc: 9 });
+  assert.deepEqual(friendHurt.opened, [], "no friend's grievance after the finale");
+  const hisHurt = applyMessageHurts(read, [{ li: KAI, text: "Cruel.", severity: "rupture" }], {
+    ref: "chat/m1",
+    at,
+    arc: 9,
+  });
+  assert.equal(hisHurt.state.lis[KAI]!.rupture, null, "nor his");
 });

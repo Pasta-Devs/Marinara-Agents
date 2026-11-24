@@ -44,7 +44,8 @@ export function applyFriendHurts(
     const friend = next.friends[li];
     if (!friend) continue;
     hurt.push(li);
-    if (severity !== "minor" && !friendHeld(friend) && friend.grievanceArc !== arc) {
+    // #2459: the finale settled every grievance, and none opens after it.
+    if (severity !== "minor" && !friendHeld(friend) && friend.grievanceArc !== arc && !state.finale) {
       next = withFriend(next, li, {
         ...friend,
         grievance: { text: text.replace(/\s+/g, " ").trim().slice(0, 300), severity, opened: at, space: 0 },
@@ -91,4 +92,31 @@ export function setFriendUpset(state: RunState, id: LiId, upset: boolean, at: st
   const friend = state.friends[id];
   if (!friend) return state;
   return withFriend(state, id, { ...friend, upset: upset ? { since: at } : null, ...(upset ? {} : { asked: null }) });
+}
+
+/**
+ * #2459: the finale read to its end settles every grievance still standing, both ways: each love interest's open or
+ * festering grievance is addressed by `key` and his rupture closes, and each friend's grievance clears (unpaid), with
+ * no one upset any more. Stamps `finale`, after which none opens again.
+ */
+export function settleAtFinale(state: RunState, key: string, at: string): RunState {
+  const lis = Object.fromEntries(
+    Object.entries(state.lis).map(([id, li]) => [
+      id,
+      {
+        ...li,
+        grievances: li.grievances.map((grievance) =>
+          grievance.status === "open" || grievance.status === "festering"
+            ? { ...grievance, status: "addressed" as const, closedBy: key }
+            : grievance,
+        ),
+        rupture: null,
+        upset: null,
+      },
+    ]),
+  );
+  const friends = Object.fromEntries(
+    Object.entries(state.friends).map(([id, friend]) => [id, { ...friend, grievance: null, upset: null }]),
+  );
+  return { ...state, lis, friends, finale: { at } };
 }

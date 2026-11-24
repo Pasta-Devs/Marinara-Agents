@@ -117,6 +117,7 @@ import { ensureStickerSets, stickerArtUrls, stickerBook, stickersComing } from "
 import { fillIntimacy } from "../intimacy.js";
 import { cancellable } from "../story/beats.js";
 import { backfillSideCast, tendSideCast } from "../story/side-cast.js";
+import { runEnded } from "./ended.js";
 
 const NoFields = z.object({});
 const ID_MAX = 200;
@@ -598,12 +599,14 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!world) throw runNotFound();
+      // #2459: an ended story's settings are kept, but start no painting nor indexing.
+      const ended = await runEnded(store, runId);
       // Side character sprites turned on: the recurring ones' looks and sprites start in the background.
-      if (sideSpritesOn) {
+      if (sideSpritesOn && !ended) {
         void tendSideCast(deps, runId, { debugMode: debugModeOf(request), review: reviewModeOf(request) });
       }
       // Another embedding model, as this write saved it: the recall index is built again with it, in the background.
-      if (embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
+      if (!ended && embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
         void deps.recall
           ?.ensure(runId)
           .catch((error: unknown) =>

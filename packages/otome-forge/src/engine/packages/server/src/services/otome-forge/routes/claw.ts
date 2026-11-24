@@ -65,9 +65,10 @@ export function registerClawRoutes(
       if (!run) throw runNotFound();
       const lis = Object.keys(run.state.lis);
       const debugMode = debugModeOf(request);
+      // #2459: an ended story writes and draws no more.
+      const ended = !!run.state.ended;
       // Each love interest's own plush is drawn once, in the background; until then theirs wears their look.
-      // #2459: an ended story draws no more.
-      if (!run.state.ended)
+      if (!ended)
         void ensurePlushArt(deps, runId, lis, { debugMode }).catch((error: unknown) =>
           runtime.logger.warn(
             "[otome-forge] Plushies not queued: %s",
@@ -75,17 +76,19 @@ export function registerClawRoutes(
           ),
         );
       // A fixed pack from before Kitty Cards gains his kitty lines; until then the client plays the catalog's.
-      void ensureKittyLines(deps, runId, lis, { debugMode }).catch((error: unknown) =>
-        runtime.logger.warn(
-          "[otome-forge] Kitty lines not queued: %s",
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
+      if (!ended)
+        void ensureKittyLines(deps, runId, lis, { debugMode }).catch((error: unknown) =>
+          runtime.logger.warn(
+            "[otome-forge] Kitty lines not queued: %s",
+            error instanceof Error ? error.message : String(error),
+          ),
+        );
       // 0.35.0: with images on, each painted kitten is cut out (free), and those owed are painted one at a time in the
       // background (or wait for the tap under Ask or review); nothing here waits for them.
       const shown = await queueKittenCutouts(deps, runId, run);
       const art = deps.art;
-      if (art) void queueKittens(deps, runId, { debugMode, review: reviewModeOf(request), active: art.active });
+      if (art && !ended)
+        void queueKittens(deps, runId, { debugMode, review: reviewModeOf(request), active: art.active });
       return {
         ...playView(run.state, run.units, run.world.content, forgeDayKey(Date.now())),
         ...kittensView(runId, shown, !!art),

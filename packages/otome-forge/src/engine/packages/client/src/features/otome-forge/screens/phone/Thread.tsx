@@ -442,7 +442,7 @@ export function Thread({
     void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
   };
 
-  const askAgain = latest.data?.retry === true && !busy && !incoming;
+  const askAgain = latest.data?.retry === true && !busy && !incoming && !view.ended;
   const activeCount = latest.data?.activeCount ?? 0;
   // The group chat's members now, as its page names them, and their names for the header and the log.
   const members = (latest.data?.members ?? []).flatMap((member) => view.lis.filter((entry) => entry.id === member));
@@ -483,20 +483,26 @@ export function Thread({
             </div>
           </>
         )}
-        {li && haptics && hapticsOn(view.world) ? <RemoteControl li={li} /> : null}
-        <CloseAndRemember
-          path={path}
-          text={
-            li
-              ? t("ui.otomeForge.phone.closeText", { name: li.name })
-              : t("ui.otomeForge.phone.groupCloseText", { names: memberNames })
-          }
-          waitText={
-            li ? t("ui.otomeForge.phone.closeWait", { name: li.name }) : t("ui.otomeForge.phone.groupCloseWait")
-          }
-          blocked={busy || incoming ? "waiting" : activeCount === 0 ? "empty" : null}
-          onClosed={closed}
-        />
+        {/* The toys' remote is a love interest's alone (#2458: never a friend's). */}
+        {li && haptics && hapticsOn(view.world) && view.lis.some((entry) => entry.id === li.id) ? (
+          <RemoteControl li={li as RunLiView} />
+        ) : null}
+        {/* #2459: an ended story's Messages only open to read. */}
+        {view.ended ? null : (
+          <CloseAndRemember
+            path={path}
+            text={
+              li
+                ? t("ui.otomeForge.phone.closeText", { name: li.name })
+                : t("ui.otomeForge.phone.groupCloseText", { names: memberNames })
+            }
+            waitText={
+              li ? t("ui.otomeForge.phone.closeWait", { name: li.name }) : t("ui.otomeForge.phone.groupCloseWait")
+            }
+            blocked={busy || incoming ? "waiting" : activeCount === 0 ? "empty" : null}
+            onClosed={closed}
+          />
+        )}
       </header>
 
       {latest.isError && !latest.data ? (
@@ -573,6 +579,7 @@ export function Thread({
                   runKey={runKey}
                   li={li}
                   row={row}
+                  ended={!!view.ended}
                   onOpenScene={onOpenScene}
                   onOpenDate={onOpenDate}
                   {...(onOpenHangout ? { onOpenHangout } : {})}
@@ -746,6 +753,12 @@ const DATE_INVITE_KEYS = {
   pending: "ui.otomeForge.phone.dateInvitePending",
   accepted: "ui.otomeForge.phone.dateInviteAccepted",
 } as const;
+/** #2458: the same for a friend's invitation to hang out. */
+const HANGOUT_INVITE_KEYS = {
+  ...INVITE_KEYS,
+  pending: "ui.otomeForge.phone.hangoutInvitePending",
+  accepted: "ui.otomeForge.phone.hangoutInviteAccepted",
+} as const;
 
 /**
  * #2156: his invitation to clear the air: Accept or Decline while it waits, then what became of it. #2424: his date
@@ -758,10 +771,13 @@ function InviteCard({
   onOpenScene,
   onOpenDate,
   onOpenHangout,
+  ended,
 }: {
   runKey: string;
   li: RunLiView | RunFriendView;
   row: Row;
+  /** #2459: the story has ended, so an invitation still waiting is only shown. */
+  ended: boolean;
   onOpenScene?: (key: string) => void;
   onOpenDate?: (open: DateOpen) => void;
   onOpenHangout?: (invite: HangoutInvite) => void;
@@ -822,9 +838,11 @@ function InviteCard({
       >
         <p className="of-invite-text" role="status">
           <HeartHandshake size={15} strokeWidth={2} aria-hidden="true" />
-          <span>{t((date ? DATE_INVITE_KEYS : INVITE_KEYS)[status], { name: li.name })}</span>
+          <span>
+            {t((date ? DATE_INVITE_KEYS : hangout ? HANGOUT_INVITE_KEYS : INVITE_KEYS)[status], { name: li.name })}
+          </span>
         </p>
-        {status === "pending" ? (
+        {ended ? null : status === "pending" ? (
           <div className="of-invite-actions">
             <button
               type="button"
@@ -860,7 +878,9 @@ function InviteCard({
               className="of-button of-button--quiet of-glass of-button--small"
               onClick={() => onOpenScene(row.invite!.scene!)}
             >
-              {t("ui.otomeForge.phone.invitePlay", { name: li.name })}
+              {t(hangout ? "ui.otomeForge.phone.hangoutInvitePlay" : "ui.otomeForge.phone.invitePlay", {
+                name: li.name,
+              })}
             </button>
           </div>
         ) : null}

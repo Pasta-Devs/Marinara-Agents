@@ -54,7 +54,7 @@ import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/c
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   friendHeld,
-  friendLevelOf,
+  friendRankOf,
   type FriendState,
 } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -236,7 +236,7 @@ function chatFriend(run: RunDocuments, unit: Unit): ChatFriend | undefined {
   if (!state || !unit.friend) return undefined;
   return {
     bible: unit.friend,
-    level: friendLevelOf(state.points),
+    level: friendRankOf(state.points, run.state.chapters, unit.id),
     lis: run.units.map(({ id, name }) => ({ id, name })),
     ...(state.grievance ? { grievance: state.grievance.text } : {}),
     ...(state.upset ? { upset: true } : {}),
@@ -248,7 +248,20 @@ const friendInviteState = (friend: FriendState): Parameters<typeof inviteOffered
   upset: friend.upset,
   asked: friend.asked,
   rupture: friend.grievance ? { grievanceId: "friend", since: friend.grievance.opened } : null,
-  grievances: [],
+  // Their grievance stands as a love interest's does, so a held friend never asks her to clear the air.
+  grievances: friend.grievance
+    ? [
+        {
+          id: "friend",
+          li: "",
+          by: "li",
+          text: friend.grievance.text,
+          severity: "rupture",
+          opened: friend.grievance.opened,
+          status: "open",
+        },
+      ]
+    : [],
 });
 
 /**

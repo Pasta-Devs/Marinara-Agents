@@ -203,6 +203,7 @@
   "ui.otomeForge.friends.adding": "Writing who they are…",
   "ui.otomeForge.friends.blockArc": "A friend has already joined in this story arc. Another can join in the next one.",
   "ui.otomeForge.friends.blockFull": "You have as many friends as love interests.",
+  "ui.otomeForge.friends.blockEnding": "Your story is ending, so no new friend joins.",
   "ui.otomeForge.friends.fromMet": "Someone you’ve met",
   "ui.otomeForge.friends.fromNew": "Someone new",
   "ui.otomeForge.friends.hint": "Friends are platonic. They earn friendship when they speak in a chapter, and one can join in each story arc, up to as many as your love interests.",
@@ -2309,5 +2310,11 @@
   "ui.otomeForge.setup.messagesSection": "Messages",
   "ui.otomeForge.setup.messagesSectionHint": "How often the love interests write to you on their own. You can change these later in Settings → Connections.",
   "ui.otomeForge.setup.needMessageNumbers": "Enter a whole number for each Messages setting.",
-  "ui.otomeForge.dateNight.keepsakeViewFull": "View the keepsake full size: {{title}}"
+  "ui.otomeForge.dateNight.keepsakeViewFull": "View the keepsake full size: {{title}}",
+  "ui.otomeForge.phone.hangoutInvitePending": "{{name}} asked you to hang out.",
+  "ui.otomeForge.phone.hangoutInviteAccepted": "You said yes. Your hangout with {{name}} is waiting.",
+  "ui.otomeForge.phone.hangoutInvitePlay": "Hang out with {{name}}",
+  "ui.otomeForge.hangouts.mementoAskTitle": "Paint this memento?",
+  "ui.otomeForge.hangouts.mementoAskText": "A picture of you with {{names}} from this hangout, painted with your image connection.",
+  "ui.otomeForge.hangouts.mementoSubject": "A memento with {{names}}"
 }

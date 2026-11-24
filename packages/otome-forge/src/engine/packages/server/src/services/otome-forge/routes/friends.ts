@@ -21,16 +21,18 @@ import {
   type RegisterRoutes,
 } from "../http.js";
 import { isChapterKey, sideCastId } from "../ids.js";
+import { readThread } from "../phone/chat.js";
 import { settleInvites } from "../phone/upset.js";
 import { normalizeSideCast } from "../schemas/side-cast.js";
 import { readRun } from "../schemas/state.js";
 import { toChapterView } from "../schemas/story.js";
 import { nextEndingStep } from "../story/ending.js";
 import { askWingman } from "../story/friend-rewards.js";
-import { openMendStory, openRankStory, startHangout } from "../story/friend-stories.js";
+import { hangoutCompany, openMendStory, openRankStory, startHangout } from "../story/friend-stories.js";
 import { addFriend, currentArc, metPeople } from "../story/friends.js";
-import { mementoPromptFor, paintMemento } from "../story/hangout-memento.js";
+import { mementoPromptFor, mementoView, paintMemento } from "../story/hangout-memento.js";
 import { readChapter } from "../story/canon.js";
+import { mainChapters } from "../story/chapters.js";
 import { wearLook } from "./wardrobe.js";
 
 const Pronouns = z.object({
@@ -80,6 +82,22 @@ function placeText(place: string, firstFriend: string): string {
 
 export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
   const { store, handle } = deps;
+  /**
+   * A friend's invitation to hang out, in their thread: still waiting (null), or the hangout it opened already, which a
+   * repeated Accept returns rather than plan another. 404 for no such invitation, 409 `conflict` for one answered.
+   */
+  const invitedHangout = async (runId: string, friend: string, message: string) => {
+    const asked = (await readThread(store, runId, friend))?.messages.find(
+      (entry) => entry.id === message && entry.who === "li" && entry.invite?.kind === "hangout",
+    )?.invite;
+    if (!asked) throw new OtomeForgeError(404, "No such invitation.", "not-found");
+    if (asked.status === "accepted" && asked.scene) {
+      const open = await readChapter(store, runId, asked.scene);
+      if (open?.friendStory?.kind === "hangout") return open;
+    }
+    if (asked.status !== "pending") throw new OtomeForgeError(409, "That invitation was answered already.", "conflict");
+    return null;
+  };
   const mode = (request: Parameters<typeof debugModeOf>[0]) => ({
     debugMode: debugModeOf(request),
     review: reviewModeOf(request),
@@ -138,11 +156,18 @@ export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
       return {
         hangouts: chapters
           .sort((a, b) => b.plannedAt.localeCompare(a.plannedAt))
-          .map((chapter) => ({
-            ...toChapterView(chapter),
-            state: run.state.chapters[chapter.key]?.completed ? "done" : "in-progress",
-            memento: !!chapter.friendStory?.memento,
-          })),
+          .map((chapter) => {
+            const view = toChapterView(chapter);
+            const art = mementoView(runId, chapter.key, chapter.friendStory?.memento?.art);
+            return {
+              ...view,
+              ...(view.friendStory?.memento && art
+                ? { friendStory: { ...view.friendStory, memento: { ...view.friendStory.memento, art } } }
+                : {}),
+              state: run.state.chapters[chapter.key]?.completed ? "done" : "in-progress",
+              memento: !!chapter.friendStory?.memento,
+            };
+          }),
         // Who may come now: her friends whose grievance does not stand.
         free: Object.entries(run.state.friends).flatMap(([id, friend]) => (friendHeld(friend) ? [] : [id])),
       };
@@ -156,6 +181,12 @@ export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const run = await readRun(store, runId);
       if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
+      // Who comes, and the invitation she accepts, before her look is worn or anything is planned, as a date does.
+      hangoutCompany(run, body.friends);
+      if (body.invite) {
+        const open = await invitedHangout(runId, body.friends[0]!, body.invite.message);
+        if (open) return { chapter: toChapterView(open) };
+      }
       const first = run.friends?.find((unit) => unit.id === body.friends[0])?.name ?? "";
       const place = placeText(body.place, first);
       const { debugMode } = mode(request);
@@ -218,7 +249,9 @@ export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
           name: person.name,
           ...(person.cardId ? { cardId: person.cardId } : {}),
         })),
-        block: friendBlock(run.units.length, Object.values(run.state.friends), await currentArc(store, runId)),
+        block: (await mainChapters(store, runId)).some((chapter) => chapter.ending === "finale")
+          ? "ending"
+          : friendBlock(run.units.length, Object.values(run.state.friends), await currentArc(store, runId)),
       };
     }),
   );

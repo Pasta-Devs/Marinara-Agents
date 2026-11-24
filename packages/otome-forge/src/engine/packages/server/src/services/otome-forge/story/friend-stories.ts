@@ -269,6 +269,22 @@ export async function openMendStory(
   );
 }
 
+/**
+ * Who comes to a hangout, checked before anything is worn or planned: her friends, once each (400 for none or too
+ * many), every one of them hers (404) and holding no grievance with her (409 `locked`). 409 while the world is forged.
+ */
+export function hangoutCompany(run: RunDocuments, friends: readonly LiId[]) {
+  if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
+  const company = [...new Set(friends)];
+  if (!company.length || company.length > LIS_MAX) throw new OtomeForgeError(400, "Choose who comes.", "bad-request");
+  const cards = friendCards(run, "story", true) ?? [];
+  const coming = company.map((id) => cards.find((card) => card.unit.id === id));
+  if (coming.some((card) => !card)) throw notFound("friend");
+  const held = company.find((id) => friendHeld(run.state.friends[id]));
+  if (held) throw locked(`${cards.find((card) => card.unit.id === held)!.unit.name} needs you to make it right first.`);
+  return { company, coming: coming as NonNullable<(typeof coming)[number]>[] };
+}
+
 /** POST /runs/:run/hangouts (see the header): her look is worn by the caller first. */
 export async function startHangout(
   deps: ChapterDeps,
@@ -278,14 +294,7 @@ export async function startHangout(
 ): Promise<Chapter> {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Hearth story");
-  if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
-  const company = [...new Set(friends)];
-  if (!company.length || company.length > LIS_MAX) throw new OtomeForgeError(400, "Choose who comes.", "bad-request");
-  const cards = friendCards(run, "story", true) ?? [];
-  const coming = company.map((id) => cards.find((card) => card.unit.id === id));
-  if (coming.some((card) => !card)) throw notFound("friend");
-  const held = company.find((id) => friendHeld(run.state.friends[id]));
-  if (held) throw locked(`${cards.find((card) => card.unit.id === held)!.unit.name} needs you to make it right first.`);
+  const { company, coming } = hangoutCompany(run, friends);
   const saved = await savedKeys(deps, runId, "story-hangout-");
   return planFriendChapter(
     deps,
@@ -293,7 +302,7 @@ export async function startHangout(
     run,
     {
       key: hangoutKey(saved.length + 1),
-      planFor: { kind: "hangout", friends: coming.map((card) => card!), place },
+      planFor: { kind: "hangout", friends: coming, place },
       nodes: FRIEND_STORY_NODES.hangout,
       cast: [],
       story: { friendStory: { kind: "hangout", friends: company, ...(place ? { place } : {}) } },

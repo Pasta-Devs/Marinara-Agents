@@ -433,6 +433,10 @@ function normalizeHome(raw: unknown, lis: RunState["lis"]): HomeState {
   };
 }
 
+/** #2459: a moment's record ({at}), or null. */
+const stamp = (value: unknown): { at: string } | null =>
+  isRecord(value) && typeof value.at === "string" ? { at: clipText(value.at, 40) } : null;
+
 /** Your thoughts… waiting (#2127), or null: none, a damaged one, or one longer than the player may write. */
 function normalizeThoughts(raw: unknown): PlayerThoughts | null {
   const parsed = ThoughtsSchema.safeParse(raw);
@@ -519,11 +523,9 @@ export function normalizeState(data: unknown): RunState {
     },
     thoughts: normalizeThoughts(field(data, "thoughts")),
     friends: normalizeFriends(field(data, "friends"), lis),
-    // #2459: once the epilogue is read, the story has ended and only opens to look at.
-    ended: (() => {
-      const ended = field(data, "ended");
-      return isRecord(ended) && typeof ended.at === "string" ? { at: clipText(ended.at, 40) } : null;
-    })(),
+    // #2459: the finale read to its end, then the epilogue, after which the story only opens to look at.
+    finale: stamp(field(data, "finale")),
+    ended: stamp(field(data, "ended")),
   };
 }
 

@@ -15,9 +15,11 @@ import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { CostHint } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
+import { PromptReviewDialog, type ImagePrompt } from "../../components/PromptReviewDialog";
 import { runPath, storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
+import { useOtomeProps } from "../../props";
 import type { ChapterView, LiId, Paint, RunView } from "../../shared/api-types";
 import { BASE_LOOK, PARTNER_CHOICE } from "../../shared/dates";
 import { LookPicker, wornDateLook } from "../dates/LookPicker";
@@ -62,10 +64,11 @@ export function Hangouts({
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const hangouts = useHangouts(runKey);
-  const [planning, setPlanning] = useState<HangoutInvite | "new" | null>(invite ?? null);
+  // #2459: an ended story plans nothing, so an invitation is not opened.
+  const [planning, setPlanning] = useState<HangoutInvite | "new" | null>(view.ended ? null : (invite ?? null));
   useEffect(() => {
-    if (invite) setPlanning(invite);
-  }, [invite]);
+    if (invite && !view.ended) setPlanning(invite);
+  }, [invite, view.ended]);
   const friends = view.friends ?? [];
   const nameOf = (id: LiId) => friends.find((friend) => friend.id === id)?.name ?? "";
 
@@ -148,14 +151,18 @@ function HangoutRow({
   const queryClient = useQueryClient();
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const { reviewImagePromptsBeforeSend } = useOtomeProps();
+  const [confirming, setConfirming] = useState(false);
+  const [review, setReview] = useState<ImagePrompt | null>(null);
   const first = (view.friends ?? []).find((friend) => friend.id === entry.friendStory?.friends[0]);
   const art: Paint | undefined = entry.friendStory?.memento?.art;
-  const paint = async () => {
-    if (busy) return;
+  const mementoPath = `${runPath(runKey)}/hangouts/${encodeURIComponent(entry.key)}/memento`;
+  const paint = async (prompt?: ImagePrompt) => {
     setBusy(true);
     setError(null);
     try {
-      await otome.post(`${runPath(runKey)}/hangouts/${encodeURIComponent(entry.key)}/memento`, {});
+      await otome.post(mementoPath, { ...(prompt ?? {}) });
+      setReview(null);
     } catch (failure) {
       setError(failure);
     } finally {
@@ -163,7 +170,29 @@ function HangoutRow({
       void queryClient.invalidateQueries({ queryKey: hangoutsKey(runKey) });
     }
   };
+  /** As a date's keepsake: Ask before painting confirms first, and the Engine's prompt review shows the prompt. */
+  const start = async () => {
+    setConfirming(false);
+    if (!reviewImagePromptsBeforeSend) {
+      await paint();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      setReview(await otome.post<ImagePrompt>(`${mementoPath}/prompt`, {}));
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  };
   const painting = busy || art?.state === "pending";
+  const tap = () => {
+    if (painting) return;
+    if (view.world.images.ask) setConfirming(true);
+    else void start();
+  };
   return (
     <li
       className="of-hangout of-glass"
@@ -200,7 +229,7 @@ function HangoutRow({
             type="button"
             className="of-button of-button--quiet of-glass of-button--small"
             aria-disabled={painting}
-            onClick={() => void paint()}
+            onClick={tap}
           >
             {art?.state === "failed" || art?.state === "stopped" ? (
               <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
@@ -226,6 +255,40 @@ function HangoutRow({
         </p>
       ) : null}
       {art?.state === "failed" && art.error ? <p className="of-hint">{art.error}</p> : null}
+      {confirming ? (
+        <Dialog
+          title={t("ui.otomeForge.hangouts.mementoAskTitle")}
+          onClose={() => setConfirming(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="of-button of-button--quiet of-glass"
+                onClick={() => setConfirming(false)}
+              >
+                {t("ui.otomeForge.dateNight.keepsakeAskNo")}
+              </button>
+              <button type="button" className="of-button of-button--primary" onClick={() => void start()}>
+                <Paintbrush size={16} strokeWidth={2} aria-hidden="true" />
+                {t("ui.otomeForge.dateNight.keepsakeAskYes")}
+              </button>
+            </>
+          }
+        >
+          <p className="of-body">{t("ui.otomeForge.hangouts.mementoAskText", { names: names.join(", ") })}</p>
+          <CostHint images={1} />
+        </Dialog>
+      ) : null}
+      {review ? (
+        <PromptReviewDialog
+          subject={t("ui.otomeForge.hangouts.mementoSubject", { names: names.join(", ") })}
+          initial={review}
+          busy={busy}
+          error={error ? otome.errorMessage(error) : null}
+          onSend={(prompt) => void paint(prompt)}
+          onSkip={() => setReview(null)}
+        />
+      ) : null}
     </li>
   );
 }

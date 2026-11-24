@@ -174,11 +174,17 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
     ) ??
     null;
   /** Opens a route or repair chapter that is already planned; plans it (one model call) otherwise. */
+  // The ending and a friend's first make-up story have no key until planned: the planning id is never empty.
   const planArc = (target: ArcTarget) =>
-    void arcPlanning.plan(target.key, arcPath(target), target.kind === "side" ? { arc: target.arc } : {}, (key) => {
-      setArcPlan(null);
-      onOpenChapter(key);
-    });
+    void arcPlanning.plan(
+      target.key || `${target.kind}:${target.li}`,
+      arcPath(target),
+      target.kind === "side" ? { arc: target.arc } : {},
+      (key) => {
+        setArcPlan(null);
+        onOpenChapter(key);
+      },
+    );
   const openArc = (target: ArcTarget) => {
     const planned = chapters.find((chapter) => chapter.key === target.key);
     if (planned) onOpenChapter(planned.key);
@@ -256,6 +262,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
           bondStories={bond}
           planning={arcPlanning.planning}
           onReadSide={(entry) => openArc({ kind: "side", li: entry.li, key: entry.key, arc: entry.arc })}
+          ended={!!story.data.ending?.ended}
         />
       ) : null}
       <Affection
@@ -1447,6 +1454,7 @@ function Routes({
   bondStories,
   planning,
   onReadSide,
+  ended,
 }: {
   runKey: string;
   routes: RouteEntry[];
@@ -1461,6 +1469,8 @@ function Routes({
   /** The key being opened (usePlanChapter's `planning`), so a side's Read shows the wait. */
   planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
+  /** #2459: the story has ended, so no card offers anything to do. */
+  ended: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -1488,6 +1498,7 @@ function Routes({
               bondWaits={bondStories.some((entry) => entry.li === route.li)}
               planning={planning}
               onReadSide={onReadSide}
+              ended={ended}
             />
           );
         })}
@@ -1509,6 +1520,7 @@ function RouteCard({
   bondWaits,
   planning,
   onReadSide,
+  ended,
 }: {
   runKey: string;
   route: RouteEntry;
@@ -1524,6 +1536,7 @@ function RouteCard({
   bondWaits: boolean;
   planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
+  ended: boolean;
 }) {
   const { t } = useTranslation();
   const accent = accentOf(li);
@@ -1640,7 +1653,7 @@ function RouteCard({
           onRead={() => onReadSide(side)}
         />
       ))}
-      <UpsetToggle runKey={runKey} li={li} upset={!!route.upset} />
+      {ended ? null : <UpsetToggle runKey={runKey} li={li} upset={!!route.upset} />}
     </li>
   );
 }

@@ -222,8 +222,14 @@ export const figurinePaintTarget = (runKey: string, li: string, subject: string)
  * S/routes/tarot.ts (#2151): POST .../art/tarot {li, card} and .../art/tarot/prompt, from Tarot night and the Album; a
  * card of the story's one set is the same card whichever love interest's `li` asks. `subject` names it in the review.
  */
-export const tarotPaintTarget = (runKey: string, li: string, card: Arcana, subject: string): PaintTarget => ({
-  id: `tarot:${deckKey(card, li)}`,
+export const tarotPaintTarget = (
+  runKey: string,
+  li: string,
+  card: Arcana,
+  subject: string,
+  key = deckKey(card, li), // #2458: a friend's own card has its own key (the Album passes it)
+): PaintTarget => ({
+  id: `tarot:${key}`,
   subject,
   paintPath: `${runPath(runKey)}/art/tarot`,
   promptPath: `${runPath(runKey)}/art/tarot/prompt`,

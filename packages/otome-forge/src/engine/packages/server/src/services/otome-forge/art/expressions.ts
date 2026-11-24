@@ -249,8 +249,8 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       void (async () => {
         const run = await readRun(runId);
         if (!run || disposed) return;
-        // Love interests only: the kit matches each line's speaker to these names.
-        const units = await readCastUnits(store, runId);
+        // The love interests and (#2458) her friends: the kit matches each line's speaker to these names.
+        const units = [...(await readCastUnits(store, runId)), ...(await readFriendUnits(store, runId))];
         if (options.lane === "high" && run.world.images.expressions) {
           const speakers = new Set(beat.segments.map((segment) => segment.speaker));
           // The kit's dedupe key for a unit's set (createForgeStoryExpressions schedule).

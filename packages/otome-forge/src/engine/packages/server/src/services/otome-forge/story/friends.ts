@@ -23,7 +23,7 @@ import {
   defaultFriendState,
   friendAirKey,
   friendBlock,
-  friendLevelOf,
+  friendRankOf,
   type FriendBible,
 } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
@@ -37,8 +37,9 @@ import { normalizeState, readRun } from "../schemas/state.js";
 import { FriendBibleSchema, normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
 import { listArcs } from "./arc.js";
+import { mainChapters } from "./chapters.js";
 import { readBeat } from "./canon.js";
-import { namesPerson, readLines, sideScenes } from "./side-cast.js";
+import { namesClash, namesPerson, readLines, sideScenes } from "./side-cast.js";
 
 /** Who joins: someone she has met (by their side-cast key), one of the player's cards, or someone new. */
 export type FriendArrival =
@@ -69,14 +70,14 @@ const FRIENDS_IN: ReadonlySet<ChapterKind> = new Set(["main", "route", "repair"]
  * chapter is a friend's own story or the story's ending (`theirs`).
  */
 export function friendCards(
-  run: { friends?: readonly Unit[]; state: Pick<RunState, "friends"> },
+  run: { friends?: readonly Unit[]; state: Pick<RunState, "friends" | "chapters"> },
   kind: ChapterKind,
   theirs = false,
 ): FriendCard[] | undefined {
   if (!FRIENDS_IN.has(kind) && !theirs) return undefined;
   const cards = (run.friends ?? []).flatMap((unit) => {
     const friend = run.state.friends[unit.id];
-    return friend && unit.friend ? [{ unit, level: friendLevelOf(friend.points) }] : [];
+    return friend && unit.friend ? [{ unit, level: friendRankOf(friend.points, run.state.chapters, unit.id) }] : [];
   });
   return cards.length ? cards : undefined;
 }
@@ -87,11 +88,13 @@ export async function currentArc(store: Pick<OtomeStore, "listRun">, runId: stri
 }
 
 /** The message for a friendBlock reason. */
-const blocked = (reason: "full" | "arc") =>
+const blocked = (reason: "full" | "arc" | "ending") =>
   notNow(
     reason === "full"
       ? "This story already has as many friends as love interests."
-      : "A friend has already joined in this story arc.",
+      : reason === "arc"
+        ? "A friend has already joined in this story arc."
+        : "The story is ending, so no new friend joins.",
   );
 
 /** The side characters she has met who are not a love interest, a friend or the protagonist, newest first. */
@@ -130,7 +133,9 @@ export async function addFriend(
   if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   if (run.world.forge.phase !== "ready") throw notNow("The world is still being forged.");
   const arc = await currentArc(deps.store, runId);
-  const block = friendBlock(run.units.length, Object.values(run.state.friends), arc);
+  // #2459: once the finale is planned, no friend joins.
+  const ending = (await mainChapters(deps.store, runId)).some((chapter) => chapter.ending === "finale");
+  const block = ending ? "ending" : friendBlock(run.units.length, Object.values(run.state.friends), arc);
   if (block) throw blocked(block);
 
   let name = "";
@@ -156,7 +161,7 @@ export async function addFriend(
   if (!name) throw refused("Say who your friend is.");
   if (CONTROL.test(name) || name.includes("..")) throw refused("That name cannot be used.");
   const taken = [...run.units, ...(run.friends ?? [])];
-  if (namesPerson(name, run.player.name) || taken.some((unit) => namesPerson(name, unit.name))) {
+  if (namesClash(name, run.player.name) || taken.some((unit) => namesClash(name, unit.name))) {
     throw refused(`${name} is already in your story's cast.`);
   }
 
