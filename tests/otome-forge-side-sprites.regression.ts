@@ -475,12 +475,17 @@ test("a failed sprite is kept and painted again only by Retry", async () => {
 });
 
 test("Repaint paints a ready sprite again and keeps its picture on screen while it paints and if it fails", async () => {
+  // The second and third paid images are held until the test lets them go: the second then fails, the third succeeds.
+  let release: ((fail: boolean) => void) | null = null;
   const t = await sideWorld("r-side09-iiiiii", {
     images: { ask: true },
     replies: [json(ARLE_LOOK)],
-    before: (_call, n) => {
-      if (n === 2) throw new Error("provider refused");
-    },
+    before: (_call, n) =>
+      n < 2
+        ? undefined
+        : new Promise<void>((resolve, reject) => {
+            release = (fail) => (fail ? reject(new Error("provider refused")) : resolve());
+          }),
   });
   await t.read(await t.scene(1, [ARLE_SAYS("One.")]));
   await t.read(await t.scene(2, [ARLE_SAYS("Two.")]));
@@ -498,15 +503,28 @@ test("Repaint paints a ready sprite again and keeps its picture on screen while 
   await t.call("POST", "/runs/:run/art/side", { key: "arlecchino" });
   assert.equal(t.paid.length, 1);
 
+  /** Starts a repaint, checks the old sprite while its image is held, then lets the image fail or succeed. */
+  const repaintHeld = async (fail: boolean) => {
+    release = null;
+    const call = t.call("POST", "/runs/:run/art/side", { key: "arlecchino", repaint: true });
+    await until(() => release !== null, "the repaint's image is being made");
+    const during = await sceneSide();
+    assert.equal(during.url, shown, "the old sprite stays on screen while the new one paints");
+    assert.equal(during.art.state, "pending");
+    assert.equal(during.coming, true, "the reader keeps reading the scene until the new sprite is in");
+    release!(fail);
+    return call;
+  };
+
   // A repaint that fails keeps the sprite it was replacing, on its record and on screen.
-  const failed = await t.call("POST", "/runs/:run/art/side", { key: "arlecchino", repaint: true });
+  const failed = await repaintHeld(true);
   assert.equal(t.paid.length, 2, "Repaint pays for one new picture");
   assert.equal(failed.body.art.state, "failed");
   assert.equal(failed.body.art.url, first, "the failed repaint keeps the old picture");
   assert.equal((await sceneSide()).url, shown, "the old sprite stays on screen");
 
   // Painted again: a new picture, cut out, and the one it replaced is released.
-  const again = await t.call("POST", "/runs/:run/art/side", { key: "arlecchino", repaint: true });
+  const again = await repaintHeld(false);
   assert.equal(t.paid.length, 3);
   assert.equal(again.body.art.state, "ready");
   assert.notEqual(again.body.art.url, first, "a new picture");
@@ -517,6 +535,25 @@ test("Repaint paints a ready sprite again and keeps its picture on screen while 
     t.deleted.some((id) => first.includes(id)),
     "the replaced picture is deleted from the gallery",
   );
+});
+
+test("a Repaint waiting on another tap's refused paint answers with its own refusal, not the old sprite", async () => {
+  const t = await sideWorld("r-side10-jjjjjj", { images: { ask: true }, replies: [json(ARLE_LOOK)] });
+  await t.read(await t.scene(1, [ARLE_SAYS("One.")]));
+  await t.read(await t.scene(2, [ARLE_SAYS("Two.")]));
+  await until(async () => (await t.sides()).arlecchino?.art?.state === "waiting-consent", "held for the tap");
+  assert.equal((await t.call("POST", "/runs/:run/art/side", { key: "arlecchino" })).body.art.state, "ready");
+  await setImages(t.store, t.runId, { connectionId: "conn-image", sideSprites: false, ask: true });
+  const taps = await Promise.all([
+    t.call("POST", "/runs/:run/art/side", { key: "arlecchino", repaint: true }),
+    t.call("POST", "/runs/:run/art/side", { key: "arlecchino", repaint: true }),
+  ]);
+  assert.deepEqual(
+    taps.map((tap) => tap.status),
+    [409, 409],
+    "both taps are refused; neither reports the untouched sprite as repainted",
+  );
+  assert.equal(t.paid.length, 1);
 });
 
 test("with the toggle off nothing is called, matched or painted; turning it on starts what is due", async () => {

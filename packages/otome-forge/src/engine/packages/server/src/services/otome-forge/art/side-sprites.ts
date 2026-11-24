@@ -295,12 +295,16 @@ export async function paintSideNow(
     const person = (await readSides(deps, runId))?.people[key];
     return person ? sideSpriteView(runId, person).art : null;
   };
+  // The record as this tap found it, so a repaint can tell one another tap's refused paint left untouched.
+  const first = (await readSides(deps, runId))?.people[key]?.art;
   return tapPaint(
     runId,
     async () => sideOwner(key),
-    async () => {
+    async ({ threw }) => {
       const art = await shown();
-      return { value: art, art: art ?? undefined };
+      // #2299: a paint that was refused (it threw) left the sprite as this repaint found it, which is no answer to it.
+      const untouched = threw && repaint && art?.state === first?.state && art?.at === first?.at;
+      return { value: art, ...(art && !untouched ? { art } : {}) };
     },
     async () => {
       const [world, sides] = await Promise.all([
