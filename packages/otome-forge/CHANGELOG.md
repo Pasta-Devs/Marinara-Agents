@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.46.1 — 2026-11-25
+
+- A tag image style profile (**Danbooru / Illustrious**, **Anime**) no longer writes its own description into image prompts; its tags still apply.
+- NovelAI backgrounds follow your **Image style**: they no longer switch to NovelAI's own scenery style.
+- Memory covers stay at most Suggestive, as banner art and looks do. Only story CGs of explicit scenes can be explicit.
+
 ## 0.46.0 — 2026-11-24
 
 - **Settings → Images** has **Backgrounds** and **Scene art**: another image connection for places, and for story CGs, date keepsakes, hangout mementos and photos. Both use your image connection until you choose.
