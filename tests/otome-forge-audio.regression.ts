@@ -21,7 +21,10 @@ import {
   type PrepLine,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
 import { playsHomeCue } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/screens.ts";
-import type { RunLiView } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type {
+  RunFriendView,
+  RunLiView,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   MUSIC_MEDIUM,
   MUSIC_SCENES,
@@ -404,6 +407,54 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
   assert.equal(await voice("Kai", "...don't leave again.", { thought: true }), null, "nor a thought");
   settings.tts = false;
   assert.equal(await voice("Kai"), null, "voices off: nothing is spoken");
+});
+
+test("#2458: friends are voiced as love interests are, whenever voices are on, keeping a voice assigned to their name", async () => {
+  const config = {
+    connectionId: "tts-1",
+    connectionProfiles: {
+      "tts-1": {
+        voiceAssignments: [
+          { characterId: "card-nahida", voice: "nahida-voice" },
+          { characterId: "card-kaveh-npc", characterName: "Kaveh", voice: "kaveh-voice" },
+        ],
+        npcDefaultMaleVoices: ["m1", "m2", "m3"],
+        npcDefaultFemaleVoices: ["f1", "f2"],
+      },
+    },
+  };
+  const friend = (name: string, changes: Partial<RunFriendView> = {}): RunFriendView => ({
+    id: `li-${name.toLowerCase()}-ab12`,
+    name,
+    pronouns: HE,
+    source: "archetype",
+    voiceGender: "",
+    accent: "#E7A6B8",
+    level: 1,
+    affectionProgress: { current: 0, required: 200 },
+    arc: 0,
+    ...changes,
+  });
+  const friends = [
+    friend("Kaveh"),
+    friend("Nahida", { pronouns: SHE, source: "card", cardId: "card-nahida" }),
+    friend("Tighnari"),
+  ];
+  const player = { name: "Ines", personaId: "persona-ines" };
+  const settings = { tts: true, otherVoices: false, muted: false, dialogueVolume: 1 } as Parameters<
+    typeof wouldVoice
+  >[0];
+  const voice = async (speaker: string, list = friends) => {
+    const who = lineSpeaker({ speaker, text: "A line." }, [], player, list);
+    if (!wouldVoice(settings, who)) return null;
+    return lineVoice(config, who, who.cast || settings.otherVoices, async () => ["any-1"]);
+  };
+  assert.equal(await voice("Nahida"), "nahida-voice", "a card friend's own Engine voice, with Voice everyone else off");
+  assert.equal(await voice("Kaveh"), "kaveh-voice", "a friend without a card keeps the voice assigned to their name");
+  const tighnari = await voice("Tighnari");
+  assert.ok(["m1", "m2", "m3"].includes(tighnari!), "and anyone else of them the pool for their pronouns");
+  assert.equal(await voice("Tighnari"), tighnari, "always the same one");
+  assert.equal(await voice("Tighnari", []), null, "the same name as a side character waits for Voice everyone else");
 });
 
 test("a line made ahead is sent as it is played: same text, voice, speaker and cache key", () => {
