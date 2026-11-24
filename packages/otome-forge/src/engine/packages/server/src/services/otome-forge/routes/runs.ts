@@ -96,6 +96,7 @@ import {
   stageArtUrls,
 } from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
+import { ensureFinaleRewards } from "../story/friend-rewards.js";
 import {
   ConnectionsSchema,
   ContentSchema,
@@ -188,6 +189,8 @@ const SettingsBody = z.object({
   dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
   groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
   dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+  friendMessages: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+  friendInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AppearanceBody = z.object({ identityLine: z.string() });
@@ -408,27 +411,33 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       if (!read) throw runNotFound();
       // #2303: an invitation to clear the air accepted before its scene existed gets that scene, once (no model call).
       await ensureClearAirScenes(store, runId, read.state);
+      // #2459: an ended story starts no background work.
+      const ended = !!read.state.ended;
       // #2174: the love interests' personality quiz answers, once, in the background (a story from before the quiz
       // gets them here, by its first chapter-planning wait); nothing here waits for them.
-      void ensureQuizScores(deps, runId, read, { debugMode: debugModeOf(request) }).catch((error: unknown) =>
-        deps.runtime.logger.warn(
-          "[otome-forge] The quiz's answers were not queued: %s",
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
-      // Long-term recall: chapter summaries not indexed yet (a story from before it, too), in the background.
-      void deps.recall
-        ?.ensure(runId, { open: true })
-        .catch((error: unknown) =>
+      if (!ended)
+        void ensureQuizScores(deps, runId, read, { debugMode: debugModeOf(request) }).catch((error: unknown) =>
           deps.runtime.logger.warn(
-            "[otome-forge] The recall index was not queued: %s",
+            "[otome-forge] The quiz's answers were not queued: %s",
             error instanceof Error ? error.message : String(error),
           ),
         );
+      // Long-term recall: chapter summaries not indexed yet (a story from before it, too), in the background.
+      if (!ended)
+        void deps.recall
+          ?.ensure(runId, { open: true })
+          .catch((error: unknown) =>
+            deps.runtime.logger.warn(
+              "[otome-forge] The recall index was not queued: %s",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
       // 0.20.0: the side characters of scenes read before they were recorded, once; then, with Side character
       // sprites on, what the recurring ones are owed. Neither is waited for.
       const sideMode = { debugMode: debugModeOf(request), review: reviewModeOf(request) };
-      void backfillSideCast(deps, runId).then(() => tendSideCast(deps, runId, sideMode));
+      if (!ended) void backfillSideCast(deps, runId).then(() => tendSideCast(deps, runId, sideMode));
+      // #2458: a friend's rank-5 finale gives her their look and their card, once (no model call; the card paints).
+      if (!ended) await ensureFinaleRewards(deps, runId, read, sideMode);
       const run = await withPersonaAbout(await withEngineLooks(read, runId, sideMode), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.
@@ -448,9 +457,9 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // #2044: every read designs the sets and paints the stickers owed so far (a level reached since, or the levels a
       // story in progress had already reached), in the background; nothing here waits for them.
       const debugMode = debugModeOf(request);
-      const designing = ensureStickerSets(deps, runId, shown, { debugMode });
-      const painting = !!deps.art?.queueStickers;
-      void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
+      const designing = !ended && ensureStickerSets(deps, runId, shown, { debugMode });
+      const painting = !ended && !!deps.art?.queueStickers;
+      if (!ended) void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
       return {
         view: {
           ...runView(runKey, runId, shown),
@@ -579,6 +588,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           ...(body.dailyMessages !== undefined ? { dailyMessages: body.dailyMessages } : {}),
           ...(body.groupSquabbles !== undefined ? { groupSquabbles: body.groupSquabbles } : {}),
           ...(body.dateInvites !== undefined ? { dateInvites: body.dateInvites } : {}),
+          ...(body.friendMessages !== undefined ? { friendMessages: body.friendMessages } : {}),
+          ...(body.friendInvites !== undefined ? { friendInvites: body.friendInvites } : {}),
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },

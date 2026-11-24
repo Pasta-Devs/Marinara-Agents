@@ -30,6 +30,8 @@ import { field } from "../schemas/common.js";
 import { MESSAGE_ID, markSeen, phoneList, sendMessage, threadPage } from "../phone/chat.js";
 import { noteOpenThread, phoneDue } from "../phone/daily.js";
 import { closeGroup, groupDue, groupList, groupPage, groupSeen, sendToGroup } from "../phone/group.js";
+import { friendDue } from "../phone/friends.js";
+import { runEnded } from "./ended.js";
 import { inviteDue } from "../phone/invite.js";
 import { closeAndRemember } from "../phone/memory.js";
 import { answerInvite } from "../phone/upset.js";
@@ -111,12 +113,17 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { open } = parseBody(DueBody, request.body);
       const { runId } = runParam(request);
+      // #2459: an ended story writes no more messages.
+      if (await runEnded(deps.store, runId)) return { status: "disabled", latest: null };
       const options = { open: open ?? null, debugMode: debugModeOf(request) };
       const daily = await phoneDue(deps, runId, options);
       return {
         ...daily,
         group: await groupDue(deps, runId, options),
         invite: await inviteDue(deps, runId, options),
+        // #2458: her friends' messages and hangout invitations, each week.
+        friend: await friendDue(deps, runId, "message", options),
+        hangout: await friendDue(deps, runId, "hangout", options),
       };
     }),
   );

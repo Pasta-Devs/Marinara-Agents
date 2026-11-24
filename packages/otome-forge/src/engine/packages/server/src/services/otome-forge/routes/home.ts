@@ -173,7 +173,10 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       const [note, look, threads, items, photos] = await Promise.all([
         li ? readNote(store, runId, todayKey(), li) : null,
         lookOf(deps, runId, show, unit, player),
-        Promise.all([...order, GROUP_THREAD].map((id) => readThread(store, runId, id))),
+        // #2458: her friends' threads count toward the unread too.
+        Promise.all(
+          [...order, ...Object.keys(run.state.friends), GROUP_THREAD].map((id) => readThread(store, runId, id)),
+        ),
         readItems(store, runId),
         listPhotos(store, runId),
       ]);
@@ -192,9 +195,11 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         }
       }
       // The first visit backfills every love interest's pack; later visits catch a new stage's.
-      void ensureLinePacks(deps, runId, order, { debugMode: debugModeOf(request) }).catch(
-        warn("Line packs not queued"),
-      );
+      // #2459: an ended story writes no more lines.
+      if (!run.state.ended)
+        void ensureLinePacks(deps, runId, order, { debugMode: debugModeOf(request) }).catch(
+          warn("Line packs not queued"),
+        );
       // A bought figurine stands on Home once painted, cut out once its cut-out is made.
       const figurines = await queueFigurineCutouts(
         deps,

@@ -804,6 +804,9 @@ test("squabbles: off by default, armed a minute after a visit starts, spread by 
     latest: null,
     group: { status: "disabled", latest: null },
     invite: { status: "disabled", latest: null },
+    // #2458: so do her friends' messages and hangout invitations.
+    friend: { status: "disabled", latest: null },
+    hangout: { status: "disabled", latest: null },
   });
   const beat = (now: number, open: string | null = null, random = () => 0) =>
     groupDue(t.deps, t.runId, { open, now, random, debugMode: true });

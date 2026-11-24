@@ -320,7 +320,13 @@ function normalizeLiState(raw: unknown): LiState {
       grievances: (value) => validItems(GrievanceSchema, value, LIST_MAX),
       // #2156: a rupture without `space` (saved before it) has its space waived.
       rupture: z
-        .object({ grievanceId: short(80), since: z.string(), space: z.number().int().min(0).optional() })
+        .object({
+          grievanceId: short(80),
+          since: z.string(),
+          space: z.number().int().min(0).optional(),
+          // #2458: the friend who talked to him for her (the rank-5 Wingman); they appear in his repair.
+          helper: z.string().max(80).optional(),
+        })
         .nullable(),
       grievanceArc: z.number().int().min(0).nullable(),
       upset: z.object({ since: z.string().max(40) }).nullable(),

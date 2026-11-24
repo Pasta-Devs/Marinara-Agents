@@ -230,6 +230,10 @@ export function normalizeWorld(data: unknown): World {
       groupDaily: PhoneDailySchema.optional(),
       dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
       inviteWeekly: PhoneDailySchema.optional(),
+      friendMessages: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+      friendInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+      friendWeekly: PhoneDailySchema.optional(),
+      friendInviteWeekly: PhoneDailySchema.optional(),
     },
     defaultWorld,
     isRecord(data) ? data : undefined,
@@ -248,6 +252,8 @@ export function toWorldView(world: World): WorldView {
     phoneDaily: _phoneDaily,
     groupDaily: _groupDaily,
     inviteWeekly: _inviteWeekly,
+    friendWeekly: _friendWeekly,
+    friendInviteWeekly: _friendInviteWeekly,
     ...rest
   } = world;
   const { briefs: _briefs, ...shownAudio } = audio;

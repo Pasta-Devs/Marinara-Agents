@@ -264,6 +264,14 @@ export interface World {
    * interests who asked that week (S/phone/invite.ts); never sent to the client.
    */
   inviteWeekly?: PhoneDaily;
+  /**
+   * #2458: Settings → Connections: how many times each local week a friend writes to her first, and how many times one
+   * asks her to hang out (DATE_INVITES_MAX at most each); absent or 0: never. Their quotas are kept as `inviteWeekly`.
+   */
+  friendMessages?: number;
+  friendInvites?: number;
+  friendWeekly?: PhoneDaily;
+  friendInviteWeekly?: PhoneDaily;
 }
 
 /**
@@ -733,6 +741,9 @@ export interface PhoneDueResult {
   group?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
   /** #2424: the date invitations (S/phone/invite.ts), the same way; `latest` is the newest invitation's. */
   invite?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
+  /** #2458: her friends' messages and hangout invitations (S/phone/friends.ts), the same way. */
+  friend?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
+  hangout?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
 }
 
 /** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
@@ -858,7 +869,7 @@ export interface LiState {
    * aside), and his repair waits for GRIEVANCE_SPACE_CHAPTERS of them. A rupture saved without it (from before #2156,
    * or one still owed that it moved to) has its space waived.
    */
-  rupture: { grievanceId: string; since: string; space?: number } | null;
+  rupture: { grievanceId: string; since: string; space?: number; helper?: LiId } | null;
   /** #2156: the story arc his last grievance with her opened in (0 before arcs), so at most one opens an arc; null for none. */
   grievanceArc: number | null;
   /**
@@ -1470,9 +1481,12 @@ export type ChapterView = Omit<
   | "recalled"
   | "memories"
   | "context"
+  | "friendStory"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
+  /** #2458: a friend's story without its plan's look or memento brief; a memento shows its paint once asked for. */
+  friendStory?: Omit<NonNullable<Chapter["friendStory"]>, "look" | "memento"> & { memento?: { art: Paint } };
 };
 
 /**
@@ -1548,6 +1562,10 @@ export interface StoryChapterEntry {
   nodes: number;
   /** The story arc a main chapter belongs to, for grouping the list; absent before arcs existed. */
   arc?: number;
+  /** #2458: a friend's own story (kind "story"): its kind, the friends in it and a rank story's level. */
+  friendStory?: { kind: FriendStoryKind; friends: LiId[]; level?: number };
+  /** #2459: the story's finale or epilogue. */
+  ending?: "finale" | "epilogue";
 }
 
 export type LeadReason = "least-recent" | "ripe-conflict";
@@ -1641,6 +1659,12 @@ export interface StoryView {
    * null when one may. Absent from an older server.
    */
   friendBlock?: "full" | "arc" | null;
+  /**
+   * #2458: each friend's story offers, in the order they joined: the rank story waiting (its level and key), a make-up
+   * story while their grievance stands (open once it has had its space), a clear-the-air scene she accepted, whether
+   * she told them she is upset, and the love interests their Wingman can talk to now.
+   */
+  friendStories?: FriendStoryEntry[];
   /** #2459: End the Story: on offer, the finale's and the epilogue's keys once planned, and when it ended. */
   ending?: {
     offered: boolean;
@@ -1648,6 +1672,21 @@ export interface StoryView {
     epilogue?: string;
     ended?: string;
   };
+}
+
+/** #2458: what the Story screen offers with one friend (StoryView.friendStories). */
+export interface FriendStoryEntry {
+  id: LiId;
+  rank: { level: number; key: string } | null;
+  /** Their grievance with her: its text, the space it has had of what it needs, and its make-up story once open. */
+  held: { text: string; space: number; need: number; key?: string } | null;
+  upset: boolean;
+  /** Her accepted invitation's scene to clear the air, while unread. */
+  air?: string;
+  /** Their rank-5 finale is read. */
+  finale: boolean;
+  /** The love interests whose grievance their Wingman can smooth over now (empty once used this arc). */
+  wingman: LiId[];
 }
 
 /** A bond rank whose story is waiting to be opened (0.23.0). */
@@ -1765,7 +1804,10 @@ export interface RecallIndexStatus {
 // ── Wire shapes ──
 
 /** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quotas. */
-export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily" | "inviteWeekly"> & {
+export type WorldView = Omit<
+  World,
+  "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily" | "inviteWeekly" | "friendWeekly" | "friendInviteWeekly"
+> & {
   mystery: { question: string };
   web: Omit<WebRow, "secret">[];
   audio: Omit<WorldAudio, "briefs">;

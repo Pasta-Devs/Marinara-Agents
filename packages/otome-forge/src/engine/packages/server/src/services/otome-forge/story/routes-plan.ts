@@ -52,6 +52,12 @@ import { repairPlanMessages, routePlanMessages } from "../prompts.js";
 import { ChapterPlanSchema, type ChapterPlanReply } from "./replies.js";
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");
+
+/** #2458: the name of the friend who talked to `li` for her (his rupture's `helper`), or "". */
+const helperName = (run: RunDocuments, li: LiId) => {
+  const helper = run.state.lis[li]?.rupture?.helper;
+  return helper ? (run.friends?.find((friend) => friend.id === helper)?.name ?? "") : "";
+};
 const locked = (message: string) => new OtomeForgeError(409, message, "locked");
 
 /** The newest main chapter number the state has finished (route and repair conflicts are dated by it), or 0. */
@@ -358,6 +364,7 @@ export async function planRepairChapter(
         recalls: memory.recalls?.text ?? "",
         sharesCache: sharesScenesCache(run.world),
         friends: friendCards(run, "repair"),
+        ...(helperName(run, li) ? { helper: helperName(run, li) } : {}),
       }),
       memory,
       schema: ChapterPlanSchema,

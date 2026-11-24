@@ -3288,6 +3288,8 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
 export interface RepairPlanInput extends ArcPlanInput {
   /** The rupture grievance the repair's last node resolves. */
   grievance: Pick<LiState["grievances"][number], "id" | "text" | "by">;
+  /** #2458: the friend who talked to him for her (the Wingman), by name; they appear in the first node. */
+  helper?: string;
 }
 
 /** P11: a 2–3 node repair after a rupture; its last node resolves the grievance (S/story/routes-plan.ts checks it). */
@@ -3313,6 +3315,11 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
   ].join("\n");
   const user = arcPlanUser(input, `${name.toUpperCase()} (whose repair this is)`, [
     `The rupture (grievance ${grievance.id}, held by ${holder}): ${grievance.text}`,
+    ...(input.helper
+      ? [
+          `${input.helper}, her friend, talked to ${name} for her, which is why this comes now: ${input.helper} appears in the first node.`,
+        ]
+      : []),
     `Plan the repair between ${name} and the protagonist now (id ${li}).`,
   ]);
   return planInStoryLayout(input, system, user);

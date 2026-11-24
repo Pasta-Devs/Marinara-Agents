@@ -1478,6 +1478,8 @@ export async function serveBeat(
   } else {
     beat = stored;
     if (!beat) {
+      // #2459: an ended story only replays what was written.
+      if (run.state.ended) throw locked("This story has ended. It still opens to look at.");
       if (!writable(run, chapter, i)) throw conflict("This beat cannot be written yet.");
       beat = await cancellable(deps, runId, (signal) =>
         readOrGenerate(
@@ -1503,7 +1505,7 @@ export async function serveBeat(
     await deps.art?.prepareScenePlaces?.(runId, beat, { debugMode, review });
     beat = await prepareCg(deps, runId, beat, { debugMode, review });
   }
-  queueFaces(deps, runId, beat, debugMode);
+  if (!run.state.ended) queueFaces(deps, runId, beat, debugMode);
   if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });
   return beat;
 }

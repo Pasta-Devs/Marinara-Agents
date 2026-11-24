@@ -459,10 +459,14 @@ export function toChapterView(chapter: Chapter): ChapterView {
     memories: _memories,
     context: _context,
     music,
+    friendStory,
     ...rest
   } = chapter;
+  // #2458: a friend's story shows its kind, friends, level, place and memento's paint; never the plan's look or brief.
+  const { look: _look, memento, ...story } = friendStory ?? { kind: "rank", friends: [] };
   return {
     ...rest,
+    ...(friendStory ? { friendStory: { ...story, ...(memento?.art ? { memento: { art: memento.art } } : {}) } } : {}),
     ...(music?.track ? { music: { track: music.track } } : {}),
     nodes: nodes.map(({ i, kind, moment, cg, gate }) => ({
       i,

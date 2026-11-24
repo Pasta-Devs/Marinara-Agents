@@ -27,6 +27,7 @@ import { registerKittyRoutes } from "./routes/kitty.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
 import { registerPhoneRoutes } from "./routes/phone.js";
 import { registerQuizRoutes } from "./routes/quiz.js";
+import { endedGuard } from "./routes/ended.js";
 import { registerFriendRoutes } from "./routes/friends.js";
 import { registerReadHimRoutes } from "./routes/read-him.js";
 import { registerReadMeRoutes } from "./routes/read-me.js";
@@ -81,7 +82,8 @@ export async function activate({ api }: ActivationContext) {
   // runs in the request's time zone (forgeTimeZoneRoutes wraps get and post, the only methods Otome uses).
   const releaseRoutes = await api.registerPrivilegedRoutes(
     async (fastify) => {
-      const router = forgeTimeZoneRoutes(fastify);
+      // #2459: an ended story only opens to look at (S/routes/ended.ts).
+      const router = endedGuard(forgeTimeZoneRoutes(fastify), store);
       registerIndexRoutes(router, deps);
       registerRunRoutes(router, deps);
       registerSetupRoutes(router, deps);

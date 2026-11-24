@@ -35,13 +35,23 @@ import type {
   LeadReason,
   LiId,
   LiState,
+  FriendStoryEntry,
   RunState,
   StoryChapterEntry,
   StoryView,
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { friendBlock } from "../../../../../client/src/features/otome-forge/shared/friends.js";
+import {
+  FRIEND_SPACE_CHAPTERS,
+  friendAirOfKey,
+  friendBlock,
+  friendHeld,
+  friendRankKey,
+} from "../../../../../client/src/features/otome-forge/shared/friends.js";
+import { finaleRead } from "./friend-rewards.js";
+import { needsSpace } from "../state/stages.js";
+import { waitingRank } from "./friend-stories.js";
 import { endingView, readEpilogue } from "./ending.js";
 import { friendCards } from "./friends.js";
 import { LAST_STAGE, type ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
@@ -810,7 +820,11 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
   // Dates (M5) are played from Dates, not listed with the story.
   const chapters = (await deps.store.listRun("chapter", runId))
     .map((record) => normalizeChapter(record.data))
-    .filter((chapter): chapter is Chapter => !!chapter && chapter.kind !== "date")
+    // #2458: hangouts are played from the Album's Hangouts tab, as dates are from theirs.
+    .filter(
+      (chapter): chapter is Chapter =>
+        !!chapter && chapter.kind !== "date" && chapter.friendStory?.kind !== "hangout",
+    )
     .sort(byStoryOrder);
   const arcs = await listArcs(deps.store, runId);
   const entries: StoryChapterEntry[] = chapters.map((chapter) => {
@@ -827,6 +841,17 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
       beatsRead: progress?.beatsRead ?? 0,
       nodes: chapters.find((entry) => entry.key === chapter.key)!.nodes.length,
       ...(arc ? { arc: arc.number } : {}),
+      // #2458, #2459: a friend's story and the ending name themselves in the list.
+      ...(chapter.friendStory
+        ? {
+            friendStory: {
+              kind: chapter.friendStory.kind,
+              friends: chapter.friendStory.friends,
+              ...(chapter.friendStory.level ? { level: chapter.friendStory.level } : {}),
+            },
+          }
+        : {}),
+      ...(chapter.ending ? { ending: chapter.ending } : {}),
     };
   });
   const ready = run.world.forge.phase === "ready";
@@ -894,7 +919,40 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     friendBlock:
       ready && !closing ? friendBlock(cast.length, Object.values(run.state.friends), current?.number ?? 0) : "full",
     ending,
+    friendStories: ready && !run.state.ended ? friendStoryEntries(run.state, chapters, current?.number ?? 0) : [],
   };
+}
+
+/** #2458: what Story offers with each friend (StoryView.friendStories). */
+function friendStoryEntries(state: RunState, chapters: readonly Chapter[], arc: number): FriendStoryEntry[] {
+  const held = Object.entries(state.lis).flatMap(([li, his]) => (needsSpace(his) ? [li] : []));
+  return Object.entries(state.friends).map(([id, friend]) => {
+    const level = waitingRank(state, id);
+    const mend = chapters.find(
+      (chapter) => chapter.key.startsWith(`story-friend-mend-${id}-`) && !state.chapters[chapter.key]?.completed,
+    );
+    const air = chapters.find((chapter) => {
+      const scene = friendAirOfKey(chapter.key);
+      return scene?.id === id && !state.chapters[chapter.key]?.completed;
+    });
+    const finale = finaleRead(state, id);
+    return {
+      id,
+      rank: level && !friendHeld(friend) ? { level, key: friendRankKey(id, level) } : null,
+      held: friend.grievance
+        ? {
+            text: friend.grievance.text,
+            space: friend.grievance.space,
+            need: FRIEND_SPACE_CHAPTERS,
+            ...(mend ? { key: mend.key } : {}),
+          }
+        : null,
+      upset: !!friend.upset,
+      ...(air ? { air: air.key } : {}),
+      finale,
+      wingman: finale && friend.wingmanArc !== arc ? held : [],
+    };
+  });
 }
 
 /** The ways on at the end of an arc: breathing room, the story going on, and someone new while the cast has room. */
