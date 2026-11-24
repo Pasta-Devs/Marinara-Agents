@@ -1,13 +1,17 @@
-// Otome Hearth friends (#2458, part 1): their levels, who may join and when (SH/friends.ts), Add a friend (POST
-// /runs/:run/friends, S/story/friends.ts), the friendship a main chapter pays them (S/state/rewards.ts payFriends) and
-// their block in the story prompts (S/prompts.ts friendsBlock, S/story/friends.ts friendCards).
+// Otome Hearth friends (#2458) and End the Story (#2459): their levels, who may join and when (SH/friends.ts), Add a
+// friend (POST /runs/:run/friends, S/story/friends.ts), what a main chapter and their own stories pay them
+// (S/state/rewards.ts), their grievances (S/state/friends.ts), rank stories, hangouts and the Wingman
+// (S/story/friend-stories.ts, S/story/friend-rewards.ts), their block in the story prompts (S/prompts.ts), the ending
+// (S/story/ending.ts) and an ended story's lock (S/routes/ended.ts).
 // Run: npx tsx --tsconfig tests/tsconfig.regressions.json --test tests/otome-forge-friends.regression.ts
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { RunState } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   FRIEND_CHAPTER_AFFECTION,
+  defaultFriendState,
   friendBlock,
+  friendRankKey,
   friendLevelOf,
   friendProgressOf,
   type FriendBible,
@@ -15,6 +19,7 @@ import {
 import {
   runDocTarget,
   sideCastId,
+  stateId as stateIdOf,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
   friendsBlock,
@@ -27,7 +32,20 @@ import {
   normalizeState,
   readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
-import { payFriends } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/rewards.ts";
+import {
+  grant,
+  payFriends,
+  readBeatToEnd,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/rewards.ts";
+import {
+  applyFriendHurts,
+  mendOpen,
+  withFriendSpace,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/friends.ts";
+import { endedGuard } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/ended.ts";
+import { endingView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/ending.ts";
+import { askWingman } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-rewards.ts";
+import { waitingRank } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-stories.ts";
 import { friendCards } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friends.ts";
 import { CAST, HE, KAI, MIR, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
@@ -170,4 +188,187 @@ test("the story prompts carry her friends in main, route and repair chapters onl
   const player = normalizePlayer({ name: "Ines" });
   assert.ok(storyContext({ world, player, units, memory: "", friends: cards }).includes(block));
   assert.doesNotMatch(storyContext({ world, player, units, memory: "" }), /HER FRIENDS/u, "no friends, no block");
+});
+
+// ── Grievances, their stories' pay, and the ending ──
+
+const KAVEH = "li-kaveh-ab12";
+const friendsState = (friend: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
+  normalizeState({
+    lis: { [KAI]: {}, [MIR]: {} },
+    friends: { [KAVEH]: { points: 300, arc: 1, joinedAt: "x", ...friend } },
+    ...extra,
+  });
+const story = (friendStory: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+  ({
+    key: "story-x",
+    kind: "story",
+    lead: "",
+    nodes: [{ i: 0, kind: "beat", guide: "g", cast: [] }],
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    friendStory,
+    ...extra,
+  }) as never;
+
+test("a serious hurt in Messages opens a friend's grievance once an arc; a milder one costs 15, never below the level", () => {
+  const at = "2026-11-24T10:00:00.000Z";
+  const opened = applyFriendHurts(friendsState(), [{ li: KAVEH, text: "You lied to me.", severity: "major" }], {
+    at,
+    arc: 2,
+  });
+  assert.deepEqual(opened.opened, [KAVEH]);
+  assert.equal(opened.state.friends[KAVEH]!.grievance?.text, "You lied to me.");
+  assert.equal(opened.state.friends[KAVEH]!.grievanceArc, 2);
+  const again = applyFriendHurts(opened.state, [{ li: KAVEH, text: "And again.", severity: "rupture" }], {
+    at,
+    arc: 2,
+  });
+  assert.deepEqual(again.opened, [], "one stands already");
+  assert.equal(again.state.friends[KAVEH]!.points, 285, "so it costs as a milder one does");
+  const mild = applyFriendHurts(friendsState({ points: 205 }), [{ li: KAVEH, text: "Rude.", severity: "minor" }], {
+    at,
+    arc: 2,
+  });
+  assert.equal(mild.state.friends[KAVEH]!.points, 200, "level 2's floor holds");
+  assert.deepEqual(
+    applyFriendHurts(friendsState(), [{ li: KAI, text: "x", severity: "major" }], { at, arc: 2 }).hurt,
+    [],
+    "a love interest's hurt is not a friend's",
+  );
+});
+
+test("while a friend's grievance stands they earn nothing; their make-up story waits a chapter, then clears it for 300", () => {
+  const held = friendsState({ grievance: { text: "Hurt.", severity: "major", opened: "x", space: 0 } });
+  assert.equal(grant(held, { source: "close-and-remember", li: KAVEH, affection: 5 }).granted.affection, 0);
+  assert.deepEqual(payFriends(held, [KAVEH]).grants, []);
+  assert.equal(mendOpen(held.friends[KAVEH]), false);
+  const spaced = withFriendSpace(held);
+  assert.equal(mendOpen(spaced.friends[KAVEH]), true);
+  const done = readBeatToEnd(spaced, story({ kind: "mend", friends: [KAVEH] }), 0, { at: "y", dayKey: "2026-11-24" });
+  assert.equal(done.state.friends[KAVEH]!.grievance, null);
+  assert.equal(done.state.friends[KAVEH]!.points, 600);
+  assert.deepEqual(
+    done.grants.filter((entry) => entry.source === "friend"),
+    [{ source: "friend", li: KAVEH, affection: 300 }],
+  );
+  const replay = readBeatToEnd(done.state, story({ kind: "mend", friends: [KAVEH] }), 0, { at: "z" });
+  assert.deepEqual(replay.grants, [], "paid once");
+});
+
+test("a friend's own stories pay as their kind does; the epilogue's end ends the story", () => {
+  const day = "2026-11-24";
+  const rank = readBeatToEnd(friendsState(), story({ kind: "rank", friends: [KAVEH], level: 2 }), 0, {
+    at: "a",
+    dayKey: day,
+  });
+  assert.deepEqual(rank.grants, [
+    { source: "beat", starlight: 30 },
+    { source: "chapter", starlight: 300 },
+  ]);
+  const MEI = "li-mei-cd34";
+  const two = normalizeState({
+    lis: { [KAI]: {} },
+    friends: { [KAVEH]: { points: 0, arc: 0, joinedAt: "x" }, [MEI]: { points: 0, arc: 1, joinedAt: "x" } },
+  });
+  const hangout = readBeatToEnd(two, story({ kind: "hangout", friends: [KAVEH, MEI] }), 0, { at: "b", dayKey: day });
+  assert.deepEqual(hangout.grants, [
+    { source: "chapter", starlight: 120 },
+    { source: "friend", li: KAVEH, affection: 50 },
+    { source: "friend", li: MEI, affection: 50 },
+  ]);
+  const air = readBeatToEnd(friendsState({ asked: "x" }), story({ kind: "clear-air", friends: [KAVEH] }), 0, {
+    at: "c",
+  });
+  assert.equal(air.state.friends[KAVEH]!.asked, null);
+  const epilogue = readBeatToEnd(friendsState(), story(undefined as never, { ending: "epilogue" }), 0, { at: "d" });
+  assert.deepEqual(epilogue.state.ended, { at: "d" });
+});
+
+test("rank stories wait in order for the level; the Wingman waives a love interest's space once an arc", async () => {
+  const state = friendsState({ points: 760 });
+  assert.equal(waitingRank(state, KAVEH), 2);
+  const second = normalizeState({
+    ...state,
+    chapters: { [friendRankKey(KAVEH, 2)]: { beatsRead: 1, completed: "x" } },
+  });
+  assert.equal(waitingRank(second, KAVEH), 3);
+  assert.equal(waitingRank(friendsState({ points: 100 }), KAVEH), null);
+
+  const t = await storyWorld({ runKey: "r-friends-cccccc" });
+  await t.store.mutateDoc(runDocTarget("state", stateIdOf(t.runId)), normalizeState, (current) => ({
+    ...current,
+    friends: { [KAVEH]: { ...current.friends[KAVEH], ...defaultFriendState(0, "x"), points: 1100 } },
+    chapters: { ...current.chapters, [friendRankKey(KAVEH, 5)]: { beatsRead: 3, completed: "x", applied: [] } },
+    lis: {
+      ...current.lis,
+      [KAI]: {
+        ...current.lis[KAI]!,
+        grievances: [
+          { id: "g1", li: KAI, by: "li", text: "x", severity: "rupture", opened: "main-1/0", status: "open" },
+        ],
+        rupture: { grievanceId: "g1", since: "x", space: 0 },
+      },
+    },
+  }));
+  const asked = await askWingman(t.deps, t.runId, KAVEH, KAI);
+  assert.deepEqual(asked, { li: KAI, helper: KAVEH });
+  const after = await t.state();
+  assert.equal(after.lis[KAI]!.rupture?.space, 2);
+  assert.equal(after.lis[KAI]!.rupture?.helper, KAVEH);
+  await assert.rejects(() => askWingman(t.deps, t.runId, KAVEH, KAI), /already helped|nothing for them/u);
+});
+
+test("End the Story is offered once every love interest stands at level 20, and plans nothing before", async () => {
+  const at20 = { points: 20000, stage: 6 };
+  const bond = Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [`story-bond-${KAI}-${11 + i}`, { beatsRead: 1, completed: "x" }]),
+  );
+  const run = {
+    units: CAST.slice(0, 1).map((li) => ({ id: li.id, bible: {} })),
+    state: normalizeState({ lis: { [KAI]: at20 }, chapters: bond }),
+  };
+  assert.equal(endingView(run as never, [], null).offered, true);
+  assert.equal(
+    endingView({ ...run, state: normalizeState({ lis: { [KAI]: { points: 100 } } }) } as never, [], null).offered,
+    false,
+  );
+  const t = await storyWorld({ runKey: "r-ending-aaaaaa" });
+  const refused = await t.call("POST", "/runs/:run/ending");
+  assert.equal(refused.status, 409);
+  assert.equal(t.calls.length, 0);
+});
+
+test("an ended story refuses what plays and keeps what only looks", async () => {
+  const handled: string[] = [];
+  const routes = new Map<string, (request: unknown, reply: unknown) => Promise<unknown>>();
+  const fake = {
+    get: () => undefined,
+    post: (path: string, handler: (request: unknown, reply: unknown) => Promise<unknown>) => routes.set(path, handler),
+  };
+  const ended = { readDoc: async () => normalizeState({ ended: { at: "x" } }) } as never;
+  const router = endedGuard(fake as never, ended);
+  for (const path of ["/runs/:run/wish/pull", "/runs/:run/chapters/:key/beats/:i/read", "/runs/:run/friends"]) {
+    router.post(path, async () => handled.push(path));
+  }
+  const reply = () => {
+    const sent: { status?: number; body?: unknown } = {};
+    return {
+      sent,
+      status(code: number) {
+        sent.status = code;
+        return this;
+      },
+      send(body: unknown) {
+        sent.body = body;
+        return sent;
+      },
+    };
+  };
+  const request = { params: { run: "r-ended-aaaaaa" } };
+  const pull = reply();
+  await routes.get("/runs/:run/wish/pull")!(request, pull);
+  assert.equal(pull.sent.status, 409);
+  await routes.get("/runs/:run/chapters/:key/beats/:i/read")!(request, reply());
+  await routes.get("/runs/:run/friends")!(request, reply());
+  assert.deepEqual(handled, ["/runs/:run/chapters/:key/beats/:i/read"], "reading again still works");
 });
