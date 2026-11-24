@@ -20,6 +20,8 @@ import type {
   RunState,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
+  defaultFriendState,
+  friendAirKey,
   friendBlock,
   friendLevelOf,
   type FriendBible,
@@ -222,7 +224,7 @@ export async function addFriend(
     if (Object.hasOwn(state.friends, id)) return state;
     const again = friendBlock(Object.keys(state.lis).length, Object.values(state.friends), arc);
     if (again) throw blocked(again);
-    return { ...state, friends: { ...state.friends, [id]: { points: 0, arc, joinedAt: at } } };
+    return { ...state, friends: { ...state.friends, [id]: defaultFriendState(arc, at) } };
   });
   return { id, name };
 }
@@ -247,4 +249,33 @@ export async function friendsHeard(
     beat ? readLines(beat).flatMap((line) => (line.thought ? [] : [line.speaker])) : [],
   );
   return friends.filter((friend) => speakers.some((name) => namesPerson(name, friend.name))).map((friend) => friend.id);
+}
+
+/**
+ * #2458: a friend's scene to clear the air (`story-friend-air-<id>-<n>`), opened by accepting their invitation while
+ * she is upset with them: one node, written as its scene is read, with no plan call (as a love interest's,
+ * S/items/character-story.ts clearAirStoryChapter).
+ */
+export function friendAirChapter(unit: Pick<Unit, "id" | "name">, n: number, at: string): Chapter {
+  const { name } = unit;
+  return {
+    key: friendAirKey(unit.id, n),
+    kind: "story",
+    lead: "",
+    friendStory: { kind: "clear-air", friends: [unit.id] },
+    title: `Clearing the Air with ${name}`,
+    tags: [],
+    summary: "",
+    nodes: [
+      {
+        i: 0,
+        kind: "beat",
+        guide: `CLEARING THE AIR between ${name} and the protagonist, who told ${name} they were upset with them. They meet somewhere ${name} chooses. What hurt is said plainly, as friends say it, and what ${name} does about it is ${name}'s own; how it lands is up to the protagonist. One complete scene, with its own small turn.`,
+        cast: [],
+      },
+    ],
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "",
+  };
 }

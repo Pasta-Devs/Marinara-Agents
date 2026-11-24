@@ -8,7 +8,7 @@ import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Prestige, PrestigeKind } from "./economy";
 import type { Face, MusicMood } from "./faces";
-import type { FriendBible, FriendState } from "./friends";
+import type { FriendBible, FriendState, FriendStoryKind } from "./friends";
 import type { ClawRound } from "./claw";
 import type { KittyRound } from "./kitty";
 import type { ReadHimPaid } from "./read-him";
@@ -683,7 +683,8 @@ export interface PhoneMessage {
    * own choosing (S/phone/invite.ts), accepted from its date's looks step (POST /runs/:run/dates/invited), and its
    * `scene` is that date's chapter; absent, it is the invitation to clear the air.
    */
-  invite?: { status: PhoneInviteStatus; scene?: string; kind?: "date" };
+  /** #2458: `kind` "hangout" is a friend asking her to hang out. */
+  invite?: { status: PhoneInviteStatus; scene?: string; kind?: "date" | "hangout" };
   /** 0.34.0: his message drives the toys while he holds the remote (SH/haptics.ts); it loops until his next cue. */
   haptic?: HapticCue[];
 }
@@ -1028,6 +1029,8 @@ export interface RunState {
   thoughts: PlayerThoughts | null;
   /** #2458: her friends, in the order they joined (their units are `${R}:unit:<id>`, with `friend` and no bible). */
   friends: Record<LiId, FriendState>;
+  /** #2459: when the epilogue was read to its end: the story has ended and only opens to look at. Null until then. */
+  ended: { at: string } | null;
 }
 
 /** One Shop purchase as the state keeps it (S/routes/shop.ts): what it bought, a gift id or `figurine:<li>`. */
@@ -1172,6 +1175,13 @@ export interface Chapter {
    * the client).
    */
   hisSide?: HisSideNote;
+  /**
+   * #2458: a friend's own story (kind "story"): its kind, the friends in it (by id; the first is the one it is about),
+   * a rank story's level, and the place a hangout was asked for. Shown to the client, which names the chapter by it.
+   */
+  friendStory?: { kind: FriendStoryKind; friends: LiId[]; level?: number; place?: string };
+  /** #2459: the story's finale (a main chapter) or its epilogue (kind "story", key `story-epilogue`). */
+  ending?: "finale" | "epilogue";
   /**
    * 0.19.0: a main chapter's earlier chapters recalled in detail, by chapter key, in the order they go, chosen once when
    * it was planned so every scene's story context is the same (S/story/canon.ts recallText; hidden from the client).

@@ -513,8 +513,20 @@ export function normalizeState(data: unknown): RunState {
     },
     thoughts: normalizeThoughts(field(data, "thoughts")),
     friends: normalizeFriends(field(data, "friends"), lis),
+    // #2459: once the epilogue is read, the story has ended and only opens to look at.
+    ended: (() => {
+      const ended = field(data, "ended");
+      return isRecord(ended) && typeof ended.at === "string" ? { at: clipText(ended.at, 40) } : null;
+    })(),
   };
 }
+
+const FriendGrievanceSchema = z.object({
+  text: short(),
+  severity: z.enum(["major", "rupture"]),
+  opened: short(40),
+  space: z.number().int().min(0).max(1000),
+});
 
 /**
  * #2458: her friends, in the order they joined, at most as many as love interests can be. A friend never shares an id
@@ -526,10 +538,18 @@ function normalizeFriends(raw: unknown, lis: RunState["lis"]): RunState["friends
   for (const [id, entry] of Object.entries(raw)) {
     if (!isLiId(id) || Object.hasOwn(lis, id) || !isRecord(entry)) continue;
     if (Object.keys(friends).length >= LIS_MAX) break;
+    const grievance = FriendGrievanceSchema.safeParse(entry.grievance);
+    const upset = isRecord(entry.upset) && typeof entry.upset.since === "string" ? { since: entry.upset.since } : null;
+    const arcOrNull = (value: unknown) => (value === null || value === undefined ? null : wholeNumber(value, 0, 0));
     friends[id] = {
       points: wholeNumber(entry.points, 0, 0),
       arc: wholeNumber(entry.arc, 0, 0),
       joinedAt: typeof entry.joinedAt === "string" ? clipText(entry.joinedAt, 40) : "",
+      grievance: grievance.success ? grievance.data : null,
+      grievanceArc: arcOrNull(entry.grievanceArc),
+      upset,
+      asked: typeof entry.asked === "string" ? clipText(entry.asked, 40) : null,
+      wingmanArc: arcOrNull(entry.wingmanArc),
     };
   }
   return friends;

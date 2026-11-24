@@ -3750,12 +3750,50 @@ export interface ChatReplyInput {
    * #2156: he writes first because she has just told him she is upset with him (S/phone/upset.ts); #2424 "date": to ask
    * her on a date of his own choosing (S/phone/invite.ts).
    */
-  reason?: "upset" | "date";
+  reason?: "upset" | "date" | "hangout";
   /** 0.34.0: he holds the remote of her toys for about this many more minutes (with haptics on), or none. */
   remote?: number;
   /** 0.34.0: her connected toys as S/haptics.ts devicesText lists them, while he holds the remote. */
   toys?: string;
+  /**
+   * #2458: the thread is one of her friends': their bible and level, the love interests (by id and name), and what
+   * stands between you. The love interest's card, stage and invitations give way to theirs.
+   */
+  friend?: ChatFriend;
 }
+
+/** #2458: one of her friends, as their Messages thread sees them. */
+export interface ChatFriend {
+  bible: FriendBible;
+  level: number;
+  lis: ReadonlyArray<{ id: string; name: string }>;
+  /** Their grievance with her, while it stands. */
+  grievance?: string;
+  /** She told them she is upset with them. */
+  upset?: boolean;
+}
+
+/** #2458: a friend's own card in their Messages thread: who they are, your friendship, and their view of her love life. */
+export function friendChatCard(name: string, friend: ChatFriend): string {
+  const { bible } = friend;
+  const stances = Object.entries(bible.onLis).flatMap(([id, view]) => {
+    const li = friend.lis.find((candidate) => candidate.id === id);
+    return li ? [`On ${li.name}: ${view.stance}, ${view.why}`] : [];
+  });
+  return [
+    `${name}: ${bible.role}. ${bible.personality}`,
+    `How you know each other: ${bible.howWeMet}`,
+    `What you want: ${bible.want} What you fear: ${bible.fear}`,
+    `Your voice: ${bible.voice.register}${bible.voice.tics.length ? ` Tics: ${bible.voice.tics.join("; ")}.` : ""}`,
+    `Likes: ${bible.likes.join(", ") || "—"}. Dislikes: ${bible.dislikes.join(", ") || "—"}.`,
+    `Her love life, as you see it: ${bible.onHer}`,
+    ...stances,
+  ].join("\n");
+}
+
+/** #2458: what a friend may ask in Messages, in place of the love interests' invitation rule. */
+const FRIEND_INVITE_RULE =
+  "- The one exception: when you are told below that you may ask them to clear the air, or that you are asking them to hang out, you may. That outing is kept by the game, not by your message.";
 
 export function chatReplyMessages({
   world,
@@ -3774,6 +3812,7 @@ export function chatReplyMessages({
   reason,
   remote = 0,
   toys = "",
+  friend,
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
@@ -3790,7 +3829,7 @@ export function chatReplyMessages({
         .join(" ")
     : "";
   const system = [
-    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
+    `You are ${name} (${pronounText(unit.pronouns)}), ${friend ? `one of ${them}'s close friends in an otome visual novel: a platonic friend, never a love interest` : "a love interest in an otome visual novel: a character-driven romance"}. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "..."}]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
@@ -3800,14 +3839,16 @@ export function chatReplyMessages({
     `- Write every message in ${world.language}.`,
     "",
     "HOW CLOSE YOU ARE",
-    CHAT_STAGE[liState.stage] ?? CHAT_STAGE[1]!,
-    liState.rupture ? RUPTURE_LINE : "",
+    friend
+      ? `Your friendship, ${friend.level} of 5: ${friend.bible.growth[String(friend.level) as keyof FriendBible["growth"]]}`
+      : (CHAT_STAGE[liState.stage] ?? CHAT_STAGE[1]!),
+    (friend ? friend.grievance : liState.rupture) ? RUPTURE_LINE : "",
     "",
     "HARD RULES",
     `- Write ONLY your own messages. Never write ${them}'s reply, and never narrate what they do or feel.`,
     "- It is a message, not a chapter: no scene headings, no narration, no third person about yourself, no actions in asterisks.",
     `- Nothing happens in the story because of this conversation, except that what ${them} writes can hurt you (hurt). You can talk about what has happened and what you feel; you cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret you are still hiding. No grievance or rupture is settled by text: only the story settles it.`,
-    CLEAR_AIR_RULE,
+    friend ? FRIEND_INVITE_RULE : CLEAR_AIR_RULE,
     "- Never invent shared history: what you two share is only what the story and these conversations hold.",
     `- Never mention how long it has been since ${them} last wrote, that they were away, or anything about their life outside the story, and never ask where they have been.`,
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
@@ -3824,11 +3865,21 @@ export function chatReplyMessages({
     .join("\n");
   const user = [
     "WHO YOU ARE",
-    otomeSceneCard(unit, { ...liState, bondPlayed }),
-    betweenYou(unit, { ...liState, bondPlayed }),
-    upsetLine(unit, liState),
-    // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
-    ...(known ? [known] : []),
+    ...(friend
+      ? [
+          friendChatCard(name, friend),
+          friend.grievance ? `What still hurts: ${friend.grievance}` : "",
+          friend.upset
+            ? `${them} told you they are upset with you. You know it, and work out why from what happened; it is not settled until it is cleared.`
+            : "",
+        ]
+      : [
+          otomeSceneCard(unit, { ...liState, bondPlayed }),
+          betweenYou(unit, { ...liState, bondPlayed }),
+          upsetLine(unit, liState),
+          // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
+          ...(known ? [known] : []),
+        ]),
     offscreen.trim()
       ? `What you were doing lately, away from ${them}: ${offscreen.trim()} You may hint at it in your own way; never give away what you are hiding.`
       : "",
@@ -3874,9 +3925,11 @@ export function chatReplyMessages({
       ? `Write ${name}'s next message now: ${them} has just told you they are upset with you, and you write to them about it first, on your own, in your own voice. One or two short messages.`
       : reason === "date"
         ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, to ask them out on a date. Where you take them and what you do together is yours to choose, from who you are; you may tell them or keep it a surprise. One or two short messages, the last one asking.`
-        : first
-          ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
-          : `Write ${name}'s next message now, answering ${them}.`,
+        : reason === "hangout"
+          ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, to ask them to hang out, as friends do. Where you go and what you do is yours to choose, from who you are; you may tell them or keep it a surprise. One or two short messages, the last one asking.`
+          : first
+            ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
+            : `Write ${name}'s next message now, answering ${them}.`,
     otomeContractReminder("chat"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
