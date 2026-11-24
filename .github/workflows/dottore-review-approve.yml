@@ -1,4 +1,6 @@
 name: Dottore Approval Dispatch
+# The head and the finished workflow's conclusion in the run's title let an older run for the same head see a newer one.
+run-name: "Dottore Approval Dispatch: ${{ github.event.workflow_run.head_sha }} (${{ github.event.workflow_run.conclusion }})"
 
 # When a check workflow finishes on a pull request head that Dottore discharged, ask the trusted reviewer whether it can
 # approve that head now. List here the workflows that report the base branch's required checks.
@@ -13,9 +15,9 @@ permissions:
   issues: read
   pull-requests: read
 
-concurrency:
-  group: dottore-approve-dispatch-${{ github.event.workflow_run.head_sha }}
-  cancel-in-progress: true
+# No concurrency group: GitHub runs this workflow from the default branch and shows its runs on that branch's head
+# commit, where a cancelled run looks like a failed check. A run that a newer one for the same head replaces ends
+# successfully instead (see `superseded` below).
 
 jobs:
   dispatch:
@@ -31,9 +33,27 @@ jobs:
           HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          TRIGGER_CREATED: ${{ github.event.workflow_run.created_at }}
           DOTTORE_BASE_REFS: ${{ vars.DOTTORE_BASE_REFS || 'refactor,main,staging' }}
         run: |
           # Inert: reads the event and PR metadata and dispatches the trusted workflow; runs no PR code.
+          # Checks that finish on one head within seconds start one run each, and only the newest run for the head
+          # dispatches. An older run stops here, and again right before it would dispatch, when a newer run for the head
+          # is queued, running or finished successfully. A failed lookup finds no newer run, so this run dispatches.
+          superseded() {
+            local newer
+            newer=$(gh api --method GET --paginate \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/dottore-review-approve.yml/runs" \
+              -f event=workflow_run -f created=">=$TRIGGER_CREATED" -f per_page=100 \
+              --jq '.workflow_runs[] | select(.id > ($ENV.GITHUB_RUN_ID | tonumber)
+                and .display_title == "Dottore Approval Dispatch: \($ENV.HEAD_SHA) (success)"
+                and (.status != "completed" or .conclusion == "success")) | .id')
+            [ -n "$newer" ] || return 1
+            echo "Dispatch run ${newer%%$'\n'*} is newer for $HEAD_SHA and asks Dottore instead."
+          }
+          if superseded; then
+            exit 0
+          fi
           PR_NUM="$PR_FROM_RUN"
           if [ -z "$PR_NUM" ]; then
             # A fork PR's run lists no pull requests, and the base repository's commit lookup does not know a fork's
@@ -61,6 +81,9 @@ jobs:
             --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- dottore:walkthrough -->")) | (.body | split("\n")) as $l | $l[:($l | map(startswith("<!-- dottore:") | not) | index(true) // length)] | .[]' )
           if ! grep -q "<!-- dottore:last-reviewed-sha=$HEAD_SHA -->" <<<"$WALKTHROUGH" || ! grep -q "<!-- dottore:discharge -->" <<<"$WALKTHROUGH"; then
             echo "Dottore has not discharged $HEAD_SHA."
+            exit 0
+          fi
+          if superseded; then
             exit 0
           fi
           gh workflow run dottore-review.yml \
