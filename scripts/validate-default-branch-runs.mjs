@@ -213,6 +213,9 @@ function validateDottoreApprovalDispatch() {
   const dispatch = step(workflow, "Dispatch Dottore's approval check");
   const shell = blockScalar(dispatch, "run", 8).replaceAll("${{ github.repository }}", REPOSITORY);
   assert.doesNotMatch(shell, /\$\{\{/u);
+  // The cases below need bash, jq and a shebang mock, which CI's Ubuntu runner has; validate-pr-triage.mjs skips its
+  // own bash cases on Windows the same way.
+  if (process.platform === "win32") return 0;
 
   const head = "d".repeat(40);
   const directory = mkdtempSync(join(tmpdir(), "marinara-dottore-dispatch-"));
