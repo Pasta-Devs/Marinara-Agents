@@ -61,7 +61,7 @@ async function repaintWorld(
 ) {
   const t = await artWorld({ runKey, images: { expressions: true, style: STYLE }, before });
   t.images.styleProfile = async () => ({
-    styleText: "PROFILE STYLE REPLACED BY SETTINGS",
+    styleText: "PROFILE STYLE AFTER SETTINGS",
     positiveTags: POSITIVE,
     negativeTags: NEGATIVE,
     tagged,
@@ -143,7 +143,8 @@ test("expression preview and paid edits retain the complete configured style, pr
       const prompt = preview.body.prompts[face];
       assert.ok(prompt.prompt.includes(STYLE), "the full configured style reaches the preview");
       assert.ok(prompt.prompt.includes(POSITIVE));
-      assert.ok(!prompt.prompt.includes("PROFILE STYLE REPLACED BY SETTINGS"));
+      // The player's Image style adds to the profile's style words, before them.
+      assert.ok(prompt.prompt.includes(`${STYLE}, PROFILE STYLE AFTER SETTINGS`), prompt.prompt);
       assert.match(prompt.prompt, /adult man/);
       assert.match(prompt.prompt, /clothing coverage/);
       assert.match(prompt.negativePrompt, /child, childlike, minor, underage/);

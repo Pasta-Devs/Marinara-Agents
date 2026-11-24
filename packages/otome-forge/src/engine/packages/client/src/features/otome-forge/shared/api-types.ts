@@ -113,6 +113,12 @@ export interface Connections {
 export interface ImageSettings {
   /** The image-generation connection, or null for a world played without images. */
   connectionId: string | null;
+  /**
+   * Settings → Images: the connection that paints the backgrounds (places), and the one that paints scene art (story
+   * CGs, date keepsakes, hangout mementos and photos); absent, the image connection paints them, as it does the rest.
+   */
+  backgroundConnectionId?: string;
+  sceneConnectionId?: string;
   rating: ImageRating;
   /** Ask before painting places, story CGs, banner art and first-open item art. Base looks always ask. */
   ask: boolean;

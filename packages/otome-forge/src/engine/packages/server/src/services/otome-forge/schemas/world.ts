@@ -104,6 +104,8 @@ export function normalizeImages(data: unknown): ImageSettings {
   return readFields<ImageSettings>(
     {
       connectionId: z.string().nullable(),
+      backgroundConnectionId: z.string().min(1).optional(),
+      sceneConnectionId: z.string().min(1).optional(),
       rating: normalizeImageRating,
       ask: z.boolean(),
       expressions: z.boolean(),

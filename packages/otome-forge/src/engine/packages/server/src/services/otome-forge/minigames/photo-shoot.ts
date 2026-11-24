@@ -43,7 +43,13 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/photos.js";
 import { BASE_LOOK, type AlbumImage } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { loadedCutouts, type CutoutOwner } from "../art/cg.js";
-import { galleryRefIds, hasLikenessSource, MissingLikenessError, worldStyle } from "../art/image-client.js";
+import {
+  galleryRefIds,
+  hasLikenessSource,
+  imageConnectionFor,
+  MissingLikenessError,
+  worldStyle,
+} from "../art/image-client.js";
 import {
   imagesOf,
   paintIsLive,
@@ -201,7 +207,7 @@ interface PhotoLook {
 async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup: PhotoSetup) {
   const run = await readRun(deps.store, runId);
   if (!run) throw runNotFound();
-  const connectionId = run.world.images.connectionId;
+  const connectionId = imageConnectionFor(run.world.images, "scene");
   if (!connectionId) throw noConnection();
   if (!isLiId(setup.li)) throw liNotFound();
   const unit = run.units.find((candidate) => candidate.id === setup.li && candidate.bible);
@@ -316,7 +322,7 @@ async function buildPhoto(
     outfitLine: herLook.outfitLine,
     presentation: player.look.presentation,
   };
-  const style = await worldStyle(images, run.world.images);
+  const style = await worldStyle(images, run.world.images, "scene");
   const prompt = photoPrompt(
     {
       li,
@@ -372,7 +378,7 @@ function paintPhoto(
       if (!ours(latest)) return "gone";
       const world: World | null = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) return "gone";
-      return world.images.connectionId === connectionId ? "paint" : "stopped";
+      return imageConnectionFor(world.images, "scene") === connectionId ? "paint" : "stopped";
     },
     async paint() {
       const photo = latest!;

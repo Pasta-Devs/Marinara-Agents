@@ -175,6 +175,9 @@ const SettingsBody = z.object({
   images: z
     .object({
       connectionId: z.string().min(1).max(200).nullable().optional(),
+      // The backgrounds' and scene art's own connections; "" goes back to the image connection.
+      backgroundConnectionId: z.string().max(200).optional(),
+      sceneConnectionId: z.string().max(200).optional(),
       rating: z.enum(IMAGE_RATINGS).optional(),
       ask: z.boolean().optional(),
       expressions: z.boolean().optional(),
@@ -576,6 +579,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         replaced = current.connections.embeddings ?? null;
         const content = body.content ?? current.content;
         const images = { ...current.images, ...body.images };
+        if (!images.backgroundConnectionId) delete images.backgroundConnectionId;
+        if (!images.sceneConnectionId) delete images.sceneConnectionId;
         // Turning faces on again allows one more attempt at a set that failed or stopped before (the kit's rule).
         if (images.expressions && !current.images.expressions) images.expressionsSince = at;
         sideSpritesOn = !!images.sideSprites && !current.images.sideSprites;

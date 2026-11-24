@@ -9,7 +9,7 @@
 // record is kept on the chapter (`friendStory.memento.art`); the Album's Hangouts tab shows it.
 import type { Chapter, Paint } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { cgReferences, cgSubjects, outfitCutouts } from "../art/cg.js";
-import { galleryRef, worldStyle } from "../art/image-client.js";
+import { galleryRef, imageConnectionFor, worldStyle } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget } from "../ids.js";
@@ -88,7 +88,7 @@ export async function mementoPromptFor(
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
   const { run, brief, people, references } = await mementoSubject(deps, runId, key);
-  const style = await worldStyle(imagesOf(deps), run.world.images);
+  const style = await worldStyle(imagesOf(deps), run.world.images, "scene");
   return keepsakePrompt({ brief, people, world: run.world, style, references }, edited);
 }
 
@@ -110,7 +110,8 @@ export async function paintMemento(
 ): Promise<Paint> {
   const { run, brief, art, first, people, units, references } = await mementoSubject(deps, runId, key);
   if (art?.state === "ready") return art;
-  const connectionId = run.world.images.connectionId;
+  // #2465: a memento is scene art, painted on the Scene art connection.
+  const connectionId = imageConnectionFor(run.world.images, "scene");
   if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
   const claim = paintKey(runId, key);
   if (painting.has(claim)) throw new OtomeForgeError(409, "This memento is already being painted.", "busy");
@@ -119,7 +120,7 @@ export async function paintMemento(
     const latest = (await readChapter(deps.store, runId, key))?.friendStory?.memento?.art;
     if (latest?.state === "ready") return latest;
     const images = imagesOf(deps);
-    const style = await worldStyle(images, run.world.images);
+    const style = await worldStyle(images, run.world.images, "scene");
     const built = keepsakePrompt({ brief, people, world: run.world, style, references }, { prompt, negativePrompt });
     if (!(await saveMemento(deps, runId, key, { state: "pending", at: new Date().toISOString() }))) throw notFound();
     let painted: { url: string; id?: string };

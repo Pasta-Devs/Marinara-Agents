@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.46.0 — 2026-11-24
+
+- **Settings → Images** has **Backgrounds** and **Scene art**: another image connection for places, and for story CGs, date keepsakes, hangout mementos and photos. Both use your image connection until you choose.
+- With a NovelAI connection, pictures are written in NovelAI's style: tags with the people counts first, its quality tags and its negative preset. A scene sends NovelAI one character reference, and the prompt decides what everyone wears.
+- **Image style** now adds to your Engine image style instead of replacing it.
+- Explicit key images name what they show plainly and are drawn uncensored.
+
 ## 0.45.0 — 2026-11-24
 
 - **Friends:** on **Story**, **Add a friend** takes someone you've met, one of your characters or someone new: platonic, five levels shown as stars, as many as your love interests, one each story arc. Each gets a bible, a painted portrait and faces, a voice and a **Messages** thread.

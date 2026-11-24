@@ -5,7 +5,17 @@ import test from "node:test";
 import { queueScenePaints } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
 import { createCutoutClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
-import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
+import {
+  NOVELAI_NEGATIVE,
+  NOVELAI_QUALITY,
+  createImageClient,
+  paintsWithNovelAi,
+  worldStyle,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
+import {
+  cgPrompt,
+  placePrompt,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   paintSlot,
   startPaint,
@@ -1111,4 +1121,103 @@ test("a repaint keeps the picture it paints over on screen, keeps it again if it
   assert.match(failed.body.art.error ?? "", /provider down/);
   assert.deepEqual([failed.body.art.url, failed.body.art.ref], [done.body.art.url, done.body.art.ref]);
   assert.equal(t.paid.length, 4, "the failed repaint was paid for once and is not retried by itself");
+});
+
+test("backgrounds and scene art paint on their own connections when chosen; Settings sets and clears them", async () => {
+  const runKey = "r-imgkinds-aaaaaa";
+  const t = await sceneWorld(runKey, {
+    runKey,
+    images: { backgroundConnectionId: "conn-bg", sceneConnectionId: "conn-scene" },
+  });
+  await t.write(1, { cg: CG });
+  await until(() => t.paid.length === 2, "the place and the CG painted");
+  const cg = t.paid.find((paid) => paid.method === "generateBannerArt");
+  const place = t.paid.find((paid) => paid.method !== "generateBannerArt");
+  assert.equal(place?.request.connectionId, "conn-bg");
+  assert.equal(cg?.request.connectionId, "conn-scene");
+
+  // A repaint tap follows the choice made now; "" goes back to the image connection.
+  const settings = routesOf(registerRunRoutes, t.deps, runKey);
+  const saved = await settings("POST", "/runs/:run/settings", { images: { sceneConnectionId: "" } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const images = (await t.world()).images;
+  assert.equal(images.sceneConnectionId, undefined);
+  assert.equal(images.backgroundConnectionId, "conn-bg", "the other choice stays");
+  const repaint = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(repaint.status, 200, JSON.stringify(repaint.body));
+  assert.equal(t.paid.at(-1)?.request.connectionId, "conn-image");
+  // Without the image connection nothing is painted, whatever the other two say.
+  await setImages(t.store, t.runId, { connectionId: null });
+  const none = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
+  assert.equal(none.status, 503, JSON.stringify(none.body));
+});
+
+test("a NovelAI connection paints in NovelAI's style, with one reference that the prompt dresses (#2465)", async () => {
+  // The Engine's rule: a named service decides, else a NovelAI model or address.
+  assert.equal(paintsWithNovelAi({ imageService: "novelai", model: "nai-diffusion-5-full" }), true);
+  assert.equal(paintsWithNovelAi({ model: "nai-diffusion-5", baseUrl: "" }), true);
+  assert.equal(paintsWithNovelAi({ model: "custom", baseUrl: "https://image.novelai.net" }), true);
+  assert.equal(paintsWithNovelAi({ imageService: "openai", model: "nai-diffusion-5" }), false);
+  assert.equal(paintsWithNovelAi({ model: "gpt-image-1", baseUrl: "https://api.openai.com/v1" }), false);
+
+  const connections = [
+    { id: "conn-gpt", provider: "image_generation", model: "gpt-image-1", baseUrl: "https://api.openai.com/v1" },
+    { id: "conn-nai", provider: "image_generation", model: "nai-diffusion-5-full", imageService: "novelai" },
+  ];
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetch = (async (url: string | URL, init?: RequestInit) => {
+    const path = String(url).replace("http://127.0.0.1:7860", "");
+    if (path === "/api/connections") return Response.json(connections);
+    if (path === "/api/app-settings/ui") return Response.json({ value: {} });
+    if (path === "/api/characters/avatar-generation") {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ image: "data:image/png;base64,iVBORw0KGgo=", prompt: "p" });
+    }
+    return new Response("{}", { status: 404 });
+  }) as typeof globalThis.fetch;
+  const images = createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+  const settings = { connectionId: "conn-gpt", sceneConnectionId: "conn-nai" };
+
+  const background = await worldStyle(images, settings, "background");
+  assert.equal(background.novelai, undefined, "GPT paints the places as the profile says");
+  const scene = await worldStyle(images, settings, "scene");
+  assert.equal(scene.tagged, true);
+  assert.equal(scene.novelai, true);
+  assert.match(scene.positiveTags, new RegExp(`${NOVELAI_QUALITY}$`, "u"));
+  assert.ok(scene.negativeTags.startsWith(NOVELAI_NEGATIVE) && scene.negativeTags.includes("mismatched pupils"));
+
+  const world = normalizeWorld({ images: { connectionId: "conn-gpt", rating: "sfw" } });
+  const people = [
+    { name: "Kai", identityLine: "tall", outfitLine: "coat", presentation: "man" as const },
+    { name: "Ines", identityLine: "short", outfitLine: "oilskin", presentation: "woman" as const },
+  ];
+  const cg = cgPrompt({ brief: "They share an umbrella.", people, world, style: scene, use: "cg" });
+  assert.ok(cg.prompt.startsWith("1girl, 1boy, "), cg.prompt);
+  assert.ok(cg.prompt.endsWith(NOVELAI_QUALITY), cg.prompt);
+  // An explicit key image is drawn uncensored.
+  const adult = normalizeWorld({
+    content: { heat: "explicit" },
+    images: { connectionId: "conn-gpt", rating: "explicit" },
+  });
+  const sex = cgPrompt({
+    brief: "Naked in the lamp room.",
+    people,
+    world: adult,
+    style: scene,
+    use: "cg",
+    explicit: true,
+  });
+  assert.match(sex.prompt, /nsfw, explicit, uncensored/u, sex.prompt);
+  assert.match(sex.negativePrompt, /mosaic censoring, bar censor/u);
+  const place = placePrompt({ name: "Pier", tags: "harbour pier, night", world, style: scene });
+  assert.ok(place.prompt.startsWith("background dataset, "), place.prompt);
+
+  const request = { name: "Kai", prompt: "p", negativePrompt: "n", width: 1216, height: 832, debugMode: false };
+  const refs = ["/a.png", "/b.png", "/c.png"];
+  await images.generateImage({ ...request, connectionId: "conn-nai", referenceImages: refs });
+  await images.generateImage({ ...request, connectionId: "conn-gpt", referenceImages: refs });
+  assert.deepEqual(bodies[0]!.referenceImages, ["/a.png"], "NovelAI gets the focus alone");
+  assert.equal(bodies[0]!.preferReferenceOutfit, false, "and the prompt dresses them");
+  assert.deepEqual(bodies[1]!.referenceImages, refs);
+  assert.equal("preferReferenceOutfit" in bodies[1]!, false);
 });
