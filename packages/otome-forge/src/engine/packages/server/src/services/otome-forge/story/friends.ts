@@ -3,12 +3,13 @@
 // ──────────────────────────────────────────────
 // POST /runs/:run/friends writes one friend: someone she has met (a side character who spoke in a scene, S/story/
 // side-cast.ts, with the Engine card the player picks, none, or by default the one their name matches), one of the
-// player's cards, or someone new from a name and notes. A card already linked to a love interest or friend is refused. As with a love interest who arrives mid-story (S/story/introduce.ts), the unit is
-// written first, then their bible (one structured call, friendBibleMessages), then they join `state.friends` LAST, in
-// a revision-checked write that checks again that one may join (SH/friends.ts friendBlock: as many friends as love
-// interests, one per story arc). A failed bible leaves the unit without one, out of the friends, and the same friend
-// again takes that unit back and pays for no second unit. A friend's unit never has a love interest's `bible`, so
-// nothing that means the love interests counts them (S/schemas/state.ts readCastUnits reads `state.lis` alone).
+// player's cards, or someone new from a name and notes. A card already linked to a love interest or friend is refused.
+// As with a love interest who arrives mid-story (S/story/introduce.ts), the unit is written first, then their bible
+// (one structured call, friendBibleMessages), then they join `state.friends` LAST, in a revision-checked write that
+// checks again that one may join (SH/friends.ts friendBlock: as many friends as love interests, one per story arc). A
+// failed bible leaves the unit without one, out of the friends, and the same friend again takes that unit back and
+// pays for no second unit. A friend's unit never has a love interest's `bible`, so nothing that means the love
+// interests counts them (S/schemas/state.ts readCastUnits reads `state.lis` alone).
 // Their portrait and faces are painted as a love interest's are (setup/forge.ts forgeCast gives them a paint step on
 // the next read; art/expressions.ts paints their faces once they speak).
 import type { Player, Pronouns, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
