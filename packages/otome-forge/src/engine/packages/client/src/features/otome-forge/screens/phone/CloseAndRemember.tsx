@@ -10,16 +10,18 @@
 // 0.46.3: the server answers once the close is accepted and writes the memory in the background, so the thread goes
 // back to Messages at once (onClosed). closeSent remembers the closes this page sent, so the list can say once what
 // each earned when it lands (ThreadList); CloseRetry is Try again for a close that failed, in the list and the thread.
+// ClosesLanding reads the run view again when one lands while the list is not showing.
 // ──────────────────────────────────────────────
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { BookHeart, RotateCcw } from "lucide-react";
 import { forgeStepErrorKey, useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
+import { runQueryKey } from "../../hooks/use-run";
 import type { LiId, PhoneCloseResult, PhoneListView } from "../../shared/api-types";
 import { GROUP_THREAD } from "../../shared/home";
-import { phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
+import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 
 /** The closes this page sent and is waiting on, by `${runKey} ${thread}`: the start of the session each will add. */
 export const sentCloses = new Map<string, number>();
@@ -41,6 +43,37 @@ export function closeSent(queryClient: QueryClient, runKey: string, id: LiId, re
   }
   void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
   void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, id) });
+}
+
+/** Whether `list` still shows a close this page sent being remembered. */
+const sentRemembering = (runKey: string, list: PhoneListView | undefined) =>
+  !!list &&
+  [
+    ...list.threads.map((row) => [row.li, row] as const),
+    ...(list.group ? [[GROUP_THREAD, list.group] as const] : []),
+  ].some(([id, row]) => sentCloses.has(closeKey(runKey, id)) && !!row.closing && !row.closing.error);
+
+/**
+ * While the Messages list is not showing (the player went Home, or anywhere else) and a close this page sent is still
+ * being remembered, polls the list's query, and reads the run view again once it lands, so Home's affection and level
+ * show it. ThreadList still says once what it earned when the list next shows; while it shows, it does all this itself.
+ */
+export function ClosesLanding({ runKey, listShown }: { runKey: string; listShown: boolean }) {
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const list = useQuery({
+    queryKey: phoneQueryKey(runKey),
+    queryFn: () => otome.get<PhoneListView>(phonePath(runKey)),
+    enabled: (query) => !listShown && sentRemembering(runKey, query.state.data),
+    refetchInterval: BUSY_POLL_MS,
+  });
+  const waiting = sentRemembering(runKey, list.data);
+  const was = useRef(waiting);
+  useEffect(() => {
+    if (was.current && !waiting && !listShown) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    was.current = waiting;
+  }, [listShown, queryClient, runKey, waiting]);
+  return null;
 }
 
 interface CloseAndRememberProps {
@@ -151,8 +184,21 @@ export function CloseAndRemember({ path, text, waitText, blocked, onClosed }: Cl
   );
 }
 
-/** 0.46.3: a close that failed in the background, why (its stored code), and Try again, which closes it again. */
-export function CloseRetry({ runKey, id, error }: { runKey: string; id: LiId; error: string }) {
+/**
+ * 0.46.3: a close that failed in the background, why (its stored code), and Try again, which closes it again. Its
+ * button goes once the close is accepted, so `onRetried` moves focus on (the list: to his row; the thread: back to it).
+ */
+export function CloseRetry({
+  runKey,
+  id,
+  error,
+  onRetried,
+}: {
+  runKey: string;
+  id: LiId;
+  error: string;
+  onRetried: () => void;
+}) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -164,6 +210,7 @@ export function CloseRetry({ runKey, id, error }: { runKey: string; id: LiId; er
     setFailure(null);
     try {
       closeSent(queryClient, runKey, id, await otome.post<PhoneCloseResult>(`${phonePath(runKey, id)}/close`));
+      onRetried();
     } catch (problem) {
       setFailure(otome.errorMessage(problem));
     } finally {

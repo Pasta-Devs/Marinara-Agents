@@ -121,17 +121,28 @@ const baseOf = (unit: Pick<Unit, "portrait" | "outfits" | "wornOutfit"> | null |
   unit ? wornLookUrl(unit) : "";
 
 /**
+ * 0.46.3: a Repaint expressions the kit ended before it wrote a replacement set (the base could not be read, the
+ * connection or the setting was gone, the look changed), by `${runId}|${li}`, with the look it was asked for. Kept in
+ * this process until his next Repaint expressions starts: a restart forgets it, as it forgets the paint itself.
+ */
+const unstarted = new Map<string, { base: string; paint: Paint }>();
+
+/**
  * 0.46.3: Repaint expressions for his current look as Your cast shows it: pending while it is live here (from before
- * the kit writes its replacement set), `stopped` once a restart left that set pending, `stopped` or `failed` with the
- * reason once it did not land, or undefined when none was asked or it landed (the kit's record keeps the replacement
- * only until then).
+ * the kit writes its replacement set), `stopped` once a restart left that set pending or the kit ended it before it
+ * started, `stopped` or `failed` with the reason once it did not land, or undefined when none was asked or it landed
+ * (the kit's record keeps the replacement only until then).
  */
 export function facesView(
   runId: string,
   unit: Pick<Unit, "id" | "portrait" | "outfits" | "wornOutfit" | "expressions">,
 ): Paint | undefined {
   if (paintIsLive(runId, `faces:${unit.id}`)) return { state: "pending", at: "" };
+  const ended = unstarted.get(`${runId}|${unit.id}`);
   const record = unit.expressions[baseOf(unit)];
+  // Unless that look's own set was painted after it (a beat's queue).
+  if (ended?.base === baseOf(unit) && !(isRecord(record) && String(record.at ?? "") > ended.paint.at))
+    return ended.paint;
   const replacement = isRecord(record) && isRecord(record.replacement) ? record.replacement : null;
   const state = replacement?.state;
   if (!replacement || (state !== "pending" && state !== "stopped" && state !== "failed")) return undefined;
@@ -277,11 +288,21 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       const pending = expressionsOf(runId).repaint(runId, unitId(runId, li), preview.base, options.prompts);
       if (!pending)
         throw new OtomeForgeError(409, "This character's expressions are already being painted.", "conflict");
+      const key = `${runId}|${li}`;
+      unstarted.delete(key);
+      // A set the kit ended before writing its replacement is kept for facesView before the set stops being live, so
+      // no read of the run view between them finds nothing.
+      const settled = Promise.resolve(pending).then((result) => {
+        if (result) return result;
+        const paint: Paint = { state: "stopped", at: new Date().toISOString() };
+        unstarted.set(key, { base: preview.base, paint });
+        return paint;
+      });
       // The same set asked for again shares the one paint (the kit's schedule), and is live once.
       const release = startPaint(runId, `faces:${li}`);
-      if (release) void Promise.resolve(pending).finally(release);
+      if (release) void settled.finally(release);
       options.started?.({ state: "pending", at: new Date().toISOString() });
-      return (await pending) ?? { state: "stopped", at: new Date().toISOString() };
+      return settled;
     },
     queueExpressions(runId, beat, options) {
       if (disposed) return;

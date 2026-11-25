@@ -1341,3 +1341,23 @@ test("Repaint expressions answers pending and its faces paint on; the run view s
   });
   assert.equal((await t.viewOf()).facesPaint?.state, "stopped");
 });
+
+test("Repaint expressions the kit ends before it starts (the look cannot be read) reads stopped, and the next one paints", async (context) => {
+  const t = await castWorld("r-bgpaint3-aaaaaa", 0);
+  context.after(() => t.art.dispose());
+  const read = t.images.cardAvatarImage;
+  t.images.cardAvatarImage = async () => null;
+  const started = await t.setup("POST", "/runs/:run/art/expressions", { li: KAI });
+  assert.deepEqual([started.status, started.body.paint.state], [200, "pending"], JSON.stringify(started.body));
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const ended = await t.viewOf();
+  assert.equal(ended.facesPaint?.state, "stopped", "Your cast says it did not finish, with Repaint expressions");
+  assert.deepEqual([t.paid.length, ended.expressions ?? {}], [0, {}], "nothing was paid for or filed");
+
+  // Repaint expressions again paints the set, and the run view has nothing more to say once it lands.
+  t.images.cardAvatarImage = read;
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const landed = await t.viewOf();
+  assert.deepEqual([landed.facesPaint, t.paid.length], [undefined, FACES.length]);
+});

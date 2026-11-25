@@ -135,10 +135,12 @@ async function earnClose(deps: PhoneDeps, runId: string, li: LiId, open: PhoneMe
   try {
     let affection = 0;
     await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+      // A close that lands after the next day's first activity counts against that newer day's cap, so the daily
+      // tally never goes back to the day it was closed on (keys are YYYY-MM-DD).
       const result = grant(
         current,
         { source: "close-and-remember", li, affection: AFFECTION_EARNINGS.closeAndRemember },
-        day,
+        current.daily.dayKey > day ? current.daily.dayKey : day,
       );
       affection = result.granted.affection;
       return result.state;

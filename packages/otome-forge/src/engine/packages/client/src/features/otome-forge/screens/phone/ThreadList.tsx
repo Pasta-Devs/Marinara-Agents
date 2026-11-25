@@ -6,7 +6,7 @@
 // 0.46.3: a row whose conversation is being remembered in the background says so (and the list polls until it lands);
 // one that failed shows why, with Try again. A close this page sent shows once, as it lands, what it earned.
 // ──────────────────────────────────────────────
-import { useEffect, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Heart, MessageCircleHeart, RotateCcw } from "lucide-react";
@@ -63,6 +63,12 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
       return list && (list.threads.some(working) || (list.group && working(list.group))) ? BUSY_POLL_MS : false;
     },
   });
+  /** Each row's button, so Try again under it can hand focus back to it. */
+  const rowButtons = useRef(new Map<LiId, HTMLButtonElement | null>());
+  const refOf = (id: LiId) => (element: HTMLButtonElement | null) => {
+    rowButtons.current.set(id, element);
+    rowRef(id, element);
+  };
   // The closes this page sent that landed while the list showed: what each earned (0 for none), shown once.
   const [landed, setLanded] = useState<Partial<Record<LiId, number>>>({});
   const [announce, setAnnounce] = useState("");
@@ -147,9 +153,19 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
       </span>
     );
   };
-  /** A close that failed in the background: why, and Try again, under its row (never inside its button). */
+  /**
+   * A close that failed in the background: why, and Try again, under its row (never inside its button). Accepted, it
+   * goes, and focus goes back to the row.
+   */
   const closeFailure = (id: LiId, row: PhoneCloseView | undefined) =>
-    row?.closing?.error && !view.ended ? <CloseRetry runKey={runKey} id={id} error={row.closing.error} /> : null;
+    row?.closing?.error && !view.ended ? (
+      <CloseRetry
+        runKey={runKey}
+        id={id}
+        error={row.closing.error}
+        onRetried={() => rowButtons.current.get(id)?.focus({ preventScroll: true })}
+      />
+    ) : null;
 
   return (
     <div className="of-page of-phone">
@@ -180,7 +196,7 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
           {group ? (
             <li key={GROUP_THREAD}>
               <button
-                ref={(element) => rowRef(GROUP_THREAD, element)}
+                ref={refOf(GROUP_THREAD)}
                 type="button"
                 className="of-thread-row of-glass"
                 data-unread={group.unread > 0 ? "true" : undefined}
@@ -222,7 +238,7 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
             return (
               <li key={li.id}>
                 <button
-                  ref={(element) => rowRef(li.id, element)}
+                  ref={refOf(li.id)}
                   type="button"
                   className="of-thread-row of-glass"
                   data-unread={unread > 0 ? "true" : undefined}

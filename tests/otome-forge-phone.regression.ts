@@ -8,11 +8,11 @@
 // note's full length fits the Reply quote; Close and remember never waits behind the run's story queue, yet still holds
 // its thread, and P18 gets a thinking model's summary room (#2039). 0.46.3: a close answers before its summary, which
 // runs once in the background lane while sends wait; a restart's mark resumes once, a failure keeps the conversation
-// open with Try again, and her next message lets it go. Daily messages (#2044): off by default, armed a
-// minute after the app opens, spaced 24 h / limit apart and never past the local midnight of the request's zone, a
-// spent attempt never retried, a random met love interest who is not in the open thread, not busy and not waiting on
-// her message, written by P17 "first" in the background lane on the chat connection (never the run's foreground
-// queue), dropped when the thread changed meanwhile, and landing unread.
+// open with Try again, and her next message lets it go; one landing on a later day never turns the daily tally back.
+// Daily messages (#2044): off by default, armed a minute after the app opens, spaced 24 h / limit apart and never past
+// the local midnight of the request's zone, a spent attempt never retried, a random met love interest who is not in
+// the open thread, not busy and not waiting on her message, written by P17 "first" in the background lane on the chat
+// connection (never the run's foreground queue), dropped when the thread changed meanwhile, and landing unread.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -22,7 +22,10 @@ import type {
   PhoneMessage,
   PhoneThread,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
-import { OUTSIDE_AFFECTION_DAILY_CAP } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
+import {
+  ACTIVITY_STARLIGHT_DAILY_CAP,
+  OUTSIDE_AFFECTION_DAILY_CAP,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 import { NOTE_TEXT_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
@@ -617,6 +620,40 @@ test("Close and remember: a restart's mark resumes once from a read and is never
       undefined,
     ],
   );
+});
+
+test("Close and remember: a close that lands on a later day counts against that day's cap and never turns the tally back", async () => {
+  const t = await phoneWorld("r-phoned-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  // Closed yesterday, left by a restart; today's activities have already reached both caps.
+  const today = localDay("UTC");
+  const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const daily = {
+    dayKey: today,
+    starlight: ACTIVITY_STARLIGHT_DAILY_CAP,
+    affection: { [KAI]: OUTSIDE_AFFECTION_DAILY_CAP },
+  };
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({ ...state, daily }));
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-24T23:59:00.000Z", tries: 1, day: yesterday },
+  }));
+  const points = (await t.state()).lis[KAI]!.points;
+  await t.phone("GET", "/runs/:run/phone");
+  const thread = await t.remembered();
+  assert.deepEqual(
+    thread.sessions.map((session) => [session.start, session.affection]),
+    [[0, undefined]],
+    "remembered, and today's cap is already reached",
+  );
+  const state = await t.state();
+  assert.deepEqual(state.daily, daily, "today's tally is kept");
+  assert.equal(state.lis[KAI]!.points, points);
+
+  // The next close today still earns nothing past the cap.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  await t.closeAndWait();
+  assert.deepEqual([(await t.state()).daily, (await t.state()).lis[KAI]!.points], [daily, points]);
 });
 
 test("Close and remember: a failed summary keeps the conversation open with its reason, and her next message lets it go", async () => {

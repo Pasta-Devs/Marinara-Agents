@@ -600,7 +600,8 @@ export function Thread({
             : t("ui.otomeForge.phone.groupRememberingNote")}
         </p>
       ) : closing?.error && !view.ended ? (
-        <CloseRetry runKey={runKey} id={id} error={closing.error} />
+        // Accepted again: back to Messages, as a close from the dialog is.
+        <CloseRetry runKey={runKey} id={id} error={closing.error} onRetried={onBack} />
       ) : null}
       {askAgain ? (
         <div className="of-notice of-reader-notice" role="status">

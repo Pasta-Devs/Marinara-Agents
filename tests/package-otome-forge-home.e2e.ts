@@ -165,6 +165,10 @@ function createHomeStub({
     // 0.46.3: a close accepted and remembered in the background (its session's start), held until `closeHold` resolves.
     remembering: null as number | null,
     closeHold: null as Promise<void> | null,
+    // How many of those fail as they land (the mark keeps "declined", Try again closes again), and Ilvar's level once
+    // one lands (the run view's affection).
+    backgroundFailures: 0,
+    landedLevel: null as number | null,
     // #2127: Your thoughts… waiting for the next chapter, and how many sends fail first.
     thoughts: null as Json | null,
     thoughtsFailures: 0,
@@ -291,9 +295,18 @@ function createHomeStub({
   const archived = () => sessions.reduce((sum, session) => sum + session.count, 0);
   const unread = () => messages.filter((m) => m.who === "li" && (!seenAt || m.at > seenAt)).length;
   let held = false;
-  /** 0.46.3: what the list and the page say of a close: remembering while held, then landed with its affection. */
+  let closeError: string | null = null;
+  /**
+   * 0.46.3: what the list and the page say of a close: remembering while held, then landed with its affection, or
+   * failed (`backgroundFailures`).
+   */
   const closeView = () => {
-    if (state.remembering !== null && !held) {
+    if (state.remembering !== null && !held && state.backgroundFailures > 0) {
+      state.backgroundFailures -= 1;
+      state.remembering = null;
+      closeError = "declined";
+    } else if (state.remembering !== null && !held) {
+      if (state.landedLevel !== null) view.lis[0].level = state.landedLevel;
       sessions.push({
         start: state.remembering,
         count: messages.length - state.remembering,
@@ -305,7 +318,7 @@ function createHomeStub({
     }
     const newest = sessions.at(-1);
     return {
-      ...(state.remembering !== null ? { closing: {} } : {}),
+      ...(state.remembering !== null ? { closing: {} } : closeError ? { closing: { error: closeError } } : {}),
       ...(newest
         ? { remembered: { start: newest.start, ...(newest.affection ? { affection: newest.affection } : {}) } }
         : {}),
@@ -539,6 +552,7 @@ function createHomeStub({
         return { status: 409, json: { error: "Ilvar Thorne is still writing.", code: "busy" } };
       }
       // Accepted at once; the memory lands once `closeHold` resolves (the next read after it).
+      closeError = null;
       state.remembering = archived();
       held = !!state.closeHold;
       void state.closeHold?.then(() => (held = false));
@@ -1285,6 +1299,52 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await expect(close).toHaveAttribute("aria-disabled", "true");
   await expect(close).toHaveAttribute("title", "There is nothing new to remember yet.");
   await expect(close).toHaveAccessibleDescription("There is nothing new to remember yet.");
+});
+
+test("Otome Forge phone: a close that fails in the background says why with Try again, focus stays on his row, and Home's affection follows the landing", async ({
+  page,
+}) => {
+  const stub = createHomeStub();
+  stub.state.backgroundFailures = 2;
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  const row = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
+  await row.click();
+  await root.getByRole("button", { name: "Close and remember" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+  // Back in Messages; the summary failed, so the conversation is still open, with why and Try again under his row.
+  await expect(row).toBeFocused();
+  const failed = "This conversation wasn’t remembered, so it’s still open.";
+  const reason = root.locator(".of-threads").getByRole("alert").filter({ hasText: failed });
+  await expect(reason).toContainText(catalog["ui.otomeForge.errors.declined"]!);
+  // His thread says so too; its Try again goes back to Messages, as Close does, and focus to his row.
+  await row.click();
+  await expect(root.getByRole("alert").filter({ hasText: failed })).toBeVisible();
+  await root.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(row).toBeFocused();
+  expect(posts(stub, "/close")).toHaveLength(2);
+  // It failed again: Try again in the list, and focus stays on his row while it is remembered.
+  await expect(reason).toBeVisible();
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  await reason.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(row).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  await expect(reason).toHaveCount(0);
+  await expect(row).toBeFocused();
+  // Home before it lands: the affection it earned shows there once it does, with no visit to Messages.
+  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  remember();
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  // Messages still says once what it earned.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(row).toContainText("+5 affection");
+  expect(posts(stub, "/close")).toHaveLength(3);
 });
 
 test("Otome Forge daily messages: the first heartbeat reads nothing again for an old message; a new one reads Home again", async ({
