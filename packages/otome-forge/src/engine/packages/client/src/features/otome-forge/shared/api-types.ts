@@ -718,6 +718,34 @@ export interface PhoneSession {
   name?: string;
   /** #2154: in the group chat, the love interests in it when it closed: only they recall it. */
   members?: LiId[];
+  /** 0.46.3: the affection its close earned; absent when it earned none. */
+  affection?: number;
+}
+
+/**
+ * 0.46.3: Close and remember in the background (S/phone/memory.ts). The open conversation, messages `start` to
+ * `end - 1`, has been remembered since `at`, or (`error`) its summary failed and the conversation stays open. `tries`
+ * counts the summaries started, each saved before its call; `day` is the player's local day of the close, the day its
+ * affection counts on.
+ */
+export interface PhoneClosing {
+  start: number;
+  end: number;
+  at: string;
+  tries: number;
+  day: string;
+  /** Why it failed: the route error's code, or "stopped" when restarts interrupted it. */
+  error?: string;
+}
+
+/**
+ * 0.46.3: what a thread's list row and its history page say of Close and remember: `closing` while it remembers (or,
+ * with `error`, once it failed), and `remembered`, the newest closed conversation, so the page that sent a close can
+ * tell it landed and what it earned.
+ */
+export interface PhoneCloseView {
+  closing?: Pick<PhoneClosing, "error">;
+  remembered?: Pick<PhoneSession, "start" | "affection">;
 }
 
 /** `${R}:chat:${li}`, and the group chat's `${R}:chat:group` (#2154, li "group"). */
@@ -727,13 +755,14 @@ export interface PhoneThread {
   messages: PhoneMessage[];
   sessions: PhoneSession[];
   seenAt: string | null;
+  closing?: PhoneClosing;
 }
 
 /** GET /runs/:run/phone */
 export interface PhoneListView {
-  threads: Array<{ li: LiId; last: PhoneMessage | null; unread: number; busy: boolean }>;
+  threads: Array<{ li: LiId; last: PhoneMessage | null; unread: number; busy: boolean } & PhoneCloseView>;
   /** #2154: the group chat, with its members in cast order; null until two love interests are met. */
-  group: { members: LiId[]; last: PhoneMessage | null; unread: number; busy: boolean } | null;
+  group: ({ members: LiId[]; last: PhoneMessage | null; unread: number; busy: boolean } & PhoneCloseView) | null;
 }
 
 /**
@@ -753,7 +782,7 @@ export interface PhoneDueResult {
 }
 
 /** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
-export interface PhoneHistoryPage {
+export interface PhoneHistoryPage extends PhoneCloseView {
   /** This page, oldest first; `archived` marks the messages of closed conversations. */
   messages: Array<PhoneMessage & { archived: boolean }>;
   /** 1 is the newest page. */
@@ -788,19 +817,11 @@ export interface PhoneSendResult {
   held?: LiId[];
 }
 
-/** Affection from Close and remember (the Grant shape, with its own source). */
-export interface PhoneGrant {
-  source: "close-and-remember";
-  li: LiId;
-  affection: number;
-}
-
-/** POST .../close */
-export interface PhoneCloseResult {
-  memory: PhoneSession["memory"];
-  /** Empty when nothing was earned: a replay, a one-sided conversation, or the day's cap. */
-  grants: PhoneGrant[];
-}
+/**
+ * POST .../close (0.46.3): the close was accepted and is being remembered in the background (`remembering`, with the
+ * `start` its session will have), or, with nothing open, it already landed and this is its memory again, earning nothing.
+ */
+export type PhoneCloseResult = { remembering: true; start: number } | { memory: PhoneSession["memory"] };
 
 // ── Remind Me and the caring message (M6). Tracker data never reaches a server document: the client works out
 // today's state (C/lib/cycle.ts) and sends at most its one templated line. ──
@@ -1863,6 +1884,11 @@ export interface RunLiView {
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
   expressions?: Partial<Record<Face, string>>;
+  /**
+   * 0.46.3: Repaint expressions for the current look: `pending` while its new faces paint in the background, `stopped`
+   * or `failed` (with the reason) when they did not land; absent when none was asked or they landed.
+   */
+  facesPaint?: Paint;
   /** M4: the look he wears from His Wardrobe, when not his base portrait (its outfit id and image). */
   worn?: { id: string; url: string };
 }
@@ -1907,6 +1933,7 @@ export type RunCastMember = Pick<
   | "art"
   | "cut"
   | "expressions"
+  | "facesPaint"
   | "worn"
 >;
 

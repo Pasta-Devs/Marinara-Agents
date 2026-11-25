@@ -5,7 +5,8 @@
 // ──────────────────────────────────────────────
 // Routes (S/routes/phone.ts): GET /runs/:run/phone → PhoneListView; GET .../phone/:li?page= → PhoneHistoryPage (the
 // kit's forgeChatHistoryPage, page 1 newest); POST .../phone/:li/send {text?, quote?, sticker?, id?, retry?} →
-// PhoneSendResult (409 busy while his reply or a close is being written); POST .../close → PhoneCloseResult;
+// PhoneSendResult (409 busy while his reply is being written or a close remembered); POST .../close → PhoneCloseResult
+// (0.46.3: answered once accepted, its memory written in the background);
 // POST .../seen {last?} → {}; POST /runs/:run/phone/due {open?} → PhoneDueResult (useDailyMessages, #2044).
 // #2044: the first time the phone opens with images on, POST /runs/:run/stickers starts the protagonist's five chibi
 // stickers (S/art/stickers.ts), and the run view is read again so it polls until they land.
@@ -171,10 +172,16 @@ export function PhoneScreen({
   const heading = useRef<HTMLHeadingElement>(null);
   const focusRow = (id: LiId, element: HTMLButtonElement | null) => {
     if (!element || returnTo.current !== id) return;
-    returnTo.current = null;
     // Never away from wherever the player has moved meanwhile.
     const active = document.activeElement;
-    if (!active || active === document.body || active === heading.current) element.focus({ preventScroll: true });
+    if (active && active !== document.body && active !== heading.current) {
+      returnTo.current = null;
+      return;
+    }
+    element.focus({ preventScroll: true });
+    // 0.46.3: a thread left by Close and remember's dialog is still inert behind it here; the effect below focuses
+    // the row once the dialog has let go.
+    if (document.activeElement === element) returnTo.current = null;
   };
   useEffect(() => {
     if (open || !returnTo.current) return;

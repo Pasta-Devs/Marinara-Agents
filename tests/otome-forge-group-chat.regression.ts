@@ -56,7 +56,10 @@ import {
   groupDue,
   groupJobKey,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/group.ts";
-import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
+import {
+  closeJobKey,
+  phoneMemorySources,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
 import { normalizeGroupReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
 import { renderThread } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { registerHomeRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/home.ts";
@@ -995,7 +998,12 @@ test("Close and remember in the group: P18g, one session with its members, no af
   const points = Object.fromEntries(Object.entries((await t.state()).lis).map(([li, state]) => [li, state.points]));
   const closed = await t.call("POST", close);
   assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body, { memory: { text: MEMORY.memory, quote: "Awake. Unfortunately." }, grants: [] });
+  // 0.46.3: accepted at once, and remembered by the background lane's job.
+  assert.deepEqual(closed.body, { remembering: true, start: 0 });
+  assert.deepEqual((await t.call("GET", list)).body.group.closing, {});
+  for (let round = 0; round < 400 && t.background.has(closeJobKey(t.runId, GROUP_THREAD)); round += 1) await tick();
+  assert.deepEqual((await t.thread())!.sessions[0]!.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
+  assert.deepEqual((await t.call("GET", list)).body.group.remembered, { start: 0 }, "it earned nothing");
   assert.deepEqual(
     Object.fromEntries(Object.entries((await t.state()).lis).map(([li, state]) => [li, state.points])),
     points,
@@ -1010,7 +1018,7 @@ test("Close and remember in the group: P18g, one session with its members, no af
   assert.ok(system(memoryCall.messages).startsWith("A group chat between Kai, Mireille, Sol and Ines has just ended."));
   assert.ok(memoryCall.messages.at(-1)!.content.includes("Mireille: Some of us were never asleep."));
   const replay = await t.call("POST", close);
-  assert.deepEqual([replay.status, replay.body.grants], [200, []]);
+  assert.deepEqual([replay.status, replay.body], [200, { memory: (await t.thread())!.sessions[0]!.memory }]);
   assert.equal((await t.thread())!.sessions.length, 1);
 
   const sources = await phoneMemorySources(t.store, t.runId, await t.state());

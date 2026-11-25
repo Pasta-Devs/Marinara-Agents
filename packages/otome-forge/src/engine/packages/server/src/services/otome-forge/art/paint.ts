@@ -12,6 +12,8 @@
 // paint: right before the paid call it checks the record is still the one this paint marked pending, and it saves the
 // result only onto that record, so a rewritten beat, a deleted run or a setting turned off never receives (or pays for)
 // an image meant for something else; an image nothing keeps is deleted from the gallery again.
+// 0.46.3: Your cast's taps (Repaint, Repaint expressions, a reviewed Paint the cast) answer once their record is pending
+// (answerOnceStarted), and the paint goes on in the background, whether the player stays or leaves.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   LiId,
@@ -70,8 +72,8 @@ const notFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "
  * (#2044, S/art/stickers.ts) a chat sticker (`sticker:<sticker id>`), (#2087, S/minigames/photo-shoot.ts) a Photo
  * Shoot photo (`photo:<photo id>`), (#2138, S/art/figurine.ts) a love interest's Shop figurine (`figurine:<li id>`),
  * (#2151, S/art/tarot-deck.ts) a card of the Tarot deck (`tarot:<deckKey>`), (0.20.0, S/art/side-sprites.ts) a
- * recurring side character's sprite (`side:<record key>`), or (0.35.0, S/art/kittens.ts) a Kitty Cards kitten
- * (`kitten:<player or li id>`).
+ * recurring side character's sprite (`side:<record key>`), (0.35.0, S/art/kittens.ts) a Kitty Cards kitten
+ * (`kitten:<player or li id>`), or (0.46.3, S/art/expressions.ts) the faces Repaint expressions paints (`faces:<li id>`).
  */
 export type PaintOwner =
   | LookOwner
@@ -83,7 +85,8 @@ export type PaintOwner =
   | `figurine:${string}`
   | `tarot:${string}`
   | `side:${string}`
-  | `kitten:${string}`;
+  | `kitten:${string}`
+  | `faces:${string}`;
 
 /** A live paint; `threw` once a tap's paint ended in a throw (a refusal), for the taps that waited on it. */
 const live = new Map<string, { settled: Promise<void>; settle: () => void; threw?: boolean }>();
@@ -145,6 +148,32 @@ export async function tapPaint<T>(
     const left = await after({ threw: !!waited?.threw });
     if (left.art?.state === "ready" || left.art?.state === "failed") return left.value;
   }
+}
+
+/**
+ * 0.46.3: a tap's paint, answered once it has started: `paint` calls `started` with its record once that is pending,
+ * and the answer is that record while the paint goes on. What `paint` throws before then is the answer, as it was; what
+ * it throws after is logged.
+ */
+export function answerOnceStarted(
+  deps: Pick<ArtDeps, "runtime">,
+  what: string,
+  paint: (started: (record: Paint) => void) => Promise<Paint>,
+): Promise<Paint> {
+  return new Promise<Paint>((resolve, reject) => {
+    let started = false;
+    paint((record) => {
+      started = true;
+      resolve(record);
+    }).then(resolve, (error: unknown) => {
+      if (!started) return reject(error);
+      deps.runtime.logger.warn(
+        "[otome-forge] painting %s stopped: %s",
+        what,
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+  });
 }
 
 /** Claims the owner's look for one paint (a 409 `busy` while another runs) and returns the release. */
@@ -494,6 +523,12 @@ async function savePaint(
   return replaced;
 }
 
+export type PaintClaimedOptions = Partial<ImagePrompt> & {
+  debugMode: boolean;
+  /** 0.46.3: told the record once it is saved pending, right before the paid call (answerOnceStarted). */
+  started?: (record: Paint) => void;
+};
+
 /**
  * Paints the owner's look once, for a caller holding `claimPaint`. Problems found before the paid call (no image
  * connection, no such run, no bible yet) throw; a failed paint is saved and returned as `failed`.
@@ -502,12 +537,14 @@ export async function paintClaimed(
   deps: ArtDeps,
   runId: string,
   owner: LookOwner,
-  { prompt, negativePrompt, debugMode }: Partial<ImagePrompt> & { debugMode: boolean },
+  { prompt, negativePrompt, debugMode, started }: PaintClaimedOptions,
 ): Promise<Paint> {
   const built = await lookPromptFor(deps, runId, owner, { prompt, negativePrompt }, debugMode);
   const connectionId = built.world.images.connectionId;
   if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
-  await savePaint(deps, runId, owner, { state: "pending", at: new Date().toISOString() });
+  const pending: Paint = { state: "pending", at: new Date().toISOString() };
+  await savePaint(deps, runId, owner, pending);
+  started?.(pending);
   const images = imagesOf(deps);
   let image: PaintedImage;
   try {

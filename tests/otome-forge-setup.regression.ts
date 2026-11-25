@@ -41,7 +41,10 @@ import type {
   PortraitRequest,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import { paintView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
+import {
+  paintSettled,
+  paintView,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import {
   bannedPhrasesRule,
   lookPrompt,
@@ -630,7 +633,10 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
     prompt: "oil painting, red hair, ball gown",
     negativePrompt: "blurry",
   });
-  assert.equal((edited.body.paint as Paint).state, "ready");
+  // 0.46.3: answered once its record is pending; the paint goes on in the background.
+  assert.equal((edited.body.paint as Paint).state, "pending");
+  await paintSettled(t.runId, `li:${MIR}`);
+  assert.equal((await t.unit(MIR)).art?.state, "ready");
   assert.equal(t.paid[3].prompt, "oil painting, red hair, ball gown, safe for work, fully clothed, adult woman");
   assert.equal(
     t.paid[3].negativePrompt,
@@ -640,7 +646,9 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
 
   // A repaint keeps the old look until the new one is saved, then deletes the old gallery image.
   const repaint = await t.post("/runs/:run/art/paint", { target: { kind: "look", owner: `li:${KAI}` } });
-  assert.equal((repaint.body.paint as Paint).ref, "global-gallery:img5");
+  assert.equal((repaint.body.paint as Paint).state, "pending");
+  await paintSettled(t.runId, `li:${KAI}`);
+  assert.equal((await t.unit(KAI)).art?.ref, "global-gallery:img5");
   assert.deepEqual(t.deleted, ["img3"]);
   assert.equal((await t.post("/runs/:run/art/paint", { target: { kind: "look", owner: "li:bad id" } })).status, 400);
 });

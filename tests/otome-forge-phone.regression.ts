@@ -6,7 +6,9 @@
 // source recalled only by its own love interest, unread and seen, and a run deleted mid-reply leaving no thread; P17
 // keeps recalled memory whole beside the previous chapter in full; a card name of any length never costs a session; a
 // note's full length fits the Reply quote; Close and remember never waits behind the run's story queue, yet still holds
-// its thread, and P18 gets a thinking model's summary room (#2039). Daily messages (#2044): off by default, armed a
+// its thread, and P18 gets a thinking model's summary room (#2039). 0.46.3: a close answers before its summary, which
+// runs once in the background lane while sends wait; a restart's mark resumes once, a failure keeps the conversation
+// open with Try again, and her next message lets it go. Daily messages (#2044): off by default, armed a
 // minute after the app opens, spaced 24 h / limit apart and never past the local midnight of the request's zone, a
 // spent attempt never retried, a random met love interest who is not in the open thread, not busy and not waiting on
 // her message, written by P17 "first" in the background lane on the chat connection (never the run's foreground
@@ -71,7 +73,11 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/invite.ts";
 import { applyMessageHurts } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
 import { heldAgainst } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/dates.ts";
-import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
+import {
+  CLOSE_TRIES,
+  closeJobKey,
+  phoneMemorySources,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
 import {
   normalizeChatMemory,
   normalizeChatReply,
@@ -176,6 +182,8 @@ async function phoneWorld(
     replies?: FakeReply[];
     withMemory?: boolean;
     model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens">;
+    /** 0.46.3: the background lane Close and remember runs in; off where a test builds its own (dailyWorld). */
+    lane?: boolean;
   } = {},
 ) {
   const t = await storyWorld({ runKey, replies: options.replies ?? phoneModel(), model: options.model ?? {} });
@@ -187,10 +195,27 @@ async function phoneWorld(
       readSources: async (runId) => phoneMemorySources(t.store, runId, (await t.state())!),
     });
   }
-  const deps: RouteDeps = { ...t.deps, handle: createHandle(t.runtime.logger), ...(memory ? { memory } : {}) };
+  const background = options.lane === false ? undefined : createBackgroundQueue(t.runtime);
+  const deps: RouteDeps = {
+    ...t.deps,
+    handle: createHandle(t.runtime.logger),
+    ...(memory ? { memory } : {}),
+    ...(background ? { background } : {}),
+  };
   const thread = async (li: string): Promise<PhoneThread | null> =>
     t.store.readDoc(chatId(t.runId, li), normalizeThread);
-  return { ...t, deps, memory, thread, phone: phoneRoutes(deps, runKey) };
+  const phone = phoneRoutes(deps, runKey);
+  /** 0.46.3: lets thread `li`'s close job finish, and returns the thread as it left it. */
+  const remembered = async (li: string = KAI) => {
+    for (let round = 0; round < 400 && background?.has(closeJobKey(t.runId, li)); round += 1) await tick();
+    return (await thread(li))!;
+  };
+  /** Close and remember, accepted, then landed: the accept's answer and the thread. */
+  const closeAndWait = async (li: string = KAI, timeZone = "UTC") => {
+    const accepted = await phone("POST", close, { li, timeZone });
+    return { accepted, thread: await remembered(li) };
+  };
+  return { ...t, deps, background, memory, thread, phone, remembered, closeAndWait };
 }
 
 /** Holds the first model call until `release()` (`reached` resolves once it waits); later calls answer at once. */
@@ -438,20 +463,17 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const points = (await t.state()).lis[KAI]!.points;
 
-  const closed = await t.phone("POST", close, { li: KAI });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
+  const { accepted, thread } = await t.closeAndWait();
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+  assert.deepEqual(accepted.body, { remembering: true, start: 0 }, "accepted; its session will start at 0");
+  assert.equal((await t.state()).lis[KAI]!.points, points + 3, "capped at the day's limit");
   assert.deepEqual(
-    closed.body.grants,
-    [{ source: "close-and-remember", li: KAI, affection: 3 }],
-    "capped at the day's limit",
+    thread.sessions.map((session) => [session.start, session.count, session.name, session.affection]),
+    [[0, 3, "Kai", 3]],
+    "the session keeps what its close earned",
   );
-  assert.equal((await t.state()).lis[KAI]!.points, points + 3);
-  const thread = (await t.thread(KAI))!;
-  assert.deepEqual(
-    thread.sessions.map((session) => [session.start, session.count, session.name]),
-    [[0, 3, "Kai"]],
-  );
+  assert.deepEqual(thread.sessions[0]!.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
+  assert.equal(thread.closing, undefined, "landed: the mark is off");
   assert.equal("suggestions" in thread, false);
 
   const memoryCall = t.calls.find((call) => isMemoryPrompt(call.messages))!;
@@ -463,55 +485,170 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
 
   const calls = t.calls.length;
   const replay = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([replay.status, replay.body.memory.text, replay.body.grants], [200, MEMORY.memory, []]);
+  assert.deepEqual([replay.status, replay.body], [200, { memory: thread.sessions[0]!.memory }]);
   assert.equal(t.calls.length, calls, "a replay makes no call");
   assert.equal((await t.thread(KAI))!.sessions.length, 1);
 
   const view = await t.phone("GET", page, { li: KAI });
-  assert.deepEqual([view.body.activeCount, view.body.past], [0, 1]);
+  assert.deepEqual([view.body.activeCount, view.body.past, view.body.closing], [0, 1, undefined]);
+  assert.deepEqual(view.body.remembered, { start: 0, affection: 3 });
   assert.ok((view.body.messages as Array<{ archived: boolean }>).every((message) => message.archived));
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads.find((entry: { li: string }) => entry.li === KAI);
+  assert.deepEqual([row.closing, row.remembered], [undefined, { start: 0, affection: 3 }]);
 
   // The day's cap is reached: the next conversation is remembered and earns nothing.
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
-  const capped = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([capped.status, capped.body.grants], [200, []]);
+  const capped = await t.closeAndWait();
+  assert.deepEqual([capped.accepted.status, capped.accepted.body], [200, { remembering: true, start: 3 }]);
   assert.deepEqual(
-    (await t.thread(KAI))!.sessions.map((session) => [session.start, session.count]),
+    capped.thread.sessions.map((session) => [session.start, session.count, session.affection]),
     [
-      [0, 3],
-      [3, 3],
+      [0, 3, 3],
+      [3, 3, undefined],
     ],
   );
   assert.equal((await t.state()).lis[KAI]!.points, points + 3);
 });
 
-test("Close and remember never waits behind the run's story queue, and its thread still takes one write at a time", async () => {
+test("Close and remember answers before its summary, which runs once in the background lane while sends wait", async () => {
   const t = await phoneWorld("r-phoneq-aaaaaa");
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   // A story write (a lookahead beat, say) holds the run's foreground queue the whole time.
   let free!: () => void;
   const story = runForeground(t.runId, () => new Promise<void>((resolve) => (free = resolve)));
+  const admitted: string[] = [];
+  const admission = t.runtime.integrations!.admission!;
+  const admit = admission.run.bind(admission);
+  Object.assign(admission, {
+    run: (connectionId: string, mode: { kind: string }, operation: () => Promise<unknown>) => {
+      admitted.push(`${connectionId} ${mode.kind}`);
+      return admit(connectionId, mode as never, operation);
+    },
+  });
   const release = gateFirstCall(t.runtime);
   try {
-    const closing = t.phone("POST", close, { li: KAI });
-    const started = await Promise.race([
-      release.reached.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)),
-    ]);
-    assert.ok(started, "P18 is written at once, not behind the story write");
-    // While it is summarized, the thread takes no other write.
-    const busy = await t.phone("POST", send, { li: KAI, body: { text: "Wait." } });
-    assert.deepEqual([busy.status, busy.body.code], [409, "busy"]);
+    const accepted = await t.phone("POST", close, { li: KAI });
+    assert.deepEqual([accepted.status, accepted.body], [200, { remembering: true, start: 0 }], "answered at once");
+    const mark = (await t.thread(KAI))!.closing!;
+    assert.deepEqual([mark.start, mark.end, mark.day, mark.error], [0, 3, localDay("UTC"), undefined]);
+    await release.reached;
+    assert.ok(t.background!.has(closeJobKey(t.runId, KAI)), "P18 is written by the background lane's job");
+    assert.deepEqual(admitted, ["conn-text foreground"], "the player's own close, on P18's connection, never waits");
+    assert.equal((await t.thread(KAI))!.closing!.tries, 1, "the summary was counted before its call");
+    // While it is remembered: the list and the thread say so, Close answers the same, and sending waits.
+    const view = await t.phone("GET", page, { li: KAI });
+    assert.deepEqual([view.body.closing, view.body.busy, view.body.activeCount], [{}, false, 3]);
+    const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+    assert.deepEqual([row.li, row.closing], [KAI, {}]);
+    const again = await t.phone("POST", close, { li: KAI });
+    assert.deepEqual([again.status, again.body], [200, { remembering: true, start: 0 }]);
+    for (const body of [{ text: "Wait." }, { retry: true }]) {
+      const busy = await t.phone("POST", send, { li: KAI, body });
+      assert.deepEqual([busy.status, busy.body.code], [409, "busy"], JSON.stringify(body));
+    }
+    assert.equal((await t.thread(KAI))!.messages.length, 3, "nothing new went in");
     release();
-    const closed = await closing;
-    assert.equal(closed.status, 200, JSON.stringify(closed.body));
-    assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
-    assert.equal((await t.thread(KAI))!.sessions.length, 1, "remembered while the story write still runs");
+    const thread = await t.remembered();
+    assert.deepEqual(
+      thread.sessions.map((session) => [session.start, session.count, session.affection]),
+      [[0, 3, 5]],
+      "remembered while the story write still runs",
+    );
+    assert.equal(thread.closing, undefined);
+    assert.equal(t.calls.filter((call) => isMemoryPrompt(call.messages)).length, 1, "one summary");
   } finally {
     release();
     free();
     await story;
   }
+  // Sending opens the next conversation (its reply waits behind the story write, so after it).
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Now?" } })).status, 200);
+});
+
+test("Close and remember: a restart's mark resumes once from a read and is never remembered twice", async () => {
+  const t = await phoneWorld("r-phoner-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const mark = (tries: number) =>
+    t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+      ...thread,
+      closing: { start: 0, end: 3, at: `2026-11-25T10:00:0${tries}.000Z`, tries, day: localDay("UTC") },
+    }));
+  // A restart left the close counted once, with no job for it here: reading the list queues it again, once.
+  await mark(1);
+  const points = (await t.state()).lis[KAI]!.points;
+  assert.equal((await t.phone("GET", "/runs/:run/phone")).status, 200);
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200, "a second read queues nothing more");
+  const thread = await t.remembered();
+  assert.deepEqual(
+    [thread.sessions.length, thread.closing, t.calls.filter((call) => isMemoryPrompt(call.messages)).length],
+    [1, undefined, 1],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Its session landed before the restart: only the mark comes off, with no call and no second grant.
+  await mark(1);
+  const calls = t.calls.length;
+  await t.phone("GET", page, { li: KAI });
+  const again = await t.remembered();
+  assert.deepEqual([again.sessions.length, again.closing, t.calls.length], [1, undefined, calls]);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Two summaries never landed: it fails as stopped, the conversation stays open, and Try again closes it.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (current) => ({
+    ...current,
+    closing: { start: 3, end: 6, at: "2026-11-25T10:01:00.000Z", tries: CLOSE_TRIES, day: localDay("UTC") },
+  }));
+  const before = t.calls.length;
+  await t.phone("GET", "/runs/:run/phone");
+  const stopped = await t.remembered();
+  assert.deepEqual([stopped.closing?.error, stopped.sessions.length, t.calls.length], ["stopped", 1, before]);
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual(row.closing, { error: "stopped" });
+  const retried = await t.closeAndWait();
+  assert.deepEqual(retried.accepted.body, { remembering: true, start: 3 });
+  assert.deepEqual(
+    [retried.thread.sessions.map((session) => [session.start, session.count]), retried.thread.closing],
+    [
+      [
+        [0, 3],
+        [3, 3],
+      ],
+      undefined,
+    ],
+  );
+});
+
+test("Close and remember: a failed summary keeps the conversation open with its reason, and her next message lets it go", async () => {
+  const t = await phoneWorld("r-phonef-aaaaaa", { replies: [json(REPLY), "", "", ...phoneModel()] });
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const failed = await t.closeAndWait();
+  assert.equal(failed.accepted.status, 200, JSON.stringify(failed.accepted.body));
+  assert.deepEqual(
+    [failed.thread.closing?.error, failed.thread.sessions.length, archivedCount(failed.thread)],
+    ["declined", 0, 0],
+    "nothing was lost",
+  );
+  const view = await t.phone("GET", page, { li: KAI });
+  assert.deepEqual([view.body.closing, view.body.activeCount], [{ error: "declined" }, 3]);
+  const points = (await t.state()).lis[KAI]!.points;
+  // A failed close holds nothing back: her next message goes in and lets it go.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Hello?" } })).status, 200);
+  assert.equal((await t.thread(KAI))!.closing, undefined);
+  const landed = await t.closeAndWait();
+  assert.deepEqual(
+    landed.thread.sessions.map((session) => [session.start, session.count, session.affection]),
+    [[0, 6, 5]],
+    "the next close remembers all of it",
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Without a lane, or a connection for P18, the close is refused before anything is marked.
+  const u = await phoneWorld("r-phonef-bbbbbb", { lane: false });
+  assert.equal((await u.phone("POST", send, { li: KAI, body: { text: "Hi" } })).status, 200);
+  const refused = await u.phone("POST", close, { li: KAI });
+  assert.deepEqual([refused.status, refused.body.code], [503, "no-connection"]);
+  assert.equal((await u.thread(KAI))!.closing, undefined);
 });
 
 test("P18 is a summary: it may write at least 10240 tokens for a thinking model, or the connection's lower cap", async () => {
@@ -522,8 +659,8 @@ test("P18 is a summary: it may write at least 10240 tokens for a thinking model,
   ] as const) {
     const t = await phoneWorld(`r-phone${maxOutputTokens ?? 0}-aaaaaa`, { model: { maxOutputTokens } });
     assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
-    const closed = await t.phone("POST", close, { li: KAI });
-    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    const { accepted } = await t.closeAndWait();
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
     const maxTokens = t.calls.find((call) => isMemoryPrompt(call.messages))!.options!.maxTokens!;
     assert.ok(maxTokens >= least, `cap ${maxOutputTokens}: P18 may write ${maxTokens}`);
     if (maxOutputTokens) assert.ok(maxTokens <= maxOutputTokens);
@@ -549,10 +686,12 @@ test("the grant lands once through a stale write, a one-sided talk earns nothing
     (await t.phone("POST", send, { li: KAI, body: { text: "Are you there?" }, timeZone: late })).status,
     422,
   );
-  const lonely = await t.phone("POST", close, { li: KAI, timeZone: early });
-  assert.equal(lonely.status, 200, JSON.stringify(lonely.body));
-  assert.deepEqual(lonely.body.grants, [], "a conversation with nothing from him earns nothing");
-  assert.equal(lonely.body.memory.quote, "", "a quote the conversation does not hold is dropped");
+  const lonely = await t.closeAndWait(KAI, early);
+  assert.equal(lonely.accepted.status, 200, JSON.stringify(lonely.accepted.body));
+  const alone = lonely.thread.sessions[0]!;
+  assert.equal(alone.affection, undefined, "a conversation with nothing from him earns nothing");
+  assert.equal(alone.memory.quote, "", "a quote the conversation does not hold is dropped");
+  assert.equal((await t.state()).daily.affection[KAI], 300);
 
   // A full conversation on her early-zone day: a new day, so the cap from the late zone's day does not apply. Two
   // stale revisions on the way make both writes apply again, and still the session and the grant land once.
@@ -560,13 +699,16 @@ test("the grant lands once through a stale write, a one-sided talk earns nothing
   t.fake.interfere(chatId(t.runId, KAI));
   t.fake.interfere(stateId(t.runId));
   const before = (await t.state()).lis[KAI]!.points;
-  const closed = await t.phone("POST", close, { li: KAI, timeZone: early });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
+  const closed = await t.closeAndWait(KAI, early);
+  assert.equal(closed.accepted.status, 200, JSON.stringify(closed.accepted.body));
+  assert.deepEqual(
+    closed.thread.sessions.map((session) => session.affection),
+    [undefined, 5],
+  );
   const state = await t.state();
   assert.equal(state.lis[KAI]!.points, before + 5);
+  // The day it was closed on, in her zone, though the summary ran after the request.
   assert.deepEqual(state.daily, { dayKey: localDay(early), starlight: 0, affection: { [KAI]: 5 } });
-  assert.equal((await t.thread(KAI))!.sessions.length, 2);
 });
 
 test("a closed session is a chat source for its love interest only: recalled by him, never by another", async () => {
@@ -827,17 +969,16 @@ test("a card name of any length never costs a session: clipped as written, the m
   }));
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const before = (await t.state()).lis[KAI]!.points;
-  const closed = await t.phone("POST", close, { li: KAI });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.equal(closed.body.grants.length, 1);
-  const thread = (await t.thread(KAI))!;
+  const { accepted, thread } = await t.closeAndWait();
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
   assert.deepEqual(
     thread.sessions.map((session) => [session.start, session.count, [...(session.name ?? "")].length]),
     [[0, 2, SESSION_NAME_MAX]],
   );
+  assert.equal(thread.sessions[0]!.affection, 5);
   assert.equal(archivedCount(thread), 2, "nothing reopens");
   const replay = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([replay.status, replay.body.grants], [200, []], "a second Close earns nothing");
+  assert.deepEqual([replay.status, "memory" in replay.body], [200, true], "a second Close earns nothing");
   assert.equal((await t.state()).lis[KAI]!.points, before + 5);
 
   // A stored session or message with a display field out of bounds keeps its place; only that field is dropped.
@@ -889,7 +1030,7 @@ function inZone<T>(timeZone: string, operation: () => Promise<T>): Promise<T> {
 
 /** A forged world with chapter 1 read (the cast is met), a background lane and a chat connection of its own. */
 async function dailyWorld(runKey: string, { limit, replies }: { limit?: number; replies?: FakeReply[] } = {}) {
-  const t = await phoneWorld(runKey, { replies: replies ?? phoneModel(DAILY) });
+  const t = await phoneWorld(runKey, { replies: replies ?? phoneModel(DAILY), lane: false });
   const background = createBackgroundQueue(t.runtime);
   const deps = { ...t.deps, background };
   // Which connection each admitted job held, and how.

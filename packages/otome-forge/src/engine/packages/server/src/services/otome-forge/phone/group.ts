@@ -27,7 +27,8 @@
 //   spent). The job is a background job on the Messages connection, inside the thread's lock (so the thread shows
 //   someone typing), and lands unread, only while the thread still ends where it was read. Two members picked at random
 //   start it; the others may join.
-// - Close and remember: one P18 call with the group wording, one session with its members, and no affection.
+// - Close and remember: one P18 call with the group wording, one session with its members, and no affection. 0.46.3:
+//   in the background, as a love interest's (S/phone/memory.ts), with the members it has when its job runs.
 //   ponytail: the group remembers only through Close and remember, so squabbles pile up in the open conversation and
 //   only its newest GROUP_TAIL_MESSAGES reach P17g, and none reaches a DM or a scene until it is closed. The upgrade
 //   path is one background compress call at the first heartbeat of a new local day while the group has an open
@@ -68,6 +69,7 @@ import { listArcs } from "../story/arc.js";
 import { recallText } from "../story/canon.js";
 import {
   answerIn,
+  closeView,
   conflict,
   emptyThread,
   historyPage,
@@ -95,7 +97,7 @@ import {
   type DailyDecision,
   type DailyDeps,
 } from "./daily.js";
-import { sessionName, summarizeOpen } from "./memory.js";
+import { acceptClose, sessionName, type CloseDeps, type Remembering } from "./memory.js";
 import {
   GroupReplySchema,
   normalizeChatMemory,
@@ -163,6 +165,7 @@ export async function groupList(
       last: thread.messages.at(-1) ?? null,
       unread: unreadCount(thread),
       busy: forgeChatReplyBusy(runId, GROUP_THREAD),
+      ...closeView(thread),
     },
   };
 }
@@ -306,27 +309,33 @@ export function sendToGroup(
   });
 }
 
-/** POST /runs/:run/phone/group/close: Close and remember with the group wording; it earns nothing. */
-export function closeGroup(
-  deps: PhoneDeps,
-  runId: string,
-  { debugMode = false }: { debugMode?: boolean } = {},
-): Promise<PhoneCloseResult> {
-  return inThreadLock(runId, GROUP_THREAD, async () => {
-    const { run, members } = await loadGroup(deps, runId);
-    const units = unitsOf(run, members);
-    const group = units.map((unit) => unit.name);
-    const names = { li: "Someone", player: run.player.name || "the protagonist" };
-    const speaker = (message: PhoneMessage) => units.find((unit) => unit.id === message.li)?.name;
-    const closed = await summarizeOpen(deps, runId, GROUP_THREAD, debugMode, {
+/** The group chat's close (S/phone/memory.ts Remembering): P18's group wording with its members now; it earns nothing. */
+export async function groupRemembering(deps: Pick<PhoneDeps, "store">, runId: string): Promise<Remembering> {
+  const { run, members } = await loadGroup(deps, runId);
+  const units = unitsOf(run, members);
+  const group = units.map((unit) => unit.name);
+  const names = { li: "Someone", player: run.player.name || "the protagonist" };
+  const speaker = (message: PhoneMessage) => units.find((unit) => unit.id === message.li)?.name;
+  return {
+    how: {
       label: "phone-group-memory",
       render: (open) => renderThread(open, names, "told", stickerLookup(run), speaker),
       messages: (conversation) => chatMemoryMessages({ world: run.world, names, conversation, group }),
       normalize: (raw, conversation) => normalizeChatMemory(raw, names, conversation, group),
       session: { name: sessionName(nameList(group)), members: [...members] },
-    });
-    if (closed.open) void Promise.resolve(deps.memory?.maintain({ runId, debugMode })).catch(() => undefined);
-    return { memory: closed.memory, grants: [] };
+    },
+  };
+}
+
+/** POST /runs/:run/phone/group/close: Close and remember with the group wording, in the background. */
+export function closeGroup(
+  deps: CloseDeps,
+  runId: string,
+  { debugMode = false }: { debugMode?: boolean } = {},
+): Promise<PhoneCloseResult> {
+  return inThreadLock(runId, GROUP_THREAD, async () => {
+    const { run } = await loadGroup(deps, runId);
+    return acceptClose(deps, runId, GROUP_THREAD, run.world, debugMode, () => groupRemembering(deps, runId));
   });
 }
 

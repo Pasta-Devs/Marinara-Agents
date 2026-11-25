@@ -2748,6 +2748,8 @@ ${R} .of-thread-last {
 ${R} .of-thread-row[data-unread="true"] .of-thread-last { color: var(--of-text); font-weight: 700; }
 ${R} .of-thread-meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
 ${R} .of-thread-time { font-size: 0.72rem; color: var(--of-text-faint); font-variant-numeric: tabular-nums; }
+/* 0.46.3: a close that failed in the background, under its row. */
+${R} .of-threads > li > .of-notice { margin-top: 4px; }
 ${R} .of-thread {
   flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
   padding: 0 10px max(10px, env(safe-area-inset-bottom));

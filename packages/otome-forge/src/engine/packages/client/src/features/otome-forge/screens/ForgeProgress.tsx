@@ -5,6 +5,10 @@
 // its prompt first, so painting is offered once the world is ready and each look exists. Once the world is ready, the
 // cast is shown with their bibles behind a spoiler gate; #2475: her friends follow the love interests, marked as
 // friends, with their appearance, card and bible (never a love interest's intimacy fill).
+// 0.46.3: Repaint, Repaint expressions and a reviewed paint answer once their paint has started, and it goes on in the
+// background whether the player stays or leaves. The run view says what paints (a running paint step, a pending look,
+// `facesPaint`), and is polled while anything does (useRun); a paint that failed shows on its step with Retry, and
+// faces that did not land beside Repaint expressions, which paints them again.
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -134,6 +138,8 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   // The look a paint step paints: its record carries the image connection's reason for a failure.
   const paintOf = (step: ForgeStep): Paint | undefined =>
     step.id === "paint:player" ? view.player.art : people.find((li) => `paint:${li.id}` === step.id)?.art;
+  const portraitOf = (step: ForgeStep): string | undefined =>
+    step.id === "paint:player" ? view.player.portrait : people.find((li) => `paint:${li.id}` === step.id)?.portrait;
   const nameOfStep = (step: ForgeStep): string => {
     if (step.id === "world-plan") return t("ui.otomeForge.setup.forgeStepWorld");
     if (step.id === "paint:player") return t("ui.otomeForge.setup.forgeStepPaintPlayer");
@@ -205,7 +211,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     else void send(step.id, "/forge/retry", { step: step.id });
   };
 
-  // Repaint: a look already painted, painted anew. The old look stays until the new one is saved.
+  // Repaint: a look already painted, painted anew in the background. The old look stays until the new one is saved.
   const repaint = async (step: ForgeStep) => {
     if (busy || reviewOpen) return;
     setErrorAt("steps");
@@ -216,13 +222,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     setBusy(step.id);
     setError(null);
     try {
-      const { paint } = await otome.post<{ paint: Paint }>(`${base}/art/paint`, {
-        target: { kind: "look", owner: paintOwner(step.id) },
-      });
-      if (paint.state === "failed") {
-        const message = t("ui.otomeForge.setup.repaintFailed");
-        setError(debugMode && paint.error ? `${message} (${paint.error})` : message);
-      }
+      await otome.post<{ paint: Paint }>(`${base}/art/paint`, { target: { kind: "look", owner: paintOwner(step.id) } });
     } catch (failure) {
       setError(otome.errorMessage(failure));
     } finally {
@@ -236,16 +236,11 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     setError(null);
     setReviewError(null);
     try {
-      const { paint } = await otome.post<{ paint: Paint }>(`${base}/art/expressions`, {
+      await otome.post<{ paint: Paint }>(`${base}/art/expressions`, {
         li,
         ...(reviewed ? { base: reviewed.base, prompts: reviewed.prompts } : {}),
       });
-      if (paint.state !== "ready") {
-        const message = t("ui.otomeForge.setup.repaintExpressionsFailed");
-        const detail = debugMode && paint.error ? `${message} (${paint.error})` : message;
-        if (reviewed) setReviewError(detail);
-        else setError(detail);
-      } else setExpressionReview(null);
+      setExpressionReview(null);
     } catch (failure) {
       if (reviewed) setReviewError(otome.errorMessage(failure));
       else setError(otome.errorMessage(failure));
@@ -292,8 +287,8 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     else setReviewPrompt(null);
   };
 
-  // A paint that failed at the provider answers like a success with a `failed` record: the dialog stays on the same
-  // person with the player's edits, to paint again or skip.
+  // The reviewed paint starts, and the next person's prompt follows at once: it paints in the background, and one that
+  // fails at the provider shows on its step with Retry. What is refused before it starts stays in the dialog.
   const sendReviewed = async (prompt: ImagePrompt) => {
     const stepId = reviewQueue[0];
     if (!stepId || busy) return;
@@ -301,16 +296,13 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     setReviewError(null);
     let painted = false;
     try {
-      const { paint } = await otome.post<{ paint: Paint }>(`${base}/art/paint`, {
+      await otome.post<{ paint: Paint }>(`${base}/art/paint`, {
         target: { kind: "look", owner: paintOwner(stepId) },
         prompt: prompt.prompt,
         negativePrompt: prompt.negativePrompt,
       });
       void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
-      if (paint.state === "failed") {
-        const message = t("ui.otomeForge.setup.reviewPaintFailed");
-        setReviewError(debugMode && paint.error ? `${message} (${paint.error})` : message);
-      } else painted = true;
+      painted = true;
     } catch (failure) {
       setReviewError(otome.errorMessage(failure));
     } finally {
@@ -361,6 +353,9 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
           const expressionLi = view.world.images.expressions
             ? people.find((li) => `paint:${li.id}` === step.id && (li.worn || li.portrait))
             : undefined;
+          // 0.46.3: its new faces paint in the background, or did not land.
+          const faces = expressionLi?.facesPaint;
+          const facesPainting = faces?.state === "pending";
           return (
             <li key={step.id} className="of-forge-step" data-state={step.state}>
               <span className="of-forge-icon" aria-hidden="true">
@@ -372,11 +367,20 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                   {t(
                     step.state === "done" && isEngineArt(paintOf(step)?.url)
                       ? "ui.otomeForge.setup.forgeStateEngineArt"
-                      : STATE_LABEL_KEYS[step.state],
+                      : step.state === "running" && isPaint(step)
+                        ? "ui.otomeForge.setup.repainting"
+                        : STATE_LABEL_KEYS[step.state],
                   )}
                 </span>
                 {step.state === "failed" ? (
-                  <span className="of-forge-why">{t(forgeStepErrorKey(step.error))}</span>
+                  <span className="of-forge-why">
+                    {/* A repaint that failed keeps the look it had. */}
+                    {t(
+                      isPaint(step) && step.error === "failed" && portraitOf(step)
+                        ? "ui.otomeForge.setup.repaintFailed"
+                        : forgeStepErrorKey(step.error),
+                    )}
+                  </span>
                 ) : null}
                 {step.state === "failed" && debugMode && (paintOf(step)?.error || step.error) ? (
                   <span className="of-forge-error">{paintOf(step)?.error || step.error}</span>
@@ -416,18 +420,24 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                       <button
                         type="button"
                         className="of-button of-button--quiet of-glass of-button--small"
-                        aria-disabled={!!busy || reviewOpen}
+                        aria-disabled={!!busy || reviewOpen || facesPainting}
                         aria-label={t("ui.otomeForge.setup.repaintExpressionsLabel", {
                           name: expressionLi.name,
                         })}
-                        onClick={() => void repaintExpressions(expressionLi.id)}
+                        onClick={() => !facesPainting && void repaintExpressions(expressionLi.id)}
                       >
                         <Paintbrush size={14} strokeWidth={2.2} aria-hidden="true" />
-                        {busy === `expressions:${expressionLi.id}`
+                        {busy === `expressions:${expressionLi.id}` || facesPainting
                           ? t("ui.otomeForge.setup.repainting")
                           : t("ui.otomeForge.setup.repaintExpressions")}
                       </button>
                       <CostHint images={FACES.length} />
+                    </span>
+                  ) : null}
+                  {faces && !facesPainting ? (
+                    <span className="of-forge-why">
+                      {t("ui.otomeForge.setup.repaintExpressionsFailed")}
+                      {debugMode && faces.error ? ` (${faces.error})` : ""}
                     </span>
                   ) : null}
                 </span>
@@ -482,7 +492,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
       {ready ? null : stepsSection}
       {paintOffer}
       {errorAlert("offer")}
-      {ready ? <CastList view={view} onOpenBible={onOpenBible} /> : null}
+      {ready ? <CastList view={view} steps={steps} onOpenBible={onOpenBible} /> : null}
 
       {ready ? (
         <div className="of-actions">
@@ -541,18 +551,36 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   );
 }
 
-function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: string) => void }) {
+function CastList({
+  view,
+  steps,
+  onOpenBible,
+}: {
+  view: RunView;
+  steps: ForgeStep[];
+  onOpenBible: (li: string) => void;
+}) {
   const { t } = useTranslation();
   const friends = view.friends ?? [];
   /** A love interest's card (`li` is him) or a friend's (none of his love-interest-only parts). */
   const card = (person: RunCastMember, li?: RunLiView) => {
     const accent = accentOf(person);
     const pronouns = `${person.pronouns.subject}/${person.pronouns.object}`;
+    // 0.46.3: their look or faces paint in the background; the new picture shows here once it lands.
+    const painting =
+      steps.some((step) => step.id === `paint:${person.id}` && step.state === "running") ||
+      person.art?.state === "pending" ||
+      person.facesPaint?.state === "pending";
     return (
       <li key={person.id} className="of-cast-card" style={{ ["--of-li-accent" as string]: accent }}>
         <Avatar name={person.name} url={person.portrait} accent={accent} size={64} />
         <span className="of-cast-name">{person.name}</span>
         <span className="of-hint">{li ? pronouns : t("ui.otomeForge.setup.castFriend", { pronouns })}</span>
+        {painting ? (
+          <span className="of-hint" role="status">
+            {t("ui.otomeForge.setup.castPainting")}
+          </span>
+        ) : null}
         <ImageAppearanceEditor key={`${view.runKey}:${person.id}`} runKey={view.runKey} li={person} />
         {li && intimacyOpen(view.world.content) ? (
           <IntimacyFill key={`${view.runKey}:${li.id}:intimacy`} runKey={view.runKey} li={li} />
