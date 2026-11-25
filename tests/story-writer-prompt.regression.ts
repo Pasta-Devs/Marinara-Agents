@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_WRITER_SYSTEM_PROMPT,
   defaultStorySettings,
+  normalizeStorySettings,
   type StoryChapter,
   type StorySettings,
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/model.ts";
@@ -15,6 +17,7 @@ import {
   endsMidSentence,
   findBannedPhrases,
   formatCharacterCard,
+  generateTarget,
   joinContinuation,
   loreScanText,
   parseTimelineResponse,
@@ -409,6 +412,185 @@ test("Peek and Write build one plan: the next chapter, and the draft the Write b
   assert.equal(reply.result.request, "Wake the dragon.");
   assert.equal(reply.result.messages.at(-1)?.content, "Wake the dragon.");
   assert.deepEqual(reply.calls.at(-1), ["lore", ["city"], loreScanText(story, complete, "Wake the dragon.")]);
+});
+
+test("Chapter length Off: Generate continues the selected chapter, and a quick reply writes into it too", async () => {
+  const story = settings({ writerDecides: true, chapterWords: 1_500, authorNote: "Two paragraphs, no more." });
+  const chapters = [
+    chapter(1, { request: "Start with a storm." }),
+    chapter(2, { text: "Vimes reached the bridge and", status: "draft" }),
+    chapter(3, { text: "Chapter three, which comes later." }),
+  ];
+  const plan = async (
+    requested: "next" | "continue" | "rewrite" | "generate",
+    selected: string | null,
+    reply?: string,
+  ) =>
+    (await planChapter({
+      settings: story,
+      chapters,
+      requested,
+      selectedChapterId: selected,
+      quickReply: reply,
+      savedMaxTokens: null,
+      sources: recordingSources().sources,
+    }))!;
+
+  const generate = await plan("generate", chapters[1]!.id);
+  // It writes into chapter 2 where its text ends: no chapter is created, and the status is left alone.
+  assert.equal(generate.mode, "continue");
+  assert.equal(generate.target, chapters[1]);
+  assert.equal(generate.original, null);
+  assert.equal(generate.writer, true);
+  assert.equal(generate.chapterNumber, 2);
+  assert.equal(generate.request, "Continue.");
+  // The model reads the story up to the selected chapter, which it continues; the chapters after it are not sent.
+  assert.deepEqual(generate.messages.slice(1), [
+    { role: "user", content: "Start with a storm." },
+    { role: "assistant", content: chapters[0]!.text },
+    { role: "user", content: "Continue." },
+    { role: "assistant", content: "Vimes reached the bridge and" },
+    { role: "user", content: "Two paragraphs, no more." },
+    { role: "user", content: "Continue." },
+  ]);
+  const system = generate.messages[0]!.content;
+  assert.ok(system.startsWith(DEFAULT_WRITER_SYSTEM_PROMPT));
+  assert.doesNotMatch(system, /next chapter|about 1,500 words|Write chapter|Chapter three/);
+  // The story so far is the story the model reads: up to the chapter it continues.
+  assert.match(
+    system,
+    /The story so far: about 12 words in 2 chapters\. You are continuing chapter 2; about 5 words of it are already written\. Write the next passage of chapter 2, as much as the author asks for, and stop there\. The author decides where chapters end: do not start a new chapter, and bring this one to a close only when the author asks\./,
+  );
+  assert.match(system, /Continue chapter 2 exactly where the last assistant message stops\./);
+  // A passage's length is the author's to ask: it gets a Long chapter's room, whatever the hidden chapter length.
+  assert.equal(generate.maxTokens, chapterTokenBudget(4_000, null));
+
+  // A quick reply goes to the same chapter, as the request, and is sent once: the chapter keeps its own request.
+  const reply = await plan("generate", chapters[1]!.id, "More dialogue.");
+  assert.equal(reply.target, chapters[1]);
+  assert.equal(reply.mode, "continue");
+  assert.equal(reply.request, "More dialogue.");
+  assert.deepEqual(reply.messages.at(-1), { role: "user", content: "More dialogue." });
+  assert.deepEqual(reply.messages.slice(0, -1), generate.messages.slice(0, -1));
+
+  // The last chapter selected, or nothing the story has: Generate continues the last chapter.
+  for (const selected of [chapters[2]!.id, null, "chapter-gone-0000"]) {
+    const last = await plan("generate", selected);
+    assert.equal(last.target, chapters[2]);
+    assert.equal(last.chapterNumber, 3);
+    assert.equal(last.messages.at(-3)?.content, "Chapter three, which comes later.");
+  }
+  // An empty chapter the author started is written from its start, still in place.
+  const empty = [chapter(1), chapter(2, { text: "", status: "draft" })];
+  const start = (await planChapter({
+    settings: story,
+    chapters: empty,
+    requested: "generate",
+    selectedChapterId: empty[1]!.id,
+    savedMaxTokens: null,
+    sources: recordingSources().sources,
+  }))!;
+  assert.equal(start.target, empty[1]);
+  assert.equal(start.mode, "continue");
+  assert.match(start.messages[0]!.content, /You are writing the start of chapter 2\./);
+  assert.match(start.messages[0]!.content, /Open with the chapter's title as a level-one heading/);
+});
+
+test("Generate never starts a chapter: with none it plans nothing, and its target is the selected one or the last", async () => {
+  const story = settings({ writerDecides: true });
+  const none = await planChapter({
+    settings: story,
+    chapters: [],
+    requested: "generate",
+    selectedChapterId: null,
+    savedMaxTokens: null,
+    sources: recordingSources().sources,
+  });
+  assert.equal(none, null);
+  const chapters = [chapter(1), chapter(2)];
+  assert.equal(generateTarget([], "anything"), null);
+  assert.equal(generateTarget(chapters, chapters[0]!.id), chapters[0]);
+  assert.equal(generateTarget(chapters, null), chapters[1]);
+  assert.equal(generateTarget(chapters, "__title"), chapters[1]);
+});
+
+test("Chapter length Off changes only the Off prompt; every other length keeps today's", async () => {
+  const chapters = [chapter(1, { text: "word ".repeat(4_000) }), chapter(2, { status: "draft", text: "Half." })];
+  const today = settings({ targetWords: 5_000 });
+  const off = settings({ targetWords: 5_000, writerDecides: true });
+  const sources = recordingSources().sources;
+  const lengthOf = (messages: Array<{ content: string }>) =>
+    /<length>\n([^<]*)\n<\/length>/.exec(messages[0]!.content)?.[1];
+
+  // A chapter length: the next chapter, the draft continued, the length and the final-chapter pacing, as before.
+  const write = (await planChapter({ settings: today, chapters, requested: "next", savedMaxTokens: null, sources }))!;
+  assert.equal(write.writer, false);
+  assert.equal(write.mode, "continue");
+  assert.equal(write.target, chapters[1]);
+  assert.equal(write.maxTokens, chapterTokenBudget(2_000, null));
+  assert.ok(write.messages[0]!.content.startsWith(DEFAULT_SYSTEM_PROMPT));
+  assert.equal(
+    lengthOf(write.messages),
+    "The story so far: about 4,001 words in 2 chapters. Target: about 5,000 words in total; about 80% is written, so pace the plot to end near the target. This should be the final chapter or very close to it: bring the story to its ending. Write chapter 2 at about 2,000 words. About 1 words of it are already written.",
+  );
+  const next = (await planChapter({
+    settings: today,
+    chapters: [chapters[0]!],
+    requested: "next",
+    savedMaxTokens: null,
+    sources,
+  }))!;
+  assert.equal(next.mode, "next");
+  assert.equal(next.target, null);
+
+  // Off: the story's pacing stays, the chapter length and the final-chapter line go.
+  const generate = (await planChapter({
+    settings: off,
+    chapters,
+    requested: "generate",
+    savedMaxTokens: null,
+    sources,
+  }))!;
+  assert.equal(
+    lengthOf(generate.messages),
+    "The story so far: about 4,001 words in 2 chapters. Target: about 5,000 words in total; about 80% is written, so pace the plot to end near the target. You are continuing chapter 2; about 1 words of it are already written. Write the next passage of chapter 2, as much as the author asks for, and stop there. The author decides where chapters end: do not start a new chapter, and bring this one to a close only when the author asks.",
+  );
+  // Rewrite, with the length Off, writes the emptied last chapter the same way.
+  const rewrite = (await planChapter({
+    settings: off,
+    chapters,
+    requested: "rewrite",
+    savedMaxTokens: null,
+    sources,
+  }))!;
+  assert.equal(rewrite.writer, true);
+  assert.equal(rewrite.original, chapters[1]);
+  assert.match(lengthOf(rewrite.messages)!, /You are writing the start of chapter 2\. Write the next passage/);
+
+  // An edited prompt is the author's and is sent as written in both modes.
+  const edited = { systemPrompt: "Write like a pulp novelist." };
+  for (const story of [settings(edited), settings({ ...edited, writerDecides: true })]) {
+    assert.ok(build({ settings: story })[0]!.content.startsWith("Write like a pulp novelist."));
+  }
+
+  // The timeline planner hears of chapter sizes only when chapters have one.
+  const plannerOf = (story: StorySettings) => buildTimelineMessages({ settings: story, chapters })[0]!.content;
+  assert.match(plannerOf(today), /about 4,001 are written so far, in chapters of about 2,000 words\./);
+  assert.match(plannerOf(off), /about 4,001 are written so far\. /);
+  assert.doesNotMatch(plannerOf(off), /in chapters of about/);
+});
+
+test("a story or a patch from before Chapter length Off keeps its chapter length", () => {
+  const saved = { ...defaultStorySettings(), chapterWords: 3_000 } as Partial<StorySettings>;
+  delete saved.writerDecides;
+  assert.equal(normalizeStorySettings(saved).writerDecides, false);
+  assert.equal(normalizeStorySettings(saved).chapterWords, 3_000);
+  const off = normalizeStorySettings({ writerDecides: true }, normalizeStorySettings(saved));
+  assert.equal(off.writerDecides, true);
+  assert.equal(off.chapterWords, 3_000);
+  // A patch without the field leaves it as it is; a value that is not a boolean is ignored.
+  assert.equal(normalizeStorySettings({ title: "Renamed" }, off).writerDecides, true);
+  assert.equal(normalizeStorySettings({ writerDecides: "yes" }, off).writerDecides, true);
 });
 
 test("the length section reports progress against the target and asks for an ending near it", () => {

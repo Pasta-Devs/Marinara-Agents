@@ -93,6 +93,22 @@ async function openStoryWriter(page: Page) {
   return root;
 }
 
+/** A text connection the stream never reaches: each test answers /generate/raw itself. */
+async function e2eConnection(request: APIRequestContext, base: string): Promise<{ id: string; name: string }> {
+  const connections: Array<{ id: string; name: string }> = await engineRequest(request, base, "GET", "/connections");
+  return (
+    connections.find((row) => row.name === "Story Writer E2E") ??
+    (await engineRequest(request, base, "POST", "/connections", {
+      name: "Story Writer E2E",
+      provider: "openai",
+      baseUrl: "http://127.0.0.1:9/v1",
+      apiKey: "story-writer-e2e-key",
+      model: "e2e-model",
+      isDefault: true,
+    }))
+  );
+}
+
 test("Story Writer writes, edits, turns pages, keeps stories and returns from the connection editor", async ({
   page,
   request,
@@ -102,18 +118,7 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   const base = baseURL!;
   const mobile = testInfo.project.name.includes("mobile");
 
-  // A text connection the stream never reaches: /generate/raw is answered below.
-  const connections: Array<{ id: string; name: string }> = await engineRequest(request, base, "GET", "/connections");
-  const connection =
-    connections.find((row) => row.name === "Story Writer E2E") ??
-    (await engineRequest(request, base, "POST", "/connections", {
-      name: "Story Writer E2E",
-      provider: "openai",
-      baseUrl: "http://127.0.0.1:9/v1",
-      apiKey: "story-writer-e2e-key",
-      model: "e2e-model",
-      isDefault: true,
-    }));
+  const connection = await e2eConnection(request, base);
   await engineRequest(request, base, "PATCH", "/story-writer/preferences", {
     theme: "book",
     colorMode: "light",
@@ -465,7 +470,8 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   });
   const pour = quickBar.getByRole("button", { name: "Pour" });
   await pour.click();
-  await expect.poll(() => generations.length).toBe(2);
+  // The third request: Continue and Redo came first.
+  await expect.poll(() => generations.length).toBe(3);
   // Mid-run the chips wait, and the bar stays put so the book does not re-paginate.
   await expect(pour).toBeDisabled();
   await expect(quickBar).toBeVisible();
@@ -823,4 +829,84 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     await page.waitForTimeout(600);
     await page.screenshot({ path: testInfo.outputPath("09-landscape-document.png") });
   }
+});
+
+test("With Chapter length Off, Generate and a quick reply write into the selected chapter and never start one (#2479)", async ({
+  page,
+  request,
+  baseURL,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const base = baseURL!;
+  await e2eConnection(request, base);
+  await engineRequest(request, base, "PATCH", "/story-writer/preferences", {
+    theme: "book",
+    streaming: true,
+    showAuthorNote: true,
+    showQuickReplies: true,
+    quickReplies: [{ id: "reply-more-dialogue", label: "More dialogue", text: "More dialogue." }],
+  });
+  const fresh = await engineRequest(request, base, "POST", "/story-writer/stories", {
+    settings: { title: "The Writer Decides", writerDecides: true, chapterTitles: false },
+  });
+  const storyId = fresh.story.id;
+  const chapterPath = `/story-writer/stories/${storyId}/chapters`;
+  // Chapter 1 was finished with a chapter length; chapter 2 the author started. Generate changes neither status.
+  await engineRequest(request, base, "POST", chapterPath, { text: "Chapter one begins.", status: "complete" });
+  await engineRequest(request, base, "POST", chapterPath, { text: "Chapter two begins.", status: "draft" });
+  await engineRequest(request, base, "PATCH", "/story-writer/preferences", { lastStoryId: storyId });
+  const storyChapters = async () =>
+    (
+      (await engineRequest(request, base, "GET", `/story-writer/stories/${storyId}`)).chapters as Array<{
+        text: string;
+        status: string;
+      }>
+    ).map(({ text, status }) => ({ text, status }));
+
+  const generations: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  let reply = "Rain hammered the bridge.";
+  await page.route("**/api/generate/raw", async (route) => {
+    generations.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sseBody(reply) });
+  });
+
+  const root = await openStoryWriter(page);
+  // One Generate button, naming the chapter it continues: the last one, where the story opens.
+  const generate = root.getByRole("button", { name: "Generate in chapter 2" });
+  await expect(generate).toBeEnabled();
+  for (const gone of ["Write next chapter", "Continue chapter 2", "Continue the last chapter"]) {
+    await expect(root.getByRole("button", { name: gone })).toHaveCount(0);
+  }
+  await expect(root.getByRole("button", { name: /^Finish chapter/ })).toHaveCount(0);
+  await generate.click();
+  await expect.poll(() => generations.length).toBe(1);
+  await expect.poll(storyChapters, { timeout: 30_000 }).toEqual([
+    { text: "Chapter one begins.", status: "complete" },
+    { text: "Chapter two begins. Rain hammered the bridge.", status: "draft" },
+  ]);
+  await expect(generate).toBeEnabled({ timeout: 30_000 });
+  const first = generations[0]!.messages;
+  expect(first.at(-2)).toEqual({ role: "assistant", content: "Chapter two begins." });
+  expect(first[0]!.content).toContain("Write the next passage of chapter 2, as much as the author asks for");
+  expect(first[0]!.content).not.toContain("at about 2,000 words");
+
+  // Back to chapter 1: the button follows the chapter shown, and a quick reply writes into it too.
+  const toChapterOne = root.getByRole("button", { name: "Generate in chapter 1" });
+  for (let step = 0; step < 3 && !(await toChapterOne.count()); step += 1) {
+    await root.getByRole("button", { name: "Previous chapter" }).click();
+  }
+  await expect(toChapterOne).toBeEnabled();
+  reply = "Vimes listened to the river.";
+  await root.getByRole("toolbar", { name: "Quick replies" }).getByRole("button", { name: "More dialogue" }).click();
+  await expect.poll(() => generations.length).toBe(2);
+  await expect.poll(storyChapters, { timeout: 30_000 }).toEqual([
+    { text: "Chapter one begins. Vimes listened to the river.", status: "complete" },
+    { text: "Chapter two begins. Rain hammered the bridge.", status: "draft" },
+  ]);
+  const second = generations[1]!.messages;
+  expect(second.at(-1)).toEqual({ role: "user", content: "More dialogue." });
+  expect(second.at(-2)).toEqual({ role: "assistant", content: "Chapter one begins." });
+  // The model reads the story up to the chapter it continues, not the chapters after it.
+  expect(second.some((message) => message.content.includes("Rain hammered the bridge."))).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath("10-writer-decides.png") });
 });

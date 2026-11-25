@@ -4,6 +4,7 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -231,6 +232,13 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
   };
 
   const shown = blocks.find((block) => block.key === bar.key) ?? blocks[0]!;
+  const shownChapterId = shown.kind === "chapter" ? shown.key : null;
+  const { onShownChapterChange } = props;
+  // Only the author's own scrolling picks a chapter: not the story opening at its end, nor the text following a chapter
+  // being written, nor the caret while they type.
+  useEffect(() => {
+    if (!pinRef.current && !isEditingHere()) onShownChapterChange?.(shownChapterId);
+  }, [shownChapterId, onShownChapterChange, isEditingHere]);
   const total = blocks.filter((block) => block.kind === "chapter").length;
   const [indicator, indicatorShort] =
     shown.kind === "chapter"
@@ -281,7 +289,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
               kind={block.kind}
               label={t("reader.chapterLabel", { number: block.number })}
               bodyLabel={t("reader.chapterBody", { number: block.number })}
-              placeholder={blockPlaceholder(t, block, generatingChapterId, editable)}
+              placeholder={blockPlaceholder(t, block, generatingChapterId, editable, props.writerDecides)}
               markdown={block.markdown}
               editable={editable}
               generating={block.key === generatingChapterId}

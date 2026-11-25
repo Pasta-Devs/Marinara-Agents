@@ -98,9 +98,7 @@ export function PromptPeekDialog(props: { load(signal: AbortSignal): Promise<Pro
     const { peek } = state;
     body = (
       <>
-        <p className="sw-hint">
-          {t(peek.mode === "next" ? "peek.next" : "peek.continue", { number: peek.chapterNumber })}
-        </p>
+        <p className="sw-hint">{t(`peek.${peek.mode}`, { number: peek.chapterNumber })}</p>
         <dl className="sw-peek-meta">
           <dt>{t("peek.model")}</dt>
           <dd>{peek.model || t("peek.notSet")}</dd>

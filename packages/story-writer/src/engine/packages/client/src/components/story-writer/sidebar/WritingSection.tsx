@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { ExternalLink, RotateCcw } from "lucide-react";
 import { resolveDefaultConnectionId, type ConnectionOption } from "../../../hooks/use-engine-resources";
 import { DEFAULT_SYSTEM_PROMPT, LIMITS, type StorySettings } from "../../../lib/story-writer/model";
+import { systemPromptOf } from "../../../lib/story-writer/prompt";
 import { NumberField, TextField, Toggle, useNumberFormat } from "./fields";
 
 const CHAPTER_PRESETS = [
@@ -86,14 +87,17 @@ export function WritingSection(props: {
         )}
       </div>
 
+      {/* "Off (I decide)" keeps the number for when a length is picked again; typing one picks it. */}
       <NumberField
         label={t("writing.chapterLength")}
         extra={<span className="sw-label-extra">{t("writing.wordsUnit")}</span>}
-        value={settings.chapterWords}
+        value={settings.writerDecides ? null : settings.chapterWords}
         min={LIMITS.chapterWords.min}
         max={LIMITS.chapterWords.max}
         step={100}
-        onCommit={(chapterWords) => chapterWords !== null && onChange({ chapterWords })}
+        placeholder={settings.writerDecides ? t("writing.presetOff") : undefined}
+        hint={settings.writerDecides ? t("writing.chapterLengthOffHint") : undefined}
+        onCommit={(chapterWords) => chapterWords !== null && onChange({ chapterWords, writerDecides: false })}
       >
         <div className="sw-button-row" role="group" aria-label={t("writing.presetsLabel")}>
           {CHAPTER_PRESETS.map((preset) => (
@@ -101,12 +105,20 @@ export function WritingSection(props: {
               key={preset.key}
               type="button"
               className="sw-chip"
-              aria-pressed={settings.chapterWords === preset.words}
-              onClick={() => onChange({ chapterWords: preset.words }, { immediate: true })}
+              aria-pressed={!settings.writerDecides && settings.chapterWords === preset.words}
+              onClick={() => onChange({ chapterWords: preset.words, writerDecides: false }, { immediate: true })}
             >
               {t("writing.preset", { name: t(`writing.${preset.key}`), words: formatNumber(preset.words) })}
             </button>
           ))}
+          <button
+            type="button"
+            className="sw-chip"
+            aria-pressed={settings.writerDecides}
+            onClick={() => onChange({ writerDecides: true }, { immediate: true })}
+          >
+            {t("writing.presetOff")}
+          </button>
         </div>
       </NumberField>
 
@@ -164,7 +176,8 @@ export function WritingSection(props: {
       <TextField
         label={t("writing.prompt")}
         hint={t("writing.promptHint")}
-        value={settings.systemPrompt}
+        // An unchanged default reads as the prompt the model gets: "the next part" when the writer decides.
+        value={systemPromptOf(settings, settings.writerDecides)}
         multiline
         rows={5}
         extra={

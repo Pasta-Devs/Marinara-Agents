@@ -60,6 +60,21 @@ You don't have to let the model start. On a brand-new story, click the empty fir
 
 The page can't be edited while the model is writing.
 
+## Write a passage at a time
+
+Set **Writing → Chapter length** to **Off (I decide)** when you want to steer the story a few paragraphs at a time and decide yourself where each chapter ends. Each story keeps its own choice.
+
+- One **Generate** button replaces **Write next chapter** and **Continue chapter N**. It continues the chapter you are on, from where its text ends. Its label names that chapter: "Generate in chapter 2".
+- The chapter you are on is the one the chapter bar names, or the one you last clicked into. On the title page or the blank page after the last chapter, it is the last chapter.
+- Your quick replies write into that chapter too.
+- The model gets no chapter length. Put how much you want in the author's note, for example "Two paragraphs, then stop." It never starts a new chapter and ends one only when you ask it to.
+- Generate never marks a chapter finished. To start the next chapter, type on the blank page after the last one.
+- When Generate continues an earlier chapter, the model reads the story only up to the end of that chapter.
+- **Continue the last chapter** and **Finish this chapter** are not shown. **Rewrite the last chapter** and **Redo** work as before; Redo takes back what Generate last wrote, in whichever chapter it wrote.
+- A brand-new story has no chapter yet, so Generate waits until you start one on the page.
+
+Pick **Short**, **Medium**, **Long** or type a length to go back to writing chapter by chapter. The length you had before is kept.
+
 ## The author's note
 
 The sticky note in the top corner holds your instructions for the next chapter, such as "Mira finally tells Jon the truth" or "slow down, more dialogue". Click it to unroll it and type. These instructions are sent with every chapter until you change them. Turn on **Author tools → Clear after the next chapter** if you want the note to empty itself once a chapter is written.
@@ -70,7 +85,7 @@ To get the note out of the way, press the hide button on the open note, or turn 
 
 ## Quick replies
 
-Quick replies are instructions you use again and again, such as "More dialogue" or "Slow down and describe the place", saved as buttons next to **Write next chapter**. Clicking one does what **Write next chapter** would (it writes the next chapter, or continues a draft), but sends that instruction in place of your continue message. Your author's note still goes with it.
+Quick replies are instructions you use again and again, such as "More dialogue" or "Slow down and describe the place", saved as buttons next to **Write next chapter**. Clicking one does what **Write next chapter** would (it writes the next chapter, or continues a draft), but sends that instruction in place of your continue message. Your author's note still goes with it. With **Chapter length** set to **Off (I decide)**, a quick reply does what **Generate** does: it writes into the chapter you are on.
 
 Add them in the sidebar under **Quick replies**: an **Instruction**, and optionally a short **Button label** (without one, the button shows the instruction). You can change or delete them there at any time, and **Edit quick replies** (the pencil at the end of the row) takes you there. **Show quick replies** hides the row when you want the room for the book. Every story shares the same quick replies, and the row only appears once you have added one.
 
@@ -79,6 +94,7 @@ A new chapter remembers the quick reply it was written from, so the model sees i
 ## The buttons at the bottom
 
 - **Write next chapter**: writes a new chapter. When the last chapter is a draft, it reads **Continue chapter N** and finishes that chapter instead.
+- **Generate in chapter N** (Chapter length Off): takes the place of **Write next chapter** and writes the next passage of the chapter you are on. See [Write a passage at a time](#write-a-passage-at-a-time).
 - **Stop**: shown while the model writes, with a live word count.
 - **Continue the last chapter**: asks the model for more of a finished chapter, for example when it ended too soon.
 - **Finish this chapter** (shown while the last chapter is a draft): marks it finished and writes the next chapter, for when a draft is done as it is.
@@ -132,11 +148,11 @@ For each character and persona the model gets its description, personality, back
 | Setting | What it does | Default |
 | --- | --- | --- |
 | Connection | The model that writes. **Edit connection** opens the Engine's connection editor. | your default connection |
-| Chapter length | About how many words each chapter should have. Short is 1,000, Medium 2,000 and Long 4,000; anything from 100 to 20,000 works. | 2,000 words |
+| Chapter length | About how many words each chapter should have. Short is 1,000, Medium 2,000 and Long 4,000; anything from 100 to 20,000 works. **Off (I decide)** gives the chapters no length: see [Write a passage at a time](#write-a-passage-at-a-time). | 2,000 words |
 | Story length target | About how long the whole story should be. Leave it empty for an open-ended story. | empty |
 | Chapter titles | Ask the model to open each chapter with its own title. | on |
 | Continue message | What you "say" to the model each time you ask for more. | `Continue.` |
-| Prompt | The instructions at the very top of everything the model reads. **Reset to default** brings back the original. | `You are an excellent writer for the user. Your goal is to write the next chapter of this fictional story.` |
+| Prompt | The instructions at the very top of everything the model reads. **Reset to default** brings back the original. | `You are an excellent writer for the user. Your goal is to write the next chapter of this fictional story.` With Chapter length Off, the default reads "the next part" instead of "the next chapter". |
 | Banned words and phrases | Words and phrases the model is told never to use, separated by commas. | `ozone, jaws working, Elara` |
 | Stream text | Show the chapter as it is written. Off, it appears all at once. | on |
 
@@ -154,10 +170,10 @@ After each chapter, Story Writer tells you if any of your banned words or phrase
 | Auto-summarize | Summarize a chapter on its own once it is no longer one of the last N. | off |
 | Timeline | The plot events you have planned, in order. | empty |
 | Fill with AI | Lets the model plan or refresh the timeline. | |
-| Update automatically after each chapter | Refreshes the timeline after every chapter the model writes. | off |
-| Clear after the next chapter | Empties the author's note once the next chapter is written. | off |
+| Update automatically after each chapter | Refreshes the timeline after every chapter the model writes, or after every Generate when Chapter length is Off. | off |
+| Clear after the next chapter | Empties the author's note once the next chapter is written, or after every Generate when Chapter length is Off. | off |
 | Depth (on the sticky note) | Where the author's note goes among the messages: 0 = right before your continue message. | 0 |
-| Peek at the prompt | Shows what **Write** would send next, without writing anything. See [What the model reads](#what-the-model-reads). | |
+| Peek at the prompt | Shows what **Write** (or **Generate**) would send next, without writing anything. See [What the model reads](#what-the-model-reads). | |
 
 ### Quick replies
 
@@ -189,11 +205,11 @@ Each time you ask for a chapter, Story Writer puts together the same kind of con
 3. **Your author's note** as a user message at its depth (right before the final message at depth 0).
 4. **Your continue message**, or the quick reply you clicked, as the final user message. A rewrite sends the request the chapter was written from instead.
 
-When the model continues an unfinished chapter, that chapter is the last assistant message and the model is asked to pick up exactly where it stops, without repeating anything or adding a heading.
+When the model continues an unfinished chapter, that chapter is the last assistant message and the model is asked to pick up exactly where it stops, without repeating anything or adding a heading. **Generate** (Chapter length Off) works the same way for the chapter you are on: the chapters before it come first, the chapters after it are left out, and the model is asked for the next passage instead of a chapter of a set length.
 
 If a model writes its thinking inside `<think>` tags, Story Writer leaves that out of the chapter.
 
-To see it for yourself, open **Author tools → Peek at the prompt**. It shows the messages as the Engine would send them for the next **Write next chapter** (or **Continue chapter N**), with the model and the token limit, and writes nothing. Long messages start folded; click one to open it.
+To see it for yourself, open **Author tools → Peek at the prompt**. It shows the messages as the Engine would send them for the next **Write next chapter** (or **Continue chapter N**, or **Generate**), with the model and the token limit, and writes nothing. Long messages start folded; click one to open it.
 
 ## Summaries: long stories without running out of room
 
@@ -210,6 +226,8 @@ The timeline is a list of events you want to happen, in order. Tick the ones tha
 ## Story length
 
 With a **Story length target**, the model is told how long the story is so far, what share of the target that is, and to pace the plot so it ends near the target. When the words left fit in one chapter, it is told to bring the story to its ending.
+
+With **Chapter length** set to **Off (I decide)**, the model is still told how long the story is and how close it is to the target, but never that a chapter should be the last one. Each Generate gets room for about 4,000 words, or the connection's own saved maximum if that is larger.
 
 **Chapter length** is a target, not a hard limit. Story Writer asks the connection for enough room for a chapter of that length, or for the connection's own saved maximum if that is larger. If a chapter gets cut off anyway, it stays a draft and **Continue chapter N** finishes it.
 

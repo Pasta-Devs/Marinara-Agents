@@ -7,6 +7,8 @@ import {
   chapterTitle,
   countWords,
   DEFAULT_CONTINUE_MESSAGE,
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_WRITER_SYSTEM_PROMPT,
   LIMITS,
   type StoryChapter,
   type StorySettings,
@@ -41,6 +43,8 @@ const MAX_MESSAGES = 200;
 const MAX_MESSAGE_CHARS = 490_000;
 const MAX_TOKENS = 200_000;
 const LORE_SCAN_CHARS = 150_000;
+/** Generate's output room: how long a passage runs is the author's to ask, so it gets a Long chapter's room. */
+const PASSAGE_BUDGET_WORDS = 4_000;
 const PROTAGONIST = "the protagonist";
 const TIMELINE_INTRO =
   "Planned events in order; [x] = already happened, [ ] = still to come. Move the story toward the next unchecked " +
@@ -77,6 +81,13 @@ function totalWords(chapters: StoryChapter[]): number {
 /** The user message that asks for more; a cleared field falls back to the default, since an empty turn breaks providers. */
 export function continueMessageOf(settings: Pick<StorySettings, "continueMessage">): string {
   return settings.continueMessage.trim() ? settings.continueMessage : DEFAULT_CONTINUE_MESSAGE;
+}
+
+/** The prompt at the very top. Unchanged, it asks for the next part rather than a chapter when the writer decides. */
+export function systemPromptOf(settings: Pick<StorySettings, "systemPrompt">, writer: boolean): string {
+  return writer && settings.systemPrompt === DEFAULT_SYSTEM_PROMPT
+    ? DEFAULT_WRITER_SYSTEM_PROMPT
+    : settings.systemPrompt;
 }
 
 /** Output budget: never below the connection's own saved budget, which reasoning models need. */
@@ -173,6 +184,7 @@ function lengthSection(
   chapters: StoryChapter[],
   number: number,
   partial: StoryChapter | null,
+  writer: boolean,
 ) {
   const words = totalWords(chapters);
   const written = chapters.filter((chapter) => chapter.text.trim()).length;
@@ -186,9 +198,21 @@ function lengthSection(
     parts.push(
       `Target: about ${formatNumber(settings.targetWords)} words in total; about ${percent}% is written, so pace the plot to end near the target.`,
     );
-    if (settings.targetWords - words <= settings.chapterWords) {
+    // Only chapters with a length can be the final one; the writer who decides also decides where the story ends.
+    if (!writer && settings.targetWords - words <= settings.chapterWords) {
       parts.push("This should be the final chapter or very close to it: bring the story to its ending.");
     }
+  }
+  if (writer) {
+    parts.push(
+      partial
+        ? `You are continuing chapter ${number}; about ${formatNumber(countWords(partial.text))} words of it are already written.`
+        : `You are writing the start of chapter ${number}.`,
+    );
+    parts.push(
+      `Write the next passage of chapter ${number}, as much as the author asks for, and stop there. The author decides where chapters end: do not start a new chapter, and bring this one to a close only when the author asks.`,
+    );
+    return parts.join(" ");
   }
   parts.push(`Write chapter ${number} at about ${formatNumber(settings.chapterWords)} words.`);
   if (partial) parts.push(`About ${formatNumber(countWords(partial.text))} words of it are already written.`);
@@ -252,6 +276,8 @@ export function buildChapterMessages(input: {
   settings: StorySettings;
   chapters: StoryChapter[];
   mode: "next" | "continue";
+  /** The writer decides (Chapter length "Off"): no chapter length, never an ending. Default: the story's setting. */
+  writer?: boolean;
   characters: PromptCharacter[];
   personas: PromptCharacter[];
   lore: PromptLoreEntry[];
@@ -259,6 +285,7 @@ export function buildChapterMessages(input: {
   request?: string;
 }): ChatMessage[] {
   const { settings, chapters, characters, personas, lore } = input;
+  const writer = input.writer ?? settings.writerDecides;
   const names = storyNames(characters, personas);
   const continueMessage = continueMessageOf(settings);
   const requestOf = (chapter: StoryChapter) => (chapter.request.trim() ? chapter.request : continueMessage);
@@ -297,7 +324,7 @@ export function buildChapterMessages(input: {
   const language = settings.language.trim();
   const systemSections = (earlierChapters: string) =>
     joinSections([
-      replaceMacros(settings.systemPrompt, names).trim(),
+      replaceMacros(systemPromptOf(settings, writer), names).trim(),
       section("story_details", storyDetails(settings)),
       section("story_overview", replaceMacros(settings.overview, names)),
       section("world_info", worldInfo(lore, names)),
@@ -306,7 +333,7 @@ export function buildChapterMessages(input: {
       section("story_notes", replaceMacros(settings.notes, names)),
       settings.timeline.length ? section("timeline", `${TIMELINE_INTRO}\n${timelineList(settings.timeline)}`) : "",
       section("earlier_chapters", earlierChapters),
-      section("length", lengthSection(settings, chapters, number, partial)),
+      section("length", lengthSection(settings, chapters, number, partial, writer)),
       section("banned_phrases", banned.length ? `Never use these words or phrases: ${banned.join(", ")}` : ""),
       section("language", language ? `Write the story in ${language}.` : ""),
       section("formatting", formattingSection(settings, number, !!partial)),
@@ -354,31 +381,48 @@ export interface ChapterPlan {
   mode: "next" | "continue";
   /** The chapter a rewrite replaces. */
   original: StoryChapter | null;
+  /** The chapter the run writes into; null = a new chapter after the last. */
+  target: StoryChapter | null;
+  /** Written the way the writer decides (Chapter length "Off"): no chapter length, and the status is left alone. */
+  writer: boolean;
   chapterNumber: number;
   request: string;
   messages: ChatMessage[];
   maxTokens: number;
 }
 
+/** The chapter Generate writes into: the one the author is on, else the last one. Null when there is no chapter. */
+export function generateTarget(chapters: StoryChapter[], selectedChapterId?: string | null): StoryChapter | null {
+  return chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[chapters.length - 1] ?? null;
+}
+
 /**
  * Everything a chapter run sends, built before the story changes. Write and Peek both call this, so a peek shows
- * exactly what Write would send.
+ * exactly what Write would send. Null when Generate has no chapter to write into: it never starts one.
  */
 export async function planChapter(input: {
   settings: StorySettings;
   chapters: StoryChapter[];
-  requested: "next" | "continue" | "rewrite";
+  requested: "next" | "continue" | "rewrite" | "generate";
+  /** Generate: the chapter the author is on (see generateTarget). */
+  selectedChapterId?: string | null;
   /** A quick reply, sent in place of the continue message. */
   quickReply?: string;
   savedMaxTokens: number | null;
   sources: PromptSources;
-}): Promise<ChapterPlan> {
+}): Promise<ChapterPlan | null> {
   const { settings, chapters, requested } = input;
-  const last = chapters[chapters.length - 1];
+  const writer = settings.writerDecides || requested === "generate";
+  // Generate continues the chapter the author is on and reads the story up to it; every other run writes the last
+  // chapter, or a new one after it.
+  const generated = requested === "generate" ? generateTarget(chapters, input.selectedChapterId) : null;
+  if (requested === "generate" && !generated) return null;
+  const story = generated ? chapters.slice(0, chapters.indexOf(generated) + 1) : chapters;
+  const last = story[story.length - 1];
   const original = requested === "rewrite" ? (last ?? null) : null;
   const mode: "next" | "continue" = !last || (requested === "next" && last.status !== "draft") ? "next" : "continue";
   // A rewrite is written from an emptied last chapter, so the prompt treats it as a new chapter.
-  const promptChapters = original ? [...chapters.slice(0, -1), { ...original, text: "", summary: "" }] : chapters;
+  const promptChapters = original ? [...story.slice(0, -1), { ...original, text: "", summary: "" }] : story;
   // Continuing a draft sends a quick reply once: the draft keeps the request it was started with.
   const request = chapterRequest(settings, input.quickReply, original);
   const [characters, personas, lore] = await Promise.all([
@@ -389,10 +433,21 @@ export async function planChapter(input: {
   return {
     mode,
     original,
-    chapterNumber: mode === "next" ? chapters.length + 1 : chapters.length,
+    target: mode === "next" ? null : (last ?? null),
+    writer,
+    chapterNumber: mode === "next" ? story.length + 1 : story.length,
     request,
-    messages: buildChapterMessages({ settings, chapters: promptChapters, mode, characters, personas, lore, request }),
-    maxTokens: chapterTokenBudget(settings.chapterWords, input.savedMaxTokens),
+    messages: buildChapterMessages({
+      settings,
+      chapters: promptChapters,
+      mode,
+      writer,
+      characters,
+      personas,
+      lore,
+      request,
+    }),
+    maxTokens: chapterTokenBudget(writer ? PASSAGE_BUDGET_WORDS : settings.chapterWords, input.savedMaxTokens),
   };
 }
 
@@ -430,9 +485,13 @@ export function buildTimelineMessages(input: { settings: StorySettings; chapters
   const { settings, chapters } = input;
   const words = totalWords(chapters);
   const language = settings.language.trim();
+  // Chapters have no set length when the writer decides.
+  const chapterSize = settings.writerDecides
+    ? ""
+    : `, in chapters of about ${formatNumber(settings.chapterWords)} words`;
   const pacing = settings.targetWords
-    ? `The story should end at about ${formatNumber(settings.targetWords)} words; about ${formatNumber(words)} are written so far, in chapters of about ${formatNumber(settings.chapterWords)} words.`
-    : `The story is open-ended; about ${formatNumber(words)} words are written so far, in chapters of about ${formatNumber(settings.chapterWords)} words.`;
+    ? `The story should end at about ${formatNumber(settings.targetWords)} words; about ${formatNumber(words)} are written so far${chapterSize}.`
+    : `The story is open-ended; about ${formatNumber(words)} words are written so far${chapterSize}.`;
   const system = [
     "You plan the timeline of key plot events for a story that is written chapter by chapter.",
     "Create the timeline, or refresh the current one: keep its events unless the story so far contradicts them, mark the events that already happened as done, and add the events still needed to carry the story to its ending.",

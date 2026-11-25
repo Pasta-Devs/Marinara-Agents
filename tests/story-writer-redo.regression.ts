@@ -125,3 +125,28 @@ test("Redo is withdrawn once the chapter or its summary is edited, it is deleted
   assert.equal(redoOffer(continued, found), 1);
   assert.equal(redoOffer(continued, story([...found.chapters, chapter(2)])), null);
 });
+
+test("Generate is remembered in the chapter it wrote into, even with chapters after it, and Redo puts that one back", () => {
+  const second = chapter(2, { text: "Vimes reached the bridge and", status: "draft", summary: "The bridge." });
+  const found = story([chapter(1), second, chapter(3)]);
+  const after = "Vimes reached the bridge and stopped.";
+  // Generate saves the text only: the status stays the author's.
+  const written = changed(found, second.id, { text: after });
+  const record = recordGeneration(found, {
+    requested: "generate",
+    override: "Slow down.",
+    chapterId: second.id,
+    after,
+  });
+
+  assert.equal(record.requested, "generate");
+  assert.deepEqual(record.before, fields(second));
+  assert.equal(record.afterSummary, "The bridge.");
+  assert.equal(redoOffer(record, written), 2);
+  // A chapter the author adds afterwards does not withdraw it; an edit, a new summary or a delete does.
+  assert.equal(redoOffer(record, story([...written.chapters, chapter(4)])), 2);
+  assert.equal(redoOffer(record, changed(written, second.id, { text: `${after} Mine.` })), null);
+  assert.equal(redoOffer(record, changed(written, second.id, { summary: "Mine." })), null);
+  assert.equal(redoOffer(record, story(written.chapters.filter((item) => item.id !== second.id))), null);
+  assert.deepEqual(changed(written, second.id, record.before!).chapters, found.chapters);
+});

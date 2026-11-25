@@ -10,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type FocusEvent,
   type KeyboardEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ import { storyWriterKeys, usePreferences, useStoryDocument, useStoryList } from 
 import { STORY_WRITER_ASSETS, storyWriterAssetUrl, type StoryWriterAsset } from "../../lib/story-writer/assets";
 import { downloadTextFile, storyFileName, storyToMarkdown, storyToPlainText } from "../../lib/story-writer/export";
 import { countWords, storyDisplayTitle, type StoryChapter, type StorySummary } from "../../lib/story-writer/model";
+import { generateTarget } from "../../lib/story-writer/prompt";
 import { storyThemeVariables, type ResolvedColorMode } from "../../lib/story-writer/styles-shell";
 import { generateClientId } from "../../lib/utils";
 import { ActionBar, QuickReplyBar, type FullscreenControl } from "./ActionBar";
@@ -127,11 +129,15 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const [storyId, setStoryId] = useState<string | null>(null);
   const doc = useStoryDocument(storyId);
   const { connections, isLoading: connectionsLoading } = useStoryConnections();
+  // The chapter the author is on: the one they last moved to in the reader or clicked into; until then the last one.
+  // Generate continues it.
+  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const generation = useStoryGeneration({
     doc,
     streaming: preferences.streaming,
     debugMode: capabilityProps.debugMode === true,
     connections,
+    selectedChapterId,
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sectionRequest, setSectionRequest] = useState<{ id: SidebarSectionId; nonce: number } | null>(null);
@@ -218,6 +224,11 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         .join(" · ")
     : "";
   const showQuickReplies = preferences.showQuickReplies && preferences.quickReplies.length > 0;
+  // Chapter length "Off": Generate and the quick replies write into the selected chapter and never start one.
+  const writerDecides = settings?.writerDecides === true;
+  const generateChapter = writerDecides ? generateTarget(chapters, selectedChapterId) : null;
+  const generateChapterNumber = writerDecides ? (generateChapter ? chapters.indexOf(generateChapter) + 1 : 0) : null;
+  const writeMode = writerDecides ? "generate" : "next";
   const fullscreen = readFullscreen(capabilityProps.browserFullscreen, {
     enter: t("actions.enterFullscreen"),
     exit: t("actions.exitFullscreen"),
@@ -386,10 +397,17 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     // The view behind the dialog is inert until this render lands; focus goes back to the button after it.
     requestAnimationFrame(() => peekOpener.current?.focus({ preventScroll: true }));
   };
+  // Clicking or tabbing into a chapter selects it, until the author moves to another one.
+  const selectFocusedChapter = (event: FocusEvent) => {
+    const key = (event.target as Element).closest?.("[data-sw-block]")?.getAttribute("data-sw-block");
+    if (key) setSelectedChapterId(key);
+  };
   // Book and E-book paginate; the Document theme scrolls, with its own component in the same place.
   const Reader = preferences.theme === "document" ? StoryDocument : StoryReader;
   const jumpToChapter = (chapterId: string) => {
     readerRef.current?.scrollToChapter(chapterId);
+    // A chapter picked from the list is the one Generate continues, even on a spread that opens on the one before.
+    setSelectedChapterId(chapterId);
     // The drawer covers the book on phones.
     if (mobile) setSidebarOpen(false);
   };
@@ -425,7 +443,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     >
       <div className="sw-frame" inert={peekOpen}>
         <div className="sw-stage" />
-        <div className="sw-reader-slot">
+        <div className="sw-reader-slot" onFocus={selectFocusedChapter}>
           {data && settings ? (
             <Reader
               key={data.story.id}
@@ -438,10 +456,12 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
               generatingChapterId={generation.generatingChapterId}
               ghostChapterId={ghostChapterId}
               editable={generation.status === "idle"}
+              writerDecides={writerDecides}
               mariImageUrl={assetUrl(STORY_WRITER_ASSETS.mari)}
               chapterBarHost={chapterBarHost}
               onChapterChange={onChapterChange}
               onStartChapter={onStartChapter}
+              onShownChapterChange={setSelectedChapterId}
             />
           ) : slotMessage ? (
             <div className="sw-slot-message" role="status">
@@ -480,13 +500,14 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 hasConnection={hasConnection || connectionsLoading}
                 chapterCount={chapters.length}
                 lastChapterDraft={lastChapter?.status === "draft"}
+                generateChapterNumber={generateChapterNumber}
                 canRedo={generation.redoChapter !== null}
                 generatingChapterNumber={generatingIndex >= 0 ? generatingIndex + 1 : null}
                 liveWords={generation.liveWords}
                 totalWords={totalWords}
                 targetWords={settings.targetWords}
                 fullscreen={fullscreen}
-                onWrite={() => void generation.write("next")}
+                onWrite={() => void generation.write(writeMode)}
                 onContinue={() => void generation.write("continue")}
                 onRewrite={() => void rewriteLastChapter()}
                 onRedo={() => void redoLatest()}
@@ -497,9 +518,9 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
               {showQuickReplies ? (
                 <QuickReplyBar
                   replies={preferences.quickReplies}
-                  canWrite={generation.canWrite}
+                  canWrite={generation.canWrite && generateChapterNumber !== 0}
                   hasConnection={hasConnection || connectionsLoading}
-                  onSend={(request) => void generation.write("next", request)}
+                  onSend={(request) => void generation.write(writeMode, request)}
                   onEdit={() => openSection("quickReplies")}
                 />
               ) : null}

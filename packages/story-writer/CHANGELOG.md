@@ -1,5 +1,9 @@
 # Story Writer release notes
 
+## 0.5.0 — 2026-11-25
+
+- **Chapter length** has a new choice, **Off (I decide)**, for steering the story a passage at a time. One **Generate** button replaces **Write next chapter** and **Continue**: it continues the chapter you are on, from where its text ends, and quick replies write into that chapter too. The model gets no chapter length, never starts a chapter, and ends one only when you ask it to. You start the next chapter yourself on the blank page after the last one. Your author's note decides how much each Generate writes. Every other chapter length works as before.
+
 ## 0.4.0 — 2026-11-17
 
 - **Redo** appears next to **Rewrite the last chapter** after the model writes something. It takes back only what the model just wrote and writes it again with the same instruction, so you no longer have to select and delete a refusal or a cut-off answer by hand. It works after **Write**, **Continue**, a quick reply and **Rewrite**. If **Clear after the next chapter** emptied your author's note, Redo puts it back. Story Writer asks first. If you change that chapter or its summary, the button goes away and your changes are kept.

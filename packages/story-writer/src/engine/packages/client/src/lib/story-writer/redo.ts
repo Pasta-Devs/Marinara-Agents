@@ -10,7 +10,7 @@ export type ChapterState = Pick<StoryChapter, "text" | "summary" | "status" | "r
 export interface LatestGeneration {
   storyId: string;
   /** What the generation was asked for, so Redo sends the same instruction again. */
-  requested: "next" | "continue" | "rewrite";
+  requested: "next" | "continue" | "rewrite" | "generate";
   /** The quick reply it was sent with. */
   override?: string;
   chapterId: string;
@@ -39,16 +39,21 @@ export function recordGeneration(
 }
 
 /**
- * The chapter number Redo would write again, or null when Redo is not offered. Every generation writes the last
- * chapter, so the recorded one must still be last, with its text and summary exactly as the run left them: an edit
- * or a delete withdraws Redo, which never throws away the author's own writing.
+ * The chapter number Redo would write again, or null when Redo is not offered. Generate writes into the chapter the
+ * author was on; every other generation writes the last chapter, so the recorded one must still be last. Its text and
+ * summary must be exactly as the run left them: an edit or a delete withdraws Redo, which never throws away the
+ * author's own writing.
  */
 export function redoOffer(record: LatestGeneration | null, story: StoryWithChapters | null): number | null {
   if (!record || !story || story.story.id !== record.storyId) return null;
-  const last = story.chapters[story.chapters.length - 1];
-  if (!last || last.id !== record.chapterId || last.text !== record.after) return null;
+  const index =
+    record.requested === "generate"
+      ? story.chapters.findIndex((chapter) => chapter.id === record.chapterId)
+      : story.chapters.length - 1;
+  const chapter = story.chapters[index];
+  if (!chapter || chapter.id !== record.chapterId || chapter.text !== record.after) return null;
   // ponytail: any summary change withdraws Redo, Summarize or an auto-summary of this chapter included (only when
   // "Keep the last chapters in full" is 0). Upgrade path: update afterSummary when the run's own follow-up writes it.
-  if (last.summary !== record.afterSummary) return null;
-  return story.chapters.length;
+  if (chapter.summary !== record.afterSummary) return null;
+  return index + 1;
 }

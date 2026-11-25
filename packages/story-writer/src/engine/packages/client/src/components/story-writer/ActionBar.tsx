@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
-// Story Writer: the floating bars under the book (write, stop, continue, rewrite, redo, fullscreen, word count; quick
-// replies)
+// Story Writer: the floating bars under the book (write or generate, stop, continue, rewrite, redo, fullscreen, word
+// count; quick replies)
 // ──────────────────────────────────────────────
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -35,6 +35,11 @@ export function ActionBar(props: {
   chapterCount: number;
   /** The last chapter is a draft, so Write continues it. */
   lastChapterDraft: boolean;
+  /**
+   * Chapter length "Off": one Generate button continues this chapter (its number) and nothing writes the next one or
+   * finishes a draft. Null = the chapter length applies; 0 = no chapter yet, so Generate waits for the author to start one.
+   */
+  generateChapterNumber: number | null;
   /** Redo is offered: the latest generation is unchanged since it was written. */
   canRedo: boolean;
   generatingChapterNumber: number | null;
@@ -57,9 +62,27 @@ export function ActionBar(props: {
   const words = (count: number) => t("actions.words", { count, formatted: formatNumber(count) });
   const busy = props.status !== "idle";
   const number = props.generatingChapterNumber ?? props.chapterCount;
-  const primaryLabel = props.lastChapterDraft
-    ? t("actions.continueDraft", { number: props.chapterCount })
-    : t("actions.write");
+  const generate = props.generateChapterNumber;
+  const primaryLabel =
+    generate !== null
+      ? generate > 0
+        ? t("actions.generateIn", { number: generate })
+        : t("actions.generate")
+      : props.lastChapterDraft
+        ? t("actions.continueDraft", { number: props.chapterCount })
+        : t("actions.write");
+  const primaryShort =
+    generate !== null
+      ? t("actions.generate")
+      : props.lastChapterDraft
+        ? t("actions.continueShort")
+        : t("actions.writeShort");
+  // Why the primary button cannot write yet, shown beside it.
+  const hint = !props.hasConnection
+    ? t("actions.noConnection")
+    : generate === 0
+      ? t("generation.errors.noChapter")
+      : null;
   const statusLabel =
     props.status === "writing"
       ? t("actions.writingStatus", { number })
@@ -120,24 +143,22 @@ export function ActionBar(props: {
           <button
             type="button"
             className="sw-action-primary"
-            disabled={!props.canWrite}
+            disabled={!props.canWrite || generate === 0}
             aria-label={primaryLabel}
-            aria-describedby={props.hasConnection ? undefined : hintId}
-            title={props.hasConnection ? primaryLabel : t("actions.noConnection")}
+            aria-describedby={hint ? hintId : undefined}
+            title={hint ?? primaryLabel}
             onClick={props.onWrite}
           >
             <Feather size={17} aria-hidden="true" />
             <span className="sw-action-label-long">{primaryLabel}</span>
-            <span className="sw-action-label-short">
-              {props.lastChapterDraft ? t("actions.continueShort") : t("actions.writeShort")}
-            </span>
+            <span className="sw-action-label-short">{primaryShort}</span>
           </button>
-          {props.hasConnection ? null : (
+          {hint ? (
             <span id={hintId} className="sw-action-hint">
-              {t("actions.noConnection")}
+              {hint}
             </span>
-          )}
-          {props.lastChapterDraft ? (
+          ) : null}
+          {generate === null && props.lastChapterDraft ? (
             <button
               type="button"
               className="sw-action-icon"
@@ -149,7 +170,7 @@ export function ActionBar(props: {
               <CheckCheck size={19} aria-hidden="true" />
             </button>
           ) : null}
-          {props.chapterCount > 0 && !props.lastChapterDraft ? (
+          {generate === null && props.chapterCount > 0 && !props.lastChapterDraft ? (
             <button
               type="button"
               className="sw-action-icon"

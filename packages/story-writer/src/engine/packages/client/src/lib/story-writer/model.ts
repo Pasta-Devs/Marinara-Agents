@@ -8,6 +8,9 @@ export const STORY_WRITER_PACKAGE_ID = "story-writer";
 
 export const DEFAULT_SYSTEM_PROMPT =
   "You are an excellent writer for the user. Your goal is to write the next chapter of this fictional story.";
+/** What an unchanged default prompt says with Chapter length "Off (I decide)", which never asks for a chapter. */
+export const DEFAULT_WRITER_SYSTEM_PROMPT =
+  "You are an excellent writer for the user. Your goal is to write the next part of this fictional story.";
 export const DEFAULT_BANNED_PHRASES = "ozone, jaws working, Elara";
 export const DEFAULT_CONTINUE_MESSAGE = "Continue.";
 export const DEFAULT_CHAPTER_WORDS = 2000;
@@ -78,6 +81,11 @@ export interface StorySettings {
   connectionId: string | null;
   /** Target length of one chapter, in words. */
   chapterWords: number;
+  /**
+   * Chapter length "Off (I decide)": Generate writes into the chapter the author is on, never ends one and never starts
+   * one. `chapterWords` is kept for when a length is picked again. Absent (a story from before 0.5.0) = false.
+   */
+  writerDecides: boolean;
   /** Target length of the whole story, in words; null = open-ended. */
   targetWords: number | null;
   characterIds: string[];
@@ -126,7 +134,10 @@ export interface StoryChapter {
   /** Markdown. */
   text: string;
   summary: string;
-  /** "draft": started by the author, or cut off; Write continues it. "complete": Write starts a new chapter. */
+  /**
+   * "draft": started by the author, or cut off; Write continues it. "complete": Write starts a new chapter. Generate
+   * (Chapter length "Off") never changes it.
+   */
   status: ChapterStatus;
   /** The user message that produced this chapter, so history replays what was really asked. */
   request: string;
@@ -224,6 +235,7 @@ export function defaultStorySettings(): StorySettings {
     title: "",
     connectionId: null,
     chapterWords: DEFAULT_CHAPTER_WORDS,
+    writerDecides: false,
     targetWords: null,
     characterIds: [],
     personaIds: [],
@@ -344,6 +356,7 @@ export function normalizeStorySettings(patch: unknown, base: StorySettings = def
     title: text(input.title, 300, base.title),
     connectionId: typeof connectionId === "string" && connectionId.trim() ? connectionId.trim().slice(0, 200) : null,
     chapterWords: integer(input.chapterWords, LIMITS.chapterWords, base.chapterWords),
+    writerDecides: typeof input.writerDecides === "boolean" ? input.writerDecides : base.writerDecides,
     targetWords:
       targetWords === null || targetWords === "" || targetWords === 0
         ? null
