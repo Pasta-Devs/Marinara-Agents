@@ -1347,6 +1347,75 @@ test("Otome Forge phone: a close that fails in the background says why with Try 
   expect(posts(stub, "/close")).toHaveLength(3);
 });
 
+test("Otome Forge phone: Home's affection follows each close that lands, while another is still remembered", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Cassian's thread holds an open conversation, and his close is remembered for the whole test.
+  const base = `/api/otome-forge/runs/${RUN}/phone`;
+  let cassianClosing = false;
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.path === `${base}/${CASSIAN}/close`) {
+      stub.calls.push(call);
+      cassianClosing = true;
+      return { status: 200, json: { remembering: true, start: 0 } };
+    }
+    if (call.path === `${base}/${CASSIAN}/seen`) return { status: 200, json: {} };
+    const response = await answer(call);
+    const json = response.json as Json;
+    const open = [
+      { id: "m-c1", who: "player", text: "Are you at the docks?", at: new Date(Date.now() - 120_000).toISOString() },
+      { id: "m-c2", who: "li", text: "Always.", at: new Date(Date.now() - 60_000).toISOString() },
+    ];
+    const closing = cassianClosing ? { closing: {} } : {};
+    if (call.path === base) {
+      const row = json.threads.find((thread: Json) => thread.li === CASSIAN);
+      Object.assign(row, { last: open.at(-1), ...closing });
+    }
+    if (call.path === `${base}/${CASSIAN}`) {
+      // His page, without what Ilvar's close says.
+      const { closing: _ilvars, remembered: _his, ...rest } = json;
+      response.json = {
+        ...rest,
+        messages: open.map((m) => ({ ...m, archived: false })),
+        activeCount: 2,
+        seenAt: open[1]!.at,
+        ...closing,
+      };
+    }
+    return response;
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  const threads = root.locator(".of-threads");
+  const closeFrom = async (name: RegExp) => {
+    await threads.getByRole("button", { name }).click();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect(threads.getByRole("button", { name })).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  };
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  await closeFrom(/Ilvar Thorne/);
+  await closeFrom(/Cassian/);
+  expect(posts(stub, "/close")).toHaveLength(2);
+  // Home while both are remembered: Ilvar's lands, and his affection shows there while Cassian's is still remembered.
+  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  remember();
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(threads.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("+5 affection");
+  await expect(threads.getByRole("button", { name: /Cassian/ })).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+});
+
 test("Otome Forge daily messages: the first heartbeat reads nothing again for an old message; a new one reads Home again", async ({
   page,
 }) => {

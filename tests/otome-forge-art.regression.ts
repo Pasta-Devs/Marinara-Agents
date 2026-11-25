@@ -1342,6 +1342,30 @@ test("Repaint expressions answers pending and its faces paint on; the run view s
   assert.equal((await t.viewOf()).facesPaint?.state, "stopped");
 });
 
+test("a Repaint expressions that lands while the run is read reads pending beside the faces from before it, never stopped", async (context) => {
+  const t = await castWorld("r-bgpaint4-aaaaaa", 1);
+  context.after(() => (t.release(), t.art.dispose()));
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await until(() => t.paid.length === 1, "the first paid face");
+  // The read's cut-out check (after its documents were read) waits until the set has landed.
+  const cutouts = t.deps.cutouts!;
+  let landDuringRead = true;
+  cutouts.cleanupRevision = async () => {
+    if (landDuringRead) {
+      landDuringRead = false;
+      t.release();
+      await paintSettled(t.runId, `faces:${KAI}`);
+    }
+    return undefined;
+  };
+  const read = await t.viewOf();
+  assert.equal(landDuringRead, false, "the set landed during the read");
+  assert.deepEqual([read.facesPaint?.state, read.expressions ?? {}], ["pending", {}], "so the client reads again");
+  const next = await t.viewOf();
+  assert.equal(next.facesPaint, undefined);
+  assert.deepEqual(Object.keys(next.expressions ?? {}).sort(), [...FACES].sort());
+});
+
 test("Repaint expressions the kit ends before it starts (the look cannot be read) reads stopped, and the next one paints", async (context) => {
   const t = await castWorld("r-bgpaint3-aaaaaa", 0);
   context.after(() => t.art.dispose());

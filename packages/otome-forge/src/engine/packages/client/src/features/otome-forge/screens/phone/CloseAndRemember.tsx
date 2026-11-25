@@ -10,7 +10,7 @@
 // 0.46.3: the server answers once the close is accepted and writes the memory in the background, so the thread goes
 // back to Messages at once (onClosed). closeSent remembers the closes this page sent, so the list can say once what
 // each earned when it lands (ThreadList); CloseRetry is Try again for a close that failed, in the list and the thread.
-// ClosesLanding reads the run view again when one lands while the list is not showing.
+// ClosesLanding reads the run view again each time one lands while the list is not showing.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,18 +45,23 @@ export function closeSent(queryClient: QueryClient, runKey: string, id: LiId, re
   void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, id) });
 }
 
-/** Whether `list` still shows a close this page sent being remembered. */
+/** The threads whose close this page sent `list` still shows being remembered, as one key ("" for none). */
 const sentRemembering = (runKey: string, list: PhoneListView | undefined) =>
-  !!list &&
-  [
-    ...list.threads.map((row) => [row.li, row] as const),
-    ...(list.group ? [[GROUP_THREAD, list.group] as const] : []),
-  ].some(([id, row]) => sentCloses.has(closeKey(runKey, id)) && !!row.closing && !row.closing.error);
+  list
+    ? [
+        ...list.threads.map((row) => [row.li, row] as const),
+        ...(list.group ? [[GROUP_THREAD, list.group] as const] : []),
+      ]
+        .filter(([id, row]) => sentCloses.has(closeKey(runKey, id)) && !!row.closing && !row.closing.error)
+        .map(([id]) => id)
+        .join(" ")
+    : "";
 
 /**
  * While the Messages list is not showing (the player went Home, or anywhere else) and a close this page sent is still
- * being remembered, polls the list's query, and reads the run view again once it lands, so Home's affection and level
- * show it. ThreadList still says once what it earned when the list next shows; while it shows, it does all this itself.
+ * being remembered, polls the list's query, and reads the run view again each time one lands, so Home's affection and
+ * level show it while another is still remembered. ThreadList still says once what each earned when the list next
+ * shows; while it shows, it does all this itself.
  */
 export function ClosesLanding({ runKey, listShown }: { runKey: string; listShown: boolean }) {
   const otome = useOtomeApi();
@@ -64,13 +69,15 @@ export function ClosesLanding({ runKey, listShown }: { runKey: string; listShown
   const list = useQuery({
     queryKey: phoneQueryKey(runKey),
     queryFn: () => otome.get<PhoneListView>(phonePath(runKey)),
-    enabled: (query) => !listShown && sentRemembering(runKey, query.state.data),
+    enabled: (query) => !listShown && !!sentRemembering(runKey, query.state.data),
     refetchInterval: BUSY_POLL_MS,
   });
   const waiting = sentRemembering(runKey, list.data);
   const was = useRef(waiting);
   useEffect(() => {
-    if (was.current && !waiting && !listShown) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    const still = new Set(waiting.split(" "));
+    const landed = was.current.split(" ").some((id) => id && !still.has(id));
+    if (landed && !listShown) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
     was.current = waiting;
   }, [listShown, queryClient, runKey, waiting]);
   return null;

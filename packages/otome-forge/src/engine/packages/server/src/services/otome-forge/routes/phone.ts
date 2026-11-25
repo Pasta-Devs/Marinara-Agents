@@ -68,10 +68,19 @@ const InviteBody = z.object({ message: z.string().min(1).max(60), accept: z.bool
 
 export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
   const { handle } = deps;
-  /** 0.46.3: a close a restart left remembering, queued again by this read (S/phone/memory.ts resumeClose). */
+  /**
+   * 0.46.3: a close a restart left remembering, queued again by this read (S/phone/memory.ts resumeClose). One that
+   * cannot be is logged, and the read still answers; its mark stands for the next read.
+   */
   const resume = (runId: string, key: string, view: PhoneCloseView, debugMode: boolean) =>
-    resumeClose(deps, runId, key, view, debugMode, () =>
-      key === GROUP_THREAD ? groupRemembering(deps, runId) : liRemembering(deps, runId, key),
+    resumeClose(deps, runId, key, view, debugMode, (mark) =>
+      key === GROUP_THREAD ? groupRemembering(deps, runId, mark) : liRemembering(deps, runId, key),
+    ).catch((error: unknown) =>
+      deps.runtime.logger.warn(
+        "[otome-forge] Close and remember in %s was not queued again: %s",
+        key,
+        error instanceof Error ? error.message : String(error),
+      ),
     );
 
   router.get(

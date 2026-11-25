@@ -222,15 +222,20 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
+/** 0.46.3: each love interest's and friend's Repaint expressions as facesView says it now, for `run`'s faces. */
+const castFaces = (runId: string, { units, friends = [] }: Pick<RunDocuments, "units" | "friends">) =>
+  new Map([...units, ...friends].map((unit) => [unit.id, facesView(runId, unit)]));
+
 /**
  * The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. 0.46.3: each
- * love interest and friend whose Repaint expressions paints, stopped or failed says so (`facesPaint`, facesView).
+ * love interest and friend whose Repaint expressions paints, stopped or failed says so (`facesPaint`, facesView), as
+ * `faces` says it at the read the run's faces came from.
  */
-function runView(runKey: string, runId: string, { world, player, units, state, friends = [] }: RunDocuments) {
+function runView(runKey: string, runId: string, run: RunDocuments, faces = castFaces(runId, run)) {
+  const { world, player, units, state, friends = [] } = run;
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
   const viewed = (unit: Unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit);
   const view = toRunView(runKey, withPlaceViews(runId, world), shown, units.map(viewed), state, friends.map(viewed));
-  const faces = new Map([...units, ...friends].map((unit) => [unit.id, facesView(runId, unit)]));
   const withFaces = <T extends { id: string }>(member: T): T => {
     const facesPaint = faces.get(member.id);
     return facesPaint ? { ...member, facesPaint } : member;
@@ -431,6 +436,9 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       await settleForge(deps, runId);
       const read = await readRun(store, runId);
       if (!read) throw runNotFound();
+      // Repaint expressions as it stood when these faces were read: one that lands during the awaits below is not
+      // `stopped` beside the faces from before it.
+      const faces = castFaces(runId, read);
       // #2303: an invitation to clear the air accepted before its scene existed gets that scene, once (no model call).
       await ensureClearAirScenes(store, runId, read.state);
       // #2459: an ended story starts no background work.
@@ -490,7 +498,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       if (!ended) void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
       return {
         view: {
-          ...runView(runKey, runId, shown),
+          ...runView(runKey, runId, shown, faces),
           ...(cutoutsPending(runId, [...units, ...friends, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
           stickers: stickerBook(runId, shown),
           ...(designing || (painting && stickersComing(runId, shown)) ? { stickersPending: true as const } : {}),

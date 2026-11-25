@@ -248,6 +248,18 @@ function gateFirstCall(runtime: Awaited<ReturnType<typeof storyWorld>>["runtime"
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+/** `promise`, or a rejection naming `what` after `ms`, so a test's `finally` still releases what it holds. */
+async function within<T>(promise: Promise<T>, what: string, ms = 5000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out waiting for ${what}`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const send = "/runs/:run/phone/:li/send";
 const close = "/runs/:run/phone/:li/close";
 const page = "/runs/:run/phone/:li";
@@ -530,11 +542,11 @@ test("Close and remember answers before its summary, which runs once in the back
   });
   const release = gateFirstCall(t.runtime);
   try {
-    const accepted = await t.phone("POST", close, { li: KAI });
+    const accepted = await within(t.phone("POST", close, { li: KAI }), "the close's answer");
     assert.deepEqual([accepted.status, accepted.body], [200, { remembering: true, start: 0 }], "answered at once");
     const mark = (await t.thread(KAI))!.closing!;
     assert.deepEqual([mark.start, mark.end, mark.day, mark.error], [0, 3, localDay("UTC"), undefined]);
-    await release.reached;
+    await within(release.reached, "the summary's call");
     assert.ok(t.background!.has(closeJobKey(t.runId, KAI)), "P18 is written by the background lane's job");
     assert.deepEqual(admitted, ["conn-text foreground"], "the player's own close, on P18's connection, never waits");
     assert.equal((await t.thread(KAI))!.closing!.tries, 1, "the summary was counted before its call");
@@ -620,6 +632,111 @@ test("Close and remember: a restart's mark resumes once from a read and is never
       undefined,
     ],
   );
+});
+
+/** Fails the next `times` writes that take a thread's close mark off (`left()` says how many are still to fail). */
+function failUnmarks(t: Awaited<ReturnType<typeof phoneWorld>>, times: number) {
+  let left = times;
+  const mutate = t.store.mutateDoc.bind(t.store);
+  t.store.mutateDoc = ((target, normalize, change, options) =>
+    mutate(
+      target,
+      normalize,
+      async (current) => {
+        const next = await change(current);
+        const [before, after] = [current, next] as Array<Partial<PhoneThread>>;
+        if (left > 0 && before.closing && after.sessions && !after.closing) {
+          left -= 1;
+          throw new Error("The disk is full.");
+        }
+        return next;
+      },
+      options,
+    )) as typeof t.store.mutateDoc;
+  return { left: () => left };
+}
+
+test("Close and remember: once its session is saved, a mark that will not come off is tried again, never failed or paid twice", async () => {
+  const t = await phoneWorld("r-phones-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const points = (await t.state()).lis[KAI]!.points;
+  // The first write that takes the mark off fails: the second lands, with what it earned.
+  const once = failUnmarks(t, 1);
+  const { thread } = await t.closeAndWait();
+  assert.equal(once.left(), 0);
+  assert.deepEqual(
+    [thread.closing, thread.sessions.map((session) => [session.start, session.affection])],
+    [undefined, [[0, 5]]],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Every try fails: the mark stays with no error (no Try again for a conversation that is remembered), and the next
+  // read only takes it off, with no call and no second grant.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  const always = failUnmarks(t, 2);
+  const stuck = await t.closeAndWait();
+  assert.equal(always.left(), 0);
+  assert.deepEqual(
+    [stuck.thread.closing?.error, stuck.thread.closing?.start, stuck.thread.sessions.length],
+    [undefined, 3, 2],
+  );
+  const calls = t.calls.length;
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual([row.li, row.closing], [KAI, {}], "still remembering, not failed");
+  const settled = await t.remembered();
+  assert.deepEqual([settled.closing, settled.sessions.length, t.calls.length], [undefined, 2, calls]);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 10, "each close paid once");
+  assert.deepEqual((await t.phone("GET", page, { li: KAI })).body.closing, undefined);
+});
+
+test("Close and remember: with no connection, a saved close only comes off; a read whose requeue fails still answers", async () => {
+  const t = await phoneWorld("r-phonec-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  await t.closeAndWait();
+  const points = (await t.state()).lis[KAI]!.points;
+  // Its session landed before a restart, and the connection P18 used is gone.
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-25T10:00:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "" },
+  }));
+  const calls = t.calls.length;
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200);
+  const thread = (await t.thread(KAI))!;
+  assert.deepEqual([thread.closing, thread.sessions.length, t.calls.length], [undefined, 1, calls]);
+  assert.equal((await t.state()).lis[KAI]!.points, points, "no second grant");
+
+  // An unfinished close still fails as no-connection; one whose write fails leaves the list answering, and the
+  // threads after it are still seen to.
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (current) => ({
+    ...current,
+    messages: [...current.messages, { id: "m-late-0001", who: "player", text: "Hello?", at: current.messages[0]!.at }],
+    closing: { start: 3, end: 4, at: "2026-11-25T10:01:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  await t.store.mutateDoc(chatTarget(t.runId, MIR), normalizeThread, (current) => ({
+    ...current,
+    li: MIR,
+    messages: [{ id: "m-mir-0001", who: "player", text: "Hi.", at: "2026-11-25T09:00:00.000Z" }],
+    closing: { start: 0, end: 1, at: "2026-11-25T10:02:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  const mutate = t.store.mutateDoc.bind(t.store);
+  t.store.mutateDoc = ((target, ...rest) =>
+    target.id === chatId(t.runId, KAI)
+      ? Promise.reject(new Error("The disk is full."))
+      : mutate(target, ...rest)) as typeof t.store.mutateDoc;
+  const list = await t.phone("GET", "/runs/:run/phone");
+  assert.equal(list.status, 200, JSON.stringify(list.body));
+  const row = (li: string) => list.body.threads.find((entry: { li: string }) => entry.li === li);
+  assert.deepEqual(row(KAI).closing, {}, "the view it read");
+  assert.deepEqual((await t.thread(MIR))!.closing?.error, "no-connection", "the next thread's close was seen to");
+  assert.ok(t.logs.some((entry) => entry.level === "warn" && String(entry.message).includes("not queued again")));
+  // Its mark stands for the next read.
+  t.store.mutateDoc = mutate;
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200);
+  assert.equal((await t.thread(KAI))!.closing?.error, "no-connection");
 });
 
 test("Close and remember: a close that lands on a later day counts against that day's cap and never turns the tally back", async () => {

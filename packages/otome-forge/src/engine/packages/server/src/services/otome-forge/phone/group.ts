@@ -28,7 +28,8 @@
 //   someone typing), and lands unread, only while the thread still ends where it was read. Two members picked at random
 //   start it; the others may join.
 // - Close and remember: one P18 call with the group wording, one session with its members, and no affection. 0.46.3:
-//   in the background, as a love interest's (S/phone/memory.ts), with the members it has when its job runs.
+//   in the background, as a love interest's (S/phone/memory.ts), with the members it had when the close was accepted
+//   (kept on its mark, so one who joins before its job runs, or a restart, is not in it).
 //   ponytail: the group remembers only through Close and remember, so squabbles pile up in the open conversation and
 //   only its newest GROUP_TAIL_MESSAGES reach P17g, and none reaches a DM or a scene until it is closed. The upgrade
 //   path is one background compress call at the first heartbeat of a new local day while the group has an open
@@ -49,6 +50,7 @@ import { forgeChatRecallQuery } from "@forge-kit/story-memory-integration.mjs";
 import type {
   LiId,
   PhoneCloseResult,
+  PhoneClosing,
   PhoneDueResult,
   PhoneHistoryPage,
   PhoneListView,
@@ -309,9 +311,17 @@ export function sendToGroup(
   });
 }
 
-/** The group chat's close (S/phone/memory.ts Remembering): P18's group wording with its members now; it earns nothing. */
-export async function groupRemembering(deps: Pick<PhoneDeps, "store">, runId: string): Promise<Remembering> {
-  const { run, members } = await loadGroup(deps, runId);
+/**
+ * The group chat's close (S/phone/memory.ts Remembering): P18's group wording with the members its `mark` kept; it earns
+ * nothing.
+ */
+export async function groupRemembering(
+  deps: Pick<PhoneDeps, "store">,
+  runId: string,
+  mark: Pick<PhoneClosing, "members">,
+): Promise<Remembering> {
+  const { run, members: now } = await loadGroup(deps, runId);
+  const members = mark.members ?? now;
   const units = unitsOf(run, members);
   const group = units.map((unit) => unit.name);
   const names = { li: "Someone", player: run.player.name || "the protagonist" };
@@ -334,8 +344,16 @@ export function closeGroup(
   { debugMode = false }: { debugMode?: boolean } = {},
 ): Promise<PhoneCloseResult> {
   return inThreadLock(runId, GROUP_THREAD, async () => {
-    const { run } = await loadGroup(deps, runId);
-    return acceptClose(deps, runId, GROUP_THREAD, run.world, debugMode, () => groupRemembering(deps, runId));
+    const { run, members } = await loadGroup(deps, runId);
+    return acceptClose(
+      deps,
+      runId,
+      GROUP_THREAD,
+      run.world,
+      debugMode,
+      (mark) => groupRemembering(deps, runId, mark),
+      members,
+    );
   });
 }
 

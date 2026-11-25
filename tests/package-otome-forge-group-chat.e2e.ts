@@ -147,10 +147,12 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
     members: [KAI, MIR, SOL],
   });
 
-  let closing: { start: number; at: number } | null = null;
+  let closing: { start: number } | null = null;
+  // 0.46.3: the close's summary is held until the test calls `land()`; every read says it is remembered meanwhile.
+  let held = true;
   /** 0.46.3: what the list and the page say of the close remembered in the background (it earns nothing). */
   const closeView = () => {
-    if (closing && Date.now() - closing.at > 1500) {
+    if (closing && !held) {
       const count = messages.length - closing.start;
       const memory = { text: "They argued about the lamps; Ines asked who was awake.", quote: "Liar." };
       sessions.push({ start: closing.start, count, memory, closedAt: now(), members: [KAI, MIR, SOL] });
@@ -227,8 +229,8 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
       return { status: 200, json: { messages: [mine, ...reply] } };
     }
     if (path === `${base}/phone/group/close`) {
-      // 0.46.3: accepted at once; for a second and a half every read says it is remembered, then it has landed.
-      closing = { start: archived(), at: Date.now() };
+      // 0.46.3: accepted at once; it lands on the first read after `land()`.
+      closing = { start: archived() };
       return { status: 200, json: { remembering: true, start: closing.start } };
     }
     if (path === `${base}/phone/due`) {
@@ -250,7 +252,7 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
-  return { calls, answer };
+  return { calls, answer, land: () => (held = false) };
 }
 
 type Stub = ReturnType<typeof createGroupStub>;
@@ -430,6 +432,7 @@ test("Otome Hearth group chat: Everyone pinned first, speakers in the thread, Cl
   await expect(dialog).toHaveCount(0);
   await expect(everyone).toBeFocused();
   await expect(everyone).toContainText("Remembering…");
+  stub.land();
   await expect(everyone).toContainText("Remembered", { timeout: 10_000 });
   await expect(everyone).not.toContainText("Remembering…");
   await expect(everyone).not.toContainText("affection");

@@ -155,6 +155,7 @@ const ClosingSchema: ZodType<PhoneClosing> = z.object({
   at: z.string().min(1),
   tries: z.number().int().min(0),
   day: z.string().min(1).max(20),
+  members: SESSION_DISPLAY.members.optional(),
   error: z.string().max(40).optional(),
 });
 

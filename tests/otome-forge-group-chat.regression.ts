@@ -992,7 +992,13 @@ test("a squabble holds the thread while written, and is dropped when the thread 
 // ── Close and remember, and who recalls it ──
 
 test("Close and remember in the group: P18g, one session with its members, no affection, recalled only by its members", async () => {
-  const t = await groupWorld("r-group11-aaaaaa", { withMemory: true, newcomer: true });
+  // The close's job (the one foreground admission here) waits until the pending read below.
+  const gate = admissionGate();
+  const t = await groupWorld("r-group11-aaaaaa", {
+    withMemory: true,
+    newcomer: true,
+    admissionRun: (operation, mode) => (mode.kind === "foreground" ? gate.admissionRun(operation) : operation()),
+  });
   await t.arc(2, 2, NEW);
   assert.equal((await t.call("POST", send, { body: { text: "Is anyone up?" } })).status, 200);
   const points = Object.fromEntries(Object.entries((await t.state()).lis).map(([li, state]) => [li, state.points]));
@@ -1001,6 +1007,10 @@ test("Close and remember in the group: P18g, one session with its members, no af
   // 0.46.3: accepted at once, and remembered by the background lane's job.
   assert.deepEqual(closed.body, { remembering: true, start: 0 });
   assert.deepEqual((await t.call("GET", list)).body.group.closing, {});
+  // Noor joins before the job runs: the close keeps the members it was accepted with.
+  await t.complete("main-2");
+  assert.deepEqual((await t.call("GET", list)).body.group.members, [KAI, MIR, SOL, NEW]);
+  gate.open();
   for (let round = 0; round < 400 && t.background.has(closeJobKey(t.runId, GROUP_THREAD)); round += 1) await tick();
   assert.deepEqual((await t.thread())!.sessions[0]!.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
   assert.deepEqual((await t.call("GET", list)).body.group.remembered, { start: 0 }, "it earned nothing");

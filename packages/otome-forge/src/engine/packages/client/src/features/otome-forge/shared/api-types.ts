@@ -734,6 +734,8 @@ export interface PhoneClosing {
   at: string;
   tries: number;
   day: string;
+  /** The group chat's members when it was accepted: the summary and the session keep them (S/phone/group.ts). */
+  members?: LiId[];
   /** Why it failed: the route error's code, or "stopped" when restarts interrupted it. */
   error?: string;
 }

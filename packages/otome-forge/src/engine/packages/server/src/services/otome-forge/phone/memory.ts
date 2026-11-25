@@ -7,8 +7,9 @@
 // everything outside the story; S/state/rewards.ts grant).
 // 0.46.3: the summary runs in the background, so the player goes back to Messages at once (the maintainer's request).
 // - The close is accepted in the thread's one write in flight, as a send is (S/phone/chat.ts inThreadLock): its checks,
-//   then the thread's `closing` mark (the open conversation's range, when, the player's local day), saved before it
-//   answers `{remembering: true}`. While the mark stands, a send is a 409 `busy`, and Close again answers the same.
+//   then the thread's `closing` mark (the open conversation's range, when, the player's local day, and in the group
+//   its members), saved before it answers `{remembering: true}`. While the mark stands, a send is a 409 `busy`, and
+//   Close again answers the same.
 // - The summary is a background-queue job keyed by the thread, under foreground admission (the player's own request,
 //   which never waits for an idle connection), on the connection P18 has always used (job `compress`). It reads the
 //   run when it starts, so it never waits in the run's foreground queue behind a lookahead beat, and the next beat never
@@ -16,13 +17,15 @@
 //   daily message after the conversation or a story write meanwhile is never lost.
 // - Each summary started is counted on the mark before its call. The queue lives in this process, so a read of the list
 //   or the thread finds a mark with no job here (a restart) and queues it again (resumeClose): it summarizes once more,
-//   and a mark that two summaries never landed fails as "stopped". A session already there is only unmarked, so a
-//   conversation is never remembered twice.
+//   and a mark that two summaries never landed fails as "stopped". A session already there is only unmarked, even with
+//   no connection, so a conversation is never remembered twice. A read whose requeue fails still answers.
 // - It lands in three writes: the session, then the affection (the state's own revision-checked write), then the mark
 //   comes off with the affection kept on the session, which the page that sent the close shows once. A grant that
-//   fails, or a restart between them, loses the affection and never pays it twice.
-// - A summary that fails leaves the conversation open and the mark with its error code, which the list and the thread
-//   show with Try again (Close again). Her next message lets it go (S/phone/chat.ts sendIn).
+//   fails, or a restart between them, loses the affection and never pays it twice. Taking the mark off is tried
+//   SETTLE_TRIES times; if it still fails, the mark stays with no error, and the next read only unmarks it.
+// - A summary that fails before its session is saved leaves the conversation open and the mark with its error code,
+//   which the list and the thread show with Try again (Close again). Her next message lets it go (S/phone/chat.ts
+//   sendIn).
 // - P18 is a summary: like every summary it gets generateJson's output room (at least 10240 tokens when the connection
 //   allows it); its wanted length is in its prompt's wording.
 // - With nothing open, Close returns the newest memory and earns nothing. A conversation with nothing from one of them
@@ -45,6 +48,7 @@ import type {
   PhoneClosing,
   PhoneMessage,
   PhoneSession,
+  PhoneThread,
   RunState,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -81,6 +85,9 @@ const said = (message: PhoneMessage) => !!message.text.trim() || !!message.stick
 /** The summaries one close may start: its own, and one more after a restart (see the header). */
 export const CLOSE_TRIES = 2;
 
+/** The writes that may take a saved close's mark off before a read is left to (see the header). */
+const SETTLE_TRIES = 2;
+
 /** The background job remembering thread `key`'s close. */
 export const closeJobKey = (runId: string, key: string) => `${runId}:phone-close:${key}`;
 
@@ -102,8 +109,8 @@ export interface Summarizing {
 }
 
 /**
- * What a thread's close needs once its job runs, read from the run then: P18's wording, and (a love interest's or a
- * friend's thread) the affection the conversation earns on `day`.
+ * What a thread's close needs once its job runs, read from the run then (and its mark): P18's wording, and (a love
+ * interest's or a friend's thread) the affection the conversation earns on `day`.
  */
 export interface Remembering {
   how: Summarizing;
@@ -179,29 +186,49 @@ function settleClose(
   });
 }
 
+/** The close's prepare: what its job needs, from its mark. */
+type Prepare = (mark: PhoneClosing) => Promise<Remembering>;
+
+/** Whether `thread` already holds the session close `mark` makes (its mark did not come off, or a restart came first). */
+const landed = (thread: PhoneThread, mark: PhoneClosing) => thread.sessions.some((entry) => entry.start === mark.start);
+
+/**
+ * Takes the mark off a close whose session is saved, with `affection` kept on it: SETTLE_TRIES writes, then the mark is
+ * left with no error for the next read to take off (see the header). It never rejects.
+ */
+async function settleSaved(deps: PhoneDeps, runId: string, key: string, mark: PhoneClosing, affection: number) {
+  for (let attempt = 1; attempt <= SETTLE_TRIES; attempt += 1) {
+    try {
+      return void (await settleClose(deps, runId, key, mark, { affection }));
+    } catch (error) {
+      if (attempt === SETTLE_TRIES)
+        deps.runtime.logger.warn(
+          "[otome-forge] Close and remember in %s is saved, but its mark stays until the next read: %s",
+          key,
+          error instanceof Error ? error.message : String(error),
+        );
+    }
+  }
+}
+
 /** The job (see the header): remembers thread `key`'s close, if it still stands. */
 async function remember(
   deps: CloseDeps,
   runId: string,
   key: string,
-  {
-    connectionId,
-    debugMode,
-    prepare,
-  }: { connectionId: string; debugMode: boolean; prepare: () => Promise<Remembering> },
+  { connectionId, debugMode, prepare }: { connectionId: string; debugMode: boolean; prepare: Prepare },
 ): Promise<void> {
   const thread = await readThread(deps.store, runId, key);
   const mark = thread?.closing;
   if (!thread || !mark || mark.error) return;
+  // Landed before a restart: only its mark is left.
+  if (landed(thread, mark)) return settleSaved(deps, runId, key, mark, 0);
   try {
-    // Landed before a restart: only its mark is left.
-    if (thread.sessions.some((session) => session.start === mark.start))
-      return void (await settleClose(deps, runId, key, mark));
     // #2459: an ended story calls no model; its conversation stays as it was.
     if ((await deps.store.readDoc(stateId(runId), normalizeState))?.ended)
       return void (await settleClose(deps, runId, key, mark));
     if (mark.tries >= CLOSE_TRIES) return void (await settleClose(deps, runId, key, mark, { error: "stopped" }));
-    const { how, earn } = await prepare();
+    const { how, earn } = await prepare(mark);
     let started = false as boolean;
     await saveThread(deps, runId, key, (current) => {
       started = current.closing?.at === mark.at && !current.closing.error;
@@ -234,18 +261,19 @@ async function remember(
     let appended = false as boolean;
     await saveThread(deps, runId, key, (current) => {
       appended = false;
-      if (current.sessions.some((entry) => entry.start === mark.start)) return current;
+      if (landed(current, mark)) return current;
       if (archivedCount(current) !== mark.start || current.messages.length < mark.end) {
         throw conflict("The thread changed while it was being remembered.");
       }
       appended = true;
       return { ...current, sessions: [...current.sessions, session] };
     });
+    // The session is saved: neither the grant nor settleSaved rejects, so it is never marked failed or paid twice.
     const affection = appended && earn ? await earn(open, mark.day) : 0;
-    await settleClose(deps, runId, key, mark, { affection });
+    await settleSaved(deps, runId, key, mark, affection);
     if (appended) void Promise.resolve(deps.memory?.maintain({ runId, debugMode })).catch(() => undefined);
   } catch (error) {
-    // The conversation stays open; the list and the thread say why, with Try again.
+    // Nothing was saved: the conversation stays open; the list and the thread say why, with Try again.
     const code = (error instanceof OtomeForgeError && error.code) || "failed";
     deps.runtime.logger.warn(
       "[otome-forge] Close and remember in %s failed: %s",
@@ -258,7 +286,8 @@ async function remember(
 
 /**
  * Queues thread `key`'s close job unless one is queued already. Without a connection for it, its mark fails as
- * `no-connection` (the accept refuses first, so only a resume finds that).
+ * `no-connection` (the accept refuses first, so only a resume finds that), unless its session is saved: then it only
+ * comes off.
  */
 async function queueClose(
   deps: CloseDeps,
@@ -266,15 +295,17 @@ async function queueClose(
   key: string,
   world: Pick<World, "connections">,
   debugMode: boolean,
-  prepare: () => Promise<Remembering>,
+  prepare: Prepare,
 ) {
   const background = deps.background;
   const jobKey = closeJobKey(runId, key);
   if (!background || background.has(jobKey)) return;
   const connectionId = resolveConnectionId(world, "compress");
   if (!connectionId) {
-    const mark = (await readThread(deps.store, runId, key))?.closing;
-    if (mark && !mark.error) await settleClose(deps, runId, key, mark, { error: "no-connection" });
+    const thread = await readThread(deps.store, runId, key);
+    const mark = thread?.closing;
+    if (!mark || mark.error) return;
+    await settleClose(deps, runId, key, mark, landed(thread, mark) ? {} : { error: "no-connection" });
     return;
   }
   background.ensure({
@@ -288,8 +319,8 @@ async function queueClose(
 
 /**
  * POST .../close for thread `key` (see the header), once its caller has checked the thread and holds its lock: marks
- * the open conversation and queues its summary, or with nothing open returns the newest memory. Close again while it
- * is remembered answers the same, and queues its job again if a restart lost it.
+ * the open conversation (with the group's `members` now) and queues its summary, or with nothing open returns the
+ * newest memory. Close again while it is remembered answers the same, and queues its job again if a restart lost it.
  */
 export async function acceptClose(
   deps: CloseDeps,
@@ -297,7 +328,8 @@ export async function acceptClose(
   key: string,
   world: Pick<World, "connections">,
   debugMode: boolean,
-  prepare: () => Promise<Remembering>,
+  prepare: Prepare,
+  members?: LiId[],
 ): Promise<PhoneCloseResult> {
   if (!deps.background)
     throw new OtomeForgeError(503, "Messages cannot remember a conversation right now.", "no-connection");
@@ -321,7 +353,10 @@ export async function acceptClose(
   const day = forgeDayKey(Date.now());
   await saveThread(deps, runId, key, (current) => {
     if (archivedCount(current) !== start) throw conflict("The thread changed while it was being closed.");
-    return { ...current, closing: { start, end: current.messages.length, at, tries: 0, day } };
+    return {
+      ...current,
+      closing: { start, end: current.messages.length, at, tries: 0, day, ...(members ? { members } : {}) },
+    };
   });
   await queueClose(deps, runId, key, world, debugMode, prepare);
   return { remembering: true, start };
@@ -337,7 +372,7 @@ export async function resumeClose(
   key: string,
   { closing }: PhoneCloseView,
   debugMode: boolean,
-  prepare: () => Promise<Remembering>,
+  prepare: Prepare,
 ): Promise<void> {
   if (!closing || closing.error || !deps.background || deps.background.has(closeJobKey(runId, key))) return;
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
