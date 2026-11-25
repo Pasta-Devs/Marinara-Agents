@@ -160,7 +160,7 @@
     "presetLong": "Long",
     "preset": "{{name}} · {{words}}",
     "presetOff": "Off (I decide)",
-    "chapterLengthOffHint": "Generate continues the chapter you are on, as much as your author's note asks for. It never ends a chapter or starts one: begin the next chapter yourself on the blank page after the last one.",
+    "chapterLengthOffHint": "Generate continues the chapter you are on, as much as your author's note asks for, and never starts a new one: begin the next chapter yourself on the blank page after the last one.",
     "targetLength": "Story length target",
     "targetPlaceholder": "Open-ended",
     "targetHint": "Leave empty for an open-ended story. The model is told how far along the story is.",
