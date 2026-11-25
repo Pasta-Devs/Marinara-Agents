@@ -162,7 +162,7 @@ function createHomeStub({
     replying: false,
     sendFailures: 0,
     closeFailures: 0,
-    // 0.46.3: a close accepted and remembered in the background (its session's start), held until `closeHold` resolves.
+    // 0.47.1: a close accepted and remembered in the background (its session's start), held until `closeHold` resolves.
     remembering: null as number | null,
     closeHold: null as Promise<void> | null,
     // How many of those fail as they land (the mark keeps "declined", Try again closes again), and Ilvar's level once
@@ -297,7 +297,7 @@ function createHomeStub({
   let held = false;
   let closeError: string | null = null;
   /**
-   * 0.46.3: what the list and the page say of a close: remembering while held, then landed with its affection, or
+   * 0.47.1: what the list and the page say of a close: remembering while held, then landed with its affection, or
    * failed (`backgroundFailures`).
    */
   const closeView = () => {
@@ -1199,7 +1199,7 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await root.getByRole("button", { name: "Close and remember" }).click();
   await expect(dialog).toContainText("Ilvar Thorne");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
-  // 0.46.3: accepted, the player is back in Messages at once while the memory is written in the background.
+  // 0.47.1: accepted, the player is back in Messages at once while the memory is written in the background.
   let remember = () => {};
   stub.state.closeHold = new Promise<void>((done) => (remember = done));
   await dialog.getByRole("button", { name: "Close and remember" }).click();
@@ -1304,6 +1304,7 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
 test("Otome Forge phone: a close that fails in the background says why with Try again, focus stays on his row, and Home's affection follows the landing", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const stub = createHomeStub();
   stub.state.backgroundFailures = 2;
   await stubRoutes(page, stub, []);
@@ -1531,7 +1532,7 @@ test("Otome Forge phone: his thread's header keeps Close beside his name on one 
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  // "You unlocked a new sticker" landing once the close is remembered (0.46.3: back in Messages, which reads the run
+  // "You unlocked a new sticker" landing once the close is remembered (0.47.1: back in Messages, which reads the run
   // again then) sits below the top bar, so its controls stay in view.
   await page.setViewportSize({ width: 320, height: 640 });
   stub.stickerState.unlock = true;

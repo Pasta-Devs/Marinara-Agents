@@ -6,7 +6,7 @@
 // source recalled only by its own love interest, unread and seen, and a run deleted mid-reply leaving no thread; P17
 // keeps recalled memory whole beside the previous chapter in full; a card name of any length never costs a session; a
 // note's full length fits the Reply quote; Close and remember never waits behind the run's story queue, yet still holds
-// its thread, and P18 gets a thinking model's summary room (#2039). 0.46.3: a close answers before its summary, which
+// its thread, and P18 gets a thinking model's summary room (#2039). 0.47.1: a close answers before its summary, which
 // runs once in the background lane while sends wait; a restart's mark resumes once, a failure keeps the conversation
 // open with Try again, and her next message lets it go; one landing on a later day never turns the daily tally back.
 // Daily messages (#2044): off by default, armed a minute after the app opens, spaced 24 h / limit apart and never past
@@ -185,7 +185,7 @@ async function phoneWorld(
     replies?: FakeReply[];
     withMemory?: boolean;
     model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens">;
-    /** 0.46.3: the background lane Close and remember runs in; off where a test builds its own (dailyWorld). */
+    /** 0.47.1: the background lane Close and remember runs in; off where a test builds its own (dailyWorld). */
     lane?: boolean;
   } = {},
 ) {
@@ -208,7 +208,7 @@ async function phoneWorld(
   const thread = async (li: string): Promise<PhoneThread | null> =>
     t.store.readDoc(chatId(t.runId, li), normalizeThread);
   const phone = phoneRoutes(deps, runKey);
-  /** 0.46.3: lets thread `li`'s close job finish, and returns the thread as it left it. */
+  /** 0.47.1: lets thread `li`'s close job finish, and returns the thread as it left it. */
   const remembered = async (li: string = KAI) => {
     for (let round = 0; round < 400 && background?.has(closeJobKey(t.runId, li)); round += 1) await tick();
     return (await thread(li))!;

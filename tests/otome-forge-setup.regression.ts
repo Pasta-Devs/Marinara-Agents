@@ -633,7 +633,7 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
     prompt: "oil painting, red hair, ball gown",
     negativePrompt: "blurry",
   });
-  // 0.46.3: answered once its record is pending; the paint goes on in the background.
+  // 0.47.1: answered once its record is pending; the paint goes on in the background.
   assert.equal((edited.body.paint as Paint).state, "pending");
   await paintSettled(t.runId, `li:${MIR}`);
   assert.equal((await t.unit(MIR)).art?.state, "ready");

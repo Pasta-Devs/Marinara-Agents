@@ -5,13 +5,13 @@
 // POST /runs/:run/forge/retry {step}                                   → {forge}  (failed steps only)
 // POST /runs/:run/forge/consent {steps}                                → {forge}  (paint steps waiting for consent)
 // POST /runs/:run/art/prompt {target:{kind:"look", owner}}             → {prompt, negativePrompt}
-// POST /runs/:run/art/paint {target, prompt?, negativePrompt?}         → {paint} (pending, 0.46.3)
+// POST /runs/:run/art/paint {target, prompt?, negativePrompt?}         → {paint} (pending, 0.47.1)
 // POST /runs/:run/art/expressions/prompt {li}                         → {base, prompts} (five read-only previews)
 // POST /runs/:run/art/expressions {li, base?, prompts?}               → {paint} (one explicit replacement set, pending)
 // GET  /image-style-profiles                                          → {defaultProfileId, profiles: [{id, name, promptMode}]}
 //                                                                        (the Engine's, for Settings → Images)
 // `owner` is "player" or "li:<li id>". The paint route is the explicit tap: it paints once and keeps an edited prompt's
-// safety tags. 0.46.3: it and the expressions route answer once their record is pending, and the paint goes on in the
+// safety tags. 0.47.1: it and the expressions route answer once their record is pending, and the paint goes on in the
 // background (the maintainer's request): the run view shows it painting, then `ready`, or `failed` with Retry (its
 // step's, or Repaint expressions again). What is wrong before the paint starts (another paint of that look, no image
 // connection, a look not painted or reviewed against another one) is still the answer.

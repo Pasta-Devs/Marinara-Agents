@@ -19,7 +19,7 @@
 // with her (the send's `held`), the thread says so: he needs space until she makes it right in Routes.
 // A picked sticker is attached to the message box (shown above it, with Remove), not sent: Send sends it with the words
 // in the box, or alone, as one message; picking another replaces it. A failed send that was never saved gives it back.
-// 0.46.3: once a close is accepted, the thread goes back to Messages (onBack) while the memory is written in the
+// 0.47.1: once a close is accepted, the thread goes back to Messages (onBack) while the memory is written in the
 // background. Opened again meanwhile, it says the conversation is being remembered, and sending waits until it lands;
 // a close that failed shows why, with Try again (CloseRetry).
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
@@ -209,7 +209,7 @@ export function Thread({
   const remoteBusy = !outgoing && latest.data?.busy === true;
   const typing = waiting || revealing || remoteBusy;
   const busy = !!outgoing || remoteBusy;
-  /** 0.46.3: the open conversation is being remembered in the background; a close that failed shows its error. */
+  /** 0.47.1: the open conversation is being remembered in the background; a close that failed shows its error. */
   const closing = latest.data?.closing;
   const rememberingNow = !!closing && !closing.error;
   const canSend = !busy && !rememberingNow && (draft.trim().length > 0 || !!attached);
@@ -423,7 +423,7 @@ export function Thread({
     );
   };
 
-  // 0.46.3: accepted, the memory is written in the background, and the player is back in Messages at once.
+  // 0.47.1: accepted, the memory is written in the background, and the player is back in Messages at once.
   const closed = (result: PhoneCloseResult) => {
     closeSent(queryClient, runKey, id, result);
     onBack();

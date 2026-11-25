@@ -1241,7 +1241,7 @@ test("a NovelAI connection paints in NovelAI's style, with one reference that th
   assert.equal("preferReferenceOutfit" in bodies[1]!, false);
 });
 
-// ── 0.46.3: Your cast's paints go on in the background ──
+// ── 0.47.1: Your cast's paints go on in the background ──
 
 /** A cast whose looks wait for the tap, with Kai painted on a gallery look and Expressions on; `n` gates paid call n. */
 async function castWorld(runKey: string, gated: number) {

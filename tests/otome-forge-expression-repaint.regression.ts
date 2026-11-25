@@ -1,5 +1,5 @@
 // Explicit expression repainting uses the existing paid-image lifecycle, keeps a usable set while replacing it,
-// and passes the configured image style through both prose and tagged provider prompts. 0.46.3: its route answers once
+// and passes the configured image style through both prose and tagged provider prompts. 0.47.1: its route answers once
 // the set is scheduled, pending, and the faces paint on in the background; these tests read what each paint came to.
 import assert from "node:assert/strict";
 import test from "node:test";

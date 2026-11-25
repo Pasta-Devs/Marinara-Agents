@@ -603,7 +603,7 @@ test("Settings adding a connection later: Engine-art owners' steps are done in i
   // A failed Repaint keeps her persona avatar, and its step says failed, with Retry, after every read.
   failNext = true;
   const failed = await setup("POST", "/runs/:run/art/paint", { target: { kind: "look", owner: "player" } });
-  assert.equal(failed.body.paint.state, "pending", "answered as it starts (0.46.3)");
+  assert.equal(failed.body.paint.state, "pending", "answered as it starts (0.47.1)");
   await paintSettled(t.runId, "player");
   assert.equal((await readPlayer(t)).art?.state, "failed");
   assert.equal((await readPlayer(t)).portrait, AVA);

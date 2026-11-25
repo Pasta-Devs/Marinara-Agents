@@ -5,7 +5,7 @@
 // Polling runs while a step is running, or pending with nothing failed before it (SH/forge.ts forgeIsWorking): the
 // text steps, and a paid paint the player asked for. It stops while the world waits on a failed step's Retry (whose
 // answer patches the view and starts it again), and after a restart the server reports a step with no live owner as
-// failed. 0.46.3: also while Your cast's paints go on in the background (castPainting), wherever the player is.
+// failed. 0.47.1: also while Your cast's paints go on in the background (castPainting), wherever the player is.
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../api";
@@ -24,7 +24,7 @@ export const bibleQueryKey = (runKey: string, li: string) => ["otome-forge", "bi
 export const fetchRunView = async (otome: ReturnType<typeof useOtomeApi>, runKey: string) =>
   (await otome.get<{ view: RunView }>(`/runs/${encodeURIComponent(runKey)}`)).view;
 
-/** 0.46.3: a look or a set of faces is being painted (the server says `stopped` once a restart left one pending). */
+/** 0.47.1: a look or a set of faces is being painted (the server says `stopped` once a restart left one pending). */
 export const castPainting = (view: RunView) =>
   [view.player, ...view.lis, ...(view.friends ?? [])].some(
     (person) => person.art?.state === "pending" || ("facesPaint" in person && person.facesPaint?.state === "pending"),

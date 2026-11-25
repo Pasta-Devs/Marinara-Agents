@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.47.1",
+          "date": "2026-11-25",
+          "notes": "- **Close and remember** sends you back to **Messages** at once and writes the memory in the background. The row says **Remembering…**, then what it earned. A close that fails keeps the conversation open, with **Try again**.\n- **Repaint**, **Repaint expressions** and a reviewed **Paint the cast** paint in the background. You can leave **Your cast** while they paint, and the new picture appears once it's saved.",
+          "highlight": false
+        },
+        {
           "version": "0.47.0",
           "date": "2026-11-25",
           "notes": "- Friends have stickers of their own, one for each friend level: five in all. With images on, they are painted as a love interest's are. **Album → Stickers** lists them after the love interests', with **Repaint**. A friend's Messages thread offers them, and the friend sends them too.\n- In **Everyone**, you can send every sticker you have: yours, and every painted one of your love interests and friends.\n- **Story → Friends** no longer shows a line about each friend under their stars.\n- In **Album → Hangouts**, **Plan a hangout** no longer touches the hangouts below it.",
@@ -828,12 +834,6 @@
           "date": "2026-11-19",
           "notes": "- A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.\n- The lines after a choice are made ahead too, and the reply to your pick once you pick it. Leaving a scene stops making the rest of its voices.\n- Voices are made ahead only while **Voice the dialogue** is on, the **Voices** volume is up and nothing is muted. If one can't be made, the rest are voiced as they appear, as before, until you switch **Voice the dialogue**, **Voice everyone else** or muting off or on.\n- This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.",
           "highlight": true
-        },
-        {
-          "version": "0.36.9",
-          "date": "2026-11-19",
-          "notes": "- The story, messages and every other text Otome Hearth writes are now told not to fall into patterns. Lines of the same kind, such as narration, speech, thoughts and messages, should not keep opening or running the same way, and scenes and replies should not keep the same build. Some models, Gemini among them, kept starting every thought with \"My … feels\" and building scenes the same way.",
-          "highlight": false
         }
       ]
     },

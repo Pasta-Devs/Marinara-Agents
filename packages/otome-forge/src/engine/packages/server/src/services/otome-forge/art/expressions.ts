@@ -15,7 +15,7 @@
 // beat is served, queueScenePaints for a beat's places and CG once written and prepareSceneCg for a CG still without
 // a record once served (art/cg.ts), dispose on teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs
 // each run's sticker chain from GET /runs/:run.
-// 0.46.3: Repaint expressions is told once its set is scheduled (`started`), so its route answers then and the five
+// 0.47.1: Repaint expressions is told once its set is scheduled (`started`), so its route answers then and the five
 // faces paint on in the background; the set is live as `faces:<li>` (S/art/paint.ts startPaint) until it settles, and
 // facesView shows Your cast its replacement painting, stopped by a restart, or failed.
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -71,7 +71,7 @@ export type ExpressionBeat = Pick<Beat, "segments" | "choices">;
 
 export interface OtomeArt {
   /**
-   * Explicitly replaces the current look's five faces, preserving its usable set until completion. `started` (0.46.3)
+   * Explicitly replaces the current look's five faces, preserving its usable set until completion. `started` (0.47.1)
    * is told once the set is scheduled, before any paid image.
    */
   repaintExpressions(
@@ -121,14 +121,14 @@ const baseOf = (unit: Pick<Unit, "portrait" | "outfits" | "wornOutfit"> | null |
   unit ? wornLookUrl(unit) : "";
 
 /**
- * 0.46.3: a Repaint expressions the kit ended before it wrote a replacement set (the base could not be read, the
+ * 0.47.1: a Repaint expressions the kit ended before it wrote a replacement set (the base could not be read, the
  * connection or the setting was gone, the look changed), by `${runId}|${li}`, with the look it was asked for. Kept in
  * this process until his next Repaint expressions starts: a restart forgets it, as it forgets the paint itself.
  */
 const unstarted = new Map<string, { base: string; paint: Paint }>();
 
 /**
- * 0.46.3: Repaint expressions for his current look as Your cast shows it: pending while it is live here (from before
+ * 0.47.1: Repaint expressions for his current look as Your cast shows it: pending while it is live here (from before
  * the kit writes its replacement set), `stopped` once a restart left that set pending or the kit ended it before it
  * started, `stopped` or `failed` with the reason once it did not land, or undefined when none was asked or it landed
  * (the kit's record keeps the replacement only until then).

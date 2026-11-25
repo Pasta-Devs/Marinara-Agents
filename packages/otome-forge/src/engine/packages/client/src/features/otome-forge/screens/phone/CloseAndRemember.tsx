@@ -7,7 +7,7 @@
 // tooltip and description saying which. The server holds one send or close per thread (409 busy), and a close sent
 // again after it landed gets the same memory and earns nothing. In the group chat (#2154) the memory is everyone's in
 // it, and it earns nothing.
-// 0.46.3: the server answers once the close is accepted and writes the memory in the background, so the thread goes
+// 0.47.1: the server answers once the close is accepted and writes the memory in the background, so the thread goes
 // back to Messages at once (onClosed). closeSent remembers the closes this page sent, so the list can say once what
 // each earned when it lands (ThreadList); CloseRetry is Try again for a close that failed, in the list and the thread.
 // ClosesLanding reads the run view again each time one lands while the list is not showing.
@@ -192,7 +192,7 @@ export function CloseAndRemember({ path, text, waitText, blocked, onClosed }: Cl
 }
 
 /**
- * 0.46.3: a close that failed in the background, why (its stored code), and Try again, which closes it again. Its
+ * 0.47.1: a close that failed in the background, why (its stored code), and Try again, which closes it again. Its
  * button goes once the close is accepted, so `onRetried` moves focus on (the list: to his row; the thread: back to it).
  */
 export function CloseRetry({

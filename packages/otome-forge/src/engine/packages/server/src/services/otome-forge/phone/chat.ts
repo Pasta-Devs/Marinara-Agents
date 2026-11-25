@@ -14,7 +14,7 @@
 // interest's route, repair or date chapter never reaches him here.
 //
 // Send (P17) and close (P18) each hold the thread's one write in flight (the kit's withForgeChatSend): a second while
-// one runs is a 409 `busy`, and forgeChatReplyBusy shows it on the history page. 0.46.3: a close holds it only while it
+// one runs is a 409 `busy`, and forgeChatReplyBusy shows it on the history page. 0.47.1: a close holds it only while it
 // is accepted; its summary runs in the background, and while the thread's `closing` mark says it is remembered, a send
 // is a 409 `busy` too (S/phone/memory.ts). Her next message after a close that failed clears its mark: the next close
 // covers that conversation too. A send saves the player's message
@@ -148,7 +148,7 @@ const SessionSchema: ZodType<PhoneSession> = z.object({
   affection: SESSION_DISPLAY.affection.optional(),
 });
 
-/** 0.46.3: the close being remembered (S/phone/memory.ts); one that fails this schema reads as none. */
+/** 0.47.1: the close being remembered (S/phone/memory.ts); one that fails this schema reads as none. */
 const ClosingSchema: ZodType<PhoneClosing> = z.object({
   start: z.number().int().min(0),
   end: z.number().int().min(1),
@@ -208,10 +208,10 @@ export function archivedCount(thread: Pick<PhoneThread, "messages" | "sessions">
 /** The open conversation's messages. */
 export const openMessages = (thread: PhoneThread) => thread.messages.slice(archivedCount(thread));
 
-/** 0.46.3: its open conversation is being remembered right now (a close that failed is not). */
+/** 0.47.1: its open conversation is being remembered right now (a close that failed is not). */
 export const remembering = (thread: Pick<PhoneThread, "closing"> | null) => !!thread?.closing && !thread.closing.error;
 
-/** 0.46.3: what the list row and the history page say of Close and remember (SH/api-types.ts PhoneCloseView). */
+/** 0.47.1: what the list row and the history page say of Close and remember (SH/api-types.ts PhoneCloseView). */
 export function closeView(thread: Pick<PhoneThread, "closing" | "sessions">): PhoneCloseView {
   const newest = thread.sessions.at(-1);
   return {
@@ -774,7 +774,7 @@ export async function sendIn(
     if (remembering(thread)) throw stillRemembering();
     return answered([message], await answer());
   }
-  // 0.46.3: nothing new goes in, or is answered, while the last conversation is remembered.
+  // 0.47.1: nothing new goes in, or is answered, while the last conversation is remembered.
   if (remembering(thread)) throw stillRemembering();
   if (input.retry) return answered([], await answer());
   const text = (input.text ?? "").trim();

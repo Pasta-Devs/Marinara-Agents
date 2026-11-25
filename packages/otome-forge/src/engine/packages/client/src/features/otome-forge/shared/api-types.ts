@@ -718,12 +718,12 @@ export interface PhoneSession {
   name?: string;
   /** #2154: in the group chat, the love interests in it when it closed: only they recall it. */
   members?: LiId[];
-  /** 0.46.3: the affection its close earned; absent when it earned none. */
+  /** 0.47.1: the affection its close earned; absent when it earned none. */
   affection?: number;
 }
 
 /**
- * 0.46.3: Close and remember in the background (S/phone/memory.ts). The open conversation, messages `start` to
+ * 0.47.1: Close and remember in the background (S/phone/memory.ts). The open conversation, messages `start` to
  * `end - 1`, has been remembered since `at`, or (`error`) its summary failed and the conversation stays open. `tries`
  * counts the summaries started, each saved before its call; `day` is the player's local day of the close, the day its
  * affection counts on.
@@ -741,7 +741,7 @@ export interface PhoneClosing {
 }
 
 /**
- * 0.46.3: what a thread's list row and its history page say of Close and remember: `closing` while it remembers (or,
+ * 0.47.1: what a thread's list row and its history page say of Close and remember: `closing` while it remembers (or,
  * with `error`, once it failed), and `remembered`, the newest closed conversation, so the page that sent a close can
  * tell it landed and what it earned.
  */
@@ -820,7 +820,7 @@ export interface PhoneSendResult {
 }
 
 /**
- * POST .../close (0.46.3): the close was accepted and is being remembered in the background (`remembering`, with the
+ * POST .../close (0.47.1): the close was accepted and is being remembered in the background (`remembering`, with the
  * `start` its session will have), or, with nothing open, it already landed and this is its memory again, earning nothing.
  */
 export type PhoneCloseResult = { remembering: true; start: number } | { memory: PhoneSession["memory"] };
@@ -1887,7 +1887,7 @@ export interface RunLiView {
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
   expressions?: Partial<Record<Face, string>>;
   /**
-   * 0.46.3: Repaint expressions for the current look: `pending` while its new faces paint in the background, `stopped`
+   * 0.47.1: Repaint expressions for the current look: `pending` while its new faces paint in the background, `stopped`
    * or `failed` (with the reason) when they did not land; absent when none was asked or they landed.
    */
   facesPaint?: Paint;

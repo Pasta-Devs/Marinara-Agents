@@ -186,7 +186,7 @@ test("an appearance update preserves a concurrent Bible write and only the next 
   t.noWork();
   const painted = await t.call("POST", "/runs/:run/art/paint", { target });
   assert.equal(painted.status, 200);
-  // 0.46.3: answered once pending; the paint lands in the background.
+  // 0.47.1: answered once pending; the paint lands in the background.
   assert.equal(painted.body.paint.state, "pending");
   await paintSettled(t.runId, `li:${KAI}`);
   assert.equal((await t.unit()).art?.state, "ready");

@@ -148,9 +148,9 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
   });
 
   let closing: { start: number } | null = null;
-  // 0.46.3: the close's summary is held until the test calls `land()`; every read says it is remembered meanwhile.
+  // 0.47.1: the close's summary is held until the test calls `land()`; every read says it is remembered meanwhile.
   let held = true;
-  /** 0.46.3: what the list and the page say of the close remembered in the background (it earns nothing). */
+  /** 0.47.1: what the list and the page say of the close remembered in the background (it earns nothing). */
   const closeView = () => {
     if (closing && !held) {
       const count = messages.length - closing.start;
@@ -229,7 +229,7 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
       return { status: 200, json: { messages: [mine, ...reply] } };
     }
     if (path === `${base}/phone/group/close`) {
-      // 0.46.3: accepted at once; it lands on the first read after `land()`.
+      // 0.47.1: accepted at once; it lands on the first read after `land()`.
       closing = { start: archived() };
       return { status: 200, json: { remembering: true, start: closing.start } };
     }
@@ -423,7 +423,7 @@ test("Otome Hearth group chat: Everyone pinned first, speakers in the thread, Cl
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("03-answered.png") });
 
-  // Close and remember: everyone in it recalls it, and it earns nothing. 0.46.3: back to Messages at once, while it is
+  // Close and remember: everyone in it recalls it, and it earns nothing. 0.47.1: back to Messages at once, while it is
   // remembered in the background.
   await close.click();
   const dialog = page.getByRole("dialog", { name: "Close and remember?" });

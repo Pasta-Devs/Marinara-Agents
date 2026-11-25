@@ -3,7 +3,7 @@
 // the last message (or "typing…" while his reply is being written) and how many are unread. Every love interest has
 // a row, written to or not. #2154: once two love interests are met, the group chat, "Everyone", is pinned first, with
 // its members' portraits, the last message with who sent it, and its unread count.
-// 0.46.3: a row whose conversation is being remembered in the background says so (and the list polls until it lands);
+// 0.47.1: a row whose conversation is being remembered in the background says so (and the list polls until it lands);
 // one that failed shows why, with Try again. A close this page sent shows once, as it lands, what it earned.
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";

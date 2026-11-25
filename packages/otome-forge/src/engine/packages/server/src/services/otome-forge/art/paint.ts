@@ -12,7 +12,7 @@
 // paint: right before the paid call it checks the record is still the one this paint marked pending, and it saves the
 // result only onto that record, so a rewritten beat, a deleted run or a setting turned off never receives (or pays for)
 // an image meant for something else; an image nothing keeps is deleted from the gallery again.
-// 0.46.3: Your cast's taps (Repaint, Repaint expressions, a reviewed Paint the cast) answer once their record is pending
+// 0.47.1: Your cast's taps (Repaint, Repaint expressions, a reviewed Paint the cast) answer once their record is pending
 // (answerOnceStarted), and the paint goes on in the background, whether the player stays or leaves.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
@@ -73,7 +73,7 @@ const notFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "
  * Shoot photo (`photo:<photo id>`), (#2138, S/art/figurine.ts) a love interest's Shop figurine (`figurine:<li id>`),
  * (#2151, S/art/tarot-deck.ts) a card of the Tarot deck (`tarot:<deckKey>`), (0.20.0, S/art/side-sprites.ts) a
  * recurring side character's sprite (`side:<record key>`), (0.35.0, S/art/kittens.ts) a Kitty Cards kitten
- * (`kitten:<player or li id>`), or (0.46.3, S/art/expressions.ts) the faces Repaint expressions paints (`faces:<li id>`).
+ * (`kitten:<player or li id>`), or (0.47.1, S/art/expressions.ts) the faces Repaint expressions paints (`faces:<li id>`).
  */
 export type PaintOwner =
   | LookOwner
@@ -151,7 +151,7 @@ export async function tapPaint<T>(
 }
 
 /**
- * 0.46.3: a tap's paint, answered once it has started: `paint` calls `started` with its record once that is pending,
+ * 0.47.1: a tap's paint, answered once it has started: `paint` calls `started` with its record once that is pending,
  * and the answer is that record while the paint goes on. What `paint` throws before then is the answer, as it was; what
  * it throws after is logged.
  */
@@ -525,7 +525,7 @@ async function savePaint(
 
 export type PaintClaimedOptions = Partial<ImagePrompt> & {
   debugMode: boolean;
-  /** 0.46.3: told the record once it is saved pending, right before the paid call (answerOnceStarted). */
+  /** 0.47.1: told the record once it is saved pending, right before the paid call (answerOnceStarted). */
   started?: (record: Paint) => void;
 };
 

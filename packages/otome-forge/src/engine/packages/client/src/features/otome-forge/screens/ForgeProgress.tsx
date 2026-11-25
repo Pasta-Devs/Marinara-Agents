@@ -5,7 +5,7 @@
 // its prompt first, so painting is offered once the world is ready and each look exists. Once the world is ready, the
 // cast is shown with their bibles behind a spoiler gate; #2475: her friends follow the love interests, marked as
 // friends, with their appearance, card and bible (never a love interest's intimacy fill).
-// 0.46.3: Repaint, Repaint expressions and a reviewed paint answer once their paint has started, and it goes on in the
+// 0.47.1: Repaint, Repaint expressions and a reviewed paint answer once their paint has started, and it goes on in the
 // background whether the player stays or leaves. The run view says what paints (a running paint step, a pending look,
 // `facesPaint`), and is polled while anything does (useRun); a paint that failed shows on its step with Retry, and
 // faces that did not land beside Repaint expressions, which paints them again. A look's Repaint stays in place, saying
@@ -66,7 +66,7 @@ interface ExpressionReview {
 }
 
 /**
- * 0.46.3: the prompts the player last reviewed and sent, by `${runKey} ${step id}` for a look and `${runKey} ${li}` for
+ * 0.47.1: the prompts the player last reviewed and sent, by `${runKey} ${step id}` for a look and `${runKey} ${li}` for
  * a set of faces (with the look it was for), kept while they leave the page. A paint that then fails in the background
  * opens its review with them, not the defaults; a review of one that did not fail, or a paint sent without review,
  * lets them go.
@@ -393,7 +393,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
           const expressionLi = view.world.images.expressions
             ? people.find((li) => `paint:${li.id}` === step.id && (li.worn || li.portrait))
             : undefined;
-          // 0.46.3: its new faces paint in the background, or did not land.
+          // 0.47.1: its new faces paint in the background, or did not land.
           const faces = expressionLi?.facesPaint;
           const facesPainting = faces?.state === "pending";
           // A look already there, painted anew in the background: its Repaint stays, saying so, and keeps focus.
@@ -610,7 +610,7 @@ function CastList({
   const card = (person: RunCastMember, li?: RunLiView) => {
     const accent = accentOf(person);
     const pronouns = `${person.pronouns.subject}/${person.pronouns.object}`;
-    // 0.46.3: their look or faces paint in the background; the new picture shows here once it lands.
+    // 0.47.1: their look or faces paint in the background; the new picture shows here once it lands.
     const painting =
       steps.some((step) => step.id === `paint:${person.id}` && step.state === "running") ||
       person.art?.state === "pending" ||

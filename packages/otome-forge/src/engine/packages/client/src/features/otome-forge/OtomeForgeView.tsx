@@ -498,7 +498,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         </div>
         {/* "You unlocked a new sticker" (#2044), over whichever screen is open. */}
         {view && activeRun ? <StickerNotice view={view} /> : null}
-        {/* 0.46.3: a close remembered while the player is away from Messages reads the run view again as it lands. */}
+        {/* 0.47.1: a close remembered while the player is away from Messages reads the run view again as it lands. */}
         {activeRun ? (
           <ClosesLanding key={`closes:${activeRun}`} runKey={activeRun} listShown={screen === "phone" && !phoneOpen} />
         ) : null}

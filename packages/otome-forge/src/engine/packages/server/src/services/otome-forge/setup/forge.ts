@@ -12,7 +12,7 @@
 // - The phase is `ready` once the world plan and every bible are done; painting can still be running.
 // - A failed step waits for its Retry and is never retried by itself. A failed world plan holds the bibles back.
 // - Paints run one at a time in their own queue per run, so a slow image never holds up the story, and only once
-//   their love interest's bible (or, for the protagonist, the world plan) is done. 0.46.3: the art route's tap
+//   their love interest's bible (or, for the protagonist, the world plan) is done. 0.47.1: the art route's tap
 //   (startPaintWithStep) answers once its record is pending and paints on in the background.
 // - A step that reads `running` with no live owner in this process (the server restarted), or `pending` with no job
 //   left to run it, is shown and stored as `failed` (error "stopped"), with Retry.
@@ -448,7 +448,7 @@ export async function paintWithStep(
 }
 
 /**
- * 0.46.3: the art route's tap (Repaint, a reviewed Paint the cast): paintWithStep, answered with the record once it is
+ * 0.47.1: the art route's tap (Repaint, a reviewed Paint the cast): paintWithStep, answered with the record once it is
  * pending, while the paid paint goes on in the background (answerOnceStarted). Another paint of that look (409 `busy`),
  * no image connection or no bible yet is still the answer.
  */

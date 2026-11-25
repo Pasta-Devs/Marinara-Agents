@@ -375,7 +375,7 @@ test("another love interest's route or repair chapter never reaches a note, a li
 
     // Kai's closed conversation is a `chat` source for him alone, and never reaches Mireille's next reply.
     await closeAndRemember(t.deps, t.runId, KAI, { debugMode: false });
-    // 0.46.3: the memory is written by the background lane's job.
+    // 0.47.1: the memory is written by the background lane's job.
     for (let turn = 0; turn < 400 && t.background.has(closeJobKey(t.runId, KAI)); turn += 1) {
       await new Promise((resolve) => setImmediate(resolve));
     }

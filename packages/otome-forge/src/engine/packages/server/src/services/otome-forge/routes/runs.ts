@@ -222,12 +222,12 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** 0.46.3: each love interest's and friend's Repaint expressions as facesView says it now, for `run`'s faces. */
+/** 0.47.1: each love interest's and friend's Repaint expressions as facesView says it now, for `run`'s faces. */
 const castFaces = (runId: string, { units, friends = [] }: Pick<RunDocuments, "units" | "friends">) =>
   new Map([...units, ...friends].map((unit) => [unit.id, facesView(runId, unit)]));
 
 /**
- * The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. 0.46.3: each
+ * The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. 0.47.1: each
  * love interest and friend whose Repaint expressions paints, stopped or failed says so (`facesPaint`, facesView), as
  * `faces` says it at the read the run's faces came from.
  */

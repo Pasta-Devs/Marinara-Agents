@@ -27,7 +27,7 @@
 //   spent). The job is a background job on the Messages connection, inside the thread's lock (so the thread shows
 //   someone typing), and lands unread, only while the thread still ends where it was read. Two members picked at random
 //   start it; the others may join.
-// - Close and remember: one P18 call with the group wording, one session with its members, and no affection. 0.46.3:
+// - Close and remember: one P18 call with the group wording, one session with its members, and no affection. 0.47.1:
 //   in the background, as a love interest's (S/phone/memory.ts), with the members it had when the close was accepted
 //   (kept on its mark, so one who joins before its job runs, or a restart, is not in it).
 //   ponytail: the group remembers only through Close and remember, so squabbles pile up in the open conversation and

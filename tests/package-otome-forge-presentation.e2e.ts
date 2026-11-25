@@ -368,7 +368,7 @@ const REPAINT_ERROR = "The new expressions didn’t finish. Your current artwork
 const LOOK_PROMPT = { prompt: "Ilvar Thorne, copper etching portrait.", negativePrompt: "lowres, child, underage" };
 
 /**
- * 0.46.3: a repaint answers pending at once and paints on in the background: the run view says so until `land`
+ * 0.47.1: a repaint answers pending at once and paints on in the background: the run view says so until `land`
  * resolves (at once without it), then has the new picture, or (`failFirst`'s first set, `failLookFirst`'s first look)
  * says it failed.
  */
@@ -563,7 +563,7 @@ test("Otome Hearth expression repaint reviews five prompts before paying, cancel
     if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
   }
   await page.screenshot({ path: testInfo.outputPath("expression-repaint-last-review-pearl.png") });
-  // 0.46.3: the reviewed set starts and the dialog closes; the faces paint in the background.
+  // 0.47.1: the reviewed set starts and the dialog closes; the faces paint in the background.
   await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   const first = posts(calls, "/art/expressions")[0]!.body!;

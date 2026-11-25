@@ -1004,7 +1004,7 @@ test("Close and remember in the group: P18g, one session with its members, no af
   const points = Object.fromEntries(Object.entries((await t.state()).lis).map(([li, state]) => [li, state.points]));
   const closed = await t.call("POST", close);
   assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  // 0.46.3: accepted at once, and remembered by the background lane's job.
+  // 0.47.1: accepted at once, and remembered by the background lane's job.
   assert.deepEqual(closed.body, { remembering: true, start: 0 });
   assert.deepEqual((await t.call("GET", list)).body.group.closing, {});
   // Noor joins before the job runs: the close keeps the members it was accepted with.

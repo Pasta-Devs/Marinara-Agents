@@ -23,7 +23,7 @@
 // A send's result names (#2424, `held`) those whose grievance with her the reply's hurt opened (S/phone/chat.ts).
 // A thread has one send or close in flight at a time: another is a 409 `busy`. Writing his reply may fail with 503
 // `no-connection`, 422 `declined` or 502 `bad-format`; the player's message stays saved and the history page offers
-// Retry. 0.46.3: a close answers once it is accepted, and its memory is written in the background (S/phone/memory.ts):
+// Retry. 0.47.1: a close answers once it is accepted, and its memory is written in the background (S/phone/memory.ts):
 // the list and the history page say `closing` while it is, and its error once it failed; each read of them queues a
 // close a restart left remembering again. Sending and closing wait for a forged world (409 `conflict`); an unknown run
 // or love interest is a 404.
@@ -69,7 +69,7 @@ const InviteBody = z.object({ message: z.string().min(1).max(60), accept: z.bool
 export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
   const { handle } = deps;
   /**
-   * 0.46.3: a close a restart left remembering, queued again by this read (S/phone/memory.ts resumeClose). One that
+   * 0.47.1: a close a restart left remembering, queued again by this read (S/phone/memory.ts resumeClose). One that
    * cannot be is logged, and the read still answers; its mark stands for the next read.
    */
   const resume = (runId: string, key: string, view: PhoneCloseView, debugMode: boolean) =>

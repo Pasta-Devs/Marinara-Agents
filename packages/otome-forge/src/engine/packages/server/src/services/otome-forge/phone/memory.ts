@@ -5,7 +5,7 @@
 // sentences, for his prompts; the thread shows only that he remembers it and the line quoted from it), the session is
 // appended once, and he earns Close and remember's affection (SH/economy.ts, within the per-LI daily cap for
 // everything outside the story; S/state/rewards.ts grant).
-// 0.46.3: the summary runs in the background, so the player goes back to Messages at once (the maintainer's request).
+// 0.47.1: the summary runs in the background, so the player goes back to Messages at once (the maintainer's request).
 // - The close is accepted in the thread's one write in flight, as a send is (S/phone/chat.ts inThreadLock): its checks,
 //   then the thread's `closing` mark (the open conversation's range, when, the player's local day, and in the group
 //   its members), saved before it answers `{remembering: true}`. While the mark stands, a send is a 409 `busy`, and
@@ -363,7 +363,7 @@ export async function acceptClose(
 }
 
 /**
- * 0.46.3: thread `key`'s close, when its mark stands with no job for it in this process (a restart), queued again from
+ * 0.47.1: thread `key`'s close, when its mark stands with no job for it in this process (a restart), queued again from
  * a read of the list or the thread (see the header).
  */
 export async function resumeClose(
