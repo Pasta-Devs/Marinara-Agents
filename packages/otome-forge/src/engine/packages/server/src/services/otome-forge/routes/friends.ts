@@ -5,6 +5,12 @@
 //      has met who could become her friend, newest first, and why none may join now (SH/friends.ts friendBlock)
 // POST /runs/:run/friends {source: "met"|"card"|"new", …}        → {friend: {id, name}}: writes one friend (S/story/
 //      friends.ts addFriend), in the run's foreground queue so two taps write one. 409 `conflict` when none may join.
+//      Someone she has met takes `cardId` (one of the player's cards), null for none, or by default the card their
+//      name matches.
+// GET  /runs/:run/friends/:li/bible?spoilers=1                   → {bible}: a friend's bible (`unit.friend`), asked for
+//      only behind Your cast's "Show spoilers" gate, as a love interest's is
+// POST /runs/:run/friends/:li/bible {bible}                      → {bible}: the player's edit, checked whole
+//      (FriendBibleSchema); stances on anyone not a love interest are dropped, and a changed look steers the next paint
 import { z } from "zod";
 import { DATE_PLACE_IDS, BASE_LOOK } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { friendBlock, friendHeld } from "../../../../../client/src/features/otome-forge/shared/friends.js";
@@ -20,16 +26,18 @@ import {
   runParam,
   type RegisterRoutes,
 } from "../http.js";
-import { isChapterKey, sideCastId } from "../ids.js";
+import { isChapterKey, runDocTarget, sideCastId, unitId } from "../ids.js";
 import { readThread } from "../phone/chat.js";
 import { settleInvites } from "../phone/upset.js";
 import { normalizeSideCast } from "../schemas/side-cast.js";
 import { readRun } from "../schemas/state.js";
+import { field } from "../schemas/common.js";
+import { FriendBibleSchema, normalizeUnit } from "../schemas/unit.js";
 import { toChapterView } from "../schemas/story.js";
 import { nextEndingStep } from "../story/ending.js";
 import { askWingman } from "../story/friend-rewards.js";
 import { hangoutCompany, openMendStory, openRankStory, startHangout } from "../story/friend-stories.js";
-import { addFriend, currentArc, metPeople } from "../story/friends.js";
+import { addFriend, currentArc, metPeople, withCast } from "../story/friends.js";
 import { mementoPromptFor, mementoView, paintMemento } from "../story/hangout-memento.js";
 import { readChapter } from "../story/canon.js";
 import { mainChapters } from "../story/chapters.js";
@@ -45,7 +53,7 @@ const FriendBody = z.union([
     source: z.literal("met"),
     key: z.string().min(1).max(200),
     pronouns: Pronouns,
-    cardId: z.string().min(1).max(200).optional(),
+    cardId: z.string().min(1).max(200).nullable().optional(),
   }),
   z.object({ source: z.literal("card"), cardId: z.string().min(1).max(200), pronouns: Pronouns }),
   z.object({
@@ -57,6 +65,7 @@ const FriendBody = z.union([
 ]);
 
 const NoFields = z.object({});
+const FriendBibleBody = z.object({ bible: FriendBibleSchema });
 const WingmanBody = z.object({ li: z.string().min(1).max(80) });
 /** A place: one of Date Night's, a story place by name (`story:<name>`), or "partner-choice" (they choose). */
 const HangoutBody = z.object({
@@ -79,6 +88,8 @@ function placeText(place: string, firstFriend: string): string {
     return `at a ${place.replace(/-/g, " ")}, as this world has one`;
   throw new OtomeForgeError(400, "That place is not one you can choose.", "bad-request");
 }
+
+const friendNotFound = () => new OtomeForgeError(404, "No such friend.", "not-found");
 
 export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
   const { store, handle } = deps;
@@ -232,6 +243,51 @@ export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
         nextEndingStep(deps, runId, { debugMode: debugModeOf(request), ...(signal ? { signal } : {}) }),
       );
       return { chapter: toChapterView(chapter) };
+    }),
+  );
+
+  // Your cast: a friend's bible, behind the spoiler gate, and the player's edit of it.
+  router.get(
+    "/runs/:run/friends/:li/bible",
+    handle(async (request) => {
+      const { runId } = runParam(request);
+      const id = liParam(request);
+      const spoilers = field(request.query, "spoilers");
+      if (spoilers !== "1" && spoilers !== "true") {
+        throw new OtomeForgeError(400, "A bible is a spoiler: ask for it with spoilers=1.", "bad-request");
+      }
+      const run = await readRun(store, runId);
+      if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
+      const unit = run.friends?.find((friend) => friend.id === id);
+      if (!unit?.friend) throw friendNotFound();
+      return { bible: unit.friend };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/friends/:li/bible",
+    handle(async (request) => {
+      const body = parseBody(FriendBibleBody, request.body);
+      const { runId } = runParam(request);
+      const id = liParam(request);
+      const run = await readRun(store, runId);
+      if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
+      if (!run.friends?.some((friend) => friend.id === id)) throw friendNotFound();
+      const bible = withCast(body.bible, run.units);
+      const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, id)), normalizeUnit, (current) => {
+        if (!current.friend) throw friendNotFound();
+        // Their look lives on the unit too (the next paint reads it there): a line the edit changed steers it, and one
+        // left as it was keeps what the unit has (a look she met them in, an appearance edited in Your cast).
+        const { identityLine, outfitLine } = current.friend.look;
+        return {
+          ...current,
+          friend: bible,
+          identityLine: bible.look.identityLine === identityLine ? current.identityLine : bible.look.identityLine,
+          outfitLine: bible.look.outfitLine === outfitLine ? current.outfitLine : bible.look.outfitLine,
+        };
+      });
+      if (!unit?.friend) throw friendNotFound();
+      return { bible: unit.friend };
     }),
   );
 

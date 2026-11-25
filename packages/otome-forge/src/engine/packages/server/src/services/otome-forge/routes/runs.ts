@@ -14,7 +14,9 @@
 //                                             indexing of chapter summaries not indexed yet (0.19.0), records the side
 //                                             characters of scenes read before 0.20.0 (once) and, with Side
 //                                             character sprites on, tends their looks and sprites (S/story/side-cast.ts);
-//                                             someone new mid-story gets his forge steps (setup/forge.ts forgeCast)
+//                                             someone new mid-story gets his forge steps (setup/forge.ts forgeCast);
+//                                             the love interests', her friends' and the protagonist's looks and faces
+//                                             are cut out of their backdrops in the background (S/art/cutout.ts)
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
 // POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?, dateInvites?}
@@ -30,7 +32,10 @@
 //                                             adult NSFW stories, #1936), keeping the rest of the bible
 // POST /runs/:run/lis/:li/appearance {identityLine} → {identityLine}; image-only, never paints
 // POST /runs/:run/lis/:li/accent {accent}  → {accent}
-// POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest
+// POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest. 409 `conflict` for
+//                                             a card another love interest or friend has
+// #2475: appearance, accent and card take her friends (`state.friends`) as they take the love interests; a friend's
+// bible has its own routes (S/routes/friends.ts).
 //
 // The server never trusts the client with content. The gate is read from the index on each write: raising Heat or the
 // image rating, or picking Dark romance, needs it (403 `age-gate`), lowering never does, and every stored content goes
@@ -207,6 +212,8 @@ const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nul
 
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
+/** A love interest or (#2475) one of her friends: who Your cast's card link and appearance take. */
+const castMember = (run: RunDocuments, id: string) => [...run.units, ...(run.friends ?? [])].find((unit) => unit.id === id);
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
 const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate before raising this setting.", "age-gate");
 
@@ -450,6 +457,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           queueCutouts(deps, runId, unit, [...stageArtUrls(run.world, unit), ...stickerArtUrls(run, unit.id)]),
         ),
       );
+      // #2475: her friends' looks and faces too, so no view shows a friend on the painted matte.
+      const friends = await Promise.all(
+        (run.friends ?? []).map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit))),
+      );
       const queuedPlayer = await queueCutouts(deps, runId, { id: "player", cutouts: run.player.cutouts ?? {} }, [
         ...[run.player.portrait, run.player.outfits.find((outfit) => outfit.id === run.player.wornOutfit)?.url].filter(
           (url): url is string => !!url,
@@ -457,7 +468,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         ...stickerArtUrls(run, PLAYER_STICKER_OWNER),
       ]);
       const player = { ...run.player, cutouts: queuedPlayer.cutouts };
-      const shown = { ...run, units, player };
+      const shown = { ...run, units, player, friends };
       // #2044: every read designs the sets and paints the stickers owed so far (a level reached since, or the levels a
       // story in progress had already reached), in the background; nothing here waits for them.
       const debugMode = debugModeOf(request);
@@ -467,7 +478,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       return {
         view: {
           ...runView(runKey, runId, shown),
-          ...(cutoutsPending(runId, [...units, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
+          ...(cutoutsPending(runId, [...units, ...friends, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
           stickers: stickerBook(runId, shown),
           ...(designing || (painting && stickersComing(runId, shown)) ? { stickersPending: true as const } : {}),
           prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed,
@@ -635,7 +646,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       return runForeground(runId, async () => {
         const run = await readRun(store, runId);
         if (!run) throw runNotFound();
-        if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+        if (!castMember(run, li)) throw liNotFound();
         if (cardId) {
           if (
             /[\\/\u0000-\u001f\u007f]/u.test(cardId) ||
@@ -644,8 +655,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           ) {
             throw badRequest("That character card is not available.");
           }
-          if (run.units.some((unit) => unit.id !== li && unit.cardId === cardId)) {
-            throw new OtomeForgeError(409, "That card is linked to another love interest.", "conflict");
+          if ([...run.units, ...(run.friends ?? [])].some((unit) => unit.id !== li && unit.cardId === cardId)) {
+            throw new OtomeForgeError(409, "That card is linked to another love interest or friend.", "conflict");
           }
         }
         const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
@@ -655,7 +666,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           return next;
         });
         if (!unit) throw liNotFound();
-        // #2147: a love interest with no look yet takes the newly linked card's Engine art on the next read.
+        // #2147: a love interest or friend with no look yet takes the newly linked card's Engine art on the next read.
         forgetEngineLook(runId, `li:${li}`);
         return { cardId: unit.cardId ?? null };
       });
@@ -670,13 +681,15 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const li = liParam(request);
       const run = await readRun(store, runId);
       if (!run) throw runNotFound();
-      if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+      if (!castMember(run, li)) throw liNotFound();
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => ({
         ...current,
         identityLine: identityLine.trim() ? identityLine : "",
       }));
       if (!unit) throw liNotFound();
-      return { identityLine: unit.identityLine || unit.bible?.look.identityLine || "" };
+      return {
+        identityLine: unit.identityLine || unit.bible?.look.identityLine || unit.friend?.look.identityLine || "",
+      };
     }),
   );
 
