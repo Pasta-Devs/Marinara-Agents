@@ -1146,6 +1146,15 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
 
   // Meeting someone new: the dialog itself shows the planning status and the story so far, with no copy behind it.
   newcomer = true;
+  // #2475: a card someone in the cast already has (Ilvar's, linked in Your cast) is not offered.
+  await page.route(
+    (url) => url.pathname === `/api/otome-forge/runs/${RUN}`,
+    (route) => {
+      const reply = stub.answer({ method: "GET", path: `/api/otome-forge/runs/${RUN}` });
+      (reply.json as Json).view.lis[0].cardId = "card-ilvar";
+      return route.fulfill(reply);
+    },
+  );
   await page.goto("about:blank");
   const third = await openStory(page);
   // Someone from your cards (the maintainer, 2026-11-10): the cards lay out as setup's tiles, and a tap shows a check
@@ -1154,7 +1163,10 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
   await page.route("**/api/characters/catalog?**", (route) =>
     route.fulfill({
       json: {
-        items: cardNames.map((name) => ({ id: `card-${name.toLowerCase()}`, name })),
+        items: [
+          ...cardNames.map((name) => ({ id: `card-${name.toLowerCase()}`, name })),
+          { id: "card-ilvar", name: "Ilvar card" },
+        ],
         hasMore: false,
       },
     }),
@@ -1163,6 +1175,7 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
   const arrives = page.getByRole("dialog", { name: "Who arrives?" });
   const tiles = arrives.getByRole("list", { name: "Someone from your cards" }).getByRole("button");
   await expect(tiles).toHaveCount(cardNames.length);
+  await expect(tiles.filter({ hasText: "Ilvar card" })).toHaveCount(0);
   const [first, second] = await Promise.all([tiles.nth(0).boundingBox(), tiles.nth(1).boundingBox()]);
   expect(Math.abs(first!.y - second!.y), "two cards share a row").toBeLessThan(2);
   const arlecchino = tiles.filter({ hasText: "Arlecchino" });

@@ -2,13 +2,14 @@
 // Otome Hearth: her friends join the story (#2458, part 1)
 // ──────────────────────────────────────────────
 // POST /runs/:run/friends writes one friend: someone she has met (a side character who spoke in a scene, S/story/
-// side-cast.ts, with the Engine card their name matches or one the player picks), one of the player's cards, or
-// someone new from a name and notes. As with a love interest who arrives mid-story (S/story/introduce.ts), the unit is
-// written first, then their bible (one structured call, friendBibleMessages), then they join `state.friends` LAST, in
-// a revision-checked write that checks again that one may join (SH/friends.ts friendBlock: as many friends as love
-// interests, one per story arc). A failed bible leaves the unit without one, out of the friends, and the same friend
-// again takes that unit back and pays for no second unit. A friend's unit never has a love interest's `bible`, so
-// nothing that means the love interests counts them (S/schemas/state.ts readCastUnits reads `state.lis` alone).
+// side-cast.ts, with the Engine card the player picks, none, or by default the one their name matches), one of the
+// player's cards, or someone new from a name and notes. A card already linked to a love interest or friend is refused.
+// As with a love interest who arrives mid-story (S/story/introduce.ts), the unit is written first, then their bible
+// (one structured call, friendBibleMessages), then they join `state.friends` LAST, in a revision-checked write that
+// checks again that one may join (SH/friends.ts friendBlock: as many friends as love interests, one per story arc). A
+// failed bible leaves the unit without one, out of the friends, and the same friend again takes that unit back and
+// pays for no second unit. A friend's unit never has a love interest's `bible`, so nothing that means the love
+// interests counts them (S/schemas/state.ts readCastUnits reads `state.lis` alone).
 // Their portrait and faces are painted as a love interest's are (setup/forge.ts forgeCast gives them a paint step on
 // the next read; art/expressions.ts paints their faces once they speak).
 import type { Player, Pronouns, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -43,7 +44,7 @@ import { namesClash, namesPerson, readLines, sideScenes } from "./side-cast.js";
 
 /** Who joins: someone she has met (by their side-cast key), one of the player's cards, or someone new. */
 export type FriendArrival =
-  | { source: "met"; key: string; pronouns: Pronouns; cardId?: string }
+  | { source: "met"; key: string; pronouns: Pronouns; cardId?: string | null }
   | { source: "card"; cardId: string; pronouns: Pronouns }
   | { source: "new"; name: string; pronouns: Pronouns; notes?: string };
 
@@ -113,7 +114,7 @@ export function metPeople(
 }
 
 /** Keeps only the love interests the bible may speak of: their stance is keyed by id. */
-function withCast(bible: FriendBible, lis: ReadonlyArray<Pick<Unit, "id">>): FriendBible {
+export function withCast(bible: FriendBible, lis: ReadonlyArray<Pick<Unit, "id">>): FriendBible {
   const ids = new Set(lis.map((li) => li.id));
   return { ...bible, onLis: Object.fromEntries(Object.entries(bible.onLis).filter(([id]) => ids.has(id))) };
 }
@@ -138,6 +139,8 @@ export async function addFriend(
   const block = ending ? "ending" : friendBlock(run.units.length, Object.values(run.state.friends), arc);
   if (block) throw blocked(block);
 
+  const taken = [...run.units, ...(run.friends ?? [])];
+  const linked = new Set(taken.flatMap((unit) => (unit.cardId ? [unit.cardId] : [])));
   let name = "";
   let cardId: string | undefined;
   let notes = "";
@@ -146,7 +149,11 @@ export async function addFriend(
     met = (await deps.store.readDoc(sideCastId(runId), normalizeSideCast))?.people[arrival.key];
     if (!met) throw refused("No one by that name has spoken in the story yet.");
     name = met.name;
-    cardId = arrival.cardId ?? met.cardId;
+    // The card the player chose, none (null), or else the one their name matches while it is no one else's.
+    cardId =
+      arrival.cardId === null
+        ? undefined
+        : (arrival.cardId ?? (met.cardId && !linked.has(met.cardId) ? met.cardId : undefined));
   } else if (arrival.source === "card") {
     cardId = arrival.cardId;
   } else {
@@ -154,13 +161,13 @@ export async function addFriend(
     notes = arrival.notes?.trim().slice(0, NOTES_MAX) ?? "";
   }
   if (cardId) {
+    if (linked.has(cardId)) throw refused("That card is already someone in your story's cast.");
     const card = await readCard(deps.runtime, cardId);
     if (!card?.name.trim()) throw refused("That card could not be read.");
     if (arrival.source === "card") name = card.name.trim();
   }
   if (!name) throw refused("Say who your friend is.");
   if (CONTROL.test(name) || name.includes("..")) throw refused("That name cannot be used.");
-  const taken = [...run.units, ...(run.friends ?? [])];
   if (namesClash(name, run.player.name) || taken.some((unit) => namesClash(name, unit.name))) {
     throw refused(`${name} is already in your story's cast.`);
   }

@@ -43,7 +43,8 @@ const CONTROL = /[\u0000-\u001f\u007f]/u;
 
 /**
  * Writes the newcomer and returns who they are, for the arc that introduces them. 400 when the cast is full, when the
- * card cannot be read, or when the name is unusable; 409 when the run is still being forged.
+ * card is someone's in the cast already or cannot be read, or when the name is unusable; 409 when the run is still being
+ * forged.
  */
 export async function introduceLoveInterest(
   deps: GenerationDeps & {
@@ -64,6 +65,9 @@ export async function introduceLoveInterest(
 
   let name = "";
   if (arrival.source === "card") {
+    // #2475: a card is one person's likeness, and a friend's or a relinked love interest's card can carry another name.
+    if ([...run.units, ...(run.friends ?? [])].some((unit) => unit.cardId === arrival.cardId))
+      throw new OtomeForgeError(400, "That card is already someone in your story's cast.", "bad-request");
     const card = await readCard(deps.runtime, arrival.cardId);
     name = card?.name.trim() ?? "";
     if (!name) throw new OtomeForgeError(400, "That card could not be read.", "bad-request");

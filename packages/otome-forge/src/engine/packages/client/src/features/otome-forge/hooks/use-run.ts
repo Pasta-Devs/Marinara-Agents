@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../api";
 import { ACCENT_SAMPLER_VERSION, accentIsPlaceholder, castAccentFor, sampleAccent } from "../lib/accent";
-import type { RunView, SettingsInput, WorldView } from "../shared/api-types";
+import type { RunCastMember, RunView, SettingsInput, WorldView } from "../shared/api-types";
 import { forgeIsWorking } from "../shared/forge";
 import { memoryQueryKey, recallQueryKey } from "./use-memory";
 
@@ -43,8 +43,24 @@ export function patchRun(queryClient: QueryClient, runKey: string, patch: (view:
   queryClient.setQueryData<RunView>(runQueryKey(runKey), (view) => (view ? patch(view) : view));
 }
 
+/** #2475: writes `changes` into the love interest or friend `id` of the cached view (Your cast edits both alike). */
+export function patchCastMember(
+  queryClient: QueryClient,
+  runKey: string,
+  id: string,
+  changes: (person: RunCastMember) => Partial<RunCastMember>,
+) {
+  patchRun(queryClient, runKey, (view) => ({
+    ...view,
+    lis: view.lis.map((li) => (li.id === id ? { ...li, ...changes(li) } : li)),
+    ...(view.friends
+      ? { friends: view.friends.map((friend) => (friend.id === id ? { ...friend, ...changes(friend) } : friend)) }
+      : {}),
+  }));
+}
+
 /**
- * Once an LI's portrait exists, samples his accent from it and saves it, once per portrait. A failed sample or save
+ * Once an LI's (or, #2475, a friend's) portrait exists, samples his accent from it and saves it, once per portrait. A failed sample or save
  * leaves the colour from his name; the next portrait or visit tries again.
  * The picks are made distinct against each other, not against the view the pass started with: every stale LI is
  * sampled in one pass, so `picked` carries the colours already chosen (and not yet saved) synchronously, before the
@@ -58,7 +74,7 @@ export function useSampledAccents(view: RunView | undefined) {
   const picked = useRef(new Map<string, string>());
   useEffect(() => {
     if (!view) return;
-    for (const li of view.lis) {
+    for (const li of [...view.lis, ...(view.friends ?? [])]) {
       const key = `${li.id} ${li.portrait}`;
       if (!li.portrait || !accentIsPlaceholder(li) || tried.current.has(key)) continue;
       tried.current.add(key);
@@ -68,7 +84,7 @@ export function useSampledAccents(view: RunView | undefined) {
         // latest cached accents come first, then this page's choices, so a pick made a moment ago counts even before its
         // POST lands.
         const latest = queryClient.getQueryData<RunView>(runQueryKey(view.runKey)) ?? view;
-        const accent = castAccentFor(li, sampled, latest.lis, picked.current);
+        const accent = castAccentFor(li, sampled, [...latest.lis, ...(latest.friends ?? [])], picked.current);
         picked.current.set(li.id, accent);
         try {
           const saved = await otome.post<{ accent: string }>(
@@ -76,11 +92,9 @@ export function useSampledAccents(view: RunView | undefined) {
             { accent, sampler: ACCENT_SAMPLER_VERSION },
           );
           picked.current.set(li.id, saved.accent);
-          patchRun(queryClient, view.runKey, (current) => ({
-            ...current,
-            lis: current.lis.map((item) =>
-              item.id === li.id ? { ...item, accent: saved.accent, accentSampler: ACCENT_SAMPLER_VERSION } : item,
-            ),
+          patchCastMember(queryClient, view.runKey, li.id, () => ({
+            accent: saved.accent,
+            accentSampler: ACCENT_SAMPLER_VERSION,
           }));
         } catch (error) {
           // Its colour goes back to the cast, so a later pick may take it.
