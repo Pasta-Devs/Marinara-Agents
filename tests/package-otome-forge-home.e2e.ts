@@ -1417,6 +1417,50 @@ test("Otome Forge phone: Home's affection follows each close that lands, while a
   await expect(threads.getByRole("button", { name: /Cassian/ })).toContainText(catalog["ui.otomeForge.phone.closing"]!);
 });
 
+test("Otome Forge phone: a close sent from Home's Reply shows its affection on Home before Messages was ever read", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Messages' first read waits until the player is back Home and the close has landed.
+  let answerList = () => {};
+  const listHeld = new Promise<void>((done) => (answerList = done));
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}/phone`) await listHeld;
+    return answer(call);
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  try {
+    await root
+      .getByRole("article", { name: "A note from Ilvar Thorne" })
+      .getByRole("button", { name: "Reply" })
+      .click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect.poll(() => posts(stub, "/close").length).toBe(1);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // Home while nothing has read Messages yet: it lands, then the list answers with it landed.
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    remember();
+  } finally {
+    answerList();
+  }
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  // Messages still says once what it earned.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toContainText("+5 affection");
+});
+
 test("Otome Forge daily messages: the first heartbeat reads nothing again for an old message; a new one reads Home again", async ({
   page,
 }) => {

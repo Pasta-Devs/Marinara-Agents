@@ -76,7 +76,7 @@ import {
   toWorldView,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { setImages } from "./fixtures/otome-forge-art.ts";
-import type { FakeReply } from "./fixtures/otome-forge-fakes.ts";
+import { within, type FakeReply } from "./fixtures/otome-forge-fakes.ts";
 import { HE, KAI, KAVEH, MIR, SOL, at, bible, json, seedFriend, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
@@ -989,6 +989,40 @@ test("a squabble holds the thread while written, and is dropped when the thread 
   assert.ok(t.logs.some((entry) => entry.level === "info" && entry.message.includes("squabble was dropped")));
 });
 
+test("0.47.1: squabbles skip a group whose conversation is being remembered, and the job checks it again when it starts", async () => {
+  const gate = admissionGate();
+  const t = await groupWorld("r-group12-aaaaaa", { admissionRun: gate.admissionRun });
+  await t.setWorld({ groupSquabbles: 24 });
+  const beat = (now: number) => groupDue(t.deps, t.runId, { open: null, now, random: () => 0 });
+  const closing = { start: 0, end: 2, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
+  const mark = (marked: boolean) =>
+    t.store.mutateDoc(chatTarget(t.runId, GROUP_THREAD), normalizeThread, (thread) => ({
+      ...thread,
+      li: GROUP_THREAD,
+      messages: [
+        { id: "m-her-0001", who: "player", text: "Anyone?", at },
+        { id: "m-kai-0001", who: "li", text: "Here.", at, li: KAI },
+      ],
+      closing: marked ? closing : undefined,
+    }));
+  // Its close's summary runs in the background: nothing is armed or spent.
+  await mark(true);
+  assert.equal((await beat(T0)).status, "no-eligible");
+  assert.equal((await t.world()).groupDaily, undefined, "nothing armed or spent");
+
+  // Queued before the close; the close is accepted while the job waits for admission: it drops, and the slot stays spent.
+  await mark(false);
+  assert.equal((await beat(T0 + 1_000)).status, "scheduled");
+  assert.equal((await beat(T0 + 61_000)).status, "queued");
+  await mark(true);
+  gate.open();
+  for (let round = 0; round < 400 && t.background.has(groupJobKey(t.runId)); round += 1) await tick();
+  assert.equal(t.groupCalls().length, 0, "no provider work");
+  assert.equal((await t.thread())!.messages.length, 2);
+  assert.equal((await t.world()).groupDaily!.days["2026-11-02"]!.attempts, 1);
+  assert.ok(t.logs.some((entry) => entry.level === "info" && String(entry.args[0]).includes("being remembered")));
+});
+
 // ── Close and remember, and who recalls it ──
 
 test("Close and remember in the group: P18g, one session with its members, no affection, recalled only by its members", async () => {
@@ -1002,15 +1036,18 @@ test("Close and remember in the group: P18g, one session with its members, no af
   await t.arc(2, 2, NEW);
   assert.equal((await t.call("POST", send, { body: { text: "Is anyone up?" } })).status, 200);
   const points = Object.fromEntries(Object.entries((await t.state()).lis).map(([li, state]) => [li, state.points]));
-  const closed = await t.call("POST", close);
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  // 0.47.1: accepted at once, and remembered by the background lane's job.
-  assert.deepEqual(closed.body, { remembering: true, start: 0 });
-  assert.deepEqual((await t.call("GET", list)).body.group.closing, {});
-  // Noor joins before the job runs: the close keeps the members it was accepted with.
-  await t.complete("main-2");
-  assert.deepEqual((await t.call("GET", list)).body.group.members, [KAI, MIR, SOL, NEW]);
-  gate.open();
+  try {
+    const closed = await within(t.call("POST", close), "the close's answer");
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    // 0.47.1: accepted at once, and remembered by the background lane's job.
+    assert.deepEqual(closed.body, { remembering: true, start: 0 });
+    assert.deepEqual((await t.call("GET", list)).body.group.closing, {});
+    // Noor joins before the job runs: the close keeps the members it was accepted with.
+    await t.complete("main-2");
+    assert.deepEqual((await t.call("GET", list)).body.group.members, [KAI, MIR, SOL, NEW]);
+  } finally {
+    gate.open();
+  }
   for (let round = 0; round < 400 && t.background.has(closeJobKey(t.runId, GROUP_THREAD)); round += 1) await tick();
   assert.deepEqual((await t.thread())!.sessions[0]!.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
   assert.deepEqual((await t.call("GET", list)).body.group.remembered, { start: 0 }, "it earned nothing");

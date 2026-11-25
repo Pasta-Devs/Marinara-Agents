@@ -725,8 +725,8 @@ export interface PhoneSession {
 /**
  * 0.47.1: Close and remember in the background (S/phone/memory.ts). The open conversation, messages `start` to
  * `end - 1`, has been remembered since `at`, or (`error`) its summary failed and the conversation stays open. `tries`
- * counts the summaries started, each saved before its call; `day` is the player's local day of the close, the day its
- * affection counts on.
+ * counts the summaries started, each saved before its call; `day` is the player's local date when the close was
+ * accepted. Its affection counts on that day, or on a newer day's tally if one has started by the time it lands.
  */
 export interface PhoneClosing {
   start: number;

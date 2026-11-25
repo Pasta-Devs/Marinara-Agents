@@ -19,7 +19,7 @@ import { BookHeart, RotateCcw } from "lucide-react";
 import { forgeStepErrorKey, useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
 import { runQueryKey } from "../../hooks/use-run";
-import type { LiId, PhoneCloseResult, PhoneListView } from "../../shared/api-types";
+import type { LiId, PhoneCloseResult, PhoneCloseView, PhoneListView } from "../../shared/api-types";
 import { GROUP_THREAD } from "../../shared/home";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 
@@ -45,23 +45,30 @@ export function closeSent(queryClient: QueryClient, runKey: string, id: LiId, re
   void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, id) });
 }
 
-/** The threads whose close this page sent `list` still shows being remembered, as one key ("" for none). */
-const sentRemembering = (runKey: string, list: PhoneListView | undefined) =>
-  list
-    ? [
-        ...list.threads.map((row) => [row.li, row] as const),
-        ...(list.group ? [[GROUP_THREAD, list.group] as const] : []),
-      ]
-        .filter(([id, row]) => sentCloses.has(closeKey(runKey, id)) && !!row.closing && !row.closing.error)
-        .map(([id]) => id)
-        .join(" ")
-    : "";
+/**
+ * The threads whose close this page sent and `list` does not show landed yet (all of them before the list is read), as
+ * one key ("" for none).
+ */
+const sentRemembering = (runKey: string, list: PhoneListView | undefined) => {
+  const rows = new Map<LiId, PhoneCloseView>(list ? list.threads.map((row) => [row.li, row]) : []);
+  if (list?.group) rows.set(GROUP_THREAD, list.group);
+  const prefix = closeKey(runKey, "");
+  return [...sentCloses.keys()]
+    .filter((key) => key.startsWith(prefix))
+    .map((key) => key.slice(prefix.length))
+    .filter((id) => {
+      const closing = rows.get(id)?.closing;
+      return !list || (!!closing && !closing.error);
+    })
+    .join(" ");
+};
 
 /**
  * While the Messages list is not showing (the player went Home, or anywhere else) and a close this page sent is still
  * being remembered, polls the list's query, and reads the run view again each time one lands, so Home's affection and
- * level show it while another is still remembered. ThreadList still says once what each earned when the list next
- * shows; while it shows, it does all this itself.
+ * level show it while another is still remembered. The closes it waits on are the ones sentCloses holds, so it polls
+ * even when nothing has read the list yet (a thread opened from Home). ThreadList still says once what each earned
+ * when the list next shows; while it shows, it does all this itself.
  */
 export function ClosesLanding({ runKey, listShown }: { runKey: string; listShown: boolean }) {
   const otome = useOtomeApi();

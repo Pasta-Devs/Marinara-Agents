@@ -98,7 +98,7 @@ import {
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
-import type { FakeReply, FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
+import { within, type FakeReply, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
 import { KAI, MIR, SOL, json, saveStoryMemory, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
@@ -248,18 +248,6 @@ function gateFirstCall(runtime: Awaited<ReturnType<typeof storyWorld>>["runtime"
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
-/** `promise`, or a rejection naming `what` after `ms`, so a test's `finally` still releases what it holds. */
-async function within<T>(promise: Promise<T>, what: string, ms = 5000): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Timed out waiting for ${what}`)), ms);
-  });
-  try {
-    return await Promise.race([promise, late]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 const send = "/runs/:run/phone/:li/send";
 const close = "/runs/:run/phone/:li/close";
 const page = "/runs/:run/phone/:li";
@@ -558,7 +546,7 @@ test("Close and remember answers before its summary, which runs once in the back
     const again = await t.phone("POST", close, { li: KAI });
     assert.deepEqual([again.status, again.body], [200, { remembering: true, start: 0 }]);
     for (const body of [{ text: "Wait." }, { retry: true }]) {
-      const busy = await t.phone("POST", send, { li: KAI, body });
+      const busy = await within(t.phone("POST", send, { li: KAI, body }), `the busy send ${JSON.stringify(body)}`);
       assert.deepEqual([busy.status, busy.body.code], [409, "busy"], JSON.stringify(body));
     }
     assert.equal((await t.thread(KAI))!.messages.length, 3, "nothing new went in");
@@ -600,12 +588,19 @@ test("Close and remember: a restart's mark resumes once from a read and is never
   );
   assert.equal((await t.state()).lis[KAI]!.points, points + 5);
 
-  // Its session landed before the restart: only the mark comes off, with no call and no second grant.
+  // Its session landed before the restart: only the mark comes off, with no call and no second grant, and memory
+  // upkeep is queued for the session, as when it lands.
   await mark(1);
   const calls = t.calls.length;
-  await t.phone("GET", page, { li: KAI });
+  const upkeeps: string[] = [];
+  const maintain = async ({ runId }: { runId: string }) => {
+    upkeeps.push(runId);
+    return true;
+  };
+  const watched = phoneRoutes({ ...t.deps, memory: { maintain } as unknown as OtomeMemory }, "r-phoner-aaaaaa");
+  await watched("GET", page, { li: KAI });
   const again = await t.remembered();
-  assert.deepEqual([again.sessions.length, again.closing, t.calls.length], [1, undefined, calls]);
+  assert.deepEqual([again.sessions.length, again.closing, t.calls.length, upkeeps], [1, undefined, calls, [t.runId]]);
   assert.equal((await t.state()).lis[KAI]!.points, points + 5);
 
   // Two summaries never landed: it fails as stopped, the conversation stays open, and Try again closes it.
@@ -803,9 +798,19 @@ test("Close and remember: a close that lands on a later day counts against that 
   assert.deepEqual(state.daily, daily, "today's tally is kept");
   assert.equal(state.lis[KAI]!.points, points);
 
-  // The next close today still earns nothing past the cap.
+  // The next close today is remembered too, and still earns nothing past the cap.
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
-  await t.closeAndWait();
+  const next = await t.closeAndWait();
+  assert.deepEqual(
+    [next.thread.sessions.map((session) => [session.start, session.affection]), next.thread.closing],
+    [
+      [
+        [0, undefined],
+        [3, undefined],
+      ],
+      undefined,
+    ],
+  );
   assert.deepEqual([(await t.state()).daily, (await t.state()).lis[KAI]!.points], [daily, points]);
 });
 

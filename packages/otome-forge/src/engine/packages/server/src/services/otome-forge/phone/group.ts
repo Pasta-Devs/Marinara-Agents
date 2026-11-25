@@ -22,7 +22,8 @@
 //   (POST /runs/:run/phone/due) answers for it too (groupDue), by daily messages' own rule (dailyDecision: armed a
 //   minute after a visit starts, spread 24 h / limit apart, reset at local midnight, an attempt spent before any
 //   provider work and never retried), on world.groupDaily, with heartbeats of its own. None is armed or written while
-//   the group is open, a reply or a close is being written there, the open conversation ends on the player's message,
+//   the group is open, a reply or a close is being written there (0.47.1: or its conversation is being remembered in
+//   the background), the open conversation ends on the player's message,
 //   or it has fewer than two members; the job checks all of that again once it is admitted, and drops (the slot stays
 //   spent). The job is a background job on the Messages connection, inside the thread's lock (so the thread shows
 //   someone typing), and lands unread, only while the thread still ends where it was read. Two members picked at random
@@ -79,6 +80,7 @@ import {
   newMessageId,
   openMessages,
   readThread,
+  remembering,
   saveSeen,
   sendIn,
   sessionSourceId,
@@ -369,7 +371,7 @@ async function squabbleFree(deps: Pick<PhoneDeps, "store">, runId: string, run: 
   const members = await groupMembers(deps, runId, run);
   if (members.length < GROUP_MIN_MEMBERS) return null;
   const thread = await readThread(deps.store, runId, GROUP_THREAD);
-  return thread && openMessages(thread).at(-1)?.who === "player" ? null : members;
+  return thread && (remembering(thread) || openMessages(thread).at(-1)?.who === "player") ? null : members;
 }
 
 /**
@@ -440,7 +442,9 @@ async function writeSquabble(
         GROUP_THREAD,
         async () => {
           const run = await readRun(deps.store, runId);
-          // Opened, or answered, while the job waited for admission (the lock is this job's own now).
+          // Opened, answered or closed while the job waited for admission (the lock is this job's own now).
+          if (remembering(await readThread(deps.store, runId, GROUP_THREAD)))
+            throw conflict("the group's conversation is being remembered");
           const members = run && openThread(runId) !== GROUP_THREAD ? await groupMembers(deps, runId, run) : [];
           if (!run || members.length < GROUP_MIN_MEMBERS) throw conflict("the group is open or has too few members");
           return { run, members };

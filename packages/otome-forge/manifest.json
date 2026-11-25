@@ -68,13 +68,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "e8fa745fa1f727a929926694dc85453eab10d128425870be56d11b58289c8bab",
-      "bytes": 835348
+      "sha256": "4e3ad0f97364a0ac7a78caf909a88762a19b2c205327089b34d76af2f67bf4c3",
+      "bytes": 835488
     },
     {
       "path": "client.js",
-      "sha256": "fdc8e712475554391de235a6446c8e63da0a3e4e8b41922e9e76fa52092c4461",
-      "bytes": 1533525
+      "sha256": "2272c00885d1e0c2498f179e95fc57aa2cb33371da38d0d0a868e8a2e3454033",
+      "bytes": 1533608
     },
     {
       "path": "otome-hearth-icon.png",

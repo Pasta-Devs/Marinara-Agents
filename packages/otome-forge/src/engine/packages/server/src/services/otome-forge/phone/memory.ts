@@ -32,7 +32,8 @@
 // - With nothing open, Close returns the newest memory and earns nothing. A conversation with nothing from one of them
 //   earns nothing. A story that has ended is refused by S/routes/ended.ts; a job that finds it ended calls no model and
 //   leaves the conversation as it was.
-// - New sessions start memory upkeep in the background, which records them for recall.
+// - New sessions start memory upkeep in the background, which records them for recall, and so does a session a restart
+//   left marked, when its job takes the mark off.
 // phoneMemorySources turns every closed session into a `chat` memory source with `audience: [li]`: only his own
 // readers, and scenes he is in, recall it, and it never reaches the shared overview. Its title says it is private, so a
 // scene with others in it knows they were not there. S/memory/sources.ts adds it to the run's sources. Care data is
@@ -165,6 +166,10 @@ async function earnClose(deps: PhoneDeps, runId: string, li: LiId, open: PhoneMe
   }
 }
 
+/** Queues memory upkeep, which records a saved session for recall (see the header); it never rejects. */
+const upkeep = (deps: PhoneDeps, runId: string, debugMode: boolean) =>
+  void Promise.resolve(deps.memory?.maintain({ runId, debugMode })).catch(() => undefined);
+
 /** Whether `thread` already holds the session close `mark` makes (its mark did not come off, or a restart came first). */
 const landed = (thread: PhoneThread, mark: PhoneClosing) => thread.sessions.some((entry) => entry.start === mark.start);
 
@@ -225,8 +230,11 @@ async function remember(
   const thread = await readThread(deps.store, runId, key);
   const mark = thread?.closing;
   if (!thread || !mark || mark.error) return;
-  // Landed before a restart: only its mark is left.
-  if (landed(thread, mark)) return settleSaved(deps, runId, key, mark, 0);
+  // Landed before a restart: only its mark is left, and upkeep is queued for its session, as below.
+  if (landed(thread, mark)) {
+    await settleSaved(deps, runId, key, mark, 0);
+    return upkeep(deps, runId, debugMode);
+  }
   try {
     // #2459: an ended story calls no model; its conversation stays as it was.
     if ((await deps.store.readDoc(stateId(runId), normalizeState))?.ended)
@@ -279,7 +287,7 @@ async function remember(
     // The session is saved: neither the grant nor settleSaved rejects, so it is never marked failed or paid twice.
     const affection = appended && earn ? await earn(open, mark.day) : 0;
     await settleSaved(deps, runId, key, mark, affection);
-    if (appended) void Promise.resolve(deps.memory?.maintain({ runId, debugMode })).catch(() => undefined);
+    if (appended) upkeep(deps, runId, debugMode);
   } catch (error) {
     // No session was saved: the conversation stays open; the list and the thread say why, with Try again.
     const code = (error instanceof OtomeForgeError && error.code) || "failed";
