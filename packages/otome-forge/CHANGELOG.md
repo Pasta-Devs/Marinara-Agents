@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.47.0 — 2026-11-25
+
+- Friends have stickers of their own, one for each friend level: five in all. With images on, they are painted as a love interest's are. **Album → Stickers** lists them after the love interests', with **Repaint**. A friend's Messages thread offers them, and the friend sends them too.
+- In **Everyone**, you can send every sticker you have: yours, and every painted one of your love interests and friends.
+- **Story → Friends** no longer shows a line about each friend under their stars.
+- In **Album → Hangouts**, **Plan a hangout** no longer touches the hangouts below it.
+
 ## 0.46.2 — 2026-11-25
 
 - **Add a friend** from someone you've met lets you choose one of your characters for them, or none. The one their name matches comes chosen, and their portrait is painted from that character's picture, as a love interest's is.

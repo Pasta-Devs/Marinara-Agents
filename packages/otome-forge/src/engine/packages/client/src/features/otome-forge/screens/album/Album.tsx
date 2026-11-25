@@ -1,12 +1,13 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Album. CGs (newest first: story CGs once seen, Memories' CGs once painted, pair portraits), chat
-// stickers (#2044: the protagonist's five and each love interest's unlocked ones, cut out), Kitty Cards' kittens (0.36.0:
-// hers and each love interest's once painted and cut out, each to save or repaint), Photo Shoot photos (#2087:
-// newest first, square, each one viewed, saved or deleted), Tarot night's cards (#2151: each one drawn, on its own card
-// face, Cards.tsx), Memories (each one's Character Story or Moment to read, and Snapshots), the Love Timeline,
-// favourite lines, the soundtrack (the moods, then each begun chapter's theme), and the Tells journal. Only what is
-// unlocked is listed; every image saves to the device through the Engine. Everything reads without images or audio: a
-// Memory without art shows a quiet card in their colour, and a Tarot card without its picture our own emblem.
+// stickers (#2044: the protagonist's five and each love interest's unlocked ones, and (#2477) each friend's, cut out),
+// Kitty Cards' kittens (0.36.0: hers and each love interest's once painted and cut out, each to save or repaint), Photo
+// Shoot photos (#2087: newest first, square, each one viewed, saved or deleted), Tarot night's cards (#2151: each one
+// drawn, on its own card face, Cards.tsx), Memories (each one's Character Story or Moment to read, and Snapshots), the
+// Love Timeline, favourite lines, the soundtrack (the moods, then each begun chapter's theme), and the Tells journal.
+// Only what is unlocked is listed; every image saves to the device through the Engine. Everything reads without images
+// or audio: a Memory without art shows a quiet card in their colour, and a Tarot card without its picture our own
+// emblem.
 // 0.36.0: the tabs start from Memories, Dates and CGs, and it opens on Memories.
 // ──────────────────────────────────────────────
 // Route (S/routes/album.ts): GET /runs/:run/album → AlbumView. An unopened Memory is opened here as anywhere else.
@@ -470,7 +471,8 @@ function useStickerImages(view: RunView, stickers: readonly AlbumSticker[]) {
   const labels = useStickers(view);
   const tiles = stickers.map((sticker) => {
     const mine = sticker.owner === PLAYER_STICKER_OWNER;
-    const who = mine ? view.player.name : (view.lis.find((li) => li.id === sticker.owner)?.name ?? "");
+    const cast = [...view.lis, ...(view.friends ?? [])];
+    const who = mine ? view.player.name : (cast.find((li) => li.id === sticker.owner)?.name ?? "");
     const label = sticker.label || labels.byId.get(sticker.id)?.label || sticker.emotion;
     const title = who ? t("ui.otomeForge.album.stickerTitle", { name: who, sticker: label }) : label;
     return { sticker, title, Icon: labels.byId.get(sticker.id)?.Icon ?? StickerIcon };
@@ -494,8 +496,8 @@ function useStickerImages(view: RunView, stickers: readonly AlbumSticker[]) {
 }
 
 /**
- * The protagonist's stickers, then each love interest's: painted ones open the viewer and offer Repaint (#2299), waiting
- * ones offer Paint.
+ * The protagonist's stickers, then each love interest's, then (#2477) each friend's: painted ones open the viewer and
+ * offer Repaint (#2299), waiting ones offer Paint.
  */
 function StickerGrid({
   runKey,
@@ -515,6 +517,10 @@ function StickerGrid({
   const owners = [
     { owner: PLAYER_STICKER_OWNER, title: t("ui.otomeForge.album.stickersYours") },
     ...view.lis.map((li) => ({ owner: li.id, title: li.name })),
+    ...(view.friends ?? []).map((friend) => ({
+      owner: friend.id,
+      title: t("ui.otomeForge.album.stickersFriend", { name: friend.name }),
+    })),
   ];
   const images = new Map(stickers.images.map((image, index) => [image.key, index]));
   return (

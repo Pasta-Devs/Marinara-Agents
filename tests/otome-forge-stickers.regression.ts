@@ -15,6 +15,9 @@
 //   stopped. Images off paints nothing.
 // - The sticker prompt is a chibi bust on the look's matte with the look's rating and adult tags; an edit keeps them.
 // - A tap paints once; the Album lists the stickers she has and those waiting for a tap.
+// - #2477: a friend's five are designed once in one call (platonic, from their friend bible) and the sticker of each
+//   friend level reached, from 1, is painted; images off, nothing; their thread sends theirs and P17 lists them; the
+//   Album lists them after the love interests', with Repaint.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
@@ -67,7 +70,7 @@ import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/serv
 import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { artWorld, routesOf, setImages, until } from "./fixtures/otome-forge-art.ts";
 import { isQuizCall } from "./fixtures/otome-forge-fakes.ts";
-import { KAI, MIR, SOL, at, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { KAI, KAVEH, MIR, SOL, at, json, seedFriend, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const EMOTIONS = ["guarded", "smug", "pensive", "flustered", "sulking", "teasing", "proud", "tender", "devoted"];
 const setReply = (emotions: readonly string[] = EMOTIONS) =>
@@ -89,6 +92,13 @@ async function setLevel(t: Awaited<ReturnType<typeof storyWorld>>, li: string, l
     lis: { ...state.lis, [li]: { ...state.lis[li]!, points: (level - 1) * 300 } },
   }));
 }
+/** #2477: Kaveh's five, and his friendship points. */
+const FRIEND_EMOTIONS = ["shy", "grumpy", "proud", "cheering", "beaming"];
+const setFriendPoints = (t: Awaited<ReturnType<typeof storyWorld>>, points: number) =>
+  t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    friends: { ...state.friends, [KAVEH]: { ...state.friends[KAVEH]!, points } },
+  }));
 const markPhoneOpened = (t: Awaited<ReturnType<typeof storyWorld>>) =>
   t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
     ...player,
@@ -147,6 +157,10 @@ test("names fold accents and case, and a shared slug takes the love interest's i
   );
   const name = stickerLookup(clash);
   assert.deepEqual(name(`${KAI}:smug`), { name: "kai_ab12_smug", about: "smug", who: "li", ownerName: "Kai" });
+  // #2477: a friend is named the same way, and shares a slug with the love interests.
+  const withFriend = { ...clash, friends: [{ ...run.units[0]!, id: KAVEH, name: "Kai" }] };
+  assert.deepEqual([...stickerNames(withFriend)].at(-1), [KAVEH, "kai_ab12"]);
+  assert.equal(stickerLookup(withFriend)(`${KAVEH}:shy`)?.ownerName, "Kai");
   assert.deepEqual(name("you:laugh"), { name: "kai_laugh", about: "laughing", who: "player", ownerName: "Kai" });
   assert.equal(name("li-nobody-zz99:smug"), null);
 });
@@ -399,6 +413,7 @@ test("images off: nothing is designed or painted, and the book holds her built-i
   const t = await stickerWorld("r-stoff-aaaaaa");
   await setImages(t.store, t.runId, { connectionId: null });
   await setLevel(t, KAI, 6);
+  await seedFriend(t, {}, 1100);
   const started = await t.arts("POST", "/runs/:run/stickers");
   assert.deepEqual(started.body, { started: false }, "the phone opened without images starts nothing");
   assert.equal((await t.player()).stickers, undefined);
@@ -415,6 +430,7 @@ test("images off: nothing is designed or painted, and the book holds her built-i
   const stickerCalls = t.calls.filter((entry) => !isQuizCall(entry.messages));
   assert.deepEqual([stickerCalls.length, t.paid.length], [0, 0]);
   assert.equal((await t.unit()).stickers, undefined);
+  assert.equal((await t.unit(KAVEH)).stickers, undefined, "#2477: nor a friend's");
 });
 
 test("a love interest at level 2 or more gets his nine designed, then one painted sticker per level reached", async () => {
@@ -482,6 +498,99 @@ test("a love interest at level 2 or more gets his nine designed, then one painte
       .slice(4)
       .every((call) => call.request.name === "Ines"),
   );
+});
+
+test("#2477: a friend's five are designed once, the sticker of each friend level reached painted, and listed after his", async () => {
+  const t = await stickerWorld("r-stfriend-aaaaaa", { replies: [setReply(FRIEND_EMOTIONS)] });
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  // A friend at level 3 whose story never designed his set: the next read catches up.
+  await seedFriend(t, {}, 450);
+  assert.equal((await t.view()).stickersPending, true, "his five are being designed");
+  await t.settle();
+  const kaveh = await t.unit(KAVEH);
+  assert.deepEqual(
+    kaveh.stickers!.set.map((sticker) => sticker.emotion),
+    FRIEND_EMOTIONS,
+  );
+  const designs = () => t.calls.filter((entry) => !isQuizCall(entry.messages));
+  assert.equal(designs().length, 1, "one design call, for his five");
+  const prompt = designs()[0]!
+    .messages.map((message) => message.content)
+    .join("\n");
+  assert.match(
+    prompt,
+    /one of the protagonist's close friends \(platonic, never a love interest\) in an otome game: 5 2D anime chibi stickers of Kaveh/,
+  );
+  assert.match(prompt, /exactly 5, ordered from the most reserved/);
+  assert.match(prompt, /^FRIEND: Kaveh \(he\/him\)$/m);
+  assert.match(prompt, /^Look: tall, ash hair; linen coat$/m);
+  assert.match(prompt, /^Personality: Proud, fussy, secretly soft\.$/m);
+  assert.match(prompt, /^- Kai: guarded, smug/m, "his set differs from the love interests'");
+  assert.doesNotMatch(prompt, /LOVE INTEREST/);
+  // Levels 1 to 3: three paints of him, after Kai's level 2 one, one at a time.
+  assert.deepEqual(Object.keys(kaveh.stickers!.art), FRIEND_EMOTIONS.slice(0, 3));
+  assert.deepEqual(
+    t.stickerPaints().map((call) => call.request.name),
+    ["Kai", "Kaveh", "Kaveh", "Kaveh"],
+  );
+  const book = async () =>
+    (await t.view()).stickers
+      .filter((sticker) => sticker.owner !== "you")
+      .map((sticker) => [sticker.name, sticker.level, !!sticker.url?.endsWith(".cut.png")]);
+  assert.deepEqual(await book(), [
+    ["kai_guarded", 2, true],
+    ["kaveh_shy", 1, true],
+    ["kaveh_grumpy", 2, true],
+    ["kaveh_proud", 3, true],
+  ]);
+  // Level 4 later: the next read paints just that one, and designs nothing again.
+  await setFriendPoints(t, 750);
+  await t.settle();
+  assert.equal(t.stickerPaints().length, 5);
+  assert.equal(designs().length, 1);
+  // The Album lists his after the love interests', and Repaint paints one again with a tap.
+  const album = (await t.album("GET", "/runs/:run/album")).body.stickers as Array<{ owner: string; name: string }>;
+  assert.deepEqual(
+    album.filter((sticker) => sticker.owner !== "you").map((sticker) => sticker.name),
+    ["kai_guarded", "kaveh_shy", "kaveh_grumpy", "kaveh_proud", "kaveh_cheering"],
+  );
+  const repainted = await t.arts("POST", "/runs/:run/art/sticker", { sticker: `${KAVEH}:shy` });
+  assert.equal(repainted.body.art.state, "ready", JSON.stringify(repainted.body));
+  assert.equal(t.stickerPaints().length, 6);
+});
+
+test("#2477: a friend's thread sends their painted stickers and P17 lists them as theirs; no other thread takes them", async () => {
+  const t = await artWorld({
+    runKey: "r-stfrsend-aaaaaa",
+    replies: Array.from({ length: 4 }, () => json({ messages: [{ text: "Hm." }] })),
+  });
+  const url = "/api/global-gallery/file/kaveh-shy.png";
+  await seedFriend(t, {
+    stickers: { set: SET.slice(0, 5), at, art: { guarded: { state: "ready", at, url } } },
+    cutouts: { [url]: { state: "ready", at, url: `${url}.cut.png` } },
+  });
+  await assert.doesNotReject(sendMessage(t.deps, t.runId, KAVEH, { sticker: `${KAVEH}:guarded` }));
+  const prompt = t.calls
+    .at(-1)!
+    .messages.map((message) => message.content)
+    .join("\n");
+  assert.match(prompt, /Your stickers: \[kaveh_guarded\] \(guarded\)\./);
+  assert.match(prompt, /Ines's stickers, which you may send too: \[ines_laugh\]/);
+  assert.match(prompt, /Ines: \[sends the sticker \[kaveh_guarded\] \(guarded\)\]/);
+  // One not reached yet, his in a love interest's thread, or with images off: refused.
+  for (const [li, sticker] of [
+    [KAVEH, `${KAVEH}:smug`],
+    [KAI, `${KAVEH}:guarded`],
+  ] as const) {
+    await assert.rejects(
+      sendMessage(t.deps, t.runId, li, { sticker }),
+      (error: { statusCode?: number }) => error.statusCode === 400,
+    );
+  }
+  await setImages(t.store, t.runId, { connectionId: null });
+  await assert.rejects(sendMessage(t.deps, t.runId, KAVEH, { sticker: `${KAVEH}:guarded` }));
+  await assert.doesNotReject(sendMessage(t.deps, t.runId, KAVEH, { sticker: "you:laugh" }));
 });
 
 test("only one sticker paints at a time per run, in the low lane behind a tap", async () => {

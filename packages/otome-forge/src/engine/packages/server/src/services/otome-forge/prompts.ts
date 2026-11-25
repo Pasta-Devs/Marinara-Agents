@@ -86,7 +86,7 @@
 //   quizScoreMessages, quizRefillMessages: the personality quiz's love-interest answers and its new statements, in the
 //     quiz's own line format, #2174 (S/minigames/quiz.ts)
 // (i) Stickers
-//   stickerSetMessages: a love interest's nine sticker designs, #2044 (S/art/stickers.ts)
+//   stickerSetMessages: a love interest's nine sticker designs, #2044, or a friend's five, #2477 (S/art/stickers.ts)
 // (j) Wish banners
 //   bannerPlanMessages: P20 banner plan, with its Snapshot illustration briefs (S/wish/banners.ts)
 // (k) Items
@@ -277,7 +277,7 @@ import {
   type TarotPosition,
   type TarotQuestion,
 } from "../../../../client/src/features/otome-forge/shared/tarot.js";
-import { STICKERS_PER_LI } from "../../../../client/src/features/otome-forge/shared/stickers.js";
+import { STICKERS_PER_FRIEND, STICKERS_PER_LI } from "../../../../client/src/features/otome-forge/shared/stickers.js";
 import { NOTICED_WORDS_MAX, SHOW_WORDS_MAX } from "../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import {
   BANNER_ITEM_KINDS,
@@ -5483,64 +5483,80 @@ export function quizRefillMessages({ world, units, asked, count }: QuizRefillInp
 // ──────────────────────────────────────────────
 // (i) Stickers
 // ──────────────────────────────────────────────
-// A love interest's nine stickers are designed in one background call (S/art/stickers.ts); each is painted with
-// stickerPrompt (Image prompts).
+// A love interest's nine stickers (#2477: a friend's five) are designed in one background call (S/art/stickers.ts);
+// each is painted with stickerPrompt (Image prompts).
 
 // ── His set: nine stickers designed in one background call ──
 
-/** The design prompt: who he is, from his card and bible, and the other love interests' sets to differ from. */
+/**
+ * The design prompt: who he is, from his card and bible, and the other love interests' sets to differ from. #2477: a
+ * friend's unit (no bible, a friend bible) gets their five, platonic, from their friend bible, apart from every set.
+ */
 export function stickerSetMessages({
   unit,
   language,
   others,
 }: {
-  unit: Pick<Unit, "name" | "pronouns" | "identityLine" | "outfitLine" | "bible">;
+  unit: Pick<Unit, "name" | "pronouns" | "identityLine" | "outfitLine" | "bible" | "friend">;
   language: string;
   others: ReadonlyArray<{ name: string; emotions: readonly string[] }>;
 }): OtomeMessage[] {
   const bible = unit.bible;
-  const look = [unit.identityLine || bible?.look.identityLine, unit.outfitLine || bible?.look.outfitLine]
+  const friend = bible ? undefined : unit.friend;
+  const count = friend ? STICKERS_PER_FRIEND : STICKERS_PER_LI;
+  const seen = (bible ?? friend)?.look;
+  const look = [unit.identityLine || seen?.identityLine, unit.outfitLine || seen?.outfitLine]
     .map((line) => line?.trim())
     .filter(Boolean)
     .join("; ");
-  const who = bible
+  const who = friend
     ? [
-        bible.role && `Role: ${bible.role}`,
-        bible.publicFace && `How they come across: ${bible.publicFace}`,
-        bible.archetype && `Archetype: ${bible.archetype}`,
-        bible.mask.presents && `Manner: ${bible.mask.presents}`,
-        bible.trueSelf.is && `Underneath: ${bible.trueSelf.is}`,
-        bible.voice.register && `Voice: ${bible.voice.register}`,
-        bible.voice.tics.length ? `Habits of speech: ${bible.voice.tics.join("; ")}` : "",
-        bible.likes.length ? `Likes: ${bible.likes.join("; ")}` : "",
-        bible.dislikes.length ? `Dislikes: ${bible.dislikes.join("; ")}` : "",
+        friend.role && `Role: ${friend.role}`,
+        friend.publicFace && `How they come across: ${friend.publicFace}`,
+        friend.personality && `Personality: ${friend.personality}`,
+        friend.voice.register && `Voice: ${friend.voice.register}`,
+        friend.voice.tics.length ? `Habits of speech: ${friend.voice.tics.join("; ")}` : "",
+        friend.likes.length ? `Likes: ${friend.likes.join("; ")}` : "",
+        friend.dislikes.length ? `Dislikes: ${friend.dislikes.join("; ")}` : "",
       ].filter(Boolean)
-    : [];
+    : bible
+      ? [
+          bible.role && `Role: ${bible.role}`,
+          bible.publicFace && `How they come across: ${bible.publicFace}`,
+          bible.archetype && `Archetype: ${bible.archetype}`,
+          bible.mask.presents && `Manner: ${bible.mask.presents}`,
+          bible.trueSelf.is && `Underneath: ${bible.trueSelf.is}`,
+          bible.voice.register && `Voice: ${bible.voice.register}`,
+          bible.voice.tics.length ? `Habits of speech: ${bible.voice.tics.join("; ")}` : "",
+          bible.likes.length ? `Likes: ${bible.likes.join("; ")}` : "",
+          bible.dislikes.length ? `Dislikes: ${bible.dislikes.join("; ")}` : "",
+        ].filter(Boolean)
+      : [];
   const system = [
-    `You design the chat stickers of one love interest in an otome game: ${STICKERS_PER_LI} 2D anime chibi stickers of ${unit.name}, in the spirit of a game's character sticker sets (Genshin Impact's, for example). Each one is a reaction ${unit.name} would really send in a private chat, true to who they are.`,
+    `You design the chat stickers of one ${friend ? "of the protagonist's close friends (platonic, never a love interest)" : "love interest"} in an otome game: ${count} 2D anime chibi stickers of ${unit.name}, in the spirit of a game's character sticker sets (Genshin Impact's, for example). Each one is a reaction ${unit.name} would really send in a private chat, true to who they are.`,
     'Reply with ONLY a JSON object: {"stickers": [{"emotion": "...", "label": "...", "look": "..."}]}',
     "FIELDS",
-    `- stickers: exactly ${STICKERS_PER_LI}, ordered from the most guarded (the first, sent while the two barely know each other) to the closest (the last, sent once they are very close).`,
+    `- stickers: exactly ${count}, ordered from the most ${friend ? "reserved" : "guarded"} (the first, sent while the two barely know each other) to the closest (the last, sent once they are very close).`,
     "- emotion: one lowercase English word naming the reaction (for example smug, pensive, sulking, delighted); all different.",
     `- label: the sticker's caption, in ${language}, at most ${STICKER_LABEL_MAX} characters.`,
     `- look: English, visual only, at most ${STICKER_LOOK_MAX} characters: the expression and pose of a chibi bust, with at most one small prop or symbol. No text or lettering.`,
     "RULES",
     `- Choose the reactions from ${unit.name}'s personality, manner and voice: the range ${unit.name}'s own sticker set would have, never a generic set.`,
     others.length
-      ? `- The other love interests' sets are listed below: ${unit.name}'s nine must be clearly their own.`
+      ? `- The other ${friend ? "sets in the cast" : "love interests' sets"} are listed below: ${unit.name}'s ${friend ? "five" : "nine"} must be clearly their own.`
       : "",
   ]
     .filter(Boolean)
     .join("\n");
   const user = [
-    `LOVE INTEREST: ${unit.name} (${unit.pronouns.subject}/${unit.pronouns.object})`,
+    `${friend ? "FRIEND" : "LOVE INTEREST"}: ${unit.name} (${unit.pronouns.subject}/${unit.pronouns.object})`,
     look ? `Look: ${look}` : "",
     ...who,
     ...(others.length
       ? ["", "OTHER SETS", ...others.map((other) => `- ${other.name}: ${other.emotions.join(", ")}`)]
       : []),
     "",
-    `Design ${unit.name}'s ${STICKERS_PER_LI} stickers now.`,
+    `Design ${unit.name}'s ${count} stickers now.`,
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");

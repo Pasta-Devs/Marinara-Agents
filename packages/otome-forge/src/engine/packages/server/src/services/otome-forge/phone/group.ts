@@ -13,8 +13,10 @@
 // - The player's message is always answered (the maintainer's, 2026-11-07): whoever it is addressed to answers, anyone
 //   named answers, the others join when it is in character, and at least one answers (a reply with nothing in it, or
 //   with nothing from a member the newest message names, gets the repair turn). No quota counts it. A failed reply
-//   keeps the message, and the page offers Ask again. Only the protagonist's five stickers can be sent there, and no
-//   note is quoted (Home's Reply stays in his own thread).
+//   keeps the message, and the page offers Ask again. #2477: she may send every sticker she has there
+//   (S/art/stickers.ts groupSendable: her five and, with images on, every painted one of the love interests' and her
+//   friends'), while each member sends only their own and hers. No note is quoted (Home's Reply stays in his own
+//   thread).
 // - Squabbles: Settings → Connections sets how many times a day the members may start squabbling there on their own
 //   (world.groupSquabbles, 0 to DAILY_MESSAGES_MAX; absent or 0, the default, is off). The daily-message heartbeat
 //   (POST /runs/:run/phone/due) answers for it too (groupDue), by daily messages' own rule (dailyDecision: armed a
@@ -54,7 +56,7 @@ import type {
   PhoneThread,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { GROUP_THREAD } from "../../../../../client/src/features/otome-forge/shared/home.js";
-import { sendableStickers, stickerBook, stickerLookup } from "../art/stickers.js";
+import { groupSendable, sendableStickers, stickerBook, stickerLookup } from "../art/stickers.js";
 import { generateJson, resolveConnectionId } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, mainChapterKey, runDocTarget, worldId } from "../ids.js";
@@ -291,7 +293,7 @@ export function sendToGroup(
   return inThreadLock(runId, GROUP_THREAD, async () => {
     const { run } = await loadGroup(deps, runId);
     return sendIn(deps, runId, GROUP_THREAD, input, {
-      stickers: () => sendableStickers(stickerBook(runId, run), run.world).yours.map((sticker) => sticker.id),
+      stickers: () => groupSendable(stickerBook(runId, run), run.world).map((sticker) => sticker.id),
       answer: () =>
         answerIn(
           deps,
