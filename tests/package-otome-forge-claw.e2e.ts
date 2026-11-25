@@ -748,28 +748,37 @@ test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, dr
   expect(await clawX()).toBeLessThan(moved);
   await page.screenshot({ path: testInfo.outputPath("05-aim.png") });
 
-  // Drop: the cable runs out, then the claw comes home over the chute. It waits there about 2 s, through his turn's
-  // banner and his thinking, and the phone-sized screenshot below took longer than that in CI (#2470). So the page
-  // notes where the claw is when the drop ends, and the test reads that note instead of racing his turn.
+  // Drop: the cable runs out past half for about a second, then the claw comes home over the chute and waits there
+  // about 2 s (his turn's banner and his thinking). A test step can outlast either moment: the phone-sized screenshot
+  // below took 4.8 s in CI (#2470). So the page notes how far the cable ran (the loop writes it to the glass every
+  // frame) and where the claw was when the stage left "drop", and the test checks those notes.
+  type DropNote = { cable: number; endX: number };
   const game = root.locator(".of-claw-game");
   await game.evaluate((element) => {
+    const read = (name: string) =>
+      Number(getComputedStyle(element.querySelector(".of-claw-glass")!).getPropertyValue(name));
+    const note: DropNote = { cable: 0, endX: Number.NaN };
+    (window as unknown as { __clawDrop: DropNote }).__clawDrop = note;
+    let dropping = false;
     new MutationObserver((_, observer) => {
-      if (element.getAttribute("data-stage") === "drop") return;
-      observer.disconnect();
-      const x = getComputedStyle(element.querySelector(".of-claw-glass")!).getPropertyValue("--cx");
-      (window as unknown as { __clawDropEndX: number }).__clawDropEndX = Number(x);
-    }).observe(element, { attributeFilter: ["data-stage"] });
+      if (element.getAttribute("data-stage") === "drop") {
+        dropping = true;
+        note.cable = Math.max(note.cable, read("--cc"));
+      } else if (dropping) {
+        note.endX = read("--cx");
+        observer.disconnect();
+      }
+    }).observe(element, { subtree: true, attributeFilter: ["style", "data-stage"] });
   });
   await action.focus();
   await page.keyboard.press(" ");
   await expect(game).toHaveAttribute("data-stage", "drop");
   await page.waitForTimeout(650);
-  const cable = Number(await glass.evaluate((element) => getComputedStyle(element).getPropertyValue("--cc")));
-  expect(cable).toBeGreaterThan(0.5);
   await page.screenshot({ path: testInfo.outputPath("06-drop.png") });
   await expect(game).not.toHaveAttribute("data-stage", "drop", { timeout: 6_000 });
-  const dropEndX = await page.evaluate(() => (window as unknown as { __clawDropEndX?: number }).__clawDropEndX);
-  expect(Math.abs(Number(dropEndX) - 0.11)).toBeLessThan(0.02);
+  const drop = await page.evaluate(() => (window as unknown as { __clawDrop: DropNote }).__clawDrop);
+  expect(drop.cable).toBeGreaterThan(0.5);
+  expect(Math.abs(drop.endX - 0.11)).toBeLessThan(0.02);
   // His turn follows; he moves the claw himself.
   await expect(action).toHaveAttribute("data-mode", "cheer", { timeout: 6_000 });
   await page.waitForTimeout(2_200);
