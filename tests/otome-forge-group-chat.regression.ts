@@ -419,19 +419,28 @@ test("#2477: she may send every sticker she has here, a love interest's or a fri
   await t.store.mutateDoc(
     runDocTarget("unit", unitId(t.runId, KAI)),
     normalizeUnit,
-    painted(["guarded", "smug"], "/api/global-gallery/file/kai-guarded.png"),
+    painted(["guarded", "smug", "sulky"], "/api/global-gallery/file/kai-guarded.png"),
   );
+  // Level 3: guarded (level 2) is painted, smug (level 3) is owed with no picture yet, sulky (level 4) is not reached.
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, points: 300 } },
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, points: 450 } },
   }));
   for (const sticker of [`${KAI}:guarded`, `${KAVEH}:shy`, "you:pout"]) {
     const sent = await t.call("POST", send, { body: { sticker } });
     assert.equal(sent.status, 200, `${sticker}: ${JSON.stringify(sent.body)}`);
   }
-  // Owed but not painted, one past his level, a friend's not reached, no one's: refused before anything is saved.
+  // Owed but not painted, one past his level, a friend's not reached, a love interest's with no set, nobody's and an
+  // emotion she has no sticker for: refused before anything is saved.
   const calls = t.groupCalls().length;
-  for (const sticker of [`${KAI}:smug`, `${KAVEH}:grin`, `${MIR}:guarded`, "li-nobody-zz99:smug", "you:cry"]) {
+  for (const sticker of [
+    `${KAI}:smug`,
+    `${KAI}:sulky`,
+    `${KAVEH}:grin`,
+    `${MIR}:guarded`,
+    "li-nobody-zz99:smug",
+    "you:cry",
+  ]) {
     assert.equal((await t.call("POST", send, { body: { sticker } })).status, 400, sticker);
   }
   assert.equal(t.groupCalls().length, calls, "a refused sticker calls nothing");

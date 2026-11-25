@@ -9,7 +9,8 @@
 // box when the server never saved them, and "Ask again" appears when it saved them but no reply came.
 // The group chat (#2154) is this thread without `li`: "Everyone" with its members' portraits and names in the header,
 // each bubble in its speaker's accent with their name when the speaker changes and their portrait on the last of a run,
-// the protagonist's five stickers, no quote, and Close and remember for everyone in it (no affection).
+// every sticker she has (#2477: her five and, with images on, each love interest's and friend's painted ones), no
+// quote, and Close and remember for everyone in it (no affection).
 // #2156: his invitation to clear the air (PhoneMessage.invite) shows under his message with Accept and Decline while it
 // waits (POST .../invite), then what became of it; Accept opens the scene that clears it in the reader (#2303,
 // onOpenScene), and the accepted card keeps a way back to it. #2424: his invitation on a date of his choosing shows the
