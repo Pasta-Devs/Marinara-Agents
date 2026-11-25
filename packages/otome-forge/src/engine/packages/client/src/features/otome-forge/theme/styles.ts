@@ -1389,6 +1389,9 @@ ${R} .of-album-cg-date { font-size: 0.68rem; opacity: 0.8; }
 /* #2044: stickers, square and whole (they are cut-outs) on a soft surface. */
 ${R} .of-album-stickers { display: flex; flex-direction: column; gap: 12px; }
 ${R} .of-album-stickers-title { margin: 0; font-family: var(--of-font-display); font-weight: 600; font-size: 1.15rem; }
+/* #2477: Album → Hangouts: Plan a hangout stands apart from the hangouts under it (they touched). */
+${R} .of-hangouts { display: flex; flex-direction: column; gap: 12px; }
+${R} .of-hangouts > .of-button { align-self: flex-start; }
 /* #2087: Photo Shoot photos are square prints. */
 ${R} .of-album-cgs--photo .of-album-cg { aspect-ratio: 1; }
 ${R} .of-album-cgs--sticker { grid-template-columns: repeat(auto-fill, minmax(min(132px, 42%), 1fr)); }
@@ -1642,9 +1645,8 @@ ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
 /* A bond rank's "Open {{rank}}" button takes a row of its own under the hearts. With no place in the row's grid it fell
    into the avatar column, which grew to the button's width and squeezed the name and hearts (2026-11-17). */
 ${R} .of-bond-open { grid-column: 2 / -1; justify-self: start; margin-top: 4px; }
-/* #2458: a friend's "about" line and their actions take rows of their own under the stars, as a bond rank's button
-   does, so they never fall into the avatar column and squeeze the name and stars. */
-${R} .of-friend-about { grid-column: 2 / -1; margin: 2px 0 0; }
+/* #2458: a friend's actions take a row of their own under the stars, as a bond rank's button does, so they never fall
+   into the avatar column and squeeze the name and stars. */
 ${R} .of-friend-actions {
   grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 4px; min-width: 0;
 }

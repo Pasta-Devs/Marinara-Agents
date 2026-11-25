@@ -1915,8 +1915,6 @@ export type RunFriendView = RunCastMember &
   Pick<RunLiView, "level"> & {
     affectionProgress: { current: number; required: number };
     arc: number;
-    /** Who they are and how you know each other, from their bible (never a secret: friends have none). */
-    about?: string;
   };
 
 export type SetupLi =

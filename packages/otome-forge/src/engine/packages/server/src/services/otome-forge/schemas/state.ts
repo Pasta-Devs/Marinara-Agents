@@ -818,7 +818,6 @@ export function toRunView(
               level: friendLevelOf(friend.points),
               affectionProgress: friendProgressOf(friend.points),
               arc: friend.arc,
-              ...(unit.friend ? { about: `${unit.friend.role}. ${unit.friend.howWeMet}`.slice(0, 600) } : {}),
             },
           ]
         : [];

@@ -3921,6 +3921,7 @@ test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from th
     level: 5,
     affectionProgress: { current: 350, required: 350 },
     arc: 1,
+    // #2477: what a server before 0.47.0 sent; the row no longer shows it.
     about: "Architect. Your neighbour.",
   };
   view.friends = [kaveh];
@@ -3928,7 +3929,15 @@ test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from th
   const answer = (call: Call): Answer | undefined => {
     const path = call.path.replace(/^\/api\/otome-forge/u, "");
     if (path === `/runs/${RUN}/hangouts` && call.method === "GET") {
-      return { status: 200, json: { hangouts: [], free: [kaveh.id] } };
+      const hangout = {
+        key: "story-hangout-1",
+        kind: "story",
+        title: "The lantern market",
+        state: "done",
+        memento: false,
+        friendStory: { kind: "hangout", friends: [kaveh.id] },
+      };
+      return { status: 200, json: { hangouts: [hangout], free: [kaveh.id] } };
     }
     if (path === `/runs/${RUN}/album`) {
       return { status: 200, json: { cgs: [], memories: [], timeline: [], favorites: [], soundtrack: [], tells: {} } };
@@ -3970,7 +3979,9 @@ test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from th
   await stubRoutes(page, answer, calls);
   const root = await openStory(page);
   const friends = root.getByRole("region", { name: "Friends", exact: true });
-  await expect(friends.getByText("Architect. Your neighbour.", { exact: true })).toBeVisible();
+  // #2477: the row is his name, stars and progress, with no line about him.
+  await expect(friends.getByRole("meter", { name: "Friendship with Kaveh", exact: true })).toBeVisible();
+  await expect(friends.getByText("Architect. Your neighbour.")).toHaveCount(0);
   await friends.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("friends-actions.png") });
   await friends.getByRole("button", { name: "Kaveh's finale", exact: true }).click();
@@ -3991,7 +4002,17 @@ test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from th
   // A hangout: Kaveh, somewhere he chooses, in what she wears now.
   await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Album", exact: true }).click();
   await root.getByRole("tab", { name: "Hangouts", exact: true }).click();
-  await root.getByRole("button", { name: "Plan a hangout", exact: true }).click();
+  // #2477: Plan a hangout stands apart from the hangouts under it, as wide as its label, on the desktop and the phone.
+  const planButton = root.getByRole("button", { name: "Plan a hangout", exact: true });
+  const hangoutList = root.locator(".of-hangout-list");
+  await expect(hangoutList.getByText("The lantern market", { exact: true })).toBeVisible();
+  const [planBox, listBox] = [(await planButton.boundingBox())!, (await hangoutList.boundingBox())!];
+  expect(listBox.y - (planBox.y + planBox.height), "a gap between the button and the hangouts").toBeGreaterThanOrEqual(
+    8,
+  );
+  expect(planBox.width).toBeLessThan(listBox.width);
+  await page.screenshot({ path: testInfo.outputPath("hangouts.png") });
+  await planButton.click();
   const plan = page.getByRole("dialog", { name: "Plan a hangout" });
   const go = plan.getByRole("button", { name: "Hang out", exact: true });
   await expect(go).toBeDisabled();

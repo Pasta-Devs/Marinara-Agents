@@ -159,7 +159,6 @@ function FriendRow({
       >
         {t("ui.otomeForge.story.affectionProgressCount", { current, required })}
       </span>
-      {friend.about ? <p className="of-hint of-friend-about">{friend.about}</p> : null}
       {entry ? (
         <FriendActions
           runKey={runKey}
