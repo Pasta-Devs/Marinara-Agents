@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.47.1 — 2026-11-25
+
+- **Close and remember** sends you back to **Messages** at once and writes the memory in the background. The row says **Remembering…**, then what it earned. A close that fails keeps the conversation open, with **Try again**.
+- **Repaint**, **Repaint expressions** and a reviewed **Paint the cast** paint in the background. You can leave **Your cast** while they paint, and the new picture appears once it's saved.
+
 ## 0.47.0 — 2026-11-25
 
 - Friends have stickers of their own, one for each friend level: five in all. With images on, they are painted as a love interest's are. **Album → Stickers** lists them after the love interests', with **Repaint**. A friend's Messages thread offers them, and the friend sends them too.
