@@ -55,10 +55,11 @@ const PNG = Buffer.from(
   "base64",
 );
 const GALLERY_CG = "/api/gallery/file/otome-forge-cg-observation-room.png";
-/** The Album's tabs, from the left (0.36.0: Memories, Dates and CGs first). */
+/** The Album's tabs, from the left (0.36.0: Memories, Dates and CGs first; #2458: Hangouts after Dates). */
 const ALBUM_TABS = [
   "Memories",
   "Dates",
+  "Hangouts",
   "CGs",
   "Stickers",
   "Kittens",
@@ -1994,7 +1995,7 @@ test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps 
   await openDock(root, "Album");
   const tabs = root.getByRole("tablist", { name: "Album" });
   const names = ALBUM_TABS;
-  // 0.36.0: from the left, Memories, Dates and CGs, then the rest, and it opens on Memories.
+  // 0.36.0: from the left, Memories, Dates and CGs (#2458: Hangouts after Dates), then the rest, and it opens on Memories.
   await expect(tabs.getByRole("tab")).toHaveText(names);
   await expect(tabs.getByRole("tab", { name: "Memories" })).toHaveAttribute("aria-selected", "true");
   await expect(root.getByRole("tabpanel").getByRole("group", { name: "Memory rarity" })).toBeVisible();
