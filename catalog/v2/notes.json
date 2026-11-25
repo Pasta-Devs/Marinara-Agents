@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.47.0",
+          "date": "2026-11-25",
+          "notes": "- Friends have stickers of their own, one for each friend level: five in all. With images on, they are painted as a love interest's are. **Album → Stickers** lists them after the love interests', with **Repaint**. A friend's Messages thread offers them, and the friend sends them too.\n- In **Everyone**, you can send every sticker you have: yours, and every painted one of your love interests and friends.\n- **Story → Friends** no longer shows a line about each friend under their stars.\n- In **Album → Hangouts**, **Plan a hangout** no longer touches the hangouts below it.",
+          "highlight": true
+        },
+        {
           "version": "0.46.2",
           "date": "2026-11-25",
           "notes": "- **Add a friend** from someone you've met lets you choose one of your characters for them, or none. The one their name matches comes chosen, and their portrait is painted from that character's picture, as a love interest's is.\n- **Settings → Stories → Your cast** lists your friends under the love interests. Each has their appearance, their character card and their bible, behind **Show spoilers**, and you can edit it. Their faces can be repainted there too.\n- A friend's portrait, looks and faces are cut out of their background, as a love interest's are, so they no longer stand on pink. A portrait painted before this is cut out the next time the story opens.",
@@ -827,12 +833,6 @@
           "version": "0.36.9",
           "date": "2026-11-19",
           "notes": "- The story, messages and every other text Otome Hearth writes are now told not to fall into patterns. Lines of the same kind, such as narration, speech, thoughts and messages, should not keep opening or running the same way, and scenes and replies should not keep the same build. Some models, Gemini among them, kept starting every thought with \"My … feels\" and building scenes the same way.",
-          "highlight": false
-        },
-        {
-          "version": "0.36.8",
-          "date": "2026-11-19",
-          "notes": "- In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like \"nooo\", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.\n- They send stickers the way people do too: to react, tease, sulk or answer without words, not only when a picture says it better than words. A reply still has at most one sticker, or one from each of them in the group chat.\n- A message that puts an emoticon after your name, such as \"ines :(\", is no longer mistaken for a line written as you, so the reply no longer fails. A conversation's remembered line keeps such a message whole too, instead of cutting it down to \"P\".",
           "highlight": false
         }
       ]
