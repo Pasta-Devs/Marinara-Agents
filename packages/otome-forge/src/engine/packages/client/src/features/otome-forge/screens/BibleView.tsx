@@ -981,11 +981,11 @@ export function FriendBibleView({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const nameOf = (id: string) => lis.find((li) => li.id === id)?.name ?? id;
   // How they feel about her love life, then about her and each love interest they have a stance on.
-  const loveSection = (bible: FriendBible) => ({
+  const loveSection = (friendBible: FriendBible) => ({
     titleKey: "ui.otomeForge.setup.friendOnLove",
     fields: [
       { path: "onHer", labelKey: "ui.otomeForge.setup.friendOnHer", kind: "long" as const },
-      ...Object.keys(bible.onLis).flatMap((id): FieldSpec[] => [
+      ...Object.keys(friendBible.onLis).flatMap((id): FieldSpec[] => [
         {
           path: `onLis.${id}.stance`,
           labelKey: "ui.otomeForge.setup.friendStanceOn",
