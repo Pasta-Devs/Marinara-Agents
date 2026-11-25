@@ -1366,6 +1366,35 @@ test("a Repaint expressions that lands while the run is read reads pending besid
   assert.deepEqual(Object.keys(next.expressions ?? {}).sort(), [...FACES].sort());
 });
 
+test("a Repaint expressions that lands while the run's units are read reads pending, never stopped", async (context) => {
+  const t = await castWorld("r-bgpaint5-aaaaaa", 1);
+  const readDoc = t.store.readDoc;
+  context.after(() => ((t.store.readDoc = readDoc), t.release(), t.art.dispose()));
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await until(() => t.paid.length === 1, "the first paid face");
+  // Kai's unit is read with his replacement still pending; the set lands before Mireille's read (beside it) returns.
+  let kaiRead: Promise<unknown> | null = null;
+  let landDuringRead = true;
+  t.store.readDoc = (async (id: string, normalize: Parameters<typeof readDoc>[1]) => {
+    const read = readDoc(id, normalize);
+    if (id === unitId(t.runId, KAI)) kaiRead ??= read;
+    if (id === unitId(t.runId, MIR) && kaiRead && landDuringRead) {
+      landDuringRead = false;
+      await kaiRead;
+      t.release();
+      await paintSettled(t.runId, `faces:${KAI}`);
+    }
+    return read;
+  }) as typeof readDoc;
+  const read = await t.viewOf();
+  t.store.readDoc = readDoc;
+  assert.equal(landDuringRead, false, "the set landed during the read");
+  assert.deepEqual([read.facesPaint?.state, read.expressions ?? {}], ["pending", {}], "so the client reads again");
+  const next = await t.viewOf();
+  assert.equal(next.facesPaint, undefined);
+  assert.deepEqual(Object.keys(next.expressions ?? {}).sort(), [...FACES].sort());
+});
+
 test("Repaint expressions the kit ends before it starts (the look cannot be read) reads stopped, and the next one paints", async (context) => {
   const t = await castWorld("r-bgpaint3-aaaaaa", 0);
   context.after(() => t.art.dispose());

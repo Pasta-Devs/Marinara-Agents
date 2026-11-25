@@ -25,7 +25,8 @@
 //   SETTLE_TRIES times; if it still fails, the mark stays with no error, and the next read only unmarks it.
 // - A summary that fails before its session is saved leaves the conversation open and the mark with its error code,
 //   which the list and the thread show with Try again (Close again). Her next message lets it go (S/phone/chat.ts
-//   sendIn).
+//   sendIn). A saved session is never marked failed, even when the write that saved it rejects afterwards (saveThread's
+//   check that the story is still there): the close goes on and is paid as usual.
 // - P18 is a summary: like every summary it gets generateJson's output room (at least 10240 tokens when the connection
 //   allows it); its wanted length is in its prompt's wording.
 // - With nothing open, Close returns the newest memory and earns nothing. A conversation with nothing from one of them
@@ -164,7 +165,13 @@ async function earnClose(deps: PhoneDeps, runId: string, li: LiId, open: PhoneMe
   }
 }
 
-/** Thread `key` without close `mark` (with `affection` kept on its session), or with `error` on it; only that close. */
+/** Whether `thread` already holds the session close `mark` makes (its mark did not come off, or a restart came first). */
+const landed = (thread: PhoneThread, mark: PhoneClosing) => thread.sessions.some((entry) => entry.start === mark.start);
+
+/**
+ * Thread `key` without close `mark` (with `affection` kept on its session), or with `error` on it unless its session
+ * is saved; only that close.
+ */
 function settleClose(
   deps: PhoneDeps,
   runId: string,
@@ -174,7 +181,7 @@ function settleClose(
 ) {
   return saveThread(deps, runId, key, (current) => {
     if (current.closing?.at !== mark.at) return current;
-    if (end.error) return { ...current, closing: { ...current.closing, error: end.error } };
+    if (end.error && !landed(current, mark)) return { ...current, closing: { ...current.closing, error: end.error } };
     const { closing: _done, ...rest } = current;
     const affection = end.affection ?? 0;
     return {
@@ -188,9 +195,6 @@ function settleClose(
 
 /** The close's prepare: what its job needs, from its mark. */
 type Prepare = (mark: PhoneClosing) => Promise<Remembering>;
-
-/** Whether `thread` already holds the session close `mark` makes (its mark did not come off, or a restart came first). */
-const landed = (thread: PhoneThread, mark: PhoneClosing) => thread.sessions.some((entry) => entry.start === mark.start);
 
 /**
  * Takes the mark off a close whose session is saved, with `affection` kept on it: SETTLE_TRIES writes, then the mark is
@@ -267,13 +271,17 @@ async function remember(
       }
       appended = true;
       return { ...current, sessions: [...current.sessions, session] };
+    }).catch(async (error: unknown) => {
+      // It can reject after its write (the check that the story is still there): a session it saved stands.
+      const saved = appended && (await readThread(deps.store, runId, key));
+      if (!saved || !landed(saved, mark)) throw error;
     });
     // The session is saved: neither the grant nor settleSaved rejects, so it is never marked failed or paid twice.
     const affection = appended && earn ? await earn(open, mark.day) : 0;
     await settleSaved(deps, runId, key, mark, affection);
     if (appended) void Promise.resolve(deps.memory?.maintain({ runId, debugMode })).catch(() => undefined);
   } catch (error) {
-    // Nothing was saved: the conversation stays open; the list and the thread say why, with Try again.
+    // No session was saved: the conversation stays open; the list and the thread say why, with Try again.
     const code = (error instanceof OtomeForgeError && error.code) || "failed";
     deps.runtime.logger.warn(
       "[otome-forge] Close and remember in %s failed: %s",
@@ -305,7 +313,7 @@ async function queueClose(
     const thread = await readThread(deps.store, runId, key);
     const mark = thread?.closing;
     if (!mark || mark.error) return;
-    await settleClose(deps, runId, key, mark, landed(thread, mark) ? {} : { error: "no-connection" });
+    await settleClose(deps, runId, key, mark, { error: "no-connection" });
     return;
   }
   background.ensure({

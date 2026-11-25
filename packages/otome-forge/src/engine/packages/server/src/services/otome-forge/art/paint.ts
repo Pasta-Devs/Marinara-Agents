@@ -96,6 +96,12 @@ export function paintIsLive(runId: string, owner: PaintOwner): boolean {
   return live.has(liveKey(runId, owner));
 }
 
+/** 0.47.1: the owners whose paint is live in run `runId` now, so a read can tell what was painting when it began. */
+export function livePaints(runId: string): Set<string> {
+  const prefix = `${runId}|`;
+  return new Set([...live.keys()].filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length)));
+}
+
 /** Marks the owner's paint live in this process and returns its release, or null while another one is. */
 export function startPaint(runId: string, owner: PaintOwner): (() => void) | null {
   const key = liveKey(runId, owner);

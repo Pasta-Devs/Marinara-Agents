@@ -129,15 +129,16 @@ const unstarted = new Map<string, { base: string; paint: Paint }>();
 
 /**
  * 0.47.1: Repaint expressions for his current look as Your cast shows it: pending while it is live here (from before
- * the kit writes its replacement set), `stopped` once a restart left that set pending or the kit ended it before it
- * started, `stopped` or `failed` with the reason once it did not land, or undefined when none was asked or it landed
- * (the kit's record keeps the replacement only until then).
+ * the kit writes its replacement set), or was live when `unit` began to be read (`wasLive`), `stopped` once a restart
+ * left that set pending or the kit ended it before it started, `stopped` or `failed` with the reason once it did not
+ * land, or undefined when none was asked or it landed (the kit's record keeps the replacement only until then).
  */
 export function facesView(
   runId: string,
   unit: Pick<Unit, "id" | "portrait" | "outfits" | "wornOutfit" | "expressions">,
+  wasLive = false,
 ): Paint | undefined {
-  if (paintIsLive(runId, `faces:${unit.id}`)) return { state: "pending", at: "" };
+  if (wasLive || paintIsLive(runId, `faces:${unit.id}`)) return { state: "pending", at: "" };
   const ended = unstarted.get(`${runId}|${unit.id}`);
   const record = unit.expressions[baseOf(unit)];
   // Unless that look's own set was painted after it (a beat's queue).

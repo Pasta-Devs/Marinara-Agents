@@ -59,7 +59,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
 import { facesView } from "../art/expressions.js";
-import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
+import { imagesOf, livePaints, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { runForeground } from "../generation.js";
 import { ensureQuizScores } from "../minigames/quiz.js";
@@ -222,9 +222,15 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** 0.47.1: each love interest's and friend's Repaint expressions as facesView says it now, for `run`'s faces. */
-const castFaces = (runId: string, { units, friends = [] }: Pick<RunDocuments, "units" | "friends">) =>
-  new Map([...units, ...friends].map((unit) => [unit.id, facesView(runId, unit)]));
+/**
+ * 0.47.1: each love interest's and friend's Repaint expressions as facesView says it now, for `run`'s faces; `before`
+ * holds the paints that were live when they began to be read (livePaints).
+ */
+const castFaces = (
+  runId: string,
+  { units, friends = [] }: Pick<RunDocuments, "units" | "friends">,
+  before: ReadonlySet<string> = new Set(),
+) => new Map([...units, ...friends].map((unit) => [unit.id, facesView(runId, unit, before.has(`faces:${unit.id}`))]));
 
 /**
  * The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. 0.47.1: each
@@ -434,11 +440,12 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const { runKey, runId } = runParam(request);
       // A forge step left running or pending by a restart reads as failed, with Retry.
       await settleForge(deps, runId);
+      // Repaint expressions as it stood while these faces were read: one that lands during the read or the awaits
+      // below is not `stopped` beside the faces from before it.
+      const liveBefore = livePaints(runId);
       const read = await readRun(store, runId);
       if (!read) throw runNotFound();
-      // Repaint expressions as it stood when these faces were read: one that lands during the awaits below is not
-      // `stopped` beside the faces from before it.
-      const faces = castFaces(runId, read);
+      const faces = castFaces(runId, read, liveBefore);
       // #2303: an invitation to clear the air accepted before its scene existed gets that scene, once (no model call).
       await ensureClearAirScenes(store, runId, read.state);
       // #2459: an ended story starts no background work.

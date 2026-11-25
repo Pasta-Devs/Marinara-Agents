@@ -689,6 +689,42 @@ test("Close and remember: once its session is saved, a mark that will not come o
   assert.deepEqual((await t.phone("GET", page, { li: KAI })).body.closing, undefined);
 });
 
+test("Close and remember: a session saved before its write rejects is remembered and paid once, never failed", async () => {
+  const t = await phoneWorld("r-phonej-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const points = (await t.state()).lis[KAI]!.points;
+  // The write that appends the session commits, then the check that the story is still there fails once.
+  const { mutateDoc, readDoc } = t.store;
+  let armed = true;
+  let failWorldRead = false;
+  t.store.mutateDoc = (async (target, normalize, change, options) => {
+    const saved = await mutateDoc(target, normalize, change, options);
+    const thread = saved as Partial<PhoneThread>;
+    if (armed && target.id === chatId(t.runId, KAI) && thread.closing && thread.sessions?.length) {
+      armed = false;
+      failWorldRead = true;
+    }
+    return saved;
+  }) as typeof mutateDoc;
+  t.store.readDoc = ((id, normalize) => {
+    if (failWorldRead && id === worldId(t.runId)) {
+      failWorldRead = false;
+      return Promise.reject(new Error("The disk is busy."));
+    }
+    return readDoc(id, normalize);
+  }) as typeof readDoc;
+  const { thread } = await t.closeAndWait();
+  Object.assign(t.store, { mutateDoc, readDoc });
+  assert.deepEqual([armed, failWorldRead], [false, false], "the read after the session's write failed");
+  assert.deepEqual(
+    [thread.closing, thread.sessions.map((session) => [session.start, session.affection])],
+    [undefined, [[0, 5]]],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual([row.li, row.closing, row.remembered], [KAI, undefined, { start: 0, affection: 5 }], "no Try again");
+});
+
 test("Close and remember: with no connection, a saved close only comes off; a read whose requeue fails still answers", async () => {
   const t = await phoneWorld("r-phonec-aaaaaa");
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
