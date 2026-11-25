@@ -3,7 +3,8 @@
 // (S/state/rewards.ts), their grievances (S/state/friends.ts), rank stories, hangouts and the Wingman
 // (S/story/friend-stories.ts, S/story/friend-rewards.ts), their block in the story prompts (S/prompts.ts), the ending
 // (S/story/ending.ts) and an ended story's lock (S/routes/ended.ts). #2475: a met friend's card, a friend in Your cast
-// (their bible, card link and appearance), and their portrait cut out on opening the story.
+// (their bible, card link and appearance), no newcomer on a cast member's card, and their portrait cut out on opening
+// the story.
 // Run: npx tsx --tsconfig tests/tsconfig.regressions.json --test tests/otome-forge-friends.regression.ts
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -61,6 +62,7 @@ import { endingView } from "../packages/otome-forge/src/engine/packages/server/s
 import { askWingman } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-rewards.ts";
 import { waitingRank } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-stories.ts";
 import { friendCards } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friends.ts";
+import { introduceLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
 import { CAST, HE, KAI, MIR, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 import { artWorld, routesOf } from "./fixtures/otome-forge-art.ts";
 
@@ -586,6 +588,30 @@ test("#2475: a friend she has met joins without a card when the player picks non
   const unit = (await readRun(t.store, t.runId))!.friends![0]!;
   assert.equal(unit.cardId, undefined);
   assert.equal(unit.source, "archetype");
+});
+
+test("#2475: someone new mid-story never takes the card a friend or love interest has under another name", async () => {
+  const t = await storyWorld({
+    runKey: "r-friendnew-eeeeee",
+    characters: cardsOf({ "card-alha": "Alhaitham", "card-tide": "Tidecaller" }),
+  });
+  // Kaveh linked to Alhaitham's card, and Kai relinked to another card, in Your cast: neither name is the card's.
+  await seedFriend(t, { cardId: "card-alha", source: "card" });
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-tide",
+  }));
+  const units = async () => (await t.store.listRun("unit", t.runId)).length;
+  const had = await units();
+  for (const cardId of ["card-alha", "card-tide"]) {
+    await assert.rejects(
+      introduceLoveInterest(t.deps, t.runId, { source: "card", cardId, pronouns: HE }),
+      /already someone in your story's cast/u,
+      cardId,
+    );
+  }
+  assert.equal(await units(), had, "no unit was written");
+  assert.equal(t.calls.length, 0, "and no bible was paid for");
 });
 
 test("#2475: Your cast shows a friend's bible behind the spoiler gate, takes an edit checked whole, and links their card", async () => {

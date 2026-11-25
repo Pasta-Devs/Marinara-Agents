@@ -17,7 +17,7 @@ import { Avatar } from "../../components/Avatar";
 import { CostHint, usePaintsByItself } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
 import { RetryNotice } from "../../components/RetryNotice";
-import { useCharacterOptions } from "../../hooks/use-engine-resources";
+import { useCharacterOptions, type PickerItem } from "../../hooks/use-engine-resources";
 import { runPath, storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import { accentOf, nameAccent } from "../../lib/accent";
@@ -329,7 +329,14 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
     }
   };
 
-  const tile = (id: string, label: string, picked: boolean, onPick: () => void, url?: string) => (
+  /** A card's tile carries its avatar crop and title, which tells apart two cards with the same name (#2365). */
+  const tile = (
+    id: string,
+    label: string,
+    picked: boolean,
+    onPick: () => void,
+    card?: Pick<PickerItem, "avatarUrl" | "avatarCrop" | "title">,
+  ) => (
     <li key={id}>
       <button
         type="button"
@@ -340,13 +347,14 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
         onClick={onPick}
       >
         {id ? (
-          <Avatar name={label} url={url} accent={nameAccent(label)} />
+          <Avatar name={label} url={card?.avatarUrl} crop={card?.avatarCrop} accent={nameAccent(label)} />
         ) : (
           <span className="of-avatar" style={{ width: 44, height: 44 }} aria-hidden="true">
             <UserRound size={20} strokeWidth={1.8} />
           </span>
         )}
         <span className="of-tile-name">{label}</span>
+        {card?.title ? <span className="of-tile-title">{card.title}</span> : null}
         {picked ? (
           <span className="of-tile-check" aria-hidden="true">
             <Check size={12} strokeWidth={3} />
@@ -356,9 +364,7 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
     </li>
   );
   const cardTiles = (picked: string, onPick: (id: string) => void) =>
-    offered.map((card) =>
-      tile(card.id, card.name, picked === card.id, () => onPick(card.id), card.avatarUrl ?? undefined),
-    );
+    offered.map((card) => tile(card.id, card.name, picked === card.id, () => onPick(card.id), card));
 
   return (
     <Dialog

@@ -43,7 +43,7 @@ import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { Dialog } from "../../components/Dialog";
 import { useCharacterOptions } from "../../hooks/use-engine-resources";
 import { cancelStoryWork, runPath, storyQueryKey, useChapter, useStory } from "../../hooks/use-reader";
-import { runQueryKey } from "../../hooks/use-run";
+import { runQueryKey, useRun } from "../../hooks/use-run";
 import { accentOf, nameAccent } from "../../lib/accent";
 import { emptyPronouns, resolvePronouns, type PronounChoice } from "../setup/draft";
 import { PronounPicker } from "../setup/parts";
@@ -1068,6 +1068,10 @@ function NewcomerDialog({
 }) {
   const { t } = useTranslation();
   const cards = useCharacterOptions();
+  // #2475: a card a love interest or friend already has is not offered (the server refuses it too), as in Add a friend.
+  const run = useRun(runKey).data;
+  const linked = new Set([...(run?.lis ?? []), ...(run?.friends ?? [])].flatMap((person) => person.cardId ?? []));
+  const offered = cards.items.filter((card) => !linked.has(card.id));
   const [mode, setMode] = useState<"card" | "archetype">("card");
   const [cardId, setCardId] = useState("");
   const [name, setName] = useState("");
@@ -1138,7 +1142,7 @@ function NewcomerDialog({
             // Setup's card tiles (CastStep): a grid with a check on the one chosen. The of-cast-pick classes this used
             // had no styles, so the list fell apart and a tap showed nothing.
             <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.story.newcomerCard")}>
-              {cards.items.map((card) => {
+              {offered.map((card) => {
                 const picked = cardId === card.id;
                 return (
                   <li key={card.id}>

@@ -397,15 +397,20 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** The spoiler gate, then the bible loading or failed to load; nothing once it has loaded. */
+/**
+ * The spoiler gate, then the bible loading or failed to load; nothing once it has loaded. `textKey` says what the bible
+ * holds (a friend's has no secrets).
+ */
 function SpoilerGate({
   revealed,
   query,
   onReveal,
+  textKey = "ui.otomeForge.setup.bibleSpoilerText",
 }: {
   revealed: boolean;
   query: { isPending: boolean; isError: boolean; error: unknown; refetch: () => unknown };
   onReveal: () => void;
+  textKey?: string;
 }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
@@ -413,7 +418,7 @@ function SpoilerGate({
     return (
       <section className="of-section of-glass of-spoiler">
         <BookLock size={26} strokeWidth={1.6} aria-hidden="true" />
-        <p className="of-body">{t("ui.otomeForge.setup.bibleSpoilerText")}</p>
+        <p className="of-body">{t(textKey)}</p>
         <button type="button" className="of-button of-button--primary" onClick={onReveal}>
           <Eye size={16} strokeWidth={2} aria-hidden="true" />
           {t("ui.otomeForge.setup.bibleShowSpoilers")}
@@ -1006,8 +1011,9 @@ export function FriendBibleView({
   const save = async () => {
     if (!draft || busy) return;
     const bibleToSave = trimLines(draft, FRIEND_SECTIONS);
-    if (!(bibleToSave.age >= MIN_AGE)) {
-      setStatus({ error: true, text: t(PROBLEM_KEYS.age, PROBLEM_VALUES) });
+    // The server's rule (FriendBibleSchema): a whole number, 18 or older.
+    if (!Number.isInteger(bibleToSave.age) || bibleToSave.age < MIN_AGE) {
+      setStatus({ error: true, text: t("ui.otomeForge.setup.friendAdult") });
       return;
     }
     setBusy(true);
@@ -1050,6 +1056,7 @@ export function FriendBibleView({
         <SpoilerGate
           revealed={revealed}
           query={bible}
+          textKey="ui.otomeForge.setup.friendSpoilerText"
           onReveal={() => {
             setRevealed(true);
             headingRef.current?.focus({ preventScroll: true });

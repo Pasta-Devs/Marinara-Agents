@@ -3801,6 +3801,7 @@ test("#2458: Otome Hearth's Story lists her friends with stars, and Add a friend
   const cards = [
     { id: "card-kaveh", name: "Kaveh", avatarPath: null },
     { id: "card-kaveh-alt", name: "Kaveh the Architect", avatarPath: null },
+    { id: "card-kaveh-au", name: "Kaveh", comment: "Modern AU", avatarPath: null },
     { id: "card-ilvar", name: "Ilvar card", avatarPath: null },
   ];
   await page.route("**/api/characters/catalog?*", (route) => route.fulfill({ json: { items: cards, hasMore: false } }));
@@ -3821,6 +3822,8 @@ test("#2458: Otome Hearth's Story lists her friends with stars, and Add a friend
   await expect(cardList.getByRole("button", { name: "Kaveh", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(cardList.getByRole("button", { name: "No card", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(cardList.getByRole("button", { name: "Ilvar card", exact: true })).toHaveCount(0);
+  // Two of her cards named Kaveh: the second one's title tells them apart.
+  await expect(cardList.getByText("Modern AU", { exact: true })).toBeVisible();
   await cardList.getByRole("button", { name: "Kaveh the Architect", exact: true }).click();
   await expect(cardList.getByRole("button", { name: "Kaveh", exact: true })).toHaveAttribute("aria-pressed", "false");
   await dialog.getByText("he/him", { exact: true }).click();
@@ -3865,6 +3868,13 @@ test("#2458: Otome Hearth's Story lists her friends with stars, and Add a friend
   await expect(select).toHaveValue("card-kaveh-alt");
   await expect(select.getByRole("option", { name: "Ilvar card", exact: true })).toBeDisabled();
   expect(calls.some((call) => call.path.endsWith(`/friends/${kaveh.id}/bible`))).toBe(false);
+  // A friend's bible holds no secrets, and the gate says what it does hold.
+  await expect(
+    root.getByText(
+      "Their bible holds their wound, what they want and where your friendship is heading. Reading it spoils the surprises.",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await root.getByRole("button", { name: "Show spoilers", exact: true }).click();
   await expect(root.getByText("RANK-TWO", { exact: true })).toBeVisible();
   await expect(root.getByText("Friendship 2 of 5", { exact: true })).toBeVisible();
@@ -3872,6 +3882,18 @@ test("#2458: Otome Hearth's Story lists her friends with stars, and Add a friend
   await expect(root.getByText("Secrets", { exact: true })).toHaveCount(0);
   await expect(root.getByText("Arc", { exact: true })).toHaveCount(0);
   await root.getByRole("button", { name: "Edit", exact: true }).click();
+  // The server's rule, a whole number 18 or older, in a friend's own words; nothing is sent.
+  const age = root.getByRole("spinbutton", { name: "Age", exact: true });
+  await age.fill("18.5");
+  // Filling it scrolls the page, which leaves the pointer from Edit on Save's bottom edge, where its 1px hover lift
+  // never settles; the pointer moves off first.
+  await page.mouse.move(0, 0);
+  await root.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    root.getByText("Friends are always adults: the age must be a whole number, 18 or older.", { exact: true }),
+  ).toBeVisible();
+  expect(posts(calls, `/friends/${kaveh.id}/bible`)).toEqual([]);
+  await age.fill("24");
   await root
     .getByRole("textbox", { name: "How they see your love life", exact: true })
     .fill("EDITED: cheering her on.");
