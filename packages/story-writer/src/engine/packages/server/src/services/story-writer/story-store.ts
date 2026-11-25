@@ -80,6 +80,7 @@ const MAX_ATTEMPTS = 3;
 const STORY_NOT_FOUND = "Story not found.";
 const CHAPTER_NOT_FOUND = "Chapter not found.";
 const ILLUSTRATION_NOT_FOUND = "Picture not found.";
+const TOO_MANY = `A chapter can have at most ${LIMITS.illustrationsPerChapter} pictures.`;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -583,19 +584,25 @@ export function createStoryStore(persistence: StoryPersistence, options: { now?:
         throw new StoryWriterError(404, ILLUSTRATION_NOT_FOUND);
       }
       if (!replaceId && chapter.illustrations.length >= LIMITS.illustrationsPerChapter) {
-        throw new StoryWriterError(400, `A chapter can have at most ${LIMITS.illustrationsPerChapter} pictures.`);
+        throw new StoryWriterError(400, TOO_MANY);
       }
     },
 
     /** Puts a painted picture in the chapter, in place of `replaceId` when it is given (Illustrate again). */
     addIllustration(storyId: unknown, chapterId: unknown, illustration: StoryIllustration, replaceId?: string) {
       return changeIllustrations(storyId, chapterId, (current) => {
-        const list = replaceId
-          ? current.map((item) => (item.id === replaceId ? illustration : item))
-          : [...current, illustration];
+        const replacing = current.some((item) => item.id === replaceId);
+        // Two pictures painted at once both passed checkIllustration: the one that finds the chapter full is refused.
+        if (!replacing && current.length >= LIMITS.illustrationsPerChapter) throw new StoryWriterError(400, TOO_MANY);
         // The picture it replaces was removed meanwhile: the new one is added.
-        if (replaceId && !current.some((item) => item.id === replaceId)) list.push(illustration);
-        return normalizeIllustrations(list);
+        const list = normalizeIllustrations(
+          replacing ? current.map((item) => (item.id === replaceId ? illustration : item)) : [...current, illustration],
+        );
+        // Every write either stores the new picture or fails, so the caller can delete one that was not stored.
+        if (!list.some((item) => item.id === illustration.id)) {
+          throw new StoryWriterError(502, "The Global Gallery did not keep the picture.");
+        }
+        return list;
       });
     },
 

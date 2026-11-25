@@ -85,7 +85,7 @@
     "reviewTitle": "Picture prompt",
     "promptLabel": "What the picture shows",
     "reviewHint": "Written from the passage and your cast. Change anything you like, then press Paint: your image connection paints exactly this.",
-    "reviewAgainHint": "The prompt this picture was painted from. Change it if you like, then press Paint for a new picture in its place.",
+    "reviewAgainHint": "The prompt this picture was painted from. Change it if you like, then press Paint for a new picture in its place. This one stays in the Global Gallery.",
     "writingPrompt": "Writing the picture prompt…",
     "painting": "Painting the picture…",
     "done": "The picture is in the chapter, and in the Global Gallery.",

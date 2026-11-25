@@ -18,7 +18,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Loader2, RefreshCw } from "lucide-react";
 import { host } from "marinara:host";
-import { resolveDefaultConnectionId, useStoryConnections } from "../../hooks/use-engine-resources";
+import {
+  resolveDefaultConnectionId,
+  resolveImageConnectionId,
+  useStoryConnections,
+} from "../../hooks/use-engine-resources";
 import { useStoryGeneration } from "../../hooks/use-story-generation";
 import { useStoryIllustration } from "../../hooks/use-story-illustration";
 import { storyWriterKeys, usePreferences, useStoryDocument, useStoryList } from "../../hooks/use-story-writer";
@@ -558,6 +562,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 targetWords={settings.targetWords}
                 fullscreen={fullscreen}
                 illustrating={illustration.phase !== "idle"}
+                hasImageConnection={resolveImageConnectionId(imageConnections, settings.imageConnectionId) !== null}
                 onWrite={() => void generation.write(writeMode)}
                 onContinue={() => void generation.write("continue")}
                 onRewrite={() => void rewriteLastChapter()}

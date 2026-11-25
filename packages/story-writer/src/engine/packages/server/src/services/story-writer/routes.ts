@@ -102,7 +102,8 @@ export function storyWriterRoutes(store: StoryStore, logger: StoryWriterLogger, 
   const storyId = (request: StoryWriterRequest) => field(request.params, "storyId");
   const chapterId = (request: StoryWriterRequest) => field(request.params, "chapterId");
 
-  // Paints, then stores: a picture the chapter cannot take any more (it was deleted meanwhile) is deleted again.
+  // Paints, then stores: a picture the chapter cannot take any more (it was deleted or filled meanwhile, or the write
+  // failed) is deleted again.
   const illustrate = async (request: StoryWriterRequest) => {
     const input = readIllustrationCreate(request.body);
     await store.checkIllustration(storyId(request), chapterId(request), input.replace);
@@ -134,12 +135,11 @@ export function storyWriterRoutes(store: StoryStore, logger: StoryWriterLogger, 
     try {
       saved = await store.addIllustration(storyId(request), chapterId(request), illustration, input.replace);
     } catch (error) {
-      if (error instanceof StoryWriterError && error.statusCode === 404) await images.remove(picture.id);
+      // Nothing holds the new picture yet (and the Engine keeps it if a half-finished write does), so it goes again.
+      await images.remove(picture.id);
       throw error;
     }
-    // Illustrate again: the picture it replaced goes from the Global Gallery unless something else still uses it.
-    const replaced = saved.previous.find((item) => item.id === input.replace);
-    if (replaced) await images.remove(galleryId(replaced));
+    // Illustrate again keeps the picture it replaced in the Global Gallery, as deleting a chapter or a story does.
     return { story: saved.story, chapter: saved.chapter };
   };
 

@@ -2,7 +2,7 @@
 
 ## 0.6.0 — 2026-11-25
 
-- **Illustrate** paints a picture of a passage. Click in a paragraph or select some text and press the picture button: the story's model writes a prompt from the passage and your cast's looks, and the image connection you pick under **Writing → Image connection** paints it. Until you pick one, Illustrate sends nothing. If the Engine shows you media prompts before sending, you can change the prompt first. The picture sits beside its paragraph with the text wrapping around it, full width on a phone, and beside the column in Document. Writing, Continue and Rewrite keep it. **Illustrate again** paints a new one in its place; **Remove** also deletes it from the Global Gallery unless something else uses it. Markdown downloads include the pictures.
+- **Illustrate** paints a picture of a passage. Click in a paragraph or select some text and press the picture button: the story's model writes a prompt from the passage and your cast's looks, and the image connection you pick under **Writing → Image connection** paints it. Until you pick one, Illustrate sends nothing. If the Engine shows you media prompts before sending, you can change the prompt first. The picture sits beside its paragraph with the text wrapping around it, full width on a phone, and beside the column in Document. Writing, Continue and Rewrite keep it. **Illustrate again** paints a new one in its place and keeps the old one in the Global Gallery; **Remove** also deletes it from the gallery unless something else uses it. On a phone, the picture button waits for an image connection. Markdown downloads include the pictures.
 
 ## 0.5.0 — 2026-11-25
 

@@ -223,6 +223,10 @@ export const ChapterBlock = memo(function ChapterBlock({
   const handleInput = () => {
     const body = bodyRef.current;
     if (!body) return;
+    // The browser deletes a picture with the text around it (Backspace after it joins the paragraphs and takes the
+    // picture too). A picture belongs to the chapter, not to its text: the edit stays and the picture comes back.
+    const pictures = picturesRef.current;
+    if (body.querySelectorAll(`figure.${FIGURE}`).length < pictures.illustrations.length) placePictures(body, pictures);
     const next = htmlToMarkdown(body);
     shownRef.current = next;
     body.dataset.empty = next.trim() ? "false" : "true";

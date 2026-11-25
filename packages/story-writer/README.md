@@ -79,7 +79,7 @@ Pick **Short**, **Medium**, **Long** or type a length to go back to writing chap
 
 **Illustrate** (the picture button at the bottom of the screen) paints a picture of a passage of your story.
 
-1. Pick the connection that paints under **Writing → Image connection**. It starts at **None**, and with None, Illustrate sends nothing and costs nothing; it tells you where to choose one.
+1. Pick the connection that paints under **Writing → Image connection**. It starts at **None**, and with None, Illustrate sends nothing and costs nothing; it tells you where to choose one. On a phone held upright, the button shows only once you have chosen one.
 2. Click in the paragraph you want a picture of, or select a passage.
 3. Press **Illustrate**. The story's own connection writes a picture prompt in English from that passage and the looks of your characters and personas: who is there, what they look like, where they are, the light, what they are doing, and no text in the picture.
 4. If **Settings → Generations → Expose media prompts before sending** is on in Marinara Engine, Story Writer shows you that prompt first: change it as you like and press **Paint**, or **Cancel**. When it is off, the picture is painted straight away.
@@ -95,10 +95,10 @@ The picture belongs to the chapter, not to its text: it stays beside its paragra
 
 Point at a picture (on a touch screen its buttons are always shown) for its two buttons:
 
-- **Illustrate again** paints a new picture from the same prompt, in its place. With **Expose media prompts before sending** on, you can change the prompt first.
+- **Illustrate again** paints a new picture from the same prompt, in its place. The old picture stays in the Global Gallery. With **Expose media prompts before sending** on, you can change the prompt first.
 - **Remove this picture** takes it out of the chapter, after asking. It is deleted from the Global Gallery too, unless something else uses it (a duplicated story, for example).
 
-Every picture is also kept in the Engine's **Global Gallery**. Deleting a chapter or a story keeps its pictures there. A downloaded **Markdown** file shows the pictures as images linked to your Engine; **Plain text** leaves them out.
+Every picture is also kept in the Engine's **Global Gallery**. Deleting a chapter or a story keeps its pictures there, and so does painting a picture again. A downloaded **Markdown** file shows the pictures as images linked to your Engine; **Plain text** leaves them out.
 
 ## The author's note
 
@@ -125,7 +125,7 @@ A new chapter remembers the quick reply it was written from, so the model sees i
 - **Finish this chapter** (shown while the last chapter is a draft): marks it finished and writes the next chapter, for when a draft is done as it is.
 - **Rewrite the last chapter**: throws the last chapter away and writes it again from the request it was written from: the quick reply, or your continue message as it was then, even if you have changed it since. To steer a rewrite, change the author's note first. Story Writer asks first.
 - **Redo** (shown after the model has written something): takes back only what the model last wrote and writes it again with the same instruction, for when it refused or stopped partway. A continued chapter goes back to where it was before, and a new chapter is written again in its place. If **Clear after the next chapter** emptied the author's note, Redo puts the note back first. The button goes away as soon as you change that chapter or its summary, and your changes are kept. It also goes away when you reload the page. On a phone, the word count makes room for it. Story Writer asks first.
-- **Illustrate** (the picture button, once there is a chapter): paints a picture of the paragraph at the cursor or the passage you selected. See [Pictures](#pictures-illustrate-a-passage).
+- **Illustrate** (the picture button, once there is a chapter): paints a picture of the paragraph at the cursor or the passage you selected. On a phone held upright, it shows once you have chosen an image connection. See [Pictures](#pictures-illustrate-a-passage).
 - **Your stories**: opens your story list.
 - **Fullscreen**: hides the rest of Marinara Engine.
 - The word count of the whole story, with a progress bar when you have set a story length target.

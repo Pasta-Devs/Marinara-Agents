@@ -94,6 +94,51 @@ function wholeSize(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
 }
 
+const sized = (width: number, height: number) =>
+  width > 0 && height > 0 && width < 65_536 && height < 65_536 ? { width, height } : null;
+
+/**
+ * A picture's pixel size from its header (PNG, GIF, WebP or JPEG), or null for another file. The Engine reports a size
+ * only when it adjusted the request itself, and a provider can paint another shape than asked (GPT Image paints
+ * 1024×1536 for 896×1152), so the book sizes a picture by its own header.
+ * ponytail: the same reader as Slurp's slp-image-size.ts; no EXIF orientation, which painted pictures do not carry.
+ */
+export function imageSize(bytes: Buffer): { width: number; height: number } | null {
+  if (bytes.length >= 24 && bytes.readUInt32BE(0) === 0x89504e47 && bytes.toString("ascii", 12, 16) === "IHDR") {
+    return sized(bytes.readUInt32BE(16), bytes.readUInt32BE(20));
+  }
+  if (bytes.length >= 10 && bytes.toString("ascii", 0, 3) === "GIF") {
+    return sized(bytes.readUInt16LE(6), bytes.readUInt16LE(8));
+  }
+  if (bytes.length >= 30 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP") {
+    const chunk = bytes.toString("ascii", 12, 16);
+    if (chunk === "VP8X") return sized(1 + bytes.readUIntLE(24, 3), 1 + bytes.readUIntLE(27, 3));
+    if (chunk === "VP8L" && bytes[20] === 0x2f) {
+      const bits = bytes.readUInt32LE(21);
+      return sized(1 + (bits & 0x3fff), 1 + ((bits >> 14) & 0x3fff));
+    }
+    if (chunk === "VP8 ") return sized(bytes.readUInt16LE(26) & 0x3fff, bytes.readUInt16LE(28) & 0x3fff);
+    return null;
+  }
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    // The segments up to the first frame header (SOF0-SOF15, not DHT, JPG or DAC) hold its size.
+    let offset = 2;
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] !== 0xff) return null;
+      const marker = bytes[offset + 1]!;
+      if (marker === 0xff) {
+        offset += 1;
+        continue;
+      }
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return sized(bytes.readUInt16BE(offset + 7), bytes.readUInt16BE(offset + 5));
+      }
+      offset += 2 + bytes.readUInt16BE(offset + 2);
+    }
+  }
+  return null;
+}
+
 /** `fetch` is the server's, with the Engine's local auth added (server-entry.ts); tests pass their own. */
 export function createIllustrationImages({
   baseUrl = loopbackBaseUrl(),
@@ -137,7 +182,11 @@ export function createIllustrationImages({
       const image = engineImage(str(painted.image));
       const ext = image ? IMAGE_TYPES[image.mime] : undefined;
       if (!image || !ext) throw new Error("The Engine returned no picture.");
-      const size = { width: wholeSize(painted.width, width), height: wholeSize(painted.height, height) };
+      const bytes = Buffer.from(image.base64, "base64");
+      const size = imageSize(bytes) ?? {
+        width: wholeSize(painted.width, width),
+        height: wholeSize(painted.height, height),
+      };
       // The Engine reads only the fields sent before the file.
       const form = new FormData();
       form.append("prompt", prompt);
@@ -145,11 +194,7 @@ export function createIllustrationImages({
       form.append("model", str(painted.model) || "unknown");
       form.append("width", String(size.width));
       form.append("height", String(size.height));
-      form.append(
-        "file",
-        new Blob([Buffer.from(image.base64, "base64")], { type: image.mime }),
-        `story-illustration${ext}`,
-      );
+      form.append("file", new Blob([bytes], { type: image.mime }), `story-illustration${ext}`);
       const saved = await request("/api/global-gallery/upload", { method: "POST", body: form });
       const id = str(saved.id);
       const url = str(saved.url);

@@ -52,13 +52,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "fc74fa530dd4d25863e6942bc08a8c6dbc061aa97476a04e640ea4cf84f53f84",
-      "bytes": 21604
+      "sha256": "acbe888fef31158bd563061a83227097b58e80284b46f79ab4e292446fd2fb81",
+      "bytes": 22587
     },
     {
       "path": "client.js",
-      "sha256": "9caafdd4e726c5ec37db58847be72661cf4892461c595388fda6e32a7b839d17",
-      "bytes": 266409
+      "sha256": "06c338d0fee62babe72c776436bed6ef9b324ad6024a7c8a8f184427b1e7b317",
+      "bytes": 267463
     },
     {
       "path": "story-writer-icon.png",

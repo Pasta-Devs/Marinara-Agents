@@ -1061,14 +1061,23 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
     const paragraphs = root.locator(".sw-block--chapter .sw-body > p");
     await expect(paragraphs.last()).toContainText("Morning came");
     const illustrate = root.getByRole("button", { name: "Illustrate", exact: true });
-    await selectParagraph(page, paragraphs.last());
-    await illustrate.click();
-    await expect(page.getByText(/^Illustrate needs an image connection\./)).toBeVisible();
-    expect(generations).toHaveLength(0);
-    expect(painted).toHaveLength(0);
-
-    // Its "Choose one" opens the settings, where Image connection lists only the image connections.
-    await page.getByRole("button", { name: "Choose one" }).click();
+    const wordCount = root.locator(".sw-actionbar .sw-wordcount");
+    if (mobile) {
+      // A phone bar stays as it was for a writer without an image connection: no Illustrate, and the word count.
+      await expect(illustrate).toBeHidden();
+      await expect(wordCount).toBeVisible();
+      await root.getByRole("button", { name: "Show story settings" }).click();
+      const writing = root.getByRole("button", { name: "Writing" });
+      if ((await writing.getAttribute("aria-expanded")) !== "true") await writing.click();
+    } else {
+      await selectParagraph(page, paragraphs.last());
+      await illustrate.click();
+      await expect(page.getByText(/^Illustrate needs an image connection\./)).toBeVisible();
+      expect(generations).toHaveLength(0);
+      expect(painted).toHaveLength(0);
+      // Its "Choose one" opens the settings, where Image connection lists only the image connections.
+      await page.getByRole("button", { name: "Choose one" }).click();
+    }
     const picker = root.getByLabel("Image connection");
     await expect(picker).toHaveValue("");
     await expect(picker.locator("option")).toHaveText(["None (no pictures)", /^Story Writer E2E Painter/]);
@@ -1081,6 +1090,9 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
       )
       .toBe(imageConnection.id);
     await root.getByRole("button", { name: "Hide story settings" }).click();
+    // With one, the phone's word count makes room for Illustrate.
+    await expect(illustrate).toBeVisible();
+    if (mobile) await expect(wordCount).toBeHidden();
 
     const pagesBefore = Number(/of (\d+)/.exec((await root.locator(".sw-indicator").textContent()) ?? "")?.[1]);
     await selectParagraph(page, paragraphs.last());
@@ -1179,7 +1191,7 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
     expect((await savedChapter()).illustrations).toEqual([stored]);
     await expect(figure).toHaveCount(1);
 
-    // Illustrate again paints from its own prompt (no text call) in its place, and the old picture leaves the gallery.
+    // Illustrate again paints from its own prompt (no text call) in its place; the old picture stays in the gallery.
     await figure.scrollIntoViewIfNeeded();
     await figure.hover();
     await figure.getByRole("button", { name: "Illustrate again" }).click();
@@ -1194,8 +1206,7 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
       .toEqual([`${PICTURE_PROMPT} A cat watches.`]);
     expect(generations.filter((body) => body.streaming === false)).toHaveLength(textCalls);
     const secondImageId = (await savedChapter()).illustrations[0]!.image.slice("global-gallery:".length);
-    await expect.poll(galleryIds).not.toContain(firstImageId);
-    expect(await galleryIds()).toContain(secondImageId);
+    expect(await galleryIds()).toEqual(expect.arrayContaining([firstImageId, secondImageId]));
     await expect(figure.locator("img")).toHaveAttribute("alt", `${PICTURE_PROMPT} A cat watches.`);
 
     // A reload shows it from the server; the Document theme puts it beside the column when the window has room.
@@ -1211,11 +1222,34 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
       return {
         beside: box.left >= column.right - 1,
         within: box.left >= column.left - 1 && box.right <= column.right + 1,
+        // By the chapter's short last paragraph, it still ends inside the chapter.
+        held: box.bottom <= element.closest(".sw-block")!.getBoundingClientRect().bottom + 1,
       };
     });
-    expect(besideColumn).toEqual(mobile ? { beside: false, within: true } : { beside: true, within: false });
+    expect(besideColumn).toEqual(
+      mobile ? { beside: false, within: true, held: true } : { beside: true, within: false, held: true },
+    );
     await page.waitForTimeout(400);
     await page.screenshot({ path: testInfo.outputPath("13-picture-in-the-document.png") });
+
+    // Backspace at the start of its paragraph joins the paragraphs; the picture is not the text's to delete.
+    const pictureBody = root.locator(".sw-document .sw-block--chapter .sw-body");
+    const blocksBefore = await pictureBody.evaluate((body) => body.children.length);
+    await documentFigure.evaluate((figure) => {
+      const body = figure.parentElement as HTMLElement;
+      body.focus();
+      const range = document.createRange();
+      range.setStart(figure.nextElementSibling!, 0);
+      document.getSelection()!.removeAllRanges();
+      document.getSelection()!.addRange(range);
+    });
+    await page.keyboard.press("Backspace");
+    await expect(documentFigure).toHaveCount(1);
+    expect(await pictureBody.evaluate((body) => body.children.length)).toBe(blocksBefore - 1);
+    await page.keyboard.press("Escape");
+    await expect.poll(async () => (await savedChapter()).text).toContain("grudging.");
+    await expect.poll(async () => (await savedChapter()).text).not.toMatch(/\*\*\*\n\n\*\*Morning came\*\*/);
+    expect((await savedChapter()).illustrations).toHaveLength(1);
 
     // Remove asks first, takes the picture out of the chapter and deletes it from the Global Gallery.
     await documentFigure.hover();

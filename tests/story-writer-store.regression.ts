@@ -12,6 +12,7 @@ import {
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/model.ts";
 import {
   createIllustrationImages,
+  imageSize,
   type IllustrationImages,
   type PaintRequest,
 } from "../packages/story-writer/src/engine/packages/server/src/services/story-writer/illustrations.ts";
@@ -461,8 +462,30 @@ test("a chapter left unlisted by a failed story update is adopted by the retry, 
 
 // ── Illustrate ──
 
-/** A 1×1 PNG, as an image connection's answer. */
-const PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const u32 = (value: number) => Buffer.from([value >>> 24, (value >>> 16) & 255, (value >>> 8) & 255, value & 255]);
+/** The start of the 1024×1536 PNG GPT Image paints for 896×1152: its signature and header, all imageSize reads. */
+const PNG_BASE64 = Buffer.concat([
+  Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"),
+  u32(1024),
+  u32(1536),
+  Buffer.from("0806000000", "hex"),
+]).toString("base64");
+
+test("a picture's size is read from its own header", () => {
+  assert.deepEqual(imageSize(Buffer.from(PNG_BASE64, "base64")), { width: 1024, height: 1536 });
+  const gif = Buffer.from("GIF89a\x00\x04\x00\x06", "latin1");
+  assert.deepEqual(imageSize(gif), { width: 1024, height: 1536 });
+  const webp = Buffer.alloc(30);
+  webp.write("RIFF", 0, "ascii");
+  webp.write("WEBPVP8X", 8, "ascii");
+  webp.writeUIntLE(1023, 24, 3);
+  webp.writeUIntLE(1791, 27, 3);
+  assert.deepEqual(imageSize(webp), { width: 1024, height: 1792 });
+  // A JPEG's size is in its first frame header, after the segments before it (here an APP0).
+  const jpeg = Buffer.from("ffd8ffe000041234ffc0001108070004000301", "hex");
+  assert.deepEqual(imageSize(jpeg), { width: 1024, height: 1792 });
+  assert.equal(imageSize(Buffer.from("0000001c6674797061766966", "hex")), null);
+});
 
 test("the paint request: the reviewed prompt goes to the Engine as an override, with debugMode, and the picture to the Global Gallery", async () => {
   const requests: Array<{ url: string; method: string; json?: any; form?: FormData }> = [];
@@ -476,11 +499,10 @@ test("the paint request: the reviewed prompt goes to the Engine as an override, 
       form: body instanceof FormData ? body : undefined,
     });
     if (String(url).endsWith("/api/characters/avatar-generation")) {
-      // xAI's answer: a data URL inside the Engine's own, typed by its bytes rather than its label.
+      // xAI's answer: a data URL inside the Engine's own, typed by its bytes rather than its label. Like GPT Image's,
+      // it says no size: the Engine reports one only when it adjusted the request.
       return Response.json({
         image: `data:image/png;base64,data:image/jpeg;base64,${PNG_BASE64}`,
-        width: 896,
-        height: 1152,
         provider: "image_generation",
         model: "e2e-painter",
       });
@@ -500,7 +522,8 @@ test("the paint request: the reviewed prompt goes to the Engine as an override, 
     height: 1152,
     debugMode: true,
   });
-  assert.deepEqual(picture, { id: "img_42", url: "/api/global-gallery/file/img_42.png", width: 896, height: 1152 });
+  // The size the picture really has, so the book's box has its shape and crops nothing.
+  assert.deepEqual(picture, { id: "img_42", url: "/api/global-gallery/file/img_42.png", width: 1024, height: 1536 });
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.url}`),
     [
@@ -530,6 +553,7 @@ test("the paint request: the reviewed prompt goes to the Engine as an override, 
   assert.deepEqual([...form.keys()], ["prompt", "provider", "model", "width", "height", "file"]);
   assert.equal(form.get("prompt"), "A tired watchman under a singing gutter at night.");
   assert.equal(form.get("model"), "e2e-painter");
+  assert.deepEqual([form.get("width"), form.get("height")], ["1024", "1536"]);
   const file = form.get("file") as File;
   assert.equal(file.type, "image/png");
   assert.equal(file.name, "story-illustration.png");
@@ -643,7 +667,7 @@ test("a painted picture is stored in its chapter, survives every text write, and
   const copy = await store.duplicateStory(story.id);
   assert.deepEqual(copy.chapters[0]!.illustrations, [picture]);
 
-  // Illustrate again: a new picture in the old one's place, and the old one leaves the gallery.
+  // Illustrate again: a new picture in the old one's place. The old one stays in the Global Gallery.
   const again = await call(path, {
     params,
     body: {
@@ -657,7 +681,7 @@ test("a painted picture is stored in its chapter, survives every text write, and
   assert.equal(again.code, 200);
   const [second] = (again.payload as { chapter: { illustrations: any[] } }).chapter.illustrations;
   assert.equal(second.image, "global-gallery:img-2");
-  assert.deepEqual(removed, ["img-1"]);
+  assert.deepEqual(removed, []);
   assert.deepEqual((await stored()).illustrations, [second]);
 
   // Removing it takes it out of the chapter first, then asks the Engine to delete the gallery image.
@@ -666,9 +690,9 @@ test("a painted picture is stored in its chapter, survives every text write, and
   assert.equal(gone.code, 200);
   assert.deepEqual((gone.payload as { chapter: { illustrations: unknown[] } }).chapter.illustrations, []);
   assert.deepEqual((await stored()).illustrations, []);
-  assert.deepEqual(removed, ["img-1", "img-2"]);
+  assert.deepEqual(removed, ["img-2"]);
   assert.equal((await call(deletePath, { params: { ...params, illustrationId: second.id } })).code, 404);
-  assert.deepEqual(removed, ["img-1", "img-2"]);
+  assert.deepEqual(removed, ["img-2"]);
 });
 
 test("a failed paint stores nothing, and a picture whose chapter went meanwhile leaves the gallery again", async () => {
@@ -706,4 +730,48 @@ test("a failed paint stores nothing, and a picture whose chapter went meanwhile 
   });
   assert.equal((await racing.call(path, { params, body })).code, 404);
   assert.deepEqual(removed, ["img-late"]);
+});
+
+test("a painted picture that is not stored leaves the gallery again: a failed write, or a chapter filled meanwhile", async () => {
+  const { store, failNextUpdate, setData, row } = setup();
+  const { images, painted, removed } = fakeImages();
+  const { call } = await routeHarness(store, images);
+  const { story } = await store.createStory({});
+  const created = await store.createChapter(story.id, { text: "Text." });
+  const chapterId = created.chapters[0]!.id;
+  const params = { storyId: story.id, chapterId };
+  const path = "POST /stories/:storyId/chapters/:chapterId/illustrations";
+  const body = { connectionId: "img", prompt: "Rain.", paragraph: 0, anchor: "Text." };
+  const stored = async () => (await store.getStory(story.id)).chapters[0]!.illustrations;
+
+  // The disk fails after the paint: the answer is an error, and the paid picture is not left in the gallery.
+  failNextUpdate(chapterDocumentId(chapterId));
+  assert.equal((await call(path, { params, body })).code, 500);
+  assert.deepEqual(removed, ["img-1"]);
+  assert.deepEqual(await stored(), []);
+
+  // One picture short of the limit, two Illustrates at once: both are painted, one is stored, the other deleted.
+  const documentId = chapterDocumentId(chapterId);
+  const full = Array.from({ length: 99 }, (_, index) => ({
+    id: `picture-${String(index).padStart(8, "0")}`,
+    image: `global-gallery:old-${index}`,
+    url: `/api/global-gallery/file/old-${index}.png`,
+    prompt: "",
+    width: 896,
+    height: 1152,
+    paragraph: 0,
+    anchor: "",
+  }));
+  setData(documentId, { ...(row(documentId)!.data as object), illustrations: full });
+  const answers = await Promise.all([call(path, { params, body }), call(path, { params, body })]);
+  assert.deepEqual(answers.map((answer) => answer.code).sort(), [200, 400]);
+  assert.deepEqual(answers.find((answer) => answer.code === 400)!.payload, {
+    error: "A chapter can have at most 100 pictures.",
+  });
+  assert.equal(painted.length, 3);
+  const kept = (await stored()).map((item) => item.image.slice("global-gallery:".length));
+  assert.equal(kept.length, 100);
+  assert.equal(removed.length, 2);
+  assert.ok(!kept.includes(removed[1]!), "the picture that was deleted is not the one stored");
+  assert.ok(["img-2", "img-3"].includes(removed[1]!));
 });

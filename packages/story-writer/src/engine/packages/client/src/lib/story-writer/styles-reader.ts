@@ -360,6 +360,11 @@ ${R} .sw-illustration {
   user-select: none;
   -webkit-user-select: none;
 }
+/* StoryReader's whole-pixel box (data-float is set with it). Size containment makes it one unsplittable box: WebKit
+   splits a float taller than about half a page across two pages despite break-inside: avoid. */
+${R} .sw-illustration[data-float] {
+  contain: size;
+}
 ${R} .sw-illustration[data-float="true"] {
   float: right;
   clear: right;
@@ -697,6 +702,10 @@ ${DOC} .sw-illustration img {
     clear: right;
     width: 15em;
     margin: 0.3em -17.5em 0.8em 0;
+  }
+  /* A chapter holds its pictures: one by its last paragraph ends above the next chapter's line, not beside it. */
+  ${DOC} .sw-body:has(> .sw-illustration) {
+    display: flow-root;
   }
   ${DOC} .sw-illustration img {
     width: 100%;

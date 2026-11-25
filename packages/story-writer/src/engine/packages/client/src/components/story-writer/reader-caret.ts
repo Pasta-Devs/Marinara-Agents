@@ -25,14 +25,24 @@ export function caretRangeAt(x: number, y: number): Range | null {
   return typeof doc.caretRangeFromPoint === "function" ? doc.caretRangeFromPoint(x, y) : null;
 }
 
+/** The picture a caret position is in, if any: the browser can put one there, where nothing typed would land. */
+function pictureAt(range: Range | null): Element | null {
+  const node = range?.startContainer;
+  const element = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement;
+  return element?.closest("figure") ?? null;
+}
+
 /**
  * The caret position inside `editable` nearest to a point of one text column: the point itself, else the closest line
  * above or below it (a click under the last line lands at that line, a click on the chapter heading at the first one).
+ * Beside a picture (a click in the margin next to it), it is the text line left of the picture.
  */
 export function caretRangeNear(editable: HTMLElement, x: number, y: number, top: number, bottom: number) {
   const inside = (atY: number) => {
-    const range = caretRangeAt(x, atY);
-    return range && editable.contains(range.startContainer) ? range : null;
+    let range = caretRangeAt(x, atY);
+    const picture = pictureAt(range);
+    if (picture) range = caretRangeAt(picture.getBoundingClientRect().left - 2, atY);
+    return range && editable.contains(range.startContainer) && !pictureAt(range) ? range : null;
   };
   const direct = inside(y);
   if (direct) return direct;

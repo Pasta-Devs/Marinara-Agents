@@ -918,7 +918,9 @@ const LAYOUT_RULES = `
   ${R} .sw-action-label-short, ${R} .sw-action-status .sw-status-short { display: inline; }
   ${R} .sw-action-hint { display: none; }
   /* A phone bar has no room for Redo or Illustrate and the word count together: the count gives way while either
-     shows. With both, the main button keeps only its icon, so every button stays a full-size tap target. */
+     shows. With both, the main button keeps only its icon, so every button stays a full-size tap target. Illustrate
+     waits here for an image connection, so a writer without one keeps the bar as it was. */
+  ${R} .sw-actionbar:not([data-illustrate]) .sw-action-illustrate { display: none; }
   ${R} .sw-actionbar:is([data-redo="true"], [data-illustrate="true"]) :is(.sw-wordcount, .sw-wordcount-divider) { display: none; }
   ${R} .sw-actionbar[data-redo="true"][data-illustrate="true"] .sw-action-primary { justify-content: center; width: 48px; padding: 0; }
   ${R} .sw-actionbar[data-redo="true"][data-illustrate="true"] .sw-action-primary :is(.sw-action-label-long, .sw-action-label-short) { display: none; }

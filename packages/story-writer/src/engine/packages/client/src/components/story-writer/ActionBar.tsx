@@ -50,6 +50,8 @@ export function ActionBar(props: {
   fullscreen: FullscreenControl | null;
   /** A picture is being prompted, reviewed or painted (one at a time). */
   illustrating: boolean;
+  /** The story has an image connection. Until it has, a phone bar leaves Illustrate out and keeps its word count. */
+  hasImageConnection: boolean;
   onWrite(): void;
   onContinue(): void;
   onRewrite(): void;
@@ -105,7 +107,7 @@ export function ActionBar(props: {
       aria-label={t("actions.label")}
       tabIndex={-1}
       data-redo={props.canRedo ? "true" : undefined}
-      data-illustrate={!busy && props.chapterCount > 0 ? "true" : undefined}
+      data-illustrate={!busy && props.chapterCount > 0 && props.hasImageConnection ? "true" : undefined}
     >
       {busy ? (
         <>
@@ -215,7 +217,7 @@ export function ActionBar(props: {
           {props.chapterCount > 0 ? (
             <button
               type="button"
-              className="sw-action-icon"
+              className="sw-action-icon sw-action-illustrate"
               disabled={props.illustrating}
               aria-label={t("illustrate.action")}
               title={t(props.illustrating ? "illustrate.busy" : "illustrate.actionHint")}
