@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.46.2",
+          "date": "2026-11-25",
+          "notes": "- **Add a friend** from someone you've met lets you choose one of your characters for them, or none. The one their name matches comes chosen, and their portrait is painted from that character's picture, as a love interest's is.\n- **Settings → Stories → Your cast** lists your friends under the love interests. Each has their appearance, their character card and their bible, behind **Show spoilers**, and you can edit it. Their faces can be repainted there too.\n- A friend's portrait, looks and faces are cut out of their background, as a love interest's are, so they no longer stand on pink. A portrait painted before this is cut out the next time the story opens.",
+          "highlight": false
+        },
+        {
           "version": "0.46.1",
           "date": "2026-11-25",
           "notes": "- A tag image style profile (**Danbooru / Illustrious**, **Anime**) no longer writes its own description into image prompts; its tags still apply.\n- NovelAI backgrounds follow your **Image style**: they no longer switch to NovelAI's own scenery style.\n- Memory covers stay at most Suggestive, as banner art and looks do. Only story CGs of explicit scenes can be explicit.",
@@ -827,12 +833,6 @@
           "version": "0.36.8",
           "date": "2026-11-19",
           "notes": "- In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like \"nooo\", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.\n- They send stickers the way people do too: to react, tease, sulk or answer without words, not only when a picture says it better than words. A reply still has at most one sticker, or one from each of them in the group chat.\n- A message that puts an emoticon after your name, such as \"ines :(\", is no longer mistaken for a line written as you, so the reply no longer fails. A conversation's remembered line keeps such a message whole too, instead of cutting it down to \"P\".",
-          "highlight": false
-        },
-        {
-          "version": "0.36.7",
-          "date": "2026-11-18",
-          "notes": "- Dates now lists Kitty Cards above the Claw Machine, so the Claw Machine is last.\n- The couple portrait and the Photo Shoot now send each look cut out, with no background, as scene pictures do. A look that isn't cut out yet is cut first, for free, and one that can't be cut is sent as painted. The Photo Shoot still sends the place's picture as the background.\n- Error messages now say \"story\" instead of \"run\", as in \"No such Otome Hearth story.\"",
           "highlight": false
         }
       ]

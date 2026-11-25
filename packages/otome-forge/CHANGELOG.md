@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.46.2 — 2026-11-25
+
+- **Add a friend** from someone you've met lets you choose one of your characters for them, or none. The one their name matches comes chosen, and their portrait is painted from that character's picture, as a love interest's is.
+- **Settings → Stories → Your cast** lists your friends under the love interests. Each has their appearance, their character card and their bible, behind **Show spoilers**, and you can edit it. Their faces can be repainted there too.
+- A friend's portrait, looks and faces are cut out of their background, as a love interest's are, so they no longer stand on pink. A portrait painted before this is cut out the next time the story opens.
+
 ## 0.46.1 — 2026-11-25
 
 - A tag image style profile (**Danbooru / Illustrious**, **Anime**) no longer writes its own description into image prompts; its tags still apply.
