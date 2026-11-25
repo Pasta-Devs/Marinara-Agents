@@ -43,6 +43,7 @@ export interface StorySidebarProps {
   doc: StoryDocumentApi;
   generation: StoryGenerationApi;
   connections: ConnectionOption[];
+  imageConnections: ConnectionOption[];
   connectionsLoading: boolean;
   /** A connection is selected or available as the default. */
   hasConnection: boolean;
@@ -200,6 +201,7 @@ export function StorySidebar(props: StorySidebarProps) {
                     settings={settings}
                     onChange={updateSettings}
                     connections={props.connections}
+                    imageConnections={props.imageConnections}
                     connectionsLoading={props.connectionsLoading}
                     onEditConnection={props.onEditConnection}
                     onManageConnections={props.onManageConnections}

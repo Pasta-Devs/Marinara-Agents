@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import {
   CheckCheck,
   Feather,
+  ImagePlus,
   Library,
   Loader2,
   Maximize2,
@@ -47,6 +48,8 @@ export function ActionBar(props: {
   totalWords: number;
   targetWords: number | null;
   fullscreen: FullscreenControl | null;
+  /** A picture is being prompted, reviewed or painted (one at a time). */
+  illustrating: boolean;
   onWrite(): void;
   onContinue(): void;
   onRewrite(): void;
@@ -55,6 +58,8 @@ export function ActionBar(props: {
   onOpenLibrary(): void;
   /** Marks the draft last chapter finished and writes the next one. */
   onFinishChapter(): void;
+  /** Paints the passage at the caret or the selected text (it explains itself without an image connection). */
+  onIllustrate(): void;
 }) {
   const { t } = useTranslation();
   const hintId = useId();
@@ -100,6 +105,7 @@ export function ActionBar(props: {
       aria-label={t("actions.label")}
       tabIndex={-1}
       data-redo={props.canRedo ? "true" : undefined}
+      data-illustrate={!busy && props.chapterCount > 0 ? "true" : undefined}
     >
       {busy ? (
         <>
@@ -204,6 +210,22 @@ export function ActionBar(props: {
             >
               <RefreshCw size={18} aria-hidden="true" />
               <span className="sw-action-label-long">{t("actions.redoShort")}</span>
+            </button>
+          ) : null}
+          {props.chapterCount > 0 ? (
+            <button
+              type="button"
+              className="sw-action-icon"
+              disabled={props.illustrating}
+              aria-label={t("illustrate.action")}
+              title={t(props.illustrating ? "illustrate.busy" : "illustrate.actionHint")}
+              onClick={props.onIllustrate}
+            >
+              {props.illustrating ? (
+                <Loader2 className="sw-spin" size={18} aria-hidden="true" />
+              ) : (
+                <ImagePlus size={18} aria-hidden="true" />
+              )}
             </button>
           ) : null}
         </>

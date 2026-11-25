@@ -54,8 +54,10 @@ export function focusEditableAt(editable: HTMLElement, range: Range | null, fall
   let target = range;
   if (!target) {
     target = document.createRange();
-    // Inside the first/last paragraph, so typing never lands in a bare text node beside the paragraphs.
-    const edge = fallback === "start" ? editable.firstElementChild : editable.lastElementChild;
+    // Inside the first/last paragraph, so typing never lands in a bare text node beside the paragraphs, nor in a
+    // picture.
+    const blocks = Array.from(editable.children).filter((child) => child.tagName !== "FIGURE");
+    const edge = fallback === "start" ? blocks[0] : blocks[blocks.length - 1];
     target.selectNodeContents(edge ?? editable);
     target.collapse(fallback === "start");
   }

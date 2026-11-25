@@ -20,6 +20,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { host } from "marinara:host";
 import { resolveDefaultConnectionId, useStoryConnections } from "../../hooks/use-engine-resources";
 import { useStoryGeneration } from "../../hooks/use-story-generation";
+import { useStoryIllustration } from "../../hooks/use-story-illustration";
 import { storyWriterKeys, usePreferences, useStoryDocument, useStoryList } from "../../hooks/use-story-writer";
 import { STORY_WRITER_ASSETS, storyWriterAssetUrl, type StoryWriterAsset } from "../../lib/story-writer/assets";
 import { downloadTextFile, storyFileName, storyToMarkdown, storyToPlainText } from "../../lib/story-writer/export";
@@ -28,6 +29,8 @@ import { generateTarget } from "../../lib/story-writer/prompt";
 import { storyThemeVariables, type ResolvedColorMode } from "../../lib/story-writer/styles-shell";
 import { generateClientId } from "../../lib/utils";
 import { ActionBar, QuickReplyBar, type FullscreenControl } from "./ActionBar";
+import type { PictureAction } from "./ChapterBlock";
+import { IllustrateDialog } from "./IllustrateDialog";
 import { PromptPeekDialog } from "./PromptPeek";
 import { StickyNote } from "./StickyNote";
 import { StoryDocument } from "./StoryDocument";
@@ -128,7 +131,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const list = useStoryList();
   const [storyId, setStoryId] = useState<string | null>(null);
   const doc = useStoryDocument(storyId);
-  const { connections, isLoading: connectionsLoading } = useStoryConnections();
+  const { connections, imageConnections, isLoading: connectionsLoading } = useStoryConnections();
   // The chapter the author is on: the one they last moved to in the reader or clicked into; until then the last one.
   // Generate continues it.
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
@@ -141,6 +144,41 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sectionRequest, setSectionRequest] = useState<{ id: SidebarSectionId; nonce: number } | null>(null);
+  const openSection = useCallback((id: SidebarSectionId) => {
+    setSidebarOpen(true);
+    setSectionRequest((current) => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
+  }, []);
+  const illustration = useStoryIllustration({
+    doc,
+    connections,
+    imageConnections,
+    debugMode: capabilityProps.debugMode === true,
+    // The Engine's "Expose media prompts before sending" (capability props): an Engine that does not say gets the review.
+    reviewPrompts:
+      typeof capabilityProps.reviewImagePromptsBeforeSend === "boolean"
+        ? capabilityProps.reviewImagePromptsBeforeSend
+        : null,
+    selectedChapterId,
+    onNeedsConnection: () =>
+      toast.info(t("illustrate.needsConnection"), {
+        action: { label: t("illustrate.chooseConnection"), onClick: () => openSection("writing") },
+      }),
+    confirmRemove: () =>
+      confirmAction({
+        title: t("illustrate.removeTitle"),
+        message: t("illustrate.removeMessage"),
+        confirmLabel: t("illustrate.removeConfirm"),
+        tone: "destructive",
+      }),
+  });
+  const { remove: removePicture, illustrateAgain } = illustration;
+  const onPictureAction = useCallback(
+    (chapterId: string, illustrationId: string, action: PictureAction) =>
+      void (action === "remove"
+        ? removePicture(chapterId, illustrationId)
+        : illustrateAgain(chapterId, illustrationId)),
+    [removePicture, illustrateAgain],
+  );
   const [noteOpen, setNoteOpen] = useState(false);
   const [peekOpen, setPeekOpen] = useState(false);
   const peekOpener = useRef<HTMLElement | null>(null);
@@ -149,6 +187,17 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const [ghostChapterId, setGhostChapterId] = useState(generateClientId);
   const [firstStoryFailed, setFirstStoryFailed] = useState(false);
   const readerRef = useRef<StoryReaderHandle>(null);
+  // The review closes into the action bar's toolbar, as the hidden note does.
+  const reviewOpen = !!illustration.review;
+  const wasReviewing = useRef(false);
+  useEffect(() => {
+    if (wasReviewing.current && !reviewOpen) {
+      requestAnimationFrame(() =>
+        dockRef.current?.querySelector<HTMLElement>(".sw-actionbar")?.focus({ preventScroll: true }),
+      );
+    }
+    wasReviewing.current = reviewOpen;
+  }, [reviewOpen]);
   const engineTheme = useSyncExternalStore(subscribeEngineTheme, readEngineTheme, (): ResolvedColorMode => "dark");
   const mobile = useMediaQuery(MOBILE_QUERY);
   const packageVersion = typeof capabilityProps.packageVersion === "string" ? capabilityProps.packageVersion : null;
@@ -294,7 +343,11 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const exportStory = (format: "md" | "txt") => {
     if (!data) return;
     const fallback = t("app.untitled");
-    const options = { chapterLabel: (number: number) => t("reader.chapterLabel", { number }) };
+    const options = {
+      chapterLabel: (number: number) => t("reader.chapterLabel", { number }),
+      // The pictures stay in this Engine's Global Gallery: the Markdown links to them there.
+      pictureBaseUrl: window.location.origin,
+    };
     try {
       const text =
         format === "md" ? storyToMarkdown(data, fallback, options) : storyToPlainText(data, fallback, options);
@@ -317,10 +370,6 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const saveNow = async () => {
     if (await flush()) toast.success(t("stories.savedToast"));
     else toast.warning(t("stories.saveFailed"));
-  };
-  const openSection = (id: SidebarSectionId) => {
-    setSidebarOpen(true);
-    setSectionRequest((current) => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
   };
   const onKeyDown = (event: KeyboardEvent) => {
     // Ctrl/Cmd+S saves the story instead of opening the browser's "Save page" dialog.
@@ -441,7 +490,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
       style={themeStyle}
       onKeyDown={onKeyDown}
     >
-      <div className="sw-frame" inert={peekOpen}>
+      <div className="sw-frame" inert={peekOpen || !!illustration.review}>
         <div className="sw-stage" />
         <div className="sw-reader-slot" onFocus={selectFocusedChapter}>
           {data && settings ? (
@@ -462,6 +511,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
               onChapterChange={onChapterChange}
               onStartChapter={onStartChapter}
               onShownChapterChange={setSelectedChapterId}
+              onPictureAction={onPictureAction}
             />
           ) : slotMessage ? (
             <div className="sw-slot-message" role="status">
@@ -507,6 +557,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 totalWords={totalWords}
                 targetWords={settings.targetWords}
                 fullscreen={fullscreen}
+                illustrating={illustration.phase !== "idle"}
                 onWrite={() => void generation.write(writeMode)}
                 onContinue={() => void generation.write("continue")}
                 onRewrite={() => void rewriteLastChapter()}
@@ -514,6 +565,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
                 onStop={generation.stop}
                 onOpenLibrary={() => openSection("stories")}
                 onFinishChapter={() => void finishChapter()}
+                onIllustrate={() => void illustration.illustrate()}
               />
               {showQuickReplies ? (
                 <QuickReplyBar
@@ -546,6 +598,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
           doc={doc}
           generation={generation}
           connections={connections}
+          imageConnections={imageConnections}
           connectionsLoading={connectionsLoading}
           hasConnection={hasConnection}
           onEditConnection={(connectionId) => void openConnection(connectionId)}
@@ -557,6 +610,14 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         />
       </div>
       {peekOpen ? <PromptPeekDialog load={generation.peekPrompt} onClose={closePeek} /> : null}
+      {illustration.review ? (
+        <IllustrateDialog
+          key={illustration.review.status}
+          review={illustration.review}
+          onPaint={illustration.finishReview}
+          onCancel={illustration.cancel}
+        />
+      ) : null}
     </div>
   );
 }

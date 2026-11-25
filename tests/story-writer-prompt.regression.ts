@@ -10,10 +10,12 @@ import {
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/model.ts";
 import {
   buildChapterMessages,
+  buildIllustrationMessages,
   buildSummaryMessages,
   buildTimelineMessages,
   chapterRequest,
   chapterTokenBudget,
+  cleanPicturePrompt,
   endsMidSentence,
   findBannedPhrases,
   formatCharacterCard,
@@ -853,4 +855,64 @@ test("no message outgrows the 500,000 characters /generate/raw accepts", () => {
 
 test("an unclosed reasoning block is not read as a timeline", () => {
   assert.deepEqual(parseTimelineResponse("<think>\n1. Plan the heist\n2. Escape", []), []);
+});
+
+test("Illustrate's one text call: the passage, the text before it, and the cast's looks, for an English picture prompt with no text in it", () => {
+  const messages = buildIllustrationMessages({
+    settings: settings({
+      title: "The Long Walk Home",
+      genre: "Fantasy",
+      author: "Terry Pratchett",
+      overview: "{{char}} walks {{user}} home through Ankh-Morpork.",
+      notes: "The city is always wet.",
+      authorNote: "Make it rain.",
+    }),
+    characters: [
+      character("Vimes", {
+        description: "A tired watchman.",
+        appearance: "Unshaven, battered helmet, a coat too thin for the rain.",
+        personality: "Cynical.",
+        backstory: "Grew up on Cockbill Street.",
+        exampleDialogue: "Vimes: Evening.",
+      }),
+    ],
+    personas: [character("Sybil", { appearance: "Tall, red-haired, in a waxed cloak." })],
+    lore: [{ name: "Ankh", content: "The river is solid enough to walk on.", order: 0, position: 0 }],
+    passage: "Vimes stopped under the gutter that sang off key.",
+    before: "The rain came sideways off the river.",
+  });
+  assert.equal(messages.length, 2);
+  const [system, user] = messages;
+  assert.equal(system!.role, "system");
+  assert.match(system!.content, /describe in English the single picture/);
+  assert.match(system!.content, /no text in it: no letters, captions, signs with writing or speech bubbles/);
+  assert.match(system!.content, /Describe every person by their looks, not only by their name/);
+  assert.equal(user!.role, "user");
+  const content = user!.content;
+  // The setting and the cast's looks, in that order, then the passage last.
+  const order = ["<story_details>", "<story_overview>", "<world_info>", "<characters>", "<personas>", "<story_notes>"];
+  const positions = [...order, "<before_the_passage>", "<passage>"].map((tag) => content.indexOf(tag));
+  assert.ok(positions.every((position, index) => position >= 0 && (index === 0 || position > positions[index - 1]!)));
+  assert.match(content, /Title: The Long Walk Home\nGenre: Fantasy/);
+  assert.match(content, /Vimes walks Sybil home through Ankh-Morpork\./);
+  assert.match(content, /Appearance: Unshaven, battered helmet/);
+  assert.match(content, /Description: A tired watchman\./);
+  assert.match(content, /<Sybil>\nAppearance: Tall, red-haired/);
+  assert.match(content, /<passage>\nVimes stopped under the gutter that sang off key\.\n<\/passage>/);
+  assert.match(content, /<before_the_passage>\nThe rain came sideways off the river\.\n<\/before_the_passage>/);
+  assert.ok(content.endsWith("Write the picture prompt for the passage."));
+  // Only what the picture can show: no personality, backstory, dialogue, author, style or author's note.
+  for (const absent of ["Cynical", "Cockbill", "Evening.", "Terry Pratchett", "Make it rain."]) {
+    assert.ok(!content.includes(absent), `the picture prompt call leaves out ${absent}`);
+  }
+});
+
+test("the picture prompt is read without reasoning, fences, a label or wrapping quotes, on one line", () => {
+  assert.equal(
+    cleanPicturePrompt('<think>Who is there?</think>\n**Prompt:** "A tired watchman\nunder a gutter at night."'),
+    "A tired watchman under a gutter at night.",
+  );
+  assert.equal(cleanPicturePrompt("```\nRain on cobbles.\n```"), "Rain on cobbles.");
+  assert.equal(cleanPicturePrompt("<think>never closed"), "");
+  assert.equal(cleanPicturePrompt("x".repeat(5_000)).length, 4_000);
 });

@@ -150,3 +150,25 @@ test("Generate is remembered in the chapter it wrote into, even with chapters af
   assert.equal(redoOffer(record, story(written.chapters.filter((item) => item.id !== second.id))), null);
   assert.deepEqual(changed(written, second.id, record.before!).chapters, found.chapters);
 });
+
+test("a picture painted into a chapter the run created withdraws Redo, which would delete it; elsewhere pictures stay", () => {
+  const picture = {
+    id: "picture-0000-0000",
+    image: "global-gallery:img-1",
+    url: "/api/global-gallery/file/img-1.png",
+    prompt: "Rain.",
+    width: 896,
+    height: 1152,
+    paragraph: 0,
+    anchor: "",
+  };
+  const before = story([chapter(1)]);
+  const created = recordGeneration(before, { requested: "next", chapterId: "chapter-2-0000", after: "New." });
+  const written = story([chapter(1), chapter(2, { text: "New." })]);
+  assert.equal(redoOffer(created, written), 2);
+  assert.equal(redoOffer(created, changed(written, "chapter-2-0000", { illustrations: [picture] })), null);
+  // Continue puts the text back and keeps the picture, so Redo is still offered.
+  const continued = recordGeneration(before, { requested: "continue", chapterId: "chapter-1-0000", after: "More." });
+  const more = changed(before, "chapter-1-0000", { text: "More.", illustrations: [picture] });
+  assert.equal(redoOffer(continued, more), 1);
+});

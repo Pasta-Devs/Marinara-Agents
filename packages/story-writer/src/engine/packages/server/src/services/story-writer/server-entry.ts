@@ -1,3 +1,5 @@
+import { forgeEngineLocalHeaders } from "@forge-kit/engine-local-auth.mjs";
+import { createIllustrationImages } from "./illustrations.js";
 import { storyWriterRoutes, type StoryWriterLogger, type StoryWriterRouter } from "./routes.js";
 import { createStoryStore, type StoryPersistence, type StoryStore } from "./story-store.js";
 
@@ -14,9 +16,17 @@ type ActivationContext = {
 
 let activeStore: StoryStore | null = null;
 
+/** fetch to this device's Engine, with the Android app's local secret it needs (#2357). */
+const engineFetch: typeof fetch = (url, init) =>
+  fetch(url, {
+    ...init,
+    headers: forgeEngineLocalHeaders(String(url), init?.headers as Record<string, string> | undefined),
+  });
+
 export async function activate({ api }: ActivationContext) {
   const store = createStoryStore(api.runtime.persistence);
-  const releaseRoutes = await api.registerPrivilegedRoutes(storyWriterRoutes(store, api.runtime.logger), {
+  const images = createIllustrationImages({ fetch: engineFetch });
+  const releaseRoutes = await api.registerPrivilegedRoutes(storyWriterRoutes(store, api.runtime.logger, images), {
     prefix: "/api/story-writer",
   });
   activeStore = store;

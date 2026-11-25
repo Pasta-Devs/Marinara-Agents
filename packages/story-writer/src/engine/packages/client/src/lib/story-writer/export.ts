@@ -1,12 +1,44 @@
 // ──────────────────────────────────────────────
 // Story Writer: Markdown and plain-text export
 // ──────────────────────────────────────────────
-import { storyDisplayTitle, type StoryWithChapters } from "./model";
-import { markdownToPlainText } from "./markdown";
+import { storyDisplayTitle, type StoryIllustration, type StoryWithChapters } from "./model";
+import { anchorIndex, markdownBlocks, markdownToPlainText } from "./markdown";
 
 export interface StoryExportOptions {
   /** The localized chapter label; defaults to "Chapter N". */
   chapterLabel?: (chapterNumber: number) => string;
+  /**
+   * Markdown only: the Engine's address (window.location.origin), so each picture is an image the file links to. Plain
+   * text has no pictures.
+   */
+  pictureBaseUrl?: string;
+}
+
+/** Picture prompts are long prose: the alt text keeps them on one line, with no bracket that ends it early. */
+function altText(prompt: string): string {
+  return prompt
+    .replace(/\s+/g, " ")
+    .replace(/[[\]\\]/g, "")
+    .trim();
+}
+
+/**
+ * A chapter's body with each picture as a Markdown image before the block it sits beside, as the book shows it.
+ * `titled`: the chapter opens with the heading the export prints on its own, so a picture beside it goes after it.
+ */
+function withPictures(text: string, pictures: StoryIllustration[], titled: boolean, baseUrl: string): string {
+  const blocks = markdownBlocks(text);
+  const skip = titled && blocks[0]?.html.startsWith("<h") ? 1 : 0;
+  const texts = blocks.map((block) => markdownToPlainText(block.source));
+  const images = new Map<number, string[]>();
+  for (const picture of pictures) {
+    const index = Math.max(skip, anchorIndex(texts, picture.paragraph, picture.anchor));
+    images.set(index, [...(images.get(index) ?? []), `![${altText(picture.prompt)}](${baseUrl}${picture.url})`]);
+  }
+  const parts = blocks.slice(skip).flatMap((block, index) => [...(images.get(index + skip) ?? []), block.source]);
+  // A chapter whose text is only its heading still shows its pictures.
+  if (blocks.length <= skip) parts.push(...(images.get(skip) ?? []));
+  return parts.join("\n\n");
 }
 
 interface ExportChapter {
@@ -21,7 +53,11 @@ function exportChapters(story: StoryWithChapters, options: StoryExportOptions): 
     if (!chapter.text.trim()) return [];
     const opening = /^\s*#{1,3}\s+(.+?)(?:\s+#+)?\s*(?:\n|$)/.exec(chapter.text);
     const title = opening?.[1]?.trim() ?? "";
-    const body = (opening ? chapter.text.slice(opening[0].length) : chapter.text).trim();
+    const pictures = chapter.illustrations ?? [];
+    const body =
+      options.pictureBaseUrl !== undefined && pictures.length
+        ? withPictures(chapter.text, pictures, !!opening, options.pictureBaseUrl)
+        : (opening ? chapter.text.slice(opening[0].length) : chapter.text).trim();
     return [{ heading: title ? `${label(index + 1)}: ${title}` : label(index + 1), body }];
   });
 }
@@ -45,7 +81,7 @@ export function storyToPlainText(
   options: StoryExportOptions = {},
 ): string {
   const parts = [storyDisplayTitle(story.story.settings, fallbackTitle)];
-  for (const chapter of exportChapters(story, options)) {
+  for (const chapter of exportChapters(story, { ...options, pictureBaseUrl: undefined })) {
     parts.push(chapter.heading);
     const body = markdownToPlainText(chapter.body);
     if (body) parts.push(body);

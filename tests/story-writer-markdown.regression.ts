@@ -5,7 +5,11 @@ import {
   type StoryChapter,
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/model.ts";
 import {
+  anchorIndex,
+  anchorText,
   htmlToMarkdown,
+  markdownBlockTexts,
+  markdownBlocks,
   markdownToHtml,
   markdownToPlainText,
   type MarkdownNode,
@@ -204,4 +208,89 @@ test("censored words stay literal, and deep quote nesting cannot overflow the st
   const html = markdownToHtml(deep);
   assert.equal(html.match(/<blockquote>/g)?.length, 8);
   assert.ok(html.endsWith("</blockquote>".repeat(8)));
+});
+
+test("a picture finds its paragraph again by its opening words after the text above it changes", () => {
+  const text = "# The Storm\n\nIt was **dark**.\nVery dark.\n\n***\n\n> A quote\n> on two lines\n\nThe gutter sang.";
+  // The blocks are the chapter body's children, in order, as markdownToHtml renders them.
+  assert.equal(
+    markdownBlocks(text)
+      .map((block) => block.html)
+      .join(""),
+    markdownToHtml(text),
+  );
+  const texts = markdownBlockTexts(text);
+  assert.deepEqual(texts, [
+    "The Storm",
+    "It was dark.\nVery dark.",
+    "* * *",
+    "A quote\non two lines",
+    "The gutter sang.",
+  ]);
+  // A line break inside the paragraph reads the same as the DOM's text of it, which has none.
+  assert.equal(anchorIndex(texts, 1, anchorText("It was dark.Very dark.")), 1);
+  const anchor = anchorText(texts[4]!);
+  assert.equal(anchorIndex(texts, 4, anchor), 4);
+  // Two paragraphs written above it: it moves down with its paragraph.
+  const moved = markdownBlockTexts(`New one.\n\nNew two.\n\n${text}`);
+  assert.equal(anchorIndex(moved, 4, anchor), 6);
+  // Its paragraph rewritten: it stays at the index it had, and past the end it goes to the last block.
+  assert.equal(anchorIndex(markdownBlockTexts("One.\n\nTwo.\n\nThree.\n\nFour.\n\nFive.\n\nSix."), 4, anchor), 4);
+  assert.equal(anchorIndex(markdownBlockTexts("One.\n\nTwo."), 4, anchor), 1);
+  assert.equal(anchorIndex([], 4, anchor), -1);
+  // The same opening twice: the one nearer where it was.
+  assert.equal(anchorIndex(["Rain.", "x", "x", "Rain.", "x"], 4, "Rain."), 3);
+});
+
+test("a picture in the edited text never reaches the Markdown, nor splits the paragraph it was moved into", () => {
+  const figure = element("figure", [element("img"), element("span", [element("button")])]);
+  const body = element("div", [
+    figure,
+    element("p", ["Before the picture."]),
+    element("p", ["Half ", element("figure", [element("img")]), "and half."]),
+  ]);
+  assert.equal(htmlToMarkdown(body), "Before the picture.\n\nHalf and half.");
+});
+
+test("the Markdown export shows each picture before its paragraph, after the chapter's title; plain text has none", () => {
+  const picture = (id: string, paragraph: number, anchor: string, prompt: string) => ({
+    id,
+    image: `global-gallery:${id}`,
+    url: `/api/global-gallery/file/${id}.png`,
+    prompt,
+    width: 896,
+    height: 1152,
+    paragraph,
+    anchor,
+  });
+  const story = {
+    story: {
+      id: "story-1",
+      settings: { ...defaultStorySettings(), title: "Pictures" },
+      chapterIds: [],
+      wordCount: 0,
+      chapterCount: 1,
+      createdAt: "",
+      updatedAt: "",
+    },
+    chapters: [
+      {
+        ...exportChapter(1, "# The Storm\n\nIt was dark.\n\nThe gutter sang."),
+        illustrations: [
+          picture("img-1", 2, "The gutter sang.", "A gutter [singing]\nat night."),
+          picture("img-2", 0, "The Storm", "A storm."),
+        ],
+      },
+    ],
+  };
+  assert.equal(
+    storyToMarkdown(story, "Untitled", { pictureBaseUrl: "http://127.0.0.1:7860" }),
+    "# Pictures\n\n## Chapter 1: The Storm\n\n![A storm.](http://127.0.0.1:7860/api/global-gallery/file/img-2.png)\n\n" +
+      "It was dark.\n\n![A gutter singing at night.](http://127.0.0.1:7860/api/global-gallery/file/img-1.png)\n\n" +
+      "The gutter sang.\n",
+  );
+  assert.equal(
+    storyToPlainText(story, "Untitled", { pictureBaseUrl: "http://127.0.0.1:7860" }),
+    "Pictures\n\nChapter 1: The Storm\n\nIt was dark.\n\nThe gutter sang.\n",
+  );
 });

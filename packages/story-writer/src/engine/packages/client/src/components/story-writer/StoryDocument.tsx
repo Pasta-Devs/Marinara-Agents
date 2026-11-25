@@ -23,6 +23,7 @@ import {
   TITLE_KEY,
   TitlePage,
   blockPlaceholder,
+  usePictureLabels,
   useReaderBlocks,
   type StoryReaderHandle,
   type StoryReaderProps,
@@ -53,6 +54,7 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
   const rootRef = useRef<HTMLDivElement>(null);
   const columnRef = useRef<HTMLDivElement>(null);
   const { blocks, handleEdit } = useReaderBlocks(props, NO_PAGES);
+  const pictureLabels = usePictureLabels();
   const blocksRef = useRef(blocks);
   useLayoutEffect(() => {
     blocksRef.current = blocks;
@@ -293,6 +295,9 @@ export const StoryDocument = forwardRef<StoryReaderHandle, StoryReaderProps>(fun
               markdown={block.markdown}
               editable={editable}
               generating={block.key === generatingChapterId}
+              illustrations={block.illustrations}
+              pictureLabels={pictureLabels}
+              onPictureAction={props.onPictureAction}
               onEdit={handleEdit}
               onContentChange={ignoreContentChange}
             />

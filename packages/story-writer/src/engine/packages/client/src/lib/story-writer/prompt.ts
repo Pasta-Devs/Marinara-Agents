@@ -474,6 +474,85 @@ export function buildSummaryMessages(input: {
   ];
 }
 
+// ── Illustrations ──
+
+/** The output room the picture prompt asks for (a connection's own saved maximum wins when larger). */
+export const PICTURE_PROMPT_MAX_TOKENS = 800;
+/** How much of the passage, and of the text just before it, the picture prompt reads. */
+const PASSAGE_CHARS = 6_000;
+const PASSAGE_CONTEXT_CHARS = 2_000;
+
+/** The looks of one character or persona: its description and appearance, which say what it looks like. */
+function looksCard(character: PromptCharacter, names: MacroNames): string {
+  const tag = character.name.replace(/[<>/]/g, "").trim() || "Character";
+  const fields = (["description", "appearance"] as const).flatMap((key) => {
+    const value = replaceMacros(character[key] ?? "", names).trim();
+    return value ? [`${key === "description" ? "Description" : "Appearance"}: ${value}`] : [];
+  });
+  return fields.length ? `<${tag}>\n${fields.join("\n")}\n</${tag}>` : "";
+}
+
+/**
+ * The one text call behind Illustrate: the story's cast, setting and the passage go to the story's own connection,
+ * which answers with an English prompt for the image connection. `before` is the text just before the passage, so
+ * the model knows who is there and where.
+ */
+export function buildIllustrationMessages(input: {
+  settings: StorySettings;
+  characters: PromptCharacter[];
+  personas: PromptCharacter[];
+  lore: PromptLoreEntry[];
+  passage: string;
+  before?: string;
+}): ChatMessage[] {
+  const { settings, characters, personas, lore } = input;
+  const names = storyNames(characters, personas);
+  const system = [
+    "You write the prompt an image generator paints one illustration of a story from.",
+    "Read the story's setup and the passage, then describe in English the single picture that shows the passage best.",
+    "Say who is in it and what each of them looks like as the story describes them (build, face, hair, clothes), what they are doing, where they are, the time of day and the light, and the mood.",
+    "Describe every person by their looks, not only by their name: the image generator does not know them.",
+    "Describe only what can be seen. The picture has no text in it: no letters, captions, signs with writing or speech bubbles.",
+    "Answer with the prompt alone, as one paragraph of 50 to 150 words: no title, label, quotes or comments.",
+  ].join(" ");
+  const lines: Array<[string, string]> = [
+    ["Title", settings.title],
+    ["Fandom", settings.fandom],
+    ["Genre", settings.genre],
+  ];
+  const details = lines
+    .filter(([, value]) => value.trim())
+    .map(([label, value]) => `${label}: ${value.trim()}`)
+    .join("\n");
+  const user = joinSections([
+    section("story_details", details),
+    section("story_overview", replaceMacros(settings.overview, names)),
+    section("world_info", worldInfo(lore, names)),
+    section("characters", characters.map((character) => looksCard(character, names)).join("\n")),
+    section("personas", personas.map((persona) => looksCard(persona, names)).join("\n")),
+    section("story_notes", replaceMacros(settings.notes, names)),
+    section("before_the_passage", keepTail(input.before ?? "", PASSAGE_CONTEXT_CHARS)),
+    section("passage", input.passage.slice(0, PASSAGE_CHARS)),
+    "Write the picture prompt for the passage.",
+  ]);
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
+/** The picture prompt in a model's answer: no reasoning, fences, label or wrapping quotes, on one line. */
+export function cleanPicturePrompt(answer: string): string {
+  return visibleStreamingText(answer)
+    .replace(/```[a-z]*/gi, "")
+    .trim()
+    .replace(/^\**\s*(?:image |picture )?prompt\s*\**\s*:\s*\**\s*/i, "")
+    .replace(/^["“”'‘’]+|["“”'‘’]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, LIMITS.picturePrompt);
+}
+
 // ── Timeline ──
 
 /** How much of an unsummarized latest chapter the timeline planner reads. */

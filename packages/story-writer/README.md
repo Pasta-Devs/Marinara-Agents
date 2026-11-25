@@ -75,6 +75,31 @@ Set **Writing → Chapter length** to **Off (I decide)** when you want to steer 
 
 Pick **Short**, **Medium**, **Long** or type a length to go back to writing chapter by chapter. The length you had before is kept.
 
+## Pictures: illustrate a passage
+
+**Illustrate** (the picture button at the bottom of the screen) paints a picture of a passage of your story.
+
+1. Pick the connection that paints under **Writing → Image connection**. It starts at **None**, and with None, Illustrate sends nothing and costs nothing; it tells you where to choose one.
+2. Click in the paragraph you want a picture of, or select a passage.
+3. Press **Illustrate**. The story's own connection writes a picture prompt in English from that passage and the looks of your characters and personas: who is there, what they look like, where they are, the light, what they are doing, and no text in the picture.
+4. If **Settings → Generations → Expose media prompts before sending** is on in Marinara Engine, Story Writer shows you that prompt first: change it as you like and press **Paint**, or **Cancel**. When it is off, the picture is painted straight away.
+
+The image connection paints exactly the prompt it gets; your image style profiles are not added to it. A picture takes a little while to paint; you can keep writing meanwhile.
+
+Where the picture goes:
+
+- **Book** and **E-book**: beside its paragraph, with the text wrapping around it. On a page too narrow for that (a phone), it sits full width between paragraphs. It is at most 60% of a page tall, so it always fits on one page: if it does not fit where its paragraph is, it moves to the top of the next page.
+- **Document**: beside the column, next to its paragraph, in a wide window, and between paragraphs in a narrower one.
+
+The picture belongs to the chapter, not to its text: it stays beside its paragraph when you edit the text above it, and writing, Generate, **Continue** and **Rewrite** never remove it. If its paragraph is gone, it stays at the same place in the chapter.
+
+Point at a picture (on a touch screen its buttons are always shown) for its two buttons:
+
+- **Illustrate again** paints a new picture from the same prompt, in its place. With **Expose media prompts before sending** on, you can change the prompt first.
+- **Remove this picture** takes it out of the chapter, after asking. It is deleted from the Global Gallery too, unless something else uses it (a duplicated story, for example).
+
+Every picture is also kept in the Engine's **Global Gallery**. Deleting a chapter or a story keeps its pictures there. A downloaded **Markdown** file shows the pictures as images linked to your Engine; **Plain text** leaves them out.
+
 ## The author's note
 
 The sticky note in the top corner holds your instructions for the next chapter, such as "Mira finally tells Jon the truth" or "slow down, more dialogue". Click it to unroll it and type. These instructions are sent with every chapter until you change them. Turn on **Author tools → Clear after the next chapter** if you want the note to empty itself once a chapter is written.
@@ -100,18 +125,19 @@ A new chapter remembers the quick reply it was written from, so the model sees i
 - **Finish this chapter** (shown while the last chapter is a draft): marks it finished and writes the next chapter, for when a draft is done as it is.
 - **Rewrite the last chapter**: throws the last chapter away and writes it again from the request it was written from: the quick reply, or your continue message as it was then, even if you have changed it since. To steer a rewrite, change the author's note first. Story Writer asks first.
 - **Redo** (shown after the model has written something): takes back only what the model last wrote and writes it again with the same instruction, for when it refused or stopped partway. A continued chapter goes back to where it was before, and a new chapter is written again in its place. If **Clear after the next chapter** emptied the author's note, Redo puts the note back first. The button goes away as soon as you change that chapter or its summary, and your changes are kept. It also goes away when you reload the page. On a phone, the word count makes room for it. Story Writer asks first.
+- **Illustrate** (the picture button, once there is a chapter): paints a picture of the paragraph at the cursor or the passage you selected. See [Pictures](#pictures-illustrate-a-passage).
 - **Your stories**: opens your story list.
 - **Fullscreen**: hides the rest of Marinara Engine.
 - The word count of the whole story, with a progress bar when you have set a story length target.
 - Your **quick replies**, when you have some: beside these buttons on a wide screen, just above them on a narrower one.
 
-On small screens the buttons shrink to icons.
+On small screens the buttons shrink to icons. On a phone held upright, the word count makes room for **Redo** and **Illustrate**, and while both are shown the main button shows only its icon.
 
 ## Your stories: save, come back, start new ones
 
 Every story saves itself on your Marinara Engine server as you write: chapters, edits, the sticky note and every setting. Nothing is lost when you switch stories, close the tab or come back days later, and the story you had open last opens again.
 
-Press the **Your stories** button (the bookshelf icon) at the bottom of the screen to see all of them, newest first, with their length, chapter count and when you last changed them. Click one to open it. From there you can also start a **New story**, **Duplicate** one (handy for trying a different direction), **Delete** one (Story Writer asks first), and **Download** the open story as **Markdown (.md)** to keep its formatting or **Plain text (.txt)** for anywhere else.
+Press the **Your stories** button (the bookshelf icon) at the bottom of the screen to see all of them, newest first, with their length, chapter count and when you last changed them. Click one to open it. From there you can also start a **New story**, **Duplicate** one (handy for trying a different direction), **Delete** one (Story Writer asks first), and **Download** the open story as **Markdown (.md)** to keep its formatting and pictures or **Plain text (.txt)** for anywhere else.
 
 **Save now** (or Ctrl+S / Cmd+S) sends any change that is still waiting to be saved right away.
 
@@ -148,6 +174,7 @@ For each character and persona the model gets its description, personality, back
 | Setting | What it does | Default |
 | --- | --- | --- |
 | Connection | The model that writes. **Edit connection** opens the Engine's connection editor. | your default connection |
+| Image connection | The connection **Illustrate** paints with. Only image connections are listed. With **None**, Illustrate sends nothing. | None |
 | Chapter length | About how many words each chapter should have. Short is 1,000, Medium 2,000 and Long 4,000; anything from 100 to 20,000 works. **Off (I decide)** gives the chapters no length: see [Write a passage at a time](#write-a-passage-at-a-time). | 2,000 words |
 | Story length target | About how long the whole story should be. Leave it empty for an open-ended story. | empty |
 | Chapter titles | Ask the model to open each chapter with its own title. | on |
@@ -233,7 +260,7 @@ With **Chapter length** set to **Off (I decide)**, the model is still told how l
 
 ## Where your stories are kept
 
-Stories, chapters and settings are saved on your Marinara Engine server with its other data, not in the browser. That means you see the same stories on every device you use with that Engine. Uninstalling Story Writer does not delete them: install it again and they are still there.
+Stories, chapters and settings are saved on your Marinara Engine server with its other data, not in the browser; pictures are kept in its Global Gallery. That means you see the same stories on every device you use with that Engine. Uninstalling Story Writer does not delete them: install it again and they are still there.
 
 ## On a phone or tablet
 
@@ -242,6 +269,8 @@ Story Writer works in portrait and landscape. In portrait, the book shows a sing
 ## Privacy
 
 Everything the model reads goes to the connection you pick: your prompt, the selected characters, personas and lorebook entries, your overview and notes, the chapters and your author's note. If that connection is an online provider, they receive your story. For a fully private story, use a model that runs on your own computer. Story Writer itself sends your story nowhere else.
+
+**Illustrate** sends the passage, the text just before it, your overview and notes, the lorebook entries that match it and the looks of your characters and personas to the same connection, and the picture prompt it writes to your image connection.
 
 ## Troubleshooting
 
@@ -254,6 +283,12 @@ Everything the model reads goes to the connection you pick: your prompt, the sel
 **A finished chapter is still marked as a draft.** Story Writer guesses that a chapter was cut off when it ends without a sentence ending. If the chapter is really done, press **Finish this chapter** to move on to the next one.
 
 **"403" or "not allowed" when using Story Writer from another device.** Story Writer saves through the Engine's protected package routes. On the computer running Marinara Engine this just works, but from another device on your network (or through a tunnel) those routes need the admin secret: set `ADMIN_SECRET` in the server's `.env`, then paste the same value into **Settings → Advanced → Admin Access** on that device and click **Save**.
+
+**Illustrate says it needs an image connection.** Choose one under **Writing → Image connection**. If none is listed, add an image connection in the Engine's connections first.
+
+**Illustrate asks you to click in a paragraph.** It paints the paragraph at the cursor, or the text you selected, in the chapter you are on. Click in the text first; after you turn to another chapter, click in that one.
+
+**A picture fails to paint.** The message comes from the image connection or its provider. Check the connection in the Engine; nothing is stored in the chapter when painting fails.
 
 **The model keeps using a phrase you hate.** Add it to **Banned words and phrases**. Story Writer also tells you after each chapter which banned phrases slipped through, so you can edit them out.
 

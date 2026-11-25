@@ -4,7 +4,11 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink, RotateCcw } from "lucide-react";
-import { resolveDefaultConnectionId, type ConnectionOption } from "../../../hooks/use-engine-resources";
+import {
+  resolveDefaultConnectionId,
+  resolveImageConnectionId,
+  type ConnectionOption,
+} from "../../../hooks/use-engine-resources";
 import { DEFAULT_SYSTEM_PROMPT, LIMITS, type StorySettings } from "../../../lib/story-writer/model";
 import { systemPromptOf } from "../../../lib/story-writer/prompt";
 import { NumberField, TextField, Toggle, useNumberFormat } from "./fields";
@@ -19,6 +23,8 @@ export function WritingSection(props: {
   settings: StorySettings;
   onChange(patch: Partial<StorySettings>, options?: { immediate?: boolean }): void;
   connections: ConnectionOption[];
+  /** Image connections, for Illustrate. */
+  imageConnections: ConnectionOption[];
   connectionsLoading: boolean;
   onEditConnection(connectionId: string): void;
   onManageConnections(): void;
@@ -29,8 +35,10 @@ export function WritingSection(props: {
   const { t } = useTranslation();
   const formatNumber = useNumberFormat();
   const selectId = useId();
-  const { settings, onChange, connections } = props;
+  const imageSelectId = useId();
+  const { settings, onChange, connections, imageConnections } = props;
   const connectionId = resolveDefaultConnectionId(connections, settings.connectionId);
+  const imageConnectionId = resolveImageConnectionId(imageConnections, settings.imageConnectionId);
   const target = settings.targetWords;
   const percent = target ? Math.min(100, Math.round((props.totalWords / target) * 100)) : 0;
   return (
@@ -82,6 +90,46 @@ export function WritingSection(props: {
             </div>
             <p id={`${selectId}-hint`} className="sw-hint">
               {t("writing.connectionHint")}
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Never a default: without a choice here, Illustrate sends nothing and costs nothing. */}
+      <div className="sw-field">
+        <label className="sw-label" htmlFor={imageSelectId}>
+          {t("writing.imageConnection")}
+        </label>
+        {props.connectionsLoading && imageConnections.length === 0 ? (
+          <p className="sw-empty">{t("writing.loadingConnections")}</p>
+        ) : imageConnections.length === 0 ? (
+          <>
+            <p className="sw-hint">{t("writing.noImageConnections")}</p>
+            <div className="sw-button-row">
+              <button type="button" className="sw-button" onClick={props.onManageConnections}>
+                <ExternalLink size={15} aria-hidden="true" />
+                {t("writing.manageConnections")}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <select
+              id={imageSelectId}
+              className="sw-select"
+              value={imageConnectionId ?? ""}
+              aria-describedby={`${imageSelectId}-hint`}
+              onChange={(event) => onChange({ imageConnectionId: event.target.value || null }, { immediate: true })}
+            >
+              <option value="">{t("writing.imageConnectionNone")}</option>
+              {imageConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {`${connection.name}${connection.model ? ` · ${connection.model}` : ""}`}
+                </option>
+              ))}
+            </select>
+            <p id={`${imageSelectId}-hint`} className="sw-hint">
+              {t("writing.imageConnectionHint")}
             </p>
           </>
         )}

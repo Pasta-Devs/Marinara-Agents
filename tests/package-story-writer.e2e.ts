@@ -1,6 +1,9 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
+import { crc32, deflateSync } from "node:zlib";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -71,21 +74,31 @@ async function engineRequest(
   return response.json();
 }
 
-async function openStoryWriter(page: Page) {
+/** `engineUi`: more of the Engine's saved UI settings, such as its media prompt review. */
+async function openStoryWriter(page: Page, engineUi: Record<string, unknown> = {}) {
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
-  await page.addInitScript((version) => {
-    localStorage.removeItem("marinara-active-chat-id");
-    localStorage.setItem("marinara:whats-new:seen-version", version);
-    localStorage.setItem(
-      "marinara-engine-ui",
-      JSON.stringify({
-        state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
-        version: 65,
-      }),
-    );
-  }, appVersion);
+  await page.addInitScript(
+    ({ version, settings }) => {
+      localStorage.removeItem("marinara-active-chat-id");
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            sidebarOpen: false,
+            rightPanelOpen: false,
+            appAccentPulseMode: false,
+            ...settings,
+          },
+          version: 65,
+        }),
+      );
+    },
+    { version: appVersion, settings: engineUi },
+  );
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Story Writer" }).click();
   const root = page.locator("marinara-capability-story-writer .sw-root");
@@ -909,4 +922,312 @@ test("With Chapter length Off, Generate and a quick reply write into the selecte
   // The model reads the story up to the chapter it continues, not the chapters after it.
   expect(second.some((message) => message.content.includes("Rain hammered the bridge."))).toBe(false);
   await page.screenshot({ path: testInfo.outputPath("10-writer-decides.png") });
+});
+
+/** A PNG of `width` × `height` pixels, a soft gradient, as base64: what the fake image backend paints. */
+function gradientPng(width: number, height: number): string {
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    const row = y * (width * 3 + 1);
+    for (let x = 0; x < width; x += 1) {
+      raw[row + 1 + x * 3] = 60 + Math.round((140 * x) / width);
+      raw[row + 2 + x * 3] = 80 + Math.round((110 * y) / height);
+      raw[row + 3 + x * 3] = 150;
+    }
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]).toString("base64");
+}
+
+/** Puts the author's selection on a chapter paragraph, as a drag over it would, and waits for Story Writer to see it. */
+async function selectParagraph(page: Page, paragraph: Locator) {
+  await paragraph.evaluate((element) => {
+    // As a click on it would: the reader turns to the selection, and nothing else scrolls.
+    (element.closest(".sw-body") as HTMLElement).focus({ preventScroll: true });
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+const PICTURE_PROMPT =
+  "A tall watchman in a battered helmet and a thin coat stands on wet cobbles at dawn, grey light over the rooftops.";
+
+test("Illustrate paints a passage with the image connection, beside its paragraph, and keeps it through Continue (#2478)", async ({
+  page,
+  request,
+  baseURL,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const base = baseURL!;
+  const mobile = testInfo.project.name.includes("mobile");
+  // A picture's button losing focus while the pictures are placed again once threw from the chapter's blur handler.
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  // An AUTOMATIC1111 backend on this machine: the Engine paints through it, and nothing leaves the test.
+  const painted: Array<{ prompt: string; negative_prompt: string; width: number; height: number }> = [];
+  const picture = gradientPng(448, 576);
+  const painter = createServer((incoming, response) => {
+    let body = "";
+    incoming.on("data", (chunk) => (body += chunk));
+    incoming.on("end", () => {
+      if (incoming.method === "POST" && incoming.url === "/sdapi/v1/txt2img") {
+        painted.push(JSON.parse(body));
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ images: [picture] }));
+        return;
+      }
+      response.writeHead(404);
+      response.end();
+    });
+  });
+  await new Promise<void>((resolveListen) => painter.listen(0, "127.0.0.1", resolveListen));
+  try {
+    const painterUrl = `http://127.0.0.1:${(painter.address() as AddressInfo).port}`;
+    await e2eConnection(request, base);
+    const connections: Array<{ id: string; name: string }> = await engineRequest(request, base, "GET", "/connections");
+    const existing = connections.find((row) => row.name === "Story Writer E2E Painter");
+    const imageConnection = existing
+      ? await engineRequest(request, base, "PATCH", `/connections/${existing.id}`, { baseUrl: painterUrl })
+      : await engineRequest(request, base, "POST", "/connections", {
+          name: "Story Writer E2E Painter",
+          provider: "image_generation",
+          baseUrl: painterUrl,
+          apiKey: "",
+          model: "automatic1111",
+          imageGenerationSource: "automatic1111",
+        });
+    await engineRequest(request, base, "PATCH", "/story-writer/preferences", {
+      theme: "book",
+      streaming: true,
+      showAuthorNote: true,
+      showQuickReplies: false,
+    });
+    // No image connection yet: Illustrate must send nothing at all.
+    const fresh = await engineRequest(request, base, "POST", "/story-writer/stories", {
+      settings: { title: "Pictures in the Rain", chapterTitles: false },
+    });
+    const storyId = fresh.story.id;
+    await engineRequest(request, base, "POST", `/story-writer/stories/${storyId}/chapters`, {
+      text: CHAPTER.trim(),
+      status: "complete",
+    });
+    await engineRequest(request, base, "PATCH", "/story-writer/preferences", { lastStoryId: storyId });
+    const savedChapter = async () =>
+      (await engineRequest(request, base, "GET", `/story-writer/stories/${storyId}`)).chapters[0] as {
+        text: string;
+        illustrations: Array<{ id: string; image: string; url: string; prompt: string; paragraph: number }>;
+      };
+    const galleryIds = async () =>
+      ((await engineRequest(request, base, "GET", "/global-gallery")) as Array<{ id: string }>).map((row) => row.id);
+
+    const generations: Array<{ streaming?: boolean; messages: Array<{ role: string; content: string }> }> = [];
+    await page.route("**/api/generate/raw", async (route) => {
+      const body = route.request().postDataJSON();
+      generations.push(body);
+      if (body.streaming === false) {
+        await route.fulfill({ json: { content: `<think>Who is in it?</think>\n"${PICTURE_PROMPT}"` } });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+        body: sseBody(" The rain stopped at last."),
+      });
+    });
+
+    // The Engine's "Expose media prompts before sending" is on: the writer sees the prompt before anything is painted.
+    const root = await openStoryWriter(page, { reviewImagePromptsBeforeSend: true });
+    const paragraphs = root.locator(".sw-block--chapter .sw-body > p");
+    await expect(paragraphs.last()).toContainText("Morning came");
+    const illustrate = root.getByRole("button", { name: "Illustrate", exact: true });
+    await selectParagraph(page, paragraphs.last());
+    await illustrate.click();
+    await expect(page.getByText(/^Illustrate needs an image connection\./)).toBeVisible();
+    expect(generations).toHaveLength(0);
+    expect(painted).toHaveLength(0);
+
+    // Its "Choose one" opens the settings, where Image connection lists only the image connections.
+    await page.getByRole("button", { name: "Choose one" }).click();
+    const picker = root.getByLabel("Image connection");
+    await expect(picker).toHaveValue("");
+    await expect(picker.locator("option")).toHaveText(["None (no pictures)", /^Story Writer E2E Painter/]);
+    await picker.selectOption(imageConnection.id);
+    await expect
+      .poll(
+        async () =>
+          (await engineRequest(request, base, "GET", `/story-writer/stories/${storyId}`)).story.settings
+            .imageConnectionId,
+      )
+      .toBe(imageConnection.id);
+    await root.getByRole("button", { name: "Hide story settings" }).click();
+
+    const pagesBefore = Number(/of (\d+)/.exec((await root.locator(".sw-indicator").textContent()) ?? "")?.[1]);
+    await selectParagraph(page, paragraphs.last());
+    await illustrate.click();
+    const review = page.getByRole("dialog", { name: "Picture prompt" });
+    await expect(review).toBeVisible();
+    const prompt = review.getByLabel("What the picture shows");
+    await expect(prompt).toHaveValue(PICTURE_PROMPT);
+    await expect(prompt).toBeFocused();
+    expect(painted).toHaveLength(0);
+    // The one text call: the story's own connection, with the selected passage and no streaming.
+    expect(generations).toHaveLength(1);
+    const call = generations[0]!;
+    expect(call.streaming).toBe(false);
+    expect(call.messages[0]!.content).toContain("You write the prompt an image generator paints one illustration");
+    expect(call.messages[1]!.content).toContain("<passage>\nMorning came at last, grey and grudging.\n</passage>");
+    expect(call.messages[1]!.content).toContain("<before_the_passage>");
+    await page.screenshot({ path: testInfo.outputPath("11-picture-prompt.png") });
+    await prompt.fill(`${PICTURE_PROMPT} Puddles shine.`);
+    await review.getByRole("button", { name: "Paint" }).click();
+    await expect(review).toHaveCount(0);
+
+    // The image connection paints exactly the reviewed prompt, with no text in the picture.
+    await expect.poll(() => painted.length, { timeout: 30_000 }).toBe(1);
+    expect(painted[0]!.prompt).toBe(`${PICTURE_PROMPT} Puddles shine.`);
+    expect(painted[0]!.negative_prompt).toContain("text, letters, words");
+    expect([painted[0]!.width, painted[0]!.height]).toEqual([896, 1152]);
+    await expect.poll(async () => (await savedChapter()).illustrations.length, { timeout: 30_000 }).toBe(1);
+    const stored = (await savedChapter()).illustrations[0]!;
+    expect(stored.image).toMatch(/^global-gallery:/);
+    expect(stored.prompt).toBe(`${PICTURE_PROMPT} Puddles shine.`);
+    const firstImageId = stored.image.slice("global-gallery:".length);
+    expect(await galleryIds()).toContain(firstImageId);
+
+    // In the chapter, before its paragraph: loaded, beside the text on a wide page and full width on a phone.
+    const figure = root.locator(".sw-block--chapter .sw-body > figure.sw-illustration");
+    await expect(figure).toHaveCount(1);
+    await expect(figure).toHaveAttribute("data-float", mobile ? "false" : "true");
+    await expect(figure.locator("img")).toHaveAttribute("alt", `${PICTURE_PROMPT} Puddles shine.`);
+    await expect.poll(() => figure.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(448);
+    const placement = await figure.evaluate((element) => {
+      const reader = element.closest(".sw-reader") as HTMLElement;
+      const style = getComputedStyle(reader);
+      const textWidth = parseFloat(style.getPropertyValue("--sw-text-w"));
+      const textHeight = parseFloat(style.getPropertyValue("--sw-text-h"));
+      const gap = parseFloat(style.getPropertyValue("--sw-gap"));
+      const track = reader.querySelector(".sw-track")!.getBoundingClientRect();
+      const box = element.getBoundingClientRect();
+      const page = Math.floor((box.left - track.left + gap / 2) / (textWidth + gap));
+      const pageLeft = track.left + page * (textWidth + gap);
+      const next = element.nextElementSibling!;
+      // The paragraph's first line of text (its block box runs under the picture; its lines do not).
+      const text = document.createRange();
+      text.selectNodeContents(next);
+      const line = text.getClientRects()[0]!;
+      return {
+        nextText: next.textContent,
+        insidePage: box.left >= pageLeft - 1 && box.right <= pageLeft + textWidth + 1,
+        insideHeight: box.top >= track.top - 1 && box.bottom <= track.top + textHeight + 1,
+        tallest: box.height <= Math.floor(textHeight * 0.6) + 1,
+        width: box.width,
+        textWidth,
+        lineRight: line.right,
+        lineTop: line.top,
+        left: box.left,
+        bottom: box.bottom,
+      };
+    });
+    expect(placement.nextText).toBe("Morning came at last, grey and grudging.");
+    // Never cut by a page edge or the bottom of a page.
+    expect(placement.insidePage).toBe(true);
+    expect(placement.insideHeight).toBe(true);
+    expect(placement.tallest).toBe(true);
+    if (mobile) {
+      // Between paragraphs: the text starts below it.
+      expect(placement.lineTop).toBeGreaterThanOrEqual(placement.bottom - 1);
+    } else {
+      // Beside the text: the paragraph's first line ends before the picture starts.
+      expect(placement.width).toBeLessThan(placement.textWidth * 0.5);
+      expect(placement.lineRight).toBeLessThanOrEqual(placement.left + 1);
+    }
+    // The pages were measured again with the picture in them.
+    await expect
+      .poll(async () => Number(/of (\d+)/.exec((await root.locator(".sw-indicator").textContent()) ?? "")?.[1]))
+      .toBeGreaterThanOrEqual(pagesBefore);
+    await figure.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: testInfo.outputPath("12-picture-in-the-book.png") });
+
+    // Continue writes the chapter on, and the picture stays in it.
+    await root.getByRole("button", { name: "Continue the last chapter" }).click();
+    await expect
+      .poll(async () => (await savedChapter()).text, { timeout: 30_000 })
+      .toMatch(/The rain stopped at last\.$/);
+    await expect(root.getByRole("button", { name: "Write next chapter" })).toBeEnabled({ timeout: 30_000 });
+    expect((await savedChapter()).illustrations).toEqual([stored]);
+    await expect(figure).toHaveCount(1);
+
+    // Illustrate again paints from its own prompt (no text call) in its place, and the old picture leaves the gallery.
+    await figure.scrollIntoViewIfNeeded();
+    await figure.hover();
+    await figure.getByRole("button", { name: "Illustrate again" }).click();
+    await expect(review).toBeVisible();
+    await expect(review.getByLabel("What the picture shows")).toHaveValue(`${PICTURE_PROMPT} Puddles shine.`);
+    const textCalls = generations.filter((body) => body.streaming === false).length;
+    await review.getByLabel("What the picture shows").fill(`${PICTURE_PROMPT} A cat watches.`);
+    await review.getByRole("button", { name: "Paint" }).click();
+    await expect.poll(() => painted.length, { timeout: 30_000 }).toBe(2);
+    await expect
+      .poll(async () => (await savedChapter()).illustrations.map((item) => item.prompt), { timeout: 30_000 })
+      .toEqual([`${PICTURE_PROMPT} A cat watches.`]);
+    expect(generations.filter((body) => body.streaming === false)).toHaveLength(textCalls);
+    const secondImageId = (await savedChapter()).illustrations[0]!.image.slice("global-gallery:".length);
+    await expect.poll(galleryIds).not.toContain(firstImageId);
+    expect(await galleryIds()).toContain(secondImageId);
+    await expect(figure.locator("img")).toHaveAttribute("alt", `${PICTURE_PROMPT} A cat watches.`);
+
+    // A reload shows it from the server; the Document theme puts it beside the column when the window has room.
+    await engineRequest(request, base, "PATCH", "/story-writer/preferences", { theme: "document" });
+    if (!mobile) await page.setViewportSize({ width: 2000, height: 1000 });
+    await openStoryWriter(page, { reviewImagePromptsBeforeSend: true });
+    const documentFigure = root.locator(".sw-document .sw-body > figure.sw-illustration");
+    await expect(documentFigure).toHaveCount(1);
+    await documentFigure.scrollIntoViewIfNeeded();
+    const besideColumn = await documentFigure.evaluate((element) => {
+      const column = element.closest(".sw-document-column")!.getBoundingClientRect();
+      const box = element.getBoundingClientRect();
+      return {
+        beside: box.left >= column.right - 1,
+        within: box.left >= column.left - 1 && box.right <= column.right + 1,
+      };
+    });
+    expect(besideColumn).toEqual(mobile ? { beside: false, within: true } : { beside: true, within: false });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: testInfo.outputPath("13-picture-in-the-document.png") });
+
+    // Remove asks first, takes the picture out of the chapter and deletes it from the Global Gallery.
+    await documentFigure.hover();
+    await documentFigure.getByRole("button", { name: "Remove this picture" }).click();
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(documentFigure).toHaveCount(0);
+    expect((await savedChapter()).illustrations).toEqual([]);
+    await expect.poll(galleryIds).not.toContain(secondImageId);
+    await expect.poll(async () => (await savedChapter()).text).toMatch(/The rain stopped at last\.$/);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await engineRequest(request, base, "PATCH", "/story-writer/preferences", { theme: "book" });
+    await new Promise((resolveClose) => painter.close(resolveClose));
+  }
 });

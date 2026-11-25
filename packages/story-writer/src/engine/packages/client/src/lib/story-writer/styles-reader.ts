@@ -346,13 +346,77 @@ ${R} .sw-body blockquote :is(p, div) + :is(p, div) {
   text-indent: 0;
   margin-top: 0.4em;
 }
-/* A drop cap and a small-caps first line open every chapter of the book; a one-line opening still clears the cap. */
+/* ── Pictures: beside the text in the book and the e-book (StoryReader sizes them), between paragraphs on a phone ── */
+${R} .sw-illustration {
+  position: relative;
+  box-sizing: border-box;
+  margin: 0.35em auto 0.8em;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sw-r-muted) 35%, transparent), 0 6px 16px -8px rgba(0, 0, 0, 0.45);
+  break-inside: avoid;
+  text-indent: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+${R} .sw-illustration[data-float="true"] {
+  float: right;
+  clear: right;
+  margin: 0.3em 0 0.5em 1em;
+}
+${R} .sw-illustration img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+${R} .sw-illustration-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+${R} .sw-illustration:is(:hover, :focus-within) .sw-illustration-tools {
+  opacity: 1;
+}
+@media (hover: none) {
+  ${R} .sw-illustration-tools {
+    opacity: 1;
+  }
+}
+${R} .sw-illustration-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--sw-panel-border, rgba(255, 255, 255, 0.14));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sw-panel-bg, #1c1611) 82%, transparent);
+  color: var(--sw-panel-fg, #f1e6d2);
+  cursor: pointer;
+}
+${R} .sw-illustration-button:disabled {
+  display: none;
+}
+${R} .sw-illustration-button:focus-visible {
+  outline: 2px solid var(--sw-r-accent);
+  outline-offset: 1px;
+}
+/* A drop cap and a small-caps first line open every chapter of the book; a one-line opening still clears the cap.
+   After a picture, the opening wraps around it instead (a flow-root paragraph would only sit beside it). */
 ${BOOK} .sw-body > p:first-child,
 ${BOOK} .sw-body > :is(h1, h2, h3):first-child + p {
   display: flow-root;
 }
 ${BOOK} .sw-body > p:first-child::first-letter,
-${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-letter {
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-letter,
+${BOOK} .sw-body > .sw-illustration:first-child + p::first-letter,
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + .sw-illustration + p::first-letter {
   float: left;
   margin: 0.06em 0.09em 0 0;
   padding: 0;
@@ -363,7 +427,9 @@ ${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-letter {
   line-height: 0.82;
 }
 ${BOOK} .sw-body > p:first-child::first-line,
-${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-line {
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-line,
+${BOOK} .sw-body > .sw-illustration:first-child + p::first-line,
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + .sw-illustration + p::first-line {
   font-variant-caps: small-caps;
   letter-spacing: 0.03em;
 }
@@ -610,6 +676,32 @@ ${DOC} .sw-document-column {
 }
 ${DOC}[data-editable="true"] .sw-document-column {
   cursor: text;
+}
+/* A picture sits beside the column, next to its paragraph, when the window has room; between paragraphs when not. */
+${DOC} {
+  container: sw-document / inline-size;
+}
+${DOC} .sw-illustration {
+  width: fit-content;
+  max-width: 100%;
+}
+${DOC} .sw-illustration img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: min(70vh, 32em);
+}
+@container sw-document (min-width: 72em) {
+  ${DOC} .sw-illustration {
+    float: right;
+    clear: right;
+    width: 15em;
+    margin: 0.3em -17.5em 0.8em 0;
+  }
+  ${DOC} .sw-illustration img {
+    width: 100%;
+    max-height: none;
+  }
 }
 ${DOC} .sw-block {
   height: auto;

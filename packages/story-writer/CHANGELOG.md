@@ -1,5 +1,9 @@
 # Story Writer release notes
 
+## 0.6.0 — 2026-11-25
+
+- **Illustrate** paints a picture of a passage. Click in a paragraph or select some text and press the picture button: the story's model writes a prompt from the passage and your cast's looks, and the image connection you pick under **Writing → Image connection** paints it. Until you pick one, Illustrate sends nothing. If the Engine shows you media prompts before sending, you can change the prompt first. The picture sits beside its paragraph with the text wrapping around it, full width on a phone, and beside the column in Document. Writing, Continue and Rewrite keep it. **Illustrate again** paints a new one in its place; **Remove** also deletes it from the Global Gallery unless something else uses it. Markdown downloads include the pictures.
+
 ## 0.5.0 — 2026-11-25
 
 - **Chapter length** has a new choice, **Off (I decide)**, for steering the story a passage at a time. One **Generate** button replaces **Write next chapter** and **Continue**: it continues the chapter you are on, from where its text ends, and quick replies write into that chapter too. The model gets no chapter length, never starts a chapter, and ends one only when you ask it to. You start the next chapter yourself on the blank page after the last one. Your author's note decides how much each Generate writes. Every other chapter length works as before.

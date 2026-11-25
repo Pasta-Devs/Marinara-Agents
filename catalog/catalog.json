@@ -4638,7 +4638,7 @@
         },
         "id": "story-writer",
         "name": "Story Writer",
-        "version": "0.5.0",
+        "version": "0.6.0",
         "description": "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
         "engine": {
           "min": "2.5.1",
@@ -4680,13 +4680,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "a498db8a4ce2e1b44b602e23b2929ebcfaaee7cf0930f878b75e08b505f58539",
-            "bytes": 14241
+            "sha256": "fc74fa530dd4d25863e6942bc08a8c6dbc061aa97476a04e640ea4cf84f53f84",
+            "bytes": 21604
           },
           {
             "path": "client.js",
-            "sha256": "3db3db9a1b65274e68d33840f53d8627dd97a11cc18f2d53afcaa703e06145ce",
-            "bytes": 245702
+            "sha256": "9caafdd4e726c5ec37db58847be72661cf4892461c595388fda6e32a7b839d17",
+            "bytes": 266409
           },
           {
             "path": "story-writer-icon.png",
@@ -4724,9 +4724,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/story-writer.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.5.0.zip",
-        "sha256": "e92e67c6676d8759239738ea6460fd20b7dcdde2ea6162923c054351ce457681",
-        "bytes": 650267
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.6.0.zip",
+        "sha256": "d02641f8349252f827d251c84261c564608ebf2a89550fa8114ce5f02d64032b",
+        "bytes": 678337
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/story-writer/README.md"
     },
