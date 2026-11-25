@@ -1,12 +1,13 @@
 // ──────────────────────────────────────────────
-// Story Writer: the floating bars under the book (write, stop, continue, rewrite, redo, fullscreen, word count; quick
-// replies)
+// Story Writer: the floating bars under the book (write or generate, stop, continue, rewrite, redo, fullscreen, word
+// count; quick replies)
 // ──────────────────────────────────────────────
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CheckCheck,
   Feather,
+  ImagePlus,
   Library,
   Loader2,
   Maximize2,
@@ -35,6 +36,11 @@ export function ActionBar(props: {
   chapterCount: number;
   /** The last chapter is a draft, so Write continues it. */
   lastChapterDraft: boolean;
+  /**
+   * Chapter length "Off": one Generate button continues this chapter (its number) and nothing writes the next one or
+   * finishes a draft. Null = the chapter length applies; 0 = no chapter yet, so Generate waits for the author to start one.
+   */
+  generateChapterNumber: number | null;
   /** Redo is offered: the latest generation is unchanged since it was written. */
   canRedo: boolean;
   generatingChapterNumber: number | null;
@@ -42,6 +48,10 @@ export function ActionBar(props: {
   totalWords: number;
   targetWords: number | null;
   fullscreen: FullscreenControl | null;
+  /** A picture is being prompted, reviewed or painted (one at a time). */
+  illustrating: boolean;
+  /** The story has an image connection. Until it has, a phone bar leaves Illustrate out and keeps its word count. */
+  hasImageConnection: boolean;
   onWrite(): void;
   onContinue(): void;
   onRewrite(): void;
@@ -50,6 +60,8 @@ export function ActionBar(props: {
   onOpenLibrary(): void;
   /** Marks the draft last chapter finished and writes the next one. */
   onFinishChapter(): void;
+  /** Paints the passage at the caret or the selected text (it explains itself without an image connection). */
+  onIllustrate(): void;
 }) {
   const { t } = useTranslation();
   const hintId = useId();
@@ -57,9 +69,27 @@ export function ActionBar(props: {
   const words = (count: number) => t("actions.words", { count, formatted: formatNumber(count) });
   const busy = props.status !== "idle";
   const number = props.generatingChapterNumber ?? props.chapterCount;
-  const primaryLabel = props.lastChapterDraft
-    ? t("actions.continueDraft", { number: props.chapterCount })
-    : t("actions.write");
+  const generate = props.generateChapterNumber;
+  const primaryLabel =
+    generate !== null
+      ? generate > 0
+        ? t("actions.generateIn", { number: generate })
+        : t("actions.generate")
+      : props.lastChapterDraft
+        ? t("actions.continueDraft", { number: props.chapterCount })
+        : t("actions.write");
+  const primaryShort =
+    generate !== null
+      ? t("actions.generate")
+      : props.lastChapterDraft
+        ? t("actions.continueShort")
+        : t("actions.writeShort");
+  // Why the primary button cannot write yet, shown beside it.
+  const hint = !props.hasConnection
+    ? t("actions.noConnection")
+    : generate === 0
+      ? t("generation.errors.noChapter")
+      : null;
   const statusLabel =
     props.status === "writing"
       ? t("actions.writingStatus", { number })
@@ -77,6 +107,7 @@ export function ActionBar(props: {
       aria-label={t("actions.label")}
       tabIndex={-1}
       data-redo={props.canRedo ? "true" : undefined}
+      data-illustrate={!busy && props.chapterCount > 0 && props.hasImageConnection ? "true" : undefined}
     >
       {busy ? (
         <>
@@ -120,24 +151,22 @@ export function ActionBar(props: {
           <button
             type="button"
             className="sw-action-primary"
-            disabled={!props.canWrite}
+            disabled={!props.canWrite || generate === 0}
             aria-label={primaryLabel}
-            aria-describedby={props.hasConnection ? undefined : hintId}
-            title={props.hasConnection ? primaryLabel : t("actions.noConnection")}
+            aria-describedby={hint ? hintId : undefined}
+            title={hint ?? primaryLabel}
             onClick={props.onWrite}
           >
             <Feather size={17} aria-hidden="true" />
             <span className="sw-action-label-long">{primaryLabel}</span>
-            <span className="sw-action-label-short">
-              {props.lastChapterDraft ? t("actions.continueShort") : t("actions.writeShort")}
-            </span>
+            <span className="sw-action-label-short">{primaryShort}</span>
           </button>
-          {props.hasConnection ? null : (
+          {hint ? (
             <span id={hintId} className="sw-action-hint">
-              {t("actions.noConnection")}
+              {hint}
             </span>
-          )}
-          {props.lastChapterDraft ? (
+          ) : null}
+          {generate === null && props.lastChapterDraft ? (
             <button
               type="button"
               className="sw-action-icon"
@@ -149,7 +178,7 @@ export function ActionBar(props: {
               <CheckCheck size={19} aria-hidden="true" />
             </button>
           ) : null}
-          {props.chapterCount > 0 && !props.lastChapterDraft ? (
+          {generate === null && props.chapterCount > 0 && !props.lastChapterDraft ? (
             <button
               type="button"
               className="sw-action-icon"
@@ -183,6 +212,22 @@ export function ActionBar(props: {
             >
               <RefreshCw size={18} aria-hidden="true" />
               <span className="sw-action-label-long">{t("actions.redoShort")}</span>
+            </button>
+          ) : null}
+          {props.chapterCount > 0 ? (
+            <button
+              type="button"
+              className="sw-action-icon sw-action-illustrate"
+              disabled={props.illustrating}
+              aria-label={t("illustrate.action")}
+              title={t(props.illustrating ? "illustrate.busy" : "illustrate.actionHint")}
+              onClick={props.onIllustrate}
+            >
+              {props.illustrating ? (
+                <Loader2 className="sw-spin" size={18} aria-hidden="true" />
+              ) : (
+                <ImagePlus size={18} aria-hidden="true" />
+              )}
             </button>
           ) : null}
         </>

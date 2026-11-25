@@ -680,7 +680,11 @@ ${R} .sw-peek-size { margin-inline-start: auto; color: var(--sw-panel-muted); fo
 ${R} .sw-peek-text {
   margin: 0; padding: 0 12px 12px; white-space: pre-wrap; overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5;
-}`;
+}
+/* Illustrate's prompt review shares the peek's dialog. */
+${R} .sw-illustrate { width: min(600px, calc(100% - 32px)); }
+${R} .sw-illustrate .sw-peek-body { gap: 8px; }
+${R} .sw-illustrate-actions { justify-content: flex-end; margin-top: 4px; }`;
 
 const NOTE_RULES = `
 ${R} .sw-note-anchor { position: absolute; top: 14px; z-index: 25; width: 0; height: 0; }
@@ -913,8 +917,13 @@ const LAYOUT_RULES = `
   ${R} .sw-action-label-long, ${R} .sw-action-status .sw-status-long { display: none; }
   ${R} .sw-action-label-short, ${R} .sw-action-status .sw-status-short { display: inline; }
   ${R} .sw-action-hint { display: none; }
-  /* A phone bar has no room for Redo and the word count together: the count gives way while Redo shows. */
-  ${R} .sw-actionbar[data-redo="true"] :is(.sw-wordcount, .sw-wordcount-divider) { display: none; }
+  /* A phone bar has no room for Redo or Illustrate and the word count together: the count gives way while either
+     shows. With both, the main button keeps only its icon, so every button stays a full-size tap target. Illustrate
+     waits here for an image connection, so a writer without one keeps the bar as it was. */
+  ${R} .sw-actionbar:not([data-illustrate]) .sw-action-illustrate { display: none; }
+  ${R} .sw-actionbar:is([data-redo="true"], [data-illustrate="true"]) :is(.sw-wordcount, .sw-wordcount-divider) { display: none; }
+  ${R} .sw-actionbar[data-redo="true"][data-illustrate="true"] .sw-action-primary { justify-content: center; width: 48px; padding: 0; }
+  ${R} .sw-actionbar[data-redo="true"][data-illustrate="true"] .sw-action-primary :is(.sw-action-label-long, .sw-action-label-short) { display: none; }
   ${R} .sw-wordcount { padding: 0 10px 0 4px; font-size: 12px; }
   ${R} .sw-grid-2 { grid-template-columns: minmax(0, 1fr); }
 }

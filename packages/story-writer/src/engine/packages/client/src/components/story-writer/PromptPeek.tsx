@@ -20,6 +20,38 @@ type PeekState =
   | { status: "failed"; message: string }
   | { status: "ready"; peek: PromptPeek };
 
+/**
+ * Keys in one of Story Writer's dialogs (aria-modal): Tab and Shift+Tab wrap inside it, and Escape closes it. Only Story
+ * Writer behind a dialog is inert, so without the wrap focus would leave for the Engine's tabs, where Escape no longer
+ * reaches the dialog. Its stops can change while it is open.
+ */
+export function dialogKeyDown(event: KeyboardEvent, onClose: () => void) {
+  if (event.defaultPrevented) return;
+  if (event.key === "Tab") {
+    const stops = Array.from(
+      (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+        "button:not(:disabled), summary, textarea, [href], [tabindex='0']",
+      ),
+    );
+    const active = document.activeElement;
+    if (!active || !stops.length) return;
+    const order = (stop: HTMLElement) => active.compareDocumentPosition(stop);
+    // Past the last stop (or before the first), go round; anywhere else the browser moves on as usual.
+    const more = event.shiftKey
+      ? stops.some((stop) => order(stop) & Node.DOCUMENT_POSITION_PRECEDING)
+      : stops.some((stop) => order(stop) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (!more) {
+      event.preventDefault();
+      (event.shiftKey ? stops[stops.length - 1] : stops[0])?.focus();
+    }
+    return;
+  }
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  onClose();
+}
+
 export function PromptPeekDialog(props: { load(signal: AbortSignal): Promise<PromptPeek | null>; onClose(): void }) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -47,32 +79,7 @@ export function PromptPeekDialog(props: { load(signal: AbortSignal): Promise<Pro
     return () => controller.abort();
   }, [load, t]);
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented) return;
-    // aria-modal: Tab and Shift+Tab wrap inside the dialog. Only Story Writer behind it is inert, so without this focus
-    // would leave for the Engine's tabs, where Escape no longer reaches the dialog. Its stops change as the prompt loads.
-    if (event.key === "Tab") {
-      const stops = Array.from(
-        (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("button, summary, [href], [tabindex='0']"),
-      );
-      const active = document.activeElement;
-      if (!active || !stops.length) return;
-      const order = (stop: HTMLElement) => active.compareDocumentPosition(stop);
-      // Past the last stop (or before the first), go round; anywhere else the browser moves on as usual.
-      const more = event.shiftKey
-        ? stops.some((stop) => order(stop) & Node.DOCUMENT_POSITION_PRECEDING)
-        : stops.some((stop) => order(stop) & Node.DOCUMENT_POSITION_FOLLOWING);
-      if (!more) {
-        event.preventDefault();
-        (event.shiftKey ? stops[stops.length - 1] : stops[0])?.focus();
-      }
-      return;
-    }
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopPropagation();
-    onClose();
-  };
+  const onKeyDown = (event: KeyboardEvent) => dialogKeyDown(event, onClose);
 
   let body;
   if (state.status === "loading") {
@@ -98,9 +105,7 @@ export function PromptPeekDialog(props: { load(signal: AbortSignal): Promise<Pro
     const { peek } = state;
     body = (
       <>
-        <p className="sw-hint">
-          {t(peek.mode === "next" ? "peek.next" : "peek.continue", { number: peek.chapterNumber })}
-        </p>
+        <p className="sw-hint">{t(`peek.${peek.mode}`, { number: peek.chapterNumber })}</p>
         <dl className="sw-peek-meta">
           <dt>{t("peek.model")}</dt>
           <dd>{peek.model || t("peek.notSet")}</dd>

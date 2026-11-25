@@ -1234,6 +1234,18 @@
     "story-writer": {
       "versions": [
         {
+          "version": "0.6.0",
+          "date": "2026-11-25",
+          "notes": "- **Illustrate** paints a picture of a passage. Click in a paragraph or select some text and press the picture button: the story's model writes a prompt from the passage and your cast's looks, and the image connection you pick under **Writing → Image connection** paints it. Until you pick one, Illustrate sends nothing. If the Engine shows you media prompts before sending, you can change the prompt first. The picture sits beside its paragraph with the text wrapping around it, full width on a phone, and beside the column in Document. Writing, Continue and Rewrite keep it. **Illustrate again** paints a new one in its place and keeps the old one in the Global Gallery; **Remove** also deletes it from the gallery unless something else uses it. On a phone, the picture button waits for an image connection. Markdown downloads include the pictures.",
+          "highlight": true
+        },
+        {
+          "version": "0.5.0",
+          "date": "2026-11-25",
+          "notes": "- **Chapter length** has a new choice, **Off (I decide)**, for steering the story a passage at a time. One **Generate** button replaces **Write next chapter** and **Continue**: it continues the chapter you are on, from where its text ends, and quick replies write into that chapter too. The model gets no chapter length, never starts a chapter, and ends one only when you ask it to. You start the next chapter yourself on the blank page after the last one. Your author's note decides how much each Generate writes. Every other chapter length works as before.",
+          "highlight": true
+        },
+        {
           "version": "0.4.0",
           "date": "2026-11-17",
           "notes": "- **Redo** appears next to **Rewrite the last chapter** after the model writes something. It takes back only what the model just wrote and writes it again with the same instruction, so you no longer have to select and delete a refusal or a cut-off answer by hand. It works after **Write**, **Continue**, a quick reply and **Rewrite**. If **Clear after the next chapter** emptied your author's note, Redo puts it back. Story Writer asks first. If you change that chapter or its summary, the button goes away and your changes are kept.",

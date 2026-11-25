@@ -59,6 +59,8 @@ export function clonePageText(
     element.removeAttribute("tabindex");
     element.removeAttribute("role");
   }
+  // A picture's buttons are copied too: inert keeps them out of reach. Its box is inline, so it lays out as on the page.
+  copy.setAttribute("inert", "");
   copy.style.position = "absolute";
   copy.style.left = `${-offsetX}px`;
   copy.style.top = "0";

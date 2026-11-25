@@ -46,26 +46,42 @@ function inlinePlain(text: string): string {
 // Deeper "> > >" nesting renders as text: each level recurses, and thousands of them would overflow the stack.
 const MAX_QUOTE_DEPTH = 8;
 
-/** Renders chapter Markdown as HTML: paragraphs, h1–h3, scene breaks, blockquotes and inline emphasis. */
-export function markdownToHtml(markdown: string, depth = 0): string {
-  const html: string[] = [];
+/** One top-level block of a chapter as the book renders it: a paragraph, a heading, a scene break or a quote. */
+export interface MarkdownBlock {
+  html: string;
+  /** The Markdown lines it was rendered from. */
+  source: string;
+}
+
+/** Splits chapter Markdown into the blocks markdownToHtml renders, in order: the chapter body's children. */
+export function markdownBlocks(markdown: string, depth = 0): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
   let paragraph: string[] = [];
-  let quote: string[] | null = null;
+  let quote: string[] = [];
+  let quoted: string[] = [];
   const flushParagraph = () => {
-    if (paragraph.length) html.push(`<p>${paragraph.map(inlineHtml).join("<br>")}</p>`);
+    if (paragraph.length) {
+      blocks.push({ html: `<p>${paragraph.map(inlineHtml).join("<br>")}</p>`, source: paragraph.join("\n") });
+    }
     paragraph = [];
   };
   const flushQuote = () => {
-    if (quote) html.push(`<blockquote>${markdownToHtml(quote.join("\n"), depth + 1)}</blockquote>`);
-    quote = null;
+    if (quoted.length) {
+      blocks.push({
+        html: `<blockquote>${markdownToHtml(quote.join("\n"), depth + 1)}</blockquote>`,
+        source: quoted.join("\n"),
+      });
+    }
+    quote = [];
+    quoted = [];
   };
 
   for (const line of markdown.replace(/\r\n?/g, "\n").split("\n")) {
-    const quoted = depth < MAX_QUOTE_DEPTH ? QUOTE.exec(line) : null;
-    if (quoted) {
+    const inQuote = depth < MAX_QUOTE_DEPTH ? QUOTE.exec(line) : null;
+    if (inQuote) {
       flushParagraph();
-      if (!quote) quote = [];
-      quote.push(quoted[1] ?? "");
+      quote.push(inQuote[1] ?? "");
+      quoted.push(line);
       continue;
     }
     flushQuote();
@@ -75,21 +91,28 @@ export function markdownToHtml(markdown: string, depth = 0): string {
     }
     if (HR.test(line)) {
       flushParagraph();
-      html.push("<hr>");
+      blocks.push({ html: "<hr>", source: line });
       continue;
     }
     const heading = HEADING.exec(line);
     if (heading?.[1] && heading[2]) {
       flushParagraph();
       const level = heading[1].length;
-      html.push(`<h${level}>${inlineHtml(heading[2])}</h${level}>`);
+      blocks.push({ html: `<h${level}>${inlineHtml(heading[2])}</h${level}>`, source: line });
       continue;
     }
     paragraph.push(line);
   }
   flushParagraph();
   flushQuote();
-  return html.join("");
+  return blocks;
+}
+
+/** Renders chapter Markdown as HTML: paragraphs, h1–h3, scene breaks, blockquotes and inline emphasis. */
+export function markdownToHtml(markdown: string, depth = 0): string {
+  return markdownBlocks(markdown, depth)
+    .map((block) => block.html)
+    .join("");
 }
 
 /** Plain text for the .txt export: markers are removed, scene breaks become "* * *". */
@@ -106,6 +129,39 @@ export function markdownToPlainText(markdown: string): string {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+// ── Where a picture sits ──
+
+/** A block's text as a key: whitespace (and so a line break inside a paragraph) never matters. */
+const textKey = (text: string) => text.replace(/\s+/g, "");
+
+/** The opening words of a block, which find it again later (anchorIndex). */
+export function anchorText(blockText: string): string {
+  return blockText.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+/**
+ * The block a picture sits beside, among a chapter's blocks (their plain text, from the DOM or markdownBlocks): the
+ * block nearest its stored index that still opens with its anchor, else the stored index within the chapter. -1 for a
+ * chapter with no block yet.
+ */
+export function anchorIndex(blockTexts: string[], paragraph: number, anchor: string): number {
+  if (blockTexts.length === 0) return -1;
+  const fallback = Math.min(Math.max(0, paragraph), blockTexts.length - 1);
+  const key = textKey(anchor);
+  if (!key) return fallback;
+  let found = -1;
+  blockTexts.forEach((text, index) => {
+    if (!textKey(text).startsWith(key)) return;
+    if (found < 0 || Math.abs(index - paragraph) < Math.abs(found - paragraph)) found = index;
+  });
+  return found >= 0 ? found : fallback;
+}
+
+/** The plain text of each block of chapter Markdown, as anchorIndex reads them. */
+export function markdownBlockTexts(markdown: string): string[] {
+  return markdownBlocks(markdown).map((block) => markdownToPlainText(block.source));
 }
 
 // ── Editable DOM → Markdown ──
@@ -156,6 +212,7 @@ function inlineMarkdown(node: MarkdownNode): string {
   if (node.nodeType !== ELEMENT_NODE) return "";
   const name = node.nodeName.toLowerCase();
   if (name === "br") return "\n";
+  if (name === "figure") return "";
   const inner = Array.from(node.childNodes, inlineMarkdown).join("");
   const marker = INLINE_MARKERS[name];
   return marker ? wrap(inner, marker) : inner;
@@ -171,6 +228,8 @@ function blockMarkdown(node: MarkdownNode): string[] {
   };
   for (const child of Array.from(node.childNodes)) {
     const name = child.nodeName.toLowerCase();
+    // A picture beside the text belongs to the chapter, not to its Markdown, and never splits the text around it.
+    if (child.nodeType === ELEMENT_NODE && name === "figure") continue;
     if (child.nodeType !== ELEMENT_NODE || !BLOCK_ELEMENTS.has(name)) {
       line += inlineMarkdown(child);
       continue;

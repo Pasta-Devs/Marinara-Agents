@@ -10,7 +10,16 @@ import {
   defaultPreferences,
   storyDocumentId,
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/model.ts";
-import { storyWriterRoutes } from "../packages/story-writer/src/engine/packages/server/src/services/story-writer/routes.ts";
+import {
+  createIllustrationImages,
+  imageSize,
+  type IllustrationImages,
+  type PaintRequest,
+} from "../packages/story-writer/src/engine/packages/server/src/services/story-writer/illustrations.ts";
+import {
+  PICTURE_SIZE,
+  storyWriterRoutes,
+} from "../packages/story-writer/src/engine/packages/server/src/services/story-writer/routes.ts";
 import {
   createStoryStore,
   type StoryDocument,
@@ -357,7 +366,8 @@ test("reading a story repairs a missing chapter and stale totals left by an inte
   assert.equal((row(documentId)!.data as { wordCount: number }).wordCount, 3);
 });
 
-test("routes answer known failures with { error } and hide unexpected ones behind a logged 500", async () => {
+/** Story Writer's routes on a fake router; `call` runs one like Fastify would and returns its status and payload. */
+async function routeHarness(store: ReturnType<typeof createStoryStore>, images: IllustrationImages = NO_IMAGES) {
   const routes = new Map<
     string,
     { options: unknown; handler: (request: unknown, reply: unknown) => Promise<unknown> }
@@ -385,9 +395,23 @@ test("routes answer known failures with { error } and hide unexpected ones behin
     const result = await routes.get(key)!.handler({ params: {}, body: undefined, ...request }, reply);
     return result === reply ? sent : { code: 200, payload: result };
   };
+  await storyWriterRoutes(store, logger, images)(router);
+  return { routes, call, logged, logger, router };
+}
 
+/** An Engine that must never be asked to paint. */
+const NO_IMAGES: IllustrationImages = {
+  paint: async () => {
+    throw new Error("nothing may be painted here");
+  },
+  remove: async () => {
+    throw new Error("nothing may be deleted here");
+  },
+};
+
+test("routes answer known failures with { error } and hide unexpected ones behind a logged 500", async () => {
   const { store } = setup();
-  await storyWriterRoutes(store, logger)(router);
+  const { routes, call, logged, logger, router } = await routeHarness(store);
   assert.deepEqual(routes.get("PATCH /stories/:storyId/chapters/:chapterId")!.options, { bodyLimit: 4 * 1024 * 1024 });
   assert.equal(routes.get("GET /stories/:storyId")!.options, null);
   const created = await call("POST /stories", { body: { settings: { title: "Via route" } } });
@@ -405,7 +429,7 @@ test("routes answer known failures with { error } and hide unexpected ones behin
     throw new Error("disk failed at /private/data/path");
   };
   routes.clear();
-  await storyWriterRoutes(createStoryStore(failing.persistence), logger)(router);
+  await storyWriterRoutes(createStoryStore(failing.persistence), logger, NO_IMAGES)(router);
   assert.deepEqual(await call("GET /stories", {}), {
     code: 500,
     payload: { error: "Story Writer could not complete the request." },
@@ -434,4 +458,320 @@ test("a chapter left unlisted by a failed story update is adopted by the retry, 
   const other = await store.createStory({ title: "Other" });
   await assert.rejects(store.createChapter(other.story.id, { id: chapterId, text: "Theft" }), { statusCode: 409 });
   assert.equal((await store.getStory(story.id)).chapters[0]?.text, "Second try, longer");
+});
+
+// ── Illustrate ──
+
+const u32 = (value: number) => Buffer.from([value >>> 24, (value >>> 16) & 255, (value >>> 8) & 255, value & 255]);
+/** The start of the 1024×1536 PNG GPT Image paints for 896×1152: its signature and header, all imageSize reads. */
+const PNG_BASE64 = Buffer.concat([
+  Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"),
+  u32(1024),
+  u32(1536),
+  Buffer.from("0806000000", "hex"),
+]).toString("base64");
+
+test("a picture's size is read from its own header", () => {
+  assert.deepEqual(imageSize(Buffer.from(PNG_BASE64, "base64")), { width: 1024, height: 1536 });
+  const gif = Buffer.from("GIF89a\x00\x04\x00\x06", "latin1");
+  assert.deepEqual(imageSize(gif), { width: 1024, height: 1536 });
+  const webp = Buffer.alloc(30);
+  webp.write("RIFF", 0, "ascii");
+  webp.write("WEBPVP8X", 8, "ascii");
+  webp.writeUIntLE(1023, 24, 3);
+  webp.writeUIntLE(1791, 27, 3);
+  assert.deepEqual(imageSize(webp), { width: 1024, height: 1792 });
+  // A JPEG's size is in its first frame header, after the segments before it (here an APP0).
+  const jpeg = Buffer.from("ffd8ffe000041234ffc0001108070004000301", "hex");
+  assert.deepEqual(imageSize(jpeg), { width: 1024, height: 1792 });
+  assert.equal(imageSize(Buffer.from("0000001c6674797061766966", "hex")), null);
+});
+
+test("the paint request: the reviewed prompt goes to the Engine as an override, with debugMode, and the picture to the Global Gallery", async () => {
+  const requests: Array<{ url: string; method: string; json?: any; form?: FormData }> = [];
+  const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    const body = init?.body;
+    requests.push({
+      url: String(url),
+      method,
+      json: typeof body === "string" ? JSON.parse(body) : undefined,
+      form: body instanceof FormData ? body : undefined,
+    });
+    if (String(url).endsWith("/api/characters/avatar-generation")) {
+      // xAI's answer: a data URL inside the Engine's own, typed by its bytes rather than its label. Like GPT Image's,
+      // it says no size: the Engine reports one only when it adjusted the request.
+      return Response.json({
+        image: `data:image/png;base64,data:image/jpeg;base64,${PNG_BASE64}`,
+        provider: "image_generation",
+        model: "e2e-painter",
+      });
+    }
+    if (String(url).endsWith("/api/global-gallery/upload")) {
+      return Response.json({ id: "img_42", url: "/api/global-gallery/file/img_42.png" });
+    }
+    if (method === "DELETE") return new Response(null, { status: String(url).endsWith("/shared") ? 409 : 200 });
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+  const images = createIllustrationImages({ baseUrl: "http://127.0.0.1:7860", fetch: fetchImpl });
+  const picture = await images.paint({
+    connectionId: "image-connection",
+    prompt: "A tired watchman under a singing gutter at night.",
+    negativePrompt: "text, letters",
+    width: 896,
+    height: 1152,
+    debugMode: true,
+  });
+  // The size the picture really has, so the book's box has its shape and crops nothing.
+  assert.deepEqual(picture, { id: "img_42", url: "/api/global-gallery/file/img_42.png", width: 1024, height: 1536 });
+  assert.deepEqual(
+    requests.map((request) => `${request.method} ${request.url}`),
+    [
+      "POST http://127.0.0.1:7860/api/characters/avatar-generation",
+      "POST http://127.0.0.1:7860/api/global-gallery/upload",
+    ],
+  );
+  assert.deepEqual(requests[0]!.json, {
+    connectionId: "image-connection",
+    name: "Story Writer illustration",
+    appearance: "A tired watchman under a singing gutter at night.",
+    purpose: "avatar",
+    width: 896,
+    height: 1152,
+    debugMode: true,
+    // The Engine matches avatar:<slug of name> and then paints this prompt exactly, with no portrait wording of its own.
+    promptOverrides: [
+      {
+        id: "avatar:story-writer-illustration",
+        prompt: "A tired watchman under a singing gutter at night.",
+        negativePrompt: "text, letters",
+      },
+    ],
+  });
+  const form = requests[1]!.form!;
+  // The Engine reads only the fields sent before the file.
+  assert.deepEqual([...form.keys()], ["prompt", "provider", "model", "width", "height", "file"]);
+  assert.equal(form.get("prompt"), "A tired watchman under a singing gutter at night.");
+  assert.equal(form.get("model"), "e2e-painter");
+  assert.deepEqual([form.get("width"), form.get("height")], ["1024", "1536"]);
+  const file = form.get("file") as File;
+  assert.equal(file.type, "image/png");
+  assert.equal(file.name, "story-illustration.png");
+  assert.equal(Buffer.from(await file.arrayBuffer()).toString("base64"), PNG_BASE64);
+
+  assert.equal(await images.remove("img_42"), true);
+  assert.equal(requests.at(-1)!.url, "http://127.0.0.1:7860/api/global-gallery/img_42");
+  // The Engine keeps a picture another document still uses (409): it is not deleted.
+  assert.equal(await images.remove("shared"), false);
+  assert.equal(await images.remove(""), false);
+
+  const failing = createIllustrationImages({
+    baseUrl: "http://127.0.0.1:7860",
+    fetch: (async () => Response.json({ error: "The provider refused the prompt." }, { status: 500 })) as typeof fetch,
+  });
+  await assert.rejects(
+    failing.paint({ connectionId: "c", prompt: "p", negativePrompt: "", width: 1, height: 1, debugMode: false }),
+    /The provider refused the prompt\./,
+  );
+});
+
+/** A fake Engine image connection: it records each paint and deletion, and paints gallery pictures img-1, img-2, ... */
+function fakeImages() {
+  const painted: PaintRequest[] = [];
+  const removed: string[] = [];
+  const images: IllustrationImages = {
+    async paint(request) {
+      painted.push(request);
+      const id = `img-${painted.length}`;
+      return { id, url: `/api/global-gallery/file/${id}.png`, width: 896, height: 1152 };
+    },
+    async remove(id) {
+      removed.push(id);
+      return true;
+    },
+  };
+  return { images, painted, removed };
+}
+
+test("a painted picture is stored in its chapter, survives every text write, and leaves the gallery when removed", async () => {
+  const { store } = setup();
+  const { images, painted, removed } = fakeImages();
+  const { call } = await routeHarness(store, images);
+  const { story } = await store.createStory({ title: "Pictures" });
+  const created = await store.createChapter(story.id, { text: "First paragraph.\n\nThe gutter sang off key." });
+  const chapterId = created.chapters[0]!.id;
+  const params = { storyId: story.id, chapterId };
+  const path = "POST /stories/:storyId/chapters/:chapterId/illustrations";
+
+  // Without an image connection, a bad request or a missing chapter, nothing is painted (and nothing is paid for).
+  assert.equal((await call(path, { params, body: { prompt: "A gutter.", paragraph: 1, anchor: "" } })).code, 400);
+  assert.equal((await call(path, { params, body: { connectionId: "img", prompt: " ", paragraph: 1 } })).code, 400);
+  assert.equal((await call(path, { params, body: { connectionId: "img", prompt: "A", paragraph: -1 } })).code, 400);
+  const missing = { storyId: story.id, chapterId: randomUUID() };
+  assert.equal(
+    (await call(path, { params: missing, body: { connectionId: "img", prompt: "A", paragraph: 0 } })).code,
+    404,
+  );
+  assert.equal(painted.length, 0);
+
+  const answer = await call(path, {
+    params,
+    body: {
+      connectionId: "img",
+      prompt: "  A tired watchman under a singing gutter.  ",
+      paragraph: 1,
+      anchor: "The gutter sang off key.",
+      debugMode: true,
+    },
+  });
+  assert.equal(answer.code, 200);
+  assert.deepEqual(painted, [
+    {
+      connectionId: "img",
+      prompt: "A tired watchman under a singing gutter.",
+      negativePrompt:
+        "text, letters, words, writing, captions, speech bubbles, signatures, watermarks, logos, borders, UI",
+      ...PICTURE_SIZE,
+      debugMode: true,
+    },
+  ]);
+  const [picture] = (answer.payload as { chapter: { illustrations: any[] } }).chapter.illustrations;
+  assert.match(picture.id, /^picture-[0-9a-f-]{36}$/);
+  assert.deepEqual(
+    { ...picture, id: "" },
+    {
+      id: "",
+      // The Engine refuses to delete a gallery image while a package document holds this reference.
+      image: "global-gallery:img-1",
+      url: "/api/global-gallery/file/img-1.png",
+      prompt: "A tired watchman under a singing gutter.",
+      width: 896,
+      height: 1152,
+      paragraph: 1,
+      anchor: "The gutter sang off key.",
+    },
+  );
+  const stored = async () => (await store.getStory(story.id)).chapters[0]!;
+  assert.deepEqual((await stored()).illustrations, [picture]);
+
+  // Continue, an edit, Rewrite's emptied chapter and a client that sends pictures of its own: the pictures stay.
+  await store.patchChapter(story.id, chapterId, { text: "First paragraph.\n\nThe gutter sang off key.\n\nMore rain." });
+  await store.patchChapter(story.id, chapterId, { text: "", summary: "", status: "draft", request: "Continue." });
+  await store.patchChapter(story.id, chapterId, {
+    text: "A rewritten chapter.",
+    illustrations: [],
+  } as Record<string, unknown>);
+  assert.deepEqual((await stored()).illustrations, [picture]);
+  assert.equal((await stored()).text, "A rewritten chapter.");
+  // A duplicate keeps the reference too, so the Engine keeps the picture while either story has it.
+  const copy = await store.duplicateStory(story.id);
+  assert.deepEqual(copy.chapters[0]!.illustrations, [picture]);
+
+  // Illustrate again: a new picture in the old one's place. The old one stays in the Global Gallery.
+  const again = await call(path, {
+    params,
+    body: {
+      connectionId: "img",
+      prompt: "The same, at dawn.",
+      paragraph: 1,
+      anchor: picture.anchor,
+      replace: picture.id,
+    },
+  });
+  assert.equal(again.code, 200);
+  const [second] = (again.payload as { chapter: { illustrations: any[] } }).chapter.illustrations;
+  assert.equal(second.image, "global-gallery:img-2");
+  assert.deepEqual(removed, []);
+  assert.deepEqual((await stored()).illustrations, [second]);
+
+  // Removing it takes it out of the chapter first, then asks the Engine to delete the gallery image.
+  const deletePath = "DELETE /stories/:storyId/chapters/:chapterId/illustrations/:illustrationId";
+  const gone = await call(deletePath, { params: { ...params, illustrationId: second.id } });
+  assert.equal(gone.code, 200);
+  assert.deepEqual((gone.payload as { chapter: { illustrations: unknown[] } }).chapter.illustrations, []);
+  assert.deepEqual((await stored()).illustrations, []);
+  assert.deepEqual(removed, ["img-2"]);
+  assert.equal((await call(deletePath, { params: { ...params, illustrationId: second.id } })).code, 404);
+  assert.deepEqual(removed, ["img-2"]);
+});
+
+test("a failed paint stores nothing, and a picture whose chapter went meanwhile leaves the gallery again", async () => {
+  const { store } = setup();
+  const { story } = await store.createStory({});
+  const created = await store.createChapter(story.id, { text: "Text." });
+  const params = { storyId: story.id, chapterId: created.chapters[0]!.id };
+  const path = "POST /stories/:storyId/chapters/:chapterId/illustrations";
+  const body = { connectionId: "img", prompt: "Rain.", paragraph: 0, anchor: "Text." };
+
+  const refusing = await routeHarness(store, {
+    paint: async () => {
+      throw new Error("The provider refused the prompt.");
+    },
+    remove: async () => true,
+  });
+  assert.deepEqual(await refusing.call(path, { params, body }), {
+    code: 502,
+    payload: { error: "The picture could not be painted. The provider refused the prompt." },
+  });
+  assert.equal(refusing.logged.length, 1);
+  assert.deepEqual((await store.getStory(story.id)).chapters[0]!.illustrations, []);
+
+  const removed: string[] = [];
+  const racing = await routeHarness(store, {
+    async paint() {
+      // The author deletes the chapter while it is being painted.
+      await store.deleteChapter(story.id, params.chapterId);
+      return { id: "img-late", url: "/api/global-gallery/file/img-late.png", width: 1, height: 1 };
+    },
+    async remove(id) {
+      removed.push(id);
+      return true;
+    },
+  });
+  assert.equal((await racing.call(path, { params, body })).code, 404);
+  assert.deepEqual(removed, ["img-late"]);
+});
+
+test("a painted picture that is not stored leaves the gallery again: a failed write, or a chapter filled meanwhile", async () => {
+  const { store, failNextUpdate, setData, row } = setup();
+  const { images, painted, removed } = fakeImages();
+  const { call } = await routeHarness(store, images);
+  const { story } = await store.createStory({});
+  const created = await store.createChapter(story.id, { text: "Text." });
+  const chapterId = created.chapters[0]!.id;
+  const params = { storyId: story.id, chapterId };
+  const path = "POST /stories/:storyId/chapters/:chapterId/illustrations";
+  const body = { connectionId: "img", prompt: "Rain.", paragraph: 0, anchor: "Text." };
+  const stored = async () => (await store.getStory(story.id)).chapters[0]!.illustrations;
+
+  // The disk fails after the paint: the answer is an error, and the paid picture is not left in the gallery.
+  failNextUpdate(chapterDocumentId(chapterId));
+  assert.equal((await call(path, { params, body })).code, 500);
+  assert.deepEqual(removed, ["img-1"]);
+  assert.deepEqual(await stored(), []);
+
+  // One picture short of the limit, two Illustrates at once: both are painted, one is stored, the other deleted.
+  const documentId = chapterDocumentId(chapterId);
+  const full = Array.from({ length: 99 }, (_, index) => ({
+    id: `picture-${String(index).padStart(8, "0")}`,
+    image: `global-gallery:old-${index}`,
+    url: `/api/global-gallery/file/old-${index}.png`,
+    prompt: "",
+    width: 896,
+    height: 1152,
+    paragraph: 0,
+    anchor: "",
+  }));
+  setData(documentId, { ...(row(documentId)!.data as object), illustrations: full });
+  const answers = await Promise.all([call(path, { params, body }), call(path, { params, body })]);
+  assert.deepEqual(answers.map((answer) => answer.code).sort(), [200, 400]);
+  assert.deepEqual(answers.find((answer) => answer.code === 400)!.payload, {
+    error: "A chapter can have at most 100 pictures.",
+  });
+  assert.equal(painted.length, 3);
+  const kept = (await stored()).map((item) => item.image.slice("global-gallery:".length));
+  assert.equal(kept.length, 100);
+  assert.equal(removed.length, 2);
+  assert.ok(!kept.includes(removed[1]!), "the picture that was deleted is not the one stored");
+  assert.ok(["img-2", "img-3"].includes(removed[1]!));
 });

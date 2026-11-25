@@ -8,6 +8,9 @@ export const STORY_WRITER_PACKAGE_ID = "story-writer";
 
 export const DEFAULT_SYSTEM_PROMPT =
   "You are an excellent writer for the user. Your goal is to write the next chapter of this fictional story.";
+/** What an unchanged default prompt says with Chapter length "Off (I decide)", which never asks for a chapter. */
+export const DEFAULT_WRITER_SYSTEM_PROMPT =
+  "You are an excellent writer for the user. Your goal is to write the next part of this fictional story.";
 export const DEFAULT_BANNED_PHRASES = "ozone, jaws working, Elara";
 export const DEFAULT_CONTINUE_MESSAGE = "Continue.";
 export const DEFAULT_CHAPTER_WORDS = 2000;
@@ -30,6 +33,9 @@ export const LIMITS = {
   authorNoteDepth: { min: 0, max: 100 },
   fontSize: { min: 12, max: 36 },
   chaptersPerStory: 2_000,
+  illustrationsPerChapter: 100,
+  picturePrompt: 4_000,
+  illustrationAnchor: 120,
 } as const;
 
 /** "document": no pages, one column of chapters that scrolls down. A package before 0.3.0 reads it as "book". */
@@ -76,8 +82,15 @@ export interface TimelineEvent {
 export interface StorySettings {
   title: string;
   connectionId: string | null;
+  /** The Engine image connection Illustrate paints with; null = none, and Illustrate never makes a paid call. */
+  imageConnectionId: string | null;
   /** Target length of one chapter, in words. */
   chapterWords: number;
+  /**
+   * Chapter length "Off (I decide)": Generate writes into the chapter the author is on, never ends one and never starts
+   * one. `chapterWords` is kept for when a length is picked again. Absent (a story from before 0.5.0) = false.
+   */
+  writerDecides: boolean;
   /** Target length of the whole story, in words; null = open-ended. */
   targetWords: number | null;
   characterIds: string[];
@@ -120,16 +133,41 @@ export interface StorySettings {
 
 export type ChapterStatus = "draft" | "complete";
 
+/** A picture beside a paragraph of a chapter, painted by the Engine's image connection and kept in its Global Gallery. */
+export interface StoryIllustration {
+  id: string;
+  /** `global-gallery:<id>`: while a package document holds it, the Engine refuses to delete that gallery image. */
+  image: string;
+  /** Where the Engine serves the picture: /api/global-gallery/file/<name>. */
+  url: string;
+  /** The picture prompt it was painted from, which is also its description for screen readers. */
+  prompt: string;
+  width: number;
+  height: number;
+  /** The block it sits beside, by its index among the chapter's blocks (markdownBlocks) when it was painted... */
+  paragraph: number;
+  /** ...and that block's opening words, which find it again after the text above it changes (anchorIndex). */
+  anchor: string;
+}
+
 export interface StoryChapter {
   id: string;
   storyId: string;
   /** Markdown. */
   text: string;
   summary: string;
-  /** "draft": started by the author, or cut off; Write continues it. "complete": Write starts a new chapter. */
+  /**
+   * "draft": started by the author, or cut off; Write continues it. "complete": Write starts a new chapter. Generate
+   * (Chapter length "Off") never changes it.
+   */
   status: ChapterStatus;
   /** The user message that produced this chapter, so history replays what was really asked. */
   request: string;
+  /**
+   * Its pictures, in the order they were painted. Only the illustration routes change them: a chapter save, a
+   * generation, Continue and Rewrite write the text and leave them as they are.
+   */
+  illustrations: StoryIllustration[];
   createdAt: string;
   updatedAt: string;
 }
@@ -171,7 +209,23 @@ export interface StoryWithChapters {
 // POST   /story-writer/stories/:id/chapters  ChapterCreate → StoryWithChapters
 // PATCH  /story-writer/stories/:id/chapters/:chapterId  ChapterPatch → { story: StoryRecord; chapter: StoryChapter }
 // DELETE /story-writer/stories/:id/chapters/:chapterId     → StoryWithChapters
-// Errors: { error: string } with 400 (invalid input), 404 (unknown story/chapter), 409 (chapter id taken).
+// POST   /story-writer/stories/:id/chapters/:chapterId/illustrations  IllustrationCreate
+//                                                          → { story: StoryRecord; chapter: StoryChapter }
+// DELETE /story-writer/stories/:id/chapters/:chapterId/illustrations/:illustrationId
+//                                                          → { story: StoryRecord; chapter: StoryChapter }
+// Errors: { error: string } with 400 (invalid input), 404 (unknown story/chapter), 409 (chapter id taken), 502 (the
+// Engine could not paint or keep the picture).
+
+/** Paints a picture with the Engine's image connection and puts it in the chapter beside one of its blocks. */
+export interface IllustrationCreate {
+  connectionId: string;
+  prompt: string;
+  paragraph: number;
+  anchor: string;
+  /** Illustrate again: the illustration this one takes the place of. */
+  replace?: string;
+  debugMode?: boolean;
+}
 
 export interface ChapterCreate {
   /** Optional client id (CLIENT_ID_PATTERN), so a chapter the author starts typing keeps its element. */
@@ -223,7 +277,9 @@ export function defaultStorySettings(): StorySettings {
   return {
     title: "",
     connectionId: null,
+    imageConnectionId: null,
     chapterWords: DEFAULT_CHAPTER_WORDS,
+    writerDecides: false,
     targetWords: null,
     characterIds: [],
     personaIds: [],
@@ -339,11 +395,15 @@ function normalizeEntries<T extends { text: string }>(
 export function normalizeStorySettings(patch: unknown, base: StorySettings = defaultStorySettings()): StorySettings {
   const input = isRecord(patch) ? patch : {};
   const connectionId = "connectionId" in input ? input.connectionId : base.connectionId;
+  const imageConnectionId = "imageConnectionId" in input ? input.imageConnectionId : base.imageConnectionId;
   const targetWords = "targetWords" in input ? input.targetWords : base.targetWords;
   return {
     title: text(input.title, 300, base.title),
     connectionId: typeof connectionId === "string" && connectionId.trim() ? connectionId.trim().slice(0, 200) : null,
+    imageConnectionId:
+      typeof imageConnectionId === "string" && imageConnectionId.trim() ? imageConnectionId.trim().slice(0, 200) : null,
     chapterWords: integer(input.chapterWords, LIMITS.chapterWords, base.chapterWords),
+    writerDecides: typeof input.writerDecides === "boolean" ? input.writerDecides : base.writerDecides,
     targetWords:
       targetWords === null || targetWords === "" || targetWords === 0
         ? null
@@ -380,7 +440,38 @@ export function normalizeStorySettings(patch: unknown, base: StorySettings = def
   };
 }
 
-/** Normalizes a chapter write. Unknown statuses keep the base status. */
+export const GALLERY_REF_PREFIX = "global-gallery:";
+const GALLERY_REF = /^global-gallery:[A-Za-z0-9_-]{1,200}$/;
+const GALLERY_FILE_URL = /^\/api\/global-gallery\/file\/[A-Za-z0-9._%-]{1,300}$/;
+
+/** A chapter's stored pictures: each with a valid id, gallery reference and gallery URL, at most one per id. */
+export function normalizeIllustrations(value: unknown): StoryIllustration[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const list: StoryIllustration[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const { id, image, url } = item;
+    if (typeof id !== "string" || !CLIENT_ID_PATTERN.test(id) || seen.has(id)) continue;
+    if (typeof image !== "string" || !GALLERY_REF.test(image)) continue;
+    if (typeof url !== "string" || !GALLERY_FILE_URL.test(url)) continue;
+    seen.add(id);
+    list.push({
+      id,
+      image,
+      url,
+      prompt: text(item.prompt, LIMITS.picturePrompt, ""),
+      width: integer(item.width, { min: 1, max: 8192 }, 1024),
+      height: integer(item.height, { min: 1, max: 8192 }, 1024),
+      paragraph: integer(item.paragraph, { min: 0, max: 1_000_000 }, 0),
+      anchor: text(item.anchor, LIMITS.illustrationAnchor, ""),
+    });
+    if (list.length >= LIMITS.illustrationsPerChapter) break;
+  }
+  return list;
+}
+
+/** Normalizes a chapter write. Unknown statuses keep the base status. Pictures are never part of one. */
 export function normalizeChapterPatch(patch: unknown): ChapterPatch {
   const input = isRecord(patch) ? patch : {};
   const result: ChapterPatch = {};

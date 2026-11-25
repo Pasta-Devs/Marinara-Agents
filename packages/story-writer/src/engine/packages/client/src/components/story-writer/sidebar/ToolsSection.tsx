@@ -40,6 +40,7 @@ export function ToolsSection(props: {
       <h4 className="sw-subheading">{t("tools.chapters")}</h4>
       <ChapterList
         chapters={chapters}
+        showDrafts={!settings.writerDecides}
         canGenerate={canGenerate}
         generation={generation}
         onSaveSummary={props.onSaveSummary}
@@ -102,7 +103,7 @@ export function ToolsSection(props: {
       <h4 className="sw-subheading">{t("tools.authorNote")}</h4>
       <Toggle
         label={t("tools.clearNote")}
-        hint={t("tools.clearNoteHint")}
+        hint={t(settings.writerDecides ? "tools.clearNoteHintGenerate" : "tools.clearNoteHint")}
         checked={settings.clearNoteAfterChapter}
         onChange={(clearNoteAfterChapter) => onChange({ clearNoteAfterChapter }, { immediate: true })}
       />
@@ -115,7 +116,7 @@ export function ToolsSection(props: {
             {t("tools.peek")}
           </button>
         </div>
-        <p className="sw-hint">{t("tools.peekHint")}</p>
+        <p className="sw-hint">{t(settings.writerDecides ? "tools.peekHintGenerate" : "tools.peekHint")}</p>
       </div>
     </>
   );
@@ -123,6 +124,8 @@ export function ToolsSection(props: {
 
 function ChapterList(props: {
   chapters: StoryChapter[];
+  /** Off when the writer decides: then a draft is only a chapter nobody has marked finished. */
+  showDrafts: boolean;
   canGenerate: boolean;
   generation: StoryGenerationApi;
   onSaveSummary(chapterId: string, summary: string): void;
@@ -169,7 +172,9 @@ function ChapterList(props: {
                   {number}
                 </span>
                 <span className="sw-toc-title">{displayTitle}</span>
-                {chapter.status === "draft" ? <span className="sw-toc-tag">{t("tools.draft")}</span> : null}
+                {props.showDrafts && chapter.status === "draft" ? (
+                  <span className="sw-toc-tag">{t("tools.draft")}</span>
+                ) : null}
                 <span className="sw-toc-words">{formatNumber(words)}</span>
               </button>
               <button

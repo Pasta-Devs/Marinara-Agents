@@ -125,3 +125,50 @@ test("Redo is withdrawn once the chapter or its summary is edited, it is deleted
   assert.equal(redoOffer(continued, found), 1);
   assert.equal(redoOffer(continued, story([...found.chapters, chapter(2)])), null);
 });
+
+test("Generate is remembered in the chapter it wrote into, even with chapters after it, and Redo puts that one back", () => {
+  const second = chapter(2, { text: "Vimes reached the bridge and", status: "draft", summary: "The bridge." });
+  const found = story([chapter(1), second, chapter(3)]);
+  const after = "Vimes reached the bridge and stopped.";
+  // Generate saves the text only: the status stays the author's.
+  const written = changed(found, second.id, { text: after });
+  const record = recordGeneration(found, {
+    requested: "generate",
+    override: "Slow down.",
+    chapterId: second.id,
+    after,
+  });
+
+  assert.equal(record.requested, "generate");
+  assert.deepEqual(record.before, fields(second));
+  assert.equal(record.afterSummary, "The bridge.");
+  assert.equal(redoOffer(record, written), 2);
+  // A chapter the author adds afterwards does not withdraw it; an edit, a new summary or a delete does.
+  assert.equal(redoOffer(record, story([...written.chapters, chapter(4)])), 2);
+  assert.equal(redoOffer(record, changed(written, second.id, { text: `${after} Mine.` })), null);
+  assert.equal(redoOffer(record, changed(written, second.id, { summary: "Mine." })), null);
+  assert.equal(redoOffer(record, story(written.chapters.filter((item) => item.id !== second.id))), null);
+  assert.deepEqual(changed(written, second.id, record.before!).chapters, found.chapters);
+});
+
+test("a picture painted into a chapter the run created withdraws Redo, which would delete it; elsewhere pictures stay", () => {
+  const picture = {
+    id: "picture-0000-0000",
+    image: "global-gallery:img-1",
+    url: "/api/global-gallery/file/img-1.png",
+    prompt: "Rain.",
+    width: 896,
+    height: 1152,
+    paragraph: 0,
+    anchor: "",
+  };
+  const before = story([chapter(1)]);
+  const created = recordGeneration(before, { requested: "next", chapterId: "chapter-2-0000", after: "New." });
+  const written = story([chapter(1), chapter(2, { text: "New." })]);
+  assert.equal(redoOffer(created, written), 2);
+  assert.equal(redoOffer(created, changed(written, "chapter-2-0000", { illustrations: [picture] })), null);
+  // Continue puts the text back and keeps the picture, so Redo is still offered.
+  const continued = recordGeneration(before, { requested: "continue", chapterId: "chapter-1-0000", after: "More." });
+  const more = changed(before, "chapter-1-0000", { text: "More.", illustrations: [picture] });
+  assert.equal(redoOffer(continued, more), 1);
+});

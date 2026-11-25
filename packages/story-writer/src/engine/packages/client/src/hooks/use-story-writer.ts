@@ -348,9 +348,13 @@ function chapterTarget(qc: QueryClient, storyId: string, chapterId: string): Sav
       const saved = result as { story: StoryRecord; chapter: StoryChapter };
       updateStoryCache(client, id, (doc) => ({
         story: mergeRecord(doc.story, saved.story),
+        // The pictures stay as the cache has them: only the illustration routes change them, and a text save that
+        // answers after one of those must not bring back the pictures from before it.
         chapters: isDirty(key)
           ? doc.chapters
-          : doc.chapters.map((chapter) => (chapter.id === chapterId ? saved.chapter : chapter)),
+          : doc.chapters.map((chapter) =>
+              chapter.id === chapterId ? { ...saved.chapter, illustrations: chapter.illustrations } : chapter,
+            ),
       }));
       syncStorySummary(client, id);
     },
@@ -411,6 +415,24 @@ function useReportQueryError(error: unknown, key: string) {
   useEffect(() => {
     if (error) reportError(error, key);
   }, [error, key]);
+}
+
+/**
+ * An illustration route's answer: the chapter's pictures and the story's record, with any text the author typed
+ * meanwhile kept as it is.
+ */
+export function applyChapterPictures(
+  qc: QueryClient,
+  storyId: string,
+  result: { story: StoryRecord; chapter: StoryChapter },
+) {
+  updateStoryCache(qc, storyId, (doc) => ({
+    story: mergeRecord(doc.story, result.story),
+    chapters: doc.chapters.map((chapter) =>
+      chapter.id === result.chapter.id ? { ...chapter, illustrations: result.chapter.illustrations } : chapter,
+    ),
+  }));
+  syncStorySummary(qc, storyId);
 }
 
 // ── Hooks ──
@@ -657,6 +679,7 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
         summary: fields.summary ?? "",
         status: fields.status ?? "draft",
         request: fields.request ?? "",
+        illustrations: [],
         createdAt: now,
         updatedAt: now,
       };

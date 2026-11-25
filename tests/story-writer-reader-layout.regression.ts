@@ -5,6 +5,7 @@ import {
   choosePagesPerSpread,
   computeReaderLayout,
   countPages,
+  illustrationBox,
   pageAtTrackX,
   pageOffset,
   spreadOfPage,
@@ -123,4 +124,38 @@ test("page counting inverts the column grid", () => {
   assert.equal(pageAtTrackX(-10, W, G), 0);
   assert.equal(pageAtTrackX(W + G / 2 - 1, W, G), 0, "the left half of a gap belongs to the page before it");
   assert.equal(pageAtTrackX(W + G / 2, W, G), 1);
+});
+
+test("a picture is measured in whole pixels that always fit a page: beside the text on a wide page, full width on a phone", () => {
+  const portrait = { width: 896, height: 1152 };
+  for (const fixture of fixtures) {
+    const layout = computeReaderLayout(fixture);
+    for (const picture of [portrait, { width: 1536, height: 640 }, { width: 400, height: 3000 }]) {
+      const box = illustrationBox(layout, 18, picture);
+      const label = `${fixture.name} ${picture.width}×${picture.height}`;
+      assert.ok(Number.isInteger(box.width) && Number.isInteger(box.height), `${label}: whole pixels`);
+      assert.ok(box.width >= 1 && box.width <= layout.textWidth, `${label}: no wider than the text`);
+      // Never more than 60% of a page, so it fits under a chapter heading and is never cut by a page edge.
+      assert.ok(box.height <= Math.floor(layout.textHeight * 0.6), `${label}: no taller than 60% of the page`);
+      assert.ok(
+        Math.abs(box.width / box.height - picture.width / picture.height) <
+          0.1 * (picture.width / picture.height) + 1 / box.height,
+        `${label}: keeps its shape`,
+      );
+    }
+  }
+  const desktop = computeReaderLayout({ theme: "book", width: 1400, height: 820 });
+  const beside = illustrationBox(desktop, 18, portrait);
+  assert.equal(beside.float, true);
+  assert.equal(beside.width, Math.floor(desktop.textWidth * 0.42));
+  const phone = computeReaderLayout({ theme: "ebook", width: 390, height: 700 });
+  const between = illustrationBox(phone, 18, { width: 1536, height: 640 });
+  assert.equal(between.float, false);
+  assert.equal(between.width, phone.textWidth);
+  // A laptop's book page still has room beside it; a bigger font makes the same page a phone's.
+  assert.equal(
+    illustrationBox(computeReaderLayout({ theme: "book", width: 1080, height: 640 }), 18, portrait).float,
+    true,
+  );
+  assert.equal(illustrationBox(desktop, 36, portrait).float, false);
 });
