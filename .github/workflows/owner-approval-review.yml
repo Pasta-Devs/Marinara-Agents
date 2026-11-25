@@ -5,9 +5,9 @@ on:
     workflows: [Owner Approval Review Signal]
     types: [completed]
 
-concurrency:
-  group: owner-approval-review-${{ github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}
-  cancel-in-progress: true
+# No concurrency group: GitHub runs this workflow from the default branch and shows its runs on that branch's head
+# commit, where a cancelled run looks like a failed check. A run that a newer review replaces ends successfully instead,
+# in the two "Check for a newer review" steps.
 
 jobs:
   evaluate:
@@ -72,21 +72,100 @@ jobs:
 
             core.setOutput('number', String(pullNumbers[0]));
 
-      - name: Checkout trusted default branch
+      # Each review starts a run, so a burst of reviews starts several at once. Only the newest one publishes. An older
+      # run stops here, before the checkout (which takes about two minutes), and checks again right before it publishes.
+      # Both steps run the same read-only script.
+      - name: Check for a newer review
+        id: early
         if: steps.pull-request.outputs.number != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ steps.pull-request.outputs.number }}
+        with:
+          script: |
+            // A newer Owner Approval Review Signal run for this pull request starts its own run of this workflow.
+            const signal = context.payload.workflow_run;
+            try {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: signal.workflow_id,
+                created: `>=${signal.created_at}`,
+                per_page: 100,
+              });
+              // A run waiting for approval, or one that never started, starts no evaluation.
+              const idle = ['action_required', 'startup_failure'];
+              const newer = runs.find(
+                (run) =>
+                  run.id > signal.id &&
+                  !idle.includes(run.status) &&
+                  !idle.includes(run.conclusion) &&
+                  (run.pull_requests?.length
+                    ? run.pull_requests.some((pullRequest) => String(pullRequest.number) === process.env.PR_NUMBER)
+                    : run.head_sha === signal.head_sha),
+              );
+              if (newer) {
+                core.notice(`Review signal run ${newer.id} is newer; its own evaluation publishes the status.`);
+                core.setOutput('superseded', 'true');
+              }
+            } catch (error) {
+              core.warning(`Could not look for a newer review signal, so this run publishes: ${error.message}`);
+            }
+
+      - name: Checkout trusted default branch
+        if: steps.pull-request.outputs.number != '' && steps.early.outputs.superseded != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - name: Set up Node.js
-        if: steps.pull-request.outputs.number != ''
+        if: steps.pull-request.outputs.number != '' && steps.early.outputs.superseded != 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
+      - name: Check for a newer review before publishing
+        id: late
+        if: steps.pull-request.outputs.number != '' && steps.early.outputs.superseded != 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ steps.pull-request.outputs.number }}
+        with:
+          script: |
+            // A newer Owner Approval Review Signal run for this pull request starts its own run of this workflow.
+            const signal = context.payload.workflow_run;
+            try {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: signal.workflow_id,
+                created: `>=${signal.created_at}`,
+                per_page: 100,
+              });
+              // A run waiting for approval, or one that never started, starts no evaluation.
+              const idle = ['action_required', 'startup_failure'];
+              const newer = runs.find(
+                (run) =>
+                  run.id > signal.id &&
+                  !idle.includes(run.status) &&
+                  !idle.includes(run.conclusion) &&
+                  (run.pull_requests?.length
+                    ? run.pull_requests.some((pullRequest) => String(pullRequest.number) === process.env.PR_NUMBER)
+                    : run.head_sha === signal.head_sha),
+              );
+              if (newer) {
+                core.notice(`Review signal run ${newer.id} is newer; its own evaluation publishes the status.`);
+                core.setOutput('superseded', 'true');
+              }
+            } catch (error) {
+              core.warning(`Could not look for a newer review signal, so this run publishes: ${error.message}`);
+            }
+
       - name: Publish owner approval status
-        if: steps.pull-request.outputs.number != ''
+        if: >-
+          steps.pull-request.outputs.number != '' && steps.early.outputs.superseded != 'true' &&
+          steps.late.outputs.superseded != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           MEMBERS_TOKEN_CONFIGURED: ${{ secrets.PASTA_DEVS_MEMBERS_TOKEN != '' }}

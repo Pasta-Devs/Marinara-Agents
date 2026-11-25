@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { validateDefaultBranchRuns } from "./validate-default-branch-runs.mjs";
 import { validateDottoreReadiness } from "./validate-dottore-readiness.mjs";
 
 function extractNamedStep(workflow, stepName) {
@@ -30,8 +31,9 @@ function extractJob(workflow, jobId) {
   return workflow.slice(start, end).trimEnd();
 }
 
-export function validatePullRequestTriage() {
+export async function validatePullRequestTriage() {
   validateDottoreReadiness();
+  await validateDefaultBranchRuns();
   const triageWorkflow = readFileSync(new URL("../.github/workflows/pull-request-triage.yml", import.meta.url), "utf8");
   const reviewSignal = readFileSync(
     new URL("../.github/workflows/owner-approval-review-signal.yml", import.meta.url),
@@ -141,10 +143,6 @@ export function validatePullRequestTriage() {
     reviewEvaluator,
     /on:\n  workflow_run:\n    workflows: \[Owner Approval Review Signal\]\n    types: \[completed\]/u,
   );
-  assert.match(
-    reviewEvaluator,
-    /group: owner-approval-review-\$\{\{ github\.event\.workflow_run\.pull_requests\[0\]\.number \|\| github\.event\.workflow_run\.head_sha \}\}\n  cancel-in-progress: true/u,
-  );
   assert.match(reviewEvaluator, /statuses: write/u);
   assert.match(reviewEvaluator, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/u);
   assert.match(reviewEvaluator, /GET \/repos\/\{owner\}\/\{repo\}\/commits\/\{commit_sha\}\/pulls/u);
@@ -177,6 +175,6 @@ export function validatePullRequestTriage() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  validatePullRequestTriage();
+  await validatePullRequestTriage();
   console.info("Pull request workflow gates are stable and use a trusted token-backed staging approval status.");
 }
