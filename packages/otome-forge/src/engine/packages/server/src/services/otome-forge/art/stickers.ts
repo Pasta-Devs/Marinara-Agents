@@ -1,11 +1,14 @@
 // ──────────────────────────────────────────────
-// Otome Hearth: chat stickers (#2044): the protagonist's five, each love interest's nine, and their names
+// Otome Hearth: chat stickers (#2044): the protagonist's five, each love interest's nine, each friend's five, and their
+// names
 // ──────────────────────────────────────────────
 // The protagonist's five (SH/stickers.ts PLAYER_STICKERS) are painted for the run once the phone first opens with
 // images on (POST /runs/:run/stickers sets `player.stickers = {}`); until each is painted, and with images off, the
 // built-in set stands in. A love interest's nine are designed in one background text call (the Planning connection,
 // as his plush is) once he reaches level 2 with images on, ordered from guarded to close, and the sticker of each
-// level he reaches is painted: a story in progress catches up on every level already reached.
+// level he reaches is painted: a story in progress catches up on every level already reached. #2477: a friend's five
+// are designed the same way once they join (the next read of the run, so an older story catches up), and the sticker
+// of each friend level reached, from 1, is painted. A friend's set is kept on their unit, as a love interest's is.
 //
 // Paints follow the paint records' rules (art/paint.ts): one sticker at a time per run, claimed in its document before
 // the paid call, in the image connection's `low` lane behind taps and scene art; `waiting-consent` under Ask before
@@ -29,12 +32,14 @@ import type {
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { levelOf } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { friendLevelOf } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import {
   PLAYER_STICKERS,
   PLAYER_STICKER_LOOKS,
   PLAYER_STICKER_OWNER,
   STICKER_EMOTION,
   STICKER_FIRST_LEVEL,
+  STICKERS_PER_FRIEND,
   STICKERS_PER_LI,
   isPlayerSticker,
   parseStickerId,
@@ -69,20 +74,24 @@ import {
 } from "./paint.js";
 import { type ImagePrompt, STICKER_SIZE, stickerPrompt, stickerSetMessages } from "../prompts.js";
 
-type Run = Pick<RunDocuments, "world" | "player" | "units" | "state">;
+type Run = Pick<RunDocuments, "world" | "player" | "units" | "state" | "friends">;
 type Owner = typeof PLAYER_STICKER_OWNER | LiId;
+
+/** #2477: the love interests, then her friends: everyone who has stickers of their own. */
+const castOf = (run: Pick<Run, "units" | "friends">) => [...run.units, ...(run.friends ?? [])];
 
 // ── Names ──
 
 const slug = (name: string) => nameSlug(name).replace(/-/g, "_");
 
 /**
- * Each owner's name part: the protagonist keeps her slug; a love interest whose slug the protagonist or another love
- * interest shares gets `_<his id's last 4>` (ids end in 4 random characters), so two Kais read kai_ab12 and kai_cd34.
+ * Each owner's name part: the protagonist keeps her slug; a love interest (#2477: or friend) whose slug the protagonist
+ * or another of the cast shares gets `_<his id's last 4>` (ids end in 4 random characters), so two Kais read kai_ab12
+ * and kai_cd34.
  */
-export function stickerNames(run: Pick<Run, "player" | "units">): Map<Owner, string> {
+export function stickerNames(run: Pick<Run, "player" | "units" | "friends">): Map<Owner, string> {
   const player = slug(run.player.name);
-  const lis = run.units.map((unit) => [unit.id, slug(unit.name)] as const);
+  const lis = castOf(run).map((unit) => [unit.id, slug(unit.name)] as const);
   const taken = new Map<string, number>([[player, 1]]);
   for (const [, name] of lis) taken.set(name, (taken.get(name) ?? 0) + 1);
   return new Map<Owner, string>([
@@ -97,7 +106,7 @@ export type StickerLookup = (
 ) => { name: string; about: string; who: "player" | "li"; ownerName: string } | null;
 
 /** The lookup for this run's stickers (P17 and P18 render a thread's stickers through it). */
-export function stickerLookup(run: Pick<Run, "player" | "units">): StickerLookup {
+export function stickerLookup(run: Pick<Run, "player" | "units" | "friends">): StickerLookup {
   const names = stickerNames(run);
   return (id) => {
     const parsed = parseStickerId(id);
@@ -110,14 +119,14 @@ export function stickerLookup(run: Pick<Run, "player" | "units">): StickerLookup
       who: mine ? "player" : "li",
       ownerName: mine
         ? run.player.name || "the protagonist"
-        : (run.units.find((unit) => unit.id === parsed.owner)?.name ?? ""),
+        : (castOf(run).find((unit) => unit.id === parsed.owner)?.name ?? ""),
     };
   };
 }
 
 // ── What the player has ──
 
-/** A sticker owed to the player: the protagonist's five once started, and his up to the level reached. */
+/** A sticker owed to the player: the protagonist's five once started, and his (or a friend's) to the level reached. */
 export interface OwedSticker {
   id: string;
   owner: Owner;
@@ -128,7 +137,7 @@ export interface OwedSticker {
   art?: Paint;
 }
 
-export function owedStickers(run: Pick<Run, "player" | "units" | "state">): OwedSticker[] {
+export function owedStickers(run: Pick<Run, "player" | "units" | "state" | "friends">): OwedSticker[] {
   const owed: OwedSticker[] = [];
   const mine = run.player.stickers;
   if (mine) {
@@ -143,12 +152,9 @@ export function owedStickers(run: Pick<Run, "player" | "units" | "state">): Owed
       });
     }
   }
-  for (const unit of run.units) {
-    const progress = run.state.lis[unit.id];
-    if (!progress || !unit.stickers) continue;
-    const reached = levelOf(progress.points);
-    unit.stickers.set.forEach(({ emotion, label, look }, index) => {
-      const level = STICKER_FIRST_LEVEL + index;
+  const owe = (unit: Run["units"][number], reached: number, first: number, max: number) =>
+    unit.stickers?.set.slice(0, max).forEach(({ emotion, label, look }, index) => {
+      const level = first + index;
       const art = unit.stickers!.art[emotion];
       if (level <= reached)
         owed.push({
@@ -161,14 +167,22 @@ export function owedStickers(run: Pick<Run, "player" | "units" | "state">): Owed
           ...(art ? { art } : {}),
         });
     });
+  for (const unit of run.units) {
+    const progress = run.state.lis[unit.id];
+    if (progress) owe(unit, levelOf(progress.points), STICKER_FIRST_LEVEL, STICKERS_PER_LI);
+  }
+  // #2477: a friend's, one at each friend level (the stars) from 1.
+  for (const unit of run.friends ?? []) {
+    const friend = run.state.friends[unit.id];
+    if (friend) owe(unit, friendLevelOf(friend.points), 1, STICKERS_PER_FRIEND);
   }
   return owed;
 }
 
-const ownerDoc = (run: Pick<Run, "player" | "units">, owner: Owner) =>
+const ownerDoc = (run: Pick<Run, "player" | "units" | "friends">, owner: Owner) =>
   owner === PLAYER_STICKER_OWNER
     ? { id: "player", cutouts: run.player.cutouts ?? {} }
-    : run.units.find((unit) => unit.id === owner);
+    : castOf(run).find((unit) => unit.id === owner);
 
 /**
  * #2299: the pictures each saved repaint replaced, newest first, by run and new picture, so a cut-out of one of them
@@ -199,7 +213,7 @@ export function keepReplaced(runId: string, old: string, url: string): void {
  */
 function shownSticker(
   runId: string,
-  run: Pick<Run, "player" | "units">,
+  run: Pick<Run, "player" | "units" | "friends">,
   sticker: OwedSticker,
 ): { url: string | null; cutting: boolean } {
   const doc = ownerDoc(run, sticker.owner);
@@ -226,16 +240,16 @@ export function shownPicture(
 }
 
 /** Every painted sticker's image, by owner (a repaint's kept one too): what GET /runs/:run has cut out. */
-export function stickerArtUrls(run: Pick<Run, "player" | "units" | "state">, owner: Owner): string[] {
+export function stickerArtUrls(run: Pick<Run, "player" | "units" | "state" | "friends">, owner: Owner): string[] {
   return owedStickers(run).flatMap((sticker) => (sticker.owner === owner && sticker.art?.url ? [sticker.art.url] : []));
 }
 
 /**
  * Every sticker that exists for the run (RunView.stickers, which bubbles render from): the protagonist's five (painted
- * and cut out, else the built-in set, with no url), then each love interest's painted ones in cast and level order.
- * What can be sent now is sendableStickers'.
+ * and cut out, else the built-in set, with no url), then each love interest's painted ones in cast and level order,
+ * then (#2477) each friend's. What can be sent now is sendableStickers' (and groupSendable's).
  */
-export function stickerBook(runId: string, run: Pick<Run, "player" | "units" | "state">): StickerView[] {
+export function stickerBook(runId: string, run: Pick<Run, "player" | "units" | "state" | "friends">): StickerView[] {
   const names = stickerNames(run);
   const owed = owedStickers(run);
   const book: StickerView[] = PLAYER_STICKERS.map((emotion) => {
@@ -267,8 +281,9 @@ export function stickerBook(runId: string, run: Pick<Run, "player" | "units" | "
 }
 
 /**
- * What the player and he may send now: the protagonist's five (the built-in set with images off), and, with images on,
- * his painted ones. The picker shows the same (C/screens/phone/StickerPicker.tsx).
+ * What the player and he (#2477: or a friend, in their thread) may send now: the protagonist's five (the built-in set
+ * with images off), and, with images on, his painted ones. The picker shows the same
+ * (C/screens/phone/StickerPicker.tsx).
  */
 export function sendableStickers(
   book: readonly StickerView[],
@@ -280,6 +295,14 @@ export function sendableStickers(
     yours: book.filter((sticker) => sticker.owner === PLAYER_STICKER_OWNER),
     his: images && li ? book.filter((sticker) => sticker.owner === li) : [],
   };
+}
+
+/**
+ * #2477: what she may send in the group chat: every sticker she has, her five and, with images on, every painted one
+ * of the love interests' and her friends'. The group's picker shows the same.
+ */
+export function groupSendable(book: readonly StickerView[], world: Pick<World, "images">): StickerView[] {
+  return world.images.connectionId ? [...book] : sendableStickers(book, world).yours;
 }
 
 /** A paint the Album's Paint starts with a tap. */
@@ -330,7 +353,7 @@ export function albumStickers(runId: string, run: Run): AlbumSticker[] {
   });
 }
 
-// ── His set: nine stickers designed in one background call ──
+// ── His set: nine stickers designed in one background call (#2477: a friend's five) ──
 
 export const STICKER_SET_MAX_TOKENS = 2000;
 /** How long a love interest whose set failed is left alone before another attempt. */
@@ -343,11 +366,16 @@ export type StickerSetReply = z.infer<typeof StickerSetReplySchema>;
 
 const squash = (value: string) => value.replace(/\s+/gu, " ").trim();
 
-/** The reply as nine designs, or why it is refused (the repair turn sends it back). `others`: the cast's other sets. */
+/**
+ * The reply as nine designs (`friend`: five), or why it is refused (the repair turn sends it back). `others`: the
+ * cast's other sets.
+ */
 export function normalizeStickerSetReply(
   reply: StickerSetReply,
   others: ReadonlyArray<readonly string[]> = [],
+  friend = false,
 ): StickerSet["set"] | string {
+  const count = friend ? STICKERS_PER_FRIEND : STICKERS_PER_LI;
   const set: StickerSet["set"] = [];
   for (const raw of reply.stickers) {
     const emotion = raw.emotion.trim().toLowerCase();
@@ -360,13 +388,15 @@ export function normalizeStickerSetReply(
     if (!look || look.length > STICKER_LOOK_MAX) return `each look must be 1 to ${STICKER_LOOK_MAX} characters`;
     set.push({ emotion, label: [...label].join(""), look });
   }
-  if (set.length !== STICKERS_PER_LI) return `write exactly ${STICKERS_PER_LI} stickers, not ${set.length}`;
+  if (set.length !== count) return `write exactly ${count} stickers, not ${set.length}`;
   const mine = set
     .map((entry) => entry.emotion)
     .sort()
     .join(" ");
   if (others.some((emotions) => [...emotions].sort().join(" ") === mine))
-    return "this set is the same as another love interest's: choose nine that are his own";
+    return friend
+      ? "this set is the same as another in the cast: choose five that are their own"
+      : "this set is the same as another love interest's: choose nine that are his own";
   return set;
 }
 
@@ -376,13 +406,14 @@ export interface StickerDeps extends GenerationDeps {
   background?: Pick<BackgroundQueue, "ensure" | "has">;
 }
 
-/** Love interests whose last set failed, and when (the cool-down). */
+/** Love interests (and friends) whose last set failed, and when (the cool-down). */
 const failedSets = new Map<string, number>();
 export const stickerSetJobKey = (runId: string, li: LiId) => `${unitId(runId, li)}#stickers`;
 
 /**
  * Queues the design of each love interest's missing set on the background lane: with images on, a bible, level 2 or
- * more and no set yet, and no failure within STICKER_SET_RETRY_MS. True while any of the run's set jobs waits or runs.
+ * more and no set yet, and no failure within STICKER_SET_RETRY_MS; #2477: each friend's too, from the level they join
+ * at. True while any of the run's set jobs waits or runs.
  */
 export function ensureStickerSets(deps: StickerDeps, runId: string, run: Run, { debugMode }: { debugMode: boolean }) {
   const { background } = deps;
@@ -390,10 +421,15 @@ export function ensureStickerSets(deps: StickerDeps, runId: string, run: Run, { 
   const connectionId = resolveConnectionId(run.world, "chat");
   if (!background || !connectionId || !run.world.images.connectionId) return false;
   let pending = false;
-  for (const unit of run.units) {
+  const owed = (unit: Run["units"][number]) => {
+    if (unit.stickers) return false;
     const progress = run.state.lis[unit.id];
+    if (progress) return !!unit.bible && levelOf(progress.points) >= STICKER_FIRST_LEVEL;
+    return !!unit.friend && !!run.state.friends[unit.id];
+  };
+  for (const unit of castOf(run)) {
     const key = stickerSetJobKey(runId, unit.id);
-    if (!progress || !unit.bible || unit.stickers || levelOf(progress.points) < STICKER_FIRST_LEVEL) continue;
+    if (!owed(unit)) continue;
     if (!background.has(key) && Date.now() - (failedSets.get(key) ?? -Infinity) < STICKER_SET_RETRY_MS) continue;
     background.ensure({
       key,
@@ -413,7 +449,10 @@ export function ensureStickerSets(deps: StickerDeps, runId: string, run: Run, { 
   return pending;
 }
 
-/** The job: reads the run again, designs his set in one call, and keeps it unless one was kept meanwhile. */
+/**
+ * The job: reads the run again, designs his set (#2477: or a friend's) in one call, and keeps it unless one was kept
+ * meanwhile. A love interest's differs from the other love interests' sets, a friend's from everyone's in the cast.
+ */
 export async function writeStickerSet(
   deps: StickerDeps,
   runId: string,
@@ -421,9 +460,11 @@ export async function writeStickerSet(
   { connectionId, debugMode }: { connectionId: string; debugMode: boolean },
 ): Promise<void> {
   const run = await readRun(deps.store, runId);
-  const unit = run?.units.find((entry) => entry.id === li);
-  if (!run || !unit?.bible || unit.stickers) return;
-  const others = run.units
+  if (!run) return;
+  const friend = !run.units.some((entry) => entry.id === li);
+  const unit = castOf(run).find((entry) => entry.id === li);
+  if (!unit || !(friend ? unit.friend && run.state.friends[li] : unit.bible) || unit.stickers) return;
+  const others = (friend ? castOf(run) : run.units)
     .filter((entry) => entry.id !== li && entry.stickers)
     .map((entry) => ({ name: entry.name, emotions: entry.stickers!.set.map((sticker) => sticker.emotion) }));
   const { value } = await generateJson(deps, {
@@ -436,6 +477,7 @@ export async function writeStickerSet(
       const set = normalizeStickerSetReply(
         reply,
         others.map((other) => other.emotions),
+        friend,
       );
       return typeof set === "string" ? set : reply;
     },
@@ -444,7 +486,7 @@ export async function writeStickerSet(
     lane: "background",
     connectionId,
   });
-  const set = normalizeStickerSetReply(value);
+  const set = normalizeStickerSetReply(value, [], friend);
   if (typeof set === "string") return;
   const at = new Date().toISOString();
   await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) =>

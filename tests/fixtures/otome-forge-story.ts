@@ -10,6 +10,10 @@ import type {
   RunState,
 } from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { defaultContent } from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import {
+  defaultFriendState,
+  type FriendBible,
+} from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/friends.ts";
 import { runForeground } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
   createHandle,
@@ -90,6 +94,55 @@ export function bible(changes: Partial<Bible> = {}): Bible {
   };
 }
 
+/** #2458: Kaveh, a friend of hers (never a love interest), and his friend bible. */
+export const KAVEH = "li-kaveh-ab12";
+export function friendBible(changes: Partial<FriendBible> = {}): FriendBible {
+  return {
+    age: 24,
+    role: "Architect of the harbour's new bridge",
+    howWeMet: "They share a wall in the lantern-keepers' row.",
+    publicFace: "Sharp-tongued and always right.",
+    personality: "Proud, fussy, secretly soft.",
+    wound: "A failed bridge.",
+    want: "To build something that lasts.",
+    need: "To let someone help.",
+    fear: "Being ordinary.",
+    flaws: ["stubborn"],
+    virtues: ["loyal"],
+    voice: { register: "Precise and dry.", tics: ["Honestly."], samples: { warm: "W", teasing: "T", worried: "R" } },
+    likes: ["blueprints"],
+    dislikes: ["mess"],
+    growth: { "1": "RANK-ONE", "2": "RANK-TWO", "3": "RANK-THREE", "4": "RANK-FOUR", "5": "RANK-FIVE" },
+    onLis: { [KAI]: { stance: "ships", why: "KAI-STANCE-WHY" }, "li-ghost-0000": { stance: "against", why: "gone" } },
+    onHer: "Worried she works too hard.",
+    arcana: "star",
+    look: { identityLine: "tall, ash hair", outfitLine: "linen coat", presentation: "man" },
+    ...changes,
+  };
+}
+
+/** Kaveh as her friend already, with his friend bible and `unit` on top, at `points` of friendship. */
+export async function seedFriend(
+  t: { store: Pick<OtomeStore, "mutateDoc" | "updateDoc">; runId: string },
+  unit: Record<string, unknown> = {},
+  points = 0,
+) {
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAVEH)), normalizeUnit, (current) => ({
+    ...current,
+    id: KAVEH,
+    name: "Kaveh",
+    pronouns: HE,
+    friend: friendBible(),
+    identityLine: "tall, ash hair",
+    outfitLine: "linen coat",
+    createdAt: "2026-11-24T10:00:00.000Z",
+    ...unit,
+  }));
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    friends: { [KAVEH]: { ...defaultFriendState(0, "2026-11-24T10:00:00.000Z"), points } },
+  }));
+}
 /** The ready world: index, world, player, three LIs with bibles, and their state (`lis` overrides per LI). */
 export async function storyWorld({
   runKey,

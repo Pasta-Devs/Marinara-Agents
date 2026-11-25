@@ -1,7 +1,8 @@
 // Otome Hearth's group chat (#2154): one thread with every love interest met. Who is in it (the starting cast once a
 // chapter is read; a newcomer, a returning one too, only once their arc's first chapter is read; nobody else, ever, in
 // its prompt, contract or sessions), its stored speaker and members as display fields, a send that lands once and is
-// always answered whatever the squabble setting (the same id again, busy, Retry, only the protagonist's stickers),
+// always answered whatever the squabble setting (the same id again, busy, Retry; #2477: every sticker she has, her
+// five and everyone's painted ones with images on, never one she lacks),
 // P17g's parser (a member the newest message names must answer), its content (plural rules, the knowledge line, each
 // member's card and what stands between them as the whole cast may know it, ties without secrets, recall as the group:
 // no DM, notebook, date, Read Him or Claw round, and no love interest's own chapter in full or what it left) and its
@@ -71,8 +72,9 @@ import {
   normalizeWorld,
   toWorldView,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { setImages } from "./fixtures/otome-forge-art.ts";
 import type { FakeReply } from "./fixtures/otome-forge-fakes.ts";
-import { HE, KAI, MIR, SOL, at, bible, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { HE, KAI, KAVEH, MIR, SOL, at, bible, json, seedFriend, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
 const system = (messages: Messages) =>
@@ -385,7 +387,7 @@ test("a send saves her message, then the members' reply once; the same id again 
   );
   assert.equal(t.groupCalls().length, 1, "no second call");
   assert.equal((await t.thread())!.messages.length, 3, "no second message");
-  // Only the protagonist's five stickers can be sent here.
+  // A sticker she does not have (his, never painted) is refused; hers go.
   const theirSticker = await t.call("POST", send, { body: { sticker: `${KAI}:smug` } });
   assert.deepEqual([theirSticker.status, theirSticker.body.code], [400, "bad-request"]);
   assert.equal((await t.call("POST", send, { body: { sticker: "you:shy" } })).status, 200);
@@ -393,6 +395,64 @@ test("a send saves her message, then the members' reply once; the same id again 
   // The list shows the newest message; the members' reply to her newest one is unread until she sees it.
   const row = (await t.call("GET", list)).body.group;
   assert.deepEqual([row.last.li, row.unread, row.busy], [MIR, 2, false]);
+});
+
+test("#2477: she may send every sticker she has here, a love interest's or a friend's painted one, never one she lacks", async () => {
+  const t = await groupWorld("r-groupst-aaaaaa");
+  await setImages(t.store, t.runId, { connectionId: "conn-img" });
+  // A painted sticker and its ready cut-out: the run's book lists only those.
+  const painted = (emotions: string[], url: string) => (unit: Record<string, any>) => ({
+    ...unit,
+    stickers: {
+      set: emotions.map((emotion) => ({ emotion, label: `${emotion}!`, look: `a ${emotion} chibi face` })),
+      at,
+      art: { [emotions[0]!]: { state: "ready", at, url } },
+    },
+    cutouts: { ...unit.cutouts, [url]: { state: "ready", at, url: `${url}.cut.png` } },
+  });
+  await seedFriend(t);
+  await t.store.mutateDoc(
+    runDocTarget("unit", unitId(t.runId, KAVEH)),
+    normalizeUnit,
+    painted(["shy", "grin"], "/api/global-gallery/file/kaveh-shy.png"),
+  );
+  await t.store.mutateDoc(
+    runDocTarget("unit", unitId(t.runId, KAI)),
+    normalizeUnit,
+    painted(["guarded", "smug"], "/api/global-gallery/file/kai-guarded.png"),
+  );
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, points: 300 } },
+  }));
+  for (const sticker of [`${KAI}:guarded`, `${KAVEH}:shy`, "you:pout"]) {
+    const sent = await t.call("POST", send, { body: { sticker } });
+    assert.equal(sent.status, 200, `${sticker}: ${JSON.stringify(sent.body)}`);
+  }
+  // Owed but not painted, one past his level, a friend's not reached, no one's: refused before anything is saved.
+  const calls = t.groupCalls().length;
+  for (const sticker of [`${KAI}:smug`, `${KAVEH}:grin`, `${MIR}:guarded`, "li-nobody-zz99:smug", "you:cry"]) {
+    assert.equal((await t.call("POST", send, { body: { sticker } })).status, 400, sticker);
+  }
+  assert.equal(t.groupCalls().length, calls, "a refused sticker calls nothing");
+  // P17g names her friend's sticker by name; the members still send only their own and hers.
+  const prompt = t
+    .groupCalls()
+    .at(-1)!
+    .messages.map((message) => message.content)
+    .join("\n");
+  assert.match(prompt, /Ines: \[sends the sticker \[kaveh_shy\] \(shy\)\]/);
+  assert.match(prompt, /Ines: \[sends the sticker \[kai_guarded\] \(guarded\)\]/);
+  assert.doesNotMatch(prompt, /\[kaveh_shy\] \(shy\),|\[kaveh_shy\] \(shy\)\./, "never listed for a member");
+  // With images off, only her five go.
+  await setImages(t.store, t.runId, { connectionId: null });
+  assert.equal((await t.call("POST", send, { body: { sticker: `${KAVEH}:shy` } })).status, 400);
+  assert.equal((await t.call("POST", send, { body: { sticker: "you:laugh" } })).status, 200);
+  assert.deepEqual(
+    (await t.thread())!.messages.filter((message) => message.who === "player").map((message) => message.sticker),
+    [`${KAI}:guarded`, `${KAVEH}:shy`, "you:pout", "you:laugh"],
+    "a refused sticker saved nothing",
+  );
 });
 
 test("one write at a time: a send or a close while the reply is written is busy, and the squabble quota never matters", async () => {

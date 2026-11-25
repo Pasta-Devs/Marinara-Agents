@@ -470,7 +470,8 @@ function useStickerImages(view: RunView, stickers: readonly AlbumSticker[]) {
   const labels = useStickers(view);
   const tiles = stickers.map((sticker) => {
     const mine = sticker.owner === PLAYER_STICKER_OWNER;
-    const who = mine ? view.player.name : (view.lis.find((li) => li.id === sticker.owner)?.name ?? "");
+    const cast = [...view.lis, ...(view.friends ?? [])];
+    const who = mine ? view.player.name : (cast.find((li) => li.id === sticker.owner)?.name ?? "");
     const label = sticker.label || labels.byId.get(sticker.id)?.label || sticker.emotion;
     const title = who ? t("ui.otomeForge.album.stickerTitle", { name: who, sticker: label }) : label;
     return { sticker, title, Icon: labels.byId.get(sticker.id)?.Icon ?? StickerIcon };
@@ -494,8 +495,8 @@ function useStickerImages(view: RunView, stickers: readonly AlbumSticker[]) {
 }
 
 /**
- * The protagonist's stickers, then each love interest's: painted ones open the viewer and offer Repaint (#2299), waiting
- * ones offer Paint.
+ * The protagonist's stickers, then each love interest's, then (#2477) each friend's: painted ones open the viewer and
+ * offer Repaint (#2299), waiting ones offer Paint.
  */
 function StickerGrid({
   runKey,
@@ -515,6 +516,10 @@ function StickerGrid({
   const owners = [
     { owner: PLAYER_STICKER_OWNER, title: t("ui.otomeForge.album.stickersYours") },
     ...view.lis.map((li) => ({ owner: li.id, title: li.name })),
+    ...(view.friends ?? []).map((friend) => ({
+      owner: friend.id,
+      title: t("ui.otomeForge.album.stickersFriend", { name: friend.name }),
+    })),
   ];
   const images = new Map(stickers.images.map((image, index) => [image.key, index]));
   return (

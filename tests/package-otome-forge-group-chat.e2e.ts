@@ -3,7 +3,9 @@
 // and who sent it, and its unread count; the thread names everyone in its header (the long names ellipsized on one row),
 // gives each bubble its speaker's accent, their name when the speaker changes and their portrait on the last of a run,
 // and tells a screen reader who said what; Send waits while someone is typing; the picker offers the protagonist's five
-// stickers alone; Close and remember says everyone in it recalls it and earns nothing; Back returns focus to its row;
+// stickers alone without images, and with images on (#2477) every sticker she has, each love interest's and friend's
+// painted ones under their name; Close and remember says everyone in it recalls it and earns nothing; Back returns
+// focus to its row;
 // and Settings → Connections' squabbles a day validate and save with their own note. Each run checks nothing scrolls
 // sideways, on the desktop (desktop-chromium) and at phone width (mobile-chromium, 390×844), with touch targets of 44 px.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-group-chat.e2e.ts
@@ -28,9 +30,17 @@ const MIR = "li-mireille-0002";
 const SOL = "li-sol-0003";
 const NAMES: Record<string, string> = { [KAI]: "Kai Ardent", [MIR]: "Mireille Delacroix-Vaillancourt", [SOL]: "Sol" };
 const ACCENTS: Record<string, string> = { [KAI]: "#9DB8F0", [MIR]: "#E7A6B8", [SOL]: "#B8E0C2" };
+/** #2477: her friend, never in the group, whose painted sticker she may still send there. */
+const KAVEH = "li-kaveh-0009";
+/** A 1×1 PNG, for the painted stickers' cut-outs. */
+const PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
-/** The routes the phone and Settings → Connections use, answered in memory by the server's rules. */
-function createGroupStub() {
+/**
+ * The routes the phone and Settings → Connections use, answered in memory by the server's rules. `images` (#2477): an
+ * image connection, her friend Kaveh, and a painted sticker of Kai's and of Kaveh's in the run's book.
+ */
+function createGroupStub({ images = false }: { images?: boolean } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
   const they = { subject: "they", object: "them", possessive: "their" };
@@ -47,7 +57,7 @@ function createGroupStub() {
       web: [],
       openingSituation: "",
       content: { heat: "sfw", darkness: "angst", limits: {}, custom: [] },
-      images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
+      images: { connectionId: images ? "conn-img" : null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
       forge: { phase: "ready", steps: [] },
       audio: {},
@@ -71,6 +81,39 @@ function createGroupStub() {
     })),
     forge: { phase: "ready", steps: [] },
     starlight: 100,
+    ...(images
+      ? {
+          friends: [
+            { id: KAVEH, name: "Kaveh", pronouns: they, source: "archetype", accent: "#F0C69D", level: 1, arc: 0 },
+          ],
+          stickers: [
+            ...["laugh", "love", "shy", "sad", "pout"].map((emotion) => ({
+              id: `you:${emotion}`,
+              owner: "you",
+              emotion,
+              name: `ines_${emotion}`,
+            })),
+            {
+              id: `${KAI}:smug`,
+              owner: KAI,
+              emotion: "smug",
+              name: "kai_ardent_smug",
+              label: "Smug",
+              level: 2,
+              url: PNG,
+            },
+            {
+              id: `${KAVEH}:grin`,
+              owner: KAVEH,
+              emotion: "grin",
+              name: "kaveh_grin",
+              label: "Grin",
+              level: 1,
+              url: PNG,
+            },
+          ],
+        }
+      : {}),
   };
   const index = {
     version: 1,
@@ -183,6 +226,7 @@ function createGroupStub() {
       };
       return { status: 200, json: { world: structuredClone(view.world) } };
     }
+    if (path === `${base}/stickers`) return { status: 200, json: { started: true } };
     if (path === `${base}/memory/status`) {
       return { status: 200, json: { status: { phase: "ready", retryable: false, recordCount: 1 } } };
     }
@@ -405,5 +449,42 @@ test("Otome Hearth group chat: Everyone pinned first, speakers in the thread, Cl
   await expect(squabbles).toHaveValue("3");
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("05-settings.png") });
+  expect(pageErrors).toEqual([]);
+});
+
+test("#2477: with images on, Everyone's picker offers every sticker she has, a friend's too, and sends the one picked", async ({
+  page,
+}, testInfo) => {
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "light" : "dark", reducedMotion: "reduce" });
+  const stub = createGroupStub({ images: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const root = await openOtome(page, stub);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await root.locator(".of-threads .of-thread-row").first().click();
+  await expect(root.getByRole("heading", { level: 1, name: "Everyone" })).toBeFocused();
+
+  // Hers, then each love interest's and friend's painted ones under their name: Kaveh is no member, yet she has his.
+  await root.getByRole("button", { name: "Stickers" }).click();
+  const panel = root.locator(".of-sticker-panel");
+  await expect(panel.getByRole("group")).toHaveCount(3);
+  await expect(panel.getByRole("group", { name: "Your stickers" }).getByRole("button")).toHaveCount(5);
+  await expect(
+    panel
+      .getByRole("group", { name: "Kai Ardent’s stickers" })
+      .getByRole("button", { name: "Attach the Smug sticker" }),
+  ).toBeVisible();
+  const kaveh = panel.getByRole("group", { name: "Kaveh’s stickers" });
+  await expect(kaveh.getByRole("button")).toHaveCount(1);
+  await atLeast44(kaveh.getByRole("button", { name: "Attach the Grin sticker" }));
+  await noWider(page);
+  await page.screenshot({ path: testInfo.outputPath("06-every-sticker.png") });
+  await kaveh.getByRole("button", { name: "Attach the Grin sticker" }).click();
+  await expect(root.locator(".of-attached-sticker")).toContainText("Sticker attached: Grin");
+  await root.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => posts(stub, "/phone/group/send")[0]?.body?.sticker).toBe(`${KAVEH}:grin`);
+  const log = root.getByRole("list", { name: /Group chat with/ });
+  await expect(log.getByRole("img", { name: "Sticker: Grin" })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

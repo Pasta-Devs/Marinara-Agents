@@ -458,9 +458,11 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           queueCutouts(deps, runId, unit, [...stageArtUrls(run.world, unit), ...stickerArtUrls(run, unit.id)]),
         ),
       );
-      // #2475: her friends' looks and faces too, so no view shows a friend on the painted matte.
+      // #2475: her friends' looks and faces too, so no view shows a friend on the painted matte; #2477: and stickers.
       const friends = await Promise.all(
-        (run.friends ?? []).map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit))),
+        (run.friends ?? []).map((unit) =>
+          queueCutouts(deps, runId, unit, [...stageArtUrls(run.world, unit), ...stickerArtUrls(run, unit.id)]),
+        ),
       );
       const queuedPlayer = await queueCutouts(deps, runId, { id: "player", cutouts: run.player.cutouts ?? {} }, [
         ...[run.player.portrait, run.player.outfits.find((outfit) => outfit.id === run.player.wornOutfit)?.url].filter(

@@ -24,7 +24,8 @@
 // he writes first) holds the same lock while it is written in the background lane, so the thread shows him typing.
 // Stickers (#2044): a message names a sticker by id (SH/stickers.ts); one saved before names his face and still reads.
 // The player may send the protagonist's five and, with images on, his painted ones (S/art/stickers.ts
-// sendableStickers); P17 offers him the same, and his bracketed sticker becomes the message's id.
+// sendableStickers; #2477: a friend's in their thread); P17 offers him the same, and his bracketed sticker becomes the
+// message's id.
 // The group chat (#2154, S/phone/group.ts) is one more thread of this shape, `${R}:chat:group`: its messages name their
 // speaker (`li`) and its sessions their members, both display fields. It sends, answers and pages through the same
 // helpers (sendIn, answerIn, historyPage, saveSeen) with its own checks and its own prompt.

@@ -17,7 +17,6 @@ import {
   friendLevelOf,
   friendProgressOf,
   friendRankOf,
-  type FriendBible,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/friends.ts";
 import {
   runDocTarget,
@@ -63,33 +62,19 @@ import { askWingman } from "../packages/otome-forge/src/engine/packages/server/s
 import { waitingRank } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-stories.ts";
 import { friendCards } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friends.ts";
 import { introduceLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
-import { CAST, HE, KAI, MIR, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
+import {
+  CAST,
+  HE,
+  KAI,
+  KAVEH,
+  MIR,
+  friendBible,
+  json,
+  planReply,
+  seedFriend,
+  storyWorld,
+} from "./fixtures/otome-forge-story.ts";
 import { artWorld, routesOf } from "./fixtures/otome-forge-art.ts";
-
-function friendBible(changes: Partial<FriendBible> = {}): FriendBible {
-  return {
-    age: 24,
-    role: "Architect of the harbour's new bridge",
-    howWeMet: "They share a wall in the lantern-keepers' row.",
-    publicFace: "Sharp-tongued and always right.",
-    personality: "Proud, fussy, secretly soft.",
-    wound: "A failed bridge.",
-    want: "To build something that lasts.",
-    need: "To let someone help.",
-    fear: "Being ordinary.",
-    flaws: ["stubborn"],
-    virtues: ["loyal"],
-    voice: { register: "Precise and dry.", tics: ["Honestly."], samples: { warm: "W", teasing: "T", worried: "R" } },
-    likes: ["blueprints"],
-    dislikes: ["mess"],
-    growth: { "1": "RANK-ONE", "2": "RANK-TWO", "3": "RANK-THREE", "4": "RANK-FOUR", "5": "RANK-FIVE" },
-    onLis: { [KAI]: { stance: "ships", why: "KAI-STANCE-WHY" }, "li-ghost-0000": { stance: "against", why: "gone" } },
-    onHer: "Worried she works too hard.",
-    arcana: "star",
-    look: { identityLine: "tall, ash hair", outfitLine: "linen coat", presentation: "man" },
-    ...changes,
-  };
-}
 
 test("a friend's levels follow the love interests' first four steps, five stars at 1,100", () => {
   assert.deepEqual(
@@ -211,7 +196,6 @@ test("the story prompts carry her friends in main, route and repair chapters onl
 
 // ── Grievances, their stories' pay, and the ending ──
 
-const KAVEH = "li-kaveh-ab12";
 const friendsState = (friend: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
   normalizeState({
     lis: { [KAI]: {}, [MIR]: {} },
@@ -492,25 +476,6 @@ function runRoutes(deps: RouteDeps, runKey: string, li = "") {
     deps,
     runKey,
   );
-}
-
-/** Kaveh as her friend already, with his friend bible and `unit` on top. */
-async function seedFriend(t: Awaited<ReturnType<typeof storyWorld>>, unit: Record<string, unknown> = {}) {
-  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAVEH)), normalizeUnit, (current) => ({
-    ...current,
-    id: KAVEH,
-    name: "Kaveh",
-    pronouns: HE,
-    friend: friendBible(),
-    identityLine: "tall, ash hair",
-    outfitLine: "linen coat",
-    createdAt: "2026-11-24T10:00:00.000Z",
-    ...unit,
-  }));
-  await t.store.updateDoc(runDocTarget("state", stateIdOf(t.runId)), normalizeState, (state) => ({
-    ...state,
-    friends: { [KAVEH]: defaultFriendState(0, "2026-11-24T10:00:00.000Z") },
-  }));
 }
 
 test("#2475: a friend she has met takes the card the player picks, never one in the cast, and is painted from it", async () => {

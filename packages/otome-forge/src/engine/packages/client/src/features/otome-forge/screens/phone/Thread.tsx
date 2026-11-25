@@ -123,7 +123,8 @@ export function Thread({
   onOpenHangout,
 }: ThreadProps) {
   const { t } = useTranslation();
-  const stickers = useStickers(view, li);
+  // #2477: the group chat offers every sticker she has.
+  const stickers = useStickers(view, li, { group: !li });
   const haptics = useOtomeHaptics();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();

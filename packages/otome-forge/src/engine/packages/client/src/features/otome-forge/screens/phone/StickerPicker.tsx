@@ -1,12 +1,14 @@
 // ──────────────────────────────────────────────
 // Otome Forge: chat stickers (#2044). The picker offers the protagonist's five (painted for the run with images on,
 // else the built-in set) and, with images on, his painted ones (S/art/stickers.ts sendableStickers offers P17 the
-// same). A bubble shows a sticker by its id from the run view's book, a labelled chip when it has no image (or the
-// image fails), and a message saved before #2044 still shows his painted face (faceArt). A new sticker of his shows
-// "You unlocked a new sticker" (useStickerNotice). The panel closes on Escape, on a press outside the picker, and when
-// focus moves to something outside it. A press inside the picker moves no focus: Safari and iOS never focus a pressed
-// button, and instead give focus to the nearest focusable ancestor (the Engine's main), which closed the panel
-// before the tap's click landed, so a tapped sticker never sent. A blur with nowhere to go is ignored too.
+// same; #2477: a friend's in their thread). In the group chat (#2477) it offers every sticker she has, each owner's
+// painted ones under their name (S/art/stickers.ts groupSendable). A bubble shows a sticker by its id from the run
+// view's book, a labelled chip when it has no image (or the image fails), and a message saved before #2044 still shows
+// his painted face (faceArt). A new sticker of his or a friend's shows "You unlocked a new sticker" (StickerNotice).
+// The panel closes on Escape, on a press outside the picker, and when focus moves to something outside it. A press
+// inside the picker moves no focus: Safari and iOS never focus a pressed button, and instead give focus to the nearest
+// focusable ancestor (the Engine's main), which closed the panel before the tap's click landed, so a tapped sticker
+// never sent. A blur with nowhere to go is ignored too.
 // ponytail: the built-in set is the labelled icon chip: its emoji artwork (Codex image generation) is not shipped yet.
 // Upgrade path: ship stickers/<emotion>.webp as package assets (contributions.assets) and give `yours` their URLs.
 // ──────────────────────────────────────────────
@@ -95,8 +97,15 @@ function choiceOf(t: Translate, sticker: Pick<StickerView, "id" | "emotion" | "l
   };
 }
 
-/** The run's stickers: what the picker offers in his thread (`yours`, `his`) and every one a bubble may show. */
-export function useStickers(view: Pick<RunView, "world" | "stickers">, li?: Pick<RunLiView, "id">) {
+/**
+ * The run's stickers: what the picker offers in his thread (`yours`, `his`), in the group chat (`group`: `yours`, then
+ * each love interest's and friend's painted ones under their name), and every one a bubble may show.
+ */
+export function useStickers(
+  view: Pick<RunView, "world" | "stickers"> & Partial<Pick<RunView, "lis" | "friends">>,
+  li?: Pick<RunLiView, "id">,
+  { group = false }: { group?: boolean } = {},
+) {
   const { t } = useTranslation();
   const images = imagesOn(view);
   const book = view.stickers ?? [];
@@ -114,8 +123,16 @@ export function useStickers(view: Pick<RunView, "world" | "stickers">, li?: Pick
     ...yours,
     ...book.filter((sticker) => sticker.owner !== PLAYER_STICKER_OWNER).map((s) => choiceOf(t, s, images)),
   ];
-  const his = images && li ? all.filter((sticker) => parseStickerId(sticker.id)?.owner === li.id) : [];
-  return { yours, his, byId: new Map(all.map((sticker) => [sticker.id, sticker])) };
+  const ownedBy = (owner: string) => all.filter((sticker) => parseStickerId(sticker.id)?.owner === owner);
+  const his = images && li ? ownedBy(li.id) : [];
+  const others =
+    images && group
+      ? [...(view.lis ?? []), ...(view.friends ?? [])].flatMap((member) => {
+          const choices = ownedBy(member.id);
+          return choices.length ? [{ owner: member.id, name: member.name, choices }] : [];
+        })
+      : [];
+  return { yours, his, others, byId: new Map(all.map((sticker) => [sticker.id, sticker])) };
 }
 
 export type Stickers = ReturnType<typeof useStickers>;
@@ -133,7 +150,7 @@ export function stickerLabel(t: Translate, stickers: Stickers, sticker: string):
 
 interface StickerPickerProps {
   stickers: Stickers;
-  /** His name, for his section's title. */
+  /** His name, for his section's title (the group chat names each owner's section with theirs). */
   name: string;
   disabled: boolean;
   onPick: (id: string) => void;
@@ -167,8 +184,8 @@ export function StickerPicker({ stickers, name, disabled, onPick }: StickerPicke
     close(true);
   };
   const label = t("ui.otomeForge.phone.stickers");
-  const group = (title: string, choices: StickerChoice[]) => (
-    <div className="of-sticker-group" role="group" aria-label={title}>
+  const group = (title: string, choices: StickerChoice[], key?: string) => (
+    <div key={key} className="of-sticker-group" role="group" aria-label={title}>
       <p className="of-sticker-group-title" aria-hidden="true">
         {title}
       </p>
@@ -237,6 +254,9 @@ export function StickerPicker({ stickers, name, disabled, onPick }: StickerPicke
         >
           {group(t("ui.otomeForge.phone.stickersYours"), stickers.yours)}
           {stickers.his.length ? group(t("ui.otomeForge.phone.stickersHis", { name }), stickers.his) : null}
+          {stickers.others.map((other) =>
+            group(t("ui.otomeForge.phone.stickersHis", { name: other.name }), other.choices, other.owner),
+          )}
         </div>
       ) : null}
     </div>
@@ -290,11 +310,11 @@ export function StickerArt({ stickers, id }: { stickers: Stickers; id: string })
 export const STICKER_NOTICE_MS = 4_000;
 
 /**
- * "You unlocked a new sticker" while the app is open: each sticker of his that appears in the run view after its
- * first read shows a notice for STICKER_NOTICE_MS. ponytail: one that lands while the app is closed is not announced;
- * upgrade path: a seen mark on the state.
+ * "You unlocked a new sticker" while the app is open: each sticker of his (#2477: or a friend's) that appears in the
+ * run view after its first read shows a notice for STICKER_NOTICE_MS. ponytail: one that lands while the app is closed
+ * is not announced; upgrade path: a seen mark on the state.
  */
-export function StickerNotice({ view }: { view: Pick<RunView, "runKey" | "stickers" | "lis"> }) {
+export function StickerNotice({ view }: { view: Pick<RunView, "runKey" | "stickers" | "lis" | "friends"> }) {
   const { t } = useTranslation();
   const known = useRef<{ run: string; ids: Set<string> } | null>(null);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
@@ -318,7 +338,7 @@ export function StickerNotice({ view }: { view: Pick<RunView, "runKey" | "sticke
     for (const sticker of fresh) known.current.ids.add(sticker.id);
     const added = fresh.map((sticker) => ({
       id: sticker.id,
-      name: view.lis.find((li) => li.id === sticker.owner)?.name ?? "",
+      name: [...view.lis, ...(view.friends ?? [])].find((li) => li.id === sticker.owner)?.name ?? "",
     }));
     setShown((current) => [...current, ...added]);
     // Each notice goes on its own time, whatever lands after it.
