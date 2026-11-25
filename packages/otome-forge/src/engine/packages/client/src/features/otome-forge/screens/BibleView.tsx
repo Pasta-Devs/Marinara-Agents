@@ -2,7 +2,9 @@
 // Otome Forge: a love interest's character bible, behind a "Show spoilers" gate, readable and editable as a form.
 // A card's canon wins over the bible; an edit steers the story from then on. The editor checks the bible's rules
 // (SH/bible.ts: adults only, no school roles, a secret at stage 4…) before it saves, and names the one an edit breaks;
-// the server checks every save again.
+// the server checks every save again. #2475: a friend's bible (FriendBibleView) is shown and edited the same way, with
+// their own fields (their growth over five ranks, their stance on each love interest) and none of his (stages,
+// secrets, bond ranks).
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,11 +14,20 @@ import { otomeErrorCode, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { RetryNotice } from "../components/RetryNotice";
 import { useCharacterOptions } from "../hooks/use-engine-resources";
-import { bibleQueryKey, patchRun, runQueryKey, useRun } from "../hooks/use-run";
+import { bibleQueryKey, patchCastMember, runQueryKey, useRun } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
-import type { ArcStageKey, Bible, BibleSecret, RevealStage, RunLiView } from "../shared/api-types";
+import type {
+  ArcStageKey,
+  Bible,
+  BibleSecret,
+  RevealStage,
+  RunCastMember,
+  RunFriendView,
+  RunLiView,
+} from "../shared/api-types";
 import {
   bibleProblem,
+  MIN_AGE,
   MASK_TELLS_MAX,
   MASK_TELLS_MIN,
   SECRET_TELLS_MAX,
@@ -27,6 +38,8 @@ import {
 import { intimacyOpen } from "../shared/content";
 import { LAST_STAGE } from "../shared/arcs";
 import { BOND_RANKS } from "../shared/bond";
+import { FRIEND_MAX_LEVEL, type FriendBible, type FriendStance } from "../shared/friends";
+import { ARCANA_NAME_KEYS } from "../components/TarotCard";
 import { TextField } from "./setup/parts";
 
 type FieldKind = "text" | "long" | "lines" | "number" | "choice";
@@ -34,6 +47,8 @@ type FieldKind = "text" | "long" | "lines" | "number" | "choice";
 interface FieldSpec {
   path: string;
   labelKey: string;
+  /** The label's values, for a key that takes them. */
+  labelValues?: Record<string, unknown>;
   kind: FieldKind;
   /** For "choice": each value with its label key. */
   options?: Readonly<Record<string, string>>;
@@ -150,6 +165,78 @@ const INTIMACY_SECTION = {
   ],
 } as const satisfies { titleKey: string; fields: readonly FieldSpec[] };
 
+const STANCE_KEYS: Record<FriendStance, string> = {
+  ships: "ui.otomeForge.setup.friendStanceShips",
+  supports: "ui.otomeForge.setup.friendStanceSupports",
+  wary: "ui.otomeForge.setup.friendStanceWary",
+  against: "ui.otomeForge.setup.friendStanceAgainst",
+};
+
+/** #2475: a friend's bible (C/shared/friends.ts FriendBible); their stance on each love interest is listed after. */
+const FRIEND_SECTIONS: readonly { titleKey: string; fields: readonly FieldSpec[] }[] = [
+  {
+    titleKey: "ui.otomeForge.setup.bibleBasics",
+    fields: [
+      { path: "age", labelKey: "ui.otomeForge.setup.bibleAge", kind: "number" },
+      { path: "role", labelKey: "ui.otomeForge.setup.bibleRole", kind: "text" },
+      { path: "howWeMet", labelKey: "ui.otomeForge.setup.friendHowWeMet", kind: "long" },
+      { path: "publicFace", labelKey: "ui.otomeForge.setup.biblePublicFace", kind: "long" },
+      { path: "personality", labelKey: "ui.otomeForge.setup.friendPersonality", kind: "long" },
+      { path: "arcana", labelKey: "ui.otomeForge.setup.friendArcana", kind: "choice", options: ARCANA_NAME_KEYS },
+    ],
+  },
+  {
+    titleKey: "ui.otomeForge.setup.bibleHeart",
+    fields: [
+      { path: "wound", labelKey: "ui.otomeForge.setup.bibleWound", kind: "long" },
+      { path: "want", labelKey: "ui.otomeForge.setup.bibleWant", kind: "long" },
+      { path: "need", labelKey: "ui.otomeForge.setup.bibleNeed", kind: "long" },
+      { path: "fear", labelKey: "ui.otomeForge.setup.bibleFear", kind: "long" },
+    ],
+  },
+  {
+    titleKey: "ui.otomeForge.setup.bibleCharacter",
+    fields: [
+      { path: "flaws", labelKey: "ui.otomeForge.setup.bibleFlaws", kind: "lines" },
+      { path: "virtues", labelKey: "ui.otomeForge.setup.bibleVirtues", kind: "lines" },
+      { path: "likes", labelKey: "ui.otomeForge.setup.bibleLikes", kind: "lines" },
+      { path: "dislikes", labelKey: "ui.otomeForge.setup.bibleDislikes", kind: "lines" },
+    ],
+  },
+  {
+    titleKey: "ui.otomeForge.setup.bibleVoice",
+    fields: [
+      { path: "voice.register", labelKey: "ui.otomeForge.setup.bibleRegister", kind: "long" },
+      { path: "voice.tics", labelKey: "ui.otomeForge.setup.bibleTics", kind: "lines" },
+      { path: "voice.samples.warm", labelKey: "ui.otomeForge.setup.friendSampleWarm", kind: "long" },
+      { path: "voice.samples.teasing", labelKey: "ui.otomeForge.setup.friendSampleTeasing", kind: "long" },
+      { path: "voice.samples.worried", labelKey: "ui.otomeForge.setup.friendSampleWorried", kind: "long" },
+    ],
+  },
+  {
+    titleKey: "ui.otomeForge.setup.friendGrowth",
+    fields: (["1", "2", "3", "4", "5"] as const).map((level) => ({
+      path: `growth.${level}`,
+      labelKey: "ui.otomeForge.friends.rank",
+      labelValues: { level, max: FRIEND_MAX_LEVEL },
+      kind: "long" as const,
+    })),
+  },
+  {
+    titleKey: "ui.otomeForge.setup.bibleLook",
+    fields: [
+      { path: "look.identityLine", labelKey: "ui.otomeForge.setup.bibleIdentityLine", kind: "long" },
+      { path: "look.outfitLine", labelKey: "ui.otomeForge.setup.bibleOutfitLine", kind: "long" },
+      {
+        path: "look.presentation",
+        labelKey: "ui.otomeForge.setup.biblePresentation",
+        kind: "choice",
+        options: PRESENTATION_KEYS,
+      },
+    ],
+  },
+];
+
 /** Why a bible cannot be saved, one message per rule (literal keys). */
 const PROBLEM_KEYS: Record<BibleProblem, string> = {
   age: "ui.otomeForge.setup.bibleAdult",
@@ -209,20 +296,20 @@ function ReadValue({ value }: { value: unknown }) {
   return text ? <span>{text}</span> : <span className="of-faint">—</span>;
 }
 
-function Field({
+function Field<T>({
   spec,
   bible,
   editing,
   onChange,
 }: {
   spec: FieldSpec;
-  bible: Bible;
+  bible: T;
   editing: boolean;
-  onChange: (bible: Bible) => void;
+  onChange: (bible: T) => void;
 }) {
   const { t } = useTranslation();
   const value = getAt(bible, spec.path);
-  const label = t(spec.labelKey);
+  const label = t(spec.labelKey, spec.labelValues ?? {});
   if (!editing) {
     return (
       <div className="of-bible-row">
@@ -283,13 +370,18 @@ function Field({
 }
 
 /** Lines are kept as typed while editing (blank lines included) and trimmed when saved. */
-function cleanLines(bible: Bible): Bible {
-  let next = bible;
-  for (const section of bible.intimacy ? [...SECTIONS, INTIMACY_SECTION] : SECTIONS) {
+function trimLines<T>(value: T, sections: readonly { fields: readonly FieldSpec[] }[]): T {
+  let next = value;
+  for (const section of sections) {
     for (const spec of section.fields) {
       if (spec.kind === "lines") next = setAt(next, spec.path, fromLines(toLines(getAt(next, spec.path))));
     }
   }
+  return next;
+}
+
+function cleanLines(bible: Bible): Bible {
+  const next = trimLines(bible, bible.intimacy ? [...SECTIONS, INTIMACY_SECTION] : SECTIONS);
   return {
     ...next,
     secrets: next.secrets.map((secret) => ({ ...secret, tells: fromLines(toLines(secret.tells)) })),
@@ -305,13 +397,133 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** The spoiler gate, then the bible loading or failed to load; nothing once it has loaded. */
+function SpoilerGate({
+  revealed,
+  query,
+  onReveal,
+}: {
+  revealed: boolean;
+  query: { isPending: boolean; isError: boolean; error: unknown; refetch: () => unknown };
+  onReveal: () => void;
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  if (!revealed) {
+    return (
+      <section className="of-section of-glass of-spoiler">
+        <BookLock size={26} strokeWidth={1.6} aria-hidden="true" />
+        <p className="of-body">{t("ui.otomeForge.setup.bibleSpoilerText")}</p>
+        <button type="button" className="of-button of-button--primary" onClick={onReveal}>
+          <Eye size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.setup.bibleShowSpoilers")}
+        </button>
+      </section>
+    );
+  }
+  if (query.isPending) {
+    return (
+      <div className="of-center" role="status">
+        <Heart className="of-pulse" size={26} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+        <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
+      </div>
+    );
+  }
+  if (query.isError) {
+    return (
+      <div className="of-panel of-panel--center of-card of-glass" role="alert">
+        <p className="of-error">{otome.errorMessage(query.error)}</p>
+        <button type="button" className="of-button of-button--quiet of-glass" onClick={() => void query.refetch()}>
+          <RotateCcw size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.common.retry")}
+        </button>
+      </div>
+    );
+  }
+  return null;
+}
+
+/** A card's canon wins over the bible. */
+function CanonNotice() {
+  const { t } = useTranslation();
+  return (
+    <p className="of-notice">
+      <Info size={15} strokeWidth={2} aria-hidden="true" />
+      <span>
+        <strong>{t("ui.otomeForge.setup.bibleCanonTitle")}</strong> {t("ui.otomeForge.setup.bibleCanonText")}
+      </span>
+    </p>
+  );
+}
+
+/**
+ * Edit, or Cancel and Save while editing, with the hint and the save's status. Each replaces the other, so the focus
+ * goes to the bar's new first button, not to the page.
+ */
+function EditBar({
+  editing,
+  busy,
+  status,
+  onEdit,
+  onCancel,
+  onSave,
+}: {
+  editing: boolean;
+  busy: boolean;
+  status: { error: boolean; text: string } | null;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const { t } = useTranslation();
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const was = useRef(editing);
+  useEffect(() => {
+    if (was.current === editing) return;
+    was.current = editing;
+    toolbarRef.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+  }, [editing]);
+  return (
+    <>
+      <div ref={toolbarRef} className="of-bible-toolbar">
+        {editing ? (
+          <>
+            <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onCancel}>
+              {t("ui.otomeForge.setup.bibleCancel")}
+            </button>
+            <button
+              type="button"
+              className="of-button of-button--primary of-button--small"
+              aria-disabled={busy}
+              onClick={onSave}
+            >
+              <Save size={15} strokeWidth={2} aria-hidden="true" />
+              {busy ? t("ui.otomeForge.setup.bibleSaving") : t("ui.otomeForge.setup.bibleSave")}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onEdit}>
+            <PencilLine size={15} strokeWidth={2} aria-hidden="true" />
+            {t("ui.otomeForge.setup.bibleEdit")}
+          </button>
+        )}
+      </div>
+      {editing ? <p className="of-hint">{t("ui.otomeForge.setup.bibleEditHint")}</p> : null}
+      <div className="of-live" role="status" aria-live="polite">
+        {status ? <p className={status.error ? "of-notice of-notice--error" : "of-notice"}>{status.text}</p> : null}
+      </div>
+    </>
+  );
+}
+
 interface BibleViewProps {
   runKey: string;
   li: RunLiView;
   lis: RunLiView[];
 }
 
-function CardLink({ runKey, li, lis }: BibleViewProps) {
+/** The character card a love interest or (#2475) friend is linked to; a card someone else in `cast` has is disabled. */
+function CardLink({ runKey, li, cast }: { runKey: string; li: RunCastMember; cast: readonly RunCastMember[] }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -342,10 +554,7 @@ function CardLink({ runKey, li, lis }: BibleViewProps) {
         `/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li.id)}/card`,
         { cardId: value || null },
       );
-      patchRun(queryClient, runKey, (view) => ({
-        ...view,
-        lis: view.lis.map((item) => (item.id === li.id ? { ...item, cardId: cardId ?? undefined } : item)),
-      }));
+      patchCastMember(queryClient, runKey, li.id, () => ({ cardId: cardId ?? undefined }));
       setDraft(null);
       setStatus({ error: false, text: t("ui.otomeForge.setup.cardLinkSaved") });
     } catch (failure) {
@@ -387,7 +596,7 @@ function CardLink({ runKey, li, lis }: BibleViewProps) {
             <option
               key={card.id}
               value={card.id}
-              disabled={lis.some((other) => other.id !== li.id && other.cardId === card.id)}
+              disabled={cast.some((other) => other.id !== li.id && other.cardId === card.id)}
             >
               {card.title ? t("ui.otomeForge.common.nameWithTitle", { name: card.name, title: card.title }) : card.name}
             </option>
@@ -451,18 +660,6 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
   const sections =
     shown?.intimacy && run.data && intimacyOpen(run.data.world.content) ? [...SECTIONS, INTIMACY_SECTION] : SECTIONS;
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null);
-  // Edit, Cancel and Save replace themselves: focus goes to the toolbar's new first button, not to the page.
-  const focusToolbar = useRef(false);
-  useEffect(() => {
-    if (!focusToolbar.current) return;
-    focusToolbar.current = false;
-    toolbarRef.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
-  }, [editing]);
-  const setEditing = (next: Bible | null) => {
-    focusToolbar.current = true;
-    setDraft(next);
-  };
 
   const save = async () => {
     if (!draft || busy) return;
@@ -479,7 +676,7 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
       queryClient.setQueryData(queryKey, saved.bible);
       // The cast's "Add intimacy preferences" follows whether the block is there.
       void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
-      setEditing(null);
+      setDraft(null);
       setStatus({ error: false, text: t("ui.otomeForge.setup.bibleSaved") });
     } catch (failure) {
       // A rule the editor does not check (a field too long, too many entries in a list) is the bible's, not a retry's.
@@ -507,90 +704,36 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
           {t("ui.otomeForge.setup.bibleTitle", { name: li.name })}
         </h1>
       </div>
-      <CardLink key={li.id} runKey={runKey} li={li} lis={lis} />
-      {!revealed ? (
-        <section className="of-section of-glass of-spoiler">
-          <BookLock size={26} strokeWidth={1.6} aria-hidden="true" />
-          <p className="of-body">{t("ui.otomeForge.setup.bibleSpoilerText")}</p>
-          <button
-            type="button"
-            className="of-button of-button--primary"
-            onClick={() => {
-              // The button leaves with the gate; the heading (which stays) keeps the focus.
-              setRevealed(true);
-              headingRef.current?.focus({ preventScroll: true });
-            }}
-          >
-            <Eye size={16} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.setup.bibleShowSpoilers")}
-          </button>
-        </section>
-      ) : bible.isPending ? (
-        <div className="of-center" role="status">
-          <Heart className="of-pulse" size={26} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
-        </div>
-      ) : bible.isError ? (
-        <div className="of-panel of-panel--center of-card of-glass" role="alert">
-          <p className="of-error">{otome.errorMessage(bible.error)}</p>
-          <button type="button" className="of-button of-button--quiet of-glass" onClick={() => void bible.refetch()}>
-            <RotateCcw size={16} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.common.retry")}
-          </button>
-        </div>
+      <CardLink key={li.id} runKey={runKey} li={li} cast={[...lis, ...(run.data?.friends ?? [])]} />
+      {!revealed || bible.isPending || bible.isError ? (
+        <SpoilerGate
+          revealed={revealed}
+          query={bible}
+          onReveal={() => {
+            // The button leaves with the gate; the heading (which stays) keeps the focus.
+            setRevealed(true);
+            headingRef.current?.focus({ preventScroll: true });
+          }}
+        />
       ) : !shown ? (
         <p className="of-notice">{t("ui.otomeForge.setup.bibleNotYet")}</p>
       ) : (
         <>
-          {li.source === "card" ? (
-            <p className="of-notice">
-              <Info size={15} strokeWidth={2} aria-hidden="true" />
-              <span>
-                <strong>{t("ui.otomeForge.setup.bibleCanonTitle")}</strong> {t("ui.otomeForge.setup.bibleCanonText")}
-              </span>
-            </p>
-          ) : null}
-          <div ref={toolbarRef} className="of-bible-toolbar">
-            {editing ? (
-              <>
-                <button
-                  type="button"
-                  className="of-button of-button--quiet of-glass of-button--small"
-                  onClick={() => {
-                    setEditing(null);
-                    setStatus(null);
-                  }}
-                >
-                  {t("ui.otomeForge.setup.bibleCancel")}
-                </button>
-                <button
-                  type="button"
-                  className="of-button of-button--primary of-button--small"
-                  aria-disabled={busy}
-                  onClick={() => void save()}
-                >
-                  <Save size={15} strokeWidth={2} aria-hidden="true" />
-                  {busy ? t("ui.otomeForge.setup.bibleSaving") : t("ui.otomeForge.setup.bibleSave")}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="of-button of-button--quiet of-glass of-button--small"
-                onClick={() => {
-                  setEditing(shown);
-                  setStatus(null);
-                }}
-              >
-                <PencilLine size={15} strokeWidth={2} aria-hidden="true" />
-                {t("ui.otomeForge.setup.bibleEdit")}
-              </button>
-            )}
-          </div>
-          {editing ? <p className="of-hint">{t("ui.otomeForge.setup.bibleEditHint")}</p> : null}
-          <div className="of-live" role="status" aria-live="polite">
-            {status ? <p className={status.error ? "of-notice of-notice--error" : "of-notice"}>{status.text}</p> : null}
-          </div>
+          {li.source === "card" ? <CanonNotice /> : null}
+          <EditBar
+            editing={editing}
+            busy={busy}
+            status={status}
+            onEdit={() => {
+              setDraft(shown);
+              setStatus(null);
+            }}
+            onCancel={() => {
+              setDraft(null);
+              setStatus(null);
+            }}
+            onSave={() => void save()}
+          />
 
           {sections.map((section) => (
             <Block key={section.titleKey} title={t(section.titleKey)}>
@@ -801,3 +944,151 @@ const WEB_KEYS = {
   debt: "ui.otomeForge.setup.bibleWebDebt",
   secret: "ui.otomeForge.setup.bibleWebSecret",
 } as const;
+
+/**
+ * #2475: a friend's bible, behind the same gate and edited the same way (POST /runs/:run/friends/:li/bible): who they
+ * are, their growth over five ranks, their look, and their stance on each love interest they have one on. Nothing a love
+ * interest alone has (stages, secrets, bond ranks) is here.
+ */
+export function FriendBibleView({
+  runKey,
+  friend,
+  lis,
+  friends,
+}: {
+  runKey: string;
+  friend: RunFriendView;
+  lis: readonly RunLiView[];
+  friends: readonly RunFriendView[];
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [revealed, setRevealed] = useState(false);
+  const [draft, setDraft] = useState<FriendBible | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
+  const path = `/runs/${encodeURIComponent(runKey)}/friends/${encodeURIComponent(friend.id)}/bible`;
+  const queryKey = bibleQueryKey(runKey, friend.id);
+  const bible = useQuery({
+    queryKey,
+    enabled: revealed,
+    queryFn: async () => (await otome.get<{ bible: FriendBible }>(path, { spoilers: 1 })).bible,
+  });
+  const accent = accentOf(friend);
+  const editing = draft !== null;
+  const shown = draft ?? bible.data ?? null;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const nameOf = (id: string) => lis.find((li) => li.id === id)?.name ?? id;
+  // How they feel about her love life, then about her and each love interest they have a stance on.
+  const loveSection = (bible: FriendBible) => ({
+    titleKey: "ui.otomeForge.setup.friendOnLove",
+    fields: [
+      { path: "onHer", labelKey: "ui.otomeForge.setup.friendOnHer", kind: "long" as const },
+      ...Object.keys(bible.onLis).flatMap((id): FieldSpec[] => [
+        {
+          path: `onLis.${id}.stance`,
+          labelKey: "ui.otomeForge.setup.friendStanceOn",
+          labelValues: { name: nameOf(id) },
+          kind: "choice",
+          options: STANCE_KEYS,
+        },
+        {
+          path: `onLis.${id}.why`,
+          labelKey: "ui.otomeForge.setup.friendStanceWhy",
+          labelValues: { name: nameOf(id) },
+          kind: "long",
+        },
+      ]),
+    ],
+  });
+
+  const save = async () => {
+    if (!draft || busy) return;
+    const bibleToSave = trimLines(draft, FRIEND_SECTIONS);
+    if (!(bibleToSave.age >= MIN_AGE)) {
+      setStatus({ error: true, text: t(PROBLEM_KEYS.age, PROBLEM_VALUES) });
+      return;
+    }
+    setBusy(true);
+    setStatus(null);
+    try {
+      const saved = await otome.post<{ bible: FriendBible }>(path, { bible: bibleToSave });
+      queryClient.setQueryData(queryKey, saved.bible);
+      // Their look and the line Story shows about them follow the edit.
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+      setDraft(null);
+      setStatus({ error: false, text: t("ui.otomeForge.setup.bibleSaved") });
+    } catch (failure) {
+      setStatus({
+        error: true,
+        text:
+          otomeErrorCode(failure) === "bad-request"
+            ? t("ui.otomeForge.setup.bibleInvalid")
+            : otome.errorMessage(failure, "ui.otomeForge.setup.bibleSaveFailed"),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="of-page" style={{ ["--of-li-accent" as string]: accent }}>
+      <div className="of-page-head">
+        <Avatar name={friend.name} url={friend.portrait} accent={accent} size={72} className="of-avatar--hero" />
+        <h1 ref={headingRef} className="of-title" tabIndex={-1}>
+          {t("ui.otomeForge.setup.bibleTitle", { name: friend.name })}
+        </h1>
+        <p className="of-hint">
+          {t("ui.otomeForge.setup.castFriend", {
+            pronouns: `${friend.pronouns.subject}/${friend.pronouns.object}`,
+          })}
+        </p>
+      </div>
+      <CardLink key={friend.id} runKey={runKey} li={friend} cast={[...lis, ...friends]} />
+      {!revealed || bible.isPending || bible.isError || !shown ? (
+        <SpoilerGate
+          revealed={revealed}
+          query={bible}
+          onReveal={() => {
+            setRevealed(true);
+            headingRef.current?.focus({ preventScroll: true });
+          }}
+        />
+      ) : (
+        <>
+          {friend.source === "card" ? <CanonNotice /> : null}
+          <EditBar
+            editing={editing}
+            busy={busy}
+            status={status}
+            onEdit={() => {
+              setDraft(shown);
+              setStatus(null);
+            }}
+            onCancel={() => {
+              setDraft(null);
+              setStatus(null);
+            }}
+            onSave={() => void save()}
+          />
+          {[...FRIEND_SECTIONS, loveSection(shown)].map((section) => (
+            <Block key={section.titleKey} title={t(section.titleKey)}>
+              {editing ? (
+                section.fields.map((spec) => (
+                  <Field key={spec.path} spec={spec} bible={shown} editing onChange={setDraft} />
+                ))
+              ) : (
+                <dl className="of-bible-fields">
+                  {section.fields.map((spec) => (
+                    <Field key={spec.path} spec={spec} bible={shown} editing={false} onChange={setDraft} />
+                  ))}
+                </dl>
+              )}
+            </Block>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}

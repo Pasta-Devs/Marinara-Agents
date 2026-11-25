@@ -213,7 +213,8 @@ const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nul
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 /** A love interest or (#2475) one of her friends: who Your cast's card link and appearance take. */
-const castMember = (run: RunDocuments, id: string) => [...run.units, ...(run.friends ?? [])].find((unit) => unit.id === id);
+const castMember = (run: RunDocuments, id: string) =>
+  [...run.units, ...(run.friends ?? [])].find((unit) => unit.id === id);
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
 const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate before raising this setting.", "age-gate");
 

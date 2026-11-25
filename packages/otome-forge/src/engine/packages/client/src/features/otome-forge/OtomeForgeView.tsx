@@ -28,7 +28,7 @@ import { accentOf } from "./lib/accent";
 import { dropStaleCareNotes } from "./lib/cycle-storage";
 import { localDay } from "./lib/tap-mood";
 import { OtomePropsContext, readOtomeProps } from "./props";
-import { BibleView } from "./screens/BibleView";
+import { BibleView, FriendBibleView } from "./screens/BibleView";
 import { ClawMachine } from "./screens/dates/ClawMachine";
 import { DateNight, type DateOpen } from "./screens/dates/DateNight";
 import type { HangoutInvite } from "./screens/album/Hangouts";
@@ -273,6 +273,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     openReader("home")("prologue");
   };
   const bibleOf = view?.lis.find((li) => li.id === bibleLi) ?? null;
+  // #2475: Your cast opens a friend's bible too.
+  const friendBibleOf = bibleOf ? null : (view?.friends?.find((friend) => friend.id === bibleLi) ?? null);
   const datesOf = view?.lis.find((li) => li.id === (datesLi ?? homeLi?.id)) ?? view?.lis[0] ?? null;
 
   // Where Back leads. The opening screen and the dock's screens have none.
@@ -318,6 +320,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       />
     ) : screen === "bible" && activeRun && bibleOf && view ? (
       <BibleView runKey={activeRun} li={bibleOf} lis={view.lis} />
+    ) : screen === "bible" && activeRun && friendBibleOf && view ? (
+      <FriendBibleView runKey={activeRun} friend={friendBibleOf} lis={view.lis} friends={view.friends ?? []} />
     ) : screen === "settings" ? (
       <Settings
         run={view}

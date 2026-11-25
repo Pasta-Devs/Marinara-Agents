@@ -3,7 +3,8 @@
 // a step that failed (never retried by itself) with the reason it failed, and "Paint the cast (N images)": looks are
 // paid, so they wait for the player's tap. With "Review image prompts before sending" on, every paint (Retry too) shows
 // its prompt first, so painting is offered once the world is ready and each look exists. Once the world is ready, the
-// cast is shown with their bibles behind a spoiler gate.
+// cast is shown with their bibles behind a spoiler gate; #2475: her friends follow the love interests, marked as
+// friends, with their appearance, card and bible (never a love interest's intimacy fill).
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,10 +26,18 @@ import { forgeStepErrorKey, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { CostHint } from "../components/CostHint";
 import { PromptReviewDialog, type ImagePrompt } from "../components/PromptReviewDialog";
-import { bibleQueryKey, patchRun, runQueryKey, useRun } from "../hooks/use-run";
+import { bibleQueryKey, patchCastMember, patchRun, runQueryKey, useRun } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
-import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunLiView, RunView } from "../shared/api-types";
+import type {
+  ForgeStatus,
+  ForgeStep,
+  ForgeStepState,
+  Paint,
+  RunCastMember,
+  RunLiView,
+  RunView,
+} from "../shared/api-types";
 import { intimacyOpen } from "../shared/content";
 import { isEngineArt } from "../shared/engine-art";
 import { forgePrerequisite } from "../shared/forge";
@@ -350,7 +359,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
           const Icon = STATE_ICONS[step.state];
           const name = nameOfStep(step);
           const expressionLi = view.world.images.expressions
-            ? view.lis.find((li) => `paint:${li.id}` === step.id && (li.worn || li.portrait))
+            ? people.find((li) => `paint:${li.id}` === step.id && (li.worn || li.portrait))
             : undefined;
           return (
             <li key={step.id} className="of-forge-step" data-state={step.state}>
@@ -508,7 +517,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
         <PromptReviewDialog
           key={`${expressionReview.li}:${expressionReview.index}`}
           subject={t("ui.otomeForge.setup.reviewExpressionSubject", {
-            name: view.lis.find((li) => li.id === expressionReview.li)?.name,
+            name: people.find((li) => li.id === expressionReview.li)?.name,
             face: t(FACE_LABELS[FACES[expressionReview.index]!]),
             index: expressionReview.index + 1,
             total: FACES.length,
@@ -534,36 +543,48 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
 
 function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: string) => void }) {
   const { t } = useTranslation();
+  const friends = view.friends ?? [];
+  /** A love interest's card (`li` is him) or a friend's (none of his love-interest-only parts). */
+  const card = (person: RunCastMember, li?: RunLiView) => {
+    const accent = accentOf(person);
+    const pronouns = `${person.pronouns.subject}/${person.pronouns.object}`;
+    return (
+      <li key={person.id} className="of-cast-card" style={{ ["--of-li-accent" as string]: accent }}>
+        <Avatar name={person.name} url={person.portrait} accent={accent} size={64} />
+        <span className="of-cast-name">{person.name}</span>
+        <span className="of-hint">{li ? pronouns : t("ui.otomeForge.setup.castFriend", { pronouns })}</span>
+        <ImageAppearanceEditor key={`${view.runKey}:${person.id}`} runKey={view.runKey} li={person} />
+        {li && intimacyOpen(view.world.content) ? (
+          <IntimacyFill key={`${view.runKey}:${li.id}:intimacy`} runKey={view.runKey} li={li} />
+        ) : null}
+        <button
+          type="button"
+          className="of-button of-button--text of-button--small"
+          aria-label={t("ui.otomeForge.setup.openBibleOf", { name: person.name })}
+          onClick={() => onOpenBible(person.id)}
+        >
+          <BookLock size={14} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.setup.openBible")}
+        </button>
+      </li>
+    );
+  };
   return (
     <section className="of-section of-glass" aria-labelledby={`${view.runKey}-cast`}>
       <h2 id={`${view.runKey}-cast`} className="of-section-title">
         {t("ui.otomeForge.setup.forgeCastTitle")}
       </h2>
-      <ul className="of-cast">
-        {view.lis.map((li) => {
-          const accent = accentOf(li);
-          return (
-            <li key={li.id} className="of-cast-card" style={{ ["--of-li-accent" as string]: accent }}>
-              <Avatar name={li.name} url={li.portrait} accent={accent} size={64} />
-              <span className="of-cast-name">{li.name}</span>
-              <span className="of-hint">{`${li.pronouns.subject}/${li.pronouns.object}`}</span>
-              <ImageAppearanceEditor key={`${view.runKey}:${li.id}`} runKey={view.runKey} li={li} />
-              {intimacyOpen(view.world.content) ? (
-                <IntimacyFill key={`${view.runKey}:${li.id}:intimacy`} runKey={view.runKey} li={li} />
-              ) : null}
-              <button
-                type="button"
-                className="of-button of-button--text of-button--small"
-                aria-label={t("ui.otomeForge.setup.openBibleOf", { name: li.name })}
-                onClick={() => onOpenBible(li.id)}
-              >
-                <BookLock size={14} strokeWidth={2} aria-hidden="true" />
-                {t("ui.otomeForge.setup.openBible")}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <ul className="of-cast">{view.lis.map((li) => card(li, li))}</ul>
+      {friends.length ? (
+        <>
+          <h3 id={`${view.runKey}-friends`} className="of-section-title">
+            {t("ui.otomeForge.setup.castFriends")}
+          </h3>
+          <ul className="of-cast" aria-labelledby={`${view.runKey}-friends`}>
+            {friends.map((friend) => card(friend))}
+          </ul>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -632,7 +653,7 @@ function IntimacyFill({ runKey, li }: { runKey: string; li: RunLiView }) {
 }
 
 /** The public visual description, edited without opening the spoiler-heavy Bible or painting anything. */
-function ImageAppearanceEditor({ runKey, li }: { runKey: string; li: RunLiView }) {
+function ImageAppearanceEditor({ runKey, li }: { runKey: string; li: RunCastMember }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -658,20 +679,8 @@ function ImageAppearanceEditor({ runKey, li }: { runKey: string; li: RunLiView }
     setStatus(null);
     try {
       const result = await otome.saveImageAppearance(runKey, li.id, submitted);
-      patchRun(queryClient, runKey, (view) => ({
-        ...view,
-        lis: view.lis.map((current) =>
-          current.id === li.id
-            ? {
-                ...current,
-                look: {
-                  ...current.look,
-                  outfitLine: current.look?.outfitLine ?? "",
-                  identityLine: result.identityLine,
-                },
-              }
-            : current,
-        ),
+      patchCastMember(queryClient, runKey, li.id, (current) => ({
+        look: { ...current.look, outfitLine: current.look?.outfitLine ?? "", identityLine: result.identityLine },
       }));
       // A save must not replace text typed while its request was pending.
       if (latest.current === submitted) {

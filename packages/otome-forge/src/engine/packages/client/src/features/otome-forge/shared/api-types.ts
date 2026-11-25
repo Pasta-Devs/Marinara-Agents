@@ -1891,8 +1891,8 @@ export interface RunView {
   ended?: string;
 }
 
-/** #2458: a friend as the client sees them: their looks, as a love interest's, and their level, 1–5 (stars). */
-export type RunFriendView = Pick<
+/** #2475: who a love interest and a friend both are in the run view, with their looks: what Your cast edits alike. */
+export type RunCastMember = Pick<
   RunLiView,
   | "id"
   | "name"
@@ -1908,13 +1908,16 @@ export type RunFriendView = Pick<
   | "cut"
   | "expressions"
   | "worn"
-  | "level"
-> & {
-  affectionProgress: { current: number; required: number };
-  arc: number;
-  /** Who they are and how you know each other, from their bible (never a secret: friends have none). */
-  about?: string;
-};
+>;
+
+/** #2458: a friend as the client sees them: their looks, as a love interest's, and their level, 1–5 (stars). */
+export type RunFriendView = RunCastMember &
+  Pick<RunLiView, "level"> & {
+    affectionProgress: { current: number; required: number };
+    arc: number;
+    /** Who they are and how you know each other, from their bible (never a secret: friends have none). */
+    about?: string;
+  };
 
 export type SetupLi =
   | { source: "card"; cardId: string; pronouns: Pronouns }

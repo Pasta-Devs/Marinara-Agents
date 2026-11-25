@@ -2,15 +2,16 @@
 // Otome Hearth: her friends on the Story screen (#2458), under the love interests' affection
 // ──────────────────────────────────────────────
 // Each friend shows their portrait, name, five stars (their level) and progress to the next. Add a friend opens a
-// dialog: someone she has met (GET /runs/:run/friends/met, the side characters who have spoken), one of the player's
-// cards, or someone new from a name and notes, each with the pronouns the player picks. Adding writes their bible (one
-// text call) and, with an image connection, paints their portrait (Your cast), so the dialog says what it costs. The
-// server refuses a friend when the story has as many friends as love interests, or one joined in this arc already
-// (StoryView.friendBlock); the button then explains why it waits.
+// dialog: someone she has met (GET /runs/:run/friends/met, the side characters who have spoken) with one of the
+// player's cards or none (#2475: the card their name matches comes picked), one of the player's cards, or someone new
+// from a name and notes, each with the pronouns the player picks. A card linked to someone in the cast is not offered.
+// Adding writes their bible (one text call) and, with an image connection, paints their portrait (Your cast), so the
+// dialog says what it costs. The server refuses a friend when the story has as many friends as love interests, or one
+// joined in this arc already (StoryView.friendBlock); the button then explains why it waits.
 import { useId, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookHeart, Check, Handshake, HeartHandshake, Star, UserPlus } from "lucide-react";
+import { BookHeart, Check, Handshake, HeartHandshake, Star, UserPlus, UserRound } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { CostHint, usePaintsByItself } from "../../components/CostHint";
@@ -288,10 +289,15 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
     queryFn: () => otome.get<{ met: Met[] }>(`${runPath(runKey)}/friends/met`),
   });
   const people = met.data?.met ?? [];
+  // A card already linked to a love interest or friend is not offered (the server refuses it too).
+  const linked = new Set([...view.lis, ...(view.friends ?? [])].flatMap((person) => person.cardId ?? []));
+  const offered = cards.items.filter((card) => !linked.has(card.id));
   // One native radio group for the source, apart from the pronoun radios, so the arrow keys move within it.
   const source = useId();
   const [mode, setMode] = useState<"met" | "card" | "new">("met");
   const [metKey, setMetKey] = useState("");
+  /** #2475: the card someone she has met is linked to; "" for none. Picking them picks the card their name matches. */
+  const [metCard, setMetCard] = useState("");
   const [cardId, setCardId] = useState("");
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
@@ -306,10 +312,9 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
     if (!resolved || busy) return;
     setBusy(true);
     setError(null);
-    const person = people.find((entry) => entry.key === metKey);
     const body =
       mode === "met"
-        ? { source: "met", key: metKey, pronouns: resolved, ...(person?.cardId ? { cardId: person.cardId } : {}) }
+        ? { source: "met", key: metKey, pronouns: resolved, cardId: metCard || null }
         : mode === "card"
           ? { source: "card", cardId, pronouns: resolved }
           : { source: "new", name: name.trim(), pronouns: resolved, ...(notes.trim() ? { notes: notes.trim() } : {}) };
@@ -334,7 +339,13 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
         title={label}
         onClick={onPick}
       >
-        <Avatar name={label} url={url} accent={nameAccent(label)} />
+        {id ? (
+          <Avatar name={label} url={url} accent={nameAccent(label)} />
+        ) : (
+          <span className="of-avatar" style={{ width: 44, height: 44 }} aria-hidden="true">
+            <UserRound size={20} strokeWidth={1.8} />
+          </span>
+        )}
         <span className="of-tile-name">{label}</span>
         {picked ? (
           <span className="of-tile-check" aria-hidden="true">
@@ -344,6 +355,10 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
       </button>
     </li>
   );
+  const cardTiles = (picked: string, onPick: (id: string) => void) =>
+    offered.map((card) =>
+      tile(card.id, card.name, picked === card.id, () => onPick(card.id), card.avatarUrl ?? undefined),
+    );
 
   return (
     <Dialog
@@ -406,11 +421,25 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
                 retrying={met.isFetching}
               />
             ) : people.length ? (
-              <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.friends.fromMet")}>
-                {people.map((person) =>
-                  tile(person.key, person.name, metKey === person.key, () => setMetKey(person.key)),
-                )}
-              </ul>
+              <>
+                <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.friends.fromMet")}>
+                  {people.map((person) =>
+                    tile(person.key, person.name, metKey === person.key, () => {
+                      setMetKey(person.key);
+                      setMetCard(person.cardId && !linked.has(person.cardId) ? person.cardId : "");
+                    }),
+                  )}
+                </ul>
+                {metKey ? (
+                  <>
+                    <p className="of-hint">{t("ui.otomeForge.friends.metCardHint")}</p>
+                    <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.friends.metCard")}>
+                      {tile("", t("ui.otomeForge.friends.metNoCard"), !metCard, () => setMetCard(""))}
+                      {cardTiles(metCard, setMetCard)}
+                    </ul>
+                  </>
+                ) : null}
+              </>
             ) : (
               <p className="of-hint" role={met.isLoading ? "status" : undefined}>
                 {t(met.isLoading ? "ui.otomeForge.friends.metLoading" : "ui.otomeForge.friends.metNone")}
@@ -418,9 +447,7 @@ function AddFriendDialog({ runKey, view, onClose }: { runKey: string; view: RunV
             )
           ) : mode === "card" ? (
             <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.story.newcomerCard")}>
-              {cards.items.map((card) =>
-                tile(card.id, card.name, cardId === card.id, () => setCardId(card.id), card.avatarUrl ?? undefined),
-              )}
+              {cardTiles(cardId, setCardId)}
             </ul>
           ) : (
             <>

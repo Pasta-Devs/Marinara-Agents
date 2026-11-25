@@ -2,7 +2,8 @@
 // friend (POST /runs/:run/friends, S/story/friends.ts), what a main chapter and their own stories pay them
 // (S/state/rewards.ts), their grievances (S/state/friends.ts), rank stories, hangouts and the Wingman
 // (S/story/friend-stories.ts, S/story/friend-rewards.ts), their block in the story prompts (S/prompts.ts), the ending
-// (S/story/ending.ts) and an ended story's lock (S/routes/ended.ts).
+// (S/story/ending.ts) and an ended story's lock (S/routes/ended.ts). #2475: a met friend's card, a friend in Your cast
+// (their bible, card link and appearance), and their portrait cut out on opening the story.
 // Run: npx tsx --tsconfig tests/tsconfig.regressions.json --test tests/otome-forge-friends.regression.ts
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -21,7 +22,16 @@ import {
   runDocTarget,
   sideCastId,
   stateId as stateIdOf,
+  unitId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import type {
+  OtomeRequest,
+  RouteDeps,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/http.ts";
+import { cutoutsSettled } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
+import { paintClaimed } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
+import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
+import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import {
   friendsBlock,
   storyContext,
@@ -52,6 +62,7 @@ import { askWingman } from "../packages/otome-forge/src/engine/packages/server/s
 import { waitingRank } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friend-stories.ts";
 import { friendCards } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/friends.ts";
 import { CAST, HE, KAI, MIR, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { artWorld, routesOf } from "./fixtures/otome-forge-art.ts";
 
 function friendBible(changes: Partial<FriendBible> = {}): FriendBible {
   return {
@@ -452,4 +463,201 @@ test("the finale read to its end settles every grievance, both ways, and none op
   assert.equal(hisHurt.state.lis[KAI]!.rupture, null, "nor his");
   assert.equal(hisHurt.state.lis[KAI]!.grievances.length, read.lis[KAI]!.grievances.length, "nor any grievance");
   assert.equal(hisHurt.state.lis[KAI]!.points, read.lis[KAI]!.points - 15, "though it still hurts");
+});
+
+// ── #2475: a met friend's card, Your cast, and their cut-outs ──
+
+/** The Engine cards these tests offer, by id: a card's `name` is what readCard reads. */
+const cardsOf = (names: Record<string, string>) =>
+  Object.entries(names).map(([id, name]) => ({ id, data: JSON.stringify({ name }), comment: "" }));
+
+/** The run routes (Your cast's card link and appearance, GET /runs/:run), with `li` as the route's :li. */
+function runRoutes(deps: RouteDeps, runKey: string, li = "") {
+  return routesOf(
+    (router, shared) => {
+      const selected = (request: OtomeRequest) => ({
+        ...request,
+        params: { ...(request.params as Record<string, string>), li },
+      });
+      registerRunRoutes(
+        {
+          get: (path, handler) => router.get(path, (request, reply) => handler(selected(request), reply)),
+          post: (path, handler) => router.post(path, (request, reply) => handler(selected(request), reply)),
+        },
+        shared,
+      );
+    },
+    deps,
+    runKey,
+  );
+}
+
+/** Kaveh as her friend already, with his friend bible and `unit` on top. */
+async function seedFriend(t: Awaited<ReturnType<typeof storyWorld>>, unit: Record<string, unknown> = {}) {
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAVEH)), normalizeUnit, (current) => ({
+    ...current,
+    id: KAVEH,
+    name: "Kaveh",
+    pronouns: HE,
+    friend: friendBible(),
+    identityLine: "tall, ash hair",
+    outfitLine: "linen coat",
+    createdAt: "2026-11-24T10:00:00.000Z",
+    ...unit,
+  }));
+  await t.store.updateDoc(runDocTarget("state", stateIdOf(t.runId)), normalizeState, (state) => ({
+    ...state,
+    friends: { [KAVEH]: defaultFriendState(0, "2026-11-24T10:00:00.000Z") },
+  }));
+}
+
+test("#2475: a friend she has met takes the card the player picks, never one in the cast, and is painted from it", async () => {
+  const t = await artWorld({ runKey: "r-friendcard-aaaaaa", replies: [json(friendBible())] });
+  const cards = cardsOf({ "card-kaveh": "Kaveh", "card-kaveh-alt": "Kaveh the Architect", "card-kai": "Kai" });
+  t.runtime.resources.listCharacters = async (ids) => cards.filter((card) => !ids || ids.includes(card.id));
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-kai",
+  }));
+  await t.store.mutateDoc(runDocTarget("sides", sideCastId(t.runId)), normalizeSideCast, (sides) => ({
+    ...sides,
+    people: {
+      kaveh: {
+        key: "kaveh",
+        name: "Kaveh",
+        cardId: "card-kaveh",
+        chapters: ["main-1"],
+        at: "2026-11-24T10:00:00.000Z",
+      },
+    },
+  }));
+  const met = await t.call("GET", "/runs/:run/friends/met");
+  assert.deepEqual(met.body.met, [{ key: "kaveh", name: "Kaveh", cardId: "card-kaveh" }], "the card his name matches");
+
+  const taken = await t.call("POST", "/runs/:run/friends", {
+    source: "met",
+    key: "kaveh",
+    pronouns: HE,
+    cardId: "card-kai",
+  });
+  assert.equal(taken.status, 400, "a love interest's card is not a friend's");
+  assert.equal(t.calls.length, 0, "and a refusal pays for nothing");
+
+  const added = await t.call("POST", "/runs/:run/friends", {
+    source: "met",
+    key: "kaveh",
+    pronouns: HE,
+    cardId: "card-kaveh-alt",
+  });
+  assert.equal(added.status, 200, JSON.stringify(added.body));
+  const id = added.body.friend.id as string;
+  assert.equal(added.body.friend.name, "Kaveh", "someone she has met keeps the name she knows");
+  const unit = (await readRun(t.store, t.runId))!.friends!.find((friend) => friend.id === id)!;
+  assert.equal(unit.cardId, "card-kaveh-alt", "the card the player picked, not the one his name matches");
+  assert.equal(unit.source, "card");
+
+  // His portrait is painted with that card as its likeness reference, as a love interest's is.
+  const paint = await paintClaimed(t.deps, t.runId, `li:${id}`, { debugMode: false });
+  assert.equal(paint.state, "ready");
+  assert.equal(t.paid.length, 1);
+  assert.equal(t.paid[0]!.request.unit?.cardId, "card-kaveh-alt");
+});
+
+test("#2475: a friend she has met joins without a card when the player picks none", async () => {
+  const t = await storyWorld({
+    runKey: "r-friendnocard-bbbbbb",
+    replies: [json(friendBible())],
+    characters: cardsOf({ "card-kaveh": "Kaveh" }),
+  });
+  await t.store.mutateDoc(runDocTarget("sides", sideCastId(t.runId)), normalizeSideCast, (sides) => ({
+    ...sides,
+    people: {
+      kaveh: {
+        key: "kaveh",
+        name: "Kaveh",
+        cardId: "card-kaveh",
+        chapters: ["main-1"],
+        at: "2026-11-24T10:00:00.000Z",
+      },
+    },
+  }));
+  const added = await t.call("POST", "/runs/:run/friends", { source: "met", key: "kaveh", pronouns: HE, cardId: null });
+  assert.equal(added.status, 200, JSON.stringify(added.body));
+  const unit = (await readRun(t.store, t.runId))!.friends![0]!;
+  assert.equal(unit.cardId, undefined);
+  assert.equal(unit.source, "archetype");
+});
+
+test("#2475: Your cast shows a friend's bible behind the spoiler gate, takes an edit checked whole, and links their card", async () => {
+  const t = await artWorld({ runKey: "r-friendcast-cccccc" });
+  const cards = cardsOf({ "card-kaveh": "Kaveh", "card-kai": "Kai" });
+  t.runtime.resources.listCharacters = async (ids) => cards.filter((card) => !ids || ids.includes(card.id));
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-kai",
+  }));
+  await seedFriend(t);
+  const path = "/runs/:run/friends/:li/bible";
+  const friendParams = { li: KAVEH };
+
+  const gated = await t.call("GET", path, {}, friendParams);
+  assert.equal(gated.status, 400, "a bible is a spoiler");
+  const read = await t.call("GET", path, { spoilers: "1" }, friendParams);
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  assert.equal(read.body.bible.growth["2"], "RANK-TWO");
+  assert.equal((await t.call("GET", path, { spoilers: "1" }, { li: KAI })).status, 404, "a love interest is no friend");
+
+  const young = await t.call("POST", path, { bible: friendBible({ age: 17 }) }, friendParams);
+  assert.equal(young.status, 400, "adults only");
+  const edited = friendBible({
+    onHer: "EDITED: cheering her on.",
+    look: { identityLine: "short ash hair, red eyes", outfitLine: "linen coat", presentation: "man" },
+  });
+  const saved = await t.call("POST", path, { bible: edited }, friendParams);
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const unit = (await t.store.readDoc(unitId(t.runId, KAVEH), normalizeUnit))!;
+  assert.equal(unit.friend?.onHer, "EDITED: cheering her on.");
+  assert.deepEqual(Object.keys(unit.friend!.onLis), [KAI], "a stance on someone not in the cast is dropped");
+  assert.equal(unit.identityLine, "short ash hair, red eyes", "the edited look steers the next paint");
+  assert.equal(unit.bible, null, "never a love interest's bible");
+  assert.equal((await t.call("POST", path, { bible: edited }, { li: KAI })).status, 404);
+
+  // The card link and appearance take him as they take a love interest.
+  const asFriend = runRoutes(t.deps, "r-friendcast-cccccc", KAVEH);
+  const theirs = await asFriend("POST", "/runs/:run/lis/:li/card", { cardId: "card-kai" });
+  assert.equal(theirs.status, 409, "Kai's card is his");
+  const linked = await asFriend("POST", "/runs/:run/lis/:li/card", { cardId: "card-kaveh" });
+  assert.equal(linked.status, 200, JSON.stringify(linked.body));
+  assert.equal((await t.store.readDoc(unitId(t.runId, KAVEH), normalizeUnit))!.cardId, "card-kaveh");
+  const asKai = runRoutes(t.deps, "r-friendcast-cccccc", KAI);
+  assert.equal((await asKai("POST", "/runs/:run/lis/:li/card", { cardId: "card-kaveh" })).status, 409, "nor his");
+  const look = await asFriend("POST", "/runs/:run/lis/:li/appearance", { identityLine: "silver hair" });
+  assert.equal(look.status, 200, JSON.stringify(look.body));
+  assert.equal(look.body.identityLine, "silver hair");
+  const view = (await asFriend("GET", "/runs/:run")).body.view;
+  const shown = view.friends.find((friend: { id: string }) => friend.id === KAVEH);
+  assert.equal(shown.cardId, "card-kaveh");
+  assert.equal(shown.look.identityLine, "silver hair");
+});
+
+test("#2475: opening the story cuts out a friend's painted portrait, and the view shows the cut-out once it is ready", async () => {
+  const t = await artWorld({ runKey: "r-friendcut-dddddd" });
+  const PORTRAIT = "/api/global-gallery/file/kaveh-matte.png";
+  // Painted before #2475: a portrait on its chroma matte with no cut-out yet.
+  await seedFriend(t, {
+    portrait: PORTRAIT,
+    portraitRef: "global-gallery:kaveh-matte",
+    art: { state: "ready", at: "2026-11-24T10:00:00.000Z", url: PORTRAIT, ref: "global-gallery:kaveh-matte" },
+  });
+  const run = runRoutes(t.deps, "r-friendcut-dddddd");
+  const first = (await run("GET", "/runs/:run")).body.view;
+  assert.equal(first.cutoutsPending, true, "the view polls while his cut-out is made");
+  assert.equal(first.friends[0].portrait, PORTRAIT, "the matte until the cut-out is ready");
+  await cutoutsSettled();
+  const unit = (await t.store.readDoc(unitId(t.runId, KAVEH), normalizeUnit))!;
+  assert.equal(unit.cutouts[PORTRAIT]?.state, "ready");
+  const next = (await run("GET", "/runs/:run")).body.view;
+  assert.equal(next.friends[0].portrait, `${PORTRAIT}.cut.png`);
+  assert.ok(next.friends[0].cut.includes(`${PORTRAIT}.cut.png`), "framed whole as a cut-out");
+  assert.equal(next.cutoutsPending, undefined);
 });
