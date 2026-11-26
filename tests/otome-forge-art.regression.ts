@@ -1324,6 +1324,15 @@ test("0.47.2: on NovelAI a key image of two people sends both their references, 
     characters: 2,
   });
   assert.deepEqual(bodies.at(-1)!.referenceImages, ["/kai.png", "/ines.png"]);
+  // Nobody pictured (a photo of two with no picture of either): the place is never sent as a person.
+  await deps.images.generateImage({
+    ...request,
+    connectionId: "conn-image",
+    referenceImages: ["/place.png"],
+    characters: 0,
+  });
+  assert.equal(bodies.at(-1)!.referenceImages, undefined);
+  assert.equal("preferReferenceOutfit" in bodies.at(-1)!, false);
 });
 
 // ── 0.47.1: Your cast's paints go on in the background ──

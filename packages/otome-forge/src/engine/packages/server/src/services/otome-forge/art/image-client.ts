@@ -396,7 +396,7 @@ export function createImageClient({
       // references apart (the maintainer's test), so it gets one per person in the picture, as NovelAI's own client
       // sends them.
       const novelai = !!referenceImages?.length && !!(await client.novelAi?.(connectionId));
-      if (novelai) referenceImages = referenceImages!.slice(0, Math.max(1, characters));
+      if (novelai) referenceImages = referenceImages!.slice(0, characters);
       const result = (await request("/api/characters/avatar-generation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
