@@ -2,7 +2,7 @@
 
 ## 0.47.2 — 2026-11-26
 
-- With a NovelAI connection, a picture of two or more people no longer gives everyone the same face and hair. It sent NovelAI only the main character's reference; now it sends one for each person in the picture, as NovelAI's own app does.
+- With a NovelAI connection, a picture of two or more people sends NovelAI a reference for each person who has a picture, as NovelAI's own app does, so each one's own picture guides how they look. Before, it sent only the main character's reference, which gave everyone that person's face and hair.
 - On NovelAI and other tag models, a key image of a scene that isn't explicit is much less likely to come out nude, even under Explicit Heat and the Explicit image rating. Its negative prompt now also names nudity in tags (`nude, topless, nipples, sex`), which those models read.
 
 ## 0.47.1 — 2026-11-25

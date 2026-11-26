@@ -1333,6 +1333,26 @@ test("0.47.2: on NovelAI a key image of two people sends both their references, 
   });
   assert.equal(bodies.at(-1)!.referenceImages, undefined);
   assert.equal("preferReferenceOutfit" in bodies.at(-1)!, false);
+
+  // Someone with no picture at all counts as nobody, so the worn outfit added after Kai's face never takes their slot.
+  await deps.images.generateBannerArt({
+    ...request,
+    connectionId: "conn-image",
+    units: [
+      {
+        kind: "character",
+        cardId: "card-kai",
+        outfits: [{ id: "coat", url: "/api/global-gallery/file/kai-coat.png" }],
+        wornOutfit: "coat",
+        who: "Kai",
+      },
+      { kind: "character", personaId: "persona-nobody", who: "Ines" },
+    ] as never,
+  });
+  const sent = bodies
+    .at(-1)!
+    .referenceImages.map((image: string) => Buffer.from(image.split(",")[1]!, "base64").toString());
+  assert.deepEqual(sent, ["/api/avatars/file/kai.png"]);
 });
 
 // ── 0.47.1: Your cast's paints go on in the background ──

@@ -347,6 +347,8 @@ export function createImageClient({
   logger,
 }: { baseUrl?: string; fetch?: Fetch; logger?: Logger } = {}): ImageClient {
   const fetchImpl = withEngineLocalAuth(injectedFetch);
+  /** Whether the wrapper found a picture of each subject it was handed (subjectReference), for generateBannerArt. */
+  const pictured = new WeakMap<object, boolean>();
   async function request(path: string, init?: RequestInit): Promise<unknown> {
     const response = await fetchImpl(`${baseUrl}${path}`, init);
     if (!response.ok) {
@@ -474,10 +476,10 @@ export function createImageClient({
     },
 
     async generateBannerArt({ units, ...request }) {
-      // `units` told the wrapper whose references to add: theirs come first in `referenceImages`, one each, before any
-      // worn outfit's. ponytail: one whose picture would not load leaves an outfit picture in their place on NovelAI;
-      // the upgrade path is the kit returning how many likenesses it found.
-      const image = await client.generateImage({ ...request, characters: units.length });
+      // `units` told the wrapper whose references to add: the pictures found for them come first in `referenceImages`,
+      // one each, before any worn outfit's, so only those count as people.
+      const characters = units.filter((unit) => pictured.get(unit) === true).length;
+      const image = await client.generateImage({ ...request, characters });
       return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
@@ -659,21 +661,27 @@ export function createImageClient({
      * Their likeness. A subject with `who` whose pictures exist but none loads stops the paint before the paid call;
      * with no picture at all it is painted from the description, as before.
      */
-    async subjectReference(client, subject, { method } = {}) {
-      const found = await likeness(client, subject, method);
-      const { who, ...rest } = subject as Omit<ImageSubject, "kind">;
-      if (found || !who) return found;
-      // Alone in a scene, the look they wear may still show them (the kit adds it too; one picture is sent once).
-      const scene = method === "generateBannerArt";
-      const worn = scene ? wornLookPath(rest) : "";
-      const image = worn ? await client.cardAvatarImage(worn) : null;
-      if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
-      // A picture that did not load (a deleted file): a stranger would be painted and paid for instead.
-      if (await hasLikenessSource(client, rest, scene)) throw new MissingLikenessError(who);
-      logger?.warn("[otome-forge] %s: %s has no picture to send; painted from the description", method, who);
-      return null;
+    async subjectReference(client, subject, options = {}) {
+      const found = await subjectPicture(client, subject, options.method);
+      pictured.set(subject, !!found);
+      return found;
     },
   });
+
+  async function subjectPicture(client: ImageClient, subject: Omit<ImageSubject, "kind">, method?: string) {
+    const found = await likeness(client, subject, method);
+    const { who, ...rest } = subject as Omit<ImageSubject, "kind">;
+    if (found || !who) return found;
+    // Alone in a scene, the look they wear may still show them (the kit adds it too; one picture is sent once).
+    const scene = method === "generateBannerArt";
+    const worn = scene ? wornLookPath(rest) : "";
+    const image = worn ? await client.cardAvatarImage(worn) : null;
+    if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
+    // A picture that did not load (a deleted file): a stranger would be painted and paid for instead.
+    if (await hasLikenessSource(client, rest, scene)) throw new MissingLikenessError(who);
+    logger?.warn("[otome-forge] %s: %s has no picture to send; painted from the description", method, who);
+    return null;
+  }
 }
 
 const clients = new WeakMap<object, ImageClient>();
