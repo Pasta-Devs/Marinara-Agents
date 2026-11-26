@@ -658,7 +658,7 @@ test("references: the avatars of the cast the prompt names, by whole name and in
   // Sybil first, as the prompt names her; Ann Lee is not Ann too; Nobby has no avatar and Colon's does not load; the
   // fifth picture (Detritus) is past the Engine's four.
   const prompt =
-    "Sybil, tall in a waxed cloak, beside sam vimes in a battered helmet; Ann Lee, Nobby and Colon watch, " +
+    "Sybil, tall in a waxed cloak, beside Sam Vimes in a battered helmet; Ann Lee, Nobby and Colon watch, " +
     "Carrot waves and Detritus looms.";
   const avatarsBefore = () => fetched.filter((path) => path.startsWith("/api/avatars/")).length;
   assert.deepEqual(await images.references(cast, prompt), [
@@ -674,14 +674,21 @@ test("references: the avatars of the cast the prompt names, by whole name and in
   const read = avatarsBefore();
   assert.deepEqual(await images.references(cast, "Annabel and a Vimes lookalike stand in the rain."), []);
   assert.equal(avatarsBefore(), read);
-  assert.deepEqual(await images.references(cast, "ANNA laughs."), [dataUrl(files["anna.png"]!)]);
+  assert.deepEqual(await images.references(cast, "Anna laughs."), [dataUrl(files["anna.png"]!)]);
   assert.deepEqual(await images.references({ characterIds: [], personaIds: [] }, "Sybil waves."), []);
 });
 
 test("the cast a prompt names, and whether it says what they wear", () => {
   const cast = [{ name: "Ann" }, { name: "Zoë" }, { name: " " }, { name: "Dr. Who?" }];
-  assert.deepEqual(castInPrompt("zoë and ann, then Dr. Who? arrives", cast), [cast[1], cast[0], cast[3]]);
+  assert.deepEqual(castInPrompt("Zoë and Ann, then Dr. Who? arrives", cast), [cast[1], cast[0], cast[3]]);
   assert.deepEqual(castInPrompt("Annabel, Zoëy and Dr. Whom", cast), []);
+  // A name is matched as the setup capitalizes it, so a cast named for ordinary words is not found in a picture of
+  // nobody.
+  const words = [{ name: "Amber" }, { name: "Raven" }, { name: "Rose" }];
+  const empty = "An empty harbour at dusk, warm amber light on wet stones, a raven on a post, rose bushes by the gate.";
+  assert.deepEqual(castInPrompt(empty, words), []);
+  assert.deepEqual(castInPrompt("Rose and Raven sit under the amber light.", words), [words[2], words[1]]);
+  assert.deepEqual(castInPrompt("zoë and ANN wave", cast), []);
   assert.equal(namesClothes("A tall man in a battered helmet and a thin coat."), true);
   assert.equal(namesClothes("She wears nothing but a smile."), true);
   assert.equal(namesClothes("Two figures, naked, in the moonlight."), true);

@@ -64,8 +64,11 @@ export function namesClothes(prompt: string): boolean {
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * The cast members the prompt names by their whole name, ignoring case, in the order it first names them. A longer
- * name is read first, so "Ann Lee" is not Ann too, and a part of a name is no one: "Ann" never finds Anna.
+ * The cast members the prompt names by their whole name, spelled and capitalized as the card or persona has it, in the
+ * order it first names them. A longer name is read first, so "Ann Lee" is not Ann too, and a part of a name is no one:
+ * "Ann" never finds Anna. Case counts because cast names are often words ("amber light" is not Amber).
+ * ponytail: a name that opens a sentence as an ordinary word ("Amber light falls...") still matches; telling those
+ * apart would need the prompt call to list its cast.
  */
 export function castInPrompt<T extends { name: string }>(prompt: string, cast: T[]): T[] {
   let rest = prompt.normalize("NFC");
@@ -73,7 +76,7 @@ export function castInPrompt<T extends { name: string }>(prompt: string, cast: T
   for (const member of [...cast].sort((a, b) => b.name.trim().length - a.name.trim().length)) {
     const name = member.name.normalize("NFC").trim();
     if (!name) continue;
-    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, "giu");
+    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, "gu");
     const at = rest.search(pattern);
     if (at < 0) continue;
     found.push({ member, at });
