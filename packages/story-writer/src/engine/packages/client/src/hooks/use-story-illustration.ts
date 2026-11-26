@@ -2,16 +2,23 @@
 // Story Writer: Illustrate (a picture of a passage, painted by the Engine's image connection)
 // ──────────────────────────────────────────────
 // One text call to the story's own connection writes the picture prompt from the passage and the story's cast and
-// setting. The writer reviews it when the Engine's "Expose media prompts before sending" is on, and Story Writer's
-// server paints it with the story's image connection and keeps it in the Global Gallery and in the chapter. Without an
-// image connection nothing is sent, so nothing is paid for.
+// setting, and the story's prompt prefix goes in front of it. The writer reviews it when the Engine's "Expose media
+// prompts before sending" is on, and Story Writer's server paints it with the story's image connection (with the
+// pictures of the cast it names, unless the story turned that off) and keeps it in the Global Gallery and in the
+// chapter. Without an image connection nothing is sent, so nothing is paid for.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { api, getApiErrorMessage } from "../lib/api-client";
 import { anchorText } from "../lib/story-writer/markdown";
-import type { IllustrationCreate, StoryChapter, StoryIllustration, StoryRecord } from "../lib/story-writer/model";
+import {
+  withPrefix,
+  type IllustrationCreate,
+  type StoryChapter,
+  type StoryIllustration,
+  type StoryRecord,
+} from "../lib/story-writer/model";
 import {
   buildIllustrationMessages,
   cleanPicturePrompt,
@@ -246,6 +253,8 @@ export function useStoryIllustration(args: {
             toast.error(translate("illustrate.emptyPrompt"), { id: TOAST_ID });
             return;
           }
+          // The review shows the prefix too: the image connection paints exactly what it shows.
+          prompt = withPrefix(settings.picturePromptPrefix, prompt);
         }
         if (reviewing) {
           setPhase("reviewing");

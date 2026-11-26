@@ -135,6 +135,37 @@ export function WritingSection(props: {
         )}
       </div>
 
+      {imageConnectionId ? (
+        <>
+          <TextField
+            label={t("writing.picturePromptPrefix")}
+            hint={t("writing.picturePromptPrefixHint")}
+            placeholder={t("writing.picturePromptPrefixPlaceholder")}
+            value={settings.picturePromptPrefix}
+            maxLength={LIMITS.picturePrefix}
+            multiline
+            rows={2}
+            onChange={(picturePromptPrefix) => onChange({ picturePromptPrefix })}
+          />
+          <TextField
+            label={t("writing.pictureNegativePrefix")}
+            hint={t("writing.pictureNegativePrefixHint")}
+            placeholder={t("writing.pictureNegativePrefixPlaceholder")}
+            value={settings.pictureNegativePrefix}
+            maxLength={LIMITS.picturePrefix}
+            multiline
+            rows={2}
+            onChange={(pictureNegativePrefix) => onChange({ pictureNegativePrefix })}
+          />
+          <Toggle
+            label={t("writing.pictureReferences")}
+            hint={t("writing.pictureReferencesHint")}
+            checked={settings.pictureReferences}
+            onChange={(pictureReferences) => onChange({ pictureReferences }, { immediate: true })}
+          />
+        </>
+      ) : null}
+
       {/* "Off (I decide)" keeps the number for when a length is picked again; typing one picks it. */}
       <NumberField
         label={t("writing.chapterLength")}

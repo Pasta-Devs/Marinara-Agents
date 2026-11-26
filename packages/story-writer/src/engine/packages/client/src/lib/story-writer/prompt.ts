@@ -495,7 +495,8 @@ function looksCard(character: PromptCharacter, names: MacroNames): string {
 /**
  * The one text call behind Illustrate: the story's cast, setting and the passage go to the story's own connection,
  * which answers with an English prompt for the image connection. `before` is the text just before the passage, so
- * the model knows who is there and where.
+ * the model knows who is there and where. The prompt names the cast members it shows, so the server can send their
+ * pictures as references (illustrations.ts castInPrompt).
  */
 export function buildIllustrationMessages(input: {
   settings: StorySettings;
@@ -511,7 +512,7 @@ export function buildIllustrationMessages(input: {
     "You write the prompt an image generator paints one illustration of a story from.",
     "Read the story's setup and the passage, then describe in English the single picture that shows the passage best.",
     "Say who is in it and what each of them looks like as the story describes them (build, face, hair, clothes), what they are doing, where they are, the time of day and the light, and the mood.",
-    "Describe every person by their looks, not only by their name: the image generator does not know them.",
+    "Name every person by their full name as the setup gives it, and describe them by their looks too: the image generator does not know them.",
     "Describe only what can be seen. The picture has no text in it: no letters, captions, signs with writing or speech bubbles.",
     "Answer with the prompt alone, as one paragraph of 50 to 150 words: no title, label, quotes or comments.",
   ].join(" ");
