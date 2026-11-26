@@ -1241,6 +1241,120 @@ test("a NovelAI connection paints in NovelAI's style, with one reference that th
   assert.equal("preferReferenceOutfit" in bodies[1]!, false);
 });
 
+test("0.47.2: on NovelAI a key image of two people sends both their references, and a clothed one names nudity as tags", async () => {
+  const t = await sceneWorld("r-naitwins-aaaaaa");
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-kai",
+    identityLine: "tall man, grey hair",
+    outfitLine: "keeper's coat",
+    bible: bible({ look: { identityLine: "", outfitLine: "", presentation: "man" } }),
+  }));
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    look: { identityLine: "short dark hair", outfitLine: "oilskin", presentation: "woman" },
+  }));
+  // Explicit Heat and the Explicit rating: a key image may be explicit, but this supper's brief is not.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    content: { ...world.content, heat: "explicit" },
+    images: { ...world.images, rating: "explicit" },
+  }));
+  const bodies: Array<Record<string, any>> = [];
+  const json = (value: unknown) =>
+    new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+  const fetch = (async (url: string | URL, init?: RequestInit) => {
+    const path = String(url).replace("http://127.0.0.1:7860", "");
+    if (path === "/api/connections") {
+      return json([{ id: "conn-image", provider: "image_generation", model: "nai-diffusion-5-full" }]);
+    }
+    if (path === "/api/characters/card-kai") return json({ avatarPath: "/api/avatars/file/kai.png" });
+    if (path === "/api/characters/personas/persona-ines") return json({ avatarPath: "/api/avatars/file/ines.png" });
+    if (path.startsWith("/api/avatars/file/") || path.startsWith("/api/global-gallery/file/")) {
+      return new Response(Buffer.from(path), { headers: { "content-type": "image/png" } });
+    }
+    if (path === "/api/app-settings/ui") return json({ value: {} });
+    if (path === "/api/characters/avatar-generation") {
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
+      return json({ image: `data:image/png;base64,${PNG}`, prompt: body.promptOverrides[0].prompt });
+    }
+    if (path === "/api/global-gallery/upload") return json({ id: "cg1", url: "/api/global-gallery/file/cg1.png" });
+    return new Response(JSON.stringify({ error: "no" }), { status: 404 });
+  }) as typeof globalThis.fetch;
+  const deps = { ...t.deps, images: createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch }) };
+  const paint = async (i: number, cast: string[]) => {
+    const written = await saveBeat(
+      t.store,
+      t.runId,
+      beat(i, { cg: { at: 0, brief: "Supper at his table.", cast }, places: [] }),
+    );
+    await queueScenePaints(deps, t.runId, written, { debugMode: false });
+    assert.equal((await readStoredBeat(t.store, t.runId, i))?.cg?.art?.state, "ready");
+    return bodies.at(-1)!;
+  };
+
+  // With his reference alone, NovelAI drew both with his face and hair (2026-11-26); V5 tells several apart.
+  const both = await paint(1, ["Kai", "Ines"]);
+  assert.equal(both.referenceImages.length, 2, "two people: a reference each");
+  assert.deepEqual(
+    both.referenceImages.map((image: string) => Buffer.from(image.split(",")[1]!, "base64").toString()),
+    ["/api/avatars/file/kai.png", "/api/avatars/file/ines.png"],
+  );
+  assert.equal(both.preferReferenceOutfit, false, "the prompt dresses them");
+  const { prompt, negativePrompt } = both.promptOverrides[0];
+  assert.ok(prompt.startsWith("1girl, 1boy, "), prompt);
+  assert.match(prompt, /Kai: tall man, grey hair; keeper's coat\./);
+  assert.match(prompt, /Ines: short dark hair; oilskin\./);
+  assert.doesNotMatch(prompt, /nsfw|explicit|uncensored/u, "a clothed brief asks for nothing explicit");
+  // Tag models skip "nudity"; the tags reach them (a NovelAI supper came out topless, 2026-11-26).
+  assert.match(negativePrompt, /nudity, explicit sexual activity, nude, topless, nipples, sex/u);
+
+  // One person: their reference alone, which the prompt dresses.
+  const alone = await paint(2, ["Kai"]);
+  assert.equal(alone.referenceImages.length, 1);
+  assert.equal(alone.preferReferenceOutfit, false);
+
+  // Only the people's pictures go: a worn outfit or a place after them would be read as someone else.
+  const request = { name: "Kai", prompt: "p", negativePrompt: "n", width: 1216, height: 832, debugMode: false };
+  await deps.images.generateImage({
+    ...request,
+    connectionId: "conn-image",
+    referenceImages: ["/kai.png", "/ines.png", "/place.png"],
+    characters: 2,
+  });
+  assert.deepEqual(bodies.at(-1)!.referenceImages, ["/kai.png", "/ines.png"]);
+  // Nobody pictured (a photo of two with no picture of either): the place is never sent as a person.
+  await deps.images.generateImage({
+    ...request,
+    connectionId: "conn-image",
+    referenceImages: ["/place.png"],
+    characters: 0,
+  });
+  assert.equal(bodies.at(-1)!.referenceImages, undefined);
+  assert.equal("preferReferenceOutfit" in bodies.at(-1)!, false);
+
+  // Someone with no picture at all counts as nobody, so the worn outfit added after Kai's face never takes their slot.
+  await deps.images.generateBannerArt({
+    ...request,
+    connectionId: "conn-image",
+    units: [
+      {
+        kind: "character",
+        cardId: "card-kai",
+        outfits: [{ id: "coat", url: "/api/global-gallery/file/kai-coat.png" }],
+        wornOutfit: "coat",
+        who: "Kai",
+      },
+      { kind: "character", personaId: "persona-nobody", who: "Ines" },
+    ] as never,
+  });
+  const sent = bodies
+    .at(-1)!
+    .referenceImages.map((image: string) => Buffer.from(image.split(",")[1]!, "base64").toString());
+  assert.deepEqual(sent, ["/api/avatars/file/kai.png"]);
+});
+
 // ── 0.47.1: Your cast's paints go on in the background ──
 
 /** A cast whose looks wait for the tap, with Kai painted on a gallery look and Expressions on; `n` gates paid call n. */

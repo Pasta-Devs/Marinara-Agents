@@ -114,6 +114,11 @@ export interface ImageRequest {
   height: number;
   debugMode: boolean;
   referenceImages?: string[];
+  /**
+   * How many of `referenceImages`, first in order, picture someone in it, one each (absent: one). NovelAI is sent those
+   * alone, never the outfit or place pictures after them, which it would read as more people.
+   */
+  characters?: number;
 }
 
 /** An image the Engine painted, not saved yet. `overrideTook` is false when the Engine compiled its own prompt. */
@@ -342,6 +347,8 @@ export function createImageClient({
   logger,
 }: { baseUrl?: string; fetch?: Fetch; logger?: Logger } = {}): ImageClient {
   const fetchImpl = withEngineLocalAuth(injectedFetch);
+  /** Whether the wrapper found a picture of each subject it was handed (subjectReference), for generateBannerArt. */
+  const pictured = new WeakMap<object, boolean>();
   async function request(path: string, init?: RequestInit): Promise<unknown> {
     const response = await fetchImpl(`${baseUrl}${path}`, init);
     if (!response.ok) {
@@ -374,11 +381,24 @@ export function createImageClient({
   };
 
   const client: ImageClient = {
-    async generateImage({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
-      // #2465: NovelAI V5 blends several character references into one person, so it gets the first alone (the
-      // picture's focus: the love interest), and since every prompt here names what people wear, the prompt dresses
-      // them rather than the reference (the Engine's preferReferenceOutfit, which an Engine before it ignores).
+    async generateImage({
+      connectionId,
+      name,
+      prompt,
+      negativePrompt,
+      width,
+      height,
+      debugMode,
+      referenceImages,
+      characters = 1,
+    }) {
+      // #2465: every prompt here names what people wear, so on NovelAI the prompt dresses them rather than the
+      // reference (the Engine's preferReferenceOutfit, which an Engine before it ignores). 0.47.2: NovelAI got only the
+      // picture's focus, and drew everyone in a picture of two with that one face; V5 tells several character
+      // references apart (the maintainer's test), so it gets one per person in the picture, as NovelAI's own client
+      // sends them.
       const novelai = !!referenceImages?.length && !!(await client.novelAi?.(connectionId));
+      if (novelai) referenceImages = referenceImages!.slice(0, characters);
       const result = (await request("/api/characters/avatar-generation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -390,8 +410,8 @@ export function createImageClient({
           width,
           height,
           debugMode,
-          referenceImages: referenceImages?.length ? referenceImages.slice(0, novelai ? 1 : REFERENCES_MAX) : undefined,
-          ...(novelai ? { preferReferenceOutfit: false } : {}),
+          referenceImages: referenceImages?.length ? referenceImages.slice(0, REFERENCES_MAX) : undefined,
+          ...(novelai && referenceImages?.length ? { preferReferenceOutfit: false } : {}),
           promptOverrides: [{ id: avatarOverrideId(name), prompt, negativePrompt }],
         }),
       })) as { image?: unknown; prompt?: unknown } | null;
@@ -455,9 +475,11 @@ export function createImageClient({
       return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
-    async generateBannerArt({ units: _units, ...request }) {
-      // `units` only tell the wrapper whose references to add; they are in `referenceImages` by now.
-      const image = await client.generateImage(request);
+    async generateBannerArt({ units, ...request }) {
+      // `units` told the wrapper whose references to add: the pictures found for them come first in `referenceImages`,
+      // one each, before any worn outfit's, so only those count as people.
+      const characters = units.filter((unit) => pictured.get(unit) === true).length;
+      const image = await client.generateImage({ ...request, characters });
       return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
@@ -639,21 +661,27 @@ export function createImageClient({
      * Their likeness. A subject with `who` whose pictures exist but none loads stops the paint before the paid call;
      * with no picture at all it is painted from the description, as before.
      */
-    async subjectReference(client, subject, { method } = {}) {
-      const found = await likeness(client, subject, method);
-      const { who, ...rest } = subject as Omit<ImageSubject, "kind">;
-      if (found || !who) return found;
-      // Alone in a scene, the look they wear may still show them (the kit adds it too; one picture is sent once).
-      const scene = method === "generateBannerArt";
-      const worn = scene ? wornLookPath(rest) : "";
-      const image = worn ? await client.cardAvatarImage(worn) : null;
-      if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
-      // A picture that did not load (a deleted file): a stranger would be painted and paid for instead.
-      if (await hasLikenessSource(client, rest, scene)) throw new MissingLikenessError(who);
-      logger?.warn("[otome-forge] %s: %s has no picture to send; painted from the description", method, who);
-      return null;
+    async subjectReference(client, subject, options = {}) {
+      const found = await subjectPicture(client, subject, options.method);
+      pictured.set(subject, !!found);
+      return found;
     },
   });
+
+  async function subjectPicture(client: ImageClient, subject: Omit<ImageSubject, "kind">, method?: string) {
+    const found = await likeness(client, subject, method);
+    const { who, ...rest } = subject as Omit<ImageSubject, "kind">;
+    if (found || !who) return found;
+    // Alone in a scene, the look they wear may still show them (the kit adds it too; one picture is sent once).
+    const scene = method === "generateBannerArt";
+    const worn = scene ? wornLookPath(rest) : "";
+    const image = worn ? await client.cardAvatarImage(worn) : null;
+    if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
+    // A picture that did not load (a deleted file): a stranger would be painted and paid for instead.
+    if (await hasLikenessSource(client, rest, scene)) throw new MissingLikenessError(who);
+    logger?.warn("[otome-forge] %s: %s has no picture to send; painted from the description", method, who);
+    return null;
+  }
 }
 
 const clients = new WeakMap<object, ImageClient>();

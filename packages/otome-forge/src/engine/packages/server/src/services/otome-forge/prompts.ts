@@ -6533,12 +6533,24 @@ function adultsOnly(world: Pick<World, "images">, prompt: string): string {
     .trim();
 }
 
+/**
+ * 0.47.2: Suggestive's exclusions as tags, which tag models (NovelAI, Danbooru profiles) read where they skip the words:
+ * a NovelAI supper scene came out topless. Sentence prompts keep the words alone (0.2.0 took the graphic list out of
+ * them).
+ */
+const SUGGESTIVE_NEGATIVE_TAGS = "nude, topless, nipples, sex";
+
 /** The negatives an image of this use always keeps: adults only, then what its rating rules out. */
-function requiredNegative(world: Pick<World, "content" | "images">, use: ImageUse, explicitScene = false): string {
+function requiredNegative(
+  world: Pick<World, "content" | "images">,
+  use: ImageUse,
+  tagged: boolean,
+  explicitScene = false,
+): string {
   if (world.images.rating === "sfw") return mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE.sfw);
   return effectiveImageRating({ world, use, explicitScene }) === "explicit"
     ? mergeTags(ADULT_NEGATIVE, ADULT_NEGATIVE_ABOVE_SFW, RATING_NEGATIVE.explicit)
-    : mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE.suggestive);
+    : mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE.suggestive, tagged ? SUGGESTIVE_NEGATIVE_TAGS : "");
 }
 
 export interface LookInput {
@@ -6598,7 +6610,7 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
     use: "clothed",
     tagged: style.tagged === true,
   });
-  const negative = requiredNegative(world, "clothed");
+  const negative = requiredNegative(world, "clothed", style.tagged === true);
   const note = lookReferenceNote(input);
   const prompt = edited.prompt?.trim()
     ? withTags(edited.prompt, required)
@@ -6710,7 +6722,7 @@ export interface PlaceInput {
 export function placePrompt(input: PlaceInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
   const { world, style } = input;
   const required = otomeImageTags({ world, people: [], use: "place", tagged: style.tagged === true });
-  const negative = requiredNegative(world, "place");
+  const negative = requiredNegative(world, "place", style.tagged === true);
   return finish(
     world,
     () => ({
@@ -6767,7 +6779,7 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
   const people = input.people.slice(0, CG_PEOPLE_MAX);
   const explicitScene = input.explicit === true;
   const required = otomeImageTags({ world, people, use, explicitScene, tagged: style.tagged === true });
-  const negative = requiredNegative(world, use, explicitScene);
+  const negative = requiredNegative(world, use, style.tagged === true, explicitScene);
   // An explicit moment draws each person from who they are: their outfit line would dress it again.
   const bare = effectiveImageRating({ world, use, explicitScene }) === "explicit";
   const names = imageNames(people.map((person) => person.name));
@@ -6933,7 +6945,7 @@ export function stickerPrompt(input: StickerInput, edited: Partial<ImagePrompt> 
     use: "clothed",
     tagged: style.tagged === true,
   });
-  const negative = requiredNegative(world, "clothed");
+  const negative = requiredNegative(world, "clothed", style.tagged === true);
   const matte = lookMatte(input.outfitLine, input.identityLine);
   return finish(
     world,
@@ -6980,7 +6992,7 @@ const KITTEN_NEGATIVE =
 export function kittenPrompt(input: Omit<LookInput, "matte">, edited: Partial<ImagePrompt> = {}): ImagePrompt {
   const { world, style } = input;
   const required = otomeImageTags({ world, people: [], use: "clothed", tagged: style.tagged === true });
-  const negative = requiredNegative(world, "clothed");
+  const negative = requiredNegative(world, "clothed", style.tagged === true);
   const matte = lookMatte(input.outfitLine, input.identityLine);
   const name = input.name.trim() || "this person";
   const look = [input.identityLine.trim(), input.outfitLine.trim()].filter(Boolean).join("; ");
@@ -7034,7 +7046,7 @@ export function figurinePrompt(input: Omit<LookInput, "matte">, edited: Partial<
     use: "clothed",
     tagged: style.tagged === true,
   });
-  const negative = requiredNegative(world, "clothed");
+  const negative = requiredNegative(world, "clothed", style.tagged === true);
   const matte = lookMatte(input.outfitLine, input.identityLine);
   return finish(
     world,
@@ -7138,7 +7150,7 @@ export function tarotCardPrompt(input: TarotCardInput, edited: Partial<ImageProm
   const brief = ARCANA_BRIEFS[card];
   if ((input.figure ?? ARCANA_FIGURES[card]) === "none" || !input.people.length) {
     const required = otomeImageTags({ world, people: [], use: "place", tagged: style.tagged === true });
-    const negative = requiredNegative(world, "place");
+    const negative = requiredNegative(world, "place", style.tagged === true);
     return finish(
       world,
       () => ({
