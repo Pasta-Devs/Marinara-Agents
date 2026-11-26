@@ -689,6 +689,10 @@ test("the cast a prompt names, and whether it says what they wear", () => {
   assert.deepEqual(castInPrompt(empty, words), []);
   assert.deepEqual(castInPrompt("Rose and Raven sit under the amber light.", words), [words[2], words[1]]);
   assert.deepEqual(castInPrompt("zoë and ANN wave", cast), []);
+  // A combining mark belongs to the word it sits on: रामू is not राम.
+  const devanagari = [{ name: "राम" }];
+  assert.deepEqual(castInPrompt("रामू waves.", devanagari), []);
+  assert.deepEqual(castInPrompt("राम waves.", devanagari), [devanagari[0]]);
   assert.equal(namesClothes("A tall man in a battered helmet and a thin coat."), true);
   assert.equal(namesClothes("She wears nothing but a smile."), true);
   assert.equal(namesClothes("Two figures, naked, in the moonlight."), true);

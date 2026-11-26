@@ -76,7 +76,7 @@ export function castInPrompt<T extends { name: string }>(prompt: string, cast: T
   for (const member of [...cast].sort((a, b) => b.name.trim().length - a.name.trim().length)) {
     const name = member.name.normalize("NFC").trim();
     if (!name) continue;
-    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`, "gu");
+    const pattern = new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{M}\\p{N}])`, "gu");
     const at = rest.search(pattern);
     if (at < 0) continue;
     found.push({ member, at });

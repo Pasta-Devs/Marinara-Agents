@@ -2,7 +2,7 @@
 
 ## 0.7.0 — 2026-11-26
 
-- **Illustrate** can use your own image tags and your characters' pictures. Once you pick an image connection, **Writing** has a **Picture prompt prefix** that goes at the start of every picture prompt (your artist or quality tags, say), shown in the prompt review, and a **Negative prompt prefix** that goes before the negative prompt. With **Use character pictures as references** on, as it is by default, each picture goes with the avatars of the story's characters and personas that its prompt names, up to four, so a connection that takes reference pictures, such as NovelAI with Precise Reference, keeps their looks. A picture that names nobody sends none. Stories you already have start with empty prefixes and references on.
+- Illustrate can use your own image tags and your characters' pictures. Once you pick an image connection, Writing has a Picture prompt prefix that goes at the start of every picture prompt (your artist or quality tags, say), shown in the prompt review, and a Negative prompt prefix that goes before the negative prompt. With Use character pictures as references on, as it is by default, each picture goes with the avatars of the story's characters and personas that its prompt names, up to four, so a connection that takes reference pictures, such as NovelAI with Precise Reference, keeps their looks. A picture that names nobody sends none. Stories you already have start with empty prefixes and references on.
 
 ## 0.6.0 — 2026-11-25
 
