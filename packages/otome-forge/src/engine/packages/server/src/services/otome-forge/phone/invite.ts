@@ -7,8 +7,9 @@
 //   spread over the week (7 days / the limit apart, or the number met if that is smaller) and never past the next
 //   Monday, armed a minute after a visit starts, each spent before any provider work and never retried. As with daily
 //   messages, the limit counts love interests: one who asked this week is not picked again until the next.
-// - Who may ask: a love interest she has met, whose thread is not open, busy or waiting on her message, who holds no
-//   grievance with her (#2156: his dates wait) and has no invitation of his still waiting, of either kind.
+// - Who may ask: a love interest she has met, whose thread is not open, busy, being remembered (0.47.1) or waiting on
+//   her message, who holds no grievance with her (#2156: his dates wait) and has no invitation of his still waiting, of
+//   either kind.
 // - Who asks: the one she has spent the least time with (the maintainer's, 2026-11-20): the fewest scenes with him in
 //   the main story and Character Stories she finished in the last 7 days (main, route and repair chapters, item and
 //   bond stories, extra stories; never a date or his side, where she is not), a tie going to the one she was with

@@ -17,13 +17,15 @@
 //   waits behind it. Its writes are revision-checked and applied again to the latest thread or state, so a seen mark or
 //   a story write meanwhile is never lost.
 // - Each summary started is counted on the mark before its call. The queue lives in this process, so a read of the list
-//   or the thread finds a mark with no job here (a restart) and queues it again (resumeClose): it summarizes once more,
-//   and a mark that two summaries never landed fails as "stopped". A session already there is only unmarked, even with
-//   no connection, so a conversation is never remembered twice. A read whose requeue fails still answers.
+//   or the thread, or the phone's heartbeat, finds a mark with no job here (a restart) and queues it again
+//   (resumeClose): it summarizes once more, and a mark that two summaries never landed fails as "stopped". A session
+//   already there is only unmarked, even with no connection, so a conversation is never remembered twice. A read whose
+//   requeue fails still answers.
 // - It lands in three writes: the session, then the affection (the state's own revision-checked write), then the mark
 //   comes off with the affection kept on the session, which the page that sent the close shows once. A grant that
 //   fails, or a restart between them, loses the affection and never pays it twice. Taking the mark off is tried
-//   SETTLE_TRIES times; if it still fails, the mark stays with no error, and the next read only unmarks it.
+//   SETTLE_TRIES times; if it still fails, the mark stays with no error, and the next read or heartbeat only unmarks
+//   it.
 // - A summary that fails before its session is saved leaves the conversation open and the mark with its error code,
 //   which the list and the thread show with Try again (Close again). Her next message lets it go (S/phone/chat.ts
 //   sendIn). A saved session is never marked failed, even when the write that saved it rejects afterwards (saveThread's
@@ -381,7 +383,7 @@ export async function acceptClose(
 
 /**
  * 0.47.1: thread `key`'s close, when its mark stands with no job for it in this process (a restart), queued again from
- * a read of the list or the thread (see the header).
+ * a read of the list or the thread, or the heartbeat (see the header).
  */
 export async function resumeClose(
   deps: CloseDeps,

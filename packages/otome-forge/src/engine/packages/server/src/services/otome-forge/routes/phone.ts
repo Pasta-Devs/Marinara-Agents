@@ -24,9 +24,9 @@
 // A thread has one send or close in flight at a time: another is a 409 `busy`. Writing his reply may fail with 503
 // `no-connection`, 422 `declined` or 502 `bad-format`; the player's message stays saved and the history page offers
 // Retry. 0.47.1: a close answers once it is accepted, and its memory is written in the background (S/phone/memory.ts):
-// the list and the history page say `closing` while it is, and its error once it failed; each read of them queues a
-// close a restart left remembering again. Sending and closing wait for a forged world (409 `conflict`); an unknown run
-// or love interest is a 404.
+// the list and the history page say `closing` while it is, and its error once it failed; each read of them, and each
+// heartbeat, queues a close a restart left remembering again. Sending and closing wait for a forged world (409
+// `conflict`); an unknown run or love interest is a 404.
 import { z } from "zod";
 import type { PhoneCloseView } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { GROUP_THREAD } from "../../../../../client/src/features/otome-forge/shared/home.js";
@@ -83,16 +83,17 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
       ),
     );
 
+  /** The list, with each close a restart left remembering queued again (resume). */
+  const resumedList = async (runId: string, debugMode: boolean) => {
+    const list = await groupList(deps, runId, (await phoneList(deps, runId)).threads);
+    for (const thread of list.threads) await resume(runId, thread.li, thread, debugMode);
+    if (list.group) await resume(runId, GROUP_THREAD, list.group, debugMode);
+    return list;
+  };
+
   router.get(
     "/runs/:run/phone",
-    handle(async (request) => {
-      const { runId } = runParam(request);
-      const list = await groupList(deps, runId, (await phoneList(deps, runId)).threads);
-      const debugMode = debugModeOf(request);
-      for (const thread of list.threads) await resume(runId, thread.li, thread, debugMode);
-      if (list.group) await resume(runId, GROUP_THREAD, list.group, debugMode);
-      return list;
-    }),
+    handle(async (request) => resumedList(runParam(request).runId, debugModeOf(request))),
   );
 
   router.get(
@@ -155,6 +156,8 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
       if (await runEnded(deps.store, runId)) return { status: "disabled", latest: null };
       const options = { open: open ?? null, debugMode: debugModeOf(request) };
       const daily = await phoneDue(deps, runId, options);
+      // 0.47.1: nobody writes first in a thread being remembered, so the heartbeat queues a close a restart left too.
+      await resumedList(runId, options.debugMode);
       return {
         ...daily,
         group: await groupDue(deps, runId, options),

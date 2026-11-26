@@ -7,8 +7,9 @@
 // keeps recalled memory whole beside the previous chapter in full; a card name of any length never costs a session; a
 // note's full length fits the Reply quote; Close and remember never waits behind the run's story queue, yet still holds
 // its thread, and P18 gets a thinking model's summary room (#2039). 0.47.1: a close answers before its summary, which
-// runs once in the background lane while sends wait; a restart's mark resumes once, a failure keeps the conversation
-// open with Try again, and her next message lets it go; one landing on a later day never turns the daily tally back.
+// runs once in the background lane while sends and first messages wait; a restart's mark resumes once from a read or
+// the heartbeat, a failure keeps the conversation open with Try again, and her next message lets it go; one landing on
+// a later day never turns the daily tally back.
 // Daily messages (#2044): off by default, armed a minute after the app opens, spaced 24 h / limit apart and never past
 // the local midnight of the request's zone, a spent attempt never retried, a random met love interest who is not in
 // the open thread, not busy and not waiting on her message, written by P17 "first" in the background lane on the chat
@@ -74,6 +75,7 @@ import {
   inviteJobKey,
   leastSeenFirst,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/invite.ts";
+import { friendDue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/friends.ts";
 import { applyMessageHurts } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
 import { heldAgainst } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/dates.ts";
 import {
@@ -99,7 +101,17 @@ import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/serve
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import { within, type FakeReply, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
-import { KAI, MIR, SOL, json, saveStoryMemory, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
+import {
+  KAI,
+  KAVEH,
+  MIR,
+  SOL,
+  json,
+  saveStoryMemory,
+  seedFriend,
+  squeezedMemory,
+  storyWorld,
+} from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
 // #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
@@ -627,6 +639,18 @@ test("Close and remember: a restart's mark resumes once from a read and is never
       undefined,
     ],
   );
+});
+
+test("0.47.1: the heartbeat queues a close a restart left too, so first messages there wait only while it is remembered", async () => {
+  const t = await phoneWorld("r-phonez-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-25T10:00:01.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  assert.equal((await t.phone("POST", "/runs/:run/phone/due", { body: { open: null } })).status, 200);
+  const thread = await t.remembered();
+  assert.deepEqual([thread.sessions.length, thread.closing], [1, undefined]);
 });
 
 /** Fails the next `times` writes that take a thread's close mark off (`left()` says how many are still to fail). */
@@ -1517,6 +1541,30 @@ test("0.47.1: no one writes first in a thread being remembered: nothing is armed
   assert.equal((await t.due(T0 + 121_000 + 8 * HOUR)).status, "queued");
   await t.drain();
   assert.equal(t.firstCalls().length, 1);
+});
+
+test("0.47.1: her friends write first in a thread being remembered no more than love interests do", async () => {
+  const t = await dailyWorld("r-daily9-aaaaaa");
+  await seedFriend(t);
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    friendMessages: 1,
+  }));
+  const closing = { start: 0, end: 1, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
+  const mark = (marked: boolean) =>
+    t.store.mutateDoc(chatTarget(t.runId, KAVEH), normalizeThread, (thread) => ({
+      ...thread,
+      li: KAVEH,
+      messages: [{ id: "m-his-0001", who: "li", text: "Coffee?", at: "2026-11-02T08:51:00.000Z" }],
+      closing: marked ? closing : undefined,
+    }));
+  const beat = async (now: number) =>
+    (await inZone("UTC", () => friendDue(t.deps, t.runId, "message", { open: null, now, debugMode: true }))).status;
+  await mark(true);
+  assert.equal(await beat(T0), "no-eligible");
+  assert.equal((await t.store.readDoc(worldId(t.runId), normalizeWorld))!.friendWeekly, undefined, "nothing spent");
+  await mark(false);
+  assert.equal(await beat(T0 + 1_000), "scheduled");
 });
 
 test("a daily message holds his thread while it is written, and is dropped when the thread changed meanwhile", async () => {
