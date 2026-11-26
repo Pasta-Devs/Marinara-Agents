@@ -1234,6 +1234,12 @@
     "story-writer": {
       "versions": [
         {
+          "version": "0.7.0",
+          "date": "2026-11-26",
+          "notes": "- Illustrate can use your own image tags and your characters' pictures. Once you pick an image connection, Writing has a Picture prompt prefix that goes at the start of every picture prompt (your artist or quality tags, say), shown in the prompt review, and a Negative prompt prefix that goes before the negative prompt. With Use character pictures as references on, as it is by default, each picture goes with the avatars of the story's characters and personas that its prompt names, up to four, so a connection that takes reference pictures, such as NovelAI with Precise Reference, keeps their looks. A picture that names nobody sends none. Stories you already have start with empty prefixes and references on.",
+          "highlight": true
+        },
+        {
           "version": "0.6.0",
           "date": "2026-11-25",
           "notes": "- **Illustrate** paints a picture of a passage. Click in a paragraph or select some text and press the picture button: the story's model writes a prompt from the passage and your cast's looks, and the image connection you pick under **Writing → Image connection** paints it. Until you pick one, Illustrate sends nothing. If the Engine shows you media prompts before sending, you can change the prompt first. The picture sits beside its paragraph with the text wrapping around it, full width on a phone, and beside the column in Document. Writing, Continue and Rewrite keep it. **Illustrate again** paints a new one in its place and keeps the old one in the Global Gallery; **Remove** also deletes it from the gallery unless something else uses it. On a phone, the picture button waits for an image connection. Markdown downloads include the pictures.",

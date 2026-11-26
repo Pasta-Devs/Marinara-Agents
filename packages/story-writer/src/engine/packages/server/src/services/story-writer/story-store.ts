@@ -20,6 +20,7 @@ import {
   type StoryChapter,
   type StoryIllustration,
   type StoryRecord,
+  type StorySettings,
   type StorySummary,
   type StoryWithChapters,
   type StoryWriterPreferences,
@@ -237,7 +238,7 @@ async function readStoryChapter(documents: StoryDocumentStore, storyId: string, 
     : null;
   const chapter = document ? parseChapter(document) : null;
   if (!chapter || chapter.storyId !== storyId) throw new StoryWriterError(404, CHAPTER_NOT_FOUND);
-  return chapter;
+  return { story, chapter };
 }
 
 function totalsOf(chapters: StoryChapter[]) {
@@ -574,18 +575,19 @@ export function createStoryStore(persistence: StoryPersistence, options: { now?:
 
     /**
      * Checks that a picture can go into the chapter (it exists, and has room or `replaceId`), before anything is
-     * painted and paid for.
+     * painted and paid for. Answers the story's settings, which say how to paint it.
      */
-    async checkIllustration(storyId: unknown, chapterId: unknown, replaceId?: string): Promise<void> {
+    async checkIllustration(storyId: unknown, chapterId: unknown, replaceId?: string): Promise<StorySettings> {
       const id = requireId(storyId, "Story");
       const targetId = requireId(chapterId, "Chapter");
-      const chapter = await readStoryChapter(persistence.documents, id, targetId);
+      const { story, chapter } = await readStoryChapter(persistence.documents, id, targetId);
       if (replaceId && !chapter.illustrations.some((item) => item.id === replaceId)) {
         throw new StoryWriterError(404, ILLUSTRATION_NOT_FOUND);
       }
       if (!replaceId && chapter.illustrations.length >= LIMITS.illustrationsPerChapter) {
         throw new StoryWriterError(400, TOO_MANY);
       }
+      return story.settings;
     },
 
     /** Puts a painted picture in the chapter, in place of `replaceId` when it is given (Illustrate again). */

@@ -35,6 +35,7 @@ export const LIMITS = {
   chaptersPerStory: 2_000,
   illustrationsPerChapter: 100,
   picturePrompt: 4_000,
+  picturePrefix: 1_000,
   illustrationAnchor: 120,
 } as const;
 
@@ -84,6 +85,15 @@ export interface StorySettings {
   connectionId: string | null;
   /** The Engine image connection Illustrate paints with; null = none, and Illustrate never makes a paid call. */
   imageConnectionId: string | null;
+  /** Put before every picture prompt Illustrate writes (artist or quality tags, say); "" = none. */
+  picturePromptPrefix: string;
+  /** Put before the negative prompt every picture is painted with; "" = none. */
+  pictureNegativePrefix: string;
+  /**
+   * Send the avatars of the story's characters and personas the picture prompt names with the picture, as references.
+   * Absent (a story from before 0.7.0) = true.
+   */
+  pictureReferences: boolean;
   /** Target length of one chapter, in words. */
   chapterWords: number;
   /**
@@ -278,6 +288,9 @@ export function defaultStorySettings(): StorySettings {
     title: "",
     connectionId: null,
     imageConnectionId: null,
+    picturePromptPrefix: "",
+    pictureNegativePrefix: "",
+    pictureReferences: true,
     chapterWords: DEFAULT_CHAPTER_WORDS,
     writerDecides: false,
     targetWords: null,
@@ -402,6 +415,9 @@ export function normalizeStorySettings(patch: unknown, base: StorySettings = def
     connectionId: typeof connectionId === "string" && connectionId.trim() ? connectionId.trim().slice(0, 200) : null,
     imageConnectionId:
       typeof imageConnectionId === "string" && imageConnectionId.trim() ? imageConnectionId.trim().slice(0, 200) : null,
+    picturePromptPrefix: text(input.picturePromptPrefix, LIMITS.picturePrefix, base.picturePromptPrefix),
+    pictureNegativePrefix: text(input.pictureNegativePrefix, LIMITS.picturePrefix, base.pictureNegativePrefix),
+    pictureReferences: typeof input.pictureReferences === "boolean" ? input.pictureReferences : base.pictureReferences,
     chapterWords: integer(input.chapterWords, LIMITS.chapterWords, base.chapterWords),
     writerDecides: typeof input.writerDecides === "boolean" ? input.writerDecides : base.writerDecides,
     targetWords:
@@ -501,6 +517,12 @@ export function countWords(markdown: string): number {
 export function chapterTitle(markdown: string): string {
   const match = /^\s*#{1,3}\s+(.+?)\s*#*\s*$/m.exec(markdown.split(/\n\s*\n/, 1)[0] ?? "");
   return match?.[1]?.trim() ?? "";
+}
+
+/** A prompt with a prefix in front, joined as the Engine joins a connection's own prompt prefix ("prefix, prompt"). */
+export function withPrefix(prefix: string, prompt: string): string {
+  const lead = prefix.trim().replace(/[\s,;.]+$/, "");
+  return (lead && prompt.trim() ? `${lead}, ${prompt.trim()}` : lead || prompt.trim()).slice(0, LIMITS.picturePrompt);
 }
 
 export function storyDisplayTitle(settings: Pick<StorySettings, "title">, fallback: string): string {

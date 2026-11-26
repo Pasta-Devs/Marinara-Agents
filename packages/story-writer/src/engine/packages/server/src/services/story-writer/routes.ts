@@ -6,9 +6,10 @@ import {
   CLIENT_ID_PATTERN,
   GALLERY_REF_PREFIX,
   LIMITS,
+  withPrefix,
   type StoryIllustration,
 } from "../../../../client/src/lib/story-writer/model.js";
-import { PICTURE_NEGATIVE_PROMPT, type IllustrationImages } from "./illustrations.js";
+import { namesClothes, PICTURE_NEGATIVE_PROMPT, type IllustrationImages } from "./illustrations.js";
 import { StoryWriterError, type StoryStore } from "./story-store.js";
 
 // Structural slices of Fastify: the host hands privileged routes a collector with get/post/put/patch/delete only.
@@ -103,18 +104,22 @@ export function storyWriterRoutes(store: StoryStore, logger: StoryWriterLogger, 
   const chapterId = (request: StoryWriterRequest) => field(request.params, "chapterId");
 
   // Paints, then stores: a picture the chapter cannot take any more (it was deleted or filled meanwhile, or the write
-  // failed) is deleted again.
+  // failed) is deleted again. The story's negative prefix goes before the picture's own negative prompt, and the
+  // pictures of the cast the prompt names go with it unless the story turned them off.
   const illustrate = async (request: StoryWriterRequest) => {
     const input = readIllustrationCreate(request.body);
-    await store.checkIllustration(storyId(request), chapterId(request), input.replace);
+    const settings = await store.checkIllustration(storyId(request), chapterId(request), input.replace);
     let picture;
     try {
+      const references = settings.pictureReferences ? await images.references(settings, input.prompt) : [];
       picture = await images.paint({
         connectionId: input.connectionId,
         prompt: input.prompt,
-        negativePrompt: PICTURE_NEGATIVE_PROMPT,
+        negativePrompt: withPrefix(settings.pictureNegativePrefix, PICTURE_NEGATIVE_PROMPT),
         ...PICTURE_SIZE,
         debugMode: input.debugMode,
+        ...(references.length ? { referenceImages: references } : {}),
+        ...(references.length && namesClothes(input.prompt) ? { preferReferenceOutfit: false as const } : {}),
       });
     } catch (error) {
       logger.error(error, "Story Writer could not paint a picture");

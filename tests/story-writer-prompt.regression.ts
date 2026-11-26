@@ -5,6 +5,7 @@ import {
   DEFAULT_WRITER_SYSTEM_PROMPT,
   defaultStorySettings,
   normalizeStorySettings,
+  withPrefix,
   type StoryChapter,
   type StorySettings,
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/model.ts";
@@ -886,7 +887,11 @@ test("Illustrate's one text call: the passage, the text before it, and the cast'
   assert.equal(system!.role, "system");
   assert.match(system!.content, /describe in English the single picture/);
   assert.match(system!.content, /no text in it: no letters, captions, signs with writing or speech bubbles/);
-  assert.match(system!.content, /Describe every person by their looks, not only by their name/);
+  // The prompt names whom it shows, so their pictures can go with it as references.
+  assert.match(
+    system!.content,
+    /Name every person by their full name as the setup gives it, and describe them by their looks too/,
+  );
   assert.equal(user!.role, "user");
   const content = user!.content;
   // The setting and the cast's looks, in that order, then the passage last.
@@ -905,6 +910,28 @@ test("Illustrate's one text call: the passage, the text before it, and the cast'
   for (const absent of ["Cynical", "Cockbill", "Evening.", "Terry Pratchett", "Make it rain."]) {
     assert.ok(!content.includes(absent), `the picture prompt call leaves out ${absent}`);
   }
+});
+
+test("a picture prompt prefix goes first, joined as the Engine joins one; a story from before it has none and sends references", () => {
+  assert.equal(
+    withPrefix("masterpiece, artist:someone, ", "A tired watchman."),
+    "masterpiece, artist:someone, A tired watchman.",
+  );
+  assert.equal(withPrefix("  ", "A tired watchman."), "A tired watchman.");
+  assert.equal(withPrefix("lowres.", "text, letters"), "lowres, text, letters");
+  // The prompt never passes the server's limit, however long the prefix.
+  assert.equal(withPrefix("tag, ".repeat(200), "x".repeat(4_000)).length, 4_000);
+
+  const saved = { ...defaultStorySettings(), title: "Old" } as Partial<StorySettings>;
+  delete saved.picturePromptPrefix;
+  delete saved.pictureNegativePrefix;
+  delete saved.pictureReferences;
+  const old = normalizeStorySettings(saved);
+  assert.deepEqual([old.picturePromptPrefix, old.pictureNegativePrefix, old.pictureReferences], ["", "", true]);
+  const set = normalizeStorySettings({ picturePromptPrefix: "p".repeat(1_200), pictureReferences: false }, old);
+  assert.equal(set.picturePromptPrefix.length, 1_000);
+  assert.equal(set.pictureReferences, false);
+  assert.equal(normalizeStorySettings({ pictureReferences: "no" }, set).pictureReferences, false);
 });
 
 test("the picture prompt is read without reasoning, fences, a label or wrapping quotes, on one line", () => {

@@ -11,8 +11,11 @@ import {
   storyDocumentId,
 } from "../packages/story-writer/src/engine/packages/client/src/lib/story-writer/model.ts";
 import {
+  castInPrompt,
   createIllustrationImages,
   imageSize,
+  namesClothes,
+  PICTURE_NEGATIVE_PROMPT,
   type IllustrationImages,
   type PaintRequest,
 } from "../packages/story-writer/src/engine/packages/server/src/services/story-writer/illustrations.ts";
@@ -404,6 +407,9 @@ const NO_IMAGES: IllustrationImages = {
   paint: async () => {
     throw new Error("nothing may be painted here");
   },
+  references: async () => {
+    throw new Error("no references may be read here");
+  },
   remove: async () => {
     throw new Error("nothing may be deleted here");
   },
@@ -573,24 +579,154 @@ test("the paint request: the reviewed prompt goes to the Engine as an override, 
     failing.paint({ connectionId: "c", prompt: "p", negativePrompt: "", width: 1, height: 1, debugMode: false }),
     /The provider refused the prompt\./,
   );
+
+  // The cast's pictures go with it as references; NovelAI V5 lets a prompt that dresses them do so.
+  const paintWith = async (extra: Partial<PaintRequest>) => {
+    requests.length = 0;
+    await images.paint({
+      connectionId: "c",
+      prompt: "p",
+      negativePrompt: "",
+      width: 1,
+      height: 1,
+      debugMode: false,
+      ...extra,
+    });
+    return requests[0]!.json;
+  };
+  const withReferences = await paintWith({
+    referenceImages: ["data:image/png;base64,AAAA"],
+    preferReferenceOutfit: false,
+  });
+  assert.deepEqual(withReferences.referenceImages, ["data:image/png;base64,AAAA"]);
+  assert.equal(withReferences.preferReferenceOutfit, false);
+  // Without a reference, neither is sent.
+  const without = await paintWith({ referenceImages: [], preferReferenceOutfit: false });
+  assert.ok(!("referenceImages" in without) && !("preferReferenceOutfit" in without));
 });
 
-/** A fake Engine image connection: it records each paint and deletion, and paints gallery pictures img-1, img-2, ... */
-function fakeImages() {
+/** A picture the Engine serves: a PNG or WebP header, then `mark` so each one is told apart. */
+const avatarBytes = (mark: string, webp = false) =>
+  webp
+    ? Buffer.concat([Buffer.from("RIFF\0\0\0\0WEBPVP8 ", "latin1"), Buffer.from(mark)])
+    : Buffer.concat([Buffer.from(PNG_BASE64, "base64"), Buffer.from(mark)]);
+const dataUrl = (bytes: Buffer, mime = "image/png") => `data:${mime};base64,${bytes.toString("base64")}`;
+
+test("references: the avatars of the cast the prompt names, by whole name and in its order, at most four", async () => {
+  const characters: Record<string, unknown> = {
+    // A card keeps its fields in data, a JSON string in storage (or an object).
+    "c-vimes": { data: JSON.stringify({ name: "Sam Vimes" }), avatarPath: "/api/avatars/file/vimes.png" },
+    "c-ann": { data: { name: "Ann" }, avatarPath: "/api/avatars/file/ann.png" },
+    "c-ann-lee": { data: { name: "Ann Lee" }, avatarPath: "/api/avatars/file/ann-lee.png" },
+    "c-anna": { data: { name: "Anna" }, avatarPath: "/api/avatars/file/anna.png" },
+    "c-nobby": { data: { name: "Nobby" }, avatarPath: "" },
+    "c-broken": { data: { name: "Colon" }, avatarPath: "/api/avatars/file/broken.png" },
+    "c-detritus": { data: { name: "Detritus" }, avatarPath: "/api/avatars/file/detritus.png" },
+  };
+  const personas: Record<string, unknown> = {
+    "p-sybil": { name: "Sybil", avatarPath: "/api/avatars/file/sybil.webp" },
+    "p-carrot": { name: "Carrot", avatarPath: "/api/avatars/file/carrot.png" },
+  };
+  const files: Record<string, Buffer> = {
+    "vimes.png": avatarBytes("vimes"),
+    "ann.png": avatarBytes("ann"),
+    "ann-lee.png": avatarBytes("ann-lee"),
+    "anna.png": avatarBytes("anna"),
+    "sybil.webp": avatarBytes("sybil", true),
+    "carrot.png": avatarBytes("carrot"),
+    "detritus.png": avatarBytes("detritus"),
+    "broken.png": Buffer.from("not a picture"),
+  };
+  const fetched: string[] = [];
+  const fetchImpl = (async (url: string | URL) => {
+    const path = new URL(String(url)).pathname;
+    fetched.push(path);
+    const persona = /^\/api\/characters\/personas\/([^/]+)$/.exec(path)?.[1];
+    const character = /^\/api\/characters\/([^/]+)$/.exec(path)?.[1];
+    const file = /^\/api\/avatars\/file\/([^/]+)$/.exec(path)?.[1];
+    if (persona && personas[persona]) return Response.json(personas[persona]);
+    if (!persona && character && characters[character]) return Response.json(characters[character]);
+    if (file && files[file]) return new Response(new Uint8Array(files[file]));
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }) as typeof fetch;
+  const images = createIllustrationImages({ baseUrl: "http://127.0.0.1:7860", fetch: fetchImpl });
+  const cast = {
+    characterIds: ["c-vimes", "c-ann", "c-ann-lee", "c-anna", "c-nobby", "c-broken", "c-gone", "c-detritus"],
+    personaIds: ["p-sybil", "p-carrot"],
+  };
+
+  // Sybil first, as the prompt names her; Ann Lee is not Ann too; Nobby has no avatar and Colon's does not load; the
+  // fifth picture (Detritus) is past the Engine's four.
+  const prompt =
+    "Sybil, tall in a waxed cloak, beside Sam Vimes in a battered helmet; Ann Lee, Nobby and Colon watch, " +
+    "Carrot waves and Detritus looms.";
+  const avatarsBefore = () => fetched.filter((path) => path.startsWith("/api/avatars/")).length;
+  assert.deepEqual(await images.references(cast, prompt), [
+    dataUrl(files["sybil.webp"]!, "image/webp"),
+    dataUrl(files["vimes.png"]!),
+    dataUrl(files["ann-lee.png"]!),
+    dataUrl(files["carrot.png"]!),
+  ]);
+  assert.ok(!fetched.includes("/api/avatars/file/detritus.png"), "nothing past the fourth picture is read");
+  assert.ok(!fetched.includes("/api/avatars/file/ann.png") && !fetched.includes("/api/avatars/file/anna.png"));
+
+  // A part of a name is no one, and a picture of nobody sends none (and reads no picture).
+  const read = avatarsBefore();
+  assert.deepEqual(await images.references(cast, "Annabel and a Vimes lookalike stand in the rain."), []);
+  assert.equal(avatarsBefore(), read);
+  assert.deepEqual(await images.references(cast, "Anna laughs."), [dataUrl(files["anna.png"]!)]);
+  assert.deepEqual(await images.references({ characterIds: [], personaIds: [] }, "Sybil waves."), []);
+});
+
+test("the cast a prompt names, and whether it says what they wear", () => {
+  const cast = [{ name: "Ann" }, { name: "Zoë" }, { name: " " }, { name: "Dr. Who?" }];
+  assert.deepEqual(castInPrompt("Zoë and Ann, then Dr. Who? arrives", cast), [cast[1], cast[0], cast[3]]);
+  assert.deepEqual(castInPrompt("Annabel, Zoëy and Dr. Whom", cast), []);
+  // A name is matched as the setup capitalizes it, so a cast named for ordinary words is not found in a picture of
+  // nobody.
+  const words = [{ name: "Amber" }, { name: "Raven" }, { name: "Rose" }];
+  const empty = "An empty harbour at dusk, warm amber light on wet stones, a raven on a post, rose bushes by the gate.";
+  assert.deepEqual(castInPrompt(empty, words), []);
+  assert.deepEqual(castInPrompt("Rose and Raven sit under the amber light.", words), [words[2], words[1]]);
+  assert.deepEqual(castInPrompt("zoë and ANN wave", cast), []);
+  // A combining mark belongs to the word it sits on: रामू is not राम.
+  const devanagari = [{ name: "राम" }];
+  assert.deepEqual(castInPrompt("रामू waves.", devanagari), []);
+  assert.deepEqual(castInPrompt("राम waves.", devanagari), [devanagari[0]]);
+  // Names are compared as they are matched (NFC): a decomposed 민수 is shorter than 민수 씨, so it never eats it.
+  const korean = [{ name: "민수".normalize("NFD") }, { name: "민수 씨" }];
+  assert.deepEqual(castInPrompt("민수 씨 waves.", korean), [korean[1]]);
+  assert.deepEqual(castInPrompt("민수 waves.", korean), [korean[0]]);
+  assert.equal(namesClothes("A tall man in a battered helmet and a thin coat."), true);
+  assert.equal(namesClothes("She wears nothing but a smile."), true);
+  assert.equal(namesClothes("Two figures, naked, in the moonlight."), true);
+  assert.equal(namesClothes("Jean, short grey hair, laughs under the rain."), false);
+});
+
+/**
+ * A fake Engine image connection: it records each paint, deletion and references read, paints gallery pictures img-1,
+ * img-2, ... and answers `references` for any cast.
+ */
+function fakeImages(references: string[] = []) {
   const painted: PaintRequest[] = [];
   const removed: string[] = [];
+  const asked: Array<{ characterIds: string[]; personaIds: string[]; prompt: string }> = [];
   const images: IllustrationImages = {
     async paint(request) {
       painted.push(request);
       const id = `img-${painted.length}`;
       return { id, url: `/api/global-gallery/file/${id}.png`, width: 896, height: 1152 };
     },
+    async references({ characterIds, personaIds }, prompt) {
+      asked.push({ characterIds, personaIds, prompt });
+      return references;
+    },
     async remove(id) {
       removed.push(id);
       return true;
     },
   };
-  return { images, painted, removed };
+  return { images, painted, removed, asked };
 }
 
 test("a painted picture is stored in its chapter, survives every text write, and leaves the gallery when removed", async () => {
@@ -695,6 +831,43 @@ test("a painted picture is stored in its chapter, survives every text write, and
   assert.deepEqual(removed, ["img-2"]);
 });
 
+test("Illustrate paints with the story's negative prefix and the pictures of the cast it names, unless the story says no", async () => {
+  const { store } = setup();
+  const reference = "data:image/png;base64,VklNRVM=";
+  const { images, painted, asked } = fakeImages([reference]);
+  const { call } = await routeHarness(store, images);
+  const { story } = await store.createStory({
+    characterIds: ["c-vimes"],
+    personaIds: ["p-sybil"],
+    pictureNegativePrefix: "lowres, bad anatomy, ",
+  });
+  const created = await store.createChapter(story.id, { text: "Text." });
+  const params = { storyId: story.id, chapterId: created.chapters[0]!.id };
+  const path = "POST /stories/:storyId/chapters/:chapterId/illustrations";
+  const paint = async (prompt: string) => {
+    assert.equal((await call(path, { params, body: { connectionId: "img", prompt, paragraph: 0 } })).code, 200);
+    return painted.at(-1)!;
+  };
+
+  const dressed = await paint("Sam Vimes in a battered helmet under the rain.");
+  assert.equal(dressed.negativePrompt, `lowres, bad anatomy, ${PICTURE_NEGATIVE_PROMPT}`);
+  assert.deepEqual(dressed.referenceImages, [reference]);
+  // The prompt says what he wears, so the reference gives only his likeness.
+  assert.equal(dressed.preferReferenceOutfit, false);
+  assert.deepEqual(asked, [
+    { characterIds: ["c-vimes"], personaIds: ["p-sybil"], prompt: "Sam Vimes in a battered helmet under the rain." },
+  ]);
+  const plain = await paint("Sam Vimes looks up at the rain.");
+  assert.deepEqual(plain.referenceImages, [reference]);
+  assert.ok(!("preferReferenceOutfit" in plain));
+
+  // Turned off: no references are read or sent.
+  await store.patchStorySettings(story.id, { pictureReferences: false });
+  const off = await paint("Sam Vimes in a battered helmet.");
+  assert.equal(asked.length, 2);
+  assert.ok(!("referenceImages" in off) && !("preferReferenceOutfit" in off));
+});
+
 test("a failed paint stores nothing, and a picture whose chapter went meanwhile leaves the gallery again", async () => {
   const { store } = setup();
   const { story } = await store.createStory({});
@@ -707,6 +880,7 @@ test("a failed paint stores nothing, and a picture whose chapter went meanwhile 
     paint: async () => {
       throw new Error("The provider refused the prompt.");
     },
+    references: async () => [],
     remove: async () => true,
   });
   assert.deepEqual(await refusing.call(path, { params, body }), {
@@ -723,6 +897,7 @@ test("a failed paint stores nothing, and a picture whose chapter went meanwhile 
       await store.deleteChapter(story.id, params.chapterId);
       return { id: "img-late", url: "/api/global-gallery/file/img-late.png", width: 1, height: 1 };
     },
+    references: async () => [],
     async remove(id) {
       removed.push(id);
       return true;

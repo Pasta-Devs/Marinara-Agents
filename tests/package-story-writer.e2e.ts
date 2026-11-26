@@ -985,14 +985,22 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   // An AUTOMATIC1111 backend on this machine: the Engine paints through it, and nothing leaves the test.
-  const painted: Array<{ prompt: string; negative_prompt: string; width: number; height: number }> = [];
+  // With a reference picture the Engine asks AUTOMATIC1111 for img2img, starting from the first one.
+  const painted: Array<{
+    endpoint: string;
+    prompt: string;
+    negative_prompt: string;
+    width: number;
+    height: number;
+    init_images?: string[];
+  }> = [];
   const picture = gradientPng(448, 576);
   const painter = createServer((incoming, response) => {
     let body = "";
     incoming.on("data", (chunk) => (body += chunk));
     incoming.on("end", () => {
-      if (incoming.method === "POST" && incoming.url === "/sdapi/v1/txt2img") {
-        painted.push(JSON.parse(body));
+      if (incoming.method === "POST" && /^\/sdapi\/v1\/(?:txt2img|img2img)$/.test(incoming.url ?? "")) {
+        painted.push({ ...JSON.parse(body), endpoint: incoming.url });
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify({ images: [picture] }));
         return;
@@ -1089,6 +1097,14 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
             .imageConnectionId,
       )
       .toBe(imageConnection.id);
+    // Beside it (#2488): prefixes for every picture prompt and its negative prompt, and the cast's pictures as
+    // references, on by default. This story has no cast, so none is sent.
+    await expect(root.getByRole("button", { name: /^Use character pictures as references/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await root.getByLabel("Picture prompt prefix").fill("masterpiece, ink wash");
+    await root.getByLabel("Negative prompt prefix").fill("lowres");
     await root.getByRole("button", { name: "Hide story settings" }).click();
     // With one, the phone's word count makes room for Illustrate.
     await expect(illustrate).toBeVisible();
@@ -1100,7 +1116,8 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
     const review = page.getByRole("dialog", { name: "Picture prompt" });
     await expect(review).toBeVisible();
     const prompt = review.getByLabel("What the picture shows");
-    await expect(prompt).toHaveValue(PICTURE_PROMPT);
+    // The review shows the prefix too, exactly as it will be painted.
+    await expect(prompt).toHaveValue(`masterpiece, ink wash, ${PICTURE_PROMPT}`);
     await expect(prompt).toBeFocused();
     expect(painted).toHaveLength(0);
     // The one text call: the story's own connection, with the selected passage and no streaming.
@@ -1117,8 +1134,10 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
 
     // The image connection paints exactly the reviewed prompt, with no text in the picture.
     await expect.poll(() => painted.length, { timeout: 30_000 }).toBe(1);
+    // The story has no cast, so no reference picture goes with it.
+    expect(painted[0]!.endpoint).toBe("/sdapi/v1/txt2img");
     expect(painted[0]!.prompt).toBe(`${PICTURE_PROMPT} Puddles shine.`);
-    expect(painted[0]!.negative_prompt).toContain("text, letters, words");
+    expect(painted[0]!.negative_prompt).toContain("lowres, text, letters, words");
     expect([painted[0]!.width, painted[0]!.height]).toEqual([896, 1152]);
     await expect.poll(async () => (await savedChapter()).illustrations.length, { timeout: 30_000 }).toBe(1);
     const stored = (await savedChapter()).illustrations[0]!;
@@ -1191,6 +1210,17 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
     expect((await savedChapter()).illustrations).toEqual([stored]);
     await expect(figure).toHaveCount(1);
 
+    // The story gets a character with an avatar (#2488): a prompt that names him sends his avatar as a reference.
+    const avatar = gradientPng(64, 96);
+    const vimes = await engineRequest(request, base, "POST", "/characters", { data: { name: "Sam Vimes" } });
+    await engineRequest(request, base, "POST", `/characters/${vimes.id}/avatar`, {
+      avatar: `data:image/png;base64,${avatar}`,
+    });
+    await engineRequest(request, base, "PATCH", `/story-writer/stories/${storyId}`, {
+      settings: { characterIds: [vimes.id] },
+    });
+    const againPrompt = `${PICTURE_PROMPT} Sam Vimes watches.`;
+
     // Illustrate again paints from its own prompt (no text call) in its place; the old picture stays in the gallery.
     await figure.scrollIntoViewIfNeeded();
     await figure.hover();
@@ -1198,16 +1228,18 @@ test("Illustrate paints a passage with the image connection, beside its paragrap
     await expect(review).toBeVisible();
     await expect(review.getByLabel("What the picture shows")).toHaveValue(`${PICTURE_PROMPT} Puddles shine.`);
     const textCalls = generations.filter((body) => body.streaming === false).length;
-    await review.getByLabel("What the picture shows").fill(`${PICTURE_PROMPT} A cat watches.`);
+    await review.getByLabel("What the picture shows").fill(againPrompt);
     await review.getByRole("button", { name: "Paint" }).click();
     await expect.poll(() => painted.length, { timeout: 30_000 }).toBe(2);
+    expect(painted[1]!.endpoint).toBe("/sdapi/v1/img2img");
+    expect(painted[1]!.init_images).toEqual([avatar]);
     await expect
       .poll(async () => (await savedChapter()).illustrations.map((item) => item.prompt), { timeout: 30_000 })
-      .toEqual([`${PICTURE_PROMPT} A cat watches.`]);
+      .toEqual([againPrompt]);
     expect(generations.filter((body) => body.streaming === false)).toHaveLength(textCalls);
     const secondImageId = (await savedChapter()).illustrations[0]!.image.slice("global-gallery:".length);
     expect(await galleryIds()).toEqual(expect.arrayContaining([firstImageId, secondImageId]));
-    await expect(figure.locator("img")).toHaveAttribute("alt", `${PICTURE_PROMPT} A cat watches.`);
+    await expect(figure.locator("img")).toHaveAttribute("alt", againPrompt);
 
     // A reload shows it from the server; the Document theme puts it beside the column when the window has room.
     await engineRequest(request, base, "PATCH", "/story-writer/preferences", { theme: "document" });

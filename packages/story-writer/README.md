@@ -81,10 +81,12 @@ Pick **Short**, **Medium**, **Long** or type a length to go back to writing chap
 
 1. Pick the connection that paints under **Writing → Image connection**. It starts at **None**, and with None, Illustrate sends nothing and costs nothing; it tells you where to choose one. On a phone held upright, the button shows only once you have chosen one.
 2. Click in the paragraph you want a picture of, or select a passage.
-3. Press **Illustrate**. The story's own connection writes a picture prompt in English from that passage and the looks of your characters and personas: who is there, what they look like, where they are, the light, what they are doing, and no text in the picture.
-4. If **Settings → Generations → Expose media prompts before sending** is on in Marinara Engine, Story Writer shows you that prompt first: change it as you like and press **Paint**, or **Cancel**. When it is off, the picture is painted straight away.
+3. Press **Illustrate**. The story's own connection writes a picture prompt in English from that passage and the looks of your characters and personas: who is there, by name, what they look like, where they are, the light, what they are doing, and no text in the picture. Your **Picture prompt prefix** goes at the start of it.
+4. If **Settings → Generations → Expose media prompts before sending** is on in Marinara Engine, Story Writer shows you that prompt first, prefix included: change it as you like and press **Paint**, or **Cancel**. When it is off, the picture is painted straight away.
 
-The image connection paints exactly the prompt it gets; your image style profiles are not added to it. A picture takes a little while to paint; you can keep writing meanwhile.
+The image connection paints exactly the prompt it gets; your image style profiles are not added to it. To add your own tags, such as the artist and quality tags your Illustrator agent uses, put them in **Writing → Picture prompt prefix**, and the ones to avoid in **Negative prompt prefix**. Story Writer always asks for no text in the picture after your negative prefix. A picture takes a little while to paint; you can keep writing meanwhile.
+
+With **Writing → Use character pictures as references** on (the default), the picture goes with the avatars of your characters and personas that its prompt names by their full name, capitalized as on the card or persona (so Amber is not found in "amber light"), up to four, in the order the prompt names them. A connection that takes reference pictures, such as NovelAI with Precise Reference, uses them to keep their looks. When the prompt says what they wear, NovelAI V5 dresses them as the prompt says rather than as the avatar shows. Someone without an avatar is left out, and a picture that names no one from your cast is painted without references. Each connection uses reference pictures in its own way: AUTOMATIC1111, for one, starts from the first picture instead of a blank canvas; turn the setting off for such a connection to have it paint from the prompt alone.
 
 Where the picture goes:
 
@@ -95,7 +97,7 @@ The picture belongs to the chapter, not to its text: it stays beside its paragra
 
 Point at a picture (on a touch screen its buttons are always shown) for its two buttons:
 
-- **Illustrate again** paints a new picture from the same prompt, in its place. The old picture stays in the Global Gallery. With **Expose media prompts before sending** on, you can change the prompt first.
+- **Illustrate again** paints a new picture from the same prompt (with the prefix it had), in its place. The old picture stays in the Global Gallery. With **Expose media prompts before sending** on, you can change the prompt first.
 - **Remove this picture** takes it out of the chapter, after asking. It is deleted from the Global Gallery too, unless something else uses it (a duplicated story, for example).
 
 Every picture is also kept in the Engine's **Global Gallery**. Deleting a chapter or a story keeps its pictures there, and so does painting a picture again. A downloaded **Markdown** file shows the pictures as images linked to your Engine; **Plain text** leaves them out.
@@ -175,6 +177,9 @@ For each character and persona the model gets its description, personality, back
 | --- | --- | --- |
 | Connection | The model that writes. **Edit connection** opens the Engine's connection editor. | your default connection |
 | Image connection | The connection **Illustrate** paints with. Only image connections are listed. With **None**, Illustrate sends nothing. | None |
+| Picture prompt prefix | Goes at the start of every picture prompt Illustrate writes, such as artist or quality tags. Shown once you pick an image connection, like the next two. | empty |
+| Negative prompt prefix | Goes before the negative prompt every picture is painted with. | empty |
+| Use character pictures as references | Sends the avatars of the characters and personas a picture prompt names, up to four, with the picture. See [Pictures](#pictures-illustrate-a-passage). | on |
 | Chapter length | About how many words each chapter should have. Short is 1,000, Medium 2,000 and Long 4,000; anything from 100 to 20,000 works. **Off (I decide)** gives the chapters no length: see [Write a passage at a time](#write-a-passage-at-a-time). | 2,000 words |
 | Story length target | About how long the whole story should be. Leave it empty for an open-ended story. | empty |
 | Chapter titles | Ask the model to open each chapter with its own title. | on |
@@ -270,7 +275,7 @@ Story Writer works in portrait and landscape. In portrait, the book shows a sing
 
 Everything the model reads goes to the connection you pick: your prompt, the selected characters, personas and lorebook entries, your overview and notes, the chapters and your author's note. If that connection is an online provider, they receive your story. For a fully private story, use a model that runs on your own computer. Story Writer itself sends your story nowhere else.
 
-**Illustrate** sends the passage, the text just before it, your overview and notes, the lorebook entries that match it and the looks of your characters and personas to the same connection, and the picture prompt it writes to your image connection.
+**Illustrate** sends the passage, the text just before it, your overview and notes, the lorebook entries that match it and the looks of your characters and personas to the same connection, and the picture prompt it writes to your image connection, with the avatars of the characters and personas that prompt names unless **Use character pictures as references** is off.
 
 ## Troubleshooting
 
