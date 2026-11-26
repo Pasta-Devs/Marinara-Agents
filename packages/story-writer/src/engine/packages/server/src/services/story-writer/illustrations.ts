@@ -73,8 +73,9 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 export function castInPrompt<T extends { name: string }>(prompt: string, cast: T[]): T[] {
   let rest = prompt.normalize("NFC");
   const found: Array<{ member: T; at: number }> = [];
-  for (const member of [...cast].sort((a, b) => b.name.trim().length - a.name.trim().length)) {
-    const name = member.name.normalize("NFC").trim();
+  const named = cast.map((member) => ({ member, name: member.name.normalize("NFC").trim() }));
+  // Longest first, as the name is matched (normalized), so a decomposed spelling never reads shorter than it is.
+  for (const { member, name } of named.sort((a, b) => b.name.length - a.name.length)) {
     if (!name) continue;
     const pattern = new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{M}\\p{N}])`, "gu");
     const at = rest.search(pattern);

@@ -693,6 +693,10 @@ test("the cast a prompt names, and whether it says what they wear", () => {
   const devanagari = [{ name: "राम" }];
   assert.deepEqual(castInPrompt("रामू waves.", devanagari), []);
   assert.deepEqual(castInPrompt("राम waves.", devanagari), [devanagari[0]]);
+  // Names are compared as they are matched (NFC): a decomposed 민수 is shorter than 민수 씨, so it never eats it.
+  const korean = [{ name: "민수".normalize("NFD") }, { name: "민수 씨" }];
+  assert.deepEqual(castInPrompt("민수 씨 waves.", korean), [korean[1]]);
+  assert.deepEqual(castInPrompt("민수 waves.", korean), [korean[0]]);
   assert.equal(namesClothes("A tall man in a battered helmet and a thin coat."), true);
   assert.equal(namesClothes("She wears nothing but a smile."), true);
   assert.equal(namesClothes("Two figures, naked, in the moonlight."), true);
