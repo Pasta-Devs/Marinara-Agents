@@ -28,9 +28,11 @@ export const sentCloses = new Map<string, number>();
 export const closeKey = (runKey: string, id: LiId) => `${runKey} ${id}`;
 
 /** After an accepted close: waits for it, shows the list's row remembering at once, and reads the list and thread. */
-export function closeSent(queryClient: QueryClient, runKey: string, id: LiId, result: PhoneCloseResult) {
+export async function closeSent(queryClient: QueryClient, runKey: string, id: LiId, result: PhoneCloseResult) {
   if ("remembering" in result) {
     sentCloses.set(closeKey(runKey, id), result.start);
+    // A list read already on its way would land after this with no close in it, and stop the wait (sentRemembering).
+    await queryClient.cancelQueries({ queryKey: phoneQueryKey(runKey) });
     queryClient.setQueryData<PhoneListView>(phoneQueryKey(runKey), (list) =>
       list
         ? {
@@ -101,7 +103,7 @@ interface CloseAndRememberProps {
    * there is no open conversation (`empty`).
    */
   blocked: "waiting" | "remembering" | "empty" | null;
-  onClosed: (result: PhoneCloseResult) => void;
+  onClosed: (result: PhoneCloseResult) => Promise<void>;
 }
 
 export function CloseAndRemember({ path, text, waitText, blocked, onClosed }: CloseAndRememberProps) {
@@ -128,7 +130,7 @@ export function CloseAndRemember({ path, text, waitText, blocked, onClosed }: Cl
     try {
       const result = await otome.post<PhoneCloseResult>(`${path}/close`);
       setAsking(false);
-      onClosed(result);
+      await onClosed(result);
     } catch (failure) {
       setError(otome.errorMessage(failure));
     } finally {
@@ -223,7 +225,7 @@ export function CloseRetry({
     setBusy(true);
     setFailure(null);
     try {
-      closeSent(queryClient, runKey, id, await otome.post<PhoneCloseResult>(`${phonePath(runKey, id)}/close`));
+      await closeSent(queryClient, runKey, id, await otome.post<PhoneCloseResult>(`${phonePath(runKey, id)}/close`));
       onRetried();
     } catch (problem) {
       setFailure(otome.errorMessage(problem));

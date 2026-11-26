@@ -1461,6 +1461,54 @@ test("Otome Forge phone: a close sent from Home's Reply shows its affection on H
   await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toContainText("+5 affection");
 });
 
+test("Otome Forge phone: a list read already on its way when a close is accepted never stops Home following it", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Messages' first read answers with the phone as it was when it was asked, once the close has been accepted.
+  const list = `/api/otome-forge/runs/${RUN}/phone`;
+  let reads = 0;
+  let answerList = () => {};
+  const listHeld = new Promise<void>((done) => (answerList = done));
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method !== "GET" || call.path !== list || ++reads > 1) return answer(call);
+    const before = await answer(call);
+    await listHeld;
+    return before;
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  try {
+    // Messages is left before its list answers, then his thread opens from Home's Reply.
+    await root.getByRole("button", { name: /Messages/ }).click();
+    await expect.poll(() => reads).toBe(1);
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    await root
+      .getByRole("article", { name: "A note from Ilvar Thorne" })
+      .getByRole("button", { name: "Reply" })
+      .click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect.poll(() => posts(stub, "/close").length).toBe(1);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    remember();
+  } finally {
+    // The read from before the close answers now, with no close in it.
+    answerList();
+  }
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+});
+
 test("Otome Forge daily messages: the first heartbeat reads nothing again for an old message; a new one reads Home again", async ({
   page,
 }) => {

@@ -7,8 +7,9 @@
 // world.friendInviteWeekly), attempts spread over the week (or over the number of friends, if that is smaller), each
 // spent before any provider work and never retried. The limit counts friends: one who wrote this week is not picked
 // again until the next.
-// - Who may write: a friend whose grievance with her does not stand, whose thread is not open or busy and does not end
-//   on her unanswered message; to ask her to hang out, also with no invitation of theirs still waiting.
+// - Who may write: a friend whose grievance with her does not stand, whose thread is not open or busy, is not being
+//   remembered (0.47.1) and does not end on her unanswered message; to ask her to hang out, also with no invitation of
+//   theirs still waiting.
 // - The job (the background lane, on the Messages connection) writes P17 as that friend, first (S/phone/chat.ts
 //   writeFirstMessage): a plain message, or (reason "hangout") one asking her to hang out, whose last message carries
 //   the invitation (`invite.kind` "hangout"). She accepts it from Messages, where she chooses what to wear, which opens
@@ -26,7 +27,15 @@ import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { emptyThread, inThreadLock, inviteWaiting, openMessages, readThread, writeFirstMessage } from "./chat.js";
+import {
+  emptyThread,
+  inThreadLock,
+  inviteWaiting,
+  openMessages,
+  readThread,
+  remembering,
+  writeFirstMessage,
+} from "./chat.js";
 import { dailyDecision, noteOpenThread, openThread, type DailyDecision, type DailyDeps } from "./daily.js";
 
 /** The two weekly things her friends do on their own. */
@@ -60,7 +69,11 @@ async function candidates(
   const free = await Promise.all(
     ids.map(async (id) => {
       const thread = (await readThread(deps.store, runId, id)) ?? emptyThread(id);
-      return openMessages(thread).at(-1)?.who !== "player" && (kind === "message" || !inviteWaiting(thread));
+      return (
+        !remembering(thread) &&
+        openMessages(thread).at(-1)?.who !== "player" &&
+        (kind === "message" || !inviteWaiting(thread))
+      );
     }),
   );
   return ids.filter((_, index) => free[index]);

@@ -8,13 +8,14 @@
 // 0.47.1: the summary runs in the background, so the player goes back to Messages at once (the maintainer's request).
 // - The close is accepted in the thread's one write in flight, as a send is (S/phone/chat.ts inThreadLock): its checks,
 //   then the thread's `closing` mark (the open conversation's range, when, the player's local day, and in the group
-//   its members), saved before it answers `{remembering: true}`. While the mark stands, a send is a 409 `busy`, and
-//   Close again answers the same.
+//   its members), saved before it answers `{remembering: true}`. While the mark stands, a send is a 409 `busy`, and so
+//   is a message written first there (S/phone/chat.ts writeFirstIn; the heartbeat arms none for that thread meanwhile),
+//   and Close again answers the same.
 // - The summary is a background-queue job keyed by the thread, under foreground admission (the player's own request,
 //   which never waits for an idle connection), on the connection P18 has always used (job `compress`). It reads the
 //   run when it starts, so it never waits in the run's foreground queue behind a lookahead beat, and the next beat never
-//   waits behind it. Its writes are revision-checked and applied again to the latest thread or state, so a seen mark, a
-//   daily message after the conversation or a story write meanwhile is never lost.
+//   waits behind it. Its writes are revision-checked and applied again to the latest thread or state, so a seen mark or
+//   a story write meanwhile is never lost.
 // - Each summary started is counted on the mark before its call. The queue lives in this process, so a read of the list
 //   or the thread finds a mark with no job here (a restart) and queues it again (resumeClose): it summarizes once more,
 //   and a mark that two summaries never landed fails as "stopped". A session already there is only unmarked, even with

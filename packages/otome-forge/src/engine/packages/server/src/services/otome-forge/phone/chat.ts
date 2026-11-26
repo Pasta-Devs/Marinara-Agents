@@ -16,7 +16,8 @@
 // Send (P17) and close (P18) each hold the thread's one write in flight (the kit's withForgeChatSend): a second while
 // one runs is a 409 `busy`, and forgeChatReplyBusy shows it on the history page. 0.47.1: a close holds it only while it
 // is accepted; its summary runs in the background, and while the thread's `closing` mark says it is remembered, a send
-// is a 409 `busy` too (S/phone/memory.ts). Her next message after a close that failed clears its mark: the next close
+// is a 409 `busy` too (S/phone/memory.ts), and so is a message he would write first (writeFirstIn), so nothing joins a
+// conversation once it is being remembered. Her next message after a close that failed clears its mark: the next close
 // covers that conversation too. A send saves the player's message
 // first, then writes his reply in the run's foreground queue (generation.ts) and appends it only while no reply to that
 // message exists yet, so a reply lands once. The client may name its message (`id`): sending the same id again returns
@@ -700,9 +701,9 @@ export const writeFirstMessage = (
   );
 
 /**
- * writeFirstMessage's rule for thread `key` (the group chat's squabbles too, S/phone/group.ts): null when the open
- * conversation waits on her message; otherwise what `write` wrote, appended only while the thread still ends where it
- * was read.
+ * writeFirstMessage's rule for thread `key` (the group chat's squabbles too, S/phone/group.ts): a 409 `busy` while its
+ * conversation is being remembered (0.47.1), null when the open conversation waits on her message; otherwise what
+ * `write` wrote, appended only while the thread still ends where it was read.
  */
 export async function writeFirstIn<T>(
   deps: PhoneDeps,
@@ -715,6 +716,8 @@ export async function writeFirstIn<T>(
   if ((await deps.store.readDoc(stateId(runId), normalizeState))?.ended) return null;
   const loaded = await load();
   const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
+  // Closed while the job waited: no close is accepted while this holds the thread's lock, so one read is enough.
+  if (remembering(thread)) throw stillRemembering();
   if (openMessages(thread).at(-1)?.who === "player") return null;
   const newest = thread.messages.at(-1)?.id ?? null;
   const written = await write(loaded, thread);

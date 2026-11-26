@@ -1466,6 +1466,59 @@ test("daily messages skip the open thread, a busy one and one waiting on her mes
   assert.equal(t.firstCalls().length, 2);
 });
 
+test("0.47.1: no one writes first in a thread being remembered: nothing is armed for it, and the job checks it again", async () => {
+  const t = await dailyWorld("r-daily8-aaaaaa", { limit: 24 });
+  // Every admitted job waits here until `open()`, as it would for the Engine's slot.
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const admission = t.runtime.integrations!.admission!;
+  const admit = admission.run.bind(admission);
+  Object.assign(admission, {
+    run: async (connectionId: string, mode: { kind: string }, operation: () => Promise<unknown>) => {
+      await opened;
+      return admit(connectionId, mode as never, operation);
+    },
+  });
+  const closing = { start: 0, end: 2, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
+  const mark = (marked: boolean) =>
+    Promise.all(
+      [KAI, MIR, SOL].map((li) =>
+        t.store.mutateDoc(chatTarget(t.runId, li), normalizeThread, (thread) => ({
+          ...thread,
+          li,
+          messages: [
+            { id: "m-her-0001", who: "player", text: "Are you up?", at: "2026-11-02T08:50:00.000Z" },
+            { id: "m-his-0001", who: "li", text: "Always.", at: "2026-11-02T08:51:00.000Z" },
+          ],
+          closing: marked ? closing : undefined,
+        })),
+      ),
+    );
+  // Each conversation is being remembered: nothing is armed or spent, so a message comes later.
+  await mark(true);
+  assert.equal((await t.due(T0, { open: null })).status, "no-eligible");
+  assert.equal(await t.daily(), undefined, "nothing armed or spent");
+
+  // Queued before the closes, which are accepted while the job waits for admission: no provider work, nothing joins
+  // the conversations being remembered, and the attempt stays spent, as for a busy thread.
+  await mark(false);
+  assert.equal((await t.due(T0 + 1_000)).status, "scheduled");
+  assert.equal((await t.due(T0 + 61_000)).status, "queued");
+  await mark(true);
+  open();
+  await t.drain();
+  assert.equal(t.firstCalls().length, 0, "no provider work");
+  for (const li of [KAI, MIR, SOL]) assert.equal((await t.thread(li))!.messages.length, 2, li);
+  assert.deepEqual([(await t.daily())!.days["2026-11-02"]!.attempts, (await t.daily())!.last], [1, undefined]);
+
+  // Once they are remembered, one of them writes first as before.
+  await mark(false);
+  assert.equal((await t.due(T0 + 61_000 + 8 * HOUR)).status, "scheduled");
+  assert.equal((await t.due(T0 + 121_000 + 8 * HOUR)).status, "queued");
+  await t.drain();
+  assert.equal(t.firstCalls().length, 1);
+});
+
 test("a daily message holds his thread while it is written, and is dropped when the thread changed meanwhile", async () => {
   const t = await dailyWorld("r-daily4-aaaaaa", { limit: 24 });
   const release = gateFirstCall(t.runtime);

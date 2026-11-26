@@ -442,9 +442,8 @@ async function writeSquabble(
         GROUP_THREAD,
         async () => {
           const run = await readRun(deps.store, runId);
-          // Opened, answered or closed while the job waited for admission (the lock is this job's own now).
-          if (remembering(await readThread(deps.store, runId, GROUP_THREAD)))
-            throw conflict("the group's conversation is being remembered");
+          // Opened or answered while the job waited for admission (the lock is this job's own now); writeFirstIn
+          // refuses one closed meanwhile.
           const members = run && openThread(runId) !== GROUP_THREAD ? await groupMembers(deps, runId, run) : [];
           if (!run || members.length < GROUP_MIN_MEMBERS) throw conflict("the group is open or has too few members");
           return { run, members };

@@ -424,8 +424,8 @@ export function Thread({
   };
 
   // 0.47.1: accepted, the memory is written in the background, and the player is back in Messages at once.
-  const closed = (result: PhoneCloseResult) => {
-    closeSent(queryClient, runKey, id, result);
+  const closed = async (result: PhoneCloseResult) => {
+    await closeSent(queryClient, runKey, id, result);
     onBack();
   };
 
