@@ -1241,7 +1241,7 @@ test("a NovelAI connection paints in NovelAI's style, with one reference that th
   assert.equal("preferReferenceOutfit" in bodies[1]!, false);
 });
 
-test("0.47.2: on NovelAI a key image of two people sends no reference, and a clothed one names nudity as tags", async () => {
+test("0.47.2: on NovelAI a key image of two people sends both their references, and a clothed one names nudity as tags", async () => {
   const t = await sceneWorld("r-naitwins-aaaaaa");
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
     ...unit,
@@ -1294,10 +1294,14 @@ test("0.47.2: on NovelAI a key image of two people sends no reference, and a clo
     return bodies.at(-1)!;
   };
 
-  // The reference can't be tied to one of them, so NovelAI drew both with his face and hair (2026-11-26).
+  // With his reference alone, NovelAI drew both with his face and hair (2026-11-26); V5 tells several apart.
   const both = await paint(1, ["Kai", "Ines"]);
-  assert.equal(both.referenceImages, undefined, "two people: no reference");
-  assert.equal("preferReferenceOutfit" in both, false);
+  assert.equal(both.referenceImages.length, 2, "two people: a reference each");
+  assert.deepEqual(
+    both.referenceImages.map((image: string) => Buffer.from(image.split(",")[1]!, "base64").toString()),
+    ["/api/avatars/file/kai.png", "/api/avatars/file/ines.png"],
+  );
+  assert.equal(both.preferReferenceOutfit, false, "the prompt dresses them");
   const { prompt, negativePrompt } = both.promptOverrides[0];
   assert.ok(prompt.startsWith("1girl, 1boy, "), prompt);
   assert.match(prompt, /Kai: tall man, grey hair; keeper's coat\./);
@@ -1306,10 +1310,20 @@ test("0.47.2: on NovelAI a key image of two people sends no reference, and a clo
   // Tag models skip "nudity"; the tags reach them (a NovelAI supper came out topless, 2026-11-26).
   assert.match(negativePrompt, /nudity, explicit sexual activity, nude, topless, nipples, sex/u);
 
-  // One person: still their reference alone, which the prompt dresses.
+  // One person: their reference alone, which the prompt dresses.
   const alone = await paint(2, ["Kai"]);
   assert.equal(alone.referenceImages.length, 1);
   assert.equal(alone.preferReferenceOutfit, false);
+
+  // Only the people's pictures go: a worn outfit or a place after them would be read as someone else.
+  const request = { name: "Kai", prompt: "p", negativePrompt: "n", width: 1216, height: 832, debugMode: false };
+  await deps.images.generateImage({
+    ...request,
+    connectionId: "conn-image",
+    referenceImages: ["/kai.png", "/ines.png", "/place.png"],
+    characters: 2,
+  });
+  assert.deepEqual(bodies.at(-1)!.referenceImages, ["/kai.png", "/ines.png"]);
 });
 
 // ── 0.47.1: Your cast's paints go on in the background ──

@@ -188,7 +188,6 @@ async function buildCard(deps: ItemArtDeps, runId: string, key: string, edited: 
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]!.person.name.split(/\s+/)[0] || name,
           units,
-          people: subjects.length,
         });
       }
       const image = await images.generateImage(request);

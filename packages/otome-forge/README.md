@@ -163,7 +163,7 @@ With a NovelAI connection, Otome Hearth writes every picture it paints in NovelA
 - the words of V5's Heavy negative preset;
 - explicit key images tagged uncensored.
 
-A picture of one person sends NovelAI their reference, as a Character & Style reference. A picture of two or more sends none: NovelAI blends several character references into one person, and can't tie one to a single person, so everyone came out with the same face. The prompt describes each person and decides what everyone wears. The reference needs a Marinara Engine with NovelAI V5 Precise Reference; an older Engine paints without it.
+A picture with people sends NovelAI a Character & Style reference for each person in it, as NovelAI's own app does, and never an outfit or place picture, which it would read as someone else. The prompt decides what everyone wears. NovelAI V5 tells several character references apart; NovelAI has said V4.5 blends them into one person. The references need a Marinara Engine with NovelAI V5 Precise Reference; an older Engine paints without them.
 
 You can add an image connection later in **Settings → Images**. Saving it paints nothing, unless you also turn on **Side character sprites** (below). Open **Your cast** to paint missing base portraits, open owned items from **Wardrobe** or **Album** to add their missing artwork, or use **Paint** beside a reached story location or key moment. Each action shows its image cost and uses the existing prompt-review setting. Existing artwork, story text, progress and Starlight stay intact.
 

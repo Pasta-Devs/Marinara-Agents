@@ -264,7 +264,7 @@ async function buildPhoto(
   runId: string,
   setup: PhotoSetup,
   edited: Partial<ImagePrompt> = {},
-): Promise<ImagePrompt & { name: string; references: string[]; missing?: string }> {
+): Promise<ImagePrompt & { name: string; references: string[]; characters: number; missing?: string }> {
   const {
     run,
     unit,
@@ -341,6 +341,8 @@ async function buildPhoto(
     ...prompt,
     name: `${first} photo`,
     references: resolved.map((entry) => entry.image),
+    // The two of them come first, then the place: NovelAI gets theirs alone (S/art/image-client.ts generateImage).
+    characters: resolved.filter((entry) => entry.who !== "place").length,
     ...(missing ? { missing } : {}),
   };
 }
@@ -393,8 +395,7 @@ function paintPhoto(
         ...STICKER_SIZE,
         debugMode,
         referenceImages: built.references,
-        // The two of them, always.
-        people: 2,
+        characters: built.characters,
       });
       return images.uploadToGallery({ image, name: built.name, prompt: built.prompt });
     },

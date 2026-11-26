@@ -612,7 +612,6 @@ async function paintCg(
         // The Engine matches the override as `avatar:<slug of the first person's first name>`.
         name: built.subjects[0]?.person.name.split(/\s+/)[0] || "Scene",
         units: cgReferences(built.subjects).units,
-        people: built.subjects.length,
         prompt: built.prompt,
         negativePrompt: built.negativePrompt,
         ...SCENE_SIZE,
