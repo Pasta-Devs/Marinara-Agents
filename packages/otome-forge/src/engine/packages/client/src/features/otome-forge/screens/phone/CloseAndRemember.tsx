@@ -46,8 +46,8 @@ export function closeSent(queryClient: QueryClient, runKey: string, id: LiId, re
 }
 
 /**
- * The threads whose close this page sent and `list` does not show landed yet (all of them before the list is read), as
- * one key ("" for none).
+ * The threads whose close this page sent that `list` still shows being remembered (every one of them before the list is
+ * read), as one key ("" for none).
  */
 const sentRemembering = (runKey: string, list: PhoneListView | undefined) => {
   const rows = new Map<LiId, PhoneCloseView>(list ? list.threads.map((row) => [row.li, row]) : []);

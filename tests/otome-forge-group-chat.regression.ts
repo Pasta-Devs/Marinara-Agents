@@ -991,7 +991,7 @@ test("a squabble holds the thread while written, and is dropped when the thread 
 
 test("0.47.1: squabbles skip a group whose conversation is being remembered, and the job checks it again when it starts", async () => {
   const gate = admissionGate();
-  const t = await groupWorld("r-group12-aaaaaa", { admissionRun: gate.admissionRun });
+  const t = await groupWorld("r-group15-aaaaaa", { admissionRun: gate.admissionRun });
   await t.setWorld({ groupSquabbles: 24 });
   const beat = (now: number) => groupDue(t.deps, t.runId, { open: null, now, random: () => 0 });
   const closing = { start: 0, end: 2, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
