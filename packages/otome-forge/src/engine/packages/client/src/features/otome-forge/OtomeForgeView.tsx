@@ -40,6 +40,7 @@ import { ReadMe } from "./screens/dates/ReadMe";
 import { TarotNight } from "./screens/dates/TarotNight";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
+import { ClosesLanding } from "./screens/phone/CloseAndRemember";
 import { PhoneScreen, useDailyMessages, type PhoneOpen } from "./screens/phone/PhoneScreen";
 import { StickerNotice } from "./screens/phone/StickerPicker";
 import { Placeholder } from "./screens/Placeholder";
@@ -497,6 +498,10 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         </div>
         {/* "You unlocked a new sticker" (#2044), over whichever screen is open. */}
         {view && activeRun ? <StickerNotice view={view} /> : null}
+        {/* 0.47.1: a close remembered while the player is away from Messages reads the run view again as it lands. */}
+        {activeRun ? (
+          <ClosesLanding key={`closes:${activeRun}`} runKey={activeRun} listShown={screen === "phone" && !phoneOpen} />
+        ) : null}
         {/* 0.34.0: Stop the toys, over whichever screen is open while they play. */}
         <HapticsStop />
         {DOCKED.has(screen) ? (

@@ -12,7 +12,8 @@
 // - The phase is `ready` once the world plan and every bible are done; painting can still be running.
 // - A failed step waits for its Retry and is never retried by itself. A failed world plan holds the bibles back.
 // - Paints run one at a time in their own queue per run, so a slow image never holds up the story, and only once
-//   their love interest's bible (or, for the protagonist, the world plan) is done.
+//   their love interest's bible (or, for the protagonist, the world plan) is done. 0.47.1: the art route's tap
+//   (startPaintWithStep) answers once its record is pending and paints on in the background.
 // - A step that reads `running` with no live owner in this process (the server restarted), or `pending` with no job
 //   left to run it, is shown and stored as `failed` (error "stopped"), with Retry.
 // A step's `error` is an OtomeErrorCode when the failure has one, "stopped" after a restart, else "failed"; the
@@ -30,11 +31,19 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { forgePrerequisite } from "../../../../../client/src/features/otome-forge/shared/forge.js";
-import { claimPaint, paintClaimed, paintIsLive, type ArtDeps, type LookOwner } from "../art/paint.js";
+import {
+  answerOnceStarted,
+  claimPaint,
+  paintClaimed,
+  paintIsLive,
+  type ArtDeps,
+  type LookOwner,
+  type PaintClaimedOptions,
+} from "../art/paint.js";
 import type { OtomeArt } from "../art/expressions.js";
 import type { BackgroundQueue } from "../background-queue.js";
 import { ensureQuiz } from "../minigames/quiz.js";
-import { type ImagePrompt, bibleMessages, worldPlanMessages } from "../prompts.js";
+import { bibleMessages, worldPlanMessages } from "../prompts.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { ID_PREFIX, INDEX_ID, INDEX_TARGET, playerId, runDocTarget, unitId, worldId } from "../ids.js";
@@ -413,7 +422,7 @@ export async function paintWithStep(
   deps: ForgeDeps,
   runId: string,
   owner: LookOwner,
-  options: Partial<ImagePrompt> & { debugMode: boolean },
+  options: PaintClaimedOptions,
 ): Promise<Paint> {
   const release = claimPaint(runId, owner);
   const stepId = paintStepId(owner);
@@ -437,6 +446,19 @@ export async function paintWithStep(
     release();
   }
 }
+
+/**
+ * 0.47.1: the art route's tap (Repaint, a reviewed Paint the cast): paintWithStep, answered with the record once it is
+ * pending, while the paid paint goes on in the background (answerOnceStarted). Another paint of that look (409 `busy`),
+ * no image connection or no bible yet is still the answer.
+ */
+export const startPaintWithStep = (
+  deps: ForgeDeps,
+  runId: string,
+  owner: LookOwner,
+  options: Omit<PaintClaimedOptions, "started">,
+): Promise<Paint> =>
+  answerOnceStarted(deps, owner, (started) => paintWithStep(deps, runId, owner, { ...options, started }));
 
 async function runPaintSteps(deps: ForgeDeps, runId: string, debugMode: boolean): Promise<void> {
   // Each step at most once per pass: one that could not even start stays pending for settleForge to fail.

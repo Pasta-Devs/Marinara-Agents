@@ -4,9 +4,10 @@
 // - POST /runs/:run/routes/:li/upset {upset} (S/routes/arcs.ts): a flag on his state (LiState.upset), which the player
 //   sets or takes back at any time, in one revision-checked write. Telling him queues one message from him (P17 with
 //   reason "upset", S/phone/chat.ts writeFirstMessage) on the Messages connection, as the player's own request
-//   (foreground admission), inside the thread's lock so his thread shows him typing. A thread that is busy, or ends on
-//   her message waiting for his reply, drops it with a log line: his next reply knows anyway (S/prompts.ts upsetLine).
-//   Taking it back calls no model, and lets an invitation still waiting lapse.
+//   (foreground admission), inside the thread's lock so his thread shows him typing. A thread that is busy, is being
+//   remembered (0.47.1, S/phone/chat.ts writeFirstIn) or ends on her message waiting for his reply drops it with a log
+//   line: his next reply knows anyway (S/prompts.ts upsetLine). Taking it back calls no model, and lets an invitation
+//   still waiting lapse.
 // - His invitation (S/phone/chat.ts inviteOffered) waits on his message: POST /runs/:run/phone/:li/invite {message,
 //   accept}. Accept is a 409 `locked` while he holds a grievance of his own, and a 409 `conflict` (the invitation
 //   lapses) unless it waits and she is still upset with him since before he asked; otherwise one write of the state

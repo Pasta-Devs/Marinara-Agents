@@ -162,6 +162,13 @@ function createHomeStub({
     replying: false,
     sendFailures: 0,
     closeFailures: 0,
+    // 0.47.1: a close accepted and remembered in the background (its session's start), held until `closeHold` resolves.
+    remembering: null as number | null,
+    closeHold: null as Promise<void> | null,
+    // How many of those fail as they land (the mark keeps "declined", Try again closes again), and Ilvar's level once
+    // one lands (the run view's affection).
+    backgroundFailures: 0,
+    landedLevel: null as number | null,
     // #2127: Your thoughts… waiting for the next chapter, and how many sends fail first.
     thoughts: null as Json | null,
     thoughtsFailures: 0,
@@ -287,7 +294,38 @@ function createHomeStub({
   let replies = 0;
   const archived = () => sessions.reduce((sum, session) => sum + session.count, 0);
   const unread = () => messages.filter((m) => m.who === "li" && (!seenAt || m.at > seenAt)).length;
+  let held = false;
+  let closeError: string | null = null;
+  /**
+   * 0.47.1: what the list and the page say of a close: remembering while held, then landed with its affection, or
+   * failed (`backgroundFailures`).
+   */
+  const closeView = () => {
+    if (state.remembering !== null && !held && state.backgroundFailures > 0) {
+      state.backgroundFailures -= 1;
+      state.remembering = null;
+      closeError = "declined";
+    } else if (state.remembering !== null && !held) {
+      if (state.landedLevel !== null) view.lis[0].level = state.landedLevel;
+      sessions.push({
+        start: state.remembering,
+        count: messages.length - state.remembering,
+        memory: { text: "She wrote late; he admitted he had not slept.", quote: "Barely." },
+        closedAt: now(),
+        affection: 5,
+      });
+      state.remembering = null;
+    }
+    const newest = sessions.at(-1);
+    return {
+      ...(state.remembering !== null ? { closing: {} } : closeError ? { closing: { error: closeError } } : {}),
+      ...(newest
+        ? { remembered: { start: newest.start, ...(newest.affection ? { affection: newest.affection } : {}) } }
+        : {}),
+    };
+  };
   const historyPage = () => ({
+    ...closeView(),
     messages: messages.map((m, i) => ({ ...m, archived: i < archived() })),
     page: 1,
     pages: 1,
@@ -456,7 +494,7 @@ function createHomeStub({
         status: 200,
         json: {
           threads: [
-            { li: ILVAR, last: messages.at(-1), unread: unread(), busy: state.replying },
+            { li: ILVAR, last: messages.at(-1), unread: unread(), busy: state.replying, ...closeView() },
             { li: CASSIAN, last: null, unread: 0, busy: false },
           ],
         },
@@ -513,20 +551,12 @@ function createHomeStub({
         state.closeFailures -= 1;
         return { status: 409, json: { error: "Ilvar Thorne is still writing.", code: "busy" } };
       }
-      const count = messages.length - archived();
-      sessions.push({
-        start: archived(),
-        count,
-        memory: { text: "She wrote late; he admitted he had not slept.", quote: "Barely." },
-        closedAt: now(),
-      });
-      return {
-        status: 200,
-        json: {
-          memory: sessions.at(-1)!.memory,
-          grants: [{ source: "close-and-remember", li: ILVAR, affection: 5 }],
-        },
-      };
+      // Accepted at once; the memory lands once `closeHold` resolves (the next read after it).
+      closeError = null;
+      state.remembering = archived();
+      held = !!state.closeHold;
+      void state.closeHold?.then(() => (held = false));
+      return { status: 200, json: { remembering: true, start: state.remembering } };
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
@@ -1155,8 +1185,8 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await expect(box).toHaveValue("Half a thought");
   expect(posts(stub, "/send")).toHaveLength(4);
 
-  // Close and remember: the conversation becomes his memory, and affection is earned once. A close that failed says
-  // so, and the dialog opened again starts clean.
+  // Close and remember: the conversation becomes his memory, and affection is earned once. A close refused before it
+  // starts says so, and the dialog opened again starts clean.
   await expect(root.locator(".of-typing")).toHaveCount(0);
   stub.state.closeFailures = 1;
   await root.getByRole("button", { name: "Close and remember" }).click();
@@ -1169,16 +1199,40 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await root.getByRole("button", { name: "Close and remember" }).click();
   await expect(dialog).toContainText("Ilvar Thorne");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
+  // 0.47.1: accepted, the player is back in Messages at once while the memory is written in the background.
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
   await dialog.getByRole("button", { name: "Close and remember" }).click();
+  await expect(dialog).toHaveCount(0);
+  const ilvarRow = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
+  await expect(ilvarRow).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  await expect(ilvarRow).toBeFocused();
+  // Opened meanwhile, his thread says so, and sending waits until it lands; Close does nothing.
+  await ilvarRow.click();
+  await expect(
+    root.getByRole("status").filter({ hasText: "Ilvar Thorne is remembering this conversation." }),
+  ).toBeVisible();
+  await expect(root.getByRole("button", { name: "Send", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await expect(root.getByRole("button", { name: "Close and remember" })).toHaveAttribute(
+    "title",
+    "Wait until this conversation is remembered.",
+  );
+  await root.getByRole("button", { name: "All messages" }).click();
+  await expect(ilvarRow).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  remember();
+  // The list reads itself again until it lands, then says once what it earned.
+  await expect(ilvarRow).toContainText("+5 affection");
+  await expect(ilvarRow).not.toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  expect(posts(stub, "/close")).toHaveLength(2); // The one refused, then the one that landed.
+  await page.screenshot({ path: testInfo.outputPath("05-remembered.png") });
+  await ilvarRow.click();
   await expect(log).toContainText("Barely.");
   await expect(log).not.toContainText("She wrote late; he admitted he had not slept.");
-  await expect(log).toContainText("+5 affection");
-  expect(posts(stub, "/close")).toHaveLength(2); // The one that failed, then the one that landed.
-  await page.screenshot({ path: testInfo.outputPath("05-remembered.png") });
 
-  // Back to the threads, focus on his row.
+  // Back to the threads, focus on his row; the affection was said once.
   await root.getByRole("button", { name: "All messages" }).click();
-  await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toBeFocused();
+  await expect(ilvarRow).toBeFocused();
+  await expect(ilvarRow).not.toContainText("+5 affection");
 
   // A thread opened from the list is still open after Settings and back, and its Back still leads to his row.
   await root
@@ -1245,6 +1299,214 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await expect(close).toHaveAttribute("aria-disabled", "true");
   await expect(close).toHaveAttribute("title", "There is nothing new to remember yet.");
   await expect(close).toHaveAccessibleDescription("There is nothing new to remember yet.");
+});
+
+test("Otome Forge phone: a close that fails in the background says why with Try again, focus stays on his row, and Home's affection follows the landing", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  stub.state.backgroundFailures = 2;
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  const row = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
+  await row.click();
+  await root.getByRole("button", { name: "Close and remember" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+  // Back in Messages; the summary failed, so the conversation is still open, with why and Try again under his row.
+  await expect(row).toBeFocused();
+  const failed = "This conversation wasn’t remembered, so it’s still open.";
+  const reason = root.locator(".of-threads").getByRole("alert").filter({ hasText: failed });
+  await expect(reason).toContainText(catalog["ui.otomeForge.errors.declined"]!);
+  // His thread says so too; its Try again goes back to Messages, as Close does, and focus to his row.
+  await row.click();
+  await expect(root.getByRole("alert").filter({ hasText: failed })).toBeVisible();
+  await root.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(row).toBeFocused();
+  expect(posts(stub, "/close")).toHaveLength(2);
+  // It failed again: Try again in the list, and focus stays on his row while it is remembered.
+  await expect(reason).toBeVisible();
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  await reason.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(row).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  await expect(reason).toHaveCount(0);
+  await expect(row).toBeFocused();
+  // Home before it lands: the affection it earned shows there once it does, with no visit to Messages.
+  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  remember();
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  // Messages still says once what it earned.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(row).toContainText("+5 affection");
+  expect(posts(stub, "/close")).toHaveLength(3);
+});
+
+test("Otome Forge phone: Home's affection follows each close that lands, while another is still remembered", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Cassian's thread holds an open conversation, and his close is remembered for the whole test.
+  const base = `/api/otome-forge/runs/${RUN}/phone`;
+  let cassianClosing = false;
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.path === `${base}/${CASSIAN}/close`) {
+      stub.calls.push(call);
+      cassianClosing = true;
+      return { status: 200, json: { remembering: true, start: 0 } };
+    }
+    if (call.path === `${base}/${CASSIAN}/seen`) return { status: 200, json: {} };
+    const response = await answer(call);
+    const json = response.json as Json;
+    const open = [
+      { id: "m-c1", who: "player", text: "Are you at the docks?", at: new Date(Date.now() - 120_000).toISOString() },
+      { id: "m-c2", who: "li", text: "Always.", at: new Date(Date.now() - 60_000).toISOString() },
+    ];
+    const closing = cassianClosing ? { closing: {} } : {};
+    if (call.path === base) {
+      const row = json.threads.find((thread: Json) => thread.li === CASSIAN);
+      Object.assign(row, { last: open.at(-1), ...closing });
+    }
+    if (call.path === `${base}/${CASSIAN}`) {
+      // His page, without what Ilvar's close says.
+      const { closing: _ilvars, remembered: _his, ...rest } = json;
+      response.json = {
+        ...rest,
+        messages: open.map((m) => ({ ...m, archived: false })),
+        activeCount: 2,
+        seenAt: open[1]!.at,
+        ...closing,
+      };
+    }
+    return response;
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  const threads = root.locator(".of-threads");
+  const closeFrom = async (name: RegExp) => {
+    await threads.getByRole("button", { name }).click();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect(threads.getByRole("button", { name })).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  };
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  await closeFrom(/Ilvar Thorne/);
+  await closeFrom(/Cassian/);
+  expect(posts(stub, "/close")).toHaveLength(2);
+  // Home while both are remembered: Ilvar's lands, and his affection shows there while Cassian's is still remembered.
+  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  remember();
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(threads.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("+5 affection");
+  await expect(threads.getByRole("button", { name: /Cassian/ })).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+});
+
+test("Otome Forge phone: a close sent from Home's Reply shows its affection on Home before Messages was ever read", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Messages' first read waits until the player is back Home and the close has landed.
+  let answerList = () => {};
+  const listHeld = new Promise<void>((done) => (answerList = done));
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}/phone`) await listHeld;
+    return answer(call);
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  try {
+    await root
+      .getByRole("article", { name: "A note from Ilvar Thorne" })
+      .getByRole("button", { name: "Reply" })
+      .click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect.poll(() => posts(stub, "/close").length).toBe(1);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // Home while nothing has read Messages yet: it lands, then the list answers with it landed.
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    remember();
+  } finally {
+    answerList();
+  }
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  // Messages still says once what it earned.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toContainText("+5 affection");
+});
+
+test("Otome Forge phone: a list read already on its way when a close is accepted never stops Home following it", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Messages' first read answers with the phone as it was when it was asked, once the close has been accepted.
+  const list = `/api/otome-forge/runs/${RUN}/phone`;
+  let reads = 0;
+  let answerList = () => {};
+  const listHeld = new Promise<void>((done) => (answerList = done));
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method !== "GET" || call.path !== list || ++reads > 1) return answer(call);
+    const before = await answer(call);
+    await listHeld;
+    return before;
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  try {
+    // Messages is left before its list answers, then his thread opens from Home's Reply.
+    await root.getByRole("button", { name: /Messages/ }).click();
+    await expect.poll(() => reads).toBe(1);
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    await root
+      .getByRole("article", { name: "A note from Ilvar Thorne" })
+      .getByRole("button", { name: "Reply" })
+      .click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect.poll(() => posts(stub, "/close").length).toBe(1);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    remember();
+  } finally {
+    // The read from before the close answers now, with no close in it.
+    answerList();
+  }
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
 });
 
 test("Otome Forge daily messages: the first heartbeat reads nothing again for an old message; a new one reads Home again", async ({
@@ -1362,15 +1624,16 @@ test("Otome Forge phone: his thread's header keeps Close beside his name on one 
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  // "You unlocked a new sticker" landing while his thread is open (the close reads the run again) sits below its
-  // header, so his name and Close stay in view.
+  // "You unlocked a new sticker" landing once the close is remembered (0.47.1: back in Messages, which reads the run
+  // again then) sits below the top bar, so its controls stay in view.
   await page.setViewportSize({ width: 320, height: 640 });
   stub.stickerState.unlock = true;
   await close.click();
   await dialog.getByRole("button", { name: "Close and remember" }).click();
+  await expect(root.locator(".of-threads")).toBeVisible();
   const toast = root.locator(".of-toasts--app .of-toast");
   await expect(toast).toContainText("You unlocked a new sticker · Ilvar Thorne");
-  const [toastBox, headBox] = await Promise.all([toast.boundingBox(), root.locator(".of-thread-head").boundingBox()]);
+  const [toastBox, headBox] = await Promise.all([toast.boundingBox(), root.locator(".of-topbar").boundingBox()]);
   expect(toastBox!.y).toBeGreaterThanOrEqual(headBox!.y + headBox!.height);
   await page.screenshot({ path: testInfo.outputPath("thread-head-sticker-notice.png") });
   expect(pageErrors).toEqual([]);

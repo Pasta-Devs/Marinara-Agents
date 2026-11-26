@@ -147,6 +147,23 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
     members: [KAI, MIR, SOL],
   });
 
+  let closing: { start: number } | null = null;
+  // 0.47.1: the close's summary is held until the test calls `land()`; every read says it is remembered meanwhile.
+  let held = true;
+  /** 0.47.1: what the list and the page say of the close remembered in the background (it earns nothing). */
+  const closeView = () => {
+    if (closing && !held) {
+      const count = messages.length - closing.start;
+      const memory = { text: "They argued about the lamps; Ines asked who was awake.", quote: "Liar." };
+      sessions.push({ start: closing.start, count, memory, closedAt: now(), members: [KAI, MIR, SOL] });
+      // A squabble right after the close, by the speaker who ended it: his run restarts after the divider.
+      messages.push({ id: `m-after${messages.length}`, who: "li", text: "Again, then?", at: now(), li: KAI });
+      closing = null;
+    }
+    const newest = sessions.at(-1);
+    return { ...(closing ? { closing: {} } : {}), ...(newest ? { remembered: { start: newest.start } } : {}) };
+  };
+
   const answer = async (call: Call): Promise<{ status: number; json: unknown }> => {
     calls.push(call);
     const path = call.path.replace(/^\/api\/otome-forge/u, "");
@@ -179,11 +196,17 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
         status: 200,
         json: {
           threads: [KAI, MIR, SOL].map((li) => ({ li, last: null, unread: 0, busy: false })),
-          group: { members: [KAI, MIR, SOL], last: messages.at(-1) ?? null, unread: unread(), busy: replying },
+          group: {
+            members: [KAI, MIR, SOL],
+            last: messages.at(-1) ?? null,
+            unread: unread(),
+            busy: replying,
+            ...closeView(),
+          },
         },
       };
     }
-    if (path === `${base}/phone/group`) return { status: 200, json: page() };
+    if (path === `${base}/phone/group`) return { status: 200, json: { ...page(), ...closeView() } };
     if (path === `${base}/phone/group/seen`) {
       const last = messages.find((m) => m.id === call.body!.last);
       if (last && (!seenAt || last.at > seenAt)) seenAt = last.at;
@@ -206,12 +229,9 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
       return { status: 200, json: { messages: [mine, ...reply] } };
     }
     if (path === `${base}/phone/group/close`) {
-      const count = messages.length - archived();
-      const memory = { text: "They argued about the lamps; Ines asked who was awake.", quote: "Liar." };
-      sessions.push({ start: archived(), count, memory, closedAt: now(), members: [KAI, MIR, SOL] });
-      // A squabble right after the close, by the speaker who ended it: his run restarts after the divider.
-      messages.push({ id: `m-after${messages.length}`, who: "li", text: "Again, then?", at: now(), li: KAI });
-      return { status: 200, json: { memory, grants: [] } };
+      // 0.47.1: accepted at once; it lands on the first read after `land()`.
+      closing = { start: archived() };
+      return { status: 200, json: { remembering: true, start: closing.start } };
     }
     if (path === `${base}/phone/due`) {
       return { status: 200, json: { status: "waiting", latest: null, group: { status: "waiting", latest: null } } };
@@ -232,7 +252,7 @@ function createGroupStub({ images = false }: { images?: boolean } = {}) {
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
-  return { calls, answer };
+  return { calls, answer, land: () => (held = false) };
 }
 
 type Stub = ReturnType<typeof createGroupStub>;
@@ -403,12 +423,20 @@ test("Otome Hearth group chat: Everyone pinned first, speakers in the thread, Cl
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("03-answered.png") });
 
-  // Close and remember: everyone in it recalls it, and it earns nothing.
+  // Close and remember: everyone in it recalls it, and it earns nothing. 0.47.1: back to Messages at once, while it is
+  // remembered in the background.
   await close.click();
   const dialog = page.getByRole("dialog", { name: "Close and remember?" });
   await expect(dialog).toContainText("everyone in it recalls: Kai Ardent, Mireille Delacroix-Vaillancourt, Sol");
   await dialog.getByRole("button", { name: "Close and remember" }).click();
   await expect(dialog).toHaveCount(0);
+  await expect(everyone).toBeFocused();
+  await expect(everyone).toContainText("Remembering…");
+  stub.land();
+  await expect(everyone).toContainText("Remembered", { timeout: 10_000 });
+  await expect(everyone).not.toContainText("Remembering…");
+  await expect(everyone).not.toContainText("affection");
+  await everyone.click();
   await expect(log).toContainText("Remembered by everyone in it");
   await expect(log).toContainText("Liar.");
   await expect(log).not.toContainText("affection");

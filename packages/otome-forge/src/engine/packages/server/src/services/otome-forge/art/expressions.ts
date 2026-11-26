@@ -15,20 +15,31 @@
 // beat is served, queueScenePaints for a beat's places and CG once written and prepareSceneCg for a CG still without
 // a record once served (art/cg.ts), dispose on teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs
 // each run's sticker chain from GET /runs/:run.
+// 0.47.1: Repaint expressions is told once its set is scheduled (`started`), so its route answers then and the five
+// faces paint on in the background; the set is live as `faces:<li>` (S/art/paint.ts startPaint) until it settles, and
+// facesView shows Your cast its replacement painting, stopped by a restart, or failed.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
 import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FACE_LOOKS, FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { OTOME_FORGE_PACKAGE_ID, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { OtomeForgeError } from "../http.js";
-import { wornLookUrl } from "../schemas/common.js";
+import { isRecord, wornLookUrl } from "../schemas/common.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeState, readCastUnits, readFriendUnits } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt, startBeatCg } from "./cg.js";
 import { engineArtPath } from "./engine-art.js";
 import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
-import { imagesOf, paintSlot, updateIfChanged, type ArtDeps, type PaintLane } from "./paint.js";
+import {
+  imagesOf,
+  paintIsLive,
+  paintSlot,
+  startPaint,
+  updateIfChanged,
+  type ArtDeps,
+  type PaintLane,
+} from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
 import { type ImagePrompt, LOOK_SIZE, expressionPrompt } from "../prompts.js";
 import { queueStickers, type StickerQueueOptions } from "./stickers.js";
@@ -59,11 +70,14 @@ export async function expressionPromptsFor(deps: ArtDeps, runId: string, li: str
 export type ExpressionBeat = Pick<Beat, "segments" | "choices">;
 
 export interface OtomeArt {
-  /** Explicitly replaces the current look's five faces, preserving its usable set until completion. */
+  /**
+   * Explicitly replaces the current look's five faces, preserving its usable set until completion. `started` (0.47.1)
+   * is told once the set is scheduled, before any paid image.
+   */
   repaintExpressions(
     runId: string,
     li: string,
-    options: { debugMode: boolean; base?: string; prompts?: ExpressionPrompts },
+    options: { debugMode: boolean; base?: string; prompts?: ExpressionPrompts; started?: (record: Paint) => void },
   ): Promise<Paint>;
   /**
    * Queues the five faces of every love interest who speaks in `beat` whose current look has no ready set. Returns at
@@ -105,6 +119,40 @@ interface ExpressionRun {
 /** The base a love interest's faces are painted on: the look he wears (M4), else his portrait. */
 const baseOf = (unit: Pick<Unit, "portrait" | "outfits" | "wornOutfit"> | null | undefined) =>
   unit ? wornLookUrl(unit) : "";
+
+/**
+ * 0.47.1: a Repaint expressions the kit ended before it wrote a replacement set (the base could not be read, the
+ * connection or the setting was gone, the look changed), by `${runId}|${li}`, with the look it was asked for. Kept in
+ * this process until his next Repaint expressions starts: a restart forgets it, as it forgets the paint itself.
+ */
+const unstarted = new Map<string, { base: string; paint: Paint }>();
+
+/**
+ * 0.47.1: Repaint expressions for his current look as Your cast shows it: pending while it is live here (from before
+ * the kit writes its replacement set), or was live when `unit` began to be read (`wasLive`), `stopped` once a restart
+ * left that set pending or the kit ended it before it started, `stopped` or `failed` with the reason once it did not
+ * land, or undefined when none was asked or it landed (the kit's record keeps the replacement only until then).
+ */
+export function facesView(
+  runId: string,
+  unit: Pick<Unit, "id" | "portrait" | "outfits" | "wornOutfit" | "expressions">,
+  wasLive = false,
+): Paint | undefined {
+  if (wasLive || paintIsLive(runId, `faces:${unit.id}`)) return { state: "pending", at: "" };
+  const ended = unstarted.get(`${runId}|${unit.id}`);
+  const record = unit.expressions[baseOf(unit)];
+  // Unless that look's own set was painted after it (a beat's queue).
+  if (ended?.base === baseOf(unit) && !(isRecord(record) && String(record.at ?? "") > ended.paint.at))
+    return ended.paint;
+  const replacement = isRecord(record) && isRecord(record.replacement) ? record.replacement : null;
+  const state = replacement?.state;
+  if (!replacement || (state !== "pending" && state !== "stopped" && state !== "failed")) return undefined;
+  return {
+    state: state === "failed" ? "failed" : "stopped",
+    at: typeof replacement.at === "string" ? replacement.at : "",
+    ...(typeof replacement.error === "string" ? { error: replacement.error.slice(0, 300) } : {}),
+  };
+}
 
 /** The kit's view of a world's images: on only with a connection, at the look's size. */
 const imagesOfRun = (run: ExpressionRun) => ({
@@ -241,7 +289,21 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       const pending = expressionsOf(runId).repaint(runId, unitId(runId, li), preview.base, options.prompts);
       if (!pending)
         throw new OtomeForgeError(409, "This character's expressions are already being painted.", "conflict");
-      return (await pending) ?? { state: "stopped", at: new Date().toISOString() };
+      const key = `${runId}|${li}`;
+      unstarted.delete(key);
+      // A set the kit ended before writing its replacement is kept for facesView before the set stops being live, so
+      // no read of the run view between them finds nothing.
+      const settled = Promise.resolve(pending).then((result) => {
+        if (result) return result;
+        const paint: Paint = { state: "stopped", at: new Date().toISOString() };
+        unstarted.set(key, { base: preview.base, paint });
+        return paint;
+      });
+      // The same set asked for again shares the one paint (the kit's schedule), and is live once.
+      const release = startPaint(runId, `faces:${li}`);
+      if (release) void settled.finally(release);
+      options.started?.({ state: "pending", at: new Date().toISOString() });
+      return settled;
     },
     queueExpressions(runId, beat, options) {
       if (disposed) return;

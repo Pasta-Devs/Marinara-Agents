@@ -22,12 +22,15 @@
 //   (POST /runs/:run/phone/due) answers for it too (groupDue), by daily messages' own rule (dailyDecision: armed a
 //   minute after a visit starts, spread 24 h / limit apart, reset at local midnight, an attempt spent before any
 //   provider work and never retried), on world.groupDaily, with heartbeats of its own. None is armed or written while
-//   the group is open, a reply or a close is being written there, the open conversation ends on the player's message,
+//   the group is open, a reply or a close is being written there (0.47.1: or its conversation is being remembered in
+//   the background), the open conversation ends on the player's message,
 //   or it has fewer than two members; the job checks all of that again once it is admitted, and drops (the slot stays
 //   spent). The job is a background job on the Messages connection, inside the thread's lock (so the thread shows
 //   someone typing), and lands unread, only while the thread still ends where it was read. Two members picked at random
 //   start it; the others may join.
-// - Close and remember: one P18 call with the group wording, one session with its members, and no affection.
+// - Close and remember: one P18 call with the group wording, one session with its members, and no affection. 0.47.1:
+//   in the background, as a love interest's (S/phone/memory.ts), with the members it had when the close was accepted
+//   (kept on its mark, so one who joins before its job runs, or a restart, is not in it).
 //   ponytail: the group remembers only through Close and remember, so squabbles pile up in the open conversation and
 //   only its newest GROUP_TAIL_MESSAGES reach P17g, and none reaches a DM or a scene until it is closed. The upgrade
 //   path is one background compress call at the first heartbeat of a new local day while the group has an open
@@ -48,6 +51,7 @@ import { forgeChatRecallQuery } from "@forge-kit/story-memory-integration.mjs";
 import type {
   LiId,
   PhoneCloseResult,
+  PhoneClosing,
   PhoneDueResult,
   PhoneHistoryPage,
   PhoneListView,
@@ -68,6 +72,7 @@ import { listArcs } from "../story/arc.js";
 import { recallText } from "../story/canon.js";
 import {
   answerIn,
+  closeView,
   conflict,
   emptyThread,
   historyPage,
@@ -75,6 +80,7 @@ import {
   newMessageId,
   openMessages,
   readThread,
+  remembering,
   saveSeen,
   sendIn,
   sessionSourceId,
@@ -95,7 +101,7 @@ import {
   type DailyDecision,
   type DailyDeps,
 } from "./daily.js";
-import { sessionName, summarizeOpen } from "./memory.js";
+import { acceptClose, sessionName, type CloseDeps, type Remembering } from "./memory.js";
 import {
   GroupReplySchema,
   normalizeChatMemory,
@@ -163,6 +169,7 @@ export async function groupList(
       last: thread.messages.at(-1) ?? null,
       unread: unreadCount(thread),
       busy: forgeChatReplyBusy(runId, GROUP_THREAD),
+      ...closeView(thread),
     },
   };
 }
@@ -306,27 +313,49 @@ export function sendToGroup(
   });
 }
 
-/** POST /runs/:run/phone/group/close: Close and remember with the group wording; it earns nothing. */
-export function closeGroup(
-  deps: PhoneDeps,
+/**
+ * The group chat's close (S/phone/memory.ts Remembering): P18's group wording with the members its `mark` kept; it earns
+ * nothing.
+ */
+export async function groupRemembering(
+  deps: Pick<PhoneDeps, "store">,
   runId: string,
-  { debugMode = false }: { debugMode?: boolean } = {},
-): Promise<PhoneCloseResult> {
-  return inThreadLock(runId, GROUP_THREAD, async () => {
-    const { run, members } = await loadGroup(deps, runId);
-    const units = unitsOf(run, members);
-    const group = units.map((unit) => unit.name);
-    const names = { li: "Someone", player: run.player.name || "the protagonist" };
-    const speaker = (message: PhoneMessage) => units.find((unit) => unit.id === message.li)?.name;
-    const closed = await summarizeOpen(deps, runId, GROUP_THREAD, debugMode, {
+  mark: Pick<PhoneClosing, "members">,
+): Promise<Remembering> {
+  const { run, members: now } = await loadGroup(deps, runId);
+  const members = mark.members ?? now;
+  const units = unitsOf(run, members);
+  const group = units.map((unit) => unit.name);
+  const names = { li: "Someone", player: run.player.name || "the protagonist" };
+  const speaker = (message: PhoneMessage) => units.find((unit) => unit.id === message.li)?.name;
+  return {
+    how: {
       label: "phone-group-memory",
       render: (open) => renderThread(open, names, "told", stickerLookup(run), speaker),
       messages: (conversation) => chatMemoryMessages({ world: run.world, names, conversation, group }),
       normalize: (raw, conversation) => normalizeChatMemory(raw, names, conversation, group),
       session: { name: sessionName(nameList(group)), members: [...members] },
-    });
-    if (closed.open) void Promise.resolve(deps.memory?.maintain({ runId, debugMode })).catch(() => undefined);
-    return { memory: closed.memory, grants: [] };
+    },
+  };
+}
+
+/** POST /runs/:run/phone/group/close: Close and remember with the group wording, in the background. */
+export function closeGroup(
+  deps: CloseDeps,
+  runId: string,
+  { debugMode = false }: { debugMode?: boolean } = {},
+): Promise<PhoneCloseResult> {
+  return inThreadLock(runId, GROUP_THREAD, async () => {
+    const { run, members } = await loadGroup(deps, runId);
+    return acceptClose(
+      deps,
+      runId,
+      GROUP_THREAD,
+      run.world,
+      debugMode,
+      (mark) => groupRemembering(deps, runId, mark),
+      members,
+    );
   });
 }
 
@@ -342,7 +371,7 @@ async function squabbleFree(deps: Pick<PhoneDeps, "store">, runId: string, run: 
   const members = await groupMembers(deps, runId, run);
   if (members.length < GROUP_MIN_MEMBERS) return null;
   const thread = await readThread(deps.store, runId, GROUP_THREAD);
-  return thread && openMessages(thread).at(-1)?.who === "player" ? null : members;
+  return thread && (remembering(thread) || openMessages(thread).at(-1)?.who === "player") ? null : members;
 }
 
 /**
@@ -413,7 +442,8 @@ async function writeSquabble(
         GROUP_THREAD,
         async () => {
           const run = await readRun(deps.store, runId);
-          // Opened, or answered, while the job waited for admission (the lock is this job's own now).
+          // Opened or answered while the job waited for admission (the lock is this job's own now); writeFirstIn
+          // refuses one closed meanwhile.
           const members = run && openThread(runId) !== GROUP_THREAD ? await groupMembers(deps, runId, run) : [];
           if (!run || members.length < GROUP_MIN_MEMBERS) throw conflict("the group is open or has too few members");
           return { run, members };

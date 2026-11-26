@@ -1,7 +1,9 @@
 // Explicit expression repainting uses the existing paid-image lifecycle, keeps a usable set while replacing it,
-// and passes the configured image style through both prose and tagged provider prompts.
+// and passes the configured image style through both prose and tagged provider prompts. 0.47.1: its route answers once
+// the set is scheduled, pending, and the faces paint on in the background; these tests read what each paint came to.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { Paint } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   FACE_LOOKS,
   FACES,
@@ -91,21 +93,36 @@ async function repaintWorld(
   await seedChapter(t.store, t.runId);
   await saveBeat(t.store, t.runId, beat(0, { readThrough: 1, choiceCanon: { kept: "accepted" } }));
   const art = createOtomeArt(t.deps);
-  const submitted: Array<Parameters<typeof art.repaintExpressions>[2]> = [];
-  const call = routesOf(
+  const submitted: Array<Omit<Parameters<typeof art.repaintExpressions>[2], "started">> = [];
+  /** What each repaint the route started came to, in the order they were asked for. */
+  const finals: Array<Promise<Paint>> = [];
+  const route = routesOf(
     registerSetupRoutes,
     {
       ...t.deps,
       art: {
         ...art,
         repaintExpressions(...args: Parameters<typeof art.repaintExpressions>) {
-          submitted.push(structuredClone(args[2]));
-          return art.repaintExpressions(...args);
+          const { started: _started, ...options } = args[2];
+          submitted.push(structuredClone(options));
+          const done = art.repaintExpressions(...args);
+          finals.push(done);
+          return done;
         },
       },
     },
     runKey,
   );
+  /** The routes; a repaint the route accepted answers pending, and is read back as what its paint came to. */
+  const call = async (...args: Parameters<typeof route>) => {
+    const asked = finals.length;
+    const response = await route(...args);
+    if (args[1] === REPAINT && response.status === 200 && finals.length > asked) {
+      assert.equal(response.body.paint.state, "pending", "answered as the set starts, before it is painted");
+      response.body.paint = await finals[asked];
+    }
+    return response;
+  };
   const unit = async (li = KAI) => (await t.store.readDoc(unitId(t.runId, li), normalizeUnit))!;
   const world = async () => (await t.store.readDoc(`${t.runId}:world`, normalizeWorld))!;
   const shown = async () => readyFaces(await world(), await unit());

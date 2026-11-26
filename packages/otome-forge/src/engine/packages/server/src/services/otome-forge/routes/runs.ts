@@ -58,7 +58,8 @@ import {
   raisesGatedSetting,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
-import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
+import { facesView } from "../art/expressions.js";
+import { imagesOf, livePaints, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { runForeground } from "../generation.js";
 import { ensureQuizScores } from "../minigames/quiz.js";
@@ -221,11 +222,31 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
-function runView(runKey: string, runId: string, { world, player, units, state, friends = [] }: RunDocuments) {
+/**
+ * 0.47.1: each love interest's and friend's Repaint expressions as facesView says it now, for `run`'s faces; `before`
+ * holds the paints that were live when they began to be read (livePaints).
+ */
+const castFaces = (
+  runId: string,
+  { units, friends = [] }: Pick<RunDocuments, "units" | "friends">,
+  before: ReadonlySet<string> = new Set(),
+) => new Map([...units, ...friends].map((unit) => [unit.id, facesView(runId, unit, before.has(`faces:${unit.id}`))]));
+
+/**
+ * The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. 0.47.1: each
+ * love interest and friend whose Repaint expressions paints, stopped or failed says so (`facesPaint`, facesView), as
+ * `faces` says it at the read the run's faces came from.
+ */
+function runView(runKey: string, runId: string, run: RunDocuments, faces = castFaces(runId, run)) {
+  const { world, player, units, state, friends = [] } = run;
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
   const viewed = (unit: Unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit);
-  return toRunView(runKey, withPlaceViews(runId, world), shown, units.map(viewed), state, friends.map(viewed));
+  const view = toRunView(runKey, withPlaceViews(runId, world), shown, units.map(viewed), state, friends.map(viewed));
+  const withFaces = <T extends { id: string }>(member: T): T => {
+    const facesPaint = faces.get(member.id);
+    return facesPaint ? { ...member, facesPaint } : member;
+  };
+  return { ...view, lis: view.lis.map(withFaces), ...(view.friends ? { friends: view.friends.map(withFaces) } : {}) };
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
@@ -419,8 +440,12 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const { runKey, runId } = runParam(request);
       // A forge step left running or pending by a restart reads as failed, with Retry.
       await settleForge(deps, runId);
+      // Repaint expressions as it stood while these faces were read: one that lands during the read or the awaits
+      // below is not `stopped` beside the faces from before it.
+      const liveBefore = livePaints(runId);
       const read = await readRun(store, runId);
       if (!read) throw runNotFound();
+      const faces = castFaces(runId, read, liveBefore);
       // #2303: an invitation to clear the air accepted before its scene existed gets that scene, once (no model call).
       await ensureClearAirScenes(store, runId, read.state);
       // #2459: an ended story starts no background work.
@@ -480,7 +505,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       if (!ended) void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
       return {
         view: {
-          ...runView(runKey, runId, shown),
+          ...runView(runKey, runId, shown, faces),
           ...(cutoutsPending(runId, [...units, ...friends, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
           stickers: stickerBook(runId, shown),
           ...(designing || (painting && stickersComing(runId, shown)) ? { stickersPending: true as const } : {}),

@@ -6,11 +6,14 @@
 // source recalled only by its own love interest, unread and seen, and a run deleted mid-reply leaving no thread; P17
 // keeps recalled memory whole beside the previous chapter in full; a card name of any length never costs a session; a
 // note's full length fits the Reply quote; Close and remember never waits behind the run's story queue, yet still holds
-// its thread, and P18 gets a thinking model's summary room (#2039). Daily messages (#2044): off by default, armed a
-// minute after the app opens, spaced 24 h / limit apart and never past the local midnight of the request's zone, a
-// spent attempt never retried, a random met love interest who is not in the open thread, not busy and not waiting on
-// her message, written by P17 "first" in the background lane on the chat connection (never the run's foreground
-// queue), dropped when the thread changed meanwhile, and landing unread.
+// its thread, and P18 gets a thinking model's summary room (#2039). 0.47.1: a close answers before its summary, which
+// runs once in the background lane while sends and first messages wait; a restart's mark resumes once from a read or
+// the heartbeat, a failure keeps the conversation open with Try again, and her next message lets it go; one landing on
+// a later day never turns the daily tally back.
+// Daily messages (#2044): off by default, armed a minute after the app opens, spaced 24 h / limit apart and never past
+// the local midnight of the request's zone, a spent attempt never retried, a random met love interest who is not in
+// the open thread, not busy and not waiting on her message, written by P17 "first" in the background lane on the chat
+// connection (never the run's foreground queue), dropped when the thread changed meanwhile, and landing unread.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -20,7 +23,10 @@ import type {
   PhoneMessage,
   PhoneThread,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
-import { OUTSIDE_AFFECTION_DAILY_CAP } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
+import {
+  ACTIVITY_STARLIGHT_DAILY_CAP,
+  OUTSIDE_AFFECTION_DAILY_CAP,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 import { NOTE_TEXT_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
@@ -69,9 +75,14 @@ import {
   inviteJobKey,
   leastSeenFirst,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/invite.ts";
+import { friendDue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/friends.ts";
 import { applyMessageHurts } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
 import { heldAgainst } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/dates.ts";
-import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
+import {
+  CLOSE_TRIES,
+  closeJobKey,
+  phoneMemorySources,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
 import {
   normalizeChatMemory,
   normalizeChatReply,
@@ -89,8 +100,18 @@ import {
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
-import type { FakeReply, FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
-import { KAI, MIR, SOL, json, saveStoryMemory, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { within, type FakeReply, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
+import {
+  KAI,
+  KAVEH,
+  MIR,
+  SOL,
+  json,
+  saveStoryMemory,
+  seedFriend,
+  squeezedMemory,
+  storyWorld,
+} from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
 // #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
@@ -176,6 +197,8 @@ async function phoneWorld(
     replies?: FakeReply[];
     withMemory?: boolean;
     model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens">;
+    /** 0.47.1: the background lane Close and remember runs in; off where a test builds its own (dailyWorld). */
+    lane?: boolean;
   } = {},
 ) {
   const t = await storyWorld({ runKey, replies: options.replies ?? phoneModel(), model: options.model ?? {} });
@@ -187,10 +210,27 @@ async function phoneWorld(
       readSources: async (runId) => phoneMemorySources(t.store, runId, (await t.state())!),
     });
   }
-  const deps: RouteDeps = { ...t.deps, handle: createHandle(t.runtime.logger), ...(memory ? { memory } : {}) };
+  const background = options.lane === false ? undefined : createBackgroundQueue(t.runtime);
+  const deps: RouteDeps = {
+    ...t.deps,
+    handle: createHandle(t.runtime.logger),
+    ...(memory ? { memory } : {}),
+    ...(background ? { background } : {}),
+  };
   const thread = async (li: string): Promise<PhoneThread | null> =>
     t.store.readDoc(chatId(t.runId, li), normalizeThread);
-  return { ...t, deps, memory, thread, phone: phoneRoutes(deps, runKey) };
+  const phone = phoneRoutes(deps, runKey);
+  /** 0.47.1: lets thread `li`'s close job finish, and returns the thread as it left it. */
+  const remembered = async (li: string = KAI) => {
+    for (let round = 0; round < 400 && background?.has(closeJobKey(t.runId, li)); round += 1) await tick();
+    return (await thread(li))!;
+  };
+  /** Close and remember, accepted, then landed: the accept's answer and the thread. */
+  const closeAndWait = async (li: string = KAI, timeZone = "UTC") => {
+    const accepted = await phone("POST", close, { li, timeZone });
+    return { accepted, thread: await remembered(li) };
+  };
+  return { ...t, deps, background, memory, thread, phone, remembered, closeAndWait };
 }
 
 /** Holds the first model call until `release()` (`reached` resolves once it waits); later calls answer at once. */
@@ -438,20 +478,17 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const points = (await t.state()).lis[KAI]!.points;
 
-  const closed = await t.phone("POST", close, { li: KAI });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
+  const { accepted, thread } = await t.closeAndWait();
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+  assert.deepEqual(accepted.body, { remembering: true, start: 0 }, "accepted; its session will start at 0");
+  assert.equal((await t.state()).lis[KAI]!.points, points + 3, "capped at the day's limit");
   assert.deepEqual(
-    closed.body.grants,
-    [{ source: "close-and-remember", li: KAI, affection: 3 }],
-    "capped at the day's limit",
+    thread.sessions.map((session) => [session.start, session.count, session.name, session.affection]),
+    [[0, 3, "Kai", 3]],
+    "the session keeps what its close earned",
   );
-  assert.equal((await t.state()).lis[KAI]!.points, points + 3);
-  const thread = (await t.thread(KAI))!;
-  assert.deepEqual(
-    thread.sessions.map((session) => [session.start, session.count, session.name]),
-    [[0, 3, "Kai"]],
-  );
+  assert.deepEqual(thread.sessions[0]!.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
+  assert.equal(thread.closing, undefined, "landed: the mark is off");
   assert.equal("suggestions" in thread, false);
 
   const memoryCall = t.calls.find((call) => isMemoryPrompt(call.messages))!;
@@ -463,55 +500,374 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
 
   const calls = t.calls.length;
   const replay = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([replay.status, replay.body.memory.text, replay.body.grants], [200, MEMORY.memory, []]);
+  assert.deepEqual([replay.status, replay.body], [200, { memory: thread.sessions[0]!.memory }]);
   assert.equal(t.calls.length, calls, "a replay makes no call");
   assert.equal((await t.thread(KAI))!.sessions.length, 1);
 
   const view = await t.phone("GET", page, { li: KAI });
-  assert.deepEqual([view.body.activeCount, view.body.past], [0, 1]);
+  assert.deepEqual([view.body.activeCount, view.body.past, view.body.closing], [0, 1, undefined]);
+  assert.deepEqual(view.body.remembered, { start: 0, affection: 3 });
   assert.ok((view.body.messages as Array<{ archived: boolean }>).every((message) => message.archived));
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads.find((entry: { li: string }) => entry.li === KAI);
+  assert.deepEqual([row.closing, row.remembered], [undefined, { start: 0, affection: 3 }]);
 
   // The day's cap is reached: the next conversation is remembered and earns nothing.
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
-  const capped = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([capped.status, capped.body.grants], [200, []]);
+  const capped = await t.closeAndWait();
+  assert.deepEqual([capped.accepted.status, capped.accepted.body], [200, { remembering: true, start: 3 }]);
   assert.deepEqual(
-    (await t.thread(KAI))!.sessions.map((session) => [session.start, session.count]),
+    capped.thread.sessions.map((session) => [session.start, session.count, session.affection]),
     [
-      [0, 3],
-      [3, 3],
+      [0, 3, 3],
+      [3, 3, undefined],
     ],
   );
   assert.equal((await t.state()).lis[KAI]!.points, points + 3);
 });
 
-test("Close and remember never waits behind the run's story queue, and its thread still takes one write at a time", async () => {
+test("Close and remember answers before its summary, which runs once in the background lane while sends wait", async () => {
   const t = await phoneWorld("r-phoneq-aaaaaa");
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   // A story write (a lookahead beat, say) holds the run's foreground queue the whole time.
   let free!: () => void;
   const story = runForeground(t.runId, () => new Promise<void>((resolve) => (free = resolve)));
+  const admitted: string[] = [];
+  const admission = t.runtime.integrations!.admission!;
+  const admit = admission.run.bind(admission);
+  Object.assign(admission, {
+    run: (connectionId: string, mode: { kind: string }, operation: () => Promise<unknown>) => {
+      admitted.push(`${connectionId} ${mode.kind}`);
+      return admit(connectionId, mode as never, operation);
+    },
+  });
   const release = gateFirstCall(t.runtime);
   try {
-    const closing = t.phone("POST", close, { li: KAI });
-    const started = await Promise.race([
-      release.reached.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)),
-    ]);
-    assert.ok(started, "P18 is written at once, not behind the story write");
-    // While it is summarized, the thread takes no other write.
-    const busy = await t.phone("POST", send, { li: KAI, body: { text: "Wait." } });
-    assert.deepEqual([busy.status, busy.body.code], [409, "busy"]);
+    const accepted = await within(t.phone("POST", close, { li: KAI }), "the close's answer");
+    assert.deepEqual([accepted.status, accepted.body], [200, { remembering: true, start: 0 }], "answered at once");
+    const mark = (await t.thread(KAI))!.closing!;
+    assert.deepEqual([mark.start, mark.end, mark.day, mark.error], [0, 3, localDay("UTC"), undefined]);
+    await within(release.reached, "the summary's call");
+    assert.ok(t.background!.has(closeJobKey(t.runId, KAI)), "P18 is written by the background lane's job");
+    assert.deepEqual(admitted, ["conn-text foreground"], "the player's own close, on P18's connection, never waits");
+    assert.equal((await t.thread(KAI))!.closing!.tries, 1, "the summary was counted before its call");
+    // While it is remembered: the list and the thread say so, Close answers the same, and sending waits.
+    const view = await t.phone("GET", page, { li: KAI });
+    assert.deepEqual([view.body.closing, view.body.busy, view.body.activeCount], [{}, false, 3]);
+    const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+    assert.deepEqual([row.li, row.closing], [KAI, {}]);
+    const again = await t.phone("POST", close, { li: KAI });
+    assert.deepEqual([again.status, again.body], [200, { remembering: true, start: 0 }]);
+    for (const body of [{ text: "Wait." }, { retry: true }]) {
+      const busy = await within(t.phone("POST", send, { li: KAI, body }), `the busy send ${JSON.stringify(body)}`);
+      assert.deepEqual([busy.status, busy.body.code], [409, "busy"], JSON.stringify(body));
+    }
+    assert.equal((await t.thread(KAI))!.messages.length, 3, "nothing new went in");
     release();
-    const closed = await closing;
-    assert.equal(closed.status, 200, JSON.stringify(closed.body));
-    assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
-    assert.equal((await t.thread(KAI))!.sessions.length, 1, "remembered while the story write still runs");
+    const thread = await t.remembered();
+    assert.deepEqual(
+      thread.sessions.map((session) => [session.start, session.count, session.affection]),
+      [[0, 3, 5]],
+      "remembered while the story write still runs",
+    );
+    assert.equal(thread.closing, undefined);
+    assert.equal(t.calls.filter((call) => isMemoryPrompt(call.messages)).length, 1, "one summary");
   } finally {
     release();
     free();
     await story;
   }
+  // Sending opens the next conversation (its reply waits behind the story write, so after it).
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Now?" } })).status, 200);
+});
+
+test("Close and remember: a restart's mark resumes once from a read and is never remembered twice", async () => {
+  const t = await phoneWorld("r-phoner-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const mark = (tries: number) =>
+    t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+      ...thread,
+      closing: { start: 0, end: 3, at: `2026-11-25T10:00:0${tries}.000Z`, tries, day: localDay("UTC") },
+    }));
+  // A restart left the close counted once, with no job for it here: reading the list queues it again, once.
+  await mark(1);
+  const points = (await t.state()).lis[KAI]!.points;
+  assert.equal((await t.phone("GET", "/runs/:run/phone")).status, 200);
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200, "a second read queues nothing more");
+  const thread = await t.remembered();
+  assert.deepEqual(
+    [thread.sessions.length, thread.closing, t.calls.filter((call) => isMemoryPrompt(call.messages)).length],
+    [1, undefined, 1],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Its session landed before the restart: only the mark comes off, with no call and no second grant, and memory
+  // upkeep is queued for the session, as when it lands.
+  await mark(1);
+  const calls = t.calls.length;
+  const upkeeps: string[] = [];
+  const maintain = async ({ runId }: { runId: string }) => {
+    upkeeps.push(runId);
+    return true;
+  };
+  const watched = phoneRoutes({ ...t.deps, memory: { maintain } as unknown as OtomeMemory }, "r-phoner-aaaaaa");
+  await watched("GET", page, { li: KAI });
+  const again = await t.remembered();
+  assert.deepEqual([again.sessions.length, again.closing, t.calls.length, upkeeps], [1, undefined, calls, [t.runId]]);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Two summaries never landed: it fails as stopped, the conversation stays open, and Try again closes it.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (current) => ({
+    ...current,
+    closing: { start: 3, end: 6, at: "2026-11-25T10:01:00.000Z", tries: CLOSE_TRIES, day: localDay("UTC") },
+  }));
+  const before = t.calls.length;
+  await t.phone("GET", "/runs/:run/phone");
+  const stopped = await t.remembered();
+  assert.deepEqual([stopped.closing?.error, stopped.sessions.length, t.calls.length], ["stopped", 1, before]);
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual(row.closing, { error: "stopped" });
+  const retried = await t.closeAndWait();
+  assert.deepEqual(retried.accepted.body, { remembering: true, start: 3 });
+  assert.deepEqual(
+    [retried.thread.sessions.map((session) => [session.start, session.count]), retried.thread.closing],
+    [
+      [
+        [0, 3],
+        [3, 3],
+      ],
+      undefined,
+    ],
+  );
+});
+
+test("0.47.1: the heartbeat queues a close a restart left too, so first messages there wait only while it is remembered", async () => {
+  const t = await phoneWorld("r-phonez-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-25T10:00:01.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  assert.equal((await t.phone("POST", "/runs/:run/phone/due", { body: { open: null } })).status, 200);
+  const thread = await t.remembered();
+  assert.deepEqual([thread.sessions.length, thread.closing], [1, undefined]);
+});
+
+/** Fails the next `times` writes that take a thread's close mark off (`left()` says how many are still to fail). */
+function failUnmarks(t: Awaited<ReturnType<typeof phoneWorld>>, times: number) {
+  let left = times;
+  const mutate = t.store.mutateDoc.bind(t.store);
+  t.store.mutateDoc = ((target, normalize, change, options) =>
+    mutate(
+      target,
+      normalize,
+      async (current) => {
+        const next = await change(current);
+        const [before, after] = [current, next] as Array<Partial<PhoneThread>>;
+        if (left > 0 && before.closing && after.sessions && !after.closing) {
+          left -= 1;
+          throw new Error("The disk is full.");
+        }
+        return next;
+      },
+      options,
+    )) as typeof t.store.mutateDoc;
+  return { left: () => left };
+}
+
+test("Close and remember: once its session is saved, a mark that will not come off is tried again, never failed or paid twice", async () => {
+  const t = await phoneWorld("r-phones-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const points = (await t.state()).lis[KAI]!.points;
+  // The first write that takes the mark off fails: the second lands, with what it earned.
+  const once = failUnmarks(t, 1);
+  const { thread } = await t.closeAndWait();
+  assert.equal(once.left(), 0);
+  assert.deepEqual(
+    [thread.closing, thread.sessions.map((session) => [session.start, session.affection])],
+    [undefined, [[0, 5]]],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Every try fails: the mark stays with no error (no Try again for a conversation that is remembered), and the next
+  // read only takes it off, with no call and no second grant.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  const always = failUnmarks(t, 2);
+  const stuck = await t.closeAndWait();
+  assert.equal(always.left(), 0);
+  assert.deepEqual(
+    [stuck.thread.closing?.error, stuck.thread.closing?.start, stuck.thread.sessions.length],
+    [undefined, 3, 2],
+  );
+  const calls = t.calls.length;
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual([row.li, row.closing], [KAI, {}], "still remembering, not failed");
+  const settled = await t.remembered();
+  assert.deepEqual([settled.closing, settled.sessions.length, t.calls.length], [undefined, 2, calls]);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 10, "each close paid once");
+  assert.deepEqual((await t.phone("GET", page, { li: KAI })).body.closing, undefined);
+});
+
+test("Close and remember: a session saved before its write rejects is remembered and paid once, never failed", async () => {
+  const t = await phoneWorld("r-phonej-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const points = (await t.state()).lis[KAI]!.points;
+  // The write that appends the session commits, then the check that the story is still there fails once.
+  const { mutateDoc, readDoc } = t.store;
+  let armed = true;
+  let failWorldRead = false;
+  t.store.mutateDoc = (async (target, normalize, change, options) => {
+    const saved = await mutateDoc(target, normalize, change, options);
+    const thread = saved as Partial<PhoneThread>;
+    if (armed && target.id === chatId(t.runId, KAI) && thread.closing && thread.sessions?.length) {
+      armed = false;
+      failWorldRead = true;
+    }
+    return saved;
+  }) as typeof mutateDoc;
+  t.store.readDoc = ((id, normalize) => {
+    if (failWorldRead && id === worldId(t.runId)) {
+      failWorldRead = false;
+      return Promise.reject(new Error("The disk is busy."));
+    }
+    return readDoc(id, normalize);
+  }) as typeof readDoc;
+  const { thread } = await t.closeAndWait();
+  Object.assign(t.store, { mutateDoc, readDoc });
+  assert.deepEqual([armed, failWorldRead], [false, false], "the read after the session's write failed");
+  assert.deepEqual(
+    [thread.closing, thread.sessions.map((session) => [session.start, session.affection])],
+    [undefined, [[0, 5]]],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual([row.li, row.closing, row.remembered], [KAI, undefined, { start: 0, affection: 5 }], "no Try again");
+});
+
+test("Close and remember: with no connection, a saved close only comes off; a read whose requeue fails still answers", async () => {
+  const t = await phoneWorld("r-phonec-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  await t.closeAndWait();
+  const points = (await t.state()).lis[KAI]!.points;
+  // Its session landed before a restart, and the connection P18 used is gone.
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-25T10:00:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "" },
+  }));
+  const calls = t.calls.length;
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200);
+  const thread = (await t.thread(KAI))!;
+  assert.deepEqual([thread.closing, thread.sessions.length, t.calls.length], [undefined, 1, calls]);
+  assert.equal((await t.state()).lis[KAI]!.points, points, "no second grant");
+
+  // An unfinished close still fails as no-connection; one whose write fails leaves the list answering, and the
+  // threads after it are still seen to.
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (current) => ({
+    ...current,
+    messages: [...current.messages, { id: "m-late-0001", who: "player", text: "Hello?", at: current.messages[0]!.at }],
+    closing: { start: 3, end: 4, at: "2026-11-25T10:01:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  await t.store.mutateDoc(chatTarget(t.runId, MIR), normalizeThread, (current) => ({
+    ...current,
+    li: MIR,
+    messages: [{ id: "m-mir-0001", who: "player", text: "Hi.", at: "2026-11-25T09:00:00.000Z" }],
+    closing: { start: 0, end: 1, at: "2026-11-25T10:02:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  const mutate = t.store.mutateDoc.bind(t.store);
+  t.store.mutateDoc = ((target, ...rest) =>
+    target.id === chatId(t.runId, KAI)
+      ? Promise.reject(new Error("The disk is full."))
+      : mutate(target, ...rest)) as typeof t.store.mutateDoc;
+  const list = await t.phone("GET", "/runs/:run/phone");
+  assert.equal(list.status, 200, JSON.stringify(list.body));
+  const row = (li: string) => list.body.threads.find((entry: { li: string }) => entry.li === li);
+  assert.deepEqual(row(KAI).closing, {}, "the view it read");
+  assert.deepEqual((await t.thread(MIR))!.closing?.error, "no-connection", "the next thread's close was seen to");
+  assert.ok(t.logs.some((entry) => entry.level === "warn" && String(entry.message).includes("not queued again")));
+  // Its mark stands for the next read.
+  t.store.mutateDoc = mutate;
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200);
+  assert.equal((await t.thread(KAI))!.closing?.error, "no-connection");
+});
+
+test("Close and remember: a close that lands on a later day counts against that day's cap and never turns the tally back", async () => {
+  const t = await phoneWorld("r-phoned-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  // Closed yesterday, left by a restart; today's activities have already reached both caps.
+  const today = localDay("UTC");
+  const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const daily = {
+    dayKey: today,
+    starlight: ACTIVITY_STARLIGHT_DAILY_CAP,
+    affection: { [KAI]: OUTSIDE_AFFECTION_DAILY_CAP },
+  };
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({ ...state, daily }));
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-24T23:59:00.000Z", tries: 1, day: yesterday },
+  }));
+  const points = (await t.state()).lis[KAI]!.points;
+  await t.phone("GET", "/runs/:run/phone");
+  const thread = await t.remembered();
+  assert.deepEqual(
+    thread.sessions.map((session) => [session.start, session.affection]),
+    [[0, undefined]],
+    "remembered, and today's cap is already reached",
+  );
+  const state = await t.state();
+  assert.deepEqual(state.daily, daily, "today's tally is kept");
+  assert.equal(state.lis[KAI]!.points, points);
+
+  // The next close today is remembered too, and still earns nothing past the cap.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  const next = await t.closeAndWait();
+  assert.deepEqual(
+    [next.thread.sessions.map((session) => [session.start, session.affection]), next.thread.closing],
+    [
+      [
+        [0, undefined],
+        [3, undefined],
+      ],
+      undefined,
+    ],
+  );
+  assert.deepEqual([(await t.state()).daily, (await t.state()).lis[KAI]!.points], [daily, points]);
+});
+
+test("Close and remember: a failed summary keeps the conversation open with its reason, and her next message lets it go", async () => {
+  const t = await phoneWorld("r-phonef-aaaaaa", { replies: [json(REPLY), "", "", ...phoneModel()] });
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const failed = await t.closeAndWait();
+  assert.equal(failed.accepted.status, 200, JSON.stringify(failed.accepted.body));
+  assert.deepEqual(
+    [failed.thread.closing?.error, failed.thread.sessions.length, archivedCount(failed.thread)],
+    ["declined", 0, 0],
+    "nothing was lost",
+  );
+  const view = await t.phone("GET", page, { li: KAI });
+  assert.deepEqual([view.body.closing, view.body.activeCount], [{ error: "declined" }, 3]);
+  const points = (await t.state()).lis[KAI]!.points;
+  // A failed close holds nothing back: her next message goes in and lets it go.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Hello?" } })).status, 200);
+  assert.equal((await t.thread(KAI))!.closing, undefined);
+  const landed = await t.closeAndWait();
+  assert.deepEqual(
+    landed.thread.sessions.map((session) => [session.start, session.count, session.affection]),
+    [[0, 6, 5]],
+    "the next close remembers all of it",
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Without a lane, or a connection for P18, the close is refused before anything is marked.
+  const u = await phoneWorld("r-phonef-bbbbbb", { lane: false });
+  assert.equal((await u.phone("POST", send, { li: KAI, body: { text: "Hi" } })).status, 200);
+  const refused = await u.phone("POST", close, { li: KAI });
+  assert.deepEqual([refused.status, refused.body.code], [503, "no-connection"]);
+  assert.equal((await u.thread(KAI))!.closing, undefined);
 });
 
 test("P18 is a summary: it may write at least 10240 tokens for a thinking model, or the connection's lower cap", async () => {
@@ -522,8 +878,8 @@ test("P18 is a summary: it may write at least 10240 tokens for a thinking model,
   ] as const) {
     const t = await phoneWorld(`r-phone${maxOutputTokens ?? 0}-aaaaaa`, { model: { maxOutputTokens } });
     assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
-    const closed = await t.phone("POST", close, { li: KAI });
-    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    const { accepted } = await t.closeAndWait();
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
     const maxTokens = t.calls.find((call) => isMemoryPrompt(call.messages))!.options!.maxTokens!;
     assert.ok(maxTokens >= least, `cap ${maxOutputTokens}: P18 may write ${maxTokens}`);
     if (maxOutputTokens) assert.ok(maxTokens <= maxOutputTokens);
@@ -549,10 +905,12 @@ test("the grant lands once through a stale write, a one-sided talk earns nothing
     (await t.phone("POST", send, { li: KAI, body: { text: "Are you there?" }, timeZone: late })).status,
     422,
   );
-  const lonely = await t.phone("POST", close, { li: KAI, timeZone: early });
-  assert.equal(lonely.status, 200, JSON.stringify(lonely.body));
-  assert.deepEqual(lonely.body.grants, [], "a conversation with nothing from him earns nothing");
-  assert.equal(lonely.body.memory.quote, "", "a quote the conversation does not hold is dropped");
+  const lonely = await t.closeAndWait(KAI, early);
+  assert.equal(lonely.accepted.status, 200, JSON.stringify(lonely.accepted.body));
+  const alone = lonely.thread.sessions[0]!;
+  assert.equal(alone.affection, undefined, "a conversation with nothing from him earns nothing");
+  assert.equal(alone.memory.quote, "", "a quote the conversation does not hold is dropped");
+  assert.equal((await t.state()).daily.affection[KAI], 300);
 
   // A full conversation on her early-zone day: a new day, so the cap from the late zone's day does not apply. Two
   // stale revisions on the way make both writes apply again, and still the session and the grant land once.
@@ -560,13 +918,16 @@ test("the grant lands once through a stale write, a one-sided talk earns nothing
   t.fake.interfere(chatId(t.runId, KAI));
   t.fake.interfere(stateId(t.runId));
   const before = (await t.state()).lis[KAI]!.points;
-  const closed = await t.phone("POST", close, { li: KAI, timeZone: early });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
+  const closed = await t.closeAndWait(KAI, early);
+  assert.equal(closed.accepted.status, 200, JSON.stringify(closed.accepted.body));
+  assert.deepEqual(
+    closed.thread.sessions.map((session) => session.affection),
+    [undefined, 5],
+  );
   const state = await t.state();
   assert.equal(state.lis[KAI]!.points, before + 5);
+  // The day it was closed on, in her zone, though the summary ran after the request.
   assert.deepEqual(state.daily, { dayKey: localDay(early), starlight: 0, affection: { [KAI]: 5 } });
-  assert.equal((await t.thread(KAI))!.sessions.length, 2);
 });
 
 test("a closed session is a chat source for its love interest only: recalled by him, never by another", async () => {
@@ -827,17 +1188,16 @@ test("a card name of any length never costs a session: clipped as written, the m
   }));
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const before = (await t.state()).lis[KAI]!.points;
-  const closed = await t.phone("POST", close, { li: KAI });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.equal(closed.body.grants.length, 1);
-  const thread = (await t.thread(KAI))!;
+  const { accepted, thread } = await t.closeAndWait();
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
   assert.deepEqual(
     thread.sessions.map((session) => [session.start, session.count, [...(session.name ?? "")].length]),
     [[0, 2, SESSION_NAME_MAX]],
   );
+  assert.equal(thread.sessions[0]!.affection, 5);
   assert.equal(archivedCount(thread), 2, "nothing reopens");
   const replay = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([replay.status, replay.body.grants], [200, []], "a second Close earns nothing");
+  assert.deepEqual([replay.status, "memory" in replay.body], [200, true], "a second Close earns nothing");
   assert.equal((await t.state()).lis[KAI]!.points, before + 5);
 
   // A stored session or message with a display field out of bounds keeps its place; only that field is dropped.
@@ -889,7 +1249,7 @@ function inZone<T>(timeZone: string, operation: () => Promise<T>): Promise<T> {
 
 /** A forged world with chapter 1 read (the cast is met), a background lane and a chat connection of its own. */
 async function dailyWorld(runKey: string, { limit, replies }: { limit?: number; replies?: FakeReply[] } = {}) {
-  const t = await phoneWorld(runKey, { replies: replies ?? phoneModel(DAILY) });
+  const t = await phoneWorld(runKey, { replies: replies ?? phoneModel(DAILY), lane: false });
   const background = createBackgroundQueue(t.runtime);
   const deps = { ...t.deps, background };
   // Which connection each admitted job held, and how.
@@ -1128,6 +1488,83 @@ test("daily messages skip the open thread, a busy one and one waiting on her mes
   await t.drain();
   assert.equal((await t.thread(MIR))!.messages.length, 1);
   assert.equal(t.firstCalls().length, 2);
+});
+
+test("0.47.1: no one writes first in a thread being remembered: nothing is armed for it, and the job checks it again", async () => {
+  const t = await dailyWorld("r-daily8-aaaaaa", { limit: 24 });
+  // Every admitted job waits here until `open()`, as it would for the Engine's slot.
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const admission = t.runtime.integrations!.admission!;
+  const admit = admission.run.bind(admission);
+  Object.assign(admission, {
+    run: async (connectionId: string, mode: { kind: string }, operation: () => Promise<unknown>) => {
+      await opened;
+      return admit(connectionId, mode as never, operation);
+    },
+  });
+  const closing = { start: 0, end: 2, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
+  const mark = (marked: boolean) =>
+    Promise.all(
+      [KAI, MIR, SOL].map((li) =>
+        t.store.mutateDoc(chatTarget(t.runId, li), normalizeThread, (thread) => ({
+          ...thread,
+          li,
+          messages: [
+            { id: "m-her-0001", who: "player", text: "Are you up?", at: "2026-11-02T08:50:00.000Z" },
+            { id: "m-his-0001", who: "li", text: "Always.", at: "2026-11-02T08:51:00.000Z" },
+          ],
+          closing: marked ? closing : undefined,
+        })),
+      ),
+    );
+  // Each conversation is being remembered: nothing is armed or spent, so a message comes later.
+  await mark(true);
+  assert.equal((await t.due(T0, { open: null })).status, "no-eligible");
+  assert.equal(await t.daily(), undefined, "nothing armed or spent");
+
+  // Queued before the closes, which are accepted while the job waits for admission: no provider work, nothing joins
+  // the conversations being remembered, and the attempt stays spent, as for a busy thread.
+  await mark(false);
+  assert.equal((await t.due(T0 + 1_000)).status, "scheduled");
+  assert.equal((await t.due(T0 + 61_000)).status, "queued");
+  await mark(true);
+  open();
+  await t.drain();
+  assert.equal(t.firstCalls().length, 0, "no provider work");
+  for (const li of [KAI, MIR, SOL]) assert.equal((await t.thread(li))!.messages.length, 2, li);
+  assert.deepEqual([(await t.daily())!.days["2026-11-02"]!.attempts, (await t.daily())!.last], [1, undefined]);
+
+  // Once they are remembered, one of them writes first as before.
+  await mark(false);
+  assert.equal((await t.due(T0 + 61_000 + 8 * HOUR)).status, "scheduled");
+  assert.equal((await t.due(T0 + 121_000 + 8 * HOUR)).status, "queued");
+  await t.drain();
+  assert.equal(t.firstCalls().length, 1);
+});
+
+test("0.47.1: her friends write first in a thread being remembered no more than love interests do", async () => {
+  const t = await dailyWorld("r-daily9-aaaaaa");
+  await seedFriend(t);
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    friendMessages: 1,
+  }));
+  const closing = { start: 0, end: 1, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
+  const mark = (marked: boolean) =>
+    t.store.mutateDoc(chatTarget(t.runId, KAVEH), normalizeThread, (thread) => ({
+      ...thread,
+      li: KAVEH,
+      messages: [{ id: "m-his-0001", who: "li", text: "Coffee?", at: "2026-11-02T08:51:00.000Z" }],
+      closing: marked ? closing : undefined,
+    }));
+  const beat = async (now: number) =>
+    (await inZone("UTC", () => friendDue(t.deps, t.runId, "message", { open: null, now, debugMode: true }))).status;
+  await mark(true);
+  assert.equal(await beat(T0), "no-eligible");
+  assert.equal((await t.store.readDoc(worldId(t.runId), normalizeWorld))!.friendWeekly, undefined, "nothing spent");
+  await mark(false);
+  assert.equal(await beat(T0 + 1_000), "scheduled");
 });
 
 test("a daily message holds his thread while it is written, and is dropped when the thread changed meanwhile", async () => {

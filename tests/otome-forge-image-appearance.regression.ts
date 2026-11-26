@@ -9,6 +9,7 @@ import {
   runDocTarget,
   unitId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { paintSettled } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { registerSetupRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/setup.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
@@ -185,7 +186,10 @@ test("an appearance update preserves a concurrent Bible write and only the next 
   t.noWork();
   const painted = await t.call("POST", "/runs/:run/art/paint", { target });
   assert.equal(painted.status, 200);
-  assert.equal(painted.body.paint.state, "ready");
+  // 0.47.1: answered once pending; the paint lands in the background.
+  assert.equal(painted.body.paint.state, "pending");
+  await paintSettled(t.runId, `li:${KAI}`);
+  assert.equal((await t.unit()).art?.state, "ready");
   assert.equal(t.paid.length, 1, "only the explicit repaint makes an image call");
   assert.ok(t.paid[0]!.request.prompt.includes(identityLine));
   assert.equal(t.calls.length, 0);

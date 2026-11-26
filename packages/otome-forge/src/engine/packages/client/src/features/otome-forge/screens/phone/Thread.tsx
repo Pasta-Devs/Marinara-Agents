@@ -19,6 +19,9 @@
 // with her (the send's `held`), the thread says so: he needs space until she makes it right in Routes.
 // A picked sticker is attached to the message box (shown above it, with Remove), not sent: Send sends it with the words
 // in the box, or alone, as one message; picking another replaces it. A failed send that was never saved gives it back.
+// 0.47.1: once a close is accepted, the thread goes back to Messages (onBack) while the memory is written in the
+// background. Opened again meanwhile, it says the conversation is being remembered, and sending waits until it lands;
+// a close that failed shows why, with Try again (CloseRetry).
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,7 +53,7 @@ import type { DateOpen } from "../dates/DateNight";
 import type { HangoutInvite } from "../album/Hangouts";
 import { playQueryKey } from "../dates/DatesHub";
 import { homeQueryKey } from "../home/HomeScreen";
-import { CloseAndRemember } from "./CloseAndRemember";
+import { CloseAndRemember, CloseRetry, closeSent } from "./CloseAndRemember";
 import { RemoteControl } from "./RemoteControl";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 import { Sticker, StickerArt, StickerPicker, stickerLabel, useStickers, type Stickers } from "./StickerPicker";
@@ -139,12 +142,14 @@ export function Thread({
 
   const fetchPage = (page: number) => otome.get<PhoneHistoryPage>(path, { page });
   // Read again whenever the thread opens: a reply that landed after the player left (this page wrote nothing then) is
-  // in the server's page, and so is `busy` while it is still being written, which polls until it clears.
+  // in the server's page, and so is `busy` while it is still being written, or `closing` while it is remembered, which
+  // poll until they clear.
   const latest = useQuery({
     queryKey: key,
     queryFn: () => fetchPage(1),
     refetchOnMount: "always",
-    refetchInterval: (query) => (query.state.data?.busy ? BUSY_POLL_MS : false),
+    refetchInterval: (query) =>
+      query.state.data?.busy || (query.state.data?.closing && !query.state.data.closing.error) ? BUSY_POLL_MS : false,
   });
 
   const [olderPages, setOlderPages] = useState<PhoneHistoryPage[]>([]);
@@ -165,7 +170,6 @@ export function Thread({
   const [error, setError] = useState<string | null>(null);
   /** #2424: those whose grievance with her the last reply opened. */
   const [hurt, setHurt] = useState<LiId[]>([]);
-  const [closedGrant, setClosedGrant] = useState(0);
   const [announce, setAnnounce] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
   /** Who sent one of their messages: him, or in the group chat its speaker (unknown when it names none). */
@@ -199,18 +203,20 @@ export function Thread({
   const sessionEnds = new Map<number, PhoneSession>(
     sessions.map((session) => [session.start + session.count - 1, session]),
   );
-  const newestSession = sessions.at(-1);
 
   const waiting = !!outgoing && !incoming;
   const revealing = !!incoming && incoming.shown < incoming.his.length;
   const remoteBusy = !outgoing && latest.data?.busy === true;
   const typing = waiting || revealing || remoteBusy;
   const busy = !!outgoing || remoteBusy;
-  const canSend = !busy && (draft.trim().length > 0 || !!attached);
+  /** 0.47.1: the open conversation is being remembered in the background; a close that failed shows its error. */
+  const closing = latest.data?.closing;
+  const rememberingNow = !!closing && !closing.error;
+  const canSend = !busy && !rememberingNow && (draft.trim().length > 0 || !!attached);
 
   /** `fromDraft`: the box's own words (and the sticker attached to it) are sent. */
   const send = async (body: SendBody, fromDraft = false) => {
-    if (busy || sending.has(threadKey)) return;
+    if (busy || rememberingNow || sending.has(threadKey)) return;
     sending.add(threadKey);
     const started = Date.now();
     const before = new Set(messages.map((row) => row.id));
@@ -229,7 +235,6 @@ export function Thread({
     setOutgoing({ local, started });
     setError(null);
     setHurt([]);
-    setClosedGrant(0);
     setAnnounce(li ? t("ui.otomeForge.phone.typing", { name: li.name }) : t("ui.otomeForge.phone.groupTyping"));
     if (local) {
       if (fromDraft) {
@@ -418,33 +423,13 @@ export function Thread({
     );
   };
 
-  const closed = (result: PhoneCloseResult) => {
-    // Shown at once as the newest closed conversation; the server's page follows.
-    queryClient.setQueryData<PhoneHistoryPage>(key, (page) => {
-      if (!page || page.activeCount === 0) return page;
-      const end = page.from + page.messages.length;
-      const session: PhoneSession = {
-        start: end - page.activeCount,
-        count: page.activeCount,
-        memory: result.memory,
-        closedAt: new Date().toISOString(),
-      };
-      return {
-        ...page,
-        messages: page.messages.map((row) => ({ ...row, archived: true })),
-        sessions: [...page.sessions, session],
-        past: page.past + 1,
-        activeCount: 0,
-        retry: false,
-      };
-    });
-    setClosedGrant(result.grants.reduce((sum, grant) => sum + (grant.affection ?? 0), 0));
-    void queryClient.invalidateQueries({ queryKey: key });
-    void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
-    void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+  // 0.47.1: accepted, the memory is written in the background, and the player is back in Messages at once.
+  const closed = async (result: PhoneCloseResult) => {
+    await closeSent(queryClient, runKey, id, result);
+    onBack();
   };
 
-  const askAgain = latest.data?.retry === true && !busy && !incoming && !view.ended;
+  const askAgain = latest.data?.retry === true && !busy && !rememberingNow && !incoming && !view.ended;
   const activeCount = latest.data?.activeCount ?? 0;
   // The group chat's members now, as its page names them, and their names for the header and the log.
   const members = (latest.data?.members ?? []).flatMap((member) => view.lis.filter((entry) => entry.id === member));
@@ -501,7 +486,7 @@ export function Thread({
             waitText={
               li ? t("ui.otomeForge.phone.closeWait", { name: li.name }) : t("ui.otomeForge.phone.groupCloseWait")
             }
-            blocked={busy || incoming ? "waiting" : activeCount === 0 ? "empty" : null}
+            blocked={busy || incoming ? "waiting" : rememberingNow ? "remembering" : activeCount === 0 ? "empty" : null}
             onClosed={closed}
           />
         )}
@@ -600,11 +585,6 @@ export function Thread({
                       {t("ui.otomeForge.home.noteText", { text: session.memory.quote })}
                     </p>
                   ) : null}
-                  {closedGrant > 0 && session === newestSession ? (
-                    <p className="of-badge of-badge--soft" role="status">
-                      {t("ui.otomeForge.phone.affection", { amount: closedGrant })}
-                    </p>
-                  ) : null}
                 </li>
               ) : null}
             </Fragment>
@@ -613,6 +593,16 @@ export function Thread({
         {typing ? <TypingIndicator group={!li} /> : null}
       </ol>
 
+      {rememberingNow && !view.ended ? (
+        <p className="of-notice of-reader-notice" role="status">
+          {li
+            ? t("ui.otomeForge.phone.rememberingNote", { name: li.name })
+            : t("ui.otomeForge.phone.groupRememberingNote")}
+        </p>
+      ) : closing?.error && !view.ended ? (
+        // Accepted again: back to Messages, as a close from the dialog is.
+        <CloseRetry runKey={runKey} id={id} error={closing.error} onRetried={onBack} />
+      ) : null}
       {askAgain ? (
         <div className="of-notice of-reader-notice" role="status">
           <span>
@@ -696,7 +686,7 @@ export function Thread({
             <StickerPicker
               stickers={stickers}
               name={title}
-              disabled={busy}
+              disabled={busy || rememberingNow}
               onPick={(sticker) => {
                 setAttached(sticker);
                 setAnnounce(t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, sticker) }));

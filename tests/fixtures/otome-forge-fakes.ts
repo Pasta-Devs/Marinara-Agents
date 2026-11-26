@@ -404,3 +404,16 @@ export function createFakeEmbedder({
     },
   };
 }
+
+/** `promise`, or a rejection naming `what` after `ms`, so a test's `finally` still releases what it holds. */
+export async function within<T>(promise: Promise<T>, what: string, ms = 5000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out waiting for ${what}`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

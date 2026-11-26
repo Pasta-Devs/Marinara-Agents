@@ -20,7 +20,8 @@
 // - An attempt is spent when it is reserved, before any provider work, and never retried: a failed or dropped message
 //   costs that day's slot, and a crash never pays twice.
 // - The writer is picked at random (Fisher–Yates) among the love interests the player has met, never the one whose
-//   thread she has open, whose reply is being written, or whose open conversation ends on her unanswered message.
+//   thread she has open, whose reply is being written, whose conversation is being remembered (0.47.1: nothing is
+//   armed or spent for it, so he writes later), or whose open conversation ends on her unanswered message.
 //   ponytail: "met" is a cast member once any chapter but the prologue is read (the prologue meets no one, chapter 1
 //   brings the cast in), so a newcomer may write before the scene they are met in is read; the upgrade path is the
 //   arc's newcomer chapter.
@@ -44,7 +45,15 @@ import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, runDocTarget, worldId } from "../ids.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { emptyThread, inThreadLock, openMessages, readThread, writeFirstMessage, type PhoneDeps } from "./chat.js";
+import {
+  emptyThread,
+  inThreadLock,
+  openMessages,
+  readThread,
+  remembering,
+  writeFirstMessage,
+  type PhoneDeps,
+} from "./chat.js";
 
 /** Attempts are never closer than this, whatever the limit (GF). */
 export const DAILY_MIN_INTERVAL_MS = 60_000;
@@ -114,7 +123,7 @@ export async function dailyCandidates(
   const free = await Promise.all(
     cast.map(async (li) => {
       const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
-      return openMessages(thread).at(-1)?.who !== "player" && keep(li, thread);
+      return !remembering(thread) && openMessages(thread).at(-1)?.who !== "player" && keep(li, thread);
     }),
   );
   return cast.filter((_, index) => free[index]);

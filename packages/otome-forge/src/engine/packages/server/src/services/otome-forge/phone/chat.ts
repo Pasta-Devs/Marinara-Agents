@@ -14,7 +14,11 @@
 // interest's route, repair or date chapter never reaches him here.
 //
 // Send (P17) and close (P18) each hold the thread's one write in flight (the kit's withForgeChatSend): a second while
-// one runs is a 409 `busy`, and forgeChatReplyBusy shows it on the history page. A send saves the player's message
+// one runs is a 409 `busy`, and forgeChatReplyBusy shows it on the history page. 0.47.1: a close holds it only while it
+// is accepted; its summary runs in the background, and while the thread's `closing` mark says it is remembered, a send
+// is a 409 `busy` too (S/phone/memory.ts), and so is a message he would write first (writeFirstIn), so nothing joins a
+// conversation once it is being remembered. Her next message after a close that failed clears its mark: the next close
+// covers that conversation too. A send saves the player's message
 // first, then writes his reply in the run's foreground queue (generation.ts) and appends it only while no reply to that
 // message exists yet, so a reply lands once. The client may name its message (`id`): sending the same id again returns
 // what was saved, or answers it if its reply never landed. A reply that fails keeps the player's message, and the
@@ -43,6 +47,8 @@ import { z, type ZodType } from "zod";
 import type {
   LiId,
   LiState,
+  PhoneCloseView,
+  PhoneClosing,
   PhoneHistoryPage,
   PhoneListView,
   PhoneMessage,
@@ -115,7 +121,11 @@ const MESSAGE_DISPLAY = {
   }),
   haptic: HapticCuesSchema,
 };
-const SESSION_DISPLAY = { name: z.string().max(SESSION_NAME_MAX), members: z.array(LI).max(LIS_MAX) };
+const SESSION_DISPLAY = {
+  name: z.string().max(SESSION_NAME_MAX),
+  members: z.array(LI).max(LIS_MAX),
+  affection: z.number().int().min(1).max(1000),
+};
 
 const MessageSchema: ZodType<PhoneMessage> = z.object({
   id: z.string().min(1).max(60),
@@ -136,6 +146,18 @@ const SessionSchema: ZodType<PhoneSession> = z.object({
   closedAt: z.string(),
   name: SESSION_DISPLAY.name.optional(),
   members: SESSION_DISPLAY.members.optional(),
+  affection: SESSION_DISPLAY.affection.optional(),
+});
+
+/** 0.47.1: the close being remembered (S/phone/memory.ts); one that fails this schema reads as none. */
+const ClosingSchema: ZodType<PhoneClosing> = z.object({
+  start: z.number().int().min(0),
+  end: z.number().int().min(1),
+  at: z.string().min(1),
+  tries: z.number().int().min(0),
+  day: z.string().min(1).max(20),
+  members: SESSION_DISPLAY.members.optional(),
+  error: z.string().max(40).optional(),
 });
 
 /** Each stored item without the display fields that fail their schema (common.ts keeps to zod 3 and 4's shared API). */
@@ -171,6 +193,7 @@ export function normalizeThread(data: unknown): PhoneThread {
       messages: (value) => validItems(MessageSchema, dropBadFields(value, MESSAGE_DISPLAY)),
       sessions: (value) => validItems(SessionSchema, dropBadFields(value, SESSION_DISPLAY)),
       seenAt: z.string().nullable(),
+      closing: ClosingSchema.optional(),
     },
     emptyThread,
     isRecord(data) ? data : undefined,
@@ -185,6 +208,20 @@ export function archivedCount(thread: Pick<PhoneThread, "messages" | "sessions">
 
 /** The open conversation's messages. */
 export const openMessages = (thread: PhoneThread) => thread.messages.slice(archivedCount(thread));
+
+/** 0.47.1: its open conversation is being remembered right now (a close that failed is not). */
+export const remembering = (thread: Pick<PhoneThread, "closing"> | null) => !!thread?.closing && !thread.closing.error;
+
+/** 0.47.1: what the list row and the history page say of Close and remember (SH/api-types.ts PhoneCloseView). */
+export function closeView(thread: Pick<PhoneThread, "closing" | "sessions">): PhoneCloseView {
+  const newest = thread.sessions.at(-1);
+  return {
+    ...(thread.closing ? { closing: thread.closing.error ? { error: thread.closing.error } : {} } : {}),
+    ...(newest
+      ? { remembered: { start: newest.start, ...(newest.affection ? { affection: newest.affection } : {}) } }
+      : {}),
+  };
+}
 
 /** His messages the player has not seen. */
 export function unreadCount(thread: Pick<PhoneThread, "messages" | "seenAt">): number {
@@ -321,6 +358,7 @@ export async function phoneList(
         last: thread.messages.at(-1) ?? null,
         unread: unreadCount(thread),
         busy: forgeChatReplyBusy(runId, li),
+        ...closeView(thread),
         ...(friends.includes(li) ? { friend: true as const } : {}),
       };
     }),
@@ -354,6 +392,7 @@ export async function historyPage(
     from: Math.max(0, end - PAGE_SIZE),
     sessions: thread.sessions,
     seenAt: thread.seenAt,
+    ...closeView(thread),
   };
 }
 
@@ -662,9 +701,9 @@ export const writeFirstMessage = (
   );
 
 /**
- * writeFirstMessage's rule for thread `key` (the group chat's squabbles too, S/phone/group.ts): null when the open
- * conversation waits on her message; otherwise what `write` wrote, appended only while the thread still ends where it
- * was read.
+ * writeFirstMessage's rule for thread `key` (the group chat's squabbles too, S/phone/group.ts): a 409 `busy` while its
+ * conversation is being remembered (0.47.1), null when the open conversation waits on her message; otherwise what
+ * `write` wrote, appended only while the thread still ends where it was read.
  */
 export async function writeFirstIn<T>(
   deps: PhoneDeps,
@@ -677,6 +716,8 @@ export async function writeFirstIn<T>(
   if ((await deps.store.readDoc(stateId(runId), normalizeState))?.ended) return null;
   const loaded = await load();
   const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
+  // Closed while the job waited: no close is accepted while this holds the thread's lock, so one read is enough.
+  if (remembering(thread)) throw stillRemembering();
   if (openMessages(thread).at(-1)?.who === "player") return null;
   const newest = thread.messages.at(-1)?.id ?? null;
   const written = await write(loaded, thread);
@@ -733,8 +774,11 @@ export async function sendIn(
     if (message.who !== "player") throw conflict("That message id belongs to another message.");
     const reply = replyAfter(thread, named);
     if (reply.length || named < archivedCount(thread)) return { messages: [message, ...reply] };
+    if (remembering(thread)) throw stillRemembering();
     return answered([message], await answer());
   }
+  // 0.47.1: nothing new goes in, or is answered, while the last conversation is remembered.
+  if (remembering(thread)) throw stillRemembering();
   if (input.retry) return answered([], await answer());
   const text = (input.text ?? "").trim();
   if (!text && !input.sticker) throw new OtomeForgeError(400, "Write a message or pick a sticker.", "bad-request");
@@ -749,17 +793,18 @@ export async function sendIn(
     at: new Date().toISOString(),
     ...(quote ? { quote } : {}),
   };
-  await saveThread(deps, runId, key, (current) =>
-    current.messages.some((entry) => entry.id === message.id)
-      ? current
-      : {
-          ...current,
-          messages: [...current.messages, message],
-          seenAt: later(current.seenAt, message.at),
-        },
-  );
+  await saveThread(deps, runId, key, (current) => {
+    if (current.messages.some((entry) => entry.id === message.id)) return current;
+    if (remembering(current)) throw stillRemembering();
+    // A close that failed is let go: the conversation goes on, and the next close remembers all of it.
+    const { closing: _failed, ...rest } = current;
+    return { ...rest, messages: [...current.messages, message], seenAt: later(current.seenAt, message.at) };
+  });
   return answered([message], await answer());
 }
+
+const stillRemembering = () =>
+  new OtomeForgeError(409, "The last conversation in this thread is still being remembered.", "busy");
 
 /** The send's result: what it saved, then the reply, and (#2424) whose grievance with her the reply opened. */
 const answered = (before: PhoneMessage[], { messages, hurt, held }: Answered): PhoneSendResult => ({

@@ -5,13 +5,16 @@
 // POST /runs/:run/forge/retry {step}                                   → {forge}  (failed steps only)
 // POST /runs/:run/forge/consent {steps}                                → {forge}  (paint steps waiting for consent)
 // POST /runs/:run/art/prompt {target:{kind:"look", owner}}             → {prompt, negativePrompt}
-// POST /runs/:run/art/paint {target, prompt?, negativePrompt?}         → {paint}
+// POST /runs/:run/art/paint {target, prompt?, negativePrompt?}         → {paint} (pending, 0.47.1)
 // POST /runs/:run/art/expressions/prompt {li}                         → {base, prompts} (five read-only previews)
-// POST /runs/:run/art/expressions {li, base?, prompts?}               → {paint} (one explicit replacement set)
+// POST /runs/:run/art/expressions {li, base?, prompts?}               → {paint} (one explicit replacement set, pending)
 // GET  /image-style-profiles                                          → {defaultProfileId, profiles: [{id, name, promptMode}]}
 //                                                                        (the Engine's, for Settings → Images)
-// `owner` is "player" or "li:<li id>". The paint route is the explicit tap: it paints once, waits for the result,
-// and answers with the saved record (`ready`, or `failed` with Retry); an edited prompt keeps its safety tags.
+// `owner` is "player" or "li:<li id>". The paint route is the explicit tap: it paints once and keeps an edited prompt's
+// safety tags. 0.47.1: it and the expressions route answer once their record is pending, and the paint goes on in the
+// background (the maintainer's request): the run view shows it painting, then `ready`, or `failed` with Retry (its
+// step's, or Repaint expressions again). What is wrong before the paint starts (another paint of that look, no image
+// connection, a look not painted or reviewed against another one) is still the answer.
 import { z } from "zod";
 import { expressionPromptsFor } from "../art/expressions.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -19,7 +22,8 @@ import { imagesOf, lookPromptFor, parseLookOwner, type LookOwner } from "../art/
 import { generateJson } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
-import { consentForge, paintWithStep, retryForgeStep } from "../setup/forge.js";
+import { answerOnceStarted } from "../art/paint.js";
+import { consentForge, retryForgeStep, startPaintWithStep } from "../setup/forge.js";
 import { premiseMessages } from "../prompts.js";
 import { normalizePremise, PremiseSchema } from "../setup/cast.js";
 
@@ -83,9 +87,12 @@ export const registerSetupRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { runId } = runParam(request);
       const { li, base, prompts } = parseBody(ExpressionBody, request.body);
-      if (!deps.art) throw new OtomeForgeError(503, "The art service is unavailable.", "no-connection");
+      const art = deps.art;
+      if (!art) throw new OtomeForgeError(503, "The art service is unavailable.", "no-connection");
       return {
-        paint: await deps.art.repaintExpressions(runId, li, { base, prompts, debugMode: debugModeOf(request) }),
+        paint: await answerOnceStarted(deps, `faces:${li}`, (started) =>
+          art.repaintExpressions(runId, li, { base, prompts, debugMode: debugModeOf(request), started }),
+        ),
       };
     }),
   );
@@ -143,7 +150,7 @@ export const registerSetupRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { runId } = runParam(request);
       const { target, prompt, negativePrompt } = parseBody(PaintBody, request.body);
-      const paint = await paintWithStep(deps, runId, ownerOf(target), {
+      const paint = await startPaintWithStep(deps, runId, ownerOf(target), {
         prompt,
         negativePrompt,
         debugMode: debugModeOf(request),

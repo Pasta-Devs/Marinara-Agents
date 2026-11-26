@@ -365,11 +365,19 @@ const generatedCues = (calls: Call[]) =>
 const REPAINT_FACES = ["tender", "flustered", "cold", "hurt", "angry"];
 const REPAINT_ERROR = "The new expressions didn’t finish. Your current artwork stays. Try Repaint expressions again.";
 
+const LOOK_PROMPT = { prompt: "Ilvar Thorne, copper etching portrait.", negativePrompt: "lowres, child, underage" };
+
+/**
+ * 0.47.1: a repaint answers pending at once and paints on in the background: the run view says so until `land`
+ * resolves (at once without it), then has the new picture, or (`failFirst`'s first set, `failLookFirst`'s first look)
+ * says it failed.
+ */
 function expressionRepaintFixture({
   failFirst = false,
+  failLookFirst = false,
   conflictFirst = false,
-  wait,
-}: { failFirst?: boolean; conflictFirst?: boolean; wait?: Promise<void> } = {}) {
+  land,
+}: { failFirst?: boolean; failLookFirst?: boolean; conflictFirst?: boolean; land?: Promise<void> } = {}) {
   const fixture = createSceneStub({ audio: false });
   const { view } = fixture.stub;
   const forge = { phase: "ready", steps: [{ id: `paint:${ILVAR}`, state: "done" }] };
@@ -407,8 +415,10 @@ function expressionRepaintFixture({
     noticing: false,
   };
   let attempts = 0;
+  let looks = 0;
   const answer = (call: Call): Answer | undefined => {
     if (call.path.endsWith("/art/expressions/prompt")) return { status: 200, json: { base: FACE_COLD, prompts } };
+    if (call.path.endsWith("/art/prompt")) return { status: 200, json: LOOK_PROMPT };
     if (call.path.endsWith("/art/expressions")) {
       attempts += 1;
       if (conflictFirst && attempts === 1)
@@ -416,11 +426,31 @@ function expressionRepaintFixture({
           status: 409,
           json: { error: "This character's expressions are already being painted.", code: "conflict" },
         };
-      return {
-        status: 200,
-        json: { paint: { state: failFirst && attempts === 1 ? "failed" : "ready", at: now() } },
-        wait,
-      };
+      const failed = failFirst && attempts === 1;
+      view.lis[0].facesPaint = { state: "pending", at: now() };
+      void (land ?? Promise.resolve()).then(() => {
+        if (failed) view.lis[0].facesPaint = { state: "failed", at: now(), error: "the image service refused it" };
+        else delete view.lis[0].facesPaint;
+      });
+      return { status: 200, json: { paint: { state: "pending", at: now() } } };
+    }
+    if (call.path.endsWith("/art/paint")) {
+      // His look: its step paints, then the new portrait is in (or it failed, and the old one stays).
+      looks += 1;
+      const failed = failLookFirst && looks === 1;
+      const step = view.forge.steps[0];
+      step.state = "running";
+      view.lis[0].art = { state: "pending", at: now() };
+      void (land ?? Promise.resolve()).then(() => {
+        if (failed) {
+          Object.assign(step, { state: "failed", error: "failed" });
+          view.lis[0].art = { state: "failed", at: now(), error: "the image service refused it" };
+          return;
+        }
+        Object.assign(step, { state: "done", error: undefined });
+        Object.assign(view.lis[0], { portrait: FACE_TENDER, art: { state: "ready", at: now(), url: FACE_TENDER } });
+      });
+      return { status: 200, json: { paint: { state: "pending", at: now() } } };
     }
     if (call.path.endsWith("/home")) return { status: 200, json: home };
     if (call.path.endsWith(`/lis/${ILVAR}/lines`))
@@ -447,46 +477,59 @@ async function openRepaintCast(page: Page, reviewPrompts = false) {
   return root;
 }
 
-test("Otome Hearth expression repaint labels five images, shares busy controls and preserves the current look", async ({
+test("Otome Hearth repaints paint in the background: Your cast can be left and the new pictures land later", async ({
   page,
 }, testInfo) => {
-  let release!: () => void;
-  const wait = new Promise<void>((resolve) => (release = resolve));
-  const fixture = expressionRepaintFixture({ wait });
+  let land!: () => void;
+  const fixture = expressionRepaintFixture({ land: new Promise<void>((resolve) => (land = resolve)) });
   const calls: Call[] = [];
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
   await stubRoutes(page, fixture.answer, calls);
-  try {
-    const root = await openRepaintCast(page);
-    const button = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
-    const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
-    const actions = root.locator(".of-forge-retry--paints");
-    await expect(button).toBeVisible();
-    await expect(look).toBeVisible();
-    await expect(actions.getByText("Paints 1 image", { exact: true })).toBeVisible();
-    await expect(actions.getByText("Paints 5 images", { exact: true })).toBeVisible();
-    const original = await root.locator(".of-cast-card").first().locator("img").getAttribute("src");
-    const done = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/expressions"));
-    await button.click();
-    await expect(button).toBeDisabled();
-    await expect(look).toBeDisabled();
-    await expect.poll(() => posts(calls, "/art/expressions").length).toBe(1);
-    expect(posts(calls, "/art/expressions")[0]!.body).toMatchObject({ li: ILVAR });
-    expect(posts(calls, "/art/paint")).toEqual([]);
-    expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
-    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
-    await page.screenshot({ path: testInfo.outputPath("expression-repaint-busy-midnight.png") });
-    release();
-    await (await done).finished();
-    await expect(button).toBeEnabled();
-    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
-    expect(posts(calls, "/art/expressions")).toHaveLength(1);
-    expect(errors).toEqual([]);
-  } finally {
-    release();
-  }
+  const root = await openRepaintCast(page);
+  const button = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+  const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+  const actions = root.locator(".of-forge-retry--paints");
+  const card = root.locator(".of-cast-card").first();
+  await expect(button).toBeVisible();
+  await expect(look).toBeVisible();
+  await expect(actions.getByText("Paints 1 image", { exact: true })).toBeVisible();
+  await expect(actions.getByText("Paints 5 images", { exact: true })).toBeVisible();
+  const original = await card.locator("img").getAttribute("src");
+  await button.click();
+  await expect.poll(() => posts(calls, "/art/expressions").length).toBe(1);
+  expect(posts(calls, "/art/expressions")[0]!.body).toMatchObject({ li: ILVAR });
+  expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
+  // Answered as it starts: the faces paint on, the button says so and waits, and the current look stays.
+  await expect(button).toHaveText("Painting…");
+  await expect(button).toBeDisabled();
+  await expect(card.getByText("Painting in the background. You can leave this page meanwhile.")).toBeVisible();
+  await expect(card.locator("img")).toHaveAttribute("src", original!);
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-busy-midnight.png") });
+  // His look too: its step says it paints, and Repaint stays where it was, saying so and keeping focus.
+  await look.click();
+  await expect.poll(() => posts(calls, "/art/paint").length).toBe(1);
+  await expect(root.locator(".of-forge-step").first()).toContainText("Painting…");
+  await expect(look).toHaveText("Painting…");
+  await expect(look).toBeDisabled();
+  await expect(look).toBeFocused();
+  // Leave Your cast and come back: still painting, and nothing more was asked for.
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toHaveCount(0);
+  await openCast(root);
+  await expect(root.locator(".of-forge-step").first()).toContainText("Painting…");
+  await expect(card.getByText("Painting in the background. You can leave this page meanwhile.")).toBeVisible();
+  land();
+  // The run view is read again while anything paints: the faces land, and the new look takes the old one's place.
+  await expect(look).toHaveText("Repaint");
+  await expect(button).toHaveText("Repaint expressions");
+  await expect(button).toBeEnabled();
+  await expect(card.locator("img")).toHaveAttribute("src", FACE_TENDER);
+  await expect(card.getByText("Painting in the background. You can leave this page meanwhile.")).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toHaveLength(1);
+  expect(posts(calls, "/art/paint")).toHaveLength(1);
+  expect(errors).toEqual([]);
 });
 
 test("Otome Hearth expression repaint reviews five prompts before paying, cancels cleanly and retains edits after failure", async ({
@@ -520,21 +563,87 @@ test("Otome Hearth expression repaint reviews five prompts before paying, cancel
     if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
   }
   await page.screenshot({ path: testInfo.outputPath("expression-repaint-last-review-pearl.png") });
+  // 0.47.1: the reviewed set starts and the dialog closes; the faces paint in the background.
   await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
-  await expect(dialog.getByRole("alert")).toHaveText(REPAINT_ERROR);
+  await expect(dialog).toHaveCount(0);
   const first = posts(calls, "/art/expressions")[0]!.body!;
   expect(first).toMatchObject({ li: ILVAR, base: FACE_COLD });
   expect(Object.keys(first.prompts).sort()).toEqual([...REPAINT_FACES].sort());
   expect(first.prompts.tender).toEqual({ prompt: edited, negativePrompt: "Keep the edited negative whole." });
   expect(first.prompts.angry).toEqual(fixture.prompts.angry);
-  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(fixture.prompts.angry.prompt);
+  // The set failed at the provider: Your cast says so beside Repaint expressions, which opens the review again with the
+  // player's edits.
+  await expect(root.getByText(REPAINT_ERROR)).toBeVisible();
+  await expect(repaint).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("expression-repaint-failure-pearl.png") });
+  await repaint.click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(edited);
+  await expect(dialog.getByLabel("Negative prompt", { exact: true })).toHaveValue("Keep the edited negative whole.");
+  for (const index of REPAINT_FACES.keys()) {
+    if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
+  }
   await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(posts(calls, "/art/expressions")).toHaveLength(2);
   expect(posts(calls, "/art/expressions")[1]!.body).toEqual(first);
+  await expect(root.getByText(REPAINT_ERROR)).toHaveCount(0);
+  // Landed: the next review starts from the defaults again.
+  await repaint.click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(fixture.prompts.tender.prompt);
+  await dialog.getByRole("button", { name: "Cancel repaint", exact: true }).click();
   expect(posts(calls, "/art/paint")).toEqual([]);
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Otome Hearth a reviewed look that fails in the background opens its review again with the player's edits", async ({
+  page,
+}) => {
+  let land!: () => void;
+  const fixture = expressionRepaintFixture({
+    failLookFirst: true,
+    land: new Promise<void>((resolve) => (land = resolve)),
+  });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page, true);
+  const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+  await look.click();
+  let dialog = page.getByRole("dialog");
+  const edited = { prompt: "Ilvar Thorne in copper etching, his grey scarf kept.", negativePrompt: "No hat." };
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(LOOK_PROMPT.prompt);
+  await dialog.getByLabel("Prompt", { exact: true }).fill(edited.prompt);
+  await dialog.getByLabel("Negative prompt", { exact: true }).fill(edited.negativePrompt);
+  await dialog.getByRole("button", { name: "Paint", exact: true }).click();
+  // It paints in the background: the dialog closes, and Repaint says so and keeps focus.
+  await expect(dialog).toHaveCount(0);
+  await expect(look).toHaveText("Painting…");
+  await expect(look).toBeFocused();
+  const first = posts(calls, "/art/paint")[0]!.body!;
+  expect(first).toMatchObject(edited);
+  land();
+  // It failed at the provider: its step says so, and Try again opens the review with the player's edits.
+  const step = root.locator(".of-forge-step").first();
+  await expect(step).toContainText("The new look didn’t finish, so the old one stays. Try again.");
+  await root.getByRole("button", { name: "Try Ilvar Thorne’s look again", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(edited.prompt);
+  await expect(dialog.getByLabel("Negative prompt", { exact: true })).toHaveValue(edited.negativePrompt);
+  await dialog.getByRole("button", { name: "Paint", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => posts(calls, "/art/paint").length).toBe(2);
+  expect(posts(calls, "/art/paint")[1]!.body).toEqual(first);
+  // Landed: the next Repaint reviews the defaults again.
+  await expect(look).toHaveText("Repaint");
+  await look.click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(LOOK_PROMPT.prompt);
+  await dialog.getByRole("button", { name: "Skip", exact: true }).click();
+  expect(posts(calls, "/art/prompt")).toHaveLength(2);
   expect(errors).toEqual([]);
 });
 

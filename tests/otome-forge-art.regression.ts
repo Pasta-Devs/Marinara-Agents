@@ -1,6 +1,7 @@
 // Otome Forge M2b: painted places and story CGs (S/art/{places,cg}.ts, S/routes/art.ts). Paints run against a fake
 // image client that counts paid calls; the CG's loopback request is checked against the real client.
 import assert from "node:assert/strict";
+import { FACES } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import test from "node:test";
 import { queueScenePaints } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
 import { createCutoutClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
@@ -17,6 +18,7 @@ import {
   placePrompt,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
+  paintSettled,
   paintSlot,
   startPaint,
   withDeadline,
@@ -1237,4 +1239,178 @@ test("a NovelAI connection paints in NovelAI's style, with one reference that th
   assert.equal(bodies[0]!.preferReferenceOutfit, false, "and the prompt dresses them");
   assert.deepEqual(bodies[1]!.referenceImages, refs);
   assert.equal("preferReferenceOutfit" in bodies[1]!, false);
+});
+
+// ── 0.47.1: Your cast's paints go on in the background ──
+
+/** A cast whose looks wait for the tap, with Kai painted on a gallery look and Expressions on; `n` gates paid call n. */
+async function castWorld(runKey: string, gated: number) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let failNext = false;
+  const t = await artWorld({
+    runKey,
+    // Ask before painting: a read of the run paints nothing by itself.
+    images: { ask: true, expressions: true },
+    before: async (_call, n) => {
+      if (n === gated) await gate;
+      if (failNext) throw new Error("the image service refused it");
+    },
+  });
+  const art = createOtomeArt(t.deps);
+  const deps = { ...t.deps, art };
+  const look = "/api/global-gallery/file/kai-look.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: look,
+    portraitRef: "global-gallery:kai-look",
+    art: { state: "ready", at: "2026-10-28T09:00:00.000Z", url: look, ref: "global-gallery:kai-look" },
+  }));
+  const kai = async () => (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  const viewOf = async () =>
+    (await routesOf(registerRunRoutes, deps, runKey)("GET", "/runs/:run")).body.view.lis.find(
+      (li: { id: string }) => li.id === KAI,
+    );
+  return {
+    ...t,
+    art,
+    deps,
+    look,
+    kai,
+    viewOf,
+    setup: routesOf(registerSetupRoutes, deps, runKey),
+    release: () => release(),
+    failNext: () => (failNext = true),
+  };
+}
+
+test("Repaint answers with its pending record and paints on without the request; a second tap never pays twice", async (context) => {
+  const t = await castWorld("r-bgpaint1-aaaaaa", 1);
+  context.after(() => (t.release(), t.art.dispose()));
+  const target = { kind: "look", owner: `li:${KAI}` };
+  const started = await t.setup("POST", "/runs/:run/art/paint", { target });
+  assert.deepEqual([started.status, started.body.paint.state], [200, "pending"], JSON.stringify(started.body));
+  await until(() => t.paid.length === 1, "the paid portrait");
+  // The request has answered; the run view shows the paint going on, and his old look stays meanwhile.
+  const painting = await t.viewOf();
+  assert.deepEqual([painting.art.state, painting.portrait], ["pending", t.look]);
+  const again = await t.setup("POST", "/runs/:run/art/paint", { target });
+  assert.deepEqual([again.status, again.body.code], [409, "busy"]);
+  assert.equal(t.paid.length, 1, "a second tap while it paints never pays");
+  t.release();
+  await paintSettled(t.runId, `li:${KAI}`);
+  const unit = await t.kai();
+  assert.equal(unit.art?.state, "ready");
+  assert.equal(unit.portrait, unit.art?.url, "the new picture is in");
+  const landed = await t.viewOf();
+  assert.deepEqual([landed.art.state, landed.portrait], ["ready", unit.portrait]);
+  assert.equal(t.paid.length, 1);
+});
+
+test("Repaint expressions answers pending and its faces paint on; the run view says painting, then failed or nothing", async (context) => {
+  const t = await castWorld("r-bgpaint2-aaaaaa", 1);
+  context.after(() => (t.release(), t.art.dispose()));
+  const started = await t.setup("POST", "/runs/:run/art/expressions", { li: KAI });
+  assert.deepEqual([started.status, started.body.paint.state], [200, "pending"], JSON.stringify(started.body));
+  assert.deepEqual((await t.viewOf()).facesPaint?.state, "pending", "painting, from before the first face");
+  await until(() => t.paid.length === 1, "the first paid face");
+  // The same set asked for again joins the one painting: nothing more is paid for.
+  const again = await t.setup("POST", "/runs/:run/art/expressions", { li: KAI, base: t.look });
+  assert.deepEqual([again.status, again.body.paint.state], [200, "pending"]);
+  t.release();
+  await paintSettled(t.runId, `faces:${KAI}`);
+  assert.equal(t.paid.length, FACES.length, "five faces, once");
+  const landed = await t.viewOf();
+  assert.equal(landed.facesPaint, undefined, "landed: nothing more to say");
+  assert.deepEqual(Object.keys(landed.expressions ?? {}).sort(), [...FACES].sort());
+
+  // A set that fails says so with its reason, and Repaint expressions paints it again.
+  t.failNext();
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const failed = await t.viewOf();
+  assert.equal(failed.facesPaint?.state, "failed");
+  assert.match(failed.facesPaint?.error ?? "", /refused/);
+  assert.deepEqual(Object.keys(failed.expressions ?? {}).sort(), [...FACES].sort(), "the old faces stay");
+
+  // A set a restart left pending reads as stopped.
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => {
+    const record = unit.expressions[t.look] as Record<string, unknown>;
+    const replacement = { state: "pending", at: "2026-10-28T09:00:00.000Z", images: {} };
+    return { ...unit, expressions: { ...unit.expressions, [t.look]: { ...record, replacement } } };
+  });
+  assert.equal((await t.viewOf()).facesPaint?.state, "stopped");
+});
+
+test("a Repaint expressions that lands while the run is read reads pending beside the faces from before it, never stopped", async (context) => {
+  const t = await castWorld("r-bgpaint4-aaaaaa", 1);
+  context.after(() => (t.release(), t.art.dispose()));
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await until(() => t.paid.length === 1, "the first paid face");
+  // The read's cut-out check (after its documents were read) waits until the set has landed.
+  const cutouts = t.deps.cutouts!;
+  let landDuringRead = true;
+  cutouts.cleanupRevision = async () => {
+    if (landDuringRead) {
+      landDuringRead = false;
+      t.release();
+      await paintSettled(t.runId, `faces:${KAI}`);
+    }
+    return undefined;
+  };
+  const read = await t.viewOf();
+  assert.equal(landDuringRead, false, "the set landed during the read");
+  assert.deepEqual([read.facesPaint?.state, read.expressions ?? {}], ["pending", {}], "so the client reads again");
+  const next = await t.viewOf();
+  assert.equal(next.facesPaint, undefined);
+  assert.deepEqual(Object.keys(next.expressions ?? {}).sort(), [...FACES].sort());
+});
+
+test("a Repaint expressions that lands while the run's units are read reads pending, never stopped", async (context) => {
+  const t = await castWorld("r-bgpaint5-aaaaaa", 1);
+  const readDoc = t.store.readDoc;
+  context.after(() => ((t.store.readDoc = readDoc), t.release(), t.art.dispose()));
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await until(() => t.paid.length === 1, "the first paid face");
+  // Kai's unit is read with his replacement still pending; the set lands before Mireille's read (beside it) returns.
+  let kaiRead: Promise<unknown> | null = null;
+  let landDuringRead = true;
+  t.store.readDoc = (async (id: string, normalize: Parameters<typeof readDoc>[1]) => {
+    const read = readDoc(id, normalize);
+    if (id === unitId(t.runId, KAI)) kaiRead ??= read;
+    if (id === unitId(t.runId, MIR) && kaiRead && landDuringRead) {
+      landDuringRead = false;
+      await kaiRead;
+      t.release();
+      await paintSettled(t.runId, `faces:${KAI}`);
+    }
+    return read;
+  }) as typeof readDoc;
+  const read = await t.viewOf();
+  t.store.readDoc = readDoc;
+  assert.equal(landDuringRead, false, "the set landed during the read");
+  assert.deepEqual([read.facesPaint?.state, read.expressions ?? {}], ["pending", {}], "so the client reads again");
+  const next = await t.viewOf();
+  assert.equal(next.facesPaint, undefined);
+  assert.deepEqual(Object.keys(next.expressions ?? {}).sort(), [...FACES].sort());
+});
+
+test("Repaint expressions the kit ends before it starts (the look cannot be read) reads stopped, and the next one paints", async (context) => {
+  const t = await castWorld("r-bgpaint3-aaaaaa", 0);
+  context.after(() => t.art.dispose());
+  const read = t.images.cardAvatarImage;
+  t.images.cardAvatarImage = async () => null;
+  const started = await t.setup("POST", "/runs/:run/art/expressions", { li: KAI });
+  assert.deepEqual([started.status, started.body.paint.state], [200, "pending"], JSON.stringify(started.body));
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const ended = await t.viewOf();
+  assert.equal(ended.facesPaint?.state, "stopped", "Your cast says it did not finish, with Repaint expressions");
+  assert.deepEqual([t.paid.length, ended.expressions ?? {}], [0, {}], "nothing was paid for or filed");
+
+  // Repaint expressions again paints the set, and the run view has nothing more to say once it lands.
+  t.images.cardAvatarImage = read;
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const landed = await t.viewOf();
+  assert.deepEqual([landed.facesPaint, t.paid.length], [undefined, FACES.length]);
 });

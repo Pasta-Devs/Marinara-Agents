@@ -37,7 +37,10 @@ import {
   galleryRefIds,
   type ImageClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import { startPaint } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
+import {
+  paintSettled,
+  startPaint,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { paintBeatPlaces } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/places.ts";
 import {
   createHandle,
@@ -594,12 +597,15 @@ test("Settings adding a connection later: Engine-art owners' steps are done in i
   // Repaint is the player's choice: it pays once and replaces the Engine look.
   const repaint = await setup("POST", "/runs/:run/art/paint", { target: { kind: "look", owner: `li:${KAI}` } });
   assert.equal(repaint.status, 200, JSON.stringify(repaint.body));
+  await paintSettled(t.runId, `li:${KAI}`);
   assert.equal(t.paid.length, 1);
-  assert.equal((await readUnit(t, KAI)).portrait, repaint.body.paint.url);
+  assert.equal((await readUnit(t, KAI)).portrait, (await readUnit(t, KAI)).art?.url);
   // A failed Repaint keeps her persona avatar, and its step says failed, with Retry, after every read.
   failNext = true;
   const failed = await setup("POST", "/runs/:run/art/paint", { target: { kind: "look", owner: "player" } });
-  assert.equal(failed.body.paint.state, "failed");
+  assert.equal(failed.body.paint.state, "pending", "answered as it starts (0.47.1)");
+  await paintSettled(t.runId, "player");
+  assert.equal((await readPlayer(t)).art?.state, "failed");
   assert.equal((await readPlayer(t)).portrait, AVA);
   assert.equal(stepsOf((await runs("GET", "/runs/:run")).body.view.forge)["paint:player"], "failed");
   assert.deepEqual(t.deleted, [], "no Engine file is ever deleted");

@@ -27,7 +27,10 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { sendMessage } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
-import { closeAndRemember } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
+import {
+  closeAndRemember,
+  closeJobKey,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
   normalizeBeat,
@@ -372,6 +375,10 @@ test("another love interest's route or repair chapter never reaches a note, a li
 
     // Kai's closed conversation is a `chat` source for him alone, and never reaches Mireille's next reply.
     await closeAndRemember(t.deps, t.runId, KAI, { debugMode: false });
+    // 0.47.1: the memory is written by the background lane's job.
+    for (let turn = 0; turn < 400 && t.background.has(closeJobKey(t.runId, KAI)); turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
     await t.ready();
     const phone = (await readMemorySources(t.store, t.runId)).filter((source) => source.id.startsWith("phone-"));
     assert.deepEqual(
