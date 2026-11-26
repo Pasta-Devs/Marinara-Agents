@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.47.2",
+          "date": "2026-11-26",
+          "notes": "- With a NovelAI connection, a picture of two or more people sends NovelAI a reference for each person who has a picture, as NovelAI's own app does, so each one's own picture guides how they look. Before, it sent only the main character's reference, which gave everyone that person's face and hair.\n- On NovelAI and other tag models, a key image of a scene that isn't explicit is much less likely to come out nude, even under Explicit Heat and the Explicit image rating. Its negative prompt now also names nudity in tags (`nude, topless, nipples, sex`), which those models read.",
+          "highlight": false
+        },
+        {
           "version": "0.47.1",
           "date": "2026-11-25",
           "notes": "- **Close and remember** sends you back to **Messages** at once and writes the memory in the background. The row says **Remembering…**, then what it earned. A close that fails keeps the conversation open, with **Try again**.\n- **Repaint**, **Repaint expressions** and a reviewed **Paint the cast** paint in the background. You can leave **Your cast** while they paint, and the new picture appears once it's saved.",
@@ -827,12 +833,6 @@
           "version": "0.38.0",
           "date": "2026-11-19",
           "notes": "- **Rewrite** now stays in the reader for the whole scene, in dates and Character Stories as in the main story. Before, it disappeared as soon as you picked a choice, and dates and Character Stories put their choice early in every scene.\n- Rewriting a scene takes back your choices in it: the trust, affection, grievances and secrets told that they changed go back to how they were, and you choose again in the new scene.\n- You can also rewrite the scene you just read to its end, until you open the next one. Its Starlight is taken back, and you earn it again when you read the new scene.\n- **Rewrite** shows greyed, saying why, when a scene can't be taken back: a Confrontation once a stance is played, a scene whose end moved the story on (a new stage, a mended rift, the chapter's end), or a choice made before this update.",
-          "highlight": true
-        },
-        {
-          "version": "0.37.0",
-          "date": "2026-11-19",
-          "notes": "- A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.\n- The lines after a choice are made ahead too, and the reply to your pick once you pick it. Leaving a scene stops making the rest of its voices.\n- Voices are made ahead only while **Voice the dialogue** is on, the **Voices** volume is up and nothing is muted. If one can't be made, the rest are voiced as they appear, as before, until you switch **Voice the dialogue**, **Voice everyone else** or muting off or on.\n- This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.",
           "highlight": true
         }
       ]

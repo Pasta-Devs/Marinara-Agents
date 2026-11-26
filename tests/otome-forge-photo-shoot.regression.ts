@@ -245,6 +245,7 @@ test("Take picture paints one photo with no model call: his look, her look, then
     [`${HIS_URL}.cut.png`, `${HER_URL}.cut.png`, PLACE_URL],
     "people first, the place last",
   );
+  assert.equal(paid.request.characters, 2, "0.47.2: the first two are people, which NovelAI gets alone");
   assert.deepEqual([paid.request.width, paid.request.height], [1024, 1024]);
   assert.equal(paid.request.prompt, review.body.prompt, "the review showed what was sent");
   assert.equal(t.calls.length, 0, "no model call");

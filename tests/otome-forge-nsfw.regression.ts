@@ -599,7 +599,7 @@ const FACE_UNIT = {
   bible: bible({ look: { identityLine: "tall man", outfitLine: "keeper's coat", presentation: "man" } }),
 };
 
-test("non-explicit assets retain adult romance and lingerie without graphic policy enumeration", () => {
+test("non-explicit assets retain adult romance and lingerie, with no graphic words in sentence prompts", () => {
   const world = worldOf(stored("sfw", "gentle"), "suggestive");
   for (const style of [PLAIN, TAGGED]) {
     const look = lookPrompt({ ...KAI_LOOK, outfitLine: "silk lingerie, sheer robe", world, style });
@@ -619,7 +619,15 @@ test("non-explicit assets retain adult romance and lingerie without graphic poli
     for (const image of images) {
       assert.match(image.negativePrompt, /child, childlike, minor, underage, school uniform/);
       assert.match(image.negativePrompt, /nudity, explicit sexual activity/);
-      assert.doesNotMatch(image.negativePrompt, /loli|shota|nipples|genitals|\bsex\b|lingerie|sexual content/);
+      // 0.47.2: a tag model also gets them as tags, which it reads where it skips the words; lingerie stays allowed.
+      if (style.tagged)
+        assert.match(image.negativePrompt, /nudity, explicit sexual activity, nude, topless, nipples, sex/);
+      assert.doesNotMatch(
+        image.negativePrompt,
+        style.tagged
+          ? /loli|shota|genitals|lingerie|sexual content/
+          : /loli|shota|nipples|genitals|\bsex\b|lingerie|sexual content/,
+      );
       assert.doesNotMatch(image.prompt, /safe for work|adult face and body|over 18/);
     }
     assert.match(look.prompt, /silk lingerie, sheer robe/);
