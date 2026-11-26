@@ -393,6 +393,8 @@ function paintPhoto(
         ...STICKER_SIZE,
         debugMode,
         referenceImages: built.references,
+        // The two of them, always.
+        people: 2,
       });
       return images.uploadToGallery({ image, name: built.name, prompt: built.prompt });
     },

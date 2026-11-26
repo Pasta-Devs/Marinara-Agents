@@ -297,6 +297,7 @@ async function buildItemArt(
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
           units: cgReferences(subjects).units,
+          people: subjects.length,
           prompt: prompt.prompt,
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,
@@ -670,6 +671,7 @@ export async function paintPairNow(
             connectionId,
             name: built.name,
             units: built.units,
+            people: built.units.length,
             prompt: built.prompt,
             negativePrompt: built.negativePrompt,
             ...SCENE_SIZE,

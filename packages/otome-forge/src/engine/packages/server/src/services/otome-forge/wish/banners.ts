@@ -653,6 +653,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
           units: cgReferences(subjects).units,
+          people: subjects.length,
           prompt: prompt.prompt,
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,

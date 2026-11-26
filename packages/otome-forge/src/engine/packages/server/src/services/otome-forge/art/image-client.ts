@@ -114,6 +114,8 @@ export interface ImageRequest {
   height: number;
   debugMode: boolean;
   referenceImages?: string[];
+  /** How many people the picture shows; absent means one at most (a look, a face, a sticker, a place). */
+  people?: number;
 }
 
 /** An image the Engine painted, not saved yet. `overrideTook` is false when the Engine compiled its own prompt. */
@@ -133,6 +135,8 @@ export interface GeneratedImage {
 /** A story CG (M2b) or banner art (M4): `units` are the people in it, whose references the wrapper adds. */
 export interface SceneRequest extends ImageRequest {
   units: ImageSubject[];
+  /** Everyone it shows, with a picture or not: `units` holds only those who have one. */
+  people: number;
 }
 
 /** The parts of an Engine image style profile a prompt override has to carry itself (the Engine skips the profile). */
@@ -374,11 +378,24 @@ export function createImageClient({
   };
 
   const client: ImageClient = {
-    async generateImage({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
+    async generateImage({
+      connectionId,
+      name,
+      prompt,
+      negativePrompt,
+      width,
+      height,
+      debugMode,
+      referenceImages,
+      people = 1,
+    }) {
       // #2465: NovelAI V5 blends several character references into one person, so it gets the first alone (the
       // picture's focus: the love interest), and since every prompt here names what people wear, the prompt dresses
       // them rather than the reference (the Engine's preferReferenceOutfit, which an Engine before it ignores).
+      // 0.47.2: NovelAI can't tie a reference to one person, so with two or more in the picture it drew everyone with
+      // the focus's face and hair. Such a picture gets no reference, and the prompt describes each person.
       const novelai = !!referenceImages?.length && !!(await client.novelAi?.(connectionId));
+      if (novelai) referenceImages = people > 1 ? [] : referenceImages!.slice(0, 1);
       const result = (await request("/api/characters/avatar-generation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -390,8 +407,8 @@ export function createImageClient({
           width,
           height,
           debugMode,
-          referenceImages: referenceImages?.length ? referenceImages.slice(0, novelai ? 1 : REFERENCES_MAX) : undefined,
-          ...(novelai ? { preferReferenceOutfit: false } : {}),
+          referenceImages: referenceImages?.length ? referenceImages.slice(0, REFERENCES_MAX) : undefined,
+          ...(novelai && referenceImages?.length ? { preferReferenceOutfit: false } : {}),
           promptOverrides: [{ id: avatarOverrideId(name), prompt, negativePrompt }],
         }),
       })) as { image?: unknown; prompt?: unknown } | null;

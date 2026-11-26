@@ -130,6 +130,7 @@ export async function paintMemento(
         // The Engine matches the override as `avatar:<slug of the first person's first name>`.
         name: first.name.split(/\s+/)[0] || "Memento",
         units,
+        people: people.length,
         prompt: built.prompt,
         negativePrompt: built.negativePrompt,
         ...SCENE_SIZE,

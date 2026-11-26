@@ -946,6 +946,7 @@ export async function paintKeepsake(
         // The Engine matches the override as `avatar:<slug of the first person's first name>`.
         name: unit.name.split(/\s+/)[0] || "Keepsake",
         units,
+        people: people.length,
         prompt: built.prompt,
         negativePrompt: built.negativePrompt,
         ...SCENE_SIZE,
