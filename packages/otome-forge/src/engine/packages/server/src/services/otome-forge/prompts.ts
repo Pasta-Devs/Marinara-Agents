@@ -102,6 +102,7 @@
 //   placePrompt: a place, scenery only (S/art/places.ts)
 //   cgPrompt: a story CG, and Memory, Moment, Snapshot and pair art (S/art/cg.ts, S/art/outfits.ts, S/wish/banners.ts)
 //   keepsakePrompt: a date's keepsake (S/minigames/date-night.ts)
+//   selfiePrompt: his selfie in his Messages thread, #2504 (S/phone/selfie.ts)
 //   expressionPrompt: a face edit, the kit's instruction (S/art/expressions.ts)
 //   stickerPrompt: a chat sticker (S/art/stickers.ts)
 //   figurinePrompt: a love interest's Shop figurine, painted once it is bought, #2138 (S/art/figurine.ts)
@@ -293,7 +294,7 @@ import {
   type ItemLook,
   type Season,
 } from "../../../../client/src/features/otome-forge/shared/wish.js";
-import type { StyleProfile } from "./art/image-client.js";
+import { imageConnectionFor, type StyleProfile } from "./art/image-client.js";
 import { PLUSH_ATTRIBUTES, PLUSH_ELEMENTS, PLUSH_SVG_MAX } from "./art/plush-svg.js";
 import type { StickerLookup } from "./art/stickers.js";
 import { CARE_NOTE_SENTENCES_MAX, CARE_NOTE_WORDS_MAX } from "./care/care-line.js";
@@ -304,6 +305,7 @@ import type { SummaryJob, SummaryRequest } from "./memory/memory.js";
 import {
   GROUP_REPLY_MAX,
   GROUP_SQUABBLE_MAX,
+  HIS_NOTES_KEPT,
   REPLY_MESSAGES_MAX,
   type ReplySticker,
   type ReplyStickers,
@@ -1694,10 +1696,18 @@ export const KNOWN_TOKENS = 500;
  * ponytail: the newest entry is always kept whole. At the notebook's limits (a 300-character guess and 200 characters
  * of words) it is about 375 tokens even in Han, so it fits unless the name runs past about 90 characters; the upgrade
  * path is shortening that entry's words.
+ * #2504: his notes from Messages (notesLine) follow it on a line of their own; without notes it is as it was.
  */
-export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known">): string {
+export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known" | "notes">): string {
   const known = (liState.known ?? []).slice(-KNOWN_SHOWN);
-  return known.length ? knownLine(unit, known.slice(-knownShown(unit, known))) : "";
+  const notebook = known.length ? knownLine(unit, known.slice(-knownShown(unit, known))) : "";
+  return [notebook, notesLine(unit, liState)].filter(Boolean).join("\n");
+}
+
+/** #2504: what he wrote down in Messages ([note: …]), word for word and JSON-quoted as the player's words are, or "". */
+export function notesLine(unit: Pick<Unit, "name">, { notes = [] }: Pick<LiState, "notes">): string {
+  const quoted = notes.map((note) => JSON.stringify(note.text)).join("; ");
+  return quoted ? `What ${unit.name} wrote down to remember about the protagonist, word for word: ${quoted}` : "";
 }
 
 /** A notebook entry as the prompts give it: the guess, how right it was, and the protagonist's own words. */
@@ -3807,6 +3817,8 @@ export function renderThread(
       if (message.quote) parts.push(`(replying to ${own} note: "${message.quote}")`);
       if (message.text) parts.push(message.text);
       if (message.sticker) parts.push(stickerText(message, own, voice, stickers));
+      // #2504: his selfie, as he sent it.
+      if (message.selfie) parts.push(message.selfie.brief ? `[selfie: ${message.selfie.brief}]` : "[selfie]");
       return `${message.who === "player" ? names.player : (speaker?.(message) ?? names.li)}: ${parts.join(" ")}`;
     })
     .join("\n");
@@ -3943,7 +3955,9 @@ export function chatReplyMessages({
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
-  const known = knowsAboutYou(unit, liState);
+  // #2504: his notes can change from reply to reply, so they go after the cached part (notes, in `now`).
+  const known = knowsAboutYou(unit, { known: liState.known });
+  const notes = notesLine(unit, liState);
   const example = stickers?.his[0] ?? stickers?.yours[0];
   const stickerRule = example
     ? [
@@ -3962,6 +3976,13 @@ export function chatReplyMessages({
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
     `- hurt: beside "messages" in the JSON object, never inside a message, only when what ${them} just wrote truly hurts you, as ${name} would take it: {"text": "...", "severity": "minor|major|rupture"}, the text one short line in your own words on what hurt, rupture only for words that break something between you. Omit it otherwise.`,
     stickerRule,
+    // #2504: his own thread's hidden commands (S/phone/replies.ts takeCommands); a selfie only with scene art to paint it.
+    friend
+      ? ""
+      : `- To remember something about ${them} word for word, write [note: what to remember] in a message; ${them} never sees it. You keep ${HIS_NOTES_KEPT} notes, and a new one replaces the oldest.`,
+    !friend && imageConnectionFor(world.images, "scene")
+      ? `- To send ${them} a photo of yourself, write [selfie: what the photo shows, in English] in a message, rarely, when you would.`
+      : "",
     hapticsOn(world) ? CHAT_HAPTICS_RULE : "",
     `- Write every message in ${world.language}.`,
     "",
@@ -4036,6 +4057,7 @@ export function chatReplyMessages({
   // 0.20.2: everything above stays the same through a conversation, so it is cached; the thread and the task follow,
   // after the older memories its newest messages bring back (#2430), which change from reply to reply.
   const now = [
+    ...(notes ? [notes, ""] : []),
     ...(recalls.trim()
       ? [`OLDER MEMORIES THE THREAD BRINGS BACK (part of what you know of the story)\n${recalls.trim()}`, ""]
       : []),
@@ -5698,8 +5720,10 @@ const relabel = (contract: string, heading: string) => contract.replace(/^CONTEN
  */
 export function sharedState(liState: LiState): LiState {
   const shared = (ref: string) => sharedRef(ref.split("/")[0] ?? "");
+  // #2504: nor his notes from his own thread.
+  const { notes: _notes, ...own } = liState;
   return {
-    ...liState,
+    ...own,
     grievances: liState.grievances.filter((grievance) => shared(grievance.opened)),
     disclosures: liState.disclosures.filter((disclosure) => shared(disclosure.ref)),
     known: [],
@@ -6898,6 +6922,24 @@ export function keepsakePrompt(input: KeepsakeInput, edited: Partial<ImagePrompt
   // #2303: a date with several draws her with two of them, so the count tag follows the people drawn.
   const count = COUNT_WORDS[Math.min(input.people.length, CG_PEOPLE_MAX)] ?? "two people";
   return cgPrompt({ ...input, use: "cg", framing: `${count}, ${KEEPSAKE_FRAMING}` }, edited);
+}
+
+// ── #2504: his selfie in Messages ──
+
+const SELFIE_FRAMING = "one person, selfie, looking at the viewer, detailed background";
+
+/**
+ * The selfie a love interest sends in his own Messages thread (S/phone/selfie.ts): him alone, from what his [selfie: …]
+ * said it shows (`shows`, English), or a plain, casual selfie. Rated as a keepsake is: a story CG whose brief never
+ * sets `explicit`.
+ */
+export function selfiePrompt(
+  input: Omit<KeepsakeInput, "brief"> & { shows: string },
+  edited: Partial<ImagePrompt> = {},
+): ImagePrompt {
+  const name = imageNames(input.people.map((person) => person.name))[0] ?? "";
+  const brief = `A selfie ${name} took to send in a message: ${input.shows.trim() || "a plain, casual selfie"}`;
+  return cgPrompt({ ...input, brief, use: "cg", framing: SELFIE_FRAMING }, edited);
 }
 
 export interface ExpressionInput {

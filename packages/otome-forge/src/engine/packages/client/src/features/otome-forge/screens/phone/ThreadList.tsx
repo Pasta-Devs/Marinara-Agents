@@ -133,7 +133,9 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
       ? last.text
       : last.sticker
         ? t("ui.otomeForge.phone.sticker", { face: stickerLabel(t, stickers, last.sticker) })
-        : "";
+        : last.selfie
+          ? t("ui.otomeForge.phone.selfie")
+          : "";
   const groupPreview = (last: PhoneMessage | null, busy: boolean, row: PhoneCloseView) => {
     if (busy) return t("ui.otomeForge.phone.groupTyping");
     if (row.closing && !row.closing.error) return t("ui.otomeForge.phone.closing");

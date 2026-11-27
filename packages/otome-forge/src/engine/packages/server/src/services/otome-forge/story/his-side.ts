@@ -123,6 +123,8 @@ export function stateAtMoment(state: RunState, li: LiId, note: HisSideNote): Run
   const { stage, trust, tension, rupture } = note;
   const known = current.known.filter(then);
   const disclosures = current.disclosures.filter(then);
+  // #2504: and only the notes he had written by then.
+  const notes = current.notes?.filter(then);
   // 0.23.0: a bond story played after the moment goes too, so his card counts only the ranks he had reached then
   // (Dottore, #2254). No bond story can have been played before it: they open past his finale.
   const chapters = Object.fromEntries(
@@ -133,7 +135,10 @@ export function stateAtMoment(state: RunState, li: LiId, note: HisSideNote): Run
   return {
     ...state,
     chapters,
-    lis: { ...state.lis, [li]: { ...current, stage, trust, tension, rupture, grievances, disclosures, known } },
+    lis: {
+      ...state.lis,
+      [li]: { ...current, stage, trust, tension, rupture, grievances, disclosures, known, ...(notes ? { notes } : {}) },
+    },
   };
 }
 
