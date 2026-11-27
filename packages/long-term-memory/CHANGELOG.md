@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- If you extract the same text again after saving memories from it, a read that would create new memories now waits in Review instead of applying by itself, so you can catch reworded copies.
+
 ## 1.6.8 — 2026-11-27
 
 - A branch's chat summary no longer shows as new in Sources when another chat of its conversation already saved memories from the same messages. It shows under Imported with "Already saved from" and a link to that memory, and Import all new and auto-import skip it.
