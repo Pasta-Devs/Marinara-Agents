@@ -1,5 +1,14 @@
 # Otome Hearth release notes
 
+## 0.48.0 — 2026-11-27
+
+- **Album → Hangouts** shows rounded cards, as **Album → Dates** does.
+- **Close** stops a hangout while it's being planned. A friend's invitation you were accepting stays open.
+- **Plan a hangout** has an optional **What do you want to talk about?** field, for up to 300 characters.
+- Before a main chapter's first scene, its planner may ask you up to two questions about your protagonist, in **Before this chapter**. Each answer shapes the scene it was asked for.
+- In their own **Messages** thread, a love interest can note down something you tell them. They keep three notes, a new one replacing the oldest, and remember them in Messages and in the story. You don't see the notes.
+- With an image connection, a love interest can send you a selfie in their own thread. It paints by itself, or waits for **Paint the selfie** while **Ask before painting** or prompt review is on. Each selfie is 1 image.
+
 ## 0.47.2 — 2026-11-26
 
 - With a NovelAI connection, a picture of two or more people sends NovelAI a reference for each person who has a picture, as NovelAI's own app does, so each one's own picture guides how they look. Before, it sent only the main character's reference, which gave everyone that person's face and hair.
