@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.11 — 2026-11-27
 
 - If the connection doesn't serve your extraction model, an import now tells you to check the model name. After that error it starts no new pieces and leaves them for a later run, though pieces already being read still finish. It stops the same way when a login or quota error arrives with an error code Long-Term Memory recognizes.
 
