@@ -51,6 +51,8 @@
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
 //   thoughtsLines: Your thoughts… from Home (#2127), in P5 and in its main chapter's P6, P12 and P12c, with the task
+//   answersLines: #2503, the player's answers to P5's questions about the protagonist, in the P6, P12 or P12c of the
+//     node each was asked for, with the task
 //   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories, his side
 //     (#2155) and the prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word
 //     (Elsewhere)
@@ -179,6 +181,7 @@ import {
   CONFRONTATION_ROUNDS,
   type ClimaxKind,
   LAST_STAGE,
+  QUESTIONS_MAX,
   REPAIR_NODES_MAX,
   REPAIR_NODES_MIN,
   ROUTE_NODES_MAX,
@@ -2178,6 +2181,23 @@ function thoughtsLines(player: Pick<Player, "name">, text: string | undefined, u
   ];
 }
 
+/**
+ * #2503: what the player answered to the chapter plan's questions about the protagonist, in the scene (node `i`) each
+ * was asked for (P6, P12, P12c), with the task, after the cached part; without an answer for it there are no lines,
+ * and the prompt is as it was.
+ */
+function answersLines(player: Pick<Player, "name">, chapter: Pick<Chapter, "questions">, i: number): string[] {
+  const answered = (chapter.questions ?? []).filter((entry) => entry.node === i && entry.answer);
+  if (!answered.length) return [];
+  return [
+    "",
+    [
+      `Details about ${player.name || "the protagonist"} you'll need for this scene:`,
+      ...answered.map((entry) => `Question: ${entry.question}\nAnswer: ${entry.answer}`),
+    ].join("\n"),
+  ];
+}
+
 // ── P5: chapter plan (structured, 0.8, planner contract) ──
 
 export interface ChapterPlanInput {
@@ -2264,7 +2284,7 @@ export function chapterPlanMessages({
     "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if a monster, capable of earned, character-consistent change.",
     `Plan main chapter ${number}: one Lead love interest (given) and one Foil you pick from the others. The chapter is told as ${NODES_MIN} to ${NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
-    '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation|closer", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}',
+    '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation|closer", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}, "ask": [{"node": <node index>, "question": "..."}]}',
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
@@ -2273,6 +2293,7 @@ export function chapterPlanMessages({
     "- ledger.relationship: one line per love interest present on what moved between them and the protagonist. ledger.conflict: conflict seeds: plant a new one (type from: " +
       ANGST_TYPES.join(", ") +
       "), or escalate, complicate or resolve an open one by its id. ledger.offscreen: one line for every love interest NOT in this chapter: what they were doing meanwhile.",
+    `- ask (optional, usually omitted): at most ${QUESTIONS_MAX} questions for the player about the protagonist, each with the index of the first node that needs the answer, only when a node needs something about the protagonist that nothing given shows (their past, what they like, how they would act) and you would otherwise guess, or when a memory reveal or twist rests on the player's input. Write that node's guide so any answer works.`,
     "RULES",
     `- ${NODES_MIN} to ${NODES_MAX} nodes; 1 or 2 moment nodes; at most one climax node, a confrontation or a closer, as the second-to-last or last node; at most 2 nodes with cg.`,
     "- A climax only when the chapter builds to one; a chapter may go without, and end on an ordinary scene or a moment.",
@@ -2574,6 +2595,7 @@ export interface BeatMessagesInput {
     | "prestige"
     | "bond"
     | "thoughts"
+    | "questions"
     | "hisSide"
     | "friendStory"
     | "ending"
@@ -2716,6 +2738,7 @@ export function beatMessages({
     recalls.trim(),
     // A main chapter's own (#2127): no other chapter's scenes ever carry them.
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...answersLines(player, chapter, node.i),
     ...(pov && hisSide.trim()
       ? ["", `THE SCENE AS THE PROTAGONIST LIVED IT ("${chapter.title}"):\n${hisSide.trim()}`]
       : []),
@@ -3444,6 +3467,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "",
     recalls.trim(),
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...answersLines(player, chapter, node.i),
     "",
     `Write the confrontation of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
@@ -3555,6 +3579,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     "",
     recalls.trim(),
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...answersLines(player, chapter, node.i),
     "",
     `Write the closer of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,

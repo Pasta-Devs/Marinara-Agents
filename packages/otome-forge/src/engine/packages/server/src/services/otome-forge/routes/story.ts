@@ -9,6 +9,10 @@
 //                                                                 with no model call (its scene is a beat like any)
 // POST /runs/:run/chapters/next {lead}                         → {chapter: ChapterView}
 // GET  /runs/:run/chapters/:key                                → ChapterDetail
+// POST /runs/:run/chapters/:key/answers {answers}              → {chapter: ChapterView}: #2503, the player's answers to
+//                                                                 its plan's questions about the protagonist, one per
+//                                                                 question in order, with no model call; 409 `conflict`
+//                                                                 once they are answered or the chapter is finished
 // POST /runs/:run/chapters/:key/beats/:i {rewrite?, reviewImagePrompts?} → {beat, confrontation?: ConfrontationView};
 //                                                                 then the next node is queued (M2b: a confrontation
 //                                                                 node carries its stance game; S/routes/arcs.ts
@@ -32,7 +36,12 @@
 // endings not reached) never leave the server.
 import { z } from "zod";
 import type { Beat, BeatView, Favorite } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { OWN_ANSWER_MAX, OWN_OPTION } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import {
+  OWN_ANSWER_MAX,
+  OWN_OPTION,
+  QUESTION_ANSWER_MAX,
+  QUESTIONS_MAX,
+} from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
   OtomeForgeError,
@@ -43,11 +52,11 @@ import {
   type OtomeRequest,
   type RegisterRoutes,
 } from "../http.js";
-import { isChapterKey, isLiId, runDocTarget, stateId, worldId } from "../ids.js";
+import { chapterId, isChapterKey, isLiId, runDocTarget, stateId, worldId } from "../ids.js";
 import { STATE_LIMITS, keepNewest, normalizeState } from "../schemas/state.js";
 import { cgView } from "../art/cg.js";
 import { withPlaceViews } from "../art/places.js";
-import { toBeatView, toChapterView } from "../schemas/story.js";
+import { normalizeChapter, toBeatView, toChapterView } from "../schemas/story.js";
 import { toConfrontationView } from "../story/confrontation.js";
 import { normalizeWorld, toWorldView } from "../schemas/world.js";
 import { cancellable, chooseOption, easeOff, readTo, serveBeat } from "../story/beats.js";
@@ -85,6 +94,9 @@ const ArcBody = z.object({
       }),
     ])
     .optional(),
+});
+const AnswersBody = z.object({
+  answers: z.array(z.string().trim().min(1).max(QUESTION_ANSWER_MAX)).min(1).max(QUESTIONS_MAX),
 });
 const BeatBody = z.object({ rewrite: z.boolean().optional() });
 const ChooseBody = z.object({
@@ -203,6 +215,39 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const key = param(request, "key");
       if (!isChapterKey(key)) throw new OtomeForgeError(404, "No such chapter.", "not-found");
       return chapterDetail(deps, runId, key);
+    }),
+  );
+
+  router.post(
+    "/runs/:run/chapters/:key/answers",
+    handle(async (request) => {
+      const { answers } = parseBody(AnswersBody, request.body);
+      const { runId } = runParam(request);
+      const key = param(request, "key");
+      if (!isChapterKey(key)) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+      const state = await store.readDoc(stateId(runId), normalizeState);
+      if (state?.chapters[key]?.completed) throw new OtomeForgeError(409, "This chapter is finished.", "conflict");
+      const answeredAt = new Date().toISOString();
+      const chapter = await store.updateDoc(
+        runDocTarget("chapter", chapterId(runId, key)),
+        normalizeChapter,
+        (current) => {
+          if (!current) return current;
+          const questions = current.questions ?? [];
+          if (!questions.some((entry) => !entry.answer)) {
+            throw new OtomeForgeError(409, "This chapter has no questions waiting.", "conflict");
+          }
+          if (answers.length !== questions.length) {
+            throw new OtomeForgeError(400, "Answer each of the chapter's questions.", "bad-request");
+          }
+          return {
+            ...current,
+            questions: questions.map((entry, n) => ({ ...entry, answer: answers[n]!, answeredAt })),
+          };
+        },
+      );
+      if (!chapter) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+      return { chapter: toChapterView(chapter) };
     }),
   );
 

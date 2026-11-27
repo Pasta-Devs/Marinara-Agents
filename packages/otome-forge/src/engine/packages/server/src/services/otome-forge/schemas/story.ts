@@ -34,6 +34,9 @@ import {
   FIRST_STAGE,
   HIS_SIDE_MOMENTS,
   LAST_STAGE,
+  QUESTION_ANSWER_MAX,
+  QUESTION_MAX,
+  QUESTIONS_MAX,
   RIDDLE_ANSWER_MAX,
   RIDDLE_CHOICE,
   RIDDLE_QUESTION_MAX,
@@ -173,6 +176,13 @@ const LedgerSchema: ZodType<ChapterLedger> = z.object({
 
 const emptyLedger = (): ChapterLedger => ({ relationship: [], conflict: [], offscreen: [] });
 
+const QuestionSchema: ZodType<NonNullable<Chapter["questions"]>[number]> = z.object({
+  node: z.number().int().min(0),
+  question: short(QUESTION_MAX).min(1),
+  answer: short(QUESTION_ANSWER_MAX).min(1).optional(),
+  answeredAt: z.string().optional(),
+});
+
 const SelectionSchema = z.object({ kind: z.enum(["dialogue", "action"]), text: short(400) });
 const StanceOptionSchema: ZodType<ConfrontationOption> = z.object({
   label: short(200),
@@ -309,6 +319,11 @@ export function normalizeChapter(data: unknown): Chapter | null {
       prestige: z.object({ kind: z.enum(PRESTIGE_KINDS), premise: short(600) }).optional(),
       bond: z.object({ rank: z.number().int().min(11).max(20), reveal: short(600) }).optional(),
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
+      // #2503: its plan's questions about the protagonist, and the player's answers once given.
+      questions: (value) => {
+        const questions = validItems(QuestionSchema, value, QUESTIONS_MAX);
+        return questions.length ? questions : undefined;
+      },
       gift: z.enum(GIFT_IDS).optional(),
       hisSide: HisSideNoteSchema.optional(),
       friendStory: z
@@ -357,7 +372,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
     }),
     data,
   );
-  const chapter = withoutEmpty(read, "date");
+  const chapter = withoutEmpty(withoutEmpty(read, "date"), "questions");
   return chapter.nodes.length ? chapter : null;
 }
 
@@ -445,7 +460,8 @@ export function normalizeBeat(data: unknown): Beat | null {
  * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, a date's plan
  * (GET .../dates shows a date), an extra story's premise (#2025), the Your thoughts… its plan read (#2127; Home shows
  * the player only the ones still waiting), a birthday scene's gift (#2153), the moment his side retells (#2155), the
- * earlier chapters it recalls (0.19.0) or its small memories (0.20.4).
+ * earlier chapters it recalls (0.19.0) or its small memories (0.20.4). A main chapter's questions about the protagonist
+ * (#2503) go with it, so the reader can ask them.
  */
 export function toChapterView(chapter: Chapter): ChapterView {
   const {

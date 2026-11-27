@@ -15,7 +15,9 @@
 // answered in the player's own words (OwnAnswerDialog.tsx); the draft outlives the dialog until it is sent. A big
 // moment's side (#2155) is announced at the chapter's end, waiting in Routes. A recurring side character (0.20.0, Side
 // character sprites) stands in their one neutral sprite while they speak, in the speaker's figure slot; one whose
-// sprite waits for a tap (Ask before painting, a failure) offers Paint beside the place, with its cost.
+// sprite waits for a tap (Ask before painting, a failure) offers Paint beside the place, with its cost. A main chapter
+// whose plan asked about the protagonist (#2503) asks it in Before this chapter (QuestionsDialog.tsx) before its first
+// scene is written.
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -82,6 +84,7 @@ import { ContentTagsCard } from "./ContentTagsCard";
 import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
 import { OwnAnswerDialog, type OwnAnswer } from "./OwnAnswerDialog";
+import { QuestionsDialog } from "./QuestionsDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls, chapterTitle } from "./ReaderControls";
 import { SpeakerPlate, useSpeakerSprite } from "./SpeakerPlate";
@@ -190,7 +193,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // pan holds focus on the picture while the faded UI is inert, then hands it back to the story.
   useEffect(() => {
     const root = rootRef.current;
-    if (!focusInside.current || dialog || !root) return;
+    if (!focusInside.current || dialog || reader.askQuestions || !root) return;
     const active = document.activeElement;
     // Focus stays on a control in the reader, unless that control is faded (inert) or is the CG once its pan ended.
     const stays =
@@ -220,7 +223,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.defaultPrevented || dialog) return;
+    if (event.defaultPrevented || dialog || reader.askQuestions) return;
     if (event.key === "Escape" && !showUi) {
       event.preventDefault();
       setHidden(false);
@@ -669,6 +672,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           onClose={() => setDialog(null)}
         />
       ) : null}
+      {reader.askQuestions ? (
+        <QuestionsDialog questions={reader.questions} onAnswer={reader.answerQuestions} onLeave={onExit} />
+      ) : null}
       {reader.review ? (
         <PromptReviewDialog
           subject={
@@ -789,6 +795,8 @@ function BottomPanel(props: BottomPanelProps) {
   if (reader.askTags) {
     return <ContentTagsCard tags={reader.tags} onBegin={reader.beginChapter} onLeave={props.onExit} />;
   }
+  // #2503: Before this chapter is open over the stage; nothing is written until it is answered.
+  if (reader.askQuestions) return null;
   if (reader.showOutcome && reader.outcomeKind) {
     return <ConfrontationEnd outcome={reader.outcomeKind} li={props.facing} onGoOn={props.onAdvance} />;
   }
