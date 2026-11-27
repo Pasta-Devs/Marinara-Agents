@@ -138,6 +138,9 @@ async function startProject(name, clientPort, serverPort, liveVersions) {
       VITE_HOST: "127.0.0.1",
       VITE_OPEN_BROWSER: "false",
       VITE_PORT: String(clientPort),
+      // Each Engine's own Vite cache: from Vite 8.4.0 a second dev server on a shared one is refused (its process lock
+      // lives there). An Engine from before it reads no VITE_CACHE_DIR and both share node_modules/.vite, as before.
+      VITE_CACHE_DIR: resolve(engineRoot, "packages/client/node_modules", `.vite-package-browser-${name}`),
     },
   });
   child.once("exit", (code, signal) => {
