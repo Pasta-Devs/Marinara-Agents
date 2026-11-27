@@ -4052,8 +4052,15 @@ test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from th
       return { status: 200, json: { cgs: [], memories: [], timeline: [], favorites: [], soundtrack: [], tells: {} } };
     }
     if (path === `/runs/${RUN}/hangouts` && call.method === "POST") {
-      return { status: 409, json: { error: "Stop here.", code: "conflict" } };
+      // #2502: the first plan is still being written when Close stops it; the next is refused.
+      const first = posts(calls, "/hangouts").length === 1;
+      return {
+        status: 409,
+        json: { error: "Stop here.", code: "conflict" },
+        ...(first ? { wait: new Promise<void>(() => undefined) } : {}),
+      };
     }
+    if (path === `/runs/${RUN}/cancel`) return { status: 200, json: { ok: true } };
     if (path === `/runs/${RUN}/friends/${kaveh.id}/wingman`) {
       return { status: 200, json: { li: lis[0]!.id, helper: kaveh.id } };
     }
@@ -4113,13 +4120,20 @@ test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from th
   await root.getByRole("tab", { name: "Hangouts", exact: true }).click();
   // #2477: Plan a hangout stands apart from the hangouts under it, as wide as its label, on the desktop and the phone.
   const planButton = root.getByRole("button", { name: "Plan a hangout", exact: true });
-  const hangoutList = root.locator(".of-hangout-list");
-  await expect(hangoutList.getByText("The lantern market", { exact: true })).toBeVisible();
+  const hangout = root.getByRole("listitem").filter({ hasText: "The lantern market" });
+  await expect(hangout).toBeVisible();
+  const hangoutList = hangout.locator("xpath=..");
   const [planBox, listBox] = [(await planButton.boundingBox())!, (await hangoutList.boundingBox())!];
   expect(listBox.y - (planBox.y + planBox.height), "a gap between the button and the hangouts").toBeGreaterThanOrEqual(
     8,
   );
   expect(planBox.width).toBeLessThan(listBox.width);
+  // #2502: each hangout is a card as Album → Dates' are: rounded, with room around his avatar.
+  const corner = await hangout.evaluate((card) => Number.parseFloat(getComputedStyle(card).borderTopLeftRadius));
+  expect(corner, "rounded corners").toBeGreaterThanOrEqual(12);
+  const [cardBox, avatarBox] = [(await hangout.boundingBox())!, (await hangout.locator(".of-avatar").boundingBox())!];
+  expect(avatarBox.x - cardBox.x, "the avatar clear of the card's edge").toBeGreaterThanOrEqual(8);
+  expect(avatarBox.y - cardBox.y, "and of its top").toBeGreaterThanOrEqual(8);
   await page.screenshot({ path: testInfo.outputPath("hangouts.png") });
   await planButton.click();
   const plan = page.getByRole("dialog", { name: "Plan a hangout" });
@@ -4127,11 +4141,35 @@ test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from th
   await expect(go).toBeDisabled();
   await plan.getByRole("button", { name: "Kaveh", exact: true }).click();
   await plan.getByText("Let Kaveh choose", { exact: true }).click();
+  // #2502: what she wants to talk about goes with the plan, trimmed; Close stops a plan being written.
+  await plan
+    .getByRole("textbox", { name: "What do you want to talk about? (optional)", exact: true })
+    .fill("  Whether he misses home.  ");
   await go.click();
+  await expect(plan.getByText("Planning your hangout…", { exact: true })).toBeVisible();
   await expect
     .poll(() => posts(calls, "/hangouts").map((call) => call.body))
-    .toEqual([expect.objectContaining({ friends: [kaveh.id], place: "partner-choice", herLook: "base" })]);
+    .toEqual([
+      expect.objectContaining({
+        friends: [kaveh.id],
+        place: "partner-choice",
+        herLook: "base",
+        topic: "Whether he misses home.",
+      }),
+    ]);
+  const cancels = posts(calls, `/runs/${RUN}/cancel`).length;
+  await plan.getByRole("button", { name: "Close", exact: true }).click();
+  await expect.poll(() => posts(calls, `/runs/${RUN}/cancel`).length).toBe(cancels + 1);
+  await expect(plan).toBeHidden();
+  // Planned again with nothing to talk about: no topic is sent, and a refusal says why.
+  await planButton.click();
+  await plan.getByRole("button", { name: "Kaveh", exact: true }).click();
+  await plan.getByText("Let Kaveh choose", { exact: true }).click();
+  await go.click();
   await expect(plan.getByRole("alert")).toBeVisible();
+  const sent = posts(calls, "/hangouts").map((call) => call.body as Json);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).not.toHaveProperty("topic");
 });
 
 test("#2459: an ended story keeps Story, Wardrobe and the Album, and its Messages can only be read", async ({

@@ -6120,7 +6120,7 @@ export function bondPlanMessages({ world, player, unit, state, rank, reveal, mem
 export type FriendPlanFor =
   | { kind: "rank"; friend: FriendCard; level: number; look: boolean }
   | { kind: "mend"; friend: FriendCard; grievance: string }
-  | { kind: "hangout"; friends: readonly FriendCard[]; place: string }
+  | { kind: "hangout"; friends: readonly FriendCard[]; place: string; topic?: string }
   | { kind: "epilogue"; friends: readonly FriendCard[] };
 
 export interface FriendPlanInput {
@@ -6147,6 +6147,9 @@ export function friendPlanMessages({
   const name = names[0] ?? "her friend";
   const look = plan.kind === "rank" && plan.look;
   const memento = plan.kind === "hangout";
+  // #2502: what she wants to talk about with them, in the player's words; it changes with each hangout, so it goes in
+  // the task, and without one the prompt is as it was.
+  const topic = plan.kind === "hangout" ? (plan.topic?.trim() ?? "") : "";
   const shape = `{"title": "...", "tags": ["..."], "summary": "...", "nodes": [{"guide": "...", "place": "..."}]${look ? ', "look": {"name": "...", "outfitLine": "..."}' : ""}${memento ? ', "memento": "..."' : ""}}`;
   const what =
     plan.kind === "rank"
@@ -6202,6 +6205,15 @@ export function friendPlanMessages({
     units.map((unit) => `id ${unit.id}: ${unit.name}${unit.bible ? `, ${unit.bible.role}` : ""}`).join("\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
+    ...(topic
+      ? [
+          "",
+          "WHAT THE PROTAGONIST WANTS TO TALK ABOUT (the player's own words)",
+          // JSON-quoted, as thoughtsLines quotes the player's words.
+          JSON.stringify(topic),
+          `${player.name || "The protagonist"} wants to talk with ${names.join(" and ")} about this, and the hangout gives it a real place.`,
+        ]
+      : []),
     "",
     "Plan it now.",
     otomeContractReminder("planner"),

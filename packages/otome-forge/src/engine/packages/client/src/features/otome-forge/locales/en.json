@@ -272,6 +272,8 @@
   "ui.otomeForge.hangouts.planning": "Planning your hangout…",
   "ui.otomeForge.hangouts.readAgain": "Read again",
   "ui.otomeForge.hangouts.them": "them",
+  "ui.otomeForge.hangouts.topic": "What do you want to talk about? (optional)",
+  "ui.otomeForge.hangouts.topicHint": "In your own words. The hangout makes room for it.",
   "ui.otomeForge.hangouts.where": "Where",
   "ui.otomeForge.hangouts.who": "Who comes",
   "ui.otomeForge.hangouts.with": "With {{names}}",

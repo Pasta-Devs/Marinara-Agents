@@ -1392,6 +1392,9 @@ ${R} .of-album-stickers-title { margin: 0; font-family: var(--of-font-display); 
 /* #2477: Album → Hangouts: Plan a hangout stands apart from the hangouts under it (they touched). */
 ${R} .of-hangouts { display: flex; flex-direction: column; gap: 12px; }
 ${R} .of-hangouts > .of-button { align-self: flex-start; }
+/* #2502: a hangout is an Album → Dates card (.of-album-date), each part a whole row, its memento as wide as the card. */
+${R} .of-hangout > * { grid-column: 1 / -1; }
+${R} .of-hangout-memento { width: 100%; height: auto; border-radius: 12px; }
 /* #2087: Photo Shoot photos are square prints. */
 ${R} .of-album-cgs--photo .of-album-cg { aspect-ratio: 1; }
 ${R} .of-album-cgs--sticker { grid-template-columns: repeat(auto-fill, minmax(min(132px, 42%), 1fr)); }

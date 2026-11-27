@@ -6,8 +6,10 @@
 // prompts). Plan a hangout asks, as Date Night did, where (one of Date Night's places, a place the story has painted,
 // or "they choose"), who comes (any of her friends whose grievance does not stand) and what she wears, then plans it
 // (POST /runs/:run/hangouts: one text call) and opens it. A friend's invitation in Messages opens the same dialog with
-// them chosen and "they choose" picked; accepting it there is the plan (`invite`).
-import { useEffect, useState, type CSSProperties } from "react";
+// them chosen and "they choose" picked; accepting it there is the plan (`invite`). #2502: the cards are Album → Dates'
+// (.of-album-date); the plan may say what she wants to talk about (`topic`), and Close stops a plan being written, as
+// Date Night's Cancel does.
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Check, Image as ImageIcon, Paintbrush, PartyPopper, RotateCcw } from "lucide-react";
@@ -16,14 +18,16 @@ import { Avatar } from "../../components/Avatar";
 import { CostHint } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
 import { PromptReviewDialog, type ImagePrompt } from "../../components/PromptReviewDialog";
-import { runPath, storyQueryKey } from "../../hooks/use-reader";
+import { cancelStoryWork, runPath, storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { ChapterView, LiId, Paint, RunView } from "../../shared/api-types";
 import { BASE_LOOK, PARTNER_CHOICE } from "../../shared/dates";
+import { HANGOUT_TOPIC_MAX } from "../../shared/friends";
 import { LookPicker, wornDateLook } from "../dates/LookPicker";
 import { PlacePicker, paintedPlaces, type PlacePick } from "../dates/PlacePicker";
+import { TextField } from "../setup/parts";
 import { useWardrobe } from "../wardrobe/Wardrobe";
 
 /** A hangout as the tab lists it (GET /runs/:run/hangouts). */
@@ -97,7 +101,7 @@ export function Hangouts({
           {t("ui.otomeForge.hangouts.loading")}
         </p>
       ) : hangouts.data.hangouts.length ? (
-        <ul className="of-hangout-list">
+        <ul className="of-date-history">
           {hangouts.data.hangouts.map((entry) => (
             <HangoutRow
               key={entry.key}
@@ -195,7 +199,7 @@ function HangoutRow({
   };
   return (
     <li
-      className="of-hangout of-glass"
+      className="of-album-date of-hangout"
       style={first ? ({ "--of-li-accent": accentOf(first) } as CSSProperties) : undefined}
     >
       <div className="of-chapter-head">
@@ -316,8 +320,10 @@ function PlanHangout({
   const [chosen, setChosen] = useState<LiId[]>(invite ? [invite.friend] : []);
   const [place, setPlace] = useState<PlacePick | null>(invite ? { place: PARTNER_CHOICE } : null);
   const [herLook, setHerLook] = useState<string | null>(null);
+  const [topic, setTopic] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const look = herLook ?? wornDateLook(wardrobe.data?.me);
   const firstName = (view.friends ?? []).find((friend) => friend.id === chosen[0])?.name ?? "";
   const ready = chosen.length > 0 && !!place;
@@ -331,30 +337,47 @@ function PlanHangout({
     setError(null);
     const where =
       place!.place === "story" && place!.storyPlace ? `story:${place!.storyPlace.name}` : String(place!.place);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const { chapter } = await otome.post<{ chapter: ChapterView }>(`${runPath(runKey)}/hangouts`, {
-        friends: chosen,
-        place: where,
-        herLook: look || BASE_LOOK,
-        ...(invite ? { invite: { message: invite.message } } : {}),
-      });
+      const { chapter } = await otome.post<{ chapter: ChapterView }>(
+        `${runPath(runKey)}/hangouts`,
+        {
+          friends: chosen,
+          place: where,
+          herLook: look || BASE_LOOK,
+          ...(invite ? { invite: { message: invite.message } } : {}),
+          ...(topic.trim() ? { topic: topic.trim() } : {}),
+        },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       void queryClient.invalidateQueries({ queryKey: hangoutsKey(runKey) });
       void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
       void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
       onPlanned(chapter.key);
     } catch (failure) {
+      if (controller.signal.aborted) return;
       setError(failure);
       setBusy(false);
     }
+  };
+  /** Close while a plan is being written stops it (as Date Night's Cancel does): nothing is planned or shown. */
+  const close = () => {
+    if (busy) {
+      abortRef.current?.abort();
+      void cancelStoryWork(otome.post, runKey);
+    }
+    onClose();
   };
   return (
     <Dialog
       wide
       title={t("ui.otomeForge.hangouts.planTitle")}
-      onClose={busy ? undefined : onClose}
+      onClose={close}
       actions={
         <>
-          <button type="button" className="of-button of-button--quiet of-glass" onClick={onClose} disabled={busy}>
+          <button type="button" className="of-button of-button--quiet of-glass" onClick={close}>
             {t("ui.otomeForge.home.close")}
           </button>
           <button
@@ -422,6 +445,15 @@ function PlanHangout({
             hisLook={BASE_LOOK}
             herLook={look}
             onChange={(next) => setHerLook(next.herLook)}
+          />
+          <TextField
+            label={t("ui.otomeForge.hangouts.topic")}
+            value={topic}
+            onChange={setTopic}
+            max={HANGOUT_TOPIC_MAX}
+            rows={3}
+            hint={t("ui.otomeForge.hangouts.topicHint")}
+            counter
           />
           <p className="of-hint">
             <ImageIcon size={14} strokeWidth={2} aria-hidden="true" /> {t("ui.otomeForge.hangouts.mementoNote")}
