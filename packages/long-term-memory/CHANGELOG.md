@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.9 — 2026-11-27
 
 - If you extract the same text again after saving memories from it, a read that would create new memories now waits in Review instead of applying by itself, so you can catch reworded copies.
 

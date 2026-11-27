@@ -428,6 +428,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.9",
+          "date": "2026-11-27",
+          "notes": "- If you extract the same text again after saving memories from it, a read that would create new memories now waits in Review instead of applying by itself, so you can catch reworded copies.",
+          "highlight": false
+        },
+        {
           "version": "1.6.8",
           "date": "2026-11-27",
           "notes": "- A branch's chat summary no longer shows as new in Sources when another chat of its conversation already saved memories from the same messages. It shows under Imported with \"Already saved from\" and a link to that memory, and Import all new and auto-import skip it.",
@@ -539,12 +545,6 @@
           "version": "1.5.20",
           "date": "2026-10-31",
           "notes": "- Memory Settings → Extraction gains \"Use Advanced Memory recaps\". A chat that uses Advanced Memory is imported from its scene recaps instead of its summaries and messages, without an AI call, and with \"Import new chat sources automatically\" on this happens while you chat. A recap reaches only the characters who were in that scene, and a chat does not recall memories made from its own recaps. Import → Chats gains \"Backfill Advanced Memory\" for older recaps: it reads them in batches and skips recaps an earlier chat import already covers. This needs a Marinara version with Capability API 1.391; on older versions nothing changes.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.19",
-          "date": "2026-10-31",
-          "notes": "- Memory Settings → Extraction gains \"Accept safe changes automatically\", which accepts low-risk proposed memories after an import or extraction and now applies the safe part of a draft that also holds a rewrite.\n- Memory Settings → Extraction gains \"Import new chat sources automatically\", which imports a chat's new summaries and finished message stretches in the background while you chat.",
           "highlight": false
         }
       ]
