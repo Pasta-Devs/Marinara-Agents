@@ -2764,6 +2764,68 @@ async function main() {
     [{ target: `timeline_${nearLimitEvent.response.units[0]?.subjectId}`, relation: "caused_by" }],
     "same-response links must follow a bounded provider target",
   );
+  const rawSubjectId = "Damo Winter/Let It Go Mashup";
+  const malformedSubject = parseEvidenceUnitPayload(
+    {
+      summary: "Provider subject ids that are not snake_case",
+      units: [
+        unit(chat, {
+          bucket: "timeline_event",
+          subjectId: rawSubjectId,
+          sectionKey: "event",
+          text: "Mara learned the observatory script.",
+        }),
+        unit(chat, {
+          bucket: "character_fact",
+          subjectId: "mara",
+          sectionKey: "facts",
+          text: "Mara learned the observatory script.",
+          links: [
+            { target: rawSubjectId, relation: "caused_by" },
+            { target: "timeline_damo_winter_let_it_go_mashup", relation: "triggered_by" },
+          ],
+        }),
+        unit(chat, {
+          bucket: "world_fact",
+          subjectId: "!!!",
+          sectionKey: "facts",
+          text: "The observatory gate stays locked.",
+        }),
+        unit(chat, {
+          bucket: "world_fact",
+          subjectId: "Прогулка at park", // cleanup would leave only "at_park", which another subject could share
+          sectionKey: "facts",
+          text: "The observatory gate stays locked.",
+        }),
+        unit(chat, {
+          bucket: "world_fact",
+          subjectId: "Mara’s Gate",
+          sectionKey: "facts",
+          text: "The observatory gate stays locked.",
+        }),
+      ],
+    },
+    sourceHash,
+  );
+  assert.equal(malformedSubject.response.units[0]?.subjectId, "damo_winter_let_it_go_mashup");
+  assert.equal(
+    malformedSubject.response.units[2]?.subjectId,
+    "mara_s_gate",
+    "non-ASCII punctuation must not block cleanup",
+  );
+  assert.deepEqual(
+    malformedSubject.response.units[1]?.links,
+    [
+      { target: "timeline_damo_winter_let_it_go_mashup", relation: "caused_by" },
+      { target: "timeline_damo_winter_let_it_go_mashup", relation: "triggered_by" },
+    ],
+    "same-response links must follow a normalized provider subject id",
+  );
+  assert.deepEqual(
+    malformedSubject.droppedCandidates.map((candidate) => candidate.validatorCode),
+    ["invalid_evidence_unit_format", "invalid_evidence_unit_format"],
+    "a subject id with nothing to normalize, or with letters cleanup would remove, must still be dropped",
+  );
   const sharedLongSubject = `shared_${"a".repeat(115)}`;
   const sharedLongSubjectResponse = parseEvidenceUnitPayload(
     {
