@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.9 — 2026-11-27
 
 - Extraction no longer drops a memory because the model wrote its subject ID with capitals, spaces or punctuation. It cleans up the ID and keeps the memory.
 
