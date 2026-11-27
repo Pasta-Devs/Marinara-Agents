@@ -718,10 +718,12 @@ function normalizedEvidenceUnitRecord(
   const maxSubjectLength = prefix
     ? 120 - (rawSubject.startsWith(`${prefix}_`) ? 0 : prefix.length + 1) - (prefix === "timeline" ? 11 : 0)
     : 120;
+  // Cleanup removes non-ASCII letters and digits, which could give two different subjects the same id.
+  const losesCharacters = typeof subjectId === "string" && /(?![A-Za-z0-9])[\p{L}\p{N}]/u.test(subjectId);
   const boundedSubject =
     rawSubject.length > maxSubjectLength
       ? `${rawSubject.slice(0, maxSubjectLength - 11).replace(/_+$/g, "")}_${stableJsonHash(rawSubject).slice(0, 10)}`
-      : subjectId;
+      : (!losesCharacters && rawSubject) || subjectId; // an unusable id stays as written, so the validator drops it
   return {
     ...normalizedRecord,
     ...(boundedSubject !== record.subjectId ? { subjectId: boundedSubject } : {}),
