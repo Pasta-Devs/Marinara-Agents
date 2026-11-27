@@ -803,11 +803,15 @@ export default function SourcesWorkspace({
   // The ticks belong to the source being browsed, not to where the memories will go: choosing a destination
   // must not drop them.
   const selectionKey = `${source}:${sourceTargetId}:${modeFilter}`;
-  const selectedIds = new Set(selections[selectionKey] ?? []);
-  const importedSelectionKey = `${selectionKey}:imported`;
-  const selectedImportedIds = new Set(selections[importedSelectionKey] ?? []);
   const retryableIds = importResult ? retryableSourceIds(importResult) : [];
   const retryableIdSet = new Set(retryableIds);
+  // A tick kept from before a reload must not import a row that has since become covered (#2498).
+  const coveredIdSet = new Set(
+    rows.filter((row) => row.status === "covered" && !retryableIdSet.has(row.sourceId)).map((row) => row.sourceId),
+  );
+  const selectedIds = new Set((selections[selectionKey] ?? []).filter((id) => !coveredIdSet.has(id)));
+  const importedSelectionKey = `${selectionKey}:imported`;
+  const selectedImportedIds = new Set((selections[importedSelectionKey] ?? []).filter((id) => !coveredIdSet.has(id)));
   const selectableRows = rows.filter((row) => row.status === "pending" || retryableIdSet.has(row.sourceId));
   const lorebookImportSelectionKey = `${selectionKey}:lorebook-import`;
   const lorebookRefreshSelectionKey = `${selectionKey}:lorebook-refresh`;

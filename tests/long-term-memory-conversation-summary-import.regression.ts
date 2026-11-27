@@ -839,17 +839,14 @@ async function main() {
         } as never);
         // createNote leaves the fingerprint out; extraction sets it on an existing note.
         await storage.updateNote(id, {
-          extractionFingerprint: {
-            version: 3,
-            sourceHash: "a".repeat(64),
-            provenance,
-            scope,
-            modes: ["roleplay"],
+          extractionFingerprint: extractionFingerprintForLtmSourceNote((await storage.getNote(id))!, {
             extractionMode: "roleplay",
-          },
+          }),
         } as never);
         return id;
       };
+      const { extractionFingerprintForLtmSourceNote } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
       const coverEarlyPiece = await coverPiece("1-20"),
         coverLatePiece = await coverPiece("21-41");
       const coverPreview = async () =>
@@ -890,6 +887,15 @@ async function main() {
       messagesByChat.delete(coverBranch.id);
       assert.equal(coverSample(await coverPreview(), "cover-early")?.status, "pending");
       messagesByChat.set(coverBranch.id, coverBranchMessages);
+
+      // A fingerprint from an earlier text or range does not cover: those messages may not have been extracted.
+      const coverLateFingerprint = (await storage.getNote(coverLatePiece))!.extractionFingerprint!;
+      await storage.updateNote(coverLatePiece, {
+        extractionFingerprint: { ...coverLateFingerprint, sourceHash: "a".repeat(64) },
+      } as never);
+      assert.equal(coverSample(await coverPreview(), "cover-early")?.status, "pending");
+      await storage.updateNote(coverLatePiece, { extractionFingerprint: coverLateFingerprint } as never);
+      assert.equal(coverSample(await coverPreview(), "cover-early")?.status, "covered");
 
       // With only 1-20 saved, messages 21-28 are not covered.
       await storage.archiveSourceNoteWithDerived(coverLatePiece);

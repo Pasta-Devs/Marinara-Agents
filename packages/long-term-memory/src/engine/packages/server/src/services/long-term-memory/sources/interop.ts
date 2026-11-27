@@ -1574,8 +1574,14 @@ async function coveredSummaries(rows: Candidate[], matchExisting: Awaited<Return
   );
   if (!open.length) return covered;
   const notesByChat = new Map<string, LtmNote[]>();
+  // A fingerprint left from an earlier text or range does not count: those messages may never have been extracted.
   for (const { note, provenance } of matchExisting.sourceNotes)
-    if (note.status === "active" && note.extractionFingerprint && ltmSourceMessageRange(note))
+    if (
+      note.status === "active" &&
+      note.extractionFingerprint &&
+      isLtmSourceExtractionFingerprintCurrent(note, note.extractionFingerprint) &&
+      ltmSourceMessageRange(note)
+    )
       notesByChat.set(provenance.sourceId, [...(notesByChat.get(provenance.sourceId) ?? []), note]);
   if (!notesByChat.size) return covered;
   const persistence = getPackagePersistence(),
