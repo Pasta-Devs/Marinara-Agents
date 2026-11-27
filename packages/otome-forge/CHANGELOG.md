@@ -1,5 +1,13 @@
 # Otome Hearth release notes
 
+## 0.49.0 — 2026-11-27
+
+- In the story, the love interests and your protagonist change into looks they own when a scene calls for it, and their picture changes too. Each chapter offers everyone's everyday look plus up to three 3★, two 4★ and one 5★ painted looks, picked at random. A chapter starts in what everyone wore when the previous one ended.
+- **Wear at home** now changes only Home. The story no longer dresses anyone in what you pick there.
+- On a date, the love interest chooses their own look in its first scene. The look you pick for yourself on a date or a hangout is for that outing only, and Home keeps its own.
+- A scene's key image, a date's keepsake and a hangout's memento show everyone in what they wear in that scene.
+- The first time a scene puts a love interest in a look, that look gets its five faces, as **Wear at home** does.
+
 ## 0.48.0 — 2026-11-27
 
 - **Album → Hangouts** shows rounded cards, as **Album → Dates** does.
