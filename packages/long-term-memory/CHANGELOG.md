@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- If the connection doesn't serve your extraction model, an import now tells you to check the model name. After that error it starts no new pieces and leaves them for a later run, though pieces already being read still finish. It stops the same way when a login or quota error arrives with an error code Long-Term Memory recognizes.
+
 ## 1.6.10 — 2026-11-27
 
 - If you extract a source again after saving memories from it, and its text hasn't changed, a read that would create new memories now waits in Review so you can catch reworded copies. This lasts while the earlier draft is kept. By default, a finished draft is removed after 30 days.
