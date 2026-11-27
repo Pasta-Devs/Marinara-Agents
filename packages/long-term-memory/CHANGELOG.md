@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.8 — 2026-11-27
 
 - A branch's chat summary no longer shows as new in Sources when another chat of its conversation already saved memories from the same messages. It shows under Imported with "Already saved from" and a link to that memory, and Import all new and auto-import skip it.
 
