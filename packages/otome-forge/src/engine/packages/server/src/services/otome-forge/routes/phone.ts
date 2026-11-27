@@ -21,6 +21,11 @@
 //      messages' heartbeat (S/phone/daily.ts), the group chat's squabbles' (S/phone/group.ts groupDue) and the date
 //      invitations' (#2424, S/phone/invite.ts inviteDue), with the thread the player has open, if any
 // A send's result names (#2424, `held`) those whose grievance with her the reply's hurt opened (S/phone/chat.ts).
+// #2504: his selfie in his own thread (S/phone/selfie.ts), as a hangout's memento (S/routes/friends.ts):
+// POST /runs/:run/phone/:li/messages/:id/selfie/prompt {prompt?, negativePrompt?} → the prompt its paint would send
+// POST /runs/:run/phone/:li/messages/:id/selfie {prompt?, negativePrompt?}        → {art}: paints it, or a Retry; a ready
+//      one as it is; 409 `busy` while it is painted, 503 `no-connection` without an image connection, 404 for a message
+//      with no selfie. A send's reply saved with one pending is painted in the background once the send answers.
 // A thread has one send or close in flight at a time: another is a 409 `busy`. Writing his reply may fail with 503
 // `no-connection`, 422 `declined` or 502 `bad-format`; the player's message stays saved and the history page offers
 // Retry. 0.47.1: a close answers once it is accepted, and its memory is written in the background (S/phone/memory.ts):
@@ -31,7 +36,17 @@ import { z } from "zod";
 import type { PhoneCloseView } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { GROUP_THREAD } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
-import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
+import {
+  OtomeForgeError,
+  debugModeOf,
+  liParam,
+  param,
+  parseBody,
+  reviewModeOf,
+  runParam,
+  type OtomeRequest,
+  type RegisterRoutes,
+} from "../http.js";
 import { field } from "../schemas/common.js";
 import { MESSAGE_ID, markSeen, phoneList, sendMessage, threadPage } from "../phone/chat.js";
 import { noteOpenThread, phoneDue } from "../phone/daily.js";
@@ -50,6 +65,7 @@ import { inviteDue } from "../phone/invite.js";
 import { closeAndRemember, liRemembering, resumeClose } from "../phone/memory.js";
 import { answerInvite } from "../phone/upset.js";
 import { MESSAGE_TEXT_MAX, NOTE_QUOTE_MAX } from "../phone/replies.js";
+import { paintSelfie, paintSelfies, selfiePromptFor, selfieView } from "../phone/selfie.js";
 
 const SendBody = z.object({
   text: z.string().max(MESSAGE_TEXT_MAX).optional(),
@@ -65,6 +81,17 @@ const SeenBody = z.object({ last: z.string().max(60).optional() });
 const DueBody = z.object({ open: z.string().max(80).nullable().optional() });
 const NoFields = z.object({});
 const InviteBody = z.object({ message: z.string().min(1).max(60), accept: z.boolean() });
+const SelfieBody = z.object({
+  prompt: z.string().max(4000).optional(),
+  negativePrompt: z.string().max(4000).optional(),
+});
+
+/** The `:id` param, a message id, or a 404. */
+function messageParam(request: OtomeRequest): string {
+  const id = param(request, "id");
+  if (typeof id !== "string" || !MESSAGE_ID.test(id)) throw new OtomeForgeError(404, "No such selfie.", "not-found");
+  return id;
+}
 
 export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
   const { handle } = deps;
@@ -143,7 +170,7 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
       // Only the open thread reads its pages: no daily message starts there until the next heartbeat says she left.
       noteOpenThread(runId, li);
       await resume(runId, li, page, debugModeOf(request));
-      return page;
+      return { ...page, messages: page.messages.map(selfieView(runId, li)) };
     }),
   );
 
@@ -177,7 +204,12 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
         throw new OtomeForgeError(400, "Invalid request: id: not a message id", "bad-request");
       }
       const { runId } = runParam(request);
-      return sendMessage(deps, runId, liParam(request), body, { debugMode: debugModeOf(request) });
+      const li = liParam(request);
+      const debugMode = debugModeOf(request);
+      const sent = await sendMessage(deps, runId, li, body, { debugMode, review: reviewModeOf(request) });
+      // #2504: his selfie saved pending, painted now in the background.
+      paintSelfies(deps, runId, li, sent.messages, debugMode);
+      return sent;
     }),
   );
 
@@ -197,6 +229,25 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       await markSeen(deps, runId, liParam(request), last);
       return {};
+    }),
+  );
+
+  router.post(
+    "/runs/:run/phone/:li/messages/:id/selfie/prompt",
+    handle(async (request) => {
+      const edited = parseBody(SelfieBody, request.body);
+      const { runId } = runParam(request);
+      return selfiePromptFor(deps, runId, liParam(request), messageParam(request), edited);
+    }),
+  );
+
+  router.post(
+    "/runs/:run/phone/:li/messages/:id/selfie",
+    handle(async (request) => {
+      const edited = parseBody(SelfieBody, request.body);
+      const { runId } = runParam(request);
+      const debugMode = debugModeOf(request);
+      return { art: await paintSelfie(deps, runId, liParam(request), messageParam(request), { ...edited, debugMode }) };
     }),
   );
 

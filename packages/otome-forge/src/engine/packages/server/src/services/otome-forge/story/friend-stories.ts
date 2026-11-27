@@ -5,8 +5,9 @@
 //                                      level reaches it, while no grievance of theirs stands. Level 5's is their
 //                                      finale; it also picks out a look for her (its `look`), her reward.
 // POST /runs/:run/friends/:id/mend   → their make-up story while their grievance stands and has had its space.
-// POST /runs/:run/hangouts {friends, place, herLook} → a hangout with any of her friends whose grievance does not
-//                                      stand: her look worn first, then three scenes planned.
+// POST /runs/:run/hangouts {friends, place, herLook, topic?} → a hangout with any of her friends whose grievance does
+//                                      not stand: her look worn first, then three scenes planned (#2502: around
+//                                      what she wants to talk about, when the player says).
 // Each is a `story-` chapter (SH/friends.ts keys) with `friendStory`, planned by friendPlanMessages through the run's
 // foreground queue (readOrGenerate): two taps plan once, and a chapter already planned is returned as it is. Its
 // nodes hold no love interest (cast []): the friends come through the story context (S/prompts.ts friendsBlock) and
@@ -289,7 +290,7 @@ export function hangoutCompany(run: RunDocuments, friends: readonly LiId[]) {
 export async function startHangout(
   deps: ChapterDeps,
   runId: string,
-  { friends, place }: { friends: LiId[]; place: string },
+  { friends, place, topic }: { friends: LiId[]; place: string; topic?: string },
   options: { debugMode: boolean; signal?: AbortSignal },
 ): Promise<Chapter> {
   const run = await readRun(deps.store, runId);
@@ -302,7 +303,7 @@ export async function startHangout(
     run,
     {
       key: hangoutKey(saved.length + 1),
-      planFor: { kind: "hangout", friends: coming, place },
+      planFor: { kind: "hangout", friends: coming, place, ...(topic ? { topic } : {}) },
       nodes: FRIEND_STORY_NODES.hangout,
       cast: [],
       story: { friendStory: { kind: "hangout", friends: company, ...(place ? { place } : {}) } },

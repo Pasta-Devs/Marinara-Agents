@@ -46,7 +46,9 @@ export type OtomeErrorCode =
   | "bad-format"
   | "no-connection"
   | "capacity"
-  | "no-embeddings";
+  | "no-embeddings"
+  /** #2503: the chapter's questions about the protagonist come first (POST .../chapters/:key/answers). */
+  | "needs-answer";
 
 export interface OtomeRunEntry {
   runKey: string;
@@ -701,6 +703,11 @@ export interface PhoneMessage {
   invite?: { status: PhoneInviteStatus; scene?: string; kind?: "date" | "hangout" };
   /** 0.34.0: his message drives the toys while he holds the remote (SH/haptics.ts); it loops until his next cue. */
   haptic?: HapticCue[];
+  /**
+   * #2504: the selfie he sent with this message ([selfie: …] in his own thread): what it shows (English, "" for a plain
+   * one), `explicit` when he sent it as [explicit selfie: …], and its picture once painted (S/phone/selfie.ts).
+   */
+  selfie?: { brief: string; explicit?: true; art?: Paint };
 }
 
 export type PhoneInviteStatus = "pending" | "accepted" | "declined" | "lapsed";
@@ -940,6 +947,12 @@ export interface LiState {
    * that arc is written). Never sent to the client.
    */
   hisSide: HisSideNote[];
+  /**
+   * #2504: what he wrote down to remember about the protagonist in his Messages thread ([note: …]), word for word,
+   * newest last, at most 3 (a new one replaces the oldest). Only prompts about him carry it (S/prompts.ts
+   * knowsAboutYou); never sent to the client. Absent: none.
+   */
+  notes?: Array<{ text: string; at: string }>;
 }
 
 /**
@@ -1207,6 +1220,12 @@ export interface Chapter {
    * from the client).
    */
   thoughts?: string;
+  /**
+   * #2503: a main chapter's questions about the protagonist from its plan, each with the node that first needs the
+   * answer. No scene of the chapter is written until the player has answered them, and each answer reaches only that
+   * node's scene.
+   */
+  questions?: Array<{ node: number; question: string; answer?: string; answeredAt?: string }>;
   /**
    * #2153: the Shop gift given in a birthday scene (`story-birthday-<li>-<year>`), spent when it was celebrated; its
    * affection is paid when the scene is read to its end (hidden from the client).

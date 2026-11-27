@@ -227,3 +227,11 @@ export const OWN_ANSWER_MAX = 280;
 export const RIDDLE_CHOICE = "riddle";
 export const RIDDLE_ANSWER_MAX = 40;
 export const RIDDLE_QUESTION_MAX = 200;
+
+/**
+ * #2503: a main chapter's plan may ask the player this many questions about the protagonist (Chapter.questions), each
+ * this long at most, answered in at most QUESTION_ANSWER_MAX characters before its first scene is written.
+ */
+export const QUESTIONS_MAX = 2;
+export const QUESTION_MAX = 300;
+export const QUESTION_ANSWER_MAX = 1000;

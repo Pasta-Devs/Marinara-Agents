@@ -14,12 +14,16 @@
 // the local midnight of the request's zone, a spent attempt never retried, a random met love interest who is not in
 // the open thread, not busy and not waiting on her message, written by P17 "first" in the background lane on the chat
 // connection (never the run's foreground queue), dropped when the thread changed meanwhile, and landing unread.
+// #2504: his [note: …] and [selfie: …] in his own thread only: taken out of his message, his notes kept on his state
+// (the newest three) and read after P17's cached part, and his selfie painted once, by itself or on Paint.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type {
   Beat,
   Chapter,
+  ImageSettings,
   PhoneMessage,
   PhoneThread,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
@@ -34,6 +38,7 @@ import {
   COMFORT_RULE,
   SUMMARY_WORDING,
   chatReplyMessages,
+  groupChatMessages,
   sharedState,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
@@ -97,15 +102,19 @@ import {
   normalizeBeat,
   normalizeChapter,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import { within, type FakeReply, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
+import { fakeImages, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
 import {
+  HE,
   KAI,
   KAVEH,
   MIR,
   SOL,
+  friendBible,
   json,
   saveStoryMemory,
   seedFriend,
@@ -160,7 +169,7 @@ function phoneRoutes(deps: RouteDeps, runKey: string) {
   return async (
     method: "GET" | "POST",
     path: string,
-    { li, body = {}, timeZone = "UTC" }: { li?: string; body?: object; timeZone?: string } = {},
+    { li, id, body = {}, timeZone = "UTC" }: { li?: string; id?: string; body?: object; timeZone?: string } = {},
   ) => {
     const handler = routes.get(`${method} ${path}`);
     assert.ok(handler, `${method} ${path} is registered`);
@@ -183,7 +192,7 @@ function phoneRoutes(deps: RouteDeps, runKey: string) {
         url: path,
         body: method === "POST" ? fields : undefined,
         query: method === "GET" ? fields : {},
-        params: { run: runKey, ...(li ? { li } : {}) },
+        params: { run: runKey, ...(li ? { li } : {}), ...(id ? { id } : {}) },
       },
       reply,
     );
@@ -199,9 +208,17 @@ async function phoneWorld(
     model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens">;
     /** 0.47.1: the background lane Close and remember runs in; off where a test builds its own (dailyWorld). */
     lane?: boolean;
+    /**
+     * #2504: an image connection with these settings, painted by a fake image client that counts paid calls (`paid`);
+     * `before` runs before each paid call answers.
+     */
+    art?: Partial<ImageSettings> & { before?: (call: PaidCall) => void | Promise<void> };
   } = {},
 ) {
   const t = await storyWorld({ runKey, replies: options.replies ?? phoneModel(), model: options.model ?? {} });
+  const { before, ...settings } = options.art ?? {};
+  const painter = options.art ? fakeImages(before ? { before } : {}) : undefined;
+  if (options.art) await setImages(t.store, t.runId, { connectionId: "conn-image", ...settings });
   let memory: OtomeMemory | undefined;
   if (options.withMemory) {
     memory = createOtomeMemory({
@@ -216,6 +233,16 @@ async function phoneWorld(
     handle: createHandle(t.runtime.logger),
     ...(memory ? { memory } : {}),
     ...(background ? { background } : {}),
+    // A free cut-out, as artWorld's, for the likeness a selfie sends.
+    ...(painter
+      ? {
+          images: painter.images,
+          cutouts: {
+            cutOut: async (url: string) => ({ url: `${url}.cut.png`, id: `cut-${url}` }),
+            deleteGalleryImage: async () => true,
+          },
+        }
+      : {}),
   };
   const thread = async (li: string): Promise<PhoneThread | null> =>
     t.store.readDoc(chatId(t.runId, li), normalizeThread);
@@ -230,7 +257,7 @@ async function phoneWorld(
     const accepted = await phone("POST", close, { li, timeZone });
     return { accepted, thread: await remembered(li) };
   };
-  return { ...t, deps, background, memory, thread, phone, remembered, closeAndWait };
+  return { ...t, deps, background, memory, thread, phone, remembered, closeAndWait, paid: painter?.paid ?? [] };
 }
 
 /** Holds the first model call until `release()` (`reached` resolves once it waits); later calls answer at once. */
@@ -1965,4 +1992,417 @@ test("a hurt is read only from a reply to her, and in the group chat for members
     { ref: "group/c-grp-0001", at: "2026-11-20T10:00:00.000Z", arc: 0 },
   ).state;
   assert.equal(sharedState(state.lis[MIR]!).grievances.length, 1);
+});
+
+// ── #2504: his notes and selfie in his own thread ──
+
+const selfie = "/runs/:run/phone/:li/messages/:id/selfie";
+/** His three earlier notes. */
+const OLD_NOTES = [1, 2, 3].map((n) => ({ text: `OLD-NOTE-${n}`, at: `2026-11-2${n}T10:00:00.000Z` }));
+const NOTES_LINE = (texts: string[]) =>
+  `What Kai wrote down to remember about the protagonist, word for word: ${texts.map((text) => JSON.stringify(text)).join("; ")}`;
+
+test("#2504: the parser takes his commands out in his own thread only: the newest three notes, one selfie, other brackets kept", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const raw = {
+    messages: [
+      { text: "[selfie: at the lamp room window, half a smile]" },
+      { text: "Wish you were here [Café Lumière] [SELFIE]" },
+      { text: `[note: a][note:   b  ][Note: c][note: d][note:   ]` },
+    ],
+  };
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, true, true), {
+    messages: [
+      { text: "", selfie: { brief: "at the lamp room window, half a smile" } },
+      { text: "Wish you were here [Café Lumière]" },
+    ],
+    // Four notes in one reply: a new note replaces the oldest, so the first goes.
+    notes: ["b", "c", "d"],
+  });
+  // A friend's thread, and every call before #2504, reads them as text, as before.
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, true), { messages: raw.messages });
+  // A note's words are kept as written, cut to 300 characters; a plain [selfie] shows nothing in particular.
+  const long = "x".repeat(400);
+  assert.deepEqual(
+    normalizeChatReply({ messages: [{ text: `Hi [note: ${long}] [selfie]` }] }, names, [], false, false, true, true),
+    { messages: [{ text: "Hi", selfie: { brief: "" } }], notes: ["x".repeat(300)] },
+  );
+  // An emoji is one character but two in a JS string: a note cut to 300 of them is kept on his state all the same.
+  const sung = normalizeChatReply(
+    { messages: [{ text: `Hi [note: ${"🎵".repeat(400)}]` }] },
+    names,
+    [],
+    false,
+    false,
+    true,
+    true,
+  ) as { notes: string[] };
+  assert.deepEqual(sung.notes, ["🎵".repeat(300)]);
+  const at = "2026-11-27T10:00:00.000Z";
+  const kept = normalizeState({ lis: { [KAI]: { ...defaultLiState(), notes: [{ text: sung.notes[0]!, at }] } } });
+  assert.deepEqual(kept.lis[KAI]!.notes, [{ text: "🎵".repeat(300), at }]);
+  // [explicit selfie: …] is a selfie too, marked explicit.
+  assert.deepEqual(
+    normalizeChatReply(
+      { messages: [{ text: "[Explicit  Selfie: on the sheets]" }] },
+      names,
+      [],
+      false,
+      false,
+      true,
+      true,
+    ),
+    { messages: [{ text: "", selfie: { brief: "on the sheets", explicit: true } }] },
+  );
+  // A reply of notes alone has nothing for her: the repair turn asks for a message too.
+  assert.equal(
+    normalizeChatReply({ messages: [{ text: "[note: likes rain]" }] }, names, [], false, false, true, true),
+    "the reply had no message from Kai: a [note] is never shown, so write a message to them too",
+  );
+  assert.equal(normalizeChatReply({ messages: [{ text: "  " }] }, names), "the reply had no message from Kai");
+  // The group chat reads them as text too.
+  assert.deepEqual(
+    normalizeGroupReply(
+      { messages: [{ speaker: "Kai", text: "Hm. [note: a] [selfie]" }] },
+      { player: "Ines", members: [{ id: KAI, name: "Kai", stickers: [] }], yours: [] },
+    ),
+    { messages: [{ li: KAI, text: "Hm. [note: a] [selfie]" }] },
+  );
+});
+
+test("#2504: a command's words may hold brackets and line breaks, all of it hidden; one never closed takes nothing", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const listed = [{ id: "li-kai-ab12:smug", name: "kai_smug", about: "smug" }];
+  const read = (...texts: string[]) =>
+    normalizeChatReply({ messages: texts.map((text) => ({ text })) }, names, listed, false, false, true, true);
+  assert.deepEqual(
+    read(
+      "Okay [note: prefers [green tea]]",
+      "Sleep. [NOTE: hums\nwhen nervous] [selfie: by the [old] lamp] [kai_smug]",
+    ),
+    {
+      messages: [
+        { text: "Okay" },
+        { text: "Sleep.", sticker: "li-kai-ab12:smug", selfie: { brief: "by the [old] lamp" } },
+      ],
+      notes: ["prefers [green tea]", "hums\nwhen nervous"],
+    },
+  );
+  // One never closed stays as text: what follows it in its message, and the next message, are read as ever.
+  assert.deepEqual(read("[note: likes [rain] and [Café Lumière] [kai_smug] [selfie]", "Night. [note: rain]"), {
+    messages: [
+      { text: "[note: likes [rain] and [Café Lumière]", sticker: "li-kai-ab12:smug", selfie: { brief: "" } },
+      { text: "Night." },
+    ],
+    notes: ["rain"],
+  });
+});
+
+test("#2504: his [note] leaves his message and is kept word for word, the newest three, read after P17's cached part", async () => {
+  const reply = {
+    messages: [
+      { text: "[note: She hates the rain but loves the sound of it.]" },
+      { text: "Noted. [note:   Takes her tea with honey.  ] Go to sleep." },
+    ],
+  };
+  const t = await phoneWorld("r-notes1-aaaaaa", { replies: phoneModel(reply) });
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, notes: OLD_NOTES } },
+  }));
+  const sent = await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  // The message of a note alone goes; the other keeps its words around it.
+  assert.deepEqual(
+    (await t.thread(KAI))!.messages.map((message) => [message.who, message.text]),
+    [
+      ["player", "Are you awake?"],
+      ["li", "Noted. Go to sleep."],
+    ],
+  );
+  const kept = ["OLD-NOTE-3", "She hates the rain but loves the sound of it.", "Takes her tea with honey."];
+  assert.deepEqual(
+    (await t.state()).lis[KAI]!.notes!.map((note) => note.text),
+    kept,
+    "a new note replaces the oldest",
+  );
+  const [first] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.match(
+    first!.messages[0]!.content,
+    /- To remember something about Ines word for word, write \[note: what to remember\] in a message; Ines never sees it\. You keep 3 notes, and a new one replaces the oldest\./,
+  );
+  assert.doesNotMatch(first!.messages[0]!.content, /\[selfie/, "no selfie without an image connection");
+  // The next reply reads his notes word for word, after the cached part (they change from reply to reply).
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Night." } })).status, 200);
+  const [, second] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.ok(second!.messages[2]!.content.startsWith(`${NOTES_LINE(kept)}\n\nTHE THREAD NOW`));
+  assert.equal(second!.messages[0]!.content, first!.messages[0]!.content, "the same instructions");
+  assert.equal(second!.messages[1]!.content, first!.messages[1]!.content, "the cached part never holds them");
+});
+
+test("#2504: a friend's thread and the group chat neither offer nor keep his commands", async () => {
+  const t = await phoneWorld("r-notes2-aaaaaa", {
+    replies: phoneModel({ messages: [{ text: "[note: She owes me lunch.] Lunch? [selfie]" }] }),
+    art: {},
+  });
+  await seedFriend(t);
+  const sent = await t.phone("POST", send, { li: KAVEH, body: { text: "Hi!" } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  const [call] = t.calls.filter((entry) => isReplyPrompt(entry.messages));
+  assert.doesNotMatch(system(call!.messages), /\[note:|\[selfie/);
+  const theirs = (await t.thread(KAVEH))!.messages.at(-1)!;
+  assert.deepEqual([theirs.text, theirs.selfie], ["[note: She owes me lunch.] Lunch? [selfie]", undefined]);
+  const state = await t.state();
+  assert.equal(state.lis[KAVEH], undefined);
+  assert.equal(JSON.stringify(state).includes("She owes me lunch"), false, "nothing kept");
+  assert.equal(t.paid.length, 0);
+  // P17g offers neither, and reads no one's notes.
+  const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
+  const kai = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  const group = groupChatMessages({
+    world,
+    player: { name: "Ines", pronouns: { subject: "she", object: "her", possessive: "her" }, traits: [], about: "" },
+    members: [{ unit: kai, liState: sharedState({ ...defaultLiState(), notes: OLD_NOTES }), stickers: [] }],
+    yours: [],
+    tail: [],
+    memories: [],
+    story: "",
+  });
+  const text = group.map((message) => message.content).join("\n");
+  assert.doesNotMatch(text, /\[note:|\[selfie|OLD-NOTE|wrote down to remember/);
+});
+
+test("#2504: P17 offers [selfie] only in his own thread with an image connection for scene art", async () => {
+  const t = await phoneWorld("r-selfie0-aaaaaa");
+  const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
+  const unit = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  const input = {
+    world,
+    player: { name: "Ines", pronouns: { subject: "she", object: "her", possessive: "her" }, traits: [], about: "" },
+    unit,
+    liState: (await t.state()).lis[KAI]!,
+    tail: [],
+    memories: [],
+    story: "",
+  };
+  const rule =
+    "- To send Ines a photo of yourself, write [selfie: what the photo shows, in English] in a message, rarely, when you would.";
+  const withImages = (images: Partial<ImageSettings>) =>
+    chatReplyMessages({ ...input, world: { ...world, images: { ...world.images, ...images } } })[0]!.content;
+  assert.ok(!withImages({}).includes(rule), "no image connection");
+  assert.ok(withImages({ connectionId: "conn-image" }).includes(rule));
+  assert.ok(withImages({ connectionId: "conn-image", sceneConnectionId: "conn-scene" }).includes(rule));
+  // Without notes, P17 is as it was: the same bytes with an empty list.
+  assert.deepEqual(chatReplyMessages({ ...input, liState: { ...input.liState, notes: [] } }), chatReplyMessages(input));
+  // Explicit Heat with haptics on: without scene art his note line runs straight into the haptics rule, no blank line.
+  const explicit = {
+    ...world,
+    content: { ...world.content, heat: "explicit" as const },
+    audio: { ...world.audio, haptics: true },
+  };
+  const instructions = (images: Partial<ImageSettings>) =>
+    chatReplyMessages({ ...input, world: { ...explicit, images: { ...world.images, ...images } } })[0]!.content;
+  assert.ok(instructions({}).includes("a new one replaces the oldest.\n- The protagonist may hand you the remote"));
+  // With the Explicit rating too, a selfie may be explicit, as a story CG may; at Suggestive, only the plain one.
+  const explicitRule = `${rule.slice(0, -1)}; for one that shows nudity or sex, write [explicit selfie: …] instead, in plain explicit words.`;
+  assert.ok(instructions({ connectionId: "conn-image", rating: "explicit" }).includes(explicitRule));
+  assert.ok(instructions({ connectionId: "conn-image", rating: "suggestive" }).includes(rule));
+  assert.ok(
+    !withImages({ connectionId: "conn-image", rating: "explicit" }).includes("[explicit selfie"),
+    "Heat decides",
+  );
+});
+
+/** A friend's P17 with one of her stickers and haptics on, from fixed documents. */
+function friendChatPrompt() {
+  return chatReplyMessages({
+    world: normalizeWorld({
+      setting: "A harbour city.",
+      language: "English",
+      content: { heat: "explicit" },
+      audio: { haptics: true },
+    }),
+    player: normalizePlayer({ name: "Ines" }),
+    unit: { id: KAVEH, name: "Kaveh", pronouns: HE, friend: friendBible() } as never,
+    liState: defaultLiState(),
+    tail: [],
+    memories: [],
+    story: "",
+    stickers: { his: [], yours: [{ id: "s1", name: "Pout", about: "a pout" }], name: () => null },
+    friend: { bible: friendBible(), level: 2, lis: [{ id: KAI, name: "Kai" }] },
+  });
+}
+
+/** That prompt on staging before #2504 (2026-11-27): a friend's thread never offers his commands. */
+const FRIEND_CHAT_BEFORE = "d78ec62c391883a9";
+
+test("#2504: a friend's P17 is byte for byte as it was before his commands", () => {
+  const digest = createHash("sha256").update(JSON.stringify(friendChatPrompt())).digest("hex").slice(0, 16);
+  assert.equal(digest, FRIEND_CHAT_BEFORE);
+});
+
+test("#2504: with Ask before painting off, his selfie paints right after his reply, once, as a picture of him alone", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const reply = {
+    messages: [
+      { text: "Look. [selfie: at the lamp room window, the harbour lights behind him]" },
+      { text: "[selfie]" },
+    ],
+  };
+  const t = await phoneWorld("r-selfie1-aaaaaa", { replies: phoneModel(reply), art: { before: () => held } });
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: "/api/global-gallery/file/kai.png",
+  }));
+  const sent = await t.phone("POST", send, { li: KAI, body: { text: "Show me." } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  const his = (sent.body.messages as PhoneMessage[]).filter((message) => message.who === "li");
+  // One selfie a reply: the second message held only another one, so it goes.
+  assert.deepEqual(
+    his.map((message) => [message.text, message.selfie?.brief, message.selfie?.art?.state]),
+    [["Look.", "at the lamp room window, the harbour lights behind him", "pending"]],
+  );
+  const id = his[0]!.id;
+  // While it paints the thread says so, and another tap is busy.
+  await until(() => t.paid.length === 1, "the paid call");
+  const painting = await t.phone("GET", page, { li: KAI });
+  assert.equal((painting.body.messages as PhoneMessage[]).at(-1)!.selfie?.art?.state, "pending");
+  const busy = await t.phone("POST", selfie, { li: KAI, id });
+  assert.deepEqual([busy.status, busy.body.code], [409, "busy"]);
+  release();
+  await until(async () => (await t.thread(KAI))!.messages.at(-1)!.selfie?.art?.state === "ready", "the selfie");
+  const { method, request } = t.paid[0]!;
+  assert.equal(method, "generateBannerArt");
+  assert.equal(request.connectionId, "conn-image");
+  assert.deepEqual([request.width, request.height], [832, 1216], "a portrait");
+  assert.match(
+    request.prompt,
+    /A selfie Kai took to send in a message: at the lamp room window, the harbour lights behind him\./,
+  );
+  assert.match(request.prompt, /one person, selfie/);
+  assert.match(request.prompt, /Draw exactly one person, once/);
+  assert.doesNotMatch(request.prompt, /Ines/, "him alone");
+  assert.match(request.negativePrompt, /extra people/);
+  assert.equal(request.debugMode, true);
+  assert.deepEqual(
+    request.units?.map((unit) => (unit as { avatarPath?: string }).avatarPath),
+    ["/api/global-gallery/file/kai.png.cut.png"],
+    "his likeness",
+  );
+  const art = (await t.thread(KAI))!.messages.at(-1)!.selfie!.art!;
+  assert.deepEqual([art.url, art.ref], ["/api/global-gallery/file/img1.png", "global-gallery:img1"]);
+  // A ready one is returned as it is, and nothing more is paid; the thread shows it.
+  const again = await t.phone("POST", selfie, { li: KAI, id });
+  assert.deepEqual([again.status, again.body.art.state, t.paid.length], [200, "ready", 1]);
+  assert.equal((await t.phone("GET", page, { li: KAI })).body.messages.at(-1).selfie.art.url, art.url);
+  // His next reply reads the selfie he sent.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Cute." } })).status, 200);
+  const last = t.calls.filter((call) => isReplyPrompt(call.messages)).at(-1)!;
+  assert.ok(
+    last.messages[2]!.content.includes("Kai: Look. [selfie: at the lamp room window, the harbour lights behind him]"),
+  );
+});
+
+test("#2504: with Ask before painting on, or prompt review, his selfie waits for Paint, its prompt reviewed first", async () => {
+  const reply = { messages: [{ text: "[selfie: grinning on the pier]" }] };
+  const t = await phoneWorld("r-selfie2-aaaaaa", { replies: phoneModel(reply), art: { ask: true } });
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Where are you?" } })).status, 200);
+  await tick();
+  const message = (await t.thread(KAI))!.messages.at(-1)!;
+  assert.deepEqual([message.text, message.selfie], ["", { brief: "grinning on the pier" }]);
+  assert.equal(t.paid.length, 0, "nothing painted by itself");
+  const prompt = await t.phone("POST", `${selfie}/prompt`, { li: KAI, id: message.id });
+  assert.equal(prompt.status, 200, JSON.stringify(prompt.body));
+  assert.match(prompt.body.prompt, /A selfie Kai took to send in a message: grinning on the pier\./);
+  assert.equal(t.paid.length, 0, "the review pays nothing");
+  const painted = await t.phone("POST", selfie, {
+    li: KAI,
+    id: message.id,
+    body: { prompt: `${prompt.body.prompt} EDITED-WORDS` },
+  });
+  assert.deepEqual([painted.status, painted.body.art.state], [200, "ready"]);
+  assert.equal(t.paid.length, 1);
+  assert.match(t.paid[0]!.request.prompt, /EDITED-WORDS/);
+  // Her message has no selfie, and an unknown id names none.
+  const hers = (await t.thread(KAI))!.messages.find((entry) => entry.who === "player")!;
+  assert.equal((await t.phone("POST", selfie, { li: KAI, id: hers.id })).status, 404);
+  assert.equal((await t.phone("POST", selfie, { li: KAI, id: "NOT AN ID" })).status, 404);
+
+  // Ask before painting off, but the player reviews image prompts: it waits for Paint too.
+  const u = await phoneWorld("r-selfie3-aaaaaa", { replies: phoneModel(reply), art: {} });
+  const reviewed = await u.phone("POST", send, { li: KAI, body: { text: "Where?", reviewImagePrompts: true } });
+  assert.equal(reviewed.status, 200);
+  await tick();
+  assert.deepEqual((await u.thread(KAI))!.messages.at(-1)!.selfie, { brief: "grinning on the pier" });
+  assert.equal(u.paid.length, 0);
+  // A paint a restart left pending reads as stopped, with Retry.
+  await u.store.mutateDoc(chatTarget(u.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    messages: thread.messages.map((entry) =>
+      entry.selfie
+        ? { ...entry, selfie: { ...entry.selfie, art: { state: "pending" as const, at: "2026-11-27T10:00:00.000Z" } } }
+        : entry,
+    ),
+  }));
+  assert.equal((await u.phone("GET", page, { li: KAI })).body.messages.at(-1).selfie.art.state, "stopped");
+
+  // Without an image connection a selfie cannot be painted.
+  const v = await phoneWorld("r-selfie4-aaaaaa", { replies: phoneModel(reply) });
+  assert.equal((await v.phone("POST", send, { li: KAI, body: { text: "Where?" } })).status, 200);
+  const unpainted = (await v.thread(KAI))!.messages.at(-1)!;
+  assert.deepEqual(unpainted.selfie, { brief: "grinning on the pier" });
+  const refused = await v.phone("POST", selfie, { li: KAI, id: unpainted.id });
+  assert.deepEqual([refused.status, refused.body.code], [503, "no-connection"]);
+});
+
+test("#2504: under Explicit Heat and the Explicit rating his [explicit selfie: …] paints explicit; the toggles cap it", async () => {
+  // His first reply sends an explicit selfie, and every later one a plain selfie.
+  const replies = [
+    phoneModel({
+      messages: [{ text: "Don't show anyone. [explicit selfie: lying back on the sheets, nothing on]" }],
+    })[0]!,
+    ...phoneModel({ messages: [{ text: "[selfie: on the pier]" }] }),
+  ];
+  const t = await phoneWorld("r-selfie5-aaaaaa", { replies, art: { ask: true } });
+  const toggles = (heat: "explicit" | "fade", rating: "explicit" | "suggestive") =>
+    t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      content: { ...world.content, heat },
+      images: { ...world.images, rating },
+    }));
+  await toggles("explicit", "explicit");
+  for (const text of ["Show me.", "And now?"]) {
+    assert.equal((await t.phone("POST", send, { li: KAI, body: { text } })).status, 200);
+  }
+  const [bold, calm] = (await t.thread(KAI))!.messages.filter((message) => message.selfie);
+  assert.deepEqual(
+    [bold!.text, bold!.selfie],
+    ["Don't show anyone.", { brief: "lying back on the sheets, nothing on", explicit: true }],
+  );
+  assert.deepEqual(calm!.selfie, { brief: "on the pier" });
+  const negative = async (id: string) => {
+    const prompt = await t.phone("POST", `${selfie}/prompt`, { li: KAI, id });
+    assert.equal(prompt.status, 200, JSON.stringify(prompt.body));
+    return prompt.body.negativePrompt as string;
+  };
+  // Painted as a story CG of an explicit scene: uncensored, and still only adults.
+  const explicitNegative = await negative(bold!.id);
+  assert.doesNotMatch(explicitNegative, /explicit sexual activity/);
+  assert.match(explicitNegative, /censored/);
+  assert.match(explicitNegative, /child, childlike, minor/);
+  // A plain selfie stays at most Suggestive, and so does his explicit one once either toggle is lowered.
+  assert.match(await negative(calm!.id), /nudity, explicit sexual activity/);
+  await toggles("explicit", "suggestive");
+  assert.match(await negative(bold!.id), /nudity, explicit sexual activity/);
+  await toggles("fade", "explicit");
+  assert.match(await negative(bold!.id), /nudity, explicit sexual activity/);
+  // P17 offered the explicit form, and his next reply reads it as he sent it.
+  const [first, second] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.match(first!.messages[0]!.content, /write \[explicit selfie: …\] instead/);
+  assert.ok(
+    second!.messages[2]!.content.includes(
+      "Kai: Don't show anyone. [explicit selfie: lying back on the sheets, nothing on]",
+    ),
+  );
 });

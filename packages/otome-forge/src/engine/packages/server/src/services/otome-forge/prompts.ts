@@ -51,6 +51,8 @@
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
 //   thoughtsLines: Your thoughts… from Home (#2127), in P5 and in its main chapter's P6, P12 and P12c, with the task
+//   answersLines: #2503, the player's answers to P5's questions about the protagonist, in the P6, P12 or P12c of the
+//     node each was asked for, with the task
 //   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories, his side
 //     (#2155) and the prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word
 //     (Elsewhere)
@@ -100,6 +102,7 @@
 //   placePrompt: a place, scenery only (S/art/places.ts)
 //   cgPrompt: a story CG, and Memory, Moment, Snapshot and pair art (S/art/cg.ts, S/art/outfits.ts, S/wish/banners.ts)
 //   keepsakePrompt: a date's keepsake (S/minigames/date-night.ts)
+//   selfiePrompt: his selfie in his Messages thread, #2504 (S/phone/selfie.ts)
 //   expressionPrompt: a face edit, the kit's instruction (S/art/expressions.ts)
 //   stickerPrompt: a chat sticker (S/art/stickers.ts)
 //   figurinePrompt: a love interest's Shop figurine, painted once it is bought, #2138 (S/art/figurine.ts)
@@ -179,6 +182,7 @@ import {
   CONFRONTATION_ROUNDS,
   type ClimaxKind,
   LAST_STAGE,
+  QUESTIONS_MAX,
   REPAIR_NODES_MAX,
   REPAIR_NODES_MIN,
   ROUTE_NODES_MAX,
@@ -290,7 +294,7 @@ import {
   type ItemLook,
   type Season,
 } from "../../../../client/src/features/otome-forge/shared/wish.js";
-import type { StyleProfile } from "./art/image-client.js";
+import { imageConnectionFor, type StyleProfile } from "./art/image-client.js";
 import { PLUSH_ATTRIBUTES, PLUSH_ELEMENTS, PLUSH_SVG_MAX } from "./art/plush-svg.js";
 import type { StickerLookup } from "./art/stickers.js";
 import { CARE_NOTE_SENTENCES_MAX, CARE_NOTE_WORDS_MAX } from "./care/care-line.js";
@@ -301,6 +305,7 @@ import type { SummaryJob, SummaryRequest } from "./memory/memory.js";
 import {
   GROUP_REPLY_MAX,
   GROUP_SQUABBLE_MAX,
+  HIS_NOTES_KEPT,
   REPLY_MESSAGES_MAX,
   type ReplySticker,
   type ReplyStickers,
@@ -1691,10 +1696,18 @@ export const KNOWN_TOKENS = 500;
  * ponytail: the newest entry is always kept whole. At the notebook's limits (a 300-character guess and 200 characters
  * of words) it is about 375 tokens even in Han, so it fits unless the name runs past about 90 characters; the upgrade
  * path is shortening that entry's words.
+ * #2504: his notes from Messages (notesLine) follow it on a line of their own; without notes it is as it was.
  */
-export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known">): string {
+export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known" | "notes">): string {
   const known = (liState.known ?? []).slice(-KNOWN_SHOWN);
-  return known.length ? knownLine(unit, known.slice(-knownShown(unit, known))) : "";
+  const notebook = known.length ? knownLine(unit, known.slice(-knownShown(unit, known))) : "";
+  return [notebook, notesLine(unit, liState)].filter(Boolean).join("\n");
+}
+
+/** #2504: what he wrote down in Messages ([note: …]), word for word and JSON-quoted as the player's words are, or "". */
+export function notesLine(unit: Pick<Unit, "name">, { notes = [] }: Pick<LiState, "notes">): string {
+  const quoted = notes.map((note) => JSON.stringify(note.text)).join("; ");
+  return quoted ? `What ${unit.name} wrote down to remember about the protagonist, word for word: ${quoted}` : "";
 }
 
 /** A notebook entry as the prompts give it: the guess, how right it was, and the protagonist's own words. */
@@ -2178,6 +2191,23 @@ function thoughtsLines(player: Pick<Player, "name">, text: string | undefined, u
   ];
 }
 
+/**
+ * #2503: what the player answered to the chapter plan's questions about the protagonist, in the scene (node `i`) each
+ * was asked for (P6, P12, P12c), with the task, after the cached part; without an answer for it there are no lines,
+ * and the prompt is as it was.
+ */
+function answersLines(player: Pick<Player, "name">, chapter: Pick<Chapter, "questions">, i: number): string[] {
+  const answered = (chapter.questions ?? []).filter((entry) => entry.node === i && entry.answer);
+  if (!answered.length) return [];
+  return [
+    "",
+    [
+      `Details about ${player.name || "the protagonist"} you'll need for this scene:`,
+      ...answered.map((entry) => `Question: ${entry.question}\nAnswer: ${entry.answer}`),
+    ].join("\n"),
+  ];
+}
+
 // ── P5: chapter plan (structured, 0.8, planner contract) ──
 
 export interface ChapterPlanInput {
@@ -2264,7 +2294,7 @@ export function chapterPlanMessages({
     "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if a monster, capable of earned, character-consistent change.",
     `Plan main chapter ${number}: one Lead love interest (given) and one Foil you pick from the others. The chapter is told as ${NODES_MIN} to ${NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
-    '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation|closer", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}',
+    '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation|closer", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}, "ask": [{"node": <node index>, "question": "..."}]}',
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
@@ -2273,6 +2303,7 @@ export function chapterPlanMessages({
     "- ledger.relationship: one line per love interest present on what moved between them and the protagonist. ledger.conflict: conflict seeds: plant a new one (type from: " +
       ANGST_TYPES.join(", ") +
       "), or escalate, complicate or resolve an open one by its id. ledger.offscreen: one line for every love interest NOT in this chapter: what they were doing meanwhile.",
+    `- ask (optional, usually omitted): at most ${QUESTIONS_MAX} questions for the player about the protagonist, each with the index of the first node that needs the answer, only when a node needs something about the protagonist that nothing given shows (their past, what they like, how they would act) and you would otherwise guess, or when a memory reveal or twist rests on the player's input. Write that node's guide so any answer works.`,
     "RULES",
     `- ${NODES_MIN} to ${NODES_MAX} nodes; 1 or 2 moment nodes; at most one climax node, a confrontation or a closer, as the second-to-last or last node; at most 2 nodes with cg.`,
     "- A climax only when the chapter builds to one; a chapter may go without, and end on an ordinary scene or a moment.",
@@ -2574,6 +2605,7 @@ export interface BeatMessagesInput {
     | "prestige"
     | "bond"
     | "thoughts"
+    | "questions"
     | "hisSide"
     | "friendStory"
     | "ending"
@@ -2716,6 +2748,7 @@ export function beatMessages({
     recalls.trim(),
     // A main chapter's own (#2127): no other chapter's scenes ever carry them.
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...answersLines(player, chapter, node.i),
     ...(pov && hisSide.trim()
       ? ["", `THE SCENE AS THE PROTAGONIST LIVED IT ("${chapter.title}"):\n${hisSide.trim()}`]
       : []),
@@ -3444,6 +3477,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "",
     recalls.trim(),
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...answersLines(player, chapter, node.i),
     "",
     `Write the confrontation of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
@@ -3555,6 +3589,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     "",
     recalls.trim(),
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...answersLines(player, chapter, node.i),
     "",
     `Write the closer of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
@@ -3782,6 +3817,11 @@ export function renderThread(
       if (message.quote) parts.push(`(replying to ${own} note: "${message.quote}")`);
       if (message.text) parts.push(message.text);
       if (message.sticker) parts.push(stickerText(message, own, voice, stickers));
+      // #2504: his selfie, as he sent it.
+      if (message.selfie) {
+        const command = message.selfie.explicit ? "explicit selfie" : "selfie";
+        parts.push(message.selfie.brief ? `[${command}: ${message.selfie.brief}]` : `[${command}]`);
+      }
       return `${message.who === "player" ? names.player : (speaker?.(message) ?? names.li)}: ${parts.join(" ")}`;
     })
     .join("\n");
@@ -3918,7 +3958,9 @@ export function chatReplyMessages({
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
-  const known = knowsAboutYou(unit, liState);
+  // #2504: his notes can change from reply to reply, so they go after the cached part (notes, in `now`).
+  const known = knowsAboutYou(unit, { known: liState.known });
+  const notes = notesLine(unit, liState);
   const example = stickers?.his[0] ?? stickers?.yours[0];
   const stickerRule = example
     ? [
@@ -3937,6 +3979,18 @@ export function chatReplyMessages({
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
     `- hurt: beside "messages" in the JSON object, never inside a message, only when what ${them} just wrote truly hurts you, as ${name} would take it: {"text": "...", "severity": "minor|major|rupture"}, the text one short line in your own words on what hurt, rupture only for words that break something between you. Omit it otherwise.`,
     stickerRule,
+    // #2504: his own thread's hidden commands (S/phone/replies.ts takeCommands); a selfie only with scene art to paint it.
+    // Spread, never "": a "" here would leave a blank line where the prompt had none (a friend's thread stays as it was).
+    ...(friend
+      ? []
+      : [
+          `- To remember something about ${them} word for word, write [note: what to remember] in a message; ${them} never sees it. You keep ${HIS_NOTES_KEPT} notes, and a new one replaces the oldest.`,
+        ]),
+    ...(!friend && imageConnectionFor(world.images, "scene")
+      ? [
+          `- To send ${them} a photo of yourself, write [selfie: what the photo shows, in English] in a message, rarely, when you would${explicitCgAllowed(world) ? "; for one that shows nudity or sex, write [explicit selfie: …] instead, in plain explicit words" : ""}.`,
+        ]
+      : []),
     hapticsOn(world) ? CHAT_HAPTICS_RULE : "",
     `- Write every message in ${world.language}.`,
     "",
@@ -4011,6 +4065,7 @@ export function chatReplyMessages({
   // 0.20.2: everything above stays the same through a conversation, so it is cached; the thread and the task follow,
   // after the older memories its newest messages bring back (#2430), which change from reply to reply.
   const now = [
+    ...(notes ? [notes, ""] : []),
     ...(recalls.trim()
       ? [`OLDER MEMORIES THE THREAD BRINGS BACK (part of what you know of the story)\n${recalls.trim()}`, ""]
       : []),
@@ -5673,8 +5728,10 @@ const relabel = (contract: string, heading: string) => contract.replace(/^CONTEN
  */
 export function sharedState(liState: LiState): LiState {
   const shared = (ref: string) => sharedRef(ref.split("/")[0] ?? "");
+  // #2504: nor his notes from his own thread.
+  const { notes: _notes, ...own } = liState;
   return {
-    ...liState,
+    ...own,
     grievances: liState.grievances.filter((grievance) => shared(grievance.opened)),
     disclosures: liState.disclosures.filter((disclosure) => shared(disclosure.ref)),
     known: [],
@@ -6120,7 +6177,7 @@ export function bondPlanMessages({ world, player, unit, state, rank, reveal, mem
 export type FriendPlanFor =
   | { kind: "rank"; friend: FriendCard; level: number; look: boolean }
   | { kind: "mend"; friend: FriendCard; grievance: string }
-  | { kind: "hangout"; friends: readonly FriendCard[]; place: string }
+  | { kind: "hangout"; friends: readonly FriendCard[]; place: string; topic?: string }
   | { kind: "epilogue"; friends: readonly FriendCard[] };
 
 export interface FriendPlanInput {
@@ -6147,6 +6204,9 @@ export function friendPlanMessages({
   const name = names[0] ?? "her friend";
   const look = plan.kind === "rank" && plan.look;
   const memento = plan.kind === "hangout";
+  // #2502: what she wants to talk about with them, in the player's words; it changes with each hangout, so it goes in
+  // the task, and without one the prompt is as it was.
+  const topic = plan.kind === "hangout" ? (plan.topic?.trim() ?? "") : "";
   const shape = `{"title": "...", "tags": ["..."], "summary": "...", "nodes": [{"guide": "...", "place": "..."}]${look ? ', "look": {"name": "...", "outfitLine": "..."}' : ""}${memento ? ', "memento": "..."' : ""}}`;
   const what =
     plan.kind === "rank"
@@ -6202,6 +6262,15 @@ export function friendPlanMessages({
     units.map((unit) => `id ${unit.id}: ${unit.name}${unit.bible ? `, ${unit.bible.role}` : ""}`).join("\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
+    ...(topic
+      ? [
+          "",
+          "WHAT THE PROTAGONIST WANTS TO TALK ABOUT (the player's own words)",
+          // JSON-quoted, as thoughtsLines quotes the player's words.
+          JSON.stringify(topic),
+          `${player.name || "The protagonist"} wants to talk with ${names.join(" and ")} about this, and the hangout gives it a real place.`,
+        ]
+      : []),
     "",
     "Plan it now.",
     otomeContractReminder("planner"),
@@ -6861,6 +6930,24 @@ export function keepsakePrompt(input: KeepsakeInput, edited: Partial<ImagePrompt
   // #2303: a date with several draws her with two of them, so the count tag follows the people drawn.
   const count = COUNT_WORDS[Math.min(input.people.length, CG_PEOPLE_MAX)] ?? "two people";
   return cgPrompt({ ...input, use: "cg", framing: `${count}, ${KEEPSAKE_FRAMING}` }, edited);
+}
+
+// ── #2504: his selfie in Messages ──
+
+const SELFIE_FRAMING = "one person, selfie, looking at the viewer, detailed background";
+
+/**
+ * The selfie a love interest sends in his own Messages thread (S/phone/selfie.ts): him alone, from what his [selfie: …]
+ * said it shows (`shows`, English), or a plain, casual selfie. Rated as a story CG is: `explicit` when he sent it as
+ * [explicit selfie: …], which only explicitCgAllowed paints explicit.
+ */
+export function selfiePrompt(
+  input: Omit<CgInput, "brief" | "framing" | "use"> & { shows: string },
+  edited: Partial<ImagePrompt> = {},
+): ImagePrompt {
+  const name = imageNames(input.people.map((person) => person.name))[0] ?? "";
+  const brief = `A selfie ${name} took to send in a message: ${input.shows.trim() || "a plain, casual selfie"}`;
+  return cgPrompt({ ...input, brief, use: "cg", framing: SELFIE_FRAMING }, edited);
 }
 
 export interface ExpressionInput {

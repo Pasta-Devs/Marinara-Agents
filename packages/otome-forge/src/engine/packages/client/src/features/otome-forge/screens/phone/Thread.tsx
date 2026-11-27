@@ -22,12 +22,16 @@
 // 0.47.1: once a close is accepted, the thread goes back to Messages (onBack) while the memory is written in the
 // background. Opened again meanwhile, it says the conversation is being remembered, and sending waits until it lands;
 // a close that failed shows why, with Try again (CloseRetry).
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+// #2504: his selfie (PhoneMessage.selfie) shows inside his message once painted; until then it says it is painting, or
+// offers Paint as a hangout's memento does (PaintOnTap), and the thread is read again while one paints.
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookHeart, ChevronLeft, Heart, HeartHandshake, RotateCcw, SendHorizontal, X } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar, AvatarCluster } from "../../components/Avatar";
+import { CostHint } from "../../components/CostHint";
+import { PaintButton, usePaintOnTap } from "../../components/PaintOnTap";
 import { phoneHapticKey, useOtomeHaptics } from "../../hooks/use-otome-haptics";
 import { storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
@@ -35,6 +39,7 @@ import { accentOf } from "../../lib/accent";
 import { typingDelay } from "../../lib/typing-delay";
 import { useOtomeProps } from "../../props";
 import type {
+  ImageSettings,
   LiId,
   PhoneCloseResult,
   PhoneHistoryPage,
@@ -72,6 +77,10 @@ type SendBody = { text: string; quote?: string; sticker?: string; id: string } |
 
 /** A message id the server accepts as the client's own (S/phone/chat.ts MESSAGE_ID). */
 const messageId = () => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
+
+/** #2504: a selfie on the page is still painting, so the page is read again until it is not. */
+const selfiePainting = (page: PhoneHistoryPage | undefined) =>
+  !!page?.messages.some((row) => row.selfie?.art?.state === "pending");
 
 /** Rows by id, in first-seen order; a later copy of a row replaces its fields. */
 function mergeRows(...lists: Row[][]): Row[] {
@@ -149,7 +158,11 @@ export function Thread({
     queryFn: () => fetchPage(1),
     refetchOnMount: "always",
     refetchInterval: (query) =>
-      query.state.data?.busy || (query.state.data?.closing && !query.state.data.closing.error) ? BUSY_POLL_MS : false,
+      query.state.data?.busy ||
+      (query.state.data?.closing && !query.state.data.closing.error) ||
+      selfiePainting(query.state.data)
+        ? BUSY_POLL_MS
+        : false,
   });
 
   const [olderPages, setOlderPages] = useState<PhoneHistoryPage[]>([]);
@@ -306,7 +319,9 @@ export function Thread({
                     name: nameOf(next),
                     face: stickerLabel(t, stickers, next.sticker),
                   })
-                : "",
+                : next.selfie
+                  ? t("ui.otomeForge.phone.saidSelfie", { name: nameOf(next) })
+                  : "",
           );
         },
         typingDelay(next.text, waited),
@@ -360,6 +375,11 @@ export function Thread({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastHis, id, otome, path, queryClient, runKey]);
 
+  /** The log at its newest line, while the player is there. */
+  const keepNewest = () => {
+    const element = log.current;
+    if (element && stick.current) element.scrollTop = element.scrollHeight;
+  };
   // The log stays at its newest line while the player is there, and keeps its place when earlier messages load.
   useLayoutEffect(() => {
     const element = log.current;
@@ -367,9 +387,7 @@ export function Thread({
     if (prepend.current) {
       element.scrollTop = prepend.current.top + element.scrollHeight - prepend.current.height;
       prepend.current = null;
-    } else if (stick.current) {
-      element.scrollTop = element.scrollHeight;
-    }
+    } else keepNewest();
   }, [messages.length, typing, sessions.length, latest.isPending]);
 
   // Pages count from the newest message, so every new message moves every page's bounds. Once the newest page has
@@ -377,12 +395,13 @@ export function Thread({
   // newest page would drop out of view. If that read fails they are let go (Earlier messages loads them again).
   const latestFrom = latest.data?.from;
   const loadedFrom = useRef(latestFrom);
+  const readOlder = () => Promise.all(olderPages.map((older) => fetchPage(older.page)));
   useEffect(() => {
     if (latestFrom === undefined || loadedFrom.current === latestFrom) return;
     loadedFrom.current = latestFrom;
     if (!olderPages.length) return;
     let live = true;
-    Promise.all(olderPages.map((older) => fetchPage(older.page))).then(
+    readOlder().then(
       (fresh) => live && setOlderPages(fresh),
       () => live && setOlderPages([]),
     );
@@ -392,6 +411,25 @@ export function Thread({
     // Only when the newest page moves; the pages loaded are read as they are then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestFrom]);
+  // #2504: an earlier page's selfie that is still painting (a paint started in another tab, say) shows painted only
+  // once that page is read again: the pages loaded are, every BUSY_POLL_MS, until none of their selfies paints. A read
+  // that fails tries again.
+  useEffect(() => {
+    if (!olderPages.some(selfiePainting)) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      readOlder().then(
+        (fresh) => live && setOlderPages(fresh),
+        () => live && setOlderPages((current) => [...current]),
+      );
+    }, BUSY_POLL_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+    // Each read sets the pages, which arms the next one while they still hold a selfie painting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [olderPages]);
 
   const oldest = pages[0];
   const hasOlder = !!oldest && oldest.page < oldest.pages;
@@ -560,6 +598,24 @@ export function Thread({
                 pending={!incoming && outgoing?.local?.id === row.id}
                 time={!joinsNext ? messageTime(row.at, localization.locale, timeZone) : ""}
                 group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
+                selfie={
+                  li && row.selfie ? (
+                    <Selfie
+                      runKey={runKey}
+                      li={li}
+                      row={row}
+                      images={view.world.images}
+                      ended={!!view.ended}
+                      // #2504: its picture grows the message once it loads, so the log keeps to its newest line.
+                      onShown={keepNewest}
+                      // A selfie may be on an earlier page, which only a read of those pages shows painted.
+                      onPainted={() => {
+                        void queryClient.invalidateQueries({ queryKey: key });
+                        if (olderPages.length) void readOlder().then(setOlderPages, () => undefined);
+                      }}
+                    />
+                  ) : null
+                }
               />
               {li && row.invite && row.who === "li" ? (
                 <InviteCard
@@ -887,8 +943,82 @@ function InviteCard({
 }
 
 /**
+ * #2504: his selfie in his message: the picture once painted; until then Paint (or Retry), saying so while it paints,
+ * with its cost the first time, or only that it is a selfie when it cannot be painted (no images, or the story ended).
+ */
+function Selfie({
+  runKey,
+  li,
+  row,
+  images,
+  ended,
+  onShown,
+  onPainted,
+}: {
+  runKey: string;
+  li: RunLiView | RunFriendView;
+  row: Row;
+  images: Pick<ImageSettings, "connectionId" | "ask">;
+  ended: boolean;
+  /** Its picture has loaded. */
+  onShown: () => void;
+  /** Reads the thread again once a paint ends, whatever came of it. */
+  onPainted: () => void;
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const art = row.selfie?.art;
+  const { painting, error, tap, dialogs } = usePaintOnTap({
+    path: `${phonePath(runKey, li.id)}/messages/${encodeURIComponent(row.id)}/selfie`,
+    art,
+    ask: images.ask,
+    onSettled: onPainted,
+    askTitle: t("ui.otomeForge.phone.selfieAskTitle"),
+    askText: t("ui.otomeForge.phone.selfieAskText", { name: li.name }),
+    subject: t("ui.otomeForge.phone.selfieSubject", { name: li.name }),
+  });
+  if (art?.state === "ready" && art.url) {
+    return (
+      <img
+        className="of-bubble-selfie"
+        src={art.url}
+        alt={t("ui.otomeForge.phone.selfieAlt", { name: li.name })}
+        onLoad={onShown}
+      />
+    );
+  }
+  const paintable = painting || (!!images.connectionId && !ended);
+  return (
+    <div className="of-bubble-selfie of-bubble-selfie--waiting">
+      {paintable ? (
+        <PaintButton
+          art={art}
+          painting={painting}
+          onTap={tap}
+          labels={{
+            paint: t("ui.otomeForge.phone.selfiePaint"),
+            retry: t("ui.otomeForge.phone.selfieRetry"),
+            painting: t("ui.otomeForge.phone.selfiePainting"),
+          }}
+        />
+      ) : (
+        <span className="of-hint">{t("ui.otomeForge.phone.selfie")}</span>
+      )}
+      {paintable && !art ? <CostHint images={1} /> : null}
+      {error ? (
+        <p className="of-error" role="alert">
+          {otome.errorMessage(error)}
+        </p>
+      ) : null}
+      {art?.state === "failed" && art.error ? <p className="of-hint">{art.error}</p> : null}
+      {dialogs}
+    </div>
+  );
+}
+
+/**
  * One message. `li` and `name` are who sent his (in the group chat its speaker, when known); `group` marks a member's
- * message there, the first and the last of their run.
+ * message there, the first and the last of their run; `selfie` (#2504) is his selfie in it.
  */
 function Bubble({
   row,
@@ -898,6 +1028,7 @@ function Bubble({
   pending,
   time,
   group,
+  selfie,
 }: {
   row: Row;
   li: RunLiView | RunFriendView | undefined;
@@ -906,6 +1037,7 @@ function Bubble({
   pending: boolean;
   time: string;
   group?: { first: boolean; last: boolean };
+  selfie?: ReactNode;
 }) {
   const { t } = useTranslation();
   const text = row.text.trim();
@@ -923,6 +1055,7 @@ function Bubble({
           <StickerArt stickers={stickers} id={row.sticker} />
         )
       ) : null}
+      {selfie}
       {text ? <span className="of-bubble-text">{row.text}</span> : null}
     </div>
   );

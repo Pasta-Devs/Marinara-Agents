@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.48.0",
+          "date": "2026-11-27",
+          "notes": "- **Album → Hangouts** shows rounded cards, as **Album → Dates** does.\n- **Close** stops a hangout while it's being planned. A friend's invitation you were accepting stays open.\n- **Plan a hangout** has an optional **What do you want to talk about?** field, for up to 300 characters.\n- Before a main chapter's first scene, its planner may ask you up to two questions about your protagonist, in **Before this chapter**. Each answer shapes the scene it was asked for.\n- In their own **Messages** thread, a love interest can note down something you tell them. They keep three notes, a new one replacing the oldest, and remember them in Messages and in the story. You don't see the notes.\n- With an image connection, a love interest can send a selfie (1 image) in their own thread. A reply's selfie paints by itself unless **Ask before painting** or prompt review is on. One in a message they write first waits for **Paint the selfie**. Explicit Heat and the Explicit image rating allow an explicit one.",
+          "highlight": true
+        },
+        {
           "version": "0.47.2",
           "date": "2026-11-26",
           "notes": "- With a NovelAI connection, a picture of two or more people sends NovelAI a reference for each person who has a picture, as NovelAI's own app does, so each one's own picture guides how they look. Before, it sent only the main character's reference, which gave everyone that person's face and hair.\n- On NovelAI and other tag models, a key image of a scene that isn't explicit is much less likely to come out nude, even under Explicit Heat and the Explicit image rating. Its negative prompt now also names nudity in tags (`nude, topless, nipples, sex`), which those models read.",
@@ -828,12 +834,6 @@
           "date": "2026-11-19",
           "notes": "- On the Story screen's **Between you**, a love interest past their finale now shows their real level, from **Level 11** to **Level 20**. Before, every bond rank showed as Level 10 followed by the rank's name, such as \"Level 10 · named\".",
           "highlight": false
-        },
-        {
-          "version": "0.38.0",
-          "date": "2026-11-19",
-          "notes": "- **Rewrite** now stays in the reader for the whole scene, in dates and Character Stories as in the main story. Before, it disappeared as soon as you picked a choice, and dates and Character Stories put their choice early in every scene.\n- Rewriting a scene takes back your choices in it: the trust, affection, grievances and secrets told that they changed go back to how they were, and you choose again in the new scene.\n- You can also rewrite the scene you just read to its end, until you open the next one. Its Starlight is taken back, and you earn it again when you read the new scene.\n- **Rewrite** shows greyed, saying why, when a scene can't be taken back: a Confrontation once a stance is played, a scene whose end moved the story on (a new stage, a mended rift, the chapter's end), or a choice made before this update.",
-          "highlight": true
         }
       ]
     },

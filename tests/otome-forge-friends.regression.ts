@@ -4,9 +4,10 @@
 // (S/story/friend-stories.ts, S/story/friend-rewards.ts), their block in the story prompts (S/prompts.ts), the ending
 // (S/story/ending.ts) and an ended story's lock (S/routes/ended.ts). #2475: a met friend's card, a friend in Your cast
 // (their bible, card link and appearance), no newcomer on a cast member's card, and their portrait cut out on opening
-// the story.
+// the story. #2502: what she wants to talk about on a hangout reaches its plan, and a plan stopped keeps nothing.
 // Run: npx tsx --tsconfig tests/tsconfig.regressions.json --test tests/otome-forge-friends.regression.ts
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import type { RunState } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
@@ -33,6 +34,12 @@ import { paintClaimed } from "../packages/otome-forge/src/engine/packages/server
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import {
+  chatTarget,
+  normalizeThread,
+  readThread,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
+import {
+  friendPlanMessages,
   friendsBlock,
   storyContext,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
@@ -651,4 +658,107 @@ test("#2475: opening the story cuts out a friend's painted portrait, and the vie
   assert.equal(next.friends[0].portrait, `${PORTRAIT}.cut.png`);
   assert.ok(next.friends[0].cut.includes(`${PORTRAIT}.cut.png`), "framed whole as a cut-out");
   assert.equal(next.cutoutsPending, undefined);
+});
+
+// ── #2502: what she wants to talk about on a hangout, and a plan stopped ──
+
+/** A hangout's plan prompt from fixed documents: Kaveh, somewhere he chooses, with `topic` when one is given. */
+function hangoutPlanPrompt(topic?: string) {
+  const kaveh = { id: KAVEH, name: "Kaveh", pronouns: HE, friend: friendBible() } as never;
+  return friendPlanMessages({
+    world: normalizeWorld({ setting: "A harbour city.", language: "English" }),
+    player: normalizePlayer({ name: "Ines" }),
+    units: CAST.map((li) => ({ id: li.id, name: li.name, pronouns: HE, bible: null })) as never,
+    for: {
+      kind: "hangout",
+      friends: [{ unit: kaveh, level: 2 }],
+      place: "somewhere Kaveh chooses",
+      ...(topic === undefined ? {} : { topic }),
+    },
+    memory: "They watched the lanterns go out.",
+    nodes: 3,
+  });
+}
+
+/** The hangout plan without a topic, as it was before #2502 (2026-11-27). */
+const BEFORE_TOPIC = "4cec252ef2cad6ac";
+
+test("#2502: a hangout's topic goes in its plan's task in the player's words; without one the prompt is as it was", () => {
+  const digest = (messages: unknown) =>
+    createHash("sha256").update(JSON.stringify(messages)).digest("hex").slice(0, 16);
+  const without = hangoutPlanPrompt();
+  assert.equal(digest(without), BEFORE_TOPIC);
+  assert.deepEqual(hangoutPlanPrompt("   "), without, "a blank topic is none");
+  const topic = 'Whether he "really" misses home';
+  const topical = hangoutPlanPrompt(topic);
+  assert.equal(topical.length, without.length);
+  assert.equal(topical[0]!.content, without[0]!.content, "the instructions are as they were");
+  // One short block in the task, after the story memory, with her words JSON-quoted.
+  const task = without[1]!.content;
+  const cut = task.indexOf("\n\nPlan it now.");
+  assert.ok(cut > task.indexOf("They watched the lanterns go out."));
+  const user = topical[1]!.content;
+  assert.ok(user.startsWith(task.slice(0, cut)) && user.endsWith(task.slice(cut)));
+  const block = user.slice(cut, user.length - (task.length - cut));
+  assert.ok(block.includes(`\n${JSON.stringify(topic)}\n`), block);
+  assert.ok(block.trim().split("\n").length <= 3, "a short block");
+});
+
+const hangoutPlan = () => ({
+  title: "The Lantern Walk",
+  tags: [],
+  summary: "An evening along the quay.",
+  nodes: [{ guide: "They meet at the bridge." }, { guide: "They share a cake." }, { guide: "They part at the row." }],
+  memento: "Kaveh and Ines on the quay, lanterns behind them.",
+});
+
+test("#2502: Plan a hangout takes a topic of 300 characters at most, and Cancel keeps no plan and no answer", async () => {
+  let cancel = () => {};
+  const t = await storyWorld({
+    runKey: "r-hangout-aaaaaa",
+    cancellation: true,
+    // The first plan is stopped while it is written, as Close does (POST /runs/:run/cancel); the second is kept.
+    replies: [
+      () => {
+        cancel();
+        return json(hangoutPlan());
+      },
+      json(hangoutPlan()),
+    ],
+  });
+  cancel = () => void t.call("POST", "/runs/:run/cancel");
+  await seedFriend(t);
+  const invite = "m-hangout-0001abcd";
+  await t.store.mutateDoc(chatTarget(t.runId, KAVEH), normalizeThread, (thread) => ({
+    ...thread,
+    li: KAVEH,
+    messages: [
+      {
+        id: invite,
+        who: "li",
+        text: "Walk with me?",
+        at: "2026-11-27T10:00:00.000Z",
+        invite: { status: "pending", kind: "hangout" },
+      },
+    ],
+  }));
+  const body = { friends: [KAVEH], place: "partner-choice", herLook: "base", invite: { message: invite } };
+  const long = await t.call("POST", "/runs/:run/hangouts", { ...body, topic: "x".repeat(301) });
+  assert.equal(long.status, 400, JSON.stringify(long.body));
+  assert.equal(t.calls.length, 0, "refused before anything is planned");
+
+  const topic = 'Whether he "really" misses home';
+  const stopped = await t.call("POST", "/runs/:run/hangouts", { ...body, topic: `  ${topic}  ` });
+  assert.equal(stopped.status, 409, JSON.stringify(stopped.body));
+  await t.settle();
+  assert.deepEqual((await t.call("GET", "/runs/:run/hangouts")).body.hangouts, [], "no hangout is kept");
+  const asked = (await readThread(t.store, t.runId, KAVEH))!.messages[0]!.invite;
+  assert.deepEqual(asked, { status: "pending", kind: "hangout" }, "and the invitation still waits");
+
+  const planned = await t.call("POST", "/runs/:run/hangouts", { ...body, topic: `  ${topic}  ` });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const [system, user] = t.calls.at(-1)!.messages;
+  assert.ok(user!.content.includes(`\n${JSON.stringify(topic)}\n`), "her words, trimmed and quoted, in the task");
+  assert.ok(!system!.content.includes(topic), "never in the instructions");
+  assert.equal((await readThread(t.store, t.runId, KAVEH))!.messages[0]!.invite?.status, "accepted");
 });

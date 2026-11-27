@@ -63,6 +63,7 @@ const ERROR_MESSAGE_KEYS: Record<OtomeErrorCode, string> = {
   "no-connection": "ui.otomeForge.errors.noConnection",
   capacity: "ui.otomeForge.errors.capacity",
   "no-embeddings": "ui.otomeForge.errors.noEmbeddings",
+  "needs-answer": "ui.otomeForge.errors.needsAnswer",
 };
 
 function isErrorCode(value: unknown): value is OtomeErrorCode {

@@ -7,7 +7,9 @@
 // four stances (lib/reader-state.ts confrontationBeat): each stance is sent once, and the server reveals the next round
 // or, after the third, the ending, which closes on its own card. A key image is marked seen once it has been shown,
 // after the server has heard the read reached it; a paint that waits for consent is painted on a tap, as is a recurring
-// side character's sprite (0.20.0, SceneArt.sides).
+// side character's sprite (0.20.0, SceneArt.sides). #2503: a main chapter whose plan asked about the protagonist asks
+// its questions first, and its first beat is asked for once they are answered; a beat refused as `needs-answer` (a
+// chapter planned ahead) reads the chapter again, which brings them.
 // ──────────────────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,6 +41,7 @@ import type {
   AffectionChange,
   BeatView,
   ChapterDetail,
+  ChapterView,
   ChoiceOption,
   ClimaxEnding,
   ConfrontationView,
@@ -283,6 +286,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const tags = detail?.chapter.tags ?? [];
   // Dark chapters open with their content tags; the first beat waits until the player begins.
   const askTags = tags.length > 0 && node === 0 && !tagsSeen;
+  // #2503: then the plan's questions about the protagonist, while any is unanswered: no beat is asked for meanwhile.
+  const questions = detail?.chapter.questions ?? [];
+  const askQuestions = !askTags && !finished && questions.some((entry) => !entry.answer);
   const nodeCount = detail?.chapter.nodes.length ?? 0;
   const ready = load?.status === "ready" && load.node === node ? load : null;
   const beat = ready?.beat ?? null;
@@ -413,17 +419,47 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         // The beat is written now, and the server is writing the next one ahead.
         void queryClient.invalidateQueries({ queryKey: chapterQueryKey(runKey, chapterKey) });
       } catch (error) {
-        if (!controller.signal.aborted) setLoad({ status: "failed", node: index, error });
+        if (controller.signal.aborted) return;
+        setLoad({ status: "failed", node: index, error });
+        // #2503: a chapter planned ahead asks first; read again, the chapter brings its questions.
+        if (otomeErrorCode(error) === "needs-answer") {
+          void queryClient.invalidateQueries({ queryKey: chapterQueryKey(runKey, chapterKey) });
+        }
       }
     },
     [base, chapterKey, otome, protagonist, queryClient, runKey],
   );
 
   useEffect(() => {
-    if (node === null || !detail || askTags || finished) return;
+    if (node === null || !detail || askTags || askQuestions || finished) return;
     if (load && load.node === node) return;
     void fetchBeat(node);
-  }, [askTags, detail, fetchBeat, finished, load, node]);
+  }, [askQuestions, askTags, detail, fetchBeat, finished, load, node]);
+
+  /**
+   * #2503: saves the answers (one per question, in order); the chapter's first beat is asked for next. Rejects on
+   * failure; a 409 `conflict` (answered already, in another tab or by a send whose reply was lost, or the chapter
+   * finished) reads the chapter again too, which closes Before this chapter.
+   */
+  const answerQuestions = useCallback(
+    async (answers: string[]) => {
+      const { chapter } = await otome
+        .post<{ chapter: ChapterView }>(`${base}/answers`, { answers })
+        .catch((error: unknown) => {
+          if (otomeErrorCode(error) === "conflict") {
+            setLoad(null);
+            refreshStory();
+          }
+          throw error;
+        });
+      queryClient.setQueryData<ChapterDetail>(chapterQueryKey(runKey, chapterKey), (shown) =>
+        shown ? { ...shown, chapter: { ...shown.chapter, questions: chapter.questions } } : shown,
+      );
+      setLoad(null);
+      refreshStory();
+    },
+    [base, chapterKey, otome, queryClient, refreshStory, runKey],
+  );
 
   // Leaving drops the request, never the write: the server finishes the beat and keeps it for the next visit (only
   // Cancel stops a write).
@@ -1168,6 +1204,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     tags,
     askTags,
     beginChapter: () => setTagsSeen(true),
+    questions,
+    askQuestions,
+    answerQuestions,
     load,
     beat,
     position,

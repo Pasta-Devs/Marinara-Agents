@@ -88,6 +88,8 @@ export const friendMendKey = (id: LiId, n: number) => `story-friend-mend-${id}-$
 export const friendAirKey = (id: LiId, n: number) => `story-friend-air-${id}-${n}`;
 /** A hangout, the `n`th. */
 export const hangoutKey = (n: number) => `story-hangout-${n}`;
+/** #2502: the most characters of what she wants to talk about on a hangout (POST /runs/:run/hangouts `topic`). */
+export const HANGOUT_TOPIC_MAX = 300;
 /** #2459: the story's epilogue. */
 export const EPILOGUE_KEY = "story-epilogue";
 

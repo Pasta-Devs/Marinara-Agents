@@ -13,7 +13,11 @@
 //      (FriendBibleSchema); stances on anyone not a love interest are dropped, and a changed look steers the next paint
 import { z } from "zod";
 import { DATE_PLACE_IDS, BASE_LOOK } from "../../../../../client/src/features/otome-forge/shared/dates.js";
-import { friendBlock, friendHeld } from "../../../../../client/src/features/otome-forge/shared/friends.js";
+import {
+  HANGOUT_TOPIC_MAX,
+  friendBlock,
+  friendHeld,
+} from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { cancellable } from "../story/beats.js";
 import { runForeground } from "../generation.js";
 import {
@@ -74,6 +78,8 @@ const HangoutBody = z.object({
   herLook: z.string().min(1).max(80),
   /** Accepting a friend's invitation to hang out: their message in their thread. */
   invite: z.object({ message: z.string().min(1).max(60) }).optional(),
+  /** #2502: what she wants to talk about with them, in the player's words (the planner gives it a place). */
+  topic: z.string().trim().max(HANGOUT_TOPIC_MAX).optional(),
 });
 const MementoBody = z.object({
   prompt: z.string().max(4000).optional(),
@@ -204,7 +210,12 @@ export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
       // Her look first, as a date does: a look she cannot wear refuses the hangout before anything is planned.
       if (body.herLook !== BASE_LOOK) await wearLook(deps, runId, { owner: "me", look: body.herLook }, { debugMode });
       const chapter = await cancellable(deps, runId, (signal) =>
-        startHangout(deps, runId, { friends: body.friends, place }, { debugMode, ...(signal ? { signal } : {}) }),
+        startHangout(
+          deps,
+          runId,
+          { friends: body.friends, place, topic: body.topic },
+          { debugMode, ...(signal ? { signal } : {}) },
+        ),
       );
       if (body.invite) await settleInvites(deps, runId, body.friends[0]!, "accepted", body.invite.message, chapter.key);
       return { chapter: toChapterView(chapter) };

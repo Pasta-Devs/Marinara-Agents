@@ -412,8 +412,10 @@ const STAGING_OTHERS: Record<string, string> = {
   // 0.36.8 (#2394): P17's HARD RULES gained the chat-habits line (capitals, emoji and so on), so both moved again.
   // 0.39.0 (#2424): P17 gained the hurt field (beside "messages"), its no-story-effect line names the hurt, and its one
   // exception names his date invitations too, so both moved again.
-  chat: "d8193a29138d8463",
-  daily: "d24cf787da4598a6",
+  // 2026-11-27 (#2504): P17 in his own thread gained the [note: …] line (and [selfie: …] with scene art), so both moved
+  // again.
+  chat: "d50870e04834ded8",
+  daily: "8e5894c8f10bc8a3",
   note: "815cfb529ef3e8f9",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).

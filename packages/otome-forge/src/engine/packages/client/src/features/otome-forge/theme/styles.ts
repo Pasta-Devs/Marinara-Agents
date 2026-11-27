@@ -1392,6 +1392,9 @@ ${R} .of-album-stickers-title { margin: 0; font-family: var(--of-font-display); 
 /* #2477: Album → Hangouts: Plan a hangout stands apart from the hangouts under it (they touched). */
 ${R} .of-hangouts { display: flex; flex-direction: column; gap: 12px; }
 ${R} .of-hangouts > .of-button { align-self: flex-start; }
+/* #2502: a hangout is an Album → Dates card (.of-album-date), each part a whole row, its memento as wide as the card. */
+${R} .of-hangout > * { grid-column: 1 / -1; }
+${R} .of-hangout-memento { width: 100%; height: auto; border-radius: 12px; }
 /* #2087: Photo Shoot photos are square prints. */
 ${R} .of-album-cgs--photo .of-album-cg { aspect-ratio: 1; }
 ${R} .of-album-cgs--sticker { grid-template-columns: repeat(auto-fill, minmax(min(132px, 42%), 1fr)); }
@@ -2813,6 +2816,10 @@ ${R} .of-bubble-quote {
   background: rgb(255 255 255 / 0.22); font-family: var(--of-font-hand); font-size: 1.1rem; line-height: 1.12; opacity: 0.9;
 }
 ${R} .of-bubble-time { padding: 0 6px; font-size: 0.68rem; color: var(--of-text-faint); font-variant-numeric: tabular-nums; }
+/* #2504: his selfie, a portrait inside his message; until it is painted, Paint (or Painting…) in its place. */
+${R} .of-bubble-selfie { display: block; width: min(220px, 100%); border-radius: 14px; white-space: normal; }
+${R} img.of-bubble-selfie { aspect-ratio: 832 / 1216; object-fit: cover; box-shadow: 0 6px 16px rgb(0 0 0 / 0.18); }
+${R} .of-bubble-selfie--waiting { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 /* #2154: the group chat. Its portraits overlap in one slot; each member's bubble sits beside a 24 px portrait gap, the
    portrait on the last of their run, their name over the first, in the column of the time under it (gap + 6 px). */
 ${R} .of-avatar-cluster { position: relative; flex: none; display: block; }

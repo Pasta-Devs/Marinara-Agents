@@ -25,6 +25,9 @@
 // recalls in detail, by its arc's purpose for it, its Lead and cast, those thoughts and how the previous chapter ended,
 // after its arc is known, among the chapters its Lead led (#2304: main chapters they led, their route and repair), and
 // saves them on the chapter (`recalled`), so each of its scenes sends exactly those.
+// #2503: the plan may ask the player up to QUESTIONS_MAX questions about the protagonist, each for the node that first
+// needs the answer; one that names no node of the plan or asks nothing is dropped, never repaired. They are saved on
+// the chapter, and its scenes wait for the answers (S/story/beats.ts, S/routes/story.ts).
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   ArcJudgment,
@@ -54,7 +57,11 @@ import { needsSpace } from "../state/stages.js";
 import { waitingRank } from "./friend-stories.js";
 import { endingView, readEpilogue } from "./ending.js";
 import { friendCards } from "./friends.js";
-import { LAST_STAGE, type ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import {
+  LAST_STAGE,
+  QUESTIONS_MAX,
+  type ClimaxKind,
+} from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { bondStoriesPlayed, bondStoryKey } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
@@ -87,6 +94,7 @@ import { normalizeArc, revealAt, toArcView, type StoryArc } from "../schemas/sto
 import { arcCovering, arcRead, listArcs, planArc, revealedSoFar } from "./arc.js";
 import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter, toChapterView } from "../schemas/story.js";
+import { validItems } from "../schemas/common.js";
 import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
@@ -103,6 +111,7 @@ import {
   ChapterPlanSchema,
   NODES_MAX,
   NODES_MIN,
+  PlanQuestionSchema,
   sideWithFits,
   type ChapterPlanReply,
 } from "./replies.js";
@@ -237,7 +246,7 @@ export function resolveLi(units: PlanContext["units"], value: unknown): LiId | n
 
 export const clean = (value: unknown, max = 4000) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
-export type PlannedChapter = Pick<Chapter, "title" | "tags" | "foil" | "summary" | "nodes" | "ledger">;
+export type PlannedChapter = Pick<Chapter, "title" | "tags" | "foil" | "summary" | "nodes" | "ledger" | "questions">;
 
 /**
  * The reply's nodes in the chapter's shape: casts resolved to ids, and `resolves` kept only for grievances still owed,
@@ -447,7 +456,21 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   if (typeof tags === "string") return tags;
   const ledger = planLedger(reply, context, present, { main: true, idPrefix: `c${number}`, knows: [context.lead] });
   if (typeof ledger === "string") return ledger;
-  return { title: clean(reply.title, 200), tags, foil, summary: clean(reply.summary, 1200), nodes, ledger };
+  // #2503: the planner's questions about the protagonist, each on a node of this plan; any other is dropped, never
+  // repaired, so asking never fails a plan.
+  const questions = validItems(PlanQuestionSchema, reply.ask)
+    .map((entry) => ({ node: entry.node, question: entry.question.trim() }))
+    .filter((entry) => entry.question && entry.node < nodes.length)
+    .slice(0, QUESTIONS_MAX);
+  return {
+    title: clean(reply.title, 200),
+    tags,
+    foil,
+    summary: clean(reply.summary, 1200),
+    nodes,
+    ledger,
+    ...(questions.length ? { questions } : {}),
+  };
 }
 
 // ── Planning ──

@@ -40,6 +40,13 @@
 // #2424: he may also write first to ask her on a date of his own choosing (reason "date", S/phone/invite.ts): that
 // message always carries the invitation, `kind` "date", and is never written while he holds a grievance with her or an
 // invitation of his still waits.
+// #2504: in his own thread (never a friend's) his messages may hold [note: …] and [selfie: …] (S/phone/replies.ts). His
+// notes are kept on his state once his messages land (keepNotes, the newest HIS_NOTES_KEPT); a selfie rides on its
+// message (`selfie`). A reply to her saved while his world paints by itself (scene art, Ask before painting off and no
+// prompt review) holds it pending, and the send route paints it right after (S/phone/selfie.ts paintSelfies); any
+// other waits for the player's Paint. ponytail: a message he writes first is written by a job with no request to say
+// whether the player reviews image prompts, so its selfie waits for Paint; the upgrade path is the heartbeat passing
+// its review mode to the jobs.
 import { randomBytes } from "node:crypto";
 import { forgeChatHistoryPage, forgeChatReplyBusy, withForgeChatSend } from "@forge-kit/chat-continuity-server.mjs";
 import { forgeChatRecallQuery } from "@forge-kit/story-memory-integration.mjs";
@@ -68,14 +75,15 @@ import { FACES } from "../../../../../client/src/features/otome-forge/shared/fac
 import { hapticsOn } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { GROUP_THREAD } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
+import { imageConnectionFor } from "../art/image-client.js";
 import { sendableStickers, stickerBook, stickerLookup } from "../art/stickers.js";
 import { generateJson, runForeground, type GenerationDeps } from "../generation.js";
 import type { OtomeHaptics } from "../haptics.js";
 import { OtomeForgeError } from "../http.js";
 import { chatId, isLiId, runDocTarget, stateId, worldId } from "../ids.js";
-import { isRecord, readFields, validItems } from "../schemas/common.js";
+import { PaintSchema, isRecord, readFields, validItems } from "../schemas/common.js";
 import { HapticCuesSchema } from "../schemas/story.js";
-import { defaultLiState, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { defaultLiState, keepNewest, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { applyFriendHurts } from "../state/friends.js";
@@ -83,7 +91,7 @@ import { applyMessageHurts, type MessageHurt } from "../state/relationship.js";
 import { listArcs } from "../story/arc.js";
 import { recallText, type StoryMemory } from "../story/canon.js";
 import { chatReplyMessages, ownView, type ChatFriend } from "../prompts.js";
-import { ChatReplySchema, normalizeChatReply, type ChatReply, type ReplyStickers } from "./replies.js";
+import { ChatReplySchema, HIS_NOTES_KEPT, normalizeChatReply, type ChatReply, type ReplyStickers } from "./replies.js";
 
 // ── The thread document (its wire shapes are in SH/api-types.ts) ──
 
@@ -120,6 +128,11 @@ const MESSAGE_DISPLAY = {
     kind: z.enum(["date", "hangout"]).optional(),
   }),
   haptic: HapticCuesSchema,
+  selfie: z.object({
+    brief: z.string().max(STORED_TEXT_MAX),
+    explicit: z.literal(true).optional(),
+    art: PaintSchema.optional(),
+  }),
 };
 const SESSION_DISPLAY = {
   name: z.string().max(SESSION_NAME_MAX),
@@ -137,6 +150,7 @@ const MessageSchema: ZodType<PhoneMessage> = z.object({
   li: MESSAGE_DISPLAY.li.optional(),
   invite: MESSAGE_DISPLAY.invite.optional(),
   haptic: MESSAGE_DISPLAY.haptic.optional(),
+  selfie: MESSAGE_DISPLAY.selfie.optional(),
 });
 
 const SessionSchema: ZodType<PhoneSession> = z.object({
@@ -466,10 +480,14 @@ export function inviteOffered(
 export const inviteWaiting = (thread: PhoneThread) =>
   thread.messages.some((message) => message.who === "li" && message.invite?.status === "pending");
 
-/** #2424: a reply as written: its messages, and the hurts her message gave, which land with the reply (applyHurts). */
+/**
+ * #2424: a reply as written: its messages, and the hurts her message gave, which land with the reply (applyHurts).
+ * #2504: and his notes, kept once it lands (keepNotes).
+ */
 export interface Written {
   messages: PhoneMessage[];
   hurt?: MessageHurt[];
+  notes?: string[];
 }
 
 /**
@@ -477,7 +495,8 @@ export interface Written {
  * message hurt in him, for a reply to her only. The reply to her waits in the run's foreground queue (answer); a daily
  * message (`first`) runs in a background job on that job's connection (`connectionId`, S/phone/daily.ts). Both recall
  * as his own reader, with his knowledge boundary. `reason` "date" (#2424) is his invitation on a date, refused with a
- * 409 `locked` before any call while he holds a grievance with her or an invitation of his waits.
+ * 409 `locked` before any call while he holds a grievance with her or an invitation of his waits. `review` (#2504): the
+ * player reviews image prompts, so a selfie in a reply to her waits for Paint (see the header).
  */
 async function writeReply(
   deps: PhoneDeps,
@@ -490,7 +509,15 @@ async function writeReply(
     connectionId,
     reason,
     remote: heldFor,
-  }: { debugMode: boolean; first?: boolean; connectionId?: string; reason?: ChatReason; remote?: number },
+    review = false,
+  }: {
+    debugMode: boolean;
+    first?: boolean;
+    connectionId?: string;
+    reason?: ChatReason;
+    remote?: number;
+    review?: boolean;
+  },
 ): Promise<Written> {
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
   const friendState = run.state.friends[li];
@@ -550,7 +577,7 @@ async function writeReply(
     cacheTtl: "5m",
     schema: ChatReplySchema,
     normalize: (raw) =>
-      normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite, remote > 0, !first),
+      normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite, remote > 0, !first, !friend),
     maxTokens: 1200,
     debugMode,
     ...(connectionId ? { lane: "background" as const, connectionId } : { lane: "foreground" as const }),
@@ -561,6 +588,8 @@ async function writeReply(
   const asks = dating
     ? { status: "pending" as const, kind: reason === "hangout" ? ("hangout" as const) : ("date" as const) }
     : { status: "pending" as const };
+  // #2504: a selfie in a reply to her is painted right after it lands while his world paints by itself.
+  const paints = !first && !review && !run.world.images.ask && !!imageConnectionFor(run.world.images, "scene");
   const messages = written.messages.map((message, index, all): PhoneMessage => ({
     id: newMessageId(),
     who: "li",
@@ -569,8 +598,15 @@ async function writeReply(
     at,
     ...((dating || written.invite) && index === all.length - 1 ? { invite: asks } : {}),
     ...(message.haptic?.length ? { haptic: message.haptic } : {}),
+    ...(message.selfie
+      ? { selfie: { ...message.selfie, ...(paints ? { art: { state: "pending" as const, at } } : {}) } }
+      : {}),
   }));
-  return { messages, ...(written.hurt ? { hurt: [{ li, ...written.hurt }] } : {}) };
+  return {
+    messages,
+    ...(written.hurt ? { hurt: [{ li, ...written.hurt }] } : {}),
+    ...(written.notes ? { notes: written.notes } : {}),
+  };
 }
 
 /**
@@ -618,10 +654,33 @@ async function applyHurts(
 }
 
 /**
+ * #2504: the notes his messages wrote, kept on his state once they landed in thread `key` (his own): appended, the
+ * newest HIS_NOTES_KEPT kept. A write that fails is logged and lost, as a hurt's is (applyHurts).
+ */
+async function keepNotes(deps: PhoneDeps, runId: string, key: string, notes: readonly string[]): Promise<void> {
+  if (!notes.length) return;
+  try {
+    const at = new Date().toISOString();
+    await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+      const his = current.lis[key];
+      if (!his) return current;
+      const kept = keepNewest([...(his.notes ?? []), ...notes.map((text) => ({ text, at }))], HIS_NOTES_KEPT);
+      return { ...current, lis: { ...current.lis, [key]: { ...his, notes: kept } } };
+    });
+  } catch (error) {
+    deps.runtime.logger.warn(
+      "[otome-forge] A note from %s was not kept: %s",
+      key,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+/**
  * Writes the reply to the open conversation of thread `key` (`write`, with what `load` read) in the run's foreground
  * queue and appends it, unless a reply to the same message landed first (then that one is returned). The open
  * conversation must end on the player's message. #2424: the hurts a reply that landed names are kept (applyHurts), and
- * `held` names those whose grievance with her they opened.
+ * `held` names those whose grievance with her they opened; #2504: its notes too (keepNotes).
  */
 export function answerIn<T>(
   deps: PhoneDeps,
@@ -638,7 +697,7 @@ export function answerIn<T>(
     const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
     const last = openMessages(thread).at(-1);
     if (!last || last.who !== "player") throw conflict("Nothing in this thread is waiting for a reply.");
-    const { messages: written, hurt = [] } = await write(loaded, thread);
+    const { messages: written, hurt = [], notes = [] } = await write(loaded, thread);
     let kept = written;
     await saveThread(deps, runId, key, (current) => {
       const index = current.messages.findIndex((message) => message.id === last.id);
@@ -654,6 +713,7 @@ export function answerIn<T>(
     });
     // Only this request's reply brings its hurts: one that lost to another reply keeps that one's.
     const hurts = kept === written ? await applyHurts(deps, runId, key, last.id, hurt) : { hurt: [], held: [] };
+    if (kept === written) await keepNotes(deps, runId, key, notes);
     return { messages: kept, ...hurts };
   });
 }
@@ -666,14 +726,14 @@ export interface Answered {
 }
 
 /** His reply (P17) to the open conversation, through answerIn. */
-const answer = (deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean, remote?: number) =>
+const answer = (deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean, review: boolean, remote?: number) =>
   answerIn(
     deps,
     runId,
     li,
     () => loadThreadRun(deps, runId, li),
     ({ run, unit }, thread) =>
-      writeReply(deps, runId, li, { run, unit, thread }, { debugMode, ...(remote ? { remote } : {}) }),
+      writeReply(deps, runId, li, { run, unit, thread }, { debugMode, review, ...(remote ? { remote } : {}) }),
   );
 
 /**
@@ -682,23 +742,35 @@ const answer = (deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean, re
  * message lands after his newest one only while the thread still ends where it was read (a 409 `conflict` drops it),
  * and the player's seenAt is left alone, so it counts as unread. `reason` "upset" (#2156, S/phone/upset.ts): his
  * answer to her telling him she is upset with him, the same way; "date" (#2424, S/phone/invite.ts): his invitation on a
- * date.
+ * date. #2504: his notes are kept once it lands (keepNotes).
  */
-export const writeFirstMessage = (
+export async function writeFirstMessage(
   deps: PhoneDeps,
   runId: string,
   li: LiId,
   { connectionId, debugMode, reason }: { connectionId: string; debugMode: boolean; reason?: ChatReason },
-): Promise<PhoneMessage[] | null> =>
-  writeFirstIn(
+): Promise<PhoneMessage[] | null> {
+  let notes: string[] = [];
+  const written = await writeFirstIn(
     deps,
     runId,
     li,
     () => loadThreadRun(deps, runId, li),
-    async ({ run, unit }, thread) =>
-      (await writeReply(deps, runId, li, { run, unit, thread }, { debugMode, first: true, connectionId, reason }))
-        .messages,
+    async ({ run, unit }, thread) => {
+      const reply = await writeReply(
+        deps,
+        runId,
+        li,
+        { run, unit, thread },
+        { debugMode, first: true, connectionId, reason },
+      );
+      notes = reply.notes ?? [];
+      return reply.messages;
+    },
   );
+  if (written) await keepNotes(deps, runId, li, notes);
+  return written;
+}
 
 /**
  * writeFirstMessage's rule for thread `key` (the group chat's squabbles too, S/phone/group.ts): a 409 `busy` while its
@@ -736,6 +808,7 @@ async function send(
   li: LiId,
   input: SendInput,
   debugMode: boolean,
+  review: boolean,
 ): Promise<PhoneSendResult> {
   const { run } = await loadThreadRun(deps, runId, li);
   return sendIn(deps, runId, li, input, {
@@ -743,7 +816,7 @@ async function send(
       const { his, yours } = sendableStickers(stickerBook(runId, run), run.world, li);
       return [...his, ...yours].map((sticker) => sticker.id);
     },
-    answer: () => answer(deps, runId, li, debugMode, input.remote),
+    answer: () => answer(deps, runId, li, debugMode, review, input.remote),
   });
 }
 
@@ -813,13 +886,16 @@ const answered = (before: PhoneMessage[], { messages, hurt, held }: Answered): P
   ...(held.length ? { held } : {}),
 });
 
-/** POST .../send: the player's message, then his reply (P17). One send or close per thread at a time (409 `busy`). */
+/**
+ * POST .../send: the player's message, then his reply (P17). One send or close per thread at a time (409 `busy`).
+ * `review` (#2504): the player reviews image prompts (writeReply).
+ */
 export function sendMessage(
   deps: PhoneDeps,
   runId: string,
   li: LiId,
   input: SendInput,
-  { debugMode = false }: { debugMode?: boolean } = {},
+  { debugMode = false, review = false }: { debugMode?: boolean; review?: boolean } = {},
 ): Promise<PhoneSendResult> {
-  return inThreadLock(runId, li, () => send(deps, runId, li, input, debugMode));
+  return inThreadLock(runId, li, () => send(deps, runId, li, input, debugMode, review));
 }
