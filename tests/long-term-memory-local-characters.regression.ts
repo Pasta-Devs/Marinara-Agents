@@ -931,7 +931,11 @@ async function main() {
     { units: [{ ...malformedInput, bucket: "world_fact" }] },
     "a".repeat(64),
   );
-  assert.equal(malformedWorld.parserRejections, 1, "malformed IDs in other buckets remain invalid");
+  assert.equal(
+    malformedWorld.response.units[0]?.subjectId,
+    "bad_incidental_id",
+    "other buckets normalize their own ID and never rebuild it from subjectNames",
+  );
   const malformedRelationship = parseEvidenceUnitPayload(
     {
       units: [
