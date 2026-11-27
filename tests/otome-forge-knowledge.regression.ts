@@ -425,12 +425,14 @@ test("a scene knows what the protagonist wears in it, as it does a love interest
 // 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
 // protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
 // banned in narration only, so every prompt with them moved.
+// 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two stiff patterns are banned
+// everywhere and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "11af2a27caf2617a",
-  callScene: "76eac830aa1037df",
-  confrontation: "2b7c246d143fac93",
-  closer: "3f47354764841f30",
-  bible: "78c5ff4d4a24d58f",
+  scene: "cdc3e9590025bb8b",
+  callScene: "2d98df83d74203d7",
+  confrontation: "dc2f1881063c565d",
+  closer: "306f0b56762f75af",
+  bible: "3eb66e87b8f59bda",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
   // 2026-11-14 (0.29.0): P17's HARD RULES gained the no-echo line and the plain-texting line, so both moved again.
@@ -439,12 +441,12 @@ const STAGING_OTHERS: Record<string, string> = {
   // exception names his date invitations too, so both moved again.
   // 2026-11-27 (#2504): P17 in his own thread gained the [note: …] line (and [selfie: …] with scene art), so both moved
   // again.
-  chat: "d50870e04834ded8",
-  daily: "8e5894c8f10bc8a3",
-  note: "815cfb529ef3e8f9",
+  chat: "af220125bcc5e788",
+  daily: "6afcd31a0c237023",
+  note: "6b16cf8779085121",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "d6066f5c0b023879",
+  datePlan: "8079e233b7d016a5",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {

@@ -682,8 +682,11 @@ function hangoutPlanPrompt(topic?: string) {
   });
 }
 
-/** The hangout plan without a topic, as it was before #2502 (2026-11-27). */
-const BEFORE_TOPIC = "4cec252ef2cad6ac";
+/**
+ * The hangout plan without a topic, as it was before #2502 (2026-11-27). Retaken the same day for #2513, which rewords
+ * the writing rules it carries.
+ */
+const BEFORE_TOPIC = "ad40b28bc9a4c7fa";
 
 test("#2502: a hangout's topic goes in its plan's task in the player's words; without one the prompt is as it was", () => {
   const digest = (messages: unknown) =>

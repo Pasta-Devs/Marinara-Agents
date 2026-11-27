@@ -4987,9 +4987,12 @@ test("0.36.4 (#2384): spoken lines say what the person would say, and every scen
       } as Parameters<typeof confrontationMessages>[0]),
     );
     assert.ok(prompt.includes(`one piece of narration. ${SPOKEN_LINE_RULE}`), `${kind}: the spoken-line rule`);
-    // 2026-11-23: a conversation runs as between real people (the maintainer: natural dialogue).
+    // 2026-11-23: a conversation runs as between real people (the maintainer: natural dialogue). #2513: and speech is
+    // said on the spot, never composed.
     assert.ok(
-      prompt.includes("Speech uses everyday words, and a conversation runs as it does between real people:"),
+      prompt.includes(
+        "Speech uses everyday words and is said on the spot, never composed like a speech or an argument, and a conversation runs as it does between real people:",
+      ),
       `${kind}: everyday words`,
     );
     assert.doesNotMatch(prompt, /fragments, abandoned sentences|The line itself must convey/u, `${kind}: no fragments`);

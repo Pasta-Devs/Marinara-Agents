@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.49.1 — 2026-11-27
+
+- Characters speak less like a script. Four lines of the story prompt are reworded: speech is said on the spot and no longer has to come in whole sentences, counted points ("One… Two…") and mirrored pairs ("You have X, and I have Y") are banned, and a love interest's grand way of talking shows only now and then. The change reaches your story from the next scene.
+
 ## 0.49.0 — 2026-11-27
 
 - In the story, the love interests and your protagonist change into looks they own when a scene calls for it, and their picture changes too. Each chapter offers everyone's everyday look plus up to three 3★, two 4★ and one 5★ painted looks, picked at random. A chapter starts in what everyone wore when the previous one ended.

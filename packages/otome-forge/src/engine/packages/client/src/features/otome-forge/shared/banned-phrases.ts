@@ -17,6 +17,13 @@ export const NARRATION_BANNED_PATTERNS = [
   "negative parallelisms",
 ] as const;
 
+/**
+ * #2513 (the maintainer's, 2026-11-27): constructions nobody says on the spot, which made characters sound composed and
+ * theatrical, and which read just as stiff in narration, so they are banned everywhere, with the phrases below.
+ * Schematic, like the patterns above, so no wording is primed.
+ */
+export const STIFF_PATTERNS = ["counting off points (one: X, two: Y)", "mirrored pairs (you X, I Y)"] as const;
+
 export const ENGINE_BANNED_PHRASES = [
   "jaw working",
   "mechanical precision",
@@ -45,7 +52,11 @@ export const ROMANCE_BANNED_PHRASES = [
   "instant apologies",
 ] as const;
 
-export const BANNED_PHRASES: readonly string[] = [...ENGINE_BANNED_PHRASES, ...ROMANCE_BANNED_PHRASES];
+export const BANNED_PHRASES: readonly string[] = [
+  ...ENGINE_BANNED_PHRASES,
+  ...ROMANCE_BANNED_PHRASES,
+  ...STIFF_PATTERNS,
+];
 
 /** The longest list of the player's own banned phrases kept (Settings → Content), in characters. */
 export const OWN_BANNED_PHRASES_MAX = 2000;
