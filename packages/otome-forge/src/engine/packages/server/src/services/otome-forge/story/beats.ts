@@ -8,6 +8,8 @@
 // - The reply goes through the kit's forgeNormalizeChoiceBeat around Otome's own normalizeBeatBody (segments, five
 //   faces, thoughts, places, music, a CG brief); each option's `effects` are read from the raw reply by the indexes the
 //   kit numbers choices and options with (`choice-<c+1>`, `option-<o+1>`), because its normalizer drops unknown fields.
+// - #2503: while a main chapter's plan has a question about the protagonist the player has not answered, no beat of it
+//   is written (409 `needs-answer`, and the lookahead waits); a Rewrite of a beat already written is not held.
 // - Rewrite: only the beat being read, before any of its choices is canon; the beats after it are removed (they
 //   followed the old one). It costs a call, and the client says so. The new beat replaces the old one only if that is
 //   still as the rewrite found it: a pick, a read to its end or an Ease off made while it was written keeps it (409).
@@ -204,6 +206,9 @@ const chapterNotFound = () => new OtomeForgeError(404, "No such chapter.", "not-
 const beatNotFound = () => new OtomeForgeError(404, "No such beat.", "not-found");
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");
 const locked = (message: string) => new OtomeForgeError(409, message, "locked");
+const needsAnswer = () => new OtomeForgeError(409, "Answer this chapter's questions first.", "needs-answer");
+/** #2503: the chapter's plan asked something about the protagonist the player has not answered yet. */
+const unanswered = (chapter: Chapter) => !!chapter.questions?.some((entry) => !entry.answer);
 const ROUTE_LOCKED = "A rupture stands between you: this route chapter waits until it is repaired.";
 
 const str = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
@@ -1422,6 +1427,7 @@ function queueLookahead(deps: BeatDeps, runId: string, chapter: Chapter, beat: B
           if (!current || current.written.at !== beat.written.at || cutShort(current)) return null;
           // A route chapter waits while a rupture stands (no beat of it opens), so nothing is paid for meanwhile.
           if (await routeLocked(deps, runId, chapter)) return null;
+          if (unanswered(chapter)) return null;
           return generateBeat(deps, runId, chapter.key, next, { ...mode, signal });
         },
       ),
@@ -1529,6 +1535,7 @@ export async function serveBeat(
       // #2459: an ended story only replays what was written.
       if (run.state.ended) throw locked("This story has ended. It still opens to look at.");
       if (!writable(run, chapter, i)) throw conflict("This beat cannot be written yet.");
+      if (unanswered(chapter)) throw needsAnswer();
       beat = await cancellable(deps, runId, (signal) =>
         readOrGenerate(
           runId,

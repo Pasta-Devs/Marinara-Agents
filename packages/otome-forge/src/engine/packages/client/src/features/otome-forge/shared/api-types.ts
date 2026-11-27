@@ -46,7 +46,9 @@ export type OtomeErrorCode =
   | "bad-format"
   | "no-connection"
   | "capacity"
-  | "no-embeddings";
+  | "no-embeddings"
+  /** #2503: the chapter's questions about the protagonist come first (POST .../chapters/:key/answers). */
+  | "needs-answer";
 
 export interface OtomeRunEntry {
   runKey: string;
@@ -1207,6 +1209,12 @@ export interface Chapter {
    * from the client).
    */
   thoughts?: string;
+  /**
+   * #2503: a main chapter's questions about the protagonist from its plan, each with the node that first needs the
+   * answer. No scene of the chapter is written until the player has answered them, and each answer reaches only that
+   * node's scene.
+   */
+  questions?: Array<{ node: number; question: string; answer?: string; answeredAt?: string }>;
   /**
    * #2153: the Shop gift given in a birthday scene (`story-birthday-<li>-<year>`), spent when it was celebrated; its
    * affection is paid when the scene is read to its end (hidden from the client).

@@ -10,7 +10,9 @@
 // written, on a phone and a desktop; and a side-with choice
 // (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest; and
 // Write your own… (#2146) at a chapter's closing decision only, its draft kept until sent, on a phone and a desktop;
-// and a recurring side character (0.20.0) standing in their own sprite while they speak, painted on a tap under Ask.
+// and a recurring side character (0.20.0) standing in their own sprite while they speak, painted on a tap under Ask;
+// and Before this chapter (#2503): the plan's questions about the protagonist before the first scene, on a phone and a
+// desktop, and again when a chapter planned ahead has its first scene refused for them.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -206,6 +208,10 @@ function createStoryStub({
   memory = null as Json | null,
   /** The chapter opened and read up to this node (its first unread one), as when the player comes back to it. */
   startAt = 0,
+  /** #2503: the plan's questions about the protagonist; no beat is written until they are answered. */
+  questions = null as Json[] | null,
+  /** #2503: the chapter read first shows none of them, as one planned ahead: the first beat refused brings them. */
+  askLate = false,
 } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
@@ -296,6 +302,7 @@ function createStoryStub({
   let endFails = !done;
   let favorites: Json[] = [];
   let memoryStatus = memory;
+  let questionsShown = !askLate;
   if (done) {
     for (const stored of storyBeats) {
       const copy = structuredClone(stored);
@@ -362,14 +369,27 @@ function createStoryStub({
       };
     }
     if (path === `${base}/chapters/next`) {
-      chapter = { ...structuredClone(CHAPTER), title, lead: call.body!.lead };
+      chapter = {
+        ...structuredClone(CHAPTER),
+        title,
+        lead: call.body!.lead,
+        ...(questions ? { questions: structuredClone(questions) } : {}),
+      };
+      return { status: 200, json: { chapter: questionsShown ? chapter : { ...chapter, questions: undefined } } };
+    }
+    if (path === `${base}/chapters/main-1/answers`) {
+      chapter!.questions = chapter!.questions.map((entry: Json, n: number) => ({
+        ...entry,
+        answer: call.body!.answers[n],
+        answeredAt: now(),
+      }));
       return { status: 200, json: { chapter } };
     }
     if (path === `${base}/chapters/main-1`) {
       return {
         status: 200,
         json: {
-          chapter,
+          chapter: questionsShown || !chapter ? chapter : { ...chapter, questions: undefined },
           beats: CHAPTER.nodes.map(({ i }) => ({
             i,
             state: i < progress.beatsRead ? "read" : beats.has(i) ? "ready" : "unwritten",
@@ -411,6 +431,11 @@ function createStoryStub({
     if (match) {
       const i = Number(match[1]);
       if (!match[2]) {
+        // #2503: S/story/beats.ts serveBeat refuses every beat while a question waits.
+        if (!beats.has(i) && chapter?.questions?.some((entry: Json) => !entry.answer)) {
+          questionsShown = true;
+          return { status: 409, json: { error: "Answer this chapter's questions first.", code: "needs-answer" } };
+        }
         if (!beats.has(i)) {
           if (i === 1 && !declined) {
             declined = true;
@@ -3300,6 +3325,103 @@ test("Otome Hearth Write your own… (#2146): a chapter's closing decision takes
   await page.screenshot({ path: testInfo.outputPath("own-answer-line.png") });
   await next(root);
   await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeFocused();
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Before this chapter (#2503): the plan's question comes before the first scene; answering goes on to it", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const question = "What did Mira promise her sister before she left?";
+  const stub = createStoryStub({ questions: [{ node: 0, question }] });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  // The dark chapter's tags first, then its question, with focus in its answer; nothing is written before it is sent.
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const dialog = page.getByRole("dialog", { name: "Before this chapter" });
+  await expect(dialog).toContainText("Each answer shapes the scene it was asked for.");
+  const field = dialog.getByRole("textbox", { name: question });
+  await expect(field).toBeFocused();
+  const send = dialog.getByRole("button", { name: "Continue" });
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  await expect(send).toBeInViewport();
+  // It must be answered: Escape leaves it open, and a blank answer sends nothing.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await field.fill("   ");
+  await send.click({ force: true });
+  await expect(dialog).toBeVisible();
+  expect(posts(stub, "/answers")).toHaveLength(0);
+  expect(posts(stub, "/beats/0")).toHaveLength(0);
+  await field.fill("To write to her every week.");
+  await expect(send).toHaveAttribute("aria-disabled", "false");
+  await page.screenshot({ path: testInfo.outputPath("questions-dialog.png") });
+  await send.click();
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/answers")[0]!.body).toMatchObject({ answers: ["To write to her every week."] });
+  // The first scene is written now, once.
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(posts(stub, "/beats/0")).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Before this chapter (#2503): a first scene refused for its questions asks them, by keyboard too", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const questions = [
+    { node: 0, question: "What did Mira promise her sister before she left?" },
+    { node: 2, question: "How does Mira act when she is cornered?" },
+  ];
+  const stub = createStoryStub({ questions, askLate: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  // The chapter read first had none: the refused scene reads it again, and its questions open.
+  const dialog = page.getByRole("dialog", { name: "Before this chapter" });
+  await expect(dialog).toBeVisible();
+  expect(posts(stub, "/beats/0")).toHaveLength(1);
+  const first = dialog.getByRole("textbox", { name: questions[0]!.question });
+  const second = dialog.getByRole("textbox", { name: questions[1]!.question });
+  const send = dialog.getByRole("button", { name: "Continue" });
+  await expect(first).toBeFocused();
+  await page.keyboard.type("To write to her every week.");
+  // One answer is not enough: every question needs its own.
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  await page.keyboard.press("Tab");
+  await expect(second).toBeFocused();
+  // Enter starts a new line in an answer; only Continue sends.
+  await page.keyboard.type("She bites.");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Then she runs.");
+  await expect(dialog).toBeVisible();
+  expect(posts(stub, "/answers")).toHaveLength(0);
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(send).toBeFocused();
+  await expect(send).toHaveAttribute("aria-disabled", "false");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/answers")[0]!.body).toMatchObject({
+    answers: ["To write to her every week.", "She bites.\nThen she runs."],
+  });
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(posts(stub, "/beats/0")).toHaveLength(2);
   expect(pageErrors).toEqual([]);
 });
 

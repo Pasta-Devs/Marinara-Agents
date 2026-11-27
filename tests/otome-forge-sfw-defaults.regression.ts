@@ -267,7 +267,7 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "c32edc5d7d61a2f9",
   beat: "1c81753065aaa3e0",
   beatWithCg: "ab32857477439231",
-  chapterPlan: "fe5ac3d3b2a934fa",
+  chapterPlan: "94667d3c0200759e",
   closer: "8383239f7cd600fd",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
   confrontation: "8ede56ecb34643b5",
@@ -294,6 +294,8 @@ const EXPECTED_ANGST: Record<string, string> = {
 // banned in narration only, so every prompt with them moved.
 // 2026-11-24: the chapter plan says people want their own things and clash with the protagonist, each other and
 // among the love interests, so both chapterPlan digests moved.
+// 2026-11-27 (#2503): the chapter plan's shape and fields offer `ask`, its questions for the player about the
+// protagonist, so both chapterPlan digests moved; the scenes are untouched while no question is answered.
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerDates: "128950b2f59505b7",
   bannerHis: "a35ada9ecdc9ffa4",
@@ -301,7 +303,7 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "830c704474d2f33c",
   beat: "9f082088d7945899",
   beatWithCg: "66afe4a0f773c081",
-  chapterPlan: "fee16182501052b6",
+  chapterPlan: "4375a71d9923f9eb",
   closer: "686cd9770e2622dc",
   // 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
   confrontation: "c239217fa13d0169",

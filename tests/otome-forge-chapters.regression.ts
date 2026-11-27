@@ -12,6 +12,9 @@
 // it; a plan that fails or is refused keeps them, thoughts sent while it is written wait for the chapter after, and a
 // plan without thoughts gets the prompt it got before. The last Character Story's hand-off goes with the task of a
 // main chapter's plan and first scene from chapter 2, never in the cached part, and changes nothing without one.
+// #2503: the plan may ask up to two questions about the protagonist, each on one of its nodes (a bad one is dropped and
+// never fails the plan); they are saved and shown, and POST .../answers takes one answer per question, once, while the
+// chapter is not finished.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -649,6 +652,118 @@ test("Your thoughts… (#2127): the next main chapter's plan reads them with its
     words,
     "while chapter 1 keeps its own",
   );
+});
+
+test("#2503: the plan may ask up to two questions about the protagonist, on its own nodes; asking never fails a plan", () => {
+  const units = CAST.map((li) => ({ ...normalizeUnit({}), id: li.id, name: li.name, pronouns: HE, bible: bible() }));
+  const messages = chapterPlanMessages({
+    world: normalizeWorld({ connections: { narration: "conn-text" } }),
+    player: normalizePlayer({}),
+    units,
+    state: stateWith({}),
+    number: 2,
+    lead: KAI,
+    memory: "",
+  });
+  const instructions = messages
+    .slice(0, -1)
+    .map((message) => message.content)
+    .join("\n\n");
+  assert.ok(instructions.includes(', "ask": [{"node": <node index>, "question": "..."}]}'), "the shape offers it");
+  assert.match(
+    instructions,
+    /- ask \(optional, usually omitted\): at most 2 questions for the player about the protagonist/,
+  );
+  assert.match(instructions, /Write that node's guide so any answer works\./);
+  assert.ok(!messages.at(-1)!.content.includes("- ask ("), "in the instructions every plan shares, never the task");
+
+  const asked = (ask: unknown) => {
+    const plan = normalizeChapterPlan(parse(planReply(ask === undefined ? {} : { ask })), context());
+    assert.equal(typeof plan, "object", `asking never fails a plan: ${String(plan)}`);
+    return typeof plan === "string" ? null : plan.questions;
+  };
+  assert.equal(asked(undefined), undefined, "no ask, no questions");
+  assert.deepEqual(
+    asked([
+      { node: 0, question: "  What did Ines promise her brother?  " },
+      { node: 6, question: "How does Ines take her tea?" },
+    ]),
+    [
+      { node: 0, question: "What did Ines promise her brother?" },
+      { node: 6, question: "How does Ines take her tea?" },
+    ],
+  );
+  const kept = { node: 3, question: "Does Ines fear heights?" };
+  assert.deepEqual(
+    asked([
+      { node: 7, question: "Past the last node?" },
+      { node: -1, question: "Before the first?" },
+      { node: 1.5, question: "Between two?" },
+      { node: "2", question: "By name?" },
+      { node: 2, question: "   " },
+      { node: 2, question: "x".repeat(301) },
+      { question: "Which node?" },
+      null,
+      "Where was Ines born?",
+      kept,
+    ]),
+    [kept],
+    "a bad entry is dropped",
+  );
+  assert.equal(asked([kept, kept, { ...kept, node: 4 }])!.length, 2, "at most two");
+  for (const ask of [null, [], {}, "Where was Ines born?", 3]) assert.equal(asked(ask), undefined, JSON.stringify(ask));
+  // A plan that breaks a rule is repaired for that rule alone, asking or not.
+  const short = planReply({ nodes: planReply().nodes.slice(0, 4), ask: [kept] });
+  assert.match(String(normalizeChapterPlan(parse(short), context())), /6 to 9 nodes, not 4/u);
+});
+
+test("#2503: the plan's questions are saved and shown; POST .../answers takes one answer each, once", async () => {
+  const ask = [
+    { node: 2, question: "What did Ines promise her brother?" },
+    { node: 5, question: "How does Ines fight when cornered?" },
+  ];
+  const t = await storyWorld({ runKey: "r-ask-aaaaaa", replies: [json(planReply({ ask }))] });
+  const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  assert.deepEqual(planned.body.chapter.questions, ask, "the reader gets them, to ask them");
+  const detail = await t.call("GET", "/runs/:run/chapters/:key", {}, { key: "main-1" });
+  assert.deepEqual(detail.body.chapter.questions, ask);
+  const calls = t.calls.length;
+  const answer = (body: object, key = "main-1") => t.call("POST", "/runs/:run/chapters/:key/answers", body, { key });
+  const stored = async () => (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
+  for (const answers of [[], ["Only one."], ["To come home.", "   "], ["To come home.", "x".repeat(1001)], "Both."]) {
+    assert.equal((await answer({ answers })).status, 400, JSON.stringify(answers));
+  }
+  assert.equal((await answer({ answers: ["One.", "Two.", "Three."] })).status, 400, "never more than two");
+  assert.equal((await answer({ answers: ["One.", "Two."] }, "main-2")).status, 404, "no such chapter");
+  assert.equal((await answer({ answers: ["One.", "Two."] }, "not a key")).status, 404);
+  assert.deepEqual((await stored()).questions, ask, "nothing refused is saved");
+  // A finished chapter asks nothing any more.
+  const completed = (at: string | null) =>
+    t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+      ...state,
+      chapters: { ...state.chapters, "main-1": { beatsRead: at ? 7 : 0, completed: at, applied: [] } },
+    }));
+  await completed("2026-11-27T10:00:00.000Z");
+  assert.equal((await answer({ answers: ["One.", "Two."] })).status, 409, "a finished chapter");
+  await completed(null);
+
+  const answered = await answer({ answers: ["  To keep the north lamp lit.  ", "Dirty."] });
+  assert.equal(answered.status, 200, JSON.stringify(answered.body));
+  assert.deepEqual(
+    answered.body.chapter.questions.map((entry: { answer: string }) => entry.answer),
+    ["To keep the north lamp lit.", "Dirty."],
+    "trimmed, one per question in order",
+  );
+  const saved = (await stored()).questions!;
+  assert.deepEqual(
+    saved.map(({ answeredAt: _at, ...entry }) => entry),
+    ask.map((entry, n) => ({ ...entry, answer: ["To keep the north lamp lit.", "Dirty."][n] })),
+  );
+  assert.ok(saved.every((entry) => typeof entry.answeredAt === "string"));
+  assert.equal(t.calls.length, calls, "with no model call");
+  assert.equal((await answer({ answers: ["Again.", "Again."] })).status, 409, "answered once");
+  assert.deepEqual((await stored()).questions, saved, "and kept as they were");
 });
 
 test("Your thoughts… (#2127): a plan without thoughts gets the prompt it got before", () => {
