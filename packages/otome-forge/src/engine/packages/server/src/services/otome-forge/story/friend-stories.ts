@@ -315,7 +315,8 @@ export async function startHangout(
           kind: "hangout",
           friends: company,
           ...(place ? { place } : {}),
-          ...(herLook && herLook !== BASE_LOOK ? { herLook } : {}),
+          // Her everyday look too: a hangout picked in it starts her in it, never in what the last chapter left.
+          ...(herLook ? { herLook } : {}),
         },
       },
     },

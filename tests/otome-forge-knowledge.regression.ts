@@ -327,9 +327,13 @@ test("the story describes a love interest from their current Image appearance an
     assert.doesNotMatch(prompt, /OLD-MASK/, `${kind}: the bible's old look never reaches the story`);
   }
   assert.match(scene, /NEW-MASK[^\n]*; wearing WORN: navy greatcoat\./);
-  // #2509: the planner sees his everyday look; what he wears at home never reaches it.
-  assert.match(plan, new RegExp(`NEW-MASK[^\\n]*; wearing ${kai.bible!.look.outfitLine}\\.`));
-  assert.doesNotMatch(plan, /WORN/);
+  // #2509: the planners see his everyday look, his own route's (bibleBlock) and another's (othersBlock) alike; what he
+  // wears at home never reaches them.
+  const others = text(routePlanMessages({ ...input, li: MIR, memory: "", stage: 2 }));
+  for (const [kind, prompt] of Object.entries({ plan, others })) {
+    assert.match(prompt, new RegExp(`NEW-MASK[^\\n]*; wearing ${kai.bible!.look.outfitLine}\\.`), kind);
+    assert.doesNotMatch(prompt, /WORN/, kind);
+  }
   // With no edit, the bible's look is used, in their everyday clothes.
   const plain = { ...kai, identityLine: "", outfitLine: "", wornOutfit: undefined };
   assert.equal(

@@ -3270,7 +3270,8 @@ function othersBlock(units: readonly Unit[], state: RunState, li: LiId): string 
     .filter((unit) => unit.id !== li)
     .map((unit) =>
       sceneCardBlock(
-        unit,
+        // #2509: in their everyday looks, as bibleBlock gives his: Wear at home never reaches a planner.
+        { ...unit, wornOutfit: undefined },
         {
           ...seenBy(liStateOf(state, unit.id), unit.id, [li]),
           bondPlayed: bondStoriesPlayed(state.chapters, unit.id),

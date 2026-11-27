@@ -20,11 +20,13 @@ import {
   friendRankOf,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/friends.ts";
 import {
+  chapterId,
   runDocTarget,
   sideCastId,
   stateId as stateIdOf,
   unitId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { normalizeChapter } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import type {
   OtomeRequest,
   RouteDeps,
@@ -761,4 +763,7 @@ test("#2502: Plan a hangout takes a topic of 300 characters at most, and Cancel 
   assert.ok(user!.content.includes(`\n${JSON.stringify(topic)}\n`), "her words, trimmed and quoted, in the task");
   assert.ok(!system!.content.includes(topic), "never in the instructions");
   assert.equal((await readThread(t.store, t.runId, KAVEH))!.messages[0]!.invite?.status, "accepted");
+  // #2509: her everyday pick is kept on the hangout, so it starts her in it, never in what the last chapter left.
+  const hangout = await t.store.readDoc(chapterId(t.runId, planned.body.chapter.key), normalizeChapter);
+  assert.equal(hangout?.friendStory?.herLook, "base");
 });
