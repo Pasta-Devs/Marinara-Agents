@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- A branch's chat summary no longer shows as new in Sources when another chat of its conversation already saved memories from the same messages. It shows under Imported with "Already saved from" and a link to that memory, and Import all new and auto-import skip it.
+
 ## 1.6.7 — 2026-11-20
 
 - Chat summaries get a story date when they say which messages they cover, and Conversation day and week summaries get their own days. Find story dates dates the ones imported before.

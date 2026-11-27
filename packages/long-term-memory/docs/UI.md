@@ -382,6 +382,10 @@ also shows an avatar (initials of the chat's first character, else of the chat o
 line, "{who} · {n} messages · Imports as {mode}". Each part comes from what the preview and scope targets already
 carry, so a part the client does not have is left out: who needs exactly one chat with that name, the count (the span of
 message numbers) needs a message range, and the mode shows only on chat and message rows. A row with no part keeps its summary.
+A branch's summary is covered when a source memory of a related chat (one whose messages up to the
+fork the branch shares) already holds every message it summarises. A covered row sits under Imported with the
+Current chip and no checkbox, Import all new and Select all skip it, and its region shows "Already saved from
+{memory}", which opens that memory. Its Import button still imports it on request.
 Every source list (the lorebook browser and the flat lists) uses one navigator bar
 (`SourceNavigatorBar`): title and count, the Select toggle, search, Mode, Reload and the
 Ready / Imported status tabs, with each list's own parts (the messages summary note,

@@ -714,6 +714,7 @@
   "ui.longTermMemory.sourcesworkspace.clearSelectionMessage": "Clear {{count}} selected sources?",
   "ui.longTermMemory.sourcesworkspace.searchSources": "Search sources",
   "ui.longTermMemory.sourcesworkspace.sourcePreview": "Source preview",
+  "ui.longTermMemory.sourcesworkspace.coveredByValue1": "Already saved from {{value1}}",
   "ui.longTermMemory.sourcesworkspace.sourceMemory": "Source note:",
   "ui.longTermMemory.sourcesworkspace.sourceParts": "parts",
   "ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad": "Source preview could not load.",

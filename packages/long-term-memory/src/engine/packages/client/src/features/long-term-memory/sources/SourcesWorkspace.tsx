@@ -798,7 +798,8 @@ export default function SourcesWorkspace({
       Number(!left.sourceId.startsWith(`${props.chatId}:`)) - Number(!right.sourceId.startsWith(`${props.chatId}:`))
     );
   });
-  const importedRows = rows.filter((row) => row.status === "imported");
+  // A covered row (#2498) lists with the imported ones: another chat of its conversation already saved its messages.
+  const importedRows = rows.filter((row) => row.status !== "pending");
   // The ticks belong to the source being browsed, not to where the memories will go: choosing a destination
   // must not drop them.
   const selectionKey = `${source}:${sourceTargetId}:${modeFilter}`;
@@ -831,7 +832,10 @@ export default function SourcesWorkspace({
   const activeFlatSelectedIds = activeFlatRows
     .filter((row) => activeFlatSelection.has(row.sourceId))
     .map((row) => row.sourceId);
-  const activeFlatAllSelected = activeFlatRows.length > 0 && activeFlatSelectedIds.length === activeFlatRows.length;
+  const activeFlatTickable = activeFlatRows.filter(
+    (row) => row.status !== "covered" || retryableIdSet.has(row.sourceId),
+  ).length;
+  const activeFlatAllSelected = activeFlatTickable > 0 && activeFlatSelectedIds.length === activeFlatTickable;
   const focusedFlatDetail =
     sourceDetailsData?.details.find((detail) => detail.sourceId === focusedFlatSourceId) ?? null;
   const openLorebookEntry = selectedLorebook?.entries.find((entry) => entry.id === openLorebookEntryId);
@@ -1593,7 +1597,7 @@ export default function SourcesWorkspace({
           className={`group flex items-start gap-2 p-3 ${open ? "bg-[var(--primary)]/10" : ""}`}
           onClick={() => setFocusedFlatSourceId(open ? null : row.sourceId)}
         >
-          {ready || selectionMode ? (
+          {ready || (selectionMode && row.status !== "covered") ? (
             <label className={sourceCheckboxHitClass} onClick={(event) => event.stopPropagation()}>
               <input
                 type="checkbox"
@@ -1770,6 +1774,18 @@ export default function SourcesWorkspace({
                   <FileInput aria-hidden="true" size="0.75rem" />
                   {localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
                 </Button>
+              ) : row.status === "covered" ? (
+                <Button
+                  {...importActionProps}
+                  {...destinationWait()}
+                  onClick={() => {
+                    if (currentDestinationScope) void runImport([row.sourceId]);
+                  }}
+                  data-ltm-source-action="import"
+                >
+                  <FileInput aria-hidden="true" size="0.75rem" />
+                  {localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
+                </Button>
               ) : row.status === "imported" ? (
                 <>
                   <Button
@@ -1816,6 +1832,15 @@ export default function SourcesWorkspace({
                   onManage={(id, title, operation, trigger) => openSourceOperation({ id, title, operation }, trigger)}
                 />
               </>
+            ) : row.status === "covered" ? (
+              <button
+                type="button"
+                data-ltm-source-covered-by={row.coveredBy.noteId}
+                className="inline-flex min-h-11 items-center text-left text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+                onClick={() => onOpenMemory?.(row.coveredBy.noteId)}
+              >
+                {localizeUi("ui.longTermMemory.sourcesworkspace.coveredByValue1", { value1: row.coveredBy.title })}
+              </button>
             ) : null}
           </section>
         ) : null}
@@ -2809,7 +2834,7 @@ export default function SourcesWorkspace({
                         value1: localizeUi("ui.longTermMemory.sourcesworkspace.sourceParts"),
                       })}
                       checked={activeFlatAllSelected}
-                      disabled={sourceStatusFilter === "all" || activeFlatRows.length === 0}
+                      disabled={sourceStatusFilter === "all" || activeFlatTickable === 0}
                       onChange={(event) =>
                         setSelections((current) => ({
                           ...current,

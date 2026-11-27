@@ -35,6 +35,7 @@ import {
   getLtmChatDisplayName,
   isLtmSourceSharedWithChat,
   ltmSourceLastMessageNumber,
+  ltmSourceMessageRange,
   parseLtmChatMetadata,
   sharedLtmMessageCounts,
 } from "../identity/chat-scope.js";
@@ -1560,6 +1561,77 @@ function previewFreshness(
   return JSON.stringify(existingContext) === JSON.stringify(candidateContext) ? "current" : "context_updated";
 }
 
+/**
+ * Issue #2498: a branch copies its parent's first messages, and another chat of its conversation may already hold them
+ * as source notes. A chat summary row with a message range and no note of its own is covered when the active, extracted
+ * source notes of one other chat of its group, all within the messages the two chats share, hold every message of its
+ * range. Gives the covering note that holds the range's first message, by row source id.
+ */
+async function coveredSummaries(rows: Candidate[], matchExisting: Awaited<ReturnType<typeof existingMatcher>>) {
+  const covered = new Map<string, LtmNote>();
+  const open = rows.filter(
+    (row) => row.provenance.kind === "chat_summary" && row.messageRange && row.scope.groupId && !matchExisting(row),
+  );
+  if (!open.length) return covered;
+  const notesByChat = new Map<string, LtmNote[]>();
+  for (const { note, provenance } of matchExisting.sourceNotes)
+    if (note.status === "active" && note.extractionFingerprint && ltmSourceMessageRange(note))
+      notesByChat.set(provenance.sourceId, [...(notesByChat.get(provenance.sourceId) ?? []), note]);
+  if (!notesByChat.size) return covered;
+  const persistence = getPackagePersistence(),
+    chats = await persistence.listChats(),
+    listed = new Map<string, ReturnType<typeof persistence.listMessages>>(),
+    listMessages = (id: string) => {
+      if (!listed.has(id)) listed.set(id, persistence.listMessages(id));
+      return listed.get(id)!;
+    },
+    countsByChat = new Map<string, ReturnType<typeof sharedLtmMessageCounts>>();
+  for (const row of open) {
+    const chatId = row.provenance.sourceId,
+      chat = chats.find((candidate) => candidate.id === chatId);
+    if (!chat?.groupId) continue;
+    const group = chats.filter((other) => other.groupId === chat.groupId && other.id !== chatId),
+      related = group.filter((other) => notesByChat.has(other.id));
+    if (!related.length) continue;
+    if (!countsByChat.has(chatId))
+      countsByChat.set(
+        chatId,
+        sharedLtmMessageCounts({
+          chatId,
+          chats: [chat, ...group],
+          otherChatIds: related.map((other) => other.id),
+          listMessages,
+        }),
+      );
+    // A chat whose messages cannot be read leaves its summaries to import instead of failing the preview.
+    const sharedMessageCounts = await countsByChat.get(chatId)!.catch(() => undefined);
+    if (!sharedMessageCounts) continue;
+    const { first, last } = row.messageRange!;
+    for (const other of related) {
+      if (last > (sharedMessageCounts.get(other.id) ?? 0)) continue;
+      const ranges = notesByChat
+        .get(other.id)!
+        .filter((note) => isLtmSourceSharedWithChat(note, { chatId, sharedMessageCounts }))
+        .map((note) => ({ note, ...ltmSourceMessageRange(note)! }))
+        .sort((left, right) => left.first - right.first);
+      let next = first,
+        start: LtmNote | undefined;
+      for (const range of ranges) {
+        if (range.first > next) break;
+        if (range.last < next) continue;
+        start ??= range.note;
+        next = range.last + 1;
+        if (next > last) break;
+      }
+      if (start && next > last) {
+        covered.set(row.sourceId, start);
+        break;
+      }
+    }
+  }
+  return covered;
+}
+
 function previewSample(row: Candidate, note: LtmNote | undefined) {
   const base = {
     sourceId: row.sourceId,
@@ -1580,6 +1652,15 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
         existingNoteTitle: note.title || row.title,
       }
     : { ...base, status: "pending" as const, freshness: "new" as const };
+}
+/** A summary row whose messages a source note of a related chat already holds (#2498). */
+function coveredSample(row: Candidate, covered: LtmNote) {
+  return {
+    ...previewSample(row, undefined),
+    status: "covered" as const,
+    freshness: "current" as const,
+    coveredBy: { noteId: covered.id, title: (covered.title || covered.id).slice(0, 240) },
+  };
 }
 function previewPage<T>(
   rows: T[],
@@ -1657,13 +1738,18 @@ export async function previewPackageInterop(
   const page = previewPage(rows, request, request.source, (row) => row.previewOrder ?? row.sourceId);
   // ponytail: host resource APIs list complete source records; only this page gets
   // rendered previews and freshness hashes. Host-side cursors can replace the scan later.
-  const samples = page.items.map((row) => previewSample(row, matchExisting(row)));
-  const imported = rows.filter((row) => matchExisting(row)).length;
+  const covered = request.source === "chats" ? await coveredSummaries(rows, matchExisting) : new Map<string, LtmNote>();
+  const samples = page.items.map((row) => {
+    const note = matchExisting(row),
+      by = covered.get(row.sourceId);
+    return !note && by ? coveredSample(row, by) : previewSample(row, note);
+  });
+  const imported = rows.filter((row) => matchExisting(row) ?? covered.has(row.sourceId)).length;
   return {
     source: request.source,
     scanned: samples.length,
     draftable: samples.filter((item) => item.status === "pending").length,
-    importedCount: samples.filter((item) => item.status === "imported").length,
+    importedCount: samples.filter((item) => item.status !== "pending").length,
     samples,
     totals: { matches: rows.length, ready: rows.length - imported, imported },
     ...(outdated?.length ? { outdated } : {}),
