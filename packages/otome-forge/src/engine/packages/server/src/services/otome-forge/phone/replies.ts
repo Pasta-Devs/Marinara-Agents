@@ -9,6 +9,9 @@
 // as the protagonist, by anyone else, or a reply with nothing in it gets the repair turn, and so does a squabble from
 // one speaker alone, or a reply with nothing from a member the protagonist's newest message names (the maintainer's
 // rule: whoever is named answers). Each speaker sends at most one sticker in a reply, their own or the protagonist's.
+// #2504: in his own thread (never a friend's or the group chat) his messages may hold two hidden commands, taken out of
+// the text and never shown: [note: …], what he writes down to remember about the protagonist, word for word, and
+// [selfie] or [selfie: what it shows], a selfie he sends with that message.
 import { z, type ZodType } from "zod";
 import type { GrievanceSeverity, HapticCue } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -23,6 +26,9 @@ export const MESSAGE_TEXT_MAX = 1000;
 export const NOTE_QUOTE_MAX = NOTE_TEXT_MAX;
 /** His messages in one reply. */
 export const REPLY_MESSAGES_MAX = 3;
+/** #2504: a note's characters (a selfie's words too), and the notes one reply may write and he keeps. */
+export const HIS_NOTE_MAX = 300;
+export const HIS_NOTES_KEPT = 3;
 /** A closed conversation's memory, and the line kept from it. */
 export const MEMORY_CHARS_MAX = 800;
 export const MEMORY_QUOTE_MAX = 200;
@@ -125,8 +131,13 @@ export interface ChatReplyRaw {
 }
 
 export interface ChatReply {
-  /** `sticker` is a listed sticker's id (S/art/stickers.ts); `haptic` (0.34.0) only while he holds the remote. */
-  messages: Array<{ text: string; sticker?: string; haptic?: HapticCue[] }>;
+  /**
+   * `sticker` is a listed sticker's id (S/art/stickers.ts); `haptic` (0.34.0) only while he holds the remote; `selfie`
+   * (#2504) what the selfie he sends with it shows ("" for a plain one).
+   */
+  messages: Array<{ text: string; sticker?: string; haptic?: HapticCue[]; selfie?: { brief: string } }>;
+  /** #2504: what he wrote down to remember about the protagonist, word for word (his own thread only). */
+  notes?: string[];
   /** #2156: his last message asks her out to clear the air (kept only when P17 offered it). */
   invite?: true;
   /** #2424: what her message he answers hurt in him (kept only for a reply to her, never a message he writes first). */
@@ -156,6 +167,8 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
  * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays. `invite` (#2156) is kept
  * only when P17 offered it (`offered`); a message's haptic cues (0.34.0) only while he holds the remote (`remote`).
  * `hurt` (#2424) only when the reply answers her message (`answering`); one with no words or no listed severity goes.
+ * `commands` (#2504, his own thread only): his [note: …] and [selfie] are taken out of the text (takeCommands), at most
+ * HIS_NOTES_KEPT notes and one selfie a reply; a message they leave empty goes, unless it carries the selfie.
  */
 export function normalizeChatReply(
   raw: ChatReplyRaw,
@@ -164,27 +177,65 @@ export function normalizeChatReply(
   offered = false,
   remote = false,
   answering = false,
+  commands = false,
 ): ChatReply | string {
   const messages: ChatReply["messages"] = [];
+  const notes: string[] = [];
   const match = stickerMatcher(listed);
   let stickers = 0;
+  let selfies = 0;
   for (const entry of raw.messages) {
-    const message = readMessage(entry, names, match, stickers === 0);
+    const taken = commands ? takeCommands(entry.text ?? "") : null;
+    notes.push(...(taken?.notes ?? []));
+    const selfie = selfies === 0 ? taken?.selfie : undefined;
+    const message = readMessage(taken ? { ...entry, text: taken.text } : entry, names, match, stickers === 0);
     if (message === AS_PLAYER) {
       return `a message was written as ${names.player}: write only ${names.li}'s own messages, never their reply`;
     }
-    if (!message) continue;
-    if (message.sticker) stickers += 1;
+    const kept = message ?? (selfie ? { text: "" } : null);
+    if (!kept) continue;
+    if (kept.sticker) stickers += 1;
+    if (selfie) selfies += 1;
     const haptic = remote ? normalizeHapticCues(entry.haptic) : [];
-    messages.push(haptic.length ? { ...message, haptic } : message);
+    messages.push({ ...kept, ...(haptic.length ? { haptic } : {}), ...(selfie ? { selfie } : {}) });
   }
-  if (!messages.length) return `the reply had no message from ${names.li}`;
+  if (!messages.length) {
+    // #2504: a note is never shown, so a reply of notes alone still has to say something to her.
+    return `the reply had no message from ${names.li}${notes.length ? ": a [note] is never shown, so write a message to them too" : ""}`;
+  }
   const hurt = answering ? readHurt(raw.hurt) : null;
   return {
     messages: messages.slice(0, REPLY_MESSAGES_MAX),
     ...(offered && raw.invite === true ? { invite: true } : {}),
     ...(hurt ? { hurt } : {}),
+    ...(notes.length ? { notes: notes.slice(0, HIS_NOTES_KEPT) } : {}),
   };
+}
+
+/** #2504: [note: …], [selfie] and [selfie: …], in any case. */
+const COMMAND = /\[\s*(note|selfie)\s*(?::([^[\]\n]*))?\]/giu;
+
+/** A message's spaces once something was taken out of it. */
+const tidy = (text: string) =>
+  text
+    .replace(/[ \t]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .trim();
+
+/**
+ * #2504: a message of his without its commands, and what they hold: each note's words as written (trimmed, cut to
+ * HIS_NOTE_MAX; an empty one is none), and the first selfie's (a plain selfie's are "").
+ */
+function takeCommands(text: string): { text: string; notes: string[]; selfie?: { brief: string } } {
+  const notes: string[] = [];
+  let selfie: { brief: string } | undefined;
+  const rest = text.replace(COMMAND, (_whole, command: string, body: string | undefined) => {
+    const words = [...(body ?? "").trim()].slice(0, HIS_NOTE_MAX).join("");
+    if (command.toLowerCase() === "selfie") selfie ??= { brief: words };
+    else if (words) notes.push(words);
+    return " ";
+  });
+  return { text: rest === text ? text : tidy(rest), notes, ...(selfie ? { selfie } : {}) };
 }
 
 const AS_PLAYER = "as-player";
@@ -211,11 +262,7 @@ function readMessage(
     take(id);
     return id || STICKER_SHAPED.test(folded(inner)) ? " " : whole;
   });
-  if (text !== before)
-    text = text
-      .replace(/[ \t]+/g, " ")
-      .replace(/ ?\n ?/g, "\n")
-      .trim();
+  if (text !== before) text = tidy(text);
   if (entry.sticker) take(match(entry.sticker.replace(/^\[|\]$/g, "")));
   // Any line of the message may be the protagonist's, not only the first.
   const asPlayer =

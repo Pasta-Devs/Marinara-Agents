@@ -18,6 +18,7 @@
 // 0.21.0: the items won from Wish not looked at yet (`owned.unseen`, S/wish/pull.ts adds them in the pull's write,
 // S/routes/items.ts `seen` lets one go); the RunView counts them by where they are kept, for the dock's dots.
 // 0.35.0: each love interest's newest Kitty Cards games (`kitty.rounds`), kept as the Claw's rounds are.
+// #2504: each love interest's notes from his Messages thread (`notes`, S/phone/chat.ts keepNotes), absent while none.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -104,6 +105,7 @@ import {
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { friendLevelOf, friendProgressOf } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { isChapterKey, isLiId, playerId, stateId, unitId, worldId } from "../ids.js";
+import { HIS_NOTE_MAX, HIS_NOTES_KEPT } from "../phone/replies.js";
 import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems, wornLookUrl } from "./common.js";
@@ -309,8 +311,13 @@ export const defaultLiState = (): LiState => ({
 /** The longest romantic-first sentence kept (LiState.firstKiss and the rest). */
 export const FIRST_SENTENCE_MAX = 400;
 
+/** #2504: one of his notes; a damaged one is dropped on its own. */
+const HisNoteSchema = z.object({ text: short(HIS_NOTE_MAX), at: z.string().max(40) });
+
 function normalizeLiState(raw: unknown): LiState {
-  return readFields<LiState>(
+  // #2504: his notes stay absent while he has none, so a state without them reads exactly as before.
+  const notes = keepNewest(validItems(HisNoteSchema, field(raw, "notes")), HIS_NOTES_KEPT);
+  const liState = readFields<Omit<LiState, "notes">>(
     {
       points: (value) => wholeNumber(value, 0, 0),
       stage: (value) => wholeNumber(value, FIRST_STAGE, FIRST_STAGE, LAST_STAGE),
@@ -346,6 +353,7 @@ function normalizeLiState(raw: unknown): LiState {
     defaultLiState,
     isRecord(raw) ? raw : undefined,
   );
+  return notes.length ? { ...liState, notes } : liState;
 }
 
 const defaultLedgers = (): Ledgers => ({ relationship: [], conflicts: [], offscreen: [] });

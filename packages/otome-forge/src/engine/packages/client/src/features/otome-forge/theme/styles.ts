@@ -2813,6 +2813,10 @@ ${R} .of-bubble-quote {
   background: rgb(255 255 255 / 0.22); font-family: var(--of-font-hand); font-size: 1.1rem; line-height: 1.12; opacity: 0.9;
 }
 ${R} .of-bubble-time { padding: 0 6px; font-size: 0.68rem; color: var(--of-text-faint); font-variant-numeric: tabular-nums; }
+/* #2504: his selfie, a portrait inside his message; until it is painted, Paint (or Painting…) in its place. */
+${R} .of-bubble-selfie { display: block; width: min(220px, 100%); border-radius: 14px; white-space: normal; }
+${R} img.of-bubble-selfie { aspect-ratio: 832 / 1216; object-fit: cover; box-shadow: 0 6px 16px rgb(0 0 0 / 0.18); }
+${R} .of-bubble-selfie--waiting { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 /* #2154: the group chat. Its portraits overlap in one slot; each member's bubble sits beside a 24 px portrait gap, the
    portrait on the last of their run, their name over the first, in the column of the time under it (gap + 6 px). */
 ${R} .of-avatar-cluster { position: relative; flex: none; display: block; }

@@ -7,9 +7,16 @@
 // The picture is the plan's memento brief (S/prompts.ts keepsakePrompt) with the first two friends who came and the
 // protagonist, each by their likeness (S/art/cg.ts cgSubjects), as a date's keepsake (S/minigames/date-night.ts). Its
 // record is kept on the chapter (`friendStory.memento.art`); the Album's Hangouts tab shows it.
-import type { Chapter, Paint } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+// #2504: his selfie in Messages (S/phone/selfie.ts) is painted by the same paintOnce, with paintView.
+import type { Chapter, Paint, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { cgReferences, cgSubjects, outfitCutouts } from "../art/cg.js";
-import { galleryRef, imageConnectionFor, worldStyle } from "../art/image-client.js";
+import {
+  galleryRef,
+  imageConnectionFor,
+  worldStyle,
+  type ImageSubject,
+  type StyleProfile,
+} from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget } from "../ids.js";
@@ -23,13 +30,90 @@ import { readChapter } from "./canon.js";
 type MementoDeps = ArtDeps & { store: OtomeStore };
 
 const notFound = () => new OtomeForgeError(404, "No such hangout.", "not-found");
-/** Mementos being painted in this process, by run and chapter. */
+/** The pictures paintOnce is painting in this process, by their claim (`${runId}|memento:${key}` and the like). */
 const painting = new Set<string>();
 const paintKey = (runId: string, key: string) => `${runId}|memento:${key}`;
 
-/** The memento's record as the client should see it: pending with no live paint here (a restart) reads as stopped. */
-export function mementoView(runId: string, key: string, art: Paint | undefined): Paint | undefined {
-  return art?.state === "pending" && !painting.has(paintKey(runId, key)) ? { ...art, state: "stopped" } : art;
+/** A record as the client should see it: pending with no live paint of `claim` here (a restart) reads as stopped. */
+export function paintView(claim: string, art: Paint | undefined): Paint | undefined {
+  return art?.state === "pending" && !painting.has(claim) ? { ...art, state: "stopped" } : art;
+}
+
+/** The memento's record as the client should see it (paintView). */
+export const mementoView = (runId: string, key: string, art: Paint | undefined) => paintView(paintKey(runId, key), art);
+
+/** What paintOnce paints, read once it holds the claim. */
+export interface PaintJob {
+  world: Pick<World, "images">;
+  /** The record as stored now. */
+  art: Paint | undefined;
+  /** For the Engine's override, matched as `avatar:<slug of the first person's first name>`. */
+  name: string;
+  units: ImageSubject[];
+  prompt: (style: StyleProfile) => ImagePrompt;
+  size: { width: number; height: number };
+  /** Saves the record; null when what keeps it is gone (the run was deleted), then `gone()` is thrown. */
+  save: (art: Paint) => Promise<unknown>;
+  gone: () => OtomeForgeError;
+  /** What is painted, for the log. */
+  label: string;
+}
+
+/**
+ * One picture painted once, as `claim` in this process (another while it is held is a 409 `busy`): what `load` reads,
+ * on the Scene art connection (#2465). A ready one is returned as it is, and a failed or stopped one is painted again:
+ * pending, then ready, or failed with the provider's words. An image nothing refers to once it is painted (the run is
+ * gone) is deleted from the gallery again.
+ */
+export async function paintOnce(
+  deps: ArtDeps,
+  claim: string,
+  busy: string,
+  load: () => Promise<PaintJob>,
+  debugMode: boolean,
+): Promise<Paint> {
+  if (painting.has(claim)) throw new OtomeForgeError(409, busy, "busy");
+  painting.add(claim);
+  try {
+    const job = await load();
+    if (job.art?.state === "ready") return job.art;
+    const connectionId = imageConnectionFor(job.world.images, "scene");
+    if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
+    const images = imagesOf(deps);
+    const built = job.prompt(await worldStyle(images, job.world.images, "scene"));
+    if (!(await job.save({ state: "pending", at: new Date().toISOString() }))) throw job.gone();
+    let painted: { url: string; id?: string };
+    try {
+      painted = await images.generateBannerArt({
+        connectionId,
+        name: job.name,
+        units: job.units,
+        prompt: built.prompt,
+        negativePrompt: built.negativePrompt,
+        ...job.size,
+        debugMode,
+      });
+    } catch (error) {
+      const message = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+      deps.runtime.logger.warn("[otome-forge] painting %s failed: %s", job.label, message);
+      const failed: Paint = { state: "failed", at: new Date().toISOString(), error: message };
+      await job.save(failed);
+      return failed;
+    }
+    const ref = painted.id ? galleryRef(painted.id) : undefined;
+    const ready: Paint = { state: "ready", at: new Date().toISOString(), url: painted.url, ...(ref ? { ref } : {}) };
+    let saved: unknown = null;
+    try {
+      saved = await job.save(ready);
+    } finally {
+      // Nothing refers to the new image (the run or what keeps it is gone): remove it rather than leave it in the gallery.
+      if (!saved && painted.id) await images.deleteGalleryImage(painted.id);
+    }
+    if (!saved) throw job.gone();
+    return ready;
+  } finally {
+    painting.delete(claim);
+  }
 }
 
 /** Who the memento shows and how: the hangout, its first two friends and the protagonist (three people at most). */
@@ -102,58 +186,31 @@ function saveMemento(deps: MementoDeps, runId: string, key: string, art: Paint):
 }
 
 /** POST /runs/:run/hangouts/:key/memento (see the header). */
-export async function paintMemento(
+export function paintMemento(
   deps: MementoDeps,
   runId: string,
   key: string,
   { prompt, negativePrompt, debugMode }: Partial<ImagePrompt> & { debugMode: boolean },
 ): Promise<Paint> {
-  const { run, brief, art, first, people, units, references } = await mementoSubject(deps, runId, key);
-  if (art?.state === "ready") return art;
-  // #2465: a memento is scene art, painted on the Scene art connection.
-  const connectionId = imageConnectionFor(run.world.images, "scene");
-  if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
-  const claim = paintKey(runId, key);
-  if (painting.has(claim)) throw new OtomeForgeError(409, "This memento is already being painted.", "busy");
-  painting.add(claim);
-  try {
-    const latest = (await readChapter(deps.store, runId, key))?.friendStory?.memento?.art;
-    if (latest?.state === "ready") return latest;
-    const images = imagesOf(deps);
-    const style = await worldStyle(images, run.world.images, "scene");
-    const built = keepsakePrompt({ brief, people, world: run.world, style, references }, { prompt, negativePrompt });
-    if (!(await saveMemento(deps, runId, key, { state: "pending", at: new Date().toISOString() }))) throw notFound();
-    let painted: { url: string; id?: string };
-    try {
-      painted = await images.generateBannerArt({
-        connectionId,
-        // The Engine matches the override as `avatar:<slug of the first person's first name>`.
+  return paintOnce(
+    deps,
+    paintKey(runId, key),
+    "This memento is already being painted.",
+    async () => {
+      const { run, brief, art, first, people, units, references } = await mementoSubject(deps, runId, key);
+      return {
+        world: run.world,
+        art,
         name: first.name.split(/\s+/)[0] || "Memento",
         units,
-        prompt: built.prompt,
-        negativePrompt: built.negativePrompt,
-        ...SCENE_SIZE,
-        debugMode,
-      });
-    } catch (error) {
-      const message = (error instanceof Error ? error.message : String(error)).slice(0, 300);
-      deps.runtime.logger.warn("[otome-forge] painting the memento of %s failed: %s", key, message);
-      const failed: Paint = { state: "failed", at: new Date().toISOString(), error: message };
-      await saveMemento(deps, runId, key, failed);
-      return failed;
-    }
-    const ref = painted.id ? galleryRef(painted.id) : undefined;
-    const ready: Paint = { state: "ready", at: new Date().toISOString(), url: painted.url, ...(ref ? { ref } : {}) };
-    let saved: Chapter | null = null;
-    try {
-      saved = await saveMemento(deps, runId, key, ready);
-    } finally {
-      // Nothing refers to the new image (the run or the hangout is gone): remove it rather than leave it in the gallery.
-      if (!saved && painted.id) await images.deleteGalleryImage(painted.id);
-    }
-    if (!saved) throw notFound();
-    return ready;
-  } finally {
-    painting.delete(claim);
-  }
+        prompt: (style) =>
+          keepsakePrompt({ brief, people, world: run.world, style, references }, { prompt, negativePrompt }),
+        size: SCENE_SIZE,
+        save: (paint) => saveMemento(deps, runId, key, paint),
+        gone: notFound,
+        label: `the memento of ${key}`,
+      };
+    },
+    debugMode,
+  );
 }
