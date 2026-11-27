@@ -295,9 +295,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // look's first-wear scene stands him in that look, with its own faces and cut-outs, whatever he wears now. Until that
   // look is painted there is no picture of him in it: his worn look stands in, and the scene's art polls (lookComing)
   // until the new one lands; a look left waiting for Paint keeps the worn look for the whole scene.
-  // ponytail: until the scene's art read answers (made only with an image connection), he stands in his worn look; the
-  // upgrade path is the first-wear look on the chapter view.
-  const stageLi = reader.onStage.li && { ...reader.onStage.li, ...reader.sceneArt?.looks?.[reader.onStage.li.id] };
+  // #2509: every scene stands him in the look it dresses him in the same way (reader.looks, kept from the chapter's last
+  // scene until this one's read answers; see lib/reader-state.ts stageLooks for its ponytail).
+  const stageLi = reader.onStage.li && { ...reader.onStage.li, ...reader.looks?.[reader.onStage.li.id] };
   const onStageLi = stageLi
     ? {
         ...stageLi,

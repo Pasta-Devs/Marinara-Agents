@@ -9,7 +9,8 @@
 // changes), with no record kept per person. A date or a hangout dresses her in the look picked for it and its love
 // interests in their everyday looks (they choose their own in its first scene); a 5★ look's first-wear scene dresses its
 // wearer in that look; his side dresses everyone as in the scene it retells. A chapter already under way when its lists
-// were first picked starts in what everyone wore at home, which its earlier scenes were written with. A scene's `wear`
+// were first picked starts in what everyone wore at home, which its earlier scenes were written with, and so does one
+// that follows, or a his side that retells, a chapter played before 0.49.0 (it has no wardrobe). A scene's `wear`
 // (P6) changes someone's look for that scene and the ones after it. Each offered look is added to its wearer's outfits
 // (as Wear at home adds it), so it can stand on stage, be cut out and get its faces.
 // The story's helpers read the look someone wears from `wornOutfit` (appearanceLine, cgSubjects, wornLookUrl): `dressed`
@@ -104,12 +105,6 @@ export const chapterEndLooks = (
   chapter: Pick<Chapter, "key" | "wardrobe" | "nodes">,
 ) => beatLooks(store, runId, chapter, chapter.nodes.length - 1);
 
-/** Who wears what as chapter `key` ended, or {} for one with no wardrobe or none at all. */
-async function endLooks(store: Pick<OtomeStore, "readDoc">, runId: string, key: string): Promise<Looks> {
-  const chapter = await readChapter(store, runId, key);
-  return (chapter && (await chapterEndLooks(store, runId, chapter))) ?? {};
-}
-
 /** The painted looks `who` owns, from the items, with their rarity. */
 function ownedLooks(
   items: readonly Item[],
@@ -155,12 +150,13 @@ async function startLooks(
   items: readonly Item[],
   { previous, underway }: { previous?: string; underway: boolean },
 ): Promise<Looks> {
-  if (underway) {
-    return Object.fromEntries([
+  // Scenes written before 0.49.0 (in a chapter with no wardrobe) were written and staged in everyone's Home looks.
+  const home = (): Looks =>
+    Object.fromEntries([
       [ME, run.player.wornOutfit ?? BASE_LOOK],
       ...run.units.map((unit) => [unit.id, unit.wornOutfit ?? BASE_LOOK]),
     ]);
-  }
+  if (underway) return home();
   if (chapter.date) {
     // A date's love interests choose their own look in its first scene; an older Date Night evening keeps his pick.
     const his =
@@ -171,9 +167,10 @@ async function startLooks(
   if (chapter.hisSide) {
     const key = momentChapterKey(chapter.hisSide.ref);
     const told = await readChapter(store, runId, key);
-    return (told && (await beatLooks(store, runId, told, momentBeat(chapter.hisSide.ref)))) ?? {};
+    return told ? ((await beatLooks(store, runId, told, momentBeat(chapter.hisSide.ref))) ?? home()) : {};
   }
-  const carried = previous ? await endLooks(store, runId, previous) : {};
+  const before = previous ? await readChapter(store, runId, previous) : null;
+  const carried = before ? ((await chapterEndLooks(store, runId, before)) ?? home()) : {};
   // A 5★ look's first-wear scene is about that look: its wearer stands in it.
   const item = isItemStoryKey(chapter.key) ? items.find((entry) => `story-${entry.id}` === chapter.key) : undefined;
   const wearer = item && (item.kind === "his-look5" || item.kind === "her-look5") ? lookWearer(item) : null;

@@ -27,8 +27,9 @@ import { AsyncResource as ForgeStoryExpressionScope } from "node:async_hooks";
 // Another game passes its own face names, their looks, avatar-path reader, log prefix and scope name;
 // Gacha Forge passes none, so every default below is its own.
 // A scene may stand a unit in a look other than its current base (Otome Hearth #2509): `queue`'s optional
-// `sceneBases` (unit document id -> base URL) names it, and that look's set is painted instead. Only a base the
-// unit's own art uses is painted, as for any other set. Gacha Forge passes none.
+// `sceneBases` (unit document id -> base URL) names it, and that look's set is painted instead while it is due; once it
+// is ready the current base's is, as before. Only a base the unit's own art uses is painted, as for any other set.
+// Gacha Forge passes none.
 
 // Each face's edit look: [the sentence for natural-language prompts, the tags for tag prompts].
 export const forgeExpressionLooks = {
@@ -465,11 +466,15 @@ export function createForgeStoryExpressions({
             const bases = forgeStoryExpressionBases(unit, extra);
             const stale = Object.keys(unit.expressions || {}).some((key) => !bases.has(key));
             const personaBase = isPersona ? persona?.art : "";
+            const due = (record) =>
+              record?.state !== "ready" && !(record?.state === "failed" && !retryable(run, record));
+            // A scene's look while its own set is still due, else the current base as always, so a set the current
+            // base still owes (one dropped while a scene's set was painting) is painted by a later scene.
             const scene = isPersona ? "" : sceneBases?.[doc.id];
-            const sceneBase = typeof scene === "string" && bases.has(scene) ? scene : "";
+            const sceneBase =
+              typeof scene === "string" && bases.has(scene) && due(unit.expressions?.[scene]) ? scene : "";
             const record = unit.expressions?.[isPersona ? personaBase : sceneBase || currentBase(unit)];
-            const paint =
-              speaking && record?.state !== "ready" && !(record?.state === "failed" && !retryable(run, record));
+            const paint = speaking && due(record);
             if (stale || paint)
               schedule(runId, doc.id, { paint, extra, personaBase, ...(sceneBase ? { sceneBase } : {}) });
           }

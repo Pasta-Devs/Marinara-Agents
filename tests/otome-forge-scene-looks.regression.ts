@@ -297,6 +297,36 @@ test("#2509: a chapter opens in the looks the previous one ended in; a chapter u
   const player = (await t.store.readDoc(playerId(t.runId), normalizePlayer))!;
   assert.ok(player.outfits.some((outfit) => outfit.id === DRESS));
   assert.equal(player.wornOutfit, undefined);
+  // A chapter played before 0.49.0 has no lists; its scenes were written in the Home looks. The chapter after it, and a
+  // his side retelling one of its scenes, start in them.
+  await saveChapter(t, chapterOf("main-9", 2));
+  assert.deepEqual(await startOf(chapterOf("main-5", 1), { previous: "main-9" }), { me: BASE_LOOK, [KAI]: PIER });
+  const hisSide = {
+    arc: 1,
+    ref: "main-9/1",
+    moment: "stage" as const,
+    stage: 2,
+    trust: 0,
+    tension: 0,
+    open: [],
+    rupture: null,
+    at,
+  };
+  assert.deepEqual(await startOf(chapterOf("side-kai-1", 1, { kind: "story", li: KAI, hisSide } as Partial<Chapter>)), {
+    me: BASE_LOOK,
+    [KAI]: PIER,
+  });
+  // A his side of a scene with lists dresses everyone as in that scene.
+  assert.deepEqual(
+    await startOf(
+      chapterOf("side-kai-2", 1, {
+        kind: "story",
+        li: KAI,
+        hisSide: { ...hisSide, ref: "main-1/1" },
+      } as Partial<Chapter>),
+    ),
+    { me: DRESS, [KAI]: HARBOUR },
+  );
   // With no previous chapter, everyday looks; a chapter whose scenes were written before it had lists, its Home looks.
   assert.deepEqual(await startOf(chapterOf("main-3", 1)), { me: BASE_LOOK, [KAI]: BASE_LOOK });
   assert.deepEqual(await startOf(chapterOf("main-4", 1), { previous: "main-1", underway: true }), {
