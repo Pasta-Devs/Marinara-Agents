@@ -199,7 +199,7 @@ export async function reconcileEvidenceUnitCandidates(options: {
         candidateIndex,
         mutationId: groupUnits[0]!.id,
         noteId: derivedNoteId,
-        message: `Candidate target ${derivedNoteId} matched ${plausible[0]!.id}, but the bounded candidate window may be incomplete; leaving it unattached for review.`,
+        message: `Candidate target ${derivedNoteId} matched ${plausible[0]!.id}, but the bounded candidate window may be incomplete; this check did not attach it.`,
         details: {
           matchKind,
           candidateTargetNoteIds: plausible.map((note) => note.id),
@@ -236,7 +236,7 @@ export async function reconcileEvidenceUnitCandidates(options: {
         candidateIndex,
         mutationId: groupUnits[0]!.id,
         noteId: derivedNoteId,
-        message: `Candidate target ${derivedNoteId} matched no note in a bounded candidate window that may be incomplete; leaving it unattached for review.`,
+        message: `Candidate target ${derivedNoteId} matched no note in a bounded candidate window that may be incomplete; this check did not attach it.`,
         details: {
           matchKind: "none",
           candidateTargetNoteIds: [],

@@ -428,6 +428,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.12",
+          "date": "2026-11-28",
+          "notes": "- The Review count now includes memories that a read could not save, so it may go up after this update on installs that already have some in Review. The memories the read did save still apply as before.",
+          "highlight": false
+        },
+        {
           "version": "1.6.11",
           "date": "2026-11-27",
           "notes": "- If an error says your connection doesn't serve your extraction model, an import now tells you to check the model name. A plain \"Not Found\" error doesn't count, because a wrong connection address can cause it too. After the model-name error an import starts no new pieces and leaves them for a later run, though pieces already being read still finish. It stops the same way when a login or quota error arrives with an error code Long-Term Memory recognizes.",
@@ -539,12 +545,6 @@
           "version": "1.5.23",
           "date": "2026-11-01",
           "notes": "- Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.22",
-          "date": "2026-10-31",
-          "notes": "- Clearer hands-off wording: the background import help says it covers every chat, intro and re-extract text is right when safe changes are accepted automatically, and Advanced Memory scene recaps are disabled with a note on Engines that cannot provide them.\n- Chat Settings shows what background import did today and what waits for review, and both Chat Settings and Extraction warn with a \"Choose\" button when background import has no extraction connection.\n- Reading older Advanced Memory recaps is one button with progress, Stop and resume, instead of a batch-size field and repeated presses.\n- Memory Settings, Chat Settings and the setup guide offer one \"Memories from chats\" choice (I add them myself; Collect them, I'll review; Save them for me) with a per-chat override, and Hide imported messages now waits until a message's memories are saved.",
           "highlight": false
         }
       ]

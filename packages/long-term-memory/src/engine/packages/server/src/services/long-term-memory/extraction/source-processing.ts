@@ -168,7 +168,8 @@ function canMarkCurrent(prepared: PreparedSource) {
         prepared.outcome.droppedCandidates.every((item) => item.validatorCode === "placeholder_text"))
     );
   // A finished run that kept some candidates is done: extracting the same text again only replaces its draft with
-  // another attempt, so its dropped candidates wait in Review instead. Past the detail cap Review cannot list them all.
+  // another attempt. Its dropped candidates are stored as rejected suggestions, which Review lists and counts, while
+  // the draft with the kept ones may still apply on its own. Past the detail cap Review cannot list them all.
   return prepared.outcome.state === "partial_success" && !prepared.outcome.droppedCandidateDetailsTruncated;
 }
 function deterministicUuid(seed: string) {

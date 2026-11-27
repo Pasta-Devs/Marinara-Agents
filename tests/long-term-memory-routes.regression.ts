@@ -7084,6 +7084,93 @@ async function main(routeScenario: RouteScenario) {
             JSON.stringify({ chatId: "chat-persona-a", chatIds: ["chat-persona-a"] }),
         ),
       );
+      // Issue #2495: a memory a read dropped counts in the Review count, and the kept memories still apply.
+      // Runs last because it adds notes and rejected suggestions to the shared vault.
+      {
+        const { processLongTermMemorySourceBatch } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-processing.ts");
+        const { ltmRejectedSuggestionsPath } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/paths.ts");
+        const readWithDrop = async (name: string, droppedText: string, applyLowRisk: boolean) => {
+          const note = await storageService.storage.createNote({
+            id: `source_dropped_count_${name}`,
+            title: `Dropped count ${name}`,
+            type: "source",
+            status: "active",
+            modes: ["roleplay"],
+            scope: { chatId: `chat-dropped-${name}`, chatIds: [`chat-dropped-${name}`] },
+            tags: ["source_summary"],
+            keywords: [],
+            links: [],
+            provenance: { kind: "chat_summary", sourceId: `chat-dropped-${name}`, entryId: `summary-dropped-${name}` },
+            sections: { source: { text: "Nadia gave Damo the closing slot.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+          });
+          const unit = {
+            bucket: "timeline_event",
+            subjectId: `closing_slot_${name}`,
+            sectionKey: "event",
+            text: "Nadia gave Damo the closing slot.",
+            claimKind: "change",
+            importance: "major",
+            evidence: [`source_note:${note.id}`],
+            confidence: 0.95,
+            salience: 0.9,
+            status: "active",
+            links: [{ target: note.id, relation: "extracted_from" }],
+          };
+          // A subject ID with nothing to normalize is invalid_evidence_unit_format; placeholder text is not a memory.
+          const droppedUnit =
+            droppedText === "None."
+              ? { ...unit, subjectId: `nothing_new_${name}`, text: droppedText }
+              : { ...unit, subjectId: "???", text: droppedText };
+          const [result] = await processLongTermMemorySourceBatch({
+            languageModel: {
+              chatComplete: async () => ({
+                content: JSON.stringify({ summary: "One event.", units: [unit, droppedUnit] }),
+                finishReason: "stop",
+              }),
+            } as any,
+            operationId: `10000000-0000-4000-8000-0000000024${applyLowRisk ? "95" : "96"}`,
+            applyLowRisk,
+            chatId: `chat-dropped-${name}`,
+            items: [{ sourceId: note.id, title: note.title!, note, created: false, extractionMode: "roleplay" }],
+            signal: new AbortController().signal,
+            concurrency: 1,
+            root: storageService.root,
+          });
+          return result!;
+        };
+        const get = async (url: string) => {
+          const response = await app.inject({ method: "GET", url: `/api/long-term-memory/${url}`, headers });
+          assert.equal(response.statusCode, 200, response.body);
+          return response.json();
+        };
+        const countFor = (name: string) => get(`drafts/pending-count?chatId=chat-dropped-${name}`);
+        const droppedCodes = async (name: string) =>
+          (await get(`rejected-suggestions?sourceNoteId=source_dropped_count_${name}`)).suggestions.map(
+            (item: any) => item.candidate.validatorCode,
+          );
+
+        const applied = await readWithDrop("applied", "Willow booked the van.", true);
+        assert.equal(applied.draft?.status, "auto_applied", JSON.stringify(applied));
+        assert.equal(applied.appliedMutationIds!.length > 0, true, "the kept memory still applies");
+        assert.deepEqual(await droppedCodes("applied"), ["invalid_evidence_unit_format"]);
+        assert.deepEqual(await countFor("applied"), { count: 1, mutations: 1 });
+
+        const placeholder = await readWithDrop("placeholder", "None.", true);
+        assert.equal(placeholder.draft?.status, "auto_applied", JSON.stringify(placeholder));
+        assert.deepEqual(await droppedCodes("placeholder"), ["placeholder_text"]);
+        assert.deepEqual(await countFor("placeholder"), { count: 0, mutations: 0 });
+
+        // A source with a pending draft and a dropped memory is one source, with both memories waiting.
+        const pending = await readWithDrop("pending", "Willow booked the van.", false);
+        assert.equal(pending.draft?.status, "pending", JSON.stringify(pending));
+        assert.deepEqual(await countFor("pending"), { count: 1, mutations: pending.draft!.mutations.length + 1 });
+
+        // An unreadable rejected-suggestion list must not hide the drafts that are waiting.
+        await writeFile(ltmRejectedSuggestionsPath(storageService.root), "{}");
+        assert.deepEqual(await countFor("pending"), { count: 1, mutations: pending.draft!.mutations.length });
+      }
       await cleanup();
       cleanup = undefined;
       assert.equal(

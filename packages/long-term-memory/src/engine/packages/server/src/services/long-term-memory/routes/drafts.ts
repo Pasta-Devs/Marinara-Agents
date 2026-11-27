@@ -80,16 +80,23 @@ export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRunti
     draftStore.listDrafts(draftQuery.parse(request.query)),
   );
   app.get<{ Querystring: unknown }>("/drafts/pending-count", async (request) => {
-    const drafts = await draftStore.listDrafts({
-      ...draftQuery.parse(request.query),
-      status: "pending",
-    });
-    // `count` is the number of suggestion sources; `mutations` is the number of memories still waiting in them.
+    const query = draftQuery.parse(request.query);
+    const drafts = await draftStore.listDrafts({ ...query, status: "pending" });
+    // An unreadable rejected list must not hide the waiting drafts; the store logs why it could not be read.
+    const rejected = (await listRejectedSuggestions({ chatId: query.chatId }, root).catch(() => [])).filter(
+      (item) => item.candidate.validatorCode !== "placeholder_text",
+    );
+    // `count` is the number of pending drafts, plus the sources that have dropped memories and no pending draft.
+    // `mutations` is the number of memories waiting, both those still in drafts and those a read dropped.
     const mutations = drafts.reduce((total, draft) => {
       const applied = new Set(draft.appliedMutationIds ?? []);
       return total + draft.mutations.filter((mutation) => !applied.has(mutation.id)).length;
-    }, 0);
-    return { count: drafts.length, mutations };
+    }, rejected.length);
+    const sources = new Set(drafts.map((draft) => draft.source.sourceNoteId));
+    const droppedOnlySources = new Set(
+      rejected.map((item) => item.source.sourceNoteId).filter((id) => !sources.has(id)),
+    );
+    return { count: drafts.length + droppedOnlySources.size, mutations };
   });
   app.get<{ Querystring: unknown }>("/drafts/review", async (request) => {
     const query = draftReviewQuery.parse(request.query);
