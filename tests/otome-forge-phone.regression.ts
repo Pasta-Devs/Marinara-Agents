@@ -2237,7 +2237,7 @@ function friendChatPrompt() {
  * That prompt on staging before #2504 (2026-11-27): a friend's thread never offers his commands. Retaken the same day
  * for #2513, which rewords the writing rules it carries.
  */
-const FRIEND_CHAT_BEFORE = "4d1ddab1d138d5c3";
+const FRIEND_CHAT_BEFORE = "ebf2cbbf325806db";
 
 test("#2504: a friend's P17 is byte for byte as it was before his commands", () => {
   const digest = createHash("sha256").update(JSON.stringify(friendChatPrompt())).digest("hex").slice(0, 16);

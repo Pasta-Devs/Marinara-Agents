@@ -192,7 +192,6 @@ import {
 import {
   BANNED_PHRASES,
   NARRATION_BANNED_PATTERNS,
-  SPEECH_BANNED_PATTERNS,
   parseBannedPhrases,
 } from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import { MIN_AGE } from "../../../../client/src/features/otome-forge/shared/bible.js";
@@ -449,13 +448,13 @@ export const STORY_PACING_INSTRUCTION =
   'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs and twists only if they have proper build-ups between more mundane scenes; the plot always makes sense to an ordinary reader.';
 
 /**
- * The banned-phrases line: the built-in list, then the player's own (Settings → Content), each quoted as typed, then
- * the sentence patterns banned in narration only (2026-11-23), so speech may use them as people do, and last the two
- * banned in speech (#2513).
+ * The banned-phrases line: the built-in list (#2513: counted points and mirrored pairs among it), then the player's own
+ * (Settings → Content), each quoted as typed, and last the sentence patterns banned in narration only (2026-11-23), so
+ * speech may use them as people do.
  */
 export function bannedPhrasesRule(own?: string): string {
   const theirs = parseBannedPhrases(own).map((phrase) => JSON.stringify(phrase));
-  return `- Never use these overused phrases or patterns: ${[...BANNED_PHRASES, ...theirs].join("; ")}. In narration, never use these sentence patterns either: ${NARRATION_BANNED_PATTERNS.join("; ")}. In speech, never use these: ${SPEECH_BANNED_PATTERNS.join("; ")}.`;
+  return `- Never use these overused phrases or patterns: ${[...BANNED_PHRASES, ...theirs].join("; ")}. In narration, never use these sentence patterns either: ${NARRATION_BANNED_PATTERNS.join("; ")}.`;
 }
 
 /** The banned-phrases line on its own, for prompts that write prose but no story (premise, world plan). */

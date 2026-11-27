@@ -1388,13 +1388,13 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
 // 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
 // protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
 // banned in narration only, so every prompt with them moved.
-// 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two patterns are banned in
-// speech and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
+// 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two stiff patterns are banned
+// everywhere and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
 const BEFORE_GIFTS: Record<string, string> = {
-  plan: "b9baf74ae4b7bb95",
-  scene1: "bb05c90cade97749",
-  scene2: "ce6804681880d5f4",
-  scene3: "1a4361fc676d5fad",
+  plan: "f1f402fabf16701b",
+  scene1: "9c8beddd751afdb1",
+  scene2: "6e3802877a50f1fd",
+  scene3: "4ba729d8f2e809c5",
 };
 
 /** P26 and the three scenes of one date, from fixed documents, with or without a gift. */
