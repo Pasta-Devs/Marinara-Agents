@@ -18,6 +18,7 @@
 // #2152: touch on Home at 1280x800 and 390x844: head, cheek, chest and hand, Cheek bringing its own face, voiced; under
 // NSFW Heat a Crotch zone by Tab and Enter and by pointer over the middle of the hand band, with Hand on its side, gone
 // during a rupture and for a cached pack once Heat is SFW; four or five zones or pills at every phone size.
+// #2504: his selfie in his message shows as a picture once painted, or Paint until then, never his bracketed command.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -2055,6 +2056,65 @@ for (const cleanup of ["pending", "failed"] as const) {
     expect(stub.calls.filter((call) => call.method === "POST" && call.path.includes("/art/"))).toHaveLength(0);
   });
 }
+
+test("Otome Hearth phone: his selfie shows in his message as a picture, or Paint until it is painted (#2504)", async ({
+  page,
+}, testInfo) => {
+  const stub = createHomeStub();
+  const painted = { state: "ready", at: new Date().toISOString(), url: PHOTO };
+  let paints = 0;
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (
+      call.method === "POST" &&
+      call.path === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}/messages/m-selfie-b/selfie`
+    ) {
+      stub.calls.push(call);
+      paints += 1;
+      return { status: 200, json: { art: painted } };
+    }
+    const response = await answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}`) {
+      // His reply carried [selfie: …] twice over: the server keeps the picture on the message, never the brackets.
+      const at = new Date().toISOString();
+      (response.json as Json).messages.push(
+        {
+          id: "m-selfie-a",
+          who: "li",
+          text: "Proof I left the lab.",
+          at,
+          selfie: { brief: "on the bridge", art: painted },
+        },
+        { id: "m-selfie-b", who: "li", text: "", at, selfie: { brief: "", ...(paints ? { art: painted } : {}) } },
+      );
+    }
+    return response;
+  };
+  await page.emulateMedia({ colorScheme: "dark" });
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
+  const pictures = log.getByRole("img", { name: "A selfie Ilvar Thorne sent you" });
+  await expect(pictures).toHaveCount(1);
+  await expect(pictures.first()).toHaveAttribute("src", PHOTO);
+  await expect(log).toContainText("Proof I left the lab.");
+  await expect(log).not.toContainText("[selfie");
+  // The one not painted yet offers Paint (Ask before painting is off, so the tap paints it), with its cost.
+  const paint = log.getByRole("button", { name: "Paint the selfie" });
+  await expect(paint).toBeVisible();
+  await expect(log).toContainText("1 image");
+  await page.screenshot({ path: testInfo.outputPath("phone-selfie.png") });
+  await paint.click();
+  await expect(pictures).toHaveCount(2);
+  await expect(paint).toHaveCount(0);
+  expect(posts(stub, "/messages/m-selfie-b/selfie")).toHaveLength(1);
+  await expect(log).not.toContainText("[selfie");
+});
 
 for (const outcome of ["ready", "uncut", "load-error"] as const) {
   test(`Otome Hearth Home expressions retain a clean neutral when cleanup is ${outcome}`, async ({

@@ -11,6 +11,8 @@
 // - The player's own words are quoted as data.
 // - Over its token budget the line keeps the newest entries whole, and one entry at the notebook's limits fits it.
 // - The real call sites (the story routes, the Home note and a Messages reply) pass the notebook through.
+// - #2504: his notes from Messages ([note: …]) ride on the line after it into each of his own prompts (P17 reads them
+//   after its cached part), never another's, and a banner carries none.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -100,8 +102,20 @@ const NOTEBOOKS: Record<LiId, NotebookEntry[]> = {
 const MARK: Record<LiId, string> = { [KAI]: "KAI-NOTEBOOK", [MIR]: "MIR-NOTEBOOK", [SOL]: "SOL-NOTEBOOK" };
 const ANY_NOTEBOOK = /has come to know about the protagonist|[A-Z]{3}-NOTEBOOK/;
 
-/** The world, the protagonist, the cast and a state whose love interests hold `notebooks` (one left out: empty). */
-function inputs(notebooks: Partial<Record<LiId, NotebookEntry[]>> = NOTEBOOKS) {
+/** #2504: Kai's and Mireille's notes from Messages. */
+const NOTES: Partial<Record<LiId, Array<{ text: string; at: string }>>> = {
+  [KAI]: [{ text: 'KAI-NOTE: says "later" and means never.', at }],
+  [MIR]: [{ text: "MIR-NOTE: hates the fog horn.", at }],
+};
+
+/**
+ * The world, the protagonist, the cast and a state whose love interests hold `notebooks` (one left out: empty) and
+ * (#2504) `notes`.
+ */
+function inputs(
+  notebooks: Partial<Record<LiId, NotebookEntry[]>> = NOTEBOOKS,
+  notes: Partial<Record<LiId, Array<{ text: string; at: string }>>> = {},
+) {
   const world = normalizeWorld({
     title: "The Lantern Court",
     premise: "Someone is putting out the harbour's lanterns.",
@@ -118,7 +132,12 @@ function inputs(notebooks: Partial<Record<LiId, NotebookEntry[]>> = NOTEBOOKS) {
   }));
   const player = { ...normalizePlayer({}), name: "Ines", pronouns: SHE };
   const state = normalizeState({
-    lis: Object.fromEntries(CAST.map((li) => [li.id, { ...defaultLiState(), known: notebooks[li.id] ?? [] }])),
+    lis: Object.fromEntries(
+      CAST.map((li) => [
+        li.id,
+        { ...defaultLiState(), known: notebooks[li.id] ?? [], ...(notes[li.id] ? { notes: notes[li.id] } : {}) },
+      ]),
+    ),
   });
   return { world, units, player, state };
 }
@@ -128,8 +147,12 @@ const nodes = (cast: LiId[]): ChapterNode[] =>
   [0, 1, 2].map((i) => ({ i, kind: "beat", guide: "An ordinary afternoon on the quay.", cast }));
 
 /** Every prompt about `li` alone, or led by or against them, built as its call site builds it. */
-function ownPrompts(li: LiId, notebooks?: Partial<Record<LiId, NotebookEntry[]>>): Record<string, string> {
-  const input = inputs(notebooks);
+function ownPrompts(
+  li: LiId,
+  notebooks?: Partial<Record<LiId, NotebookEntry[]>>,
+  notes?: Parameters<typeof inputs>[1],
+): Record<string, string> {
+  const input = inputs(notebooks, notes);
   const { world, units, player, state } = input;
   const unit = unitOf(units, li);
   const own = ownView(state, li).liState;
@@ -264,7 +287,7 @@ test("a main-chapter scene carries each present love interest's own notebook bes
 });
 
 test("a banner and a caring message never carry a notebook", () => {
-  const { world, units, player, state } = inputs();
+  const { world, units, player, state } = inputs(NOTEBOOKS, NOTES);
   for (const kind of ["memories", "his-wardrobe", "my-wardrobe"] as const) {
     for (const featured of units) {
       const prompt = text(
@@ -281,6 +304,7 @@ test("a banner and a caring message never carry a notebook", () => {
         }),
       );
       assert.doesNotMatch(prompt, ANY_NOTEBOOK, `the ${kind} banner featuring ${featured.name} carries no notebook`);
+      assert.doesNotMatch(prompt, /wrote down to remember|[A-Z]{3}-NOTE:/, `nor his notes (#2504)`);
     }
   }
   const care = text(
@@ -305,6 +329,23 @@ test("an empty notebook adds nothing; a notebook adds exactly its own line", () 
       assert.doesNotMatch(without[kind]!, ANY_NOTEBOOK, `${kind} with an empty notebook carries none`);
       const stripped = lines.reduce((rest, line) => rest.split(`\n${line}`).join(""), prompt);
       assert.equal(stripped, without[kind], `${kind}: the notebook's line is all it adds, with no blank line`);
+    }
+  }
+});
+
+test("#2504: his notes from Messages ride after his notebook into each prompt of his own, and never another's", () => {
+  for (const li of [KAI, MIR]) {
+    const name = CAST.find((entry) => entry.id === li)!.name;
+    const line = `What ${name} wrote down to remember about the protagonist, word for word: ${JSON.stringify(NOTES[li]![0]!.text)}`;
+    const without = ownPrompts(li);
+    for (const [kind, prompt] of Object.entries(ownPrompts(li, NOTEBOOKS, NOTES))) {
+      assert.equal(prompt.split(line).length - 1, 1, `${name}'s ${kind} carries ${name}'s notes, once`);
+      for (const other of CAST.filter((entry) => entry.id !== li)) {
+        assert.ok(!prompt.includes(`What ${other.name} wrote down`), `${name}'s ${kind}: none of ${other.name}'s`);
+      }
+      // The line is all they add: on the notebook's next line, or (P17) opening the part after its cached part.
+      const added = kind === "chat" ? `${line}\n\n` : `\n${line}`;
+      assert.equal(prompt.replace(added, ""), without[kind], `${kind}: the notes' line is all they add`);
     }
   }
 });

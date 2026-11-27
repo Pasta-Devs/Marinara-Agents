@@ -349,6 +349,11 @@ test("his side is told as things stood at the moment: nothing later reaches his 
         rupture: { grievanceId: "g-new", since: LATER },
         disclosures: [...his.disclosures, { text: "TOLD-LATER", at: LATER, ref: "main-20/2" }],
         known: [...his.known, guess("GUESS-LATER", LATER) as never],
+        // #2504: his notes from Messages, one written by the moment and one after it.
+        notes: [
+          { text: "NOTE-BEFORE", at: AT },
+          { text: "NOTE-LATER", at: LATER },
+        ],
       },
     },
   };
@@ -371,8 +376,9 @@ test("his side is told as things stood at the moment: nothing later reaches his 
   );
   assert.deepEqual(then.lis[MIR], now.lis[MIR], "only his");
   const card = betweenYou({ name: "Kai" }, kai) + knowsAboutYou({ name: "Kai" }, kai);
-  for (const line of ["OLD-GRIEVANCE", "TOLD-BEFORE", "GUESS-BEFORE"]) assert.ok(card.includes(line), line);
-  for (const line of ["WALKOUT-GRIEVANCE", "A rupture stands", "TOLD-LATER", "GUESS-LATER"]) {
+  for (const line of ["OLD-GRIEVANCE", "TOLD-BEFORE", "GUESS-BEFORE", "NOTE-BEFORE"])
+    assert.ok(card.includes(line), line);
+  for (const line of ["WALKOUT-GRIEVANCE", "A rupture stands", "TOLD-LATER", "GUESS-LATER", "NOTE-LATER"]) {
     assert.ok(!card.includes(line), line);
   }
   // A rupture standing at the moment (a walkout's) stays on it.
