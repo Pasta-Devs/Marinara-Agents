@@ -316,3 +316,49 @@ test("a repainted look leaves its old faces unused: the next scene prunes them a
   assert.equal(t.paid.length, 10);
   t.art.dispose();
 });
+
+test("#2509: a scene's look gets its own five faces, his Home look keeps its set, and only a look of his own is painted", async () => {
+  const t = await facesWorld("r-scenefaces-aaaaaa");
+  const SUIT = "/api/global-gallery/file/kai-suit.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    outfits: [{ id: "suit", name: "Suit", outfitLine: "black suit", url: SUIT, at: "2026-10-28T10:00:00.000Z" }],
+  }));
+  // A base that is none of his pictures paints nothing.
+  t.art.queueExpressions(t.runId, beat(0), {
+    debugMode: false,
+    bases: { [KAI]: "/api/global-gallery/file/other.png" },
+  });
+  await until(async () => settled(await t.set()), "his portrait's faces, painted instead");
+  assert.equal(t.paid.length, 5, "only his own look's faces");
+  assert.equal((await t.unit()).expressions["/api/global-gallery/file/other.png"], undefined);
+  // The scene stands him in his suit, which he does not wear at home: the suit gets its set, and the portrait's stays.
+  t.art.queueExpressions(t.runId, beat(0), { debugMode: false, bases: { [KAI]: SUIT } });
+  await until(async () => settled((await t.unit()).expressions[SUIT] as SetRecord | undefined), "the suit's faces");
+  const suit = (await t.unit()).expressions[SUIT] as SetRecord;
+  assert.equal(suit.state, "ready");
+  assert.deepEqual(Object.keys(suit.images ?? {}).sort(), [...FACES].sort());
+  assert.equal(t.paid.length, 10);
+  assert.equal((await t.set())!.state, "ready", "the Home look's set is untouched");
+  assert.equal((await t.unit()).wornOutfit, undefined, "nothing is worn");
+  // Served again: both sets are ready, nothing more is paid.
+  t.art.queueExpressions(t.runId, beat(0), { debugMode: false, bases: { [KAI]: SUIT } });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(t.paid.length, 10);
+  // He now wears a coat at home whose set was never painted (a Wear dropped while a scene's set painted): with the
+  // scene's suit ready, the next scene paints the coat's set, as every scene did before.
+  const COAT = "/api/global-gallery/file/kai-coat.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    outfits: [
+      ...unit.outfits,
+      { id: "coat", name: "Coat", outfitLine: "grey coat", url: COAT, at: "2026-10-28T10:00:00.000Z" },
+    ],
+    wornOutfit: "coat",
+  }));
+  t.art.queueExpressions(t.runId, beat(0), { debugMode: false, bases: { [KAI]: SUIT } });
+  await until(async () => settled((await t.unit()).expressions[COAT] as SetRecord | undefined), "the coat's faces");
+  assert.equal(((await t.unit()).expressions[COAT] as SetRecord).state, "ready");
+  assert.equal(t.paid.length, 15);
+  t.art.dispose();
+});

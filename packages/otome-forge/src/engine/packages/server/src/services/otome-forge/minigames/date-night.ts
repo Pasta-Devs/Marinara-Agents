@@ -132,6 +132,7 @@ import type { OtomeStore } from "../store.js";
 import { canonPicks, type BeatDeps } from "../story/beats.js";
 import { itemView, readItem } from "../items/open.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
+import { ME, chapterEndLooks, dressed, lookOf } from "../story/scene-looks.js";
 import { ANGST_TYPES, CHAPTER_TAGS } from "../story/replies.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 
@@ -566,7 +567,8 @@ export async function planDate(
     label: `date-plan/${key}`,
     messages: datePlanMessages({
       world: run.world,
-      player: await withPersonaStoryAbout(deps.runtime, run.player),
+      // #2509: dressed in the look picked for the date (never worn at home); the love interests in their everyday looks.
+      player: dressed(await withPersonaStoryAbout(deps.runtime, run.player), input.herLook),
       unit: lead,
       others: units.slice(1),
       state: run.state,
@@ -843,6 +845,12 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   if (!isFinished(run.state, chapter)) throw conflict("A keepsake is painted once the date is over.");
+  // #2509: everyone in the look the date ended in (S/story/scene-looks.ts), its picture their reference.
+  const ended = await chapterEndLooks(deps.store, runId, chapter);
+  if (ended) {
+    run.player = dressed(run.player, lookOf(ended, ME));
+    run.units = run.units.map((member) => dressed(member, lookOf(ended, member.id)));
+  }
   const unit = partnerOf(run, chapter.date.li);
   // #2303: on a won date with several, the first two of them with her (a picture holds three people at most). An
   // earlier Date Night double date's brief was written for two, so it keeps drawing its first love interest with her.

@@ -31,6 +31,7 @@ import {
   ruptureHold,
   skipTarget,
   speakerLi,
+  stageLooks,
   worldPlaces,
   type BeatResponse,
   type Picks,
@@ -306,6 +307,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const [sceneTick, setSceneTick] = useState(0);
   const [sceneUnavailable, setSceneUnavailable] = useState<string | null>(null);
   const sceneArt = scene && scene.id === sceneId ? scene.art : null;
+  // #2509: who stands in which look, kept from the chapter's last scene until this one's read answers.
+  const looks = stageLooks(scene, sceneId, `${runKey}:${chapterKey}/`);
   const place = timeline?.lines
     .slice(0, lineIndex + 1)
     .reverse()
@@ -619,7 +622,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const wantsFaces = !!images.connectionId && images.expressions;
 
   useEffect(() => {
-    if (!sceneId || node === null || !images.connectionId) return;
+    // #2509: read without an image connection too: the scene's looks come only from here (free; it paints nothing).
+    if (!sceneId || node === null) return;
     let live = true;
     let tries = 0;
     let timer = 0;
@@ -1255,6 +1259,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     refBase,
     cg,
     sceneArt,
+    /** #2509: the looks the stage stands the love interests in (lib/reader-state.ts stageLooks). */
+    looks,
     place,
     placeInfo,
     placeUrl,

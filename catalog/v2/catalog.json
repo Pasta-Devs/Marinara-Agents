@@ -1613,8 +1613,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "196d9c1870ee0d7996ae31d86d1f79c73f3f960e3e5c049ece7dfcfecb57e678",
-            "bytes": 1039673
+            "sha256": "4af4e04f5cee8d1466cd8896a37611b9445e2682eff363e2254c15b158f6d7f0",
+            "bytes": 1040637
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2467,8 +2467,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.27.7.zip",
-        "sha256": "f278ae4c44a899b943c9ae16176fa99cd9c879043172137949e7b0b340caee7e",
-        "bytes": 9194215
+        "sha256": "082507153e894529721e663813fe4dc885495fae79f64e530134159d70b30b2f",
+        "bytes": 9195179
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -3310,7 +3310,7 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.48.0",
+        "version": "0.49.0",
         "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
@@ -3368,13 +3368,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "b30f601bb081e1168387dedf5b83dc090c99c9f38a84de53cbdab74949e370c2",
-            "bytes": 843380
+            "sha256": "33ba32befefc36c7b4b0646da7c50f978a485b7d955e655caac3856c24657f95",
+            "bytes": 849511
           },
           {
             "path": "client.js",
-            "sha256": "4ccae7d3c1d771f05a8f0d823f9273e5ad9083bd214ba11e57c4fc1af4af70c1",
-            "bytes": 1539606
+            "sha256": "89063509670293c20b0c9934dcf8cd726a850c26958322378ecfea3c211df36f",
+            "bytes": 1539740
           },
           {
             "path": "otome-hearth-icon.png",
@@ -3503,9 +3503,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.48.0.zip",
-        "sha256": "30d3c9fbfac2288e550293d78c14d6b3a4181e4a5b3648b4e52123b28539df5c",
-        "bytes": 3455234
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.49.0.zip",
+        "sha256": "7e6e6e7f42a2c2ffb2e78545a27f75a92bca1eb4cc0a764640834ff96a744767",
+        "bytes": 3461499
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },

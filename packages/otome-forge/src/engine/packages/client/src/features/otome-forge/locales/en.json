@@ -547,7 +547,7 @@
   "ui.otomeForge.dateNight.lookBase": "Everyday look",
   "ui.otomeForge.dateNight.lookTheirs": "{{name}} wears",
   "ui.otomeForge.dateNight.lookUnpaintedNote": "A look you own appears here once it’s painted: open it in the Wardrobe.",
-  "ui.otomeForge.dateNight.lookWearNote": "The looks you pick are worn for the date, and stay on afterwards.",
+  "ui.otomeForge.dateNight.lookWearNote": "You wear it for this outing only. Home keeps the look you choose there.",
   "ui.otomeForge.dateNight.lookYours": "You wear",
   "ui.otomeForge.dateNight.looksTitlePulled": "What will you wear?",
   "ui.otomeForge.dateNight.makeItRight": "Make it right",

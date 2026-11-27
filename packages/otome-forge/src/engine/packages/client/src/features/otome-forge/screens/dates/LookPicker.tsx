@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Date Night's looks. What each of them wears tonight, side by side: every look they own and can wear (the
 // Wardrobe's own list, GET /runs/:run/wardrobe), their everyday look first, or initials on their colour when a look has
-// no image. Starting the date wears the picks, as Wear at home does (S/routes/dates.ts), so they stay on afterwards.
+// no image. #2509: the pick dresses her for that date or hangout only (S/story/scene-looks.ts), never at home; the love
+// interests choose their own looks in a date's first scene.
 // The Photo Shoot (#2087) reuses it with its own note: a photo wears nothing. Looks show matte-cleaned (LookImage): the
 // Wardrobe's saved cut-outs as they are, the rest cleaned in the browser.
 // ──────────────────────────────────────────────
@@ -25,7 +26,7 @@ interface LookPickerProps {
   herLook: string;
   onChange: (looks: { hisLook: string; herLook: string }) => void;
   /**
-   * In place of "worn for the date, and stay on afterwards" (the Photo Shoot wears nothing). Always shown, with the
+   * In place of "for this outing only" (the Photo Shoot wears nothing). Always shown, with the
    * unpainted-look hint after it when there is one (that hint stands in for Date Night's own line).
    */
   note?: string;

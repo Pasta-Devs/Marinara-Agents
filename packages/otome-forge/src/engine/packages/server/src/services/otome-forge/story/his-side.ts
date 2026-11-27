@@ -53,7 +53,7 @@ const cutShort = (beat: Pick<Beat, "easedOff" | "confrontation">) => !!beat.ease
 
 /** The chapter key of a moment's `ref` (`${key}/${i}`), and its beat. */
 export const momentChapterKey = (ref: string) => ref.slice(0, ref.lastIndexOf("/"));
-const momentBeat = (ref: string) => Number(ref.slice(ref.lastIndexOf("/") + 1));
+export const momentBeat = (ref: string) => Number(ref.slice(ref.lastIndexOf("/") + 1));
 
 /**
  * The love interest a read of `beat` could give a moment to, before the read (finishBeat reads whether his side of the

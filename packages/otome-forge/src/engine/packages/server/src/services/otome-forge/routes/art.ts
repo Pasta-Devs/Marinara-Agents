@@ -4,7 +4,8 @@
 // GET  /runs/:run/art/scene?key&i                          → SceneArt: the beat's places and CG with their paints, and
 //                                                            each love interest's ready faces (the reader polls it
 //                                                            while something is painting); in his 5★ look's
-//                                                            first-wear scene, him in that look (`looks`), and
+//                                                            first-wear scene, him in that look (`looks`; #2509:
+//                                                            in any scene, the look it dresses him in), and
 //                                                            `lookComing` while that look paints or is cut out;
 //                                                            0.20.0: its recurring side speakers' sprites (`sides`)
 // POST /runs/:run/art/place {place, prompt?, negativePrompt?} → {place, world}; paints that place now (the tap)
@@ -39,6 +40,9 @@
 // for. No face set is painted for it here: faces are paid for when he wears a look (S/routes/wardrobe.ts), so the
 // scene does not pay for one he may never wear. Worn now, it is his stage look already and needs nothing. A her-look5's
 // first-wear scene pins nothing: the protagonist is never on stage, and he stands in the look he wears now.
+// #2509: every other scene stands him in the look it dresses him in (S/story/scene-looks.ts), his everyday look too,
+// whenever that is not the look he wears on Home: its cut-out once ready, and its faces once its set is, painted as the
+// scene is served (S/story/beats.ts queueFaces). A chapter from before scene looks stands him in his Home look.
 import { z } from "zod";
 import type {
   SceneArt,
@@ -60,7 +64,9 @@ import { wornLookUrl } from "../schemas/common.js";
 import { cleanedFaces, facesComing, readRun, readyCutout, stageArtUrls } from "../schemas/state.js";
 import { toWorldView } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
-import { readBeat } from "../story/canon.js";
+import { readBeat, readChapter } from "../story/canon.js";
+import { beatLooks, dressed, lookOf } from "../story/scene-looks.js";
+import { BASE_LOOK } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { namesPerson, sceneSides } from "../story/side-cast.js";
 import { SIDE_NAME_MAX } from "../schemas/side-cast.js";
 
@@ -121,17 +127,27 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const query = queryOf(request);
       const { key, i } = beatRef(query.key, query.i);
-      const [run, beat, item] = await Promise.all([
+      const [run, beat, item, chapter] = await Promise.all([
         readRun(store, runId),
         readBeat(store, runId, key, i),
         firstWearItem(store, runId, key),
+        readChapter(store, runId, key),
       ]);
       if (!run) throw runNotFound();
       if (!beat) throw new OtomeForgeError(404, "No such beat.", "not-found");
       // The look this scene is about once painted (a look's outfit id is its item's), on him while he does not wear it.
       const painted = item && outfitOf(item);
-      const standsIn = (unit: Unit) =>
+      const firstWear = (unit: Unit) =>
         painted && unit.id === item?.li && unit.wornOutfit !== painted.id ? painted : undefined;
+      // #2509: else the look the scene dresses him in (S/story/scene-looks.ts), on him while it is not his Home look.
+      const looksHere = chapter ? await beatLooks(store, runId, chapter, i) : null;
+      const sceneLook = (unit: Unit) => {
+        const look = looksHere ? lookOf(looksHere, unit.id) : (unit.wornOutfit ?? BASE_LOOK);
+        if (look === (unit.wornOutfit ?? BASE_LOOK)) return undefined;
+        if (look !== BASE_LOOK) return unit.outfits.find((outfit) => outfit.id === look);
+        return unit.portrait ? { id: BASE_LOOK, url: unit.portrait } : undefined;
+      };
+      const standsIn = (unit: Unit) => firstWear(unit) ?? sceneLook(unit);
       const units = await Promise.all(
         run.units.map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit, standsIn(unit)?.url))),
       );
@@ -184,9 +200,15 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
         places: beat.places.map((place) => readPlace(run.world, runId, place.name) ?? place),
         cg: cgView(runId, beat),
         faces,
-        // A first-wear look's faces come only from wearing it: only its free cut-outs are waited for here.
+        // A first-wear look's faces come only from wearing it: only its free cut-outs are waited for here. A scene's
+        // look gets its faces as it is served (S/story/beats.ts queueFaces), so they are waited for.
         facesComing: units
-          .filter((unit) => (!looks[unit.id] && facesComing(run.world, unit)) || cutoutsPending(runId, [unit]))
+          .filter(
+            (unit) =>
+              (!firstWear(unit) &&
+                facesComing(run.world, looksHere ? dressed(unit, lookOf(looksHere, unit.id)) : unit)) ||
+              cutoutsPending(runId, [unit]),
+          )
           .map((unit) => unit.id),
         ...(Object.keys(looks).length ? { looks } : {}),
         ...(lookComing ? { lookComing } : {}),

@@ -80,12 +80,22 @@ export interface OtomeArt {
     options: { debugMode: boolean; base?: string; prompts?: ExpressionPrompts; started?: (record: Paint) => void },
   ): Promise<Paint>;
   /**
-   * Queues the five faces of every love interest who speaks in `beat` whose current look has no ready set. Returns at
+   * Queues the five faces of every love interest who speaks in `beat` whose current look (#2509: or the one `bases`
+   * names, the look a scene stands him in) has no ready set. Returns at
    * once; painting happens in the background. Call it each time a beat is served (written or read from the store).
    * Faces wait in the `low` lane behind places and CGs; #2448: the forge asks for `high`, so a new story's love
    * interests get their faces right after their portraits.
    */
-  queueExpressions(runId: string, beat: ExpressionBeat, options: { debugMode: boolean; lane?: PaintLane }): void;
+  queueExpressions(
+    runId: string,
+    beat: ExpressionBeat,
+    options: {
+      debugMode: boolean;
+      lane?: PaintLane;
+      /** #2509: love interest id → the look a scene stands him in (S/story/scene-looks.ts), whose faces are painted. */
+      bases?: Record<string, string>;
+    },
+  ): void;
   /**
    * Paints the beat's new places and its CG in the background, or leaves them waiting for the tap (Ask before
    * painting, or `review`). The beat writer calls it with the places once a beat is written or rewritten; do not await
@@ -318,11 +328,15 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
           // The kit's dedupe key for a unit's set (createForgeStoryExpressions schedule).
           for (const unit of units) if (speakers.has(unit.name)) urgent.add(`${unitId(runId, unit.id)}:expressions`);
         }
+        const sceneBases = options.bases
+          ? Object.fromEntries(Object.entries(options.bases).map(([li, url]) => [unitId(runId, li), url]))
+          : undefined;
         expressionsOf(runId).queue(
           runId,
           run,
           units.map((unit) => ({ name: unit.name })),
           beat,
+          sceneBases,
         );
       })().catch((error: unknown) =>
         runtime.logger.warn(

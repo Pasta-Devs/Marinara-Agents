@@ -889,6 +889,10 @@ import { AsyncResource as ForgeStoryExpressionScope } from "node:async_hooks";
 // are orphaned like history entries past the sixth; collect them before the remove if merges grow.
 // Another game passes its own face names, their looks, avatar-path reader, log prefix and scope name;
 // Gacha Forge passes none, so every default below is its own.
+// A scene may stand a unit in a look other than its current base (Otome Hearth #2509): `queue`'s optional
+// `sceneBases` (unit document id -> base URL) names it, and that look's set is painted instead while it is due; once it
+// is ready the current base's is, as before. Only a base the unit's own art uses is painted, as for any other set.
+// Gacha Forge passes none.
 
 // Each face's edit look: [the sentence for natural-language prompts, the tags for tag prompts].
 const forgeExpressionLooks = {
@@ -1062,7 +1066,11 @@ function createForgeStoryExpressions({
     return forgeExpressionText(art) || forgeExpressionText(protagonist?.avatarPath);
   };
 
-  async function paintSet(runId, unitId, { paint, extra = [], personaBase, repaint = false, expectedBase, prompts }) {
+  async function paintSet(
+    runId,
+    unitId,
+    { paint, extra = [], personaBase, sceneBase, repaint = false, expectedBase, prompts },
+  ) {
     // A torn-down instance never writes set state: the next instance may already own the set.
     if (disposed) return;
     const run = await readRun(runId);
@@ -1086,7 +1094,7 @@ function createForgeStoryExpressions({
       if (pruned) await remove(stale.flatMap(([, record]) => refsOf(record)));
     }
     if (!paint) return;
-    const base = persona ? personaBase : currentBase(unit);
+    const base = persona ? personaBase : sceneBase || currentBase(unit);
     if (repaint && expectedBase !== base) return;
     const reference = localAvatarPath(base);
     if (!reference) return;
@@ -1301,7 +1309,7 @@ function createForgeStoryExpressions({
       return schedule(runId, unitId, { paint: true, repaint: true, expectedBase: base, prompts });
     },
     // Called with the cast a scene is served or written with. Returns that cast unchanged at once.
-    queue(runId, run, cast, beat) {
+    queue(runId, run, cast, beat, sceneBases) {
       try {
         if (disposed || !forgeStoryExpressionsOn(images(run)) || !Array.isArray(cast)) return cast;
         const speakers = new Set(forgeStoryExpressionSpeakers(cast, beat));
@@ -1321,10 +1329,17 @@ function createForgeStoryExpressions({
             const bases = forgeStoryExpressionBases(unit, extra);
             const stale = Object.keys(unit.expressions || {}).some((key) => !bases.has(key));
             const personaBase = isPersona ? persona?.art : "";
-            const record = unit.expressions?.[isPersona ? personaBase : currentBase(unit)];
-            const paint =
-              speaking && record?.state !== "ready" && !(record?.state === "failed" && !retryable(run, record));
-            if (stale || paint) schedule(runId, doc.id, { paint, extra, personaBase });
+            const due = (record) =>
+              record?.state !== "ready" && !(record?.state === "failed" && !retryable(run, record));
+            // A scene's look while its own set is still due, else the current base as always, so a set the current
+            // base still owes (one dropped while a scene's set was painting) is painted by a later scene.
+            const scene = isPersona ? "" : sceneBases?.[doc.id];
+            const sceneBase =
+              typeof scene === "string" && bases.has(scene) && due(unit.expressions?.[scene]) ? scene : "";
+            const record = unit.expressions?.[isPersona ? personaBase : sceneBase || currentBase(unit)];
+            const paint = speaking && due(record);
+            if (stale || paint)
+              schedule(runId, doc.id, { paint, extra, personaBase, ...(sceneBase ? { sceneBase } : {}) });
           }
         };
         detached.runInAsyncScope(() =>

@@ -17,6 +17,7 @@ import type { TarotPaid } from "./tarot";
 import type { ClawLineKind, KittyLineKind, TapZone, TimeOfDay } from "./home";
 import type { FigurinePicture, GiftId } from "./shop";
 import type { PlayerSticker } from "./stickers";
+import type { ChapterWardrobe } from "./wardrobe";
 import type { BannerKind, PityCounter, Rarity, UnseenCounts } from "./wish";
 
 export type {
@@ -1247,6 +1248,8 @@ export interface Chapter {
     place?: string;
     /** A rank-5 finale's look the friend picked out for her (her reward; outfitLine is English image tags). */
     look?: { name: string; outfitLine: string };
+    /** #2509: a hangout's look she was dressed in for it (BASE_LOOK or one of her looks), never worn at home. */
+    herLook?: string;
     /** A hangout's memento: its English picture brief, and its paint once she asked for it (POST .../memento). */
     memento?: { brief: string; art?: Paint };
   };
@@ -1270,6 +1273,8 @@ export interface Chapter {
    * every scene sends the same ones; [] when it has none (S/story/beats.ts; hidden from the client).
    */
   memories?: string[];
+  /** #2509: the looks its scenes may dress each person in, and what they start in (S/story/scene-looks.ts; hidden). */
+  wardrobe?: ChapterWardrobe;
   /**
    * #2458: her friends as its first scene told them (by id, with the rank the prompts gave), so every scene sends the
    * same HER FRIENDS block; [] when none came into it (S/story/beats.ts; hidden from the client).
@@ -1409,6 +1414,11 @@ export interface Beat {
    * take them back (S/story/rewrite-undo.ts). Hidden from the client.
    */
   undo?: StateUndo[];
+  /**
+   * #2509: who changes into another look in this scene (P6's `wear`): WardrobeOwner → look id, one of the chapter's
+   * offered looks. They wear it for the whole scene and the ones after it. Hidden from the client.
+   */
+  wear?: Record<string, string>;
 }
 
 /**
@@ -1568,8 +1578,8 @@ export interface SceneArt {
   facesComing: LiId[];
   /**
    * A his-look5's first-wear scene (`story-<item>`): its love interest stands in that look, not the one he wears now, as
-   * RunLiView's stage fields (its cut-out once ready, its cleaned faces once a set is). Absent in every other scene, a
-   * her-look5's first-wear scene too (he stands in what he wears now).
+   * RunLiView's stage fields (its cut-out once ready, its cleaned faces once a set is). #2509: in any other scene, the
+   * look the scene dresses him in, when that is not his Home look. Absent when everyone stands in their Home look.
    */
   looks?: Record<LiId, Required<Pick<RunLiView, "worn" | "expressions" | "cut">>>;
   /**

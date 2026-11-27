@@ -26,6 +26,7 @@ import { readRun } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import type { OtomeStore } from "../store.js";
 import { readChapter } from "./canon.js";
+import { ME, chapterEndLooks, dressed, lookOf } from "./scene-looks.js";
 
 type MementoDeps = ArtDeps & { store: OtomeStore };
 
@@ -125,7 +126,12 @@ async function mementoSubject(deps: MementoDeps, runId: string, key: string) {
   if (!run.state.chapters[key]?.completed) {
     throw new OtomeForgeError(409, "A memento is painted once the hangout is over.", "conflict");
   }
-  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
+  // #2509: she wears the look the hangout ended in (S/story/scene-looks.ts), its picture her reference.
+  const ended = await chapterEndLooks(deps.store, runId, chapter);
+  run.player = await withPersonaImageAppearance(
+    deps.runtime,
+    ended ? dressed(run.player, lookOf(ended, ME)) : run.player,
+  );
   const company = story.friends
     .slice(0, 2)
     .flatMap((id) => (run.friends ?? []).filter((unit) => unit.id === id && unit.friend));

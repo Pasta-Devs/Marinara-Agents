@@ -26,6 +26,21 @@ export function wornLookUrl(person: { outfits: readonly Outfit[]; wornOutfit?: s
   return worn?.url ?? person.portrait ?? "";
 }
 
+/**
+ * #2509: the looks a chapter's scenes may put each person in, picked by its first scene and kept for all of them (S/story/
+ * scene-looks.ts), keyed by WardrobeOwner ("me", or a love interest's id): each list starts with BASE_LOOK. `start` is
+ * what each of them wears as the chapter opens; a scene's `wear` changes it from that scene on.
+ */
+export interface ChapterWardrobe {
+  offered: Record<string, string[]>;
+  start: Record<string, string>;
+}
+
+/** #2509: beside the everyday look, at most this many of someone's owned looks of each rarity, chosen at random. */
+export const SCENE_LOOKS: Record<Rarity, number> = { 3: 3, 4: 2, 5: 1 };
+/** #2509: the most looks a chapter offers one person: the everyday look and SCENE_LOOKS. */
+export const SCENE_OFFERED_MAX = 1 + SCENE_LOOKS[3] + SCENE_LOOKS[4] + SCENE_LOOKS[5];
+
 /** P19: what a love interest says on noticing her new look, at most this many words. */
 export const NOTICED_WORDS_MAX = 20;
 /** P24: his line when she shows him a look, at most this many words. */

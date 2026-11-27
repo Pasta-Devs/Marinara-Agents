@@ -26,6 +26,7 @@ import {
 import { placeKey } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/places.ts";
 import {
   beatId,
+  chapterId,
   playerId,
   runDocTarget,
   stateId,
@@ -37,7 +38,10 @@ import { registerSetupRoutes } from "../packages/otome-forge/src/engine/packages
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
-import { normalizeBeat } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import {
+  normalizeBeat,
+  normalizeChapter,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
@@ -57,6 +61,7 @@ import { normalizeBeatBody } from "../packages/otome-forge/src/engine/packages/s
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import { KAI, MIR, SOL, beatReply, bible, json, storyRoutes } from "./fixtures/otome-forge-story.ts";
 
+const CG_AT = "2026-10-28T10:00:00.000Z";
 const CG = { at: 1, brief: "Rain on the lamp room glass; she catches his sleeve.", cast: ["Kai", "Ines"] };
 
 async function sceneWorld(runKey: string, options: Parameters<typeof artWorld>[0] = { runKey }) {
@@ -475,6 +480,54 @@ test("Ask before painting holds every scene paint until its tap, and a tap never
   await t
     .call("POST", "/runs/:run/art/place", { place: "Unknown Pier" })
     .then(({ status }) => assert.equal(status, 404));
+});
+
+test("#2509: a scene's key image dresses each of them in the look the scene puts them in, never their Home look", async () => {
+  const t = await sceneWorld("r-cglooks-aaaaaa");
+  const home = {
+    id: "coat",
+    name: "Coat",
+    outfitLine: "HOME-COAT: grey wool coat",
+    url: "/api/global-gallery/file/kai-coat.png",
+    at: CG_AT,
+  };
+  const scene = {
+    id: "suit",
+    name: "Suit",
+    outfitLine: "SCENE-SUIT: black three-piece suit",
+    url: "/api/global-gallery/file/kai-suit.png",
+    at: CG_AT,
+  };
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    outfits: [home, scene],
+    wornOutfit: home.id,
+  }));
+  await t.store.updateDoc(runDocTarget("chapter", chapterId(t.runId, KEY)), normalizeChapter, (chapter) =>
+    chapter
+      ? {
+          ...chapter,
+          wardrobe: {
+            offered: { me: ["base"], [KAI]: ["base", home.id, scene.id] },
+            start: { me: "base", [KAI]: "base" },
+          },
+        }
+      : chapter,
+  );
+  await saveBeat(t.store, t.runId, beat(0, { wear: { [KAI]: scene.id } }));
+  await t.write(1, { cg: CG }, true);
+  const prompt = (await t.call("POST", "/runs/:run/art/cg/prompt", { key: KEY, i: 1 })).body.prompt as string;
+  assert.doesNotMatch(prompt, /HOME-COAT/, "never the look he wears on Home");
+  const painted = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(painted.body.art.state, "ready");
+  const request = t.paid.find((call) => call.method === "generateBannerArt")!.request as {
+    prompt: string;
+    units?: Array<{ avatarPath?: string; who?: string }>;
+  };
+  // His reference is the scene's look, cut out, and the prompt dresses him in it.
+  assert.equal(request.units?.find((unit) => unit.who === "Kai")?.avatarPath, `${scene.url}.cut.png`);
+  assert.match(request.prompt, /Kai: SCENE-SUIT: black three-piece suit/);
+  assert.doesNotMatch(request.prompt, /HOME-COAT/);
 });
 
 test("reviewing image prompts holds automatic paints too; without an image connection nothing is painted", async () => {

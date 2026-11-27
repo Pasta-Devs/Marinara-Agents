@@ -303,7 +303,7 @@ test("a slow burn through stage 4, a confession when earned in stage 5, and in s
   assert.match(text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })), SLOW);
 });
 
-test("the story describes a love interest from their current Image appearance and worn look (#1965)", () => {
+test("the story describes a love interest from their current Image appearance and the look the scene dresses them in (#1965, #2509)", () => {
   const input = inputs();
   const kai = input.units.find((unit) => unit.id === KAI)!;
   // The bible's look says one mask; the player fixed it in Image appearance. A Wardrobe look is worn.
@@ -315,6 +315,7 @@ test("the story describes a love interest from their current Image appearance an
   kai.wornOutfit = "his-wardrobe-0-a1";
   const node = { i: 0, kind: "beat" as const, guide: "Kai turns to face you.", cast: [KAI] };
   const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+  // The scene writer is handed him dressed in the scene's look (S/story/scene-looks.ts dressed), here the worn one.
   const scene = text(beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" }));
   const plan = text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" }));
   for (const [kind, prompt] of Object.entries({ scene, plan })) {
@@ -323,8 +324,15 @@ test("the story describes a love interest from their current Image appearance an
       /How Kai looks now \(English image tags; describe them from this[^)]*\): NEW-MASK: a crow-beaked/,
       kind,
     );
-    assert.match(prompt, /NEW-MASK[^\n]*; wearing WORN: navy greatcoat\./, kind);
     assert.doesNotMatch(prompt, /OLD-MASK/, `${kind}: the bible's old look never reaches the story`);
+  }
+  assert.match(scene, /NEW-MASK[^\n]*; wearing WORN: navy greatcoat\./);
+  // #2509: the planners see his everyday look, his own route's (bibleBlock) and another's (othersBlock) alike; what he
+  // wears at home never reaches them.
+  const others = text(routePlanMessages({ ...input, li: MIR, memory: "", stage: 2 }));
+  for (const [kind, prompt] of Object.entries({ plan, others })) {
+    assert.match(prompt, new RegExp(`NEW-MASK[^\\n]*; wearing ${kai.bible!.look.outfitLine}\\.`), kind);
+    assert.doesNotMatch(prompt, /WORN/, kind);
   }
   // With no edit, the bible's look is used, in their everyday clothes.
   const plain = { ...kai, identityLine: "", outfitLine: "", wornOutfit: undefined };
@@ -334,7 +342,7 @@ test("the story describes a love interest from their current Image appearance an
   );
 });
 
-test("the story knows what the protagonist wears now, as it does a love interest, without their appearance twice", () => {
+test("a scene knows what the protagonist wears in it, as it does a love interest, without their appearance twice (#2509)", () => {
   const input = inputs();
   // The persona's Appearance rides in its story fields; the image identity line is that same text.
   const appearance = "PERSONA-LOOK: short black hair, freckles";
@@ -352,21 +360,38 @@ test("the story knows what the protagonist wears now, as it does a love interest
     plan: text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })),
   });
   const count = (prompt: string, part: string) => prompt.split(part).length - 1;
-  for (const [kind, prompt] of Object.entries(prompts())) {
-    assert.match(
-      prompt,
-      /\nHow Ines looks now \(English image tags; describe them from this[^)]*\): wearing WORN: red qipao\.\n/,
-      kind,
-    );
-    assert.doesNotMatch(prompt, /EVERYDAY/, `${kind}: the worn look replaces the everyday outfit`);
+  // The scene writer is handed her dressed in the scene's look; it goes after the cached story context, which a scene
+  // that changes her look must not change, so the plan (sharing that context) has none.
+  let { scene, plan } = prompts();
+  assert.match(
+    scene,
+    /\nWHAT THEY WEAR\nHow Ines looks now \(English image tags; describe them from this[^)]*\): wearing WORN: red qipao\.\n/,
+  );
+  assert.doesNotMatch(scene, /EVERYDAY/, "the look she wears replaces the everyday outfit");
+  assert.doesNotMatch(plan, /How Ines looks now|WORN|EVERYDAY/, "the plan never gets her look");
+  for (const [kind, prompt] of Object.entries({ scene, plan })) {
     assert.equal(count(prompt, appearance), 1, `${kind}: the persona's appearance is sent once`);
   }
+  const cached = (prompt: ReturnType<typeof beatMessages>) => prompt[0]!.content;
+  assert.equal(
+    cached(beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" })),
+    cached(
+      beatMessages({
+        ...input,
+        player: { ...input.player, wornOutfit: undefined },
+        chapter,
+        node,
+        storySoFar: [],
+        memory: "",
+      }),
+    ),
+    "her look never changes the cached story context",
+  );
   // In their base look, the everyday outfit.
   input.player = { ...input.player, wornOutfit: undefined };
-  for (const [kind, prompt] of Object.entries(prompts())) {
-    assert.match(prompt, /\nHow Ines looks now \([^)]*\): wearing EVERYDAY: grey apprentice smock\.\n/, kind);
-    assert.equal(count(prompt, appearance), 1, `${kind}: the persona's appearance is sent once`);
-  }
+  ({ scene, plan } = prompts());
+  assert.match(scene, /\nHow Ines looks now \([^)]*\): wearing EVERYDAY: grey apprentice smock\.\n/);
+  assert.equal(count(scene, appearance), 1, "the persona's appearance is sent once");
   // P19 is about the look itself: it is named once, as THE LOOK.
   input.player = { ...input.player, wornOutfit: "my-wardrobe-0-a1" };
   const kai = input.units.find((unit) => unit.id === KAI)!;

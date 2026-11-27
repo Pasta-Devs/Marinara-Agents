@@ -123,7 +123,9 @@ import {
   explicitCgAllowed,
   prologueEnding,
   type FriendCard,
+  type SceneLooks,
 } from "../prompts.js";
+import { wornLookUrl } from "../schemas/common.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
@@ -150,6 +152,18 @@ import {
   recallText,
 } from "./canon.js";
 import { prologueProblem } from "./prologue.js";
+import {
+  EVERYDAY,
+  ME,
+  anyChange,
+  beatLooks,
+  chapterWardrobe,
+  dressRun,
+  dressed,
+  lookOf,
+  offeredNames,
+  withOutfits,
+} from "./scene-looks.js";
 import { redoUndo, revertUndo, rewriteBlock, stateUndo, type RewriteBlock } from "./rewrite-undo.js";
 import {
   afterRound,
@@ -726,6 +740,27 @@ export function normalizeBeatReply(written: BeatReply, context: BeatContext): No
   return context.riddle ? riddleOf(reply, normalized) : normalized;
 }
 
+/**
+ * #2509: the reply's `wear` as the beat keeps it: who changes into which of their offered looks, by look id. Names are
+ * matched as the riddle's answer is (case, accents and punctuation never count); an unknown person or look, someone not
+ * in the node, or a look they already wear is dropped. Never a reason to refuse the scene.
+ */
+function wearOf(
+  raw: unknown,
+  wearers: ReadonlyArray<{ who: string; name: string; looks: ReadonlyArray<{ id: string; name: string }> }>,
+  now: Readonly<Record<string, string>>,
+): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const wear: Record<string, string> = {};
+  for (const [name, look] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof look !== "string" || !riddleKey(look)) continue;
+    const wearer = wearers.find((entry) => riddleKey(entry.name) === riddleKey(name));
+    const id = wearer?.looks.find((entry) => riddleKey(entry.name) === riddleKey(look))?.id;
+    if (wearer && id && id !== lookOf(now, wearer.who)) wear[wearer.who] = id;
+  }
+  return Object.keys(wear).length ? wear : undefined;
+}
+
 /** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
 export function segmentLists(context: BeatContext): SegmentLists {
   return {
@@ -1151,6 +1186,39 @@ async function generateBeat(
     // chapter opened on a connection already at its limit. Upgrade path: on `capacity`, retry once with `live`.
     if (saved) memory = frozenContext(saved, live);
   }
+  // #2509: what everyone wears in this node, from the chapter's wardrobe (picked and saved by its first scene, S/story/
+  // scene-looks.ts): the scene writer sees them dressed in it, and the looks they may change into, by name.
+  const picking = !chapter.wardrobe;
+  const wardrobe = await chapterWardrobe(deps, runId, chapter, run, {
+    ...(memory.previous ? { previous: memory.previous } : {}),
+    underway: i > 0 || !!replacing,
+  });
+  const looksNow = (i > 0 && (await beatLooks(deps.store, runId, { key, wardrobe }, i - 1))) || wardrobe.start;
+  const dressedRun = dressRun(withOutfits(run, picking ? await readRun(deps.store, runId) : null), looksNow);
+  const wearers = [
+    { who: ME, name: run.player.name || "the protagonist", person: dressedRun.player },
+    ...present.map((unit) => ({
+      who: unit.id,
+      name: unit.name,
+      person: dressedRun.units.find((entry) => entry.id === unit.id) ?? unit,
+    })),
+  ].map((wearer) => ({ ...wearer, looks: offeredNames(wardrobe, wearer.who, wearer.person) }));
+  const changing = wearers.filter((wearer) => wearer.looks.length > 1);
+  // His side tells a scene again as it was: nobody changes in it.
+  const looks: SceneLooks | undefined = pov
+    ? undefined
+    : {
+        change: anyChange(wardrobe),
+        people: changing.map(({ who, name, looks: own }) => ({
+          name,
+          now: own.find((look) => look.id === lookOf(looksNow, who))?.name ?? EVERYDAY,
+          can: own.map((look) => look.name),
+        })),
+        // A date's love interests choose what they wear for it, in its first scene.
+        ...(chapter.kind === "date"
+          ? { choosing: changing.filter(({ who }) => who !== ME).map(({ name }) => name) }
+          : {}),
+      };
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
@@ -1182,8 +1250,9 @@ async function generateBeat(
       : "";
   const input = {
     world: run.world,
-    player: run.player,
-    units,
+    player: dressedRun.player,
+    units: castUnits(dressedRun),
+    ...(looks ? { looks } : {}),
     state: pov && chapter.hisSide ? stateAtMoment(run.state, pov, chapter.hisSide) : run.state,
     chapter,
     node,
@@ -1279,6 +1348,10 @@ async function generateBeat(
       ...(context.date ? { scores: scoresOf(value, scene.choices) } : {}),
       ...(scene.sideWith ? { sideWith: scene.sideWith } : {}),
       ...(scene.riddle ? { riddle: scene.riddle } : {}),
+      ...(() => {
+        const wear = looks ? wearOf(value.wear, wearers, looksNow) : undefined;
+        return wear ? { wear } : {};
+      })(),
       musicMood: scene.musicMood,
       ...(scene.cg ? { cg: scene.cg } : {}),
     };
@@ -1388,12 +1461,28 @@ async function prepareCg(deps: BeatDeps, runId: string, beat: Beat, mode: PaintM
   }
 }
 
-/** The faces of the love interests who speak in a beat served (a stance game's every line counts). */
+/**
+ * The faces of the love interests who speak in a beat served (a stance game's every line counts), for the look each of
+ * them wears in it (#2509): a look a scene puts him in gets its faces as Wear at home's does.
+ */
 function queueFaces(deps: BeatDeps, runId: string, beat: Beat, debugMode: boolean): void {
   const art = deps.art;
   if (!art) return;
   const lines = beat.confrontation ? { segments: confrontationLines(beat), choices: [] } : beat;
-  inBackground(deps, beat, "expressions", () => art.queueExpressions(runId, lines, { debugMode }));
+  inBackground(deps, beat, "expressions", async () => {
+    const chapter = await readChapter(deps.store, runId, beat.key);
+    const looks = chapter && (await beatLooks(deps.store, runId, chapter, beat.i));
+    const run = looks ? await readRun(deps.store, runId) : null;
+    const bases = run
+      ? Object.fromEntries(
+          run.units.flatMap((unit) => {
+            const url = wornLookUrl(dressed(unit, lookOf(looks!, unit.id)));
+            return url ? [[unit.id, url]] : [];
+          }),
+        )
+      : undefined;
+    art.queueExpressions(runId, lines, { debugMode, ...(bases ? { bases } : {}) });
+  });
 }
 
 /** A beat that is replaced or removed lets its CG's gallery image go (unless the album keeps it). */

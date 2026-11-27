@@ -22,6 +22,7 @@ import {
   openingLine,
   openingNode,
   skipTarget,
+  stageLooks,
   sumGrants,
   voiceOf,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/reader-state.ts";
@@ -505,4 +506,18 @@ test("a key image shows from its line until the scene moves to another place, an
     [false, true, true, false, false],
     "the branch's new place ends it too",
   );
+});
+
+test("#2509: the stage keeps the chapter's last scene looks until this scene's art answers, never another chapter's", () => {
+  const suit = { worn: { id: "suit", url: "/suit.cut.png" }, expressions: {}, cut: ["/suit.cut.png"] };
+  const prefix = "run-a:main-1/";
+  const answered = (id: string, looks?: Record<string, typeof suit>) => ({ id, art: looks ? { looks } : {} });
+  // This scene's read answered: its looks, or none (everyone in their Home look).
+  assert.deepEqual(stageLooks(answered("run-a:main-1/2r0", { kai: suit }), "run-a:main-1/2r0", prefix), { kai: suit });
+  assert.equal(stageLooks(answered("run-a:main-1/2r0"), "run-a:main-1/2r0", prefix), undefined);
+  // The next scene of the chapter, still loading: he stays in the suit, never back in his Home look.
+  assert.deepEqual(stageLooks(answered("run-a:main-1/2r0", { kai: suit }), "run-a:main-1/3r0", prefix), { kai: suit });
+  // Another chapter's (main-10 is not main-1), or no read yet: Home looks.
+  assert.equal(stageLooks(answered("run-a:main-10/0r0", { kai: suit }), "run-a:main-1/0r0", prefix), undefined);
+  assert.equal(stageLooks(null, "run-a:main-1/0r0", prefix), undefined);
 });

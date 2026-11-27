@@ -21,6 +21,7 @@ import type {
   Paint,
   PlaceArt,
   RunLiView,
+  SceneArt,
   Segment,
   WorldView,
 } from "../shared/api-types";
@@ -331,4 +332,21 @@ export function sumGrants(grants: readonly Grant[]) {
     if (grant.li && grant.affection) affection.set(grant.li, (affection.get(grant.li) ?? 0) + grant.affection);
   }
   return { starlight, affection: [...affection].map(([li, amount]) => ({ li, amount })) };
+}
+
+/**
+ * #2509: the looks the stage stands the love interests in (SceneArt.looks): this scene's once its art read answered,
+ * and until then, within the same chapter, the last scene's, so nobody flashes back into their Home look between
+ * scenes. Undefined (everyone in their Home look) before any read, or while the last one was another chapter's.
+ * `chapterPrefix` is the scene ids' start for this chapter (`${runKey}:${chapterKey}/`).
+ * ponytail: a chapter's first scene still shows Home looks until its read answers; the upgrade path is the scene's
+ * looks on the beat view.
+ */
+export function stageLooks(
+  scene: { id: string; art: Pick<SceneArt, "looks"> } | null,
+  sceneId: string,
+  chapterPrefix: string,
+): SceneArt["looks"] {
+  if (!scene) return undefined;
+  return scene.id === sceneId || scene.id.startsWith(chapterPrefix) ? scene.art.looks : undefined;
 }

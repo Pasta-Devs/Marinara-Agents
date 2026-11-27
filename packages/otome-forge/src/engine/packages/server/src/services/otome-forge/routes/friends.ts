@@ -12,7 +12,7 @@
 // POST /runs/:run/friends/:li/bible {bible}                      → {bible}: the player's edit, checked whole
 //      (FriendBibleSchema); stances on anyone not a love interest are dropped, and a changed look steers the next paint
 import { z } from "zod";
-import { DATE_PLACE_IDS, BASE_LOOK } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { DATE_PLACE_IDS } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   HANGOUT_TOPIC_MAX,
   friendBlock,
@@ -45,7 +45,7 @@ import { addFriend, currentArc, metPeople, withCast } from "../story/friends.js"
 import { mementoPromptFor, mementoView, paintMemento } from "../story/hangout-memento.js";
 import { readChapter } from "../story/canon.js";
 import { mainChapters } from "../story/chapters.js";
-import { wearLook } from "./wardrobe.js";
+import { herLookFor } from "./wardrobe.js";
 
 const Pronouns = z.object({
   subject: z.string().trim().min(1).max(20),
@@ -207,13 +207,14 @@ export const registerFriendRoutes: RegisterRoutes = (router, deps) => {
       const first = run.friends?.find((unit) => unit.id === body.friends[0])?.name ?? "";
       const place = placeText(body.place, first);
       const { debugMode } = mode(request);
-      // Her look first, as a date does: a look she cannot wear refuses the hangout before anything is planned.
-      if (body.herLook !== BASE_LOOK) await wearLook(deps, runId, { owner: "me", look: body.herLook }, { debugMode });
+      // Her look first, as a date does: a look she cannot wear refuses the hangout before anything is planned. #2509: it
+      // dresses her for the hangout only, never at home.
+      await herLookFor(deps, runId, body.herLook);
       const chapter = await cancellable(deps, runId, (signal) =>
         startHangout(
           deps,
           runId,
-          { friends: body.friends, place, topic: body.topic },
+          { friends: body.friends, place, topic: body.topic, herLook: body.herLook },
           { debugMode, ...(signal ? { signal } : {}) },
         ),
       );

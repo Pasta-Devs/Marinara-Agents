@@ -20,6 +20,7 @@ import { startPaint } from "../packages/otome-forge/src/engine/packages/server/s
 import { placeKey } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/places.ts";
 import {
   beatId,
+  chapterId,
   itemId,
   itemStoryKey,
   playerId,
@@ -30,7 +31,11 @@ import {
 import { registerArtRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/art.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
-import { normalizeBeat } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import {
+  normalizeBeat,
+  normalizeChapter,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import { BASE_LOOK } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wardrobe.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
@@ -391,5 +396,55 @@ test("a look's first-wear scene stands him in that look, while it paints, on a r
   const worn = await firstWear();
   assert.equal(worn.looks, undefined);
   assert.deepEqual(worn.faces[KAI], { cold: clean(LOOK_FACE) });
+  t.noPaidWork();
+});
+
+test("#2509: a scene stands him in the look it dresses him in, his everyday one too, with that look's faces, never his Home look", async (context) => {
+  const cuts = controlledCutouts();
+  context.after(async () => {
+    cuts.release();
+    await cutoutsSettled();
+  });
+  const t = await stageWorld("r-stagescene-aaaaaa", cuts.client);
+  // He wears his coat on Home; the chapter opens with him in his everyday look.
+  await t.store.updateDoc(runDocTarget("chapter", chapterId(t.runId, KEY)), normalizeChapter, (chapter) =>
+    chapter
+      ? {
+          ...chapter,
+          wardrobe: {
+            offered: { me: [BASE_LOOK], [KAI]: [BASE_LOOK, "outfit-kept"] },
+            start: { me: BASE_LOOK, [KAI]: BASE_LOOK },
+          },
+        }
+      : chapter,
+  );
+  const sceneAt = async (i: number) => {
+    const result = await t.art("GET", "/runs/:run/art/scene", { key: KEY, i: String(i) });
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body;
+  };
+  const everyday = await sceneAt(0);
+  assert.deepEqual(
+    everyday.looks?.[KAI]?.worn,
+    { id: BASE_LOOK, url: clean(BASE) },
+    "his everyday look, cut out, not the coat he wears on Home",
+  );
+  assert.equal(everyday.faces[KAI]?.cold, undefined, "never the coat's faces");
+  // The next scene dresses him in the coat: he stands in it from that scene on, with its faces.
+  await saveBeat(t.store, t.runId, beat(1, { wear: { [KAI]: "outfit-kept" } }));
+  await saveBeat(t.store, t.runId, beat(2));
+  for (const i of [1, 2]) {
+    const coat = await sceneAt(i);
+    assert.equal(coat.looks, undefined, `scene ${i}: the coat is his Home look already, so nothing is pinned`);
+    assert.deepEqual(coat.faces[KAI], { cold: clean(FACE) });
+  }
+  assert.deepEqual((await sceneAt(0)).looks?.[KAI]?.worn, { id: BASE_LOOK, url: clean(BASE) }, "scene 1 is as it was");
+  // Wearing another look at home moves no scene: the coat scenes now pin the coat.
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => {
+    const { wornOutfit: _worn, ...rest } = unit;
+    return rest as typeof unit;
+  });
+  assert.deepEqual((await sceneAt(2)).looks?.[KAI]?.worn, { id: "outfit-kept", url: clean(WORN) });
+  assert.equal((await sceneAt(0)).looks, undefined, "now his Home look is the everyday one");
   t.noPaidWork();
 });
