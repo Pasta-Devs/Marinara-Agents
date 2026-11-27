@@ -328,7 +328,8 @@ if any is blocked, nothing is added and the preflight lines stay on screen above
 a batch button reading "Add selected (N)" for the ready ones. The identity-lock
 reason is one visible line at the top of the queue, and the Review tab badge
 counts the memories still waiting (`mutations` from the pending-count route),
-not the suggestion sources. Accept and skip use preflight and report applied, skipped,
+including those a read could not save (placeholder drops excluded), not the
+suggestion sources. Accept and skip use preflight and report applied, skipped,
 blocked, failed, and index-rebuild results separately. Re-extraction and
 rejected-suggestion cleanup preserve access to relevant diagnostics. A source row's rejected
 suggestions sit behind one small "N rejected" chip (at least 2.75rem tall, no box of its own) that opens a plain list with

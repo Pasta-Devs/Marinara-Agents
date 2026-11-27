@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- The Review count now includes memories that a read could not save, so it may go up after this update on installs that already have some in Review. The memories the read did save still apply as before.
+
 ## 1.6.11 — 2026-11-27
 
 - If an error says your connection doesn't serve your extraction model, an import now tells you to check the model name. A plain "Not Found" error doesn't count, because a wrong connection address can cause it too. After the model-name error an import starts no new pieces and leaves them for a later run, though pieces already being read still finish. It stops the same way when a login or quota error arrives with an error code Long-Term Memory recognizes.
