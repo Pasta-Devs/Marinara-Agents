@@ -430,7 +430,7 @@
         {
           "version": "1.6.10",
           "date": "2026-11-27",
-          "notes": "- If you extract the same text again after saving memories from it, a read that would create new memories now waits in Review instead of applying by itself, so you can catch reworded copies.",
+          "notes": "- If you extract a source again after saving memories from it, and its text hasn't changed, a read that would create new memories now waits in Review so you can catch reworded copies. This lasts while the earlier draft is kept. By default, a finished draft is removed after 30 days.",
           "highlight": false
         },
         {
