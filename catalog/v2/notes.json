@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.49.1",
+          "date": "2026-11-27",
+          "notes": "- Characters speak less like a script. Four lines of the story prompt are reworded: speech is said on the spot and no longer has to come in whole sentences, counted points (\"One… Two…\") and mirrored pairs (\"You have X, and I have Y\") are kept out of it, and a love interest's grand way of talking shows only now and then. The change reaches your story from the next scene.",
+          "highlight": false
+        },
+        {
           "version": "0.49.0",
           "date": "2026-11-27",
           "notes": "- In the story, the love interests and your protagonist change into looks they own when a scene calls for it, and their picture changes too. Each chapter offers everyone's everyday look plus up to three 3★, two 4★ and one 5★ painted looks, picked at random. A chapter starts in what everyone wore when the previous one ended.\n- **Wear at home** now changes only Home. The story no longer dresses anyone in what you pick there.\n- On a date, the love interest chooses their own look in its first scene. The look you pick for yourself on a date or a hangout is for that outing only, and Home keeps its own.\n- A scene's key image, a date's keepsake and a hangout's memento show everyone in what they wear in that scene.\n- The first time a scene puts a love interest in a look, that look gets its five faces, as **Wear at home** does.",
@@ -827,12 +833,6 @@
           "version": "0.38.3",
           "date": "2026-11-20",
           "notes": "- In a Confrontation, no stance wins by default. Press works when they lied or are in the wrong, Yield when they argue out of worry for you, Hold when you are in the right, and Reveal when what you tell them is what the argument is really about. A Reveal that answers their pain with your own makes them close off. Before, Reveal got through almost every time.",
-          "highlight": false
-        },
-        {
-          "version": "0.38.2",
-          "date": "2026-11-19",
-          "notes": "- Characters talk more plainly. The writing rules now say that most of what people say means what it says, even behind a mask, and that a face which contradicts the words is only an occasional beat. A spoken line can be a single word as well as a few sentences, and anyone may joke when it fits them. Some models, Claude among them, wrote nearly every line as hidden meaning that was hard to follow.\n- Twists need a build-up, as emotional payoffs already did, and the plot has to make sense to an ordinary reader. A new story's central mystery is planned so that it makes sense once it is revealed.",
           "highlight": false
         }
       ]
