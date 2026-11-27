@@ -78,6 +78,10 @@ type SendBody = { text: string; quote?: string; sticker?: string; id: string } |
 /** A message id the server accepts as the client's own (S/phone/chat.ts MESSAGE_ID). */
 const messageId = () => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
 
+/** #2504: a selfie on the page is still painting, so the page is read again until it is not. */
+const selfiePainting = (page: PhoneHistoryPage | undefined) =>
+  !!page?.messages.some((row) => row.selfie?.art?.state === "pending");
+
 /** Rows by id, in first-seen order; a later copy of a row replaces its fields. */
 function mergeRows(...lists: Row[][]): Row[] {
   const order: string[] = [];
@@ -156,7 +160,7 @@ export function Thread({
     refetchInterval: (query) =>
       query.state.data?.busy ||
       (query.state.data?.closing && !query.state.data.closing.error) ||
-      query.state.data?.messages.some((row) => row.selfie?.art?.state === "pending")
+      selfiePainting(query.state.data)
         ? BUSY_POLL_MS
         : false,
   });
@@ -407,6 +411,25 @@ export function Thread({
     // Only when the newest page moves; the pages loaded are read as they are then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestFrom]);
+  // #2504: an earlier page's selfie that is still painting (a paint started in another tab, say) shows painted only
+  // once that page is read again: the pages loaded are, every BUSY_POLL_MS, until none of their selfies paints. A read
+  // that fails tries again.
+  useEffect(() => {
+    if (!olderPages.some(selfiePainting)) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      readOlder().then(
+        (fresh) => live && setOlderPages(fresh),
+        () => live && setOlderPages((current) => [...current]),
+      );
+    }, BUSY_POLL_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+    // Each read sets the pages, which arms the next one while they still hold a selfie painting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [olderPages]);
 
   const oldest = pages[0];
   const hasOlder = !!oldest && oldest.page < oldest.pages;

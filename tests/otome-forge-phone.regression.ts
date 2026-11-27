@@ -2002,7 +2002,7 @@ const OLD_NOTES = [1, 2, 3].map((n) => ({ text: `OLD-NOTE-${n}`, at: `2026-11-2$
 const NOTES_LINE = (texts: string[]) =>
   `What Kai wrote down to remember about the protagonist, word for word: ${texts.map((text) => JSON.stringify(text)).join("; ")}`;
 
-test("#2504: the parser takes his commands out in his own thread only: three notes, one selfie, other brackets kept", () => {
+test("#2504: the parser takes his commands out in his own thread only: the newest three notes, one selfie, other brackets kept", () => {
   const names = { li: "Kai", player: "Ines" };
   const raw = {
     messages: [
@@ -2016,7 +2016,8 @@ test("#2504: the parser takes his commands out in his own thread only: three not
       { text: "", selfie: { brief: "at the lamp room window, half a smile" } },
       { text: "Wish you were here [Café Lumière]" },
     ],
-    notes: ["a", "b", "c"],
+    // Four notes in one reply: a new note replaces the oldest, so the first goes.
+    notes: ["b", "c", "d"],
   });
   // A friend's thread, and every call before #2504, reads them as text, as before.
   assert.deepEqual(normalizeChatReply(raw, names, [], false, false, true), { messages: raw.messages });
@@ -2067,6 +2068,34 @@ test("#2504: the parser takes his commands out in his own thread only: three not
     ),
     { messages: [{ li: KAI, text: "Hm. [note: a] [selfie]" }] },
   );
+});
+
+test("#2504: a command's words may hold brackets and line breaks, all of it hidden; one never closed takes nothing", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const listed = [{ id: "li-kai-ab12:smug", name: "kai_smug", about: "smug" }];
+  const read = (...texts: string[]) =>
+    normalizeChatReply({ messages: texts.map((text) => ({ text })) }, names, listed, false, false, true, true);
+  assert.deepEqual(
+    read(
+      "Okay [note: prefers [green tea]]",
+      "Sleep. [NOTE: hums\nwhen nervous] [selfie: by the [old] lamp] [kai_smug]",
+    ),
+    {
+      messages: [
+        { text: "Okay" },
+        { text: "Sleep.", sticker: "li-kai-ab12:smug", selfie: { brief: "by the [old] lamp" } },
+      ],
+      notes: ["prefers [green tea]", "hums\nwhen nervous"],
+    },
+  );
+  // One never closed stays as text: what follows it in its message, and the next message, are read as ever.
+  assert.deepEqual(read("[note: likes [rain] and [Café Lumière] [kai_smug] [selfie]", "Night. [note: rain]"), {
+    messages: [
+      { text: "[note: likes [rain] and [Café Lumière]", sticker: "li-kai-ab12:smug", selfie: { brief: "" } },
+      { text: "Night." },
+    ],
+    notes: ["rain"],
+  });
 });
 
 test("#2504: his [note] leaves his message and is kept word for word, the newest three, read after P17's cached part", async () => {

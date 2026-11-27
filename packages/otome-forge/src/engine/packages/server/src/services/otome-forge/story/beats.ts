@@ -9,7 +9,8 @@
 //   faces, thoughts, places, music, a CG brief); each option's `effects` are read from the raw reply by the indexes the
 //   kit numbers choices and options with (`choice-<c+1>`, `option-<o+1>`), because its normalizer drops unknown fields.
 // - #2503: while a main chapter's plan has a question about the protagonist the player has not answered, no beat of it
-//   is written (409 `needs-answer`, and the lookahead waits); a Rewrite of a beat already written is not held.
+//   is written (409 `needs-answer`, and the lookahead waits) nor eased off unwritten; a Rewrite or an Ease off of a
+//   beat already written is not held.
 // - Rewrite: only the beat being read, before any of its choices is canon; the beats after it are removed (they
 //   followed the old one). It costs a call, and the client says so. The new beat replaces the old one only if that is
 //   still as the rewrite found it: a pick, a read to its end or an Ease off made while it was written keeps it (409).
@@ -2105,6 +2106,8 @@ export async function easeOff(
   // A beat on screen can be eased off. One never written or never shown cannot be skipped past a rupture's lock, nor
   // his gate counted while it stands: refused here before anything is cut (and again in finishBeat's write).
   if (await ruptureHolds(deps, runId, chapter, run.state, i, current)) throw locked(ROUTE_LOCKED);
+  // #2503: nor can one never written be read past the chapter's questions, as serveBeat writes none while they wait.
+  if (!current && unanswered(chapter)) throw needsAnswer();
   const at = Math.max(0, Math.min((current ? confrontationMainline(current) : 0) - 1, Math.trunc(segment)));
   // At once, never behind the queue: a lookahead still being written from the uncut scene is not saved (generateBeat
   // checks the beat it follows before saving), and one already saved is removed here. A node the model declined has

@@ -170,8 +170,9 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
  * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays. `invite` (#2156) is kept
  * only when P17 offered it (`offered`); a message's haptic cues (0.34.0) only while he holds the remote (`remote`).
  * `hurt` (#2424) only when the reply answers her message (`answering`); one with no words or no listed severity goes.
- * `commands` (#2504, his own thread only): his [note: …] and [selfie] are taken out of the text (takeCommands), at most
- * HIS_NOTES_KEPT notes and one selfie a reply; a message they leave empty goes, unless it carries the selfie.
+ * `commands` (#2504, his own thread only): his [note: …] and [selfie] are taken out of the text (takeCommands), the
+ * newest HIS_NOTES_KEPT notes and the first selfie a reply kept; a message they leave empty goes, unless it carries
+ * the selfie.
  */
 export function normalizeChatReply(
   raw: ChatReplyRaw,
@@ -211,12 +212,18 @@ export function normalizeChatReply(
     messages: messages.slice(0, REPLY_MESSAGES_MAX),
     ...(offered && raw.invite === true ? { invite: true } : {}),
     ...(hurt ? { hurt } : {}),
-    ...(notes.length ? { notes: notes.slice(0, HIS_NOTES_KEPT) } : {}),
+    // The newest of them, as he keeps them: a new note replaces the oldest.
+    ...(notes.length ? { notes: notes.slice(-HIS_NOTES_KEPT) } : {}),
   };
 }
 
-/** #2504: [note: …], [selfie], [selfie: …] and [explicit selfie: …], in any case. */
-const COMMAND = /\[\s*(note|(explicit\s+)?selfie)\s*(?::([^[\]\n]*))?\]/giu;
+/**
+ * #2504: [note: …], [selfie], [selfie: …] and [explicit selfie: …], in any case. Its words may run over lines and hold
+ * bracketed words ([note: prefers [green tea]]); it ends at the first "]" outside them, so one never closed takes
+ * nothing. ponytail: one level of brackets inside; a command with deeper ones stays as text. The upgrade path is a
+ * scanner that counts the depth.
+ */
+const COMMAND = /\[\s*(note|(explicit\s+)?selfie)\s*(?::((?:[^[\]]|\[[^[\]]*\])*))?\]/giu;
 
 /** A message's spaces once something was taken out of it. */
 const tidy = (text: string) =>
