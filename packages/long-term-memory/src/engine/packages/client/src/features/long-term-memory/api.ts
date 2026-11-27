@@ -34,7 +34,7 @@ export function mergeSourcePreviewPages(pages: LtmInteropPreviewResponse[] | und
   const samples = [
     ...new Map(pages!.flatMap((page) => page.samples).map((sample) => [sample.sourceId, sample])).values(),
   ];
-  const importedCount = samples.filter((sample) => sample.status === "imported").length;
+  const importedCount = samples.filter((sample) => sample.status !== "pending").length;
   // Only an unfiltered first page reports outdated notes.
   return {
     ...last,

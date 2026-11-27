@@ -93,6 +93,7 @@ async function main() {
     {
       ltmImportSourceNotesResponseSchema,
       ltmInteropPreviewRequestSchema,
+      ltmInteropPreviewResponseSchema,
       ltmInteropPreviewSampleSchema,
       ltmLorebookPreviewResponseSchema,
       ltmSourceDetailsRequestSchema,
@@ -120,6 +121,8 @@ async function main() {
         sharedBranchChat,
         sharedBranchSiblingChat,
       ];
+      // Only the #2498 covered-summary chats have messages; any other chat keeps failing as before.
+      const messagesByChat = new Map<string, Array<{ id: string; chatId: string; createdAt: string }>>();
       releaseRuntime = configurePackageRuntime({
         dataDir,
         logger: { debug() {}, info() {}, warn() {}, error() {} },
@@ -152,6 +155,11 @@ async function main() {
           },
           async listChats() {
             return chats;
+          },
+          async listMessages(chatId: string) {
+            const messages = messagesByChat.get(chatId);
+            if (!messages) throw new Error(`no fixture messages for ${chatId}`);
+            return messages;
           },
         },
         resources: {
@@ -769,6 +777,133 @@ async function main() {
       );
       assert.deepEqual(multiModeChatImport.imported[0]?.note.modes, ["conversation", "roleplay"]);
       assert.equal(multiModeChatImport.imported[0]?.note.extractionFingerprint?.extractionMode, "conversation");
+
+      // #2498: a branch summary whose messages the parent already saved as extracted pieces previews as covered,
+      // linking the parent's piece read only, instead of offering the same messages for import again.
+      const coverParent = {
+        ...roleplayChat,
+        id: "chat-cover-parent",
+        name: "Cover parent",
+        groupId: "group-cover",
+        metadata: {},
+      };
+      const coverBranch = {
+        ...roleplayChat,
+        id: "chat-cover-branch",
+        name: "Cover branch",
+        groupId: "group-cover",
+        metadata: {
+          branchParentChatId: coverParent.id,
+          branchMessageId: "chat-cover-branch-45",
+          summaryEntries: [
+            { id: "cover-early", content: "Messages 1-28 retold.", rangeStartIndex: 1, rangeEndIndex: 28 },
+            { id: "cover-late", content: "Messages 40-48 retold.", rangeStartIndex: 40, rangeEndIndex: 48 },
+          ],
+        },
+      };
+      chats.push(coverParent, coverBranch);
+      for (const chat of [coverParent, coverBranch])
+        messagesByChat.set(
+          chat.id,
+          Array.from({ length: 50 }, (_, index) => ({
+            id: `${chat.id}-${index + 1}`,
+            chatId: chat.id,
+            createdAt: new Date(Date.UTC(2026, 7, 1, 0, index)).toISOString(),
+          })),
+        );
+      const coverPiece = async (range: string) => {
+        const id = `source_cover_parent_${range.replace("-", "_")}`,
+          provenance = { kind: "chat_transcript", sourceId: coverParent.id, entryId: `message-${range}` },
+          scope = { chatId: coverParent.id, chatIds: [coverParent.id] };
+        await storage.createNote({
+          id,
+          title: `Cover parent messages ${range}`,
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope,
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: {
+            source: {
+              text: `Messages ${range} of the parent.`,
+              evidence: [`chat:${coverParent.id}`, `message_entry:message-${range}`, `message_range:${range}`],
+              updatedAt: "2026-08-02T00:00:00.000Z",
+            },
+          },
+          provenance,
+          createdAt: "2026-08-02T00:00:00.000Z",
+          updatedAt: "2026-08-02T00:00:00.000Z",
+          version: 1,
+        } as never);
+        // createNote leaves the fingerprint out; extraction sets it on an existing note.
+        await storage.updateNote(id, {
+          extractionFingerprint: extractionFingerprintForLtmSourceNote((await storage.getNote(id))!, {
+            extractionMode: "roleplay",
+          }),
+        } as never);
+        return id;
+      };
+      const { extractionFingerprintForLtmSourceNote } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
+      const coverEarlyPiece = await coverPiece("1-20"),
+        coverLatePiece = await coverPiece("21-41");
+      const coverPreview = async () =>
+        ltmInteropPreviewResponseSchema.parse(
+          await previewPackageInterop(
+            { source: "chats", sourceScope: { groupId: "group-cover", groupIds: ["group-cover"] }, limit: 100 },
+            join(dataDir, "long-term-memory"),
+          ),
+        );
+      const coverSample = (preview: Awaited<ReturnType<typeof coverPreview>>, entryId: string) =>
+        preview.samples.find((sample) => sample.sourceId === `${coverBranch.id}:${entryId}`);
+      // pendingSources (auto-import-job.ts) reads a summary that is pending, source_updated or extraction_incomplete.
+      const autoImportReads = (sample: ReturnType<typeof coverSample>) =>
+        sample?.status === "pending" ||
+        sample?.freshness === "source_updated" ||
+        sample?.freshness === "extraction_incomplete";
+
+      const covered = await coverPreview();
+      const early = coverSample(covered, "cover-early");
+      assert.equal(early?.status, "covered", "parent pieces 1-20 and 21-41, shared up to 45, cover summary 1-28");
+      assert.deepEqual(early?.status === "covered" ? early.coveredBy : undefined, {
+        noteId: coverEarlyPiece,
+        title: "Cover parent messages 1-20",
+      });
+      assert.equal(early?.freshness, "current");
+      assert.equal(autoImportReads(early), false, "auto-import must leave a covered summary out");
+      assert.equal(coverSample(covered, "cover-late")?.status, "pending", "a summary past the fork is not covered");
+      assert.deepEqual(covered.totals, { matches: 2, ready: 1, imported: 1 });
+      assert.equal(covered.importedCount, 1);
+
+      // A piece that ends past the fork stays the parent's, so it covers nothing in the branch.
+      coverBranch.metadata.branchMessageId = "chat-cover-branch-30";
+      assert.equal(coverSample(await coverPreview(), "cover-early")?.status, "pending");
+      coverBranch.metadata.branchMessageId = "chat-cover-branch-45";
+
+      // A branch whose messages cannot be read previews its summary as pending instead of failing the preview.
+      const coverBranchMessages = messagesByChat.get(coverBranch.id)!;
+      messagesByChat.delete(coverBranch.id);
+      assert.equal(coverSample(await coverPreview(), "cover-early")?.status, "pending");
+      messagesByChat.set(coverBranch.id, coverBranchMessages);
+
+      // A fingerprint from an earlier text or range does not cover: those messages may not have been extracted.
+      const coverLateFingerprint = (await storage.getNote(coverLatePiece))!.extractionFingerprint!;
+      await storage.updateNote(coverLatePiece, {
+        extractionFingerprint: { ...coverLateFingerprint, sourceHash: "a".repeat(64) },
+      } as never);
+      assert.equal(coverSample(await coverPreview(), "cover-early")?.status, "pending");
+      await storage.updateNote(coverLatePiece, { extractionFingerprint: coverLateFingerprint } as never);
+      assert.equal(coverSample(await coverPreview(), "cover-early")?.status, "covered");
+
+      // With only 1-20 saved, messages 21-28 are not covered.
+      await storage.archiveSourceNoteWithDerived(coverLatePiece);
+      const partial = coverSample(await coverPreview(), "cover-early");
+      assert.equal(partial?.status, "pending", "a gap in the parent's pieces leaves the summary to import");
+      assert.equal(autoImportReads(partial), true);
+      chats.splice(chats.indexOf(coverParent), 2);
+      messagesByChat.clear();
 
       // Renamed branch display name and candidate title regression proof
       const renamedBranchChat = {

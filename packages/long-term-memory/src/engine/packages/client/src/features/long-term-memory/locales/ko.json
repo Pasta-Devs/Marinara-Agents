@@ -714,6 +714,7 @@
   "ui.longTermMemory.sourcesworkspace.clearSelectionMessage": "선택한 소스 {{count}}개를 해제할까요?",
   "ui.longTermMemory.sourcesworkspace.searchSources": "소스 검색",
   "ui.longTermMemory.sourcesworkspace.sourcePreview": "소스 미리보기",
+  "ui.longTermMemory.sourcesworkspace.coveredByValue1": "{{value1}}에 이미 저장됨",
   "ui.longTermMemory.sourcesworkspace.sourceMemory": "소스 노트:",
   "ui.longTermMemory.sourcesworkspace.sourceParts": "부분",
   "ui.longTermMemory.sourcesworkspace.sourcePreviewCouldNotLoad": "소스 미리보기를 불러오지 못했어요.",
