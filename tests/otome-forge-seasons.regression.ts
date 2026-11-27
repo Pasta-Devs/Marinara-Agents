@@ -171,11 +171,13 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
 // protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
 // banned in narration only, so every prompt with them moved.
+// 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two patterns are banned in
+// speech and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "2e2a390e36a53e06",
-  "his-wardrobe": "4a096e378bb714e6",
-  "my-wardrobe": "1956d894b71c6b9d",
-  dates: "e3adbfd1128c3f0c",
+  memories: "97b070ff18bdc875",
+  "his-wardrobe": "ef30b35023b460b4",
+  "my-wardrobe": "453fc2f7ed838f52",
+  dates: "8b0498fae40a0f28",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

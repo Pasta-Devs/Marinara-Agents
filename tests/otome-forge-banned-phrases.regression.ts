@@ -9,6 +9,7 @@ import test from "node:test";
 import {
   BANNED_PHRASES,
   NARRATION_BANNED_PATTERNS,
+  SPEECH_BANNED_PATTERNS,
   OWN_BANNED_PHRASES_MAX,
   parseBannedPhrases,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/banned-phrases.ts";
@@ -41,18 +42,22 @@ test("with none of their own, the line is the one before; with some, it ends wit
   assert.equal(bannedPhrasesRule(), BANNED_PHRASES_RULE);
   assert.equal(bannedPhrasesRule(""), BANNED_PHRASES_RULE);
   const narration = ` In narration, never use these sentence patterns either: ${NARRATION_BANNED_PATTERNS.join("; ")}.`;
+  // #2513: two constructions nobody says on the spot are kept out of speech, named as patterns, never as lines.
+  const speech = " In speech, never use these: counting off points (one: X, two: Y); mirrored pairs (you X, I Y).";
+  assert.equal(` In speech, never use these: ${SPEECH_BANNED_PATTERNS.join("; ")}.`, speech);
   assert.equal(
     BANNED_PHRASES_RULE,
-    `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}.${narration}`,
+    `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}.${narration}${speech}`,
   );
   assert.equal(
     bannedPhrasesRule(OWN),
-    `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}; "wet heat"; "slick folds"; "tell me to stop".${narration}`,
+    `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}; "wet heat"; "slick folds"; "tell me to stop".${narration}${speech}`,
   );
   // Speech may use them as people do: they are banned in narration alone, never in the list for every line.
   for (const pattern of ["not X, but Y", "if X, then Y", "negative parallelisms"]) {
     assert.ok(NARRATION_BANNED_PATTERNS.includes(pattern as never), pattern);
     assert.ok(!BANNED_PHRASES.includes(pattern), pattern);
+    assert.ok(!SPEECH_BANNED_PATTERNS.includes(pattern as never), `${pattern}: still free in speech`);
   }
   assert.ok(BANNED_PHRASES.includes("I'll always protect you"), "the spoken clichés stay banned everywhere");
 });

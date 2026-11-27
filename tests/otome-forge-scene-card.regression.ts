@@ -226,11 +226,14 @@ test("0.38.2: the writing rules balance subtext and allow jokes by rewording lin
       "the old line is reworded, not kept",
     );
     // 2026-11-23: narration in whole sentences, in the order things happen, and a protagonist who may be silly or wrong.
+    // #2513: whole sentences are narration's alone, so the line no longer asks speech for them.
+    assert.ok(rules.includes("\n- Write in plain, everyday words: say what happens and what it means without ornate"));
     assert.ok(
       rules.includes(
-        "\n- Write in plain, everyday words and whole sentences, in the order things happen: say what happens and what it means without ornate",
+        " and let a character stay ordinary if they are ordinary. Narration runs in whole sentences, in the order things happen.\n",
       ),
     );
+    assert.doesNotMatch(rules, /everyday words and whole sentences/u, "never whole sentences for every line");
     assert.ok(
       rules.includes(
         "The protagonist is just as human: they can be silly, clumsy with words, flustered or plain wrong",
@@ -257,7 +260,8 @@ test("tells are a few possible signs among others, and the writing rules ask for
   for (const story of [true, false]) {
     assert.match(
       otomeWritingRules({ story }),
-      /- A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter\./,
+      // #2513: a showy manner of speaking is one of them, never every line.
+      /- A love interest's tells, tics, habits and flourishes of speech are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter\./,
     );
   }
 });

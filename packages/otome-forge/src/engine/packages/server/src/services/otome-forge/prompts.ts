@@ -192,6 +192,7 @@ import {
 import {
   BANNED_PHRASES,
   NARRATION_BANNED_PATTERNS,
+  SPEECH_BANNED_PATTERNS,
   parseBannedPhrases,
 } from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import { MIN_AGE } from "../../../../client/src/features/otome-forge/shared/bible.js";
@@ -415,9 +416,12 @@ export const WRITING_RULES = [
   // was: the maintainer found "the reader always knows where they are…" would make models say too much. The voice line
   // gained "and anyone may joke when it fits them", so jokes are allowed, behind a mask too.
   "Now and then a face may contradict the words it speaks, but most of what people say, behind a mask or not, means what it says.",
-  "Write in plain, everyday words and whole sentences, in the order things happen: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary.",
+  // #2513: "whole sentences, in the order things happen" was always narration's (2026-11-23); read as written it bound
+  // speech too, and nobody talks in whole sentences.
+  "Write in plain, everyday words: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary. Narration runs in whole sentences, in the order things happen.",
   "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them, and anyone may joke when it fits them. The protagonist is just as human: they can be silly, clumsy with words, flustered or plain wrong, and the choices they are offered are plain too, not riddles, and not always the sensible one.",
-  "A love interest's tells, tics and habits are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
+  // #2513: "and flourishes of speech": a grand manner in the bible's voice was performed in every line.
+  "A love interest's tells, tics, habits and flourishes of speech are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   // 0.36.3: the maintainer removed "Write what the protagonist feels in their body when something happens to them, not
   // only the action." (0.6.6, #1978). With the rule on thought lines, it made the protagonist's thoughts open with a
   // bodily sensation every time ("My stomach knots…", "My heart is pounding in my chest.").
@@ -445,12 +449,13 @@ export const STORY_PACING_INSTRUCTION =
   'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs and twists only if they have proper build-ups between more mundane scenes; the plot always makes sense to an ordinary reader.';
 
 /**
- * The banned-phrases line: the built-in list, then the player's own (Settings → Content), each quoted as typed, and last
- * the sentence patterns banned in narration only (2026-11-23), so speech may use them as people do.
+ * The banned-phrases line: the built-in list, then the player's own (Settings → Content), each quoted as typed, then
+ * the sentence patterns banned in narration only (2026-11-23), so speech may use them as people do, and last the two
+ * banned in speech (#2513).
  */
 export function bannedPhrasesRule(own?: string): string {
   const theirs = parseBannedPhrases(own).map((phrase) => JSON.stringify(phrase));
-  return `- Never use these overused phrases or patterns: ${[...BANNED_PHRASES, ...theirs].join("; ")}. In narration, never use these sentence patterns either: ${NARRATION_BANNED_PATTERNS.join("; ")}.`;
+  return `- Never use these overused phrases or patterns: ${[...BANNED_PHRASES, ...theirs].join("; ")}. In narration, never use these sentence patterns either: ${NARRATION_BANNED_PATTERNS.join("; ")}. In speech, never use these: ${SPEECH_BANNED_PATTERNS.join("; ")}.`;
 }
 
 /** The banned-phrases line on its own, for prompts that write prose but no story (premise, world plan). */
@@ -2447,10 +2452,12 @@ export const BEAT_WORDS_MAX = 950;
  * "witty" one-liners that made no sense in the scene ("Jules. The piano. I hear it's sharp."), so a line says what the
  * person would really say, about what is happening, at the length it needs. "Speech uses everyday words." is the
  * maintainer's, kept from the dialogue rule they removed from the writing rules. 0.38.2 (the maintainer's pick): a line
- * may also be a single word, as people really react, so a surprise need not be wrapped in a sentence.
+ * may also be a single word, as people really react, so a surprise need not be wrapped in a sentence. #2513: "said on
+ * the spot, never composed": on Mythos 5.2 lines still read written, with mirrored pairs and counted points. It names no
+ * fragments or stutters, which 0.36.4 removed for making every line a one-liner.
  */
 export const SPOKEN_LINE_RULE =
-  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words, and a conversation runs as it does between real people: they react to what was just said, chat about small things or say something silly, and lines may follow one another with no narration between them.";
+  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words and is said on the spot, never composed like a speech or an argument, and a conversation runs as it does between real people: they react to what was just said, chat about small things or say something silly, and lines may follow one another with no narration between them.";
 
 // Under NSFW: Explicit, sex is never rushed (HEAT_TEXT, Shared blocks), so a node or a Closer's opened ending that
 // reaches it gets more room (CLOSER_INTIMATE_ENDING_MAX is in S/story/replies.ts). Each fits the reply's budget

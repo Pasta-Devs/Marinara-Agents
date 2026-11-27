@@ -418,7 +418,7 @@ Each story has its own content settings:
 - you can add limits of your own and set each one to Allow, Veil or Line, as you would a built-in one;
 - changing Darkness keeps the levels you set yourself.
 
-**Banned phrases:** when you set up a story or later in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases. The built-in sentence patterns, such as "not X, but Y", are kept out of narration only, so characters can still talk that way. Set during setup, they also apply to the world and every love interest’s Bible as they are forged.
+**Banned phrases:** when you set up a story or later in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases. The built-in sentence patterns, such as "not X, but Y", are kept out of narration only, so characters can still talk that way. Two constructions are kept out of speech, because nobody talks that way on the spot: counting off points, and mirrored pairs such as "you X, I Y". Set during setup, they also apply to the world and every love interest’s Bible as they are forged.
 
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 

@@ -17,6 +17,12 @@ export const NARRATION_BANNED_PATTERNS = [
   "negative parallelisms",
 ] as const;
 
+/**
+ * #2513: banned in speech (the maintainer's, 2026-11-27): constructions nobody says on the spot, which made characters
+ * sound composed and theatrical. Schematic, like the patterns above, so no wording is primed.
+ */
+export const SPEECH_BANNED_PATTERNS = ["counting off points (one: X, two: Y)", "mirrored pairs (you X, I Y)"] as const;
+
 export const ENGINE_BANNED_PHRASES = [
   "jaw working",
   "mechanical precision",
