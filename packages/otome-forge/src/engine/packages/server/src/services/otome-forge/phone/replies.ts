@@ -11,7 +11,7 @@
 // rule: whoever is named answers). Each speaker sends at most one sticker in a reply, their own or the protagonist's.
 // #2504: in his own thread (never a friend's or the group chat) his messages may hold two hidden commands, taken out of
 // the text and never shown: [note: …], what he writes down to remember about the protagonist, word for word, and
-// [selfie] or [selfie: what it shows], a selfie he sends with that message.
+// [selfie] or [selfie: what it shows], a selfie he sends with that message ([explicit selfie: …] for an explicit one).
 import { z, type ZodType } from "zod";
 import type { GrievanceSeverity, HapticCue } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -130,12 +130,15 @@ export interface ChatReplyRaw {
   hurt?: HurtRaw | null;
 }
 
+/** #2504: what the selfie he sends shows ("" for a plain one), `explicit` when sent as [explicit selfie: …]. */
+type ReplySelfie = { brief: string; explicit?: true };
+
 export interface ChatReply {
   /**
    * `sticker` is a listed sticker's id (S/art/stickers.ts); `haptic` (0.34.0) only while he holds the remote; `selfie`
-   * (#2504) what the selfie he sends with it shows ("" for a plain one).
+   * (#2504) the selfie he sends with it.
    */
-  messages: Array<{ text: string; sticker?: string; haptic?: HapticCue[]; selfie?: { brief: string } }>;
+  messages: Array<{ text: string; sticker?: string; haptic?: HapticCue[]; selfie?: ReplySelfie }>;
   /** #2504: what he wrote down to remember about the protagonist, word for word (his own thread only). */
   notes?: string[];
   /** #2156: his last message asks her out to clear the air (kept only when P17 offered it). */
@@ -212,8 +215,8 @@ export function normalizeChatReply(
   };
 }
 
-/** #2504: [note: …], [selfie] and [selfie: …], in any case. */
-const COMMAND = /\[\s*(note|selfie)\s*(?::([^[\]\n]*))?\]/giu;
+/** #2504: [note: …], [selfie], [selfie: …] and [explicit selfie: …], in any case. */
+const COMMAND = /\[\s*(note|(explicit\s+)?selfie)\s*(?::([^[\]\n]*))?\]/giu;
 
 /** A message's spaces once something was taken out of it. */
 const tidy = (text: string) =>
@@ -224,14 +227,14 @@ const tidy = (text: string) =>
 
 /**
  * #2504: a message of his without its commands, and what they hold: each note's words as written (trimmed, cut to
- * HIS_NOTE_MAX; an empty one is none), and the first selfie's (a plain selfie's are "").
+ * HIS_NOTE_MAX; an empty one is none), and the first selfie's (a plain selfie's are ""), with whether it is explicit.
  */
-function takeCommands(text: string): { text: string; notes: string[]; selfie?: { brief: string } } {
+function takeCommands(text: string): { text: string; notes: string[]; selfie?: ReplySelfie } {
   const notes: string[] = [];
-  let selfie: { brief: string } | undefined;
-  const rest = text.replace(COMMAND, (_whole, command: string, body: string | undefined) => {
-    const words = [...(body ?? "").trim()].slice(0, HIS_NOTE_MAX).join("");
-    if (command.toLowerCase() === "selfie") selfie ??= { brief: words };
+  let selfie: ReplySelfie | undefined;
+  const rest = text.replace(COMMAND, (_whole, command: string, explicit?: string, body = "") => {
+    const words = [...body.trim()].slice(0, HIS_NOTE_MAX).join("");
+    if (command.toLowerCase() !== "note") selfie ??= { brief: words, ...(explicit ? { explicit: true as const } : {}) };
     else if (words) notes.push(words);
     return " ";
   });

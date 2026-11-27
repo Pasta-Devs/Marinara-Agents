@@ -128,7 +128,11 @@ const MESSAGE_DISPLAY = {
     kind: z.enum(["date", "hangout"]).optional(),
   }),
   haptic: HapticCuesSchema,
-  selfie: z.object({ brief: z.string().max(STORED_TEXT_MAX), art: PaintSchema.optional() }),
+  selfie: z.object({
+    brief: z.string().max(STORED_TEXT_MAX),
+    explicit: z.literal(true).optional(),
+    art: PaintSchema.optional(),
+  }),
 };
 const SESSION_DISPLAY = {
   name: z.string().max(SESSION_NAME_MAX),

@@ -12,7 +12,8 @@
 // Write your own… (#2146) at a chapter's closing decision only, its draft kept until sent, on a phone and a desktop;
 // and a recurring side character (0.20.0) standing in their own sprite while they speak, painted on a tap under Ask;
 // and Before this chapter (#2503): the plan's questions about the protagonist before the first scene, on a phone and a
-// desktop, and again when a chapter planned ahead has its first scene refused for them.
+// desktop, again when a chapter planned ahead has its first scene refused for them, and closed when they were answered
+// in another tab.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -212,6 +213,8 @@ function createStoryStub({
   questions = null as Json[] | null,
   /** #2503: the chapter read first shows none of them, as one planned ahead: the first beat refused brings them. */
   askLate = false,
+  /** #2503: they were answered meanwhile in another tab: Continue's answers are refused as `conflict`. */
+  answeredElsewhere = false,
 } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
@@ -380,9 +383,12 @@ function createStoryStub({
     if (path === `${base}/chapters/main-1/answers`) {
       chapter!.questions = chapter!.questions.map((entry: Json, n: number) => ({
         ...entry,
-        answer: call.body!.answers[n],
+        answer: answeredElsewhere ? "Answered in another tab." : call.body!.answers[n],
         answeredAt: now(),
       }));
+      if (answeredElsewhere) {
+        return { status: 409, json: { error: "This chapter has no questions waiting.", code: "conflict" } };
+      }
       return { status: 200, json: { chapter } };
     }
     if (path === `${base}/chapters/main-1`) {
@@ -3422,6 +3428,33 @@ test("Otome Hearth Before this chapter (#2503): a first scene refused for its qu
   });
   await expect(line(root)).toContainText("Rain needles the glass dome.");
   expect(posts(stub, "/beats/0")).toHaveLength(2);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Before this chapter (#2503): questions answered in another tab close it and go on to the first scene", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const question = "What did Mira promise her sister before she left?";
+  const stub = createStoryStub({ questions: [{ node: 0, question }], answeredElsewhere: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const dialog = page.getByRole("dialog", { name: "Before this chapter" });
+  await dialog.getByRole("textbox", { name: question }).fill("To write to her every week.");
+  await dialog.getByRole("button", { name: "Continue" }).click();
+  // Refused as answered already: the chapter is read again, which closes it, and the first scene is written once.
+  await expect(dialog).toBeHidden();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(posts(stub, "/answers")).toHaveLength(1);
+  expect(posts(stub, "/beats/0")).toHaveLength(1);
   expect(pageErrors).toEqual([]);
 });
 

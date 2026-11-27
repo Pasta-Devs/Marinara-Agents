@@ -443,7 +443,7 @@ Each story has its own content settings:
 - Suggestive is a ceiling, not an instruction to make every image suggestive. Neutral portraits and expression edits stay neutral; romantic image briefs follow the actual moment.
 - Facial expression edits use the same adult, nonsexual face-edit policy at every rating, preserving the current look's body, clothing coverage, pose and style. A provider may still refuse the reference image or request; retry remains explicit.
 - Looks, faces, outfits, couple portraits, Photo Shoot photos, Moment and Snapshot illustrations and Tarot cards always stay clothed (at most Suggestive), and places, like the Tarot cards of no one, never show people.
-- Only a story CG of an explicit scene, under NSFW: Explicit Heat and the Explicit image rating, may show nudity or sex. Banner art, looks and Memory covers stay at most Suggestive; a Memory planned before 0.46.1 as explicit shows the same moment clothed.
+- Only a story CG of an explicit scene or a love interest's explicit selfie, under NSFW: Explicit Heat and the Explicit image rating, may show nudity or sex. Banner art, looks and Memory covers stay at most Suggestive; a Memory planned before 0.46.1 as explicit shows the same moment clothed.
 - Every image prompt says everyone is an adult, and its negative prompt keeps the child terms whatever you edit. Above SFW, any part of a prompt that names a minor is dropped.
 - Your image connection decides the rest:
   - Grok (xAI) ignores negative prompts, uses at most three reference images, and may refuse an image.

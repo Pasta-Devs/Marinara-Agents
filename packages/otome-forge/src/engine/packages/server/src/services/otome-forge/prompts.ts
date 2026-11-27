@@ -3818,7 +3818,10 @@ export function renderThread(
       if (message.text) parts.push(message.text);
       if (message.sticker) parts.push(stickerText(message, own, voice, stickers));
       // #2504: his selfie, as he sent it.
-      if (message.selfie) parts.push(message.selfie.brief ? `[selfie: ${message.selfie.brief}]` : "[selfie]");
+      if (message.selfie) {
+        const command = message.selfie.explicit ? "explicit selfie" : "selfie";
+        parts.push(message.selfie.brief ? `[${command}: ${message.selfie.brief}]` : `[${command}]`);
+      }
       return `${message.who === "player" ? names.player : (speaker?.(message) ?? names.li)}: ${parts.join(" ")}`;
     })
     .join("\n");
@@ -3977,12 +3980,17 @@ export function chatReplyMessages({
     `- hurt: beside "messages" in the JSON object, never inside a message, only when what ${them} just wrote truly hurts you, as ${name} would take it: {"text": "...", "severity": "minor|major|rupture"}, the text one short line in your own words on what hurt, rupture only for words that break something between you. Omit it otherwise.`,
     stickerRule,
     // #2504: his own thread's hidden commands (S/phone/replies.ts takeCommands); a selfie only with scene art to paint it.
-    friend
-      ? ""
-      : `- To remember something about ${them} word for word, write [note: what to remember] in a message; ${them} never sees it. You keep ${HIS_NOTES_KEPT} notes, and a new one replaces the oldest.`,
-    !friend && imageConnectionFor(world.images, "scene")
-      ? `- To send ${them} a photo of yourself, write [selfie: what the photo shows, in English] in a message, rarely, when you would.`
-      : "",
+    // Spread, never "": a "" here would leave a blank line where the prompt had none (a friend's thread stays as it was).
+    ...(friend
+      ? []
+      : [
+          `- To remember something about ${them} word for word, write [note: what to remember] in a message; ${them} never sees it. You keep ${HIS_NOTES_KEPT} notes, and a new one replaces the oldest.`,
+        ]),
+    ...(!friend && imageConnectionFor(world.images, "scene")
+      ? [
+          `- To send ${them} a photo of yourself, write [selfie: what the photo shows, in English] in a message, rarely, when you would${explicitCgAllowed(world) ? "; for one that shows nudity or sex, write [explicit selfie: …] instead, in plain explicit words" : ""}.`,
+        ]
+      : []),
     hapticsOn(world) ? CHAT_HAPTICS_RULE : "",
     `- Write every message in ${world.language}.`,
     "",
@@ -6930,11 +6938,11 @@ const SELFIE_FRAMING = "one person, selfie, looking at the viewer, detailed back
 
 /**
  * The selfie a love interest sends in his own Messages thread (S/phone/selfie.ts): him alone, from what his [selfie: …]
- * said it shows (`shows`, English), or a plain, casual selfie. Rated as a keepsake is: a story CG whose brief never
- * sets `explicit`.
+ * said it shows (`shows`, English), or a plain, casual selfie. Rated as a story CG is: `explicit` when he sent it as
+ * [explicit selfie: …], which only explicitCgAllowed paints explicit.
  */
 export function selfiePrompt(
-  input: Omit<KeepsakeInput, "brief"> & { shows: string },
+  input: Omit<CgInput, "brief" | "framing" | "use"> & { shows: string },
   edited: Partial<ImagePrompt> = {},
 ): ImagePrompt {
   const name = imageNames(input.people.map((person) => person.name))[0] ?? "";

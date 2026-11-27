@@ -8,7 +8,8 @@
 // POST /runs/:run/phone/:li/messages/:id/selfie        → its paint (S/story/hangout-memento.ts paintOnce): a ready one
 //      is returned as it is, one being painted is a 409 `busy`, and a failed or stopped one is painted again.
 // The picture is him alone, by his likeness (S/art/cg.ts cgSubjects), from what the command said it shows
-// (S/prompts.ts selfiePrompt), at LOOK_SIZE, rated as a keepsake is. A message with no selfie is a 404.
+// (S/prompts.ts selfiePrompt), at LOOK_SIZE, rated as a story CG is: an [explicit selfie: …] paints explicit only
+// where explicitCgAllowed. A message with no selfie is a 404.
 import type { LiId, Paint, PhoneMessage } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { cgReferences, cgSubjects, outfitCutouts } from "../art/cg.js";
 import { worldStyle } from "../art/image-client.js";
@@ -50,7 +51,17 @@ async function selfieJob(
     name: unit.name.split(/\s+/)[0] || "Selfie",
     units,
     prompt: (style) =>
-      selfiePrompt({ shows: selfie.brief, people, world: run.world, style, references: labels }, edited),
+      selfiePrompt(
+        {
+          shows: selfie.brief,
+          explicit: selfie.explicit === true,
+          people,
+          world: run.world,
+          style,
+          references: labels,
+        },
+        edited,
+      ),
     size: LOOK_SIZE,
     save: (art) =>
       deps.store.updateDoc(chatTarget(runId, li), normalizeThread, (current) => {

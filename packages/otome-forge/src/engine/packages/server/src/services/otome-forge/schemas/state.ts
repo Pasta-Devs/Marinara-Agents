@@ -311,8 +311,11 @@ export const defaultLiState = (): LiState => ({
 /** The longest romantic-first sentence kept (LiState.firstKiss and the rest). */
 export const FIRST_SENTENCE_MAX = 400;
 
-/** #2504: one of his notes; a damaged one is dropped on its own. */
-const HisNoteSchema = z.object({ text: short(HIS_NOTE_MAX), at: z.string().max(40) });
+/**
+ * #2504: one of his notes; a damaged one is dropped on its own. A note is cut to HIS_NOTE_MAX characters (code points),
+ * which zod counts as up to twice as many (UTF-16), so an emoji-laden note is never dropped.
+ */
+const HisNoteSchema = z.object({ text: short(HIS_NOTE_MAX * 2), at: z.string().max(40) });
 
 function normalizeLiState(raw: unknown): LiState {
   // #2504: his notes stay absent while he has none, so a state without them reads exactly as before.

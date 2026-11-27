@@ -7,7 +7,7 @@
 - **Plan a hangout** has an optional **What do you want to talk about?** field, for up to 300 characters.
 - Before a main chapter's first scene, its planner may ask you up to two questions about your protagonist, in **Before this chapter**. Each answer shapes the scene it was asked for.
 - In their own **Messages** thread, a love interest can note down something you tell them. They keep three notes, a new one replacing the oldest, and remember them in Messages and in the story. You don't see the notes.
-- With an image connection, a love interest can send you a selfie in their own thread. It paints by itself, or waits for **Paint the selfie** while **Ask before painting** or prompt review is on. Each selfie is 1 image.
+- With an image connection, a love interest can send a selfie (1 image) in their own thread. A reply's selfie paints by itself unless **Ask before painting** or prompt review is on. One in a message they write first waits for **Paint the selfie**. Explicit Heat and the Explicit image rating allow an explicit one.
 
 ## 0.47.2 — 2026-11-26
 

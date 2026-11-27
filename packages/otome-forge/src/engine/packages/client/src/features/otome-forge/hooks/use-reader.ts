@@ -436,10 +436,22 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     void fetchBeat(node);
   }, [askQuestions, askTags, detail, fetchBeat, finished, load, node]);
 
-  /** #2503: saves the answers (one per question, in order); the chapter's first beat is asked for next. Rejects on failure. */
+  /**
+   * #2503: saves the answers (one per question, in order); the chapter's first beat is asked for next. Rejects on
+   * failure; a 409 `conflict` (answered already, in another tab or by a send whose reply was lost, or the chapter
+   * finished) reads the chapter again too, which closes Before this chapter.
+   */
   const answerQuestions = useCallback(
     async (answers: string[]) => {
-      const { chapter } = await otome.post<{ chapter: ChapterView }>(`${base}/answers`, { answers });
+      const { chapter } = await otome
+        .post<{ chapter: ChapterView }>(`${base}/answers`, { answers })
+        .catch((error: unknown) => {
+          if (otomeErrorCode(error) === "conflict") {
+            setLoad(null);
+            refreshStory();
+          }
+          throw error;
+        });
       queryClient.setQueryData<ChapterDetail>(chapterQueryKey(runKey, chapterKey), (shown) =>
         shown ? { ...shown, chapter: { ...shown.chapter, questions: chapter.questions } } : shown,
       );

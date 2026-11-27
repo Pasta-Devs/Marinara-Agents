@@ -18,7 +18,8 @@
 // #2152: touch on Home at 1280x800 and 390x844: head, cheek, chest and hand, Cheek bringing its own face, voiced; under
 // NSFW Heat a Crotch zone by Tab and Enter and by pointer over the middle of the hand band, with Hand on its side, gone
 // during a rupture and for a cached pack once Heat is SFW; four or five zones or pills at every phone size.
-// #2504: his selfie in his message shows as a picture once painted, or Paint until then, never his bracketed command.
+// #2504: his selfie in his message shows as a picture once painted, or Paint until then, never his bracketed command;
+// painted, it keeps the thread at its newest line, and one on an earlier page shows painted.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -2114,6 +2115,93 @@ test("Otome Hearth phone: his selfie shows in his message as a picture, or Paint
   await expect(paint).toHaveCount(0);
   expect(posts(stub, "/messages/m-selfie-b/selfie")).toHaveLength(1);
   await expect(log).not.toContainText("[selfie");
+});
+
+test("Otome Hearth phone: a selfie painted keeps the thread at its newest line, and one on an earlier page shows painted (#2504)", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // A picture as large as a selfie's: its message grows once it loads.
+  const painted = { state: "ready", at: new Date().toISOString(), url: png(416, 608, [240, 200, 160]) };
+  const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  // Page 1 overflows the log and ends on his selfie, painting until `newest` turns ready; page 2 holds an older one.
+  let newest: Json = { state: "pending", at: at(1) };
+  let older: Json | undefined;
+  const chatter = Array.from({ length: 30 }, (_, n) => ({
+    id: `m-chat-${n}`,
+    who: n % 2 ? "li" : "player",
+    text: `Line ${n} about the clocks.`,
+    at: at(60 - n),
+  }));
+  const pageOf = (number: number, messages: Json[]) => ({
+    messages: messages.map((message) => ({ ...message, archived: false })),
+    page: number,
+    pages: 2,
+    from: number === 2 ? 0 : 1,
+    past: 0,
+    activeCount: 32,
+    busy: false,
+    retry: false,
+    sessions: [],
+    seenAt: at(0),
+  });
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method === "POST" && call.path.endsWith(`/phone/${ILVAR}/messages/m-old-selfie/selfie`)) {
+      stub.calls.push(call);
+      older = painted;
+      return { status: 200, json: { art: painted } };
+    }
+    return answer(call);
+  };
+  await stubRoutes(page, stub, []);
+  // The thread's pages by number (the stub reads paths alone).
+  await page.route(
+    (url) => url.pathname === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}`,
+    (route) =>
+      route.fulfill({
+        json:
+          new URL(route.request().url()).searchParams.get("page") === "2"
+            ? pageOf(2, [
+                {
+                  id: "m-old-selfie",
+                  who: "li",
+                  text: "From last spring.",
+                  at: at(90),
+                  selfie: { brief: "", ...(older ? { art: older } : {}) },
+                },
+              ])
+            : pageOf(1, [
+                ...chatter,
+                { id: "m-new-selfie", who: "li", text: "", at: at(1), selfie: { brief: "", art: newest } },
+              ]),
+      }),
+  );
+  const root = await openHome(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
+  const pictures = log.getByRole("img", { name: "A selfie Ilvar Thorne sent you" });
+  const fromBottom = () => log.evaluate((list) => list.scrollHeight - list.scrollTop - list.clientHeight);
+  await expect(log.getByRole("button", { name: "Painting the selfie…" })).toBeVisible();
+  await expect.poll(fromBottom).toBeLessThan(2);
+  // Painted, it grows from its button to the picture, and the log keeps to the newest line.
+  newest = painted;
+  await expect(pictures).toHaveCount(1, { timeout: 10_000 });
+  await expect.poll(() => pictures.evaluate((picture: HTMLImageElement) => picture.naturalWidth)).toBe(416);
+  await expect.poll(fromBottom).toBeLessThan(2);
+  // An earlier page's selfie, painted on a tap, shows as a picture, never Paint again.
+  await log.evaluate((list) => (list.scrollTop = 0));
+  await log.getByRole("button", { name: "Earlier messages" }).click();
+  await expect(log).toContainText("From last spring.");
+  await log.getByRole("button", { name: "Paint the selfie" }).click();
+  await expect(pictures).toHaveCount(2);
+  await expect(log.getByRole("button", { name: "Paint the selfie" })).toHaveCount(0);
+  expect(posts(stub, "/messages/m-old-selfie/selfie")).toHaveLength(1);
 });
 
 for (const outcome of ["ready", "uncut", "load-error"] as const) {

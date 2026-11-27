@@ -705,9 +705,9 @@ export interface PhoneMessage {
   haptic?: HapticCue[];
   /**
    * #2504: the selfie he sent with this message ([selfie: …] in his own thread): what it shows (English, "" for a plain
-   * one), and its picture once painted (S/phone/selfie.ts).
+   * one), `explicit` when he sent it as [explicit selfie: …], and its picture once painted (S/phone/selfie.ts).
    */
-  selfie?: { brief: string; art?: Paint };
+  selfie?: { brief: string; explicit?: true; art?: Paint };
 }
 
 export type PhoneInviteStatus = "pending" | "accepted" | "declined" | "lapsed";

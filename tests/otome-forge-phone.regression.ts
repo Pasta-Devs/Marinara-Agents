@@ -17,6 +17,7 @@
 // #2504: his [note: …] and [selfie: …] in his own thread only: taken out of his message, his notes kept on his state
 // (the newest three) and read after P17's cached part, and his selfie painted once, by itself or on Paint.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type {
@@ -101,16 +102,19 @@ import {
   normalizeBeat,
   normalizeChapter,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import { within, type FakeReply, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
 import { fakeImages, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
 import {
+  HE,
   KAI,
   KAVEH,
   MIR,
   SOL,
+  friendBible,
   json,
   saveStoryMemory,
   seedFriend,
@@ -2022,6 +2026,33 @@ test("#2504: the parser takes his commands out in his own thread only: three not
     normalizeChatReply({ messages: [{ text: `Hi [note: ${long}] [selfie]` }] }, names, [], false, false, true, true),
     { messages: [{ text: "Hi", selfie: { brief: "" } }], notes: ["x".repeat(300)] },
   );
+  // An emoji is one character but two in a JS string: a note cut to 300 of them is kept on his state all the same.
+  const sung = normalizeChatReply(
+    { messages: [{ text: `Hi [note: ${"🎵".repeat(400)}]` }] },
+    names,
+    [],
+    false,
+    false,
+    true,
+    true,
+  ) as { notes: string[] };
+  assert.deepEqual(sung.notes, ["🎵".repeat(300)]);
+  const at = "2026-11-27T10:00:00.000Z";
+  const kept = normalizeState({ lis: { [KAI]: { ...defaultLiState(), notes: [{ text: sung.notes[0]!, at }] } } });
+  assert.deepEqual(kept.lis[KAI]!.notes, [{ text: "🎵".repeat(300), at }]);
+  // [explicit selfie: …] is a selfie too, marked explicit.
+  assert.deepEqual(
+    normalizeChatReply(
+      { messages: [{ text: "[Explicit  Selfie: on the sheets]" }] },
+      names,
+      [],
+      false,
+      false,
+      true,
+      true,
+    ),
+    { messages: [{ text: "", selfie: { brief: "on the sheets", explicit: true } }] },
+  );
   // A reply of notes alone has nothing for her: the repair turn asks for a message too.
   assert.equal(
     normalizeChatReply({ messages: [{ text: "[note: likes rain]" }] }, names, [], false, false, true, true),
@@ -2134,6 +2165,51 @@ test("#2504: P17 offers [selfie] only in his own thread with an image connection
   assert.ok(withImages({ connectionId: "conn-image", sceneConnectionId: "conn-scene" }).includes(rule));
   // Without notes, P17 is as it was: the same bytes with an empty list.
   assert.deepEqual(chatReplyMessages({ ...input, liState: { ...input.liState, notes: [] } }), chatReplyMessages(input));
+  // Explicit Heat with haptics on: without scene art his note line runs straight into the haptics rule, no blank line.
+  const explicit = {
+    ...world,
+    content: { ...world.content, heat: "explicit" as const },
+    audio: { ...world.audio, haptics: true },
+  };
+  const instructions = (images: Partial<ImageSettings>) =>
+    chatReplyMessages({ ...input, world: { ...explicit, images: { ...world.images, ...images } } })[0]!.content;
+  assert.ok(instructions({}).includes("a new one replaces the oldest.\n- The protagonist may hand you the remote"));
+  // With the Explicit rating too, a selfie may be explicit, as a story CG may; at Suggestive, only the plain one.
+  const explicitRule = `${rule.slice(0, -1)}; for one that shows nudity or sex, write [explicit selfie: …] instead, in plain explicit words.`;
+  assert.ok(instructions({ connectionId: "conn-image", rating: "explicit" }).includes(explicitRule));
+  assert.ok(instructions({ connectionId: "conn-image", rating: "suggestive" }).includes(rule));
+  assert.ok(
+    !withImages({ connectionId: "conn-image", rating: "explicit" }).includes("[explicit selfie"),
+    "Heat decides",
+  );
+});
+
+/** A friend's P17 with one of her stickers and haptics on, from fixed documents. */
+function friendChatPrompt() {
+  return chatReplyMessages({
+    world: normalizeWorld({
+      setting: "A harbour city.",
+      language: "English",
+      content: { heat: "explicit" },
+      audio: { haptics: true },
+    }),
+    player: normalizePlayer({ name: "Ines" }),
+    unit: { id: KAVEH, name: "Kaveh", pronouns: HE, friend: friendBible() } as never,
+    liState: defaultLiState(),
+    tail: [],
+    memories: [],
+    story: "",
+    stickers: { his: [], yours: [{ id: "s1", name: "Pout", about: "a pout" }], name: () => null },
+    friend: { bible: friendBible(), level: 2, lis: [{ id: KAI, name: "Kai" }] },
+  });
+}
+
+/** That prompt on staging before #2504 (2026-11-27): a friend's thread never offers his commands. */
+const FRIEND_CHAT_BEFORE = "d78ec62c391883a9";
+
+test("#2504: a friend's P17 is byte for byte as it was before his commands", () => {
+  const digest = createHash("sha256").update(JSON.stringify(friendChatPrompt())).digest("hex").slice(0, 16);
+  assert.equal(digest, FRIEND_CHAT_BEFORE);
 });
 
 test("#2504: with Ask before painting off, his selfie paints right after his reply, once, as a picture of him alone", async () => {
@@ -2249,4 +2325,55 @@ test("#2504: with Ask before painting on, or prompt review, his selfie waits for
   assert.deepEqual(unpainted.selfie, { brief: "grinning on the pier" });
   const refused = await v.phone("POST", selfie, { li: KAI, id: unpainted.id });
   assert.deepEqual([refused.status, refused.body.code], [503, "no-connection"]);
+});
+
+test("#2504: under Explicit Heat and the Explicit rating his [explicit selfie: …] paints explicit; the toggles cap it", async () => {
+  // His first reply sends an explicit selfie, and every later one a plain selfie.
+  const replies = [
+    phoneModel({
+      messages: [{ text: "Don't show anyone. [explicit selfie: lying back on the sheets, nothing on]" }],
+    })[0]!,
+    ...phoneModel({ messages: [{ text: "[selfie: on the pier]" }] }),
+  ];
+  const t = await phoneWorld("r-selfie5-aaaaaa", { replies, art: { ask: true } });
+  const toggles = (heat: "explicit" | "fade", rating: "explicit" | "suggestive") =>
+    t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      content: { ...world.content, heat },
+      images: { ...world.images, rating },
+    }));
+  await toggles("explicit", "explicit");
+  for (const text of ["Show me.", "And now?"]) {
+    assert.equal((await t.phone("POST", send, { li: KAI, body: { text } })).status, 200);
+  }
+  const [bold, calm] = (await t.thread(KAI))!.messages.filter((message) => message.selfie);
+  assert.deepEqual(
+    [bold!.text, bold!.selfie],
+    ["Don't show anyone.", { brief: "lying back on the sheets, nothing on", explicit: true }],
+  );
+  assert.deepEqual(calm!.selfie, { brief: "on the pier" });
+  const negative = async (id: string) => {
+    const prompt = await t.phone("POST", `${selfie}/prompt`, { li: KAI, id });
+    assert.equal(prompt.status, 200, JSON.stringify(prompt.body));
+    return prompt.body.negativePrompt as string;
+  };
+  // Painted as a story CG of an explicit scene: uncensored, and still only adults.
+  const explicitNegative = await negative(bold!.id);
+  assert.doesNotMatch(explicitNegative, /explicit sexual activity/);
+  assert.match(explicitNegative, /censored/);
+  assert.match(explicitNegative, /child, childlike, minor/);
+  // A plain selfie stays at most Suggestive, and so does his explicit one once either toggle is lowered.
+  assert.match(await negative(calm!.id), /nudity, explicit sexual activity/);
+  await toggles("explicit", "suggestive");
+  assert.match(await negative(bold!.id), /nudity, explicit sexual activity/);
+  await toggles("fade", "explicit");
+  assert.match(await negative(bold!.id), /nudity, explicit sexual activity/);
+  // P17 offered the explicit form, and his next reply reads it as he sent it.
+  const [first, second] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.match(first!.messages[0]!.content, /write \[explicit selfie: …\] instead/);
+  assert.ok(
+    second!.messages[2]!.content.includes(
+      "Kai: Don't show anyone. [explicit selfie: lying back on the sheets, nothing on]",
+    ),
+  );
 });

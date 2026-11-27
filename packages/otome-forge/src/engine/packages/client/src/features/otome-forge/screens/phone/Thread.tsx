@@ -371,6 +371,11 @@ export function Thread({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastHis, id, otome, path, queryClient, runKey]);
 
+  /** The log at its newest line, while the player is there. */
+  const keepNewest = () => {
+    const element = log.current;
+    if (element && stick.current) element.scrollTop = element.scrollHeight;
+  };
   // The log stays at its newest line while the player is there, and keeps its place when earlier messages load.
   useLayoutEffect(() => {
     const element = log.current;
@@ -378,9 +383,7 @@ export function Thread({
     if (prepend.current) {
       element.scrollTop = prepend.current.top + element.scrollHeight - prepend.current.height;
       prepend.current = null;
-    } else if (stick.current) {
-      element.scrollTop = element.scrollHeight;
-    }
+    } else keepNewest();
   }, [messages.length, typing, sessions.length, latest.isPending]);
 
   // Pages count from the newest message, so every new message moves every page's bounds. Once the newest page has
@@ -388,12 +391,13 @@ export function Thread({
   // newest page would drop out of view. If that read fails they are let go (Earlier messages loads them again).
   const latestFrom = latest.data?.from;
   const loadedFrom = useRef(latestFrom);
+  const readOlder = () => Promise.all(olderPages.map((older) => fetchPage(older.page)));
   useEffect(() => {
     if (latestFrom === undefined || loadedFrom.current === latestFrom) return;
     loadedFrom.current = latestFrom;
     if (!olderPages.length) return;
     let live = true;
-    Promise.all(olderPages.map((older) => fetchPage(older.page))).then(
+    readOlder().then(
       (fresh) => live && setOlderPages(fresh),
       () => live && setOlderPages([]),
     );
@@ -573,7 +577,20 @@ export function Thread({
                 group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
                 selfie={
                   li && row.selfie ? (
-                    <Selfie runKey={runKey} li={li} row={row} images={view.world.images} ended={!!view.ended} />
+                    <Selfie
+                      runKey={runKey}
+                      li={li}
+                      row={row}
+                      images={view.world.images}
+                      ended={!!view.ended}
+                      // #2504: its picture grows the message once it loads, so the log keeps to its newest line.
+                      onShown={keepNewest}
+                      // A selfie may be on an earlier page, which only a read of those pages shows painted.
+                      onPainted={() => {
+                        void queryClient.invalidateQueries({ queryKey: key });
+                        if (olderPages.length) void readOlder().then(setOlderPages, () => undefined);
+                      }}
+                    />
                   ) : null
                 }
               />
@@ -912,29 +929,39 @@ function Selfie({
   row,
   images,
   ended,
+  onShown,
+  onPainted,
 }: {
   runKey: string;
   li: RunLiView | RunFriendView;
   row: Row;
   images: Pick<ImageSettings, "connectionId" | "ask">;
   ended: boolean;
+  /** Its picture has loaded. */
+  onShown: () => void;
+  /** Reads the thread again once a paint ends, whatever came of it. */
+  onPainted: () => void;
 }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
-  const queryClient = useQueryClient();
   const art = row.selfie?.art;
   const { painting, error, tap, dialogs } = usePaintOnTap({
     path: `${phonePath(runKey, li.id)}/messages/${encodeURIComponent(row.id)}/selfie`,
     art,
     ask: images.ask,
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, li.id) }),
+    onSettled: onPainted,
     askTitle: t("ui.otomeForge.phone.selfieAskTitle"),
     askText: t("ui.otomeForge.phone.selfieAskText", { name: li.name }),
     subject: t("ui.otomeForge.phone.selfieSubject", { name: li.name }),
   });
   if (art?.state === "ready" && art.url) {
     return (
-      <img className="of-bubble-selfie" src={art.url} alt={t("ui.otomeForge.phone.selfieAlt", { name: li.name })} />
+      <img
+        className="of-bubble-selfie"
+        src={art.url}
+        alt={t("ui.otomeForge.phone.selfieAlt", { name: li.name })}
+        onLoad={onShown}
+      />
     );
   }
   const paintable = painting || (!!images.connectionId && !ended);
