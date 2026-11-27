@@ -713,6 +713,100 @@ async function main() {
         assert.equal(providerFailure[0]?.retryable, failureCase.retryable);
       }
 
+      // A permanent failure fails every piece the same way, so the batch starts no further one (#2497). The second
+      // item is chained to the first, so a stop also has to end a chain.
+      const stopItems = await Promise.all(
+        [0, 1, 2].map(async (index) => {
+          const note = await storage.createNote({
+            id: `source_stop_${index}`,
+            title: `Stop piece ${index}`,
+            type: "source",
+            status: "active",
+            modes: ["roleplay"],
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            tags: ["source_summary"],
+            keywords: [],
+            links: [],
+            provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: `summary-stop-${index}` },
+            sections: { source: { text: `Mara checked gate ${index}.`, updatedAt: timestamp } },
+          });
+          return {
+            sourceId: note.id,
+            title: note.title!,
+            note,
+            created: false,
+            extractionMode: "roleplay" as const,
+            ...(index === 1 ? { previousPiece: { sourceNoteId: "source_stop_0", tail: "" } } : {}),
+          };
+        }),
+      );
+      const relayMessage = "No available channel for model x under group y";
+      const namedModelMessage =
+        'The connection does not serve the extraction model "fixture-model". Check the model name.';
+      const stopCases = [
+        { thrown: { status: 503, message: relayMessage }, calls: 1, code: "model_unavailable", retryable: false },
+        {
+          thrown: { status: 404, code: "model_not_found", message: "Not found" },
+          calls: 1,
+          code: "model_unavailable",
+          retryable: false,
+        },
+        {
+          // The Engine's provider errors carry a status and the provider's text, but no code.
+          thrown: { status: 404, message: "The model `x` does not exist or you do not have access to it." },
+          model: "",
+          message: "The connection does not serve the extraction model. Check the model name.",
+          calls: 1,
+          code: "model_unavailable",
+          retryable: false,
+        },
+        {
+          thrown: { status: 401, code: "authentication_error", message: "Bad key" },
+          calls: 1,
+          code: "authentication_error",
+          retryable: false,
+        },
+        { thrown: { status: 503, message: "Service unavailable" }, calls: 3, code: "extract_failed", retryable: true },
+        { thrown: { status: 404, message: "Not Found" }, calls: 3, code: "extract_failed", retryable: false },
+        // A cancelled import still reports every piece as cancelled, even when the error is a permanent one.
+        {
+          thrown: { status: 503, message: relayMessage },
+          cancel: true,
+          calls: 1,
+          code: "cancelled",
+          retryable: true,
+        },
+      ];
+      for (const stopCase of stopCases) {
+        const controller = new AbortController();
+        let calls = 0;
+        const results = await processLongTermMemorySourceBatch({
+          items: stopItems,
+          languageModel: {
+            ...options.languageModel,
+            model: stopCase.model ?? "fixture-model",
+            chatComplete: async () => {
+              calls += 1;
+              if (stopCase.cancel) controller.abort();
+              throw Object.assign(new Error(stopCase.thrown.message), stopCase.thrown);
+            },
+          },
+          operationId: randomUUID(),
+          signal: controller.signal,
+          concurrency: 1,
+          root: commitRoot,
+        });
+        const label = `${stopCase.code}: ${stopCase.thrown.message}`;
+        assert.equal(calls, stopCase.calls, label);
+        assert.equal(results.length, stopCase.cancel ? 3 : stopCase.calls, label);
+        for (const result of results) {
+          assert.equal(result.error?.code, stopCase.code, label);
+          assert.equal(result.retryable, stopCase.retryable, label);
+        }
+        if (stopCase.code === "model_unavailable")
+          assert.equal(results[0]?.error?.message, stopCase.message ?? namedModelMessage, label);
+      }
+
       const deterministicSource = await storage.createNote({
         id: "source_deterministic_batch",
         title: "Deterministic batch source",

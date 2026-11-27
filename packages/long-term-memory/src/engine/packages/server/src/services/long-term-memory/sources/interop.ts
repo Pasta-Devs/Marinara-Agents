@@ -2249,7 +2249,12 @@ export async function importPackageInterop(
         : []
       ).map((result) => [result.sourceId, result]),
     ),
-    results = written.map((item) => extracted.get(item.sourceId) ?? notExtracted(item)),
+    // A background import does not report a piece its batch stopped before starting, so the job does not hold it back.
+    results = written.flatMap((item) => {
+      const result = extracted.get(item.sourceId);
+      if (result) return [result];
+      return options.keepPendingDrafts && toExtract.includes(item) ? [] : [notExtracted(item)];
+    }),
     cancelled = results.filter((item) => item.extractionStatus === "cancelled").length,
     failed = results.filter((item) => item.extractionStatus === "failed").length,
     succeeded = results.filter((item) => item.extractionStatus === "succeeded").length,

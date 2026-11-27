@@ -90,11 +90,24 @@ const PERMANENT_FAILURE_CODES = new Set([
   "authentication_error",
   "billing_hard_limit",
   "insufficient_quota",
+  "model_unavailable",
   "quota_exceeded",
 ]);
 const SAFE_ERROR_CODE = /^[a-z][a-z0-9_.-]{0,119}$/u;
 
+// Providers report a wrong model name by code or only in the message. A bare 404 can be a wrong base URL, so the
+// status alone does not count.
+function modelUnavailable(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return (
+    code === "model_not_found" ||
+    (typeof message === "string" && /no available channel for model|model .* (not found|does not exist)/i.test(message))
+  );
+}
+
 function failureCode(error: unknown, stage: "extract" | "finalize") {
+  if (modelUnavailable(error)) return "model_unavailable";
   const code =
     error instanceof LtmServiceError
       ? error.code
@@ -562,15 +575,19 @@ function failed(
   error: unknown,
   isCancelled: boolean,
   prepared?: PreparedSource,
+  modelName?: string,
 ): LtmImportedSourceResult {
   // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.
   const unexpected = !isCancelled && !(error instanceof LtmServiceError);
   if (unexpected) logger.error(error, "[ltm] Failed to %s imported source %s", stage, item.sourceId);
-  const message = unexpected
-      ? `Failed to ${stage} imported source. Details are in the server log.`
-      : error instanceof Error
-        ? error.message
-        : `Failed to ${stage} imported source`,
+  const message =
+      !isCancelled && failureCode(error, stage) === "model_unavailable"
+        ? `The connection does not serve the extraction model${modelName ? ` "${modelName}"` : ""}. Check the model name.`
+        : unexpected
+          ? `Failed to ${stage} imported source. Details are in the server log.`
+          : error instanceof Error
+            ? error.message
+            : `Failed to ${stage} imported source`,
     base = {
       sourceId: item.sourceId,
       title: item.title,
@@ -696,11 +713,18 @@ export async function processLongTermMemorySourceBatch(options: {
   const followerIndexes = new Set(followers.values());
   const heads = options.items.flatMap((_, index) => (followerIndexes.has(index) ? [] : [index]));
   let next = 0;
+  // A permanent failure fails every later model call the same way, so no new item starts, not even a deterministic one
+  // (#2497). Items already running finish; the rest get no result.
+  let stopped = false;
   try {
     await Promise.all(
       Array.from({ length: Math.min(Math.max(options.concurrency, 1), heads.length) }, async () => {
-        while (next < heads.length) {
-          for (let index: number | undefined = heads[next++]; index !== undefined; index = followers.get(index)) {
+        while (!stopped && next < heads.length) {
+          for (
+            let index: number | undefined = heads[next++];
+            index !== undefined && !stopped;
+            index = followers.get(index)
+          ) {
             const item = options.items[index]!,
               directGameMode = Boolean(item.deterministicSourceText);
             try {
@@ -732,6 +756,9 @@ export async function processLongTermMemorySourceBatch(options: {
               });
               outcomes[index] = { state: "prepared", item, prepared };
             } catch (error) {
+              const isCancelled = cancelled(error, options.signal);
+              // A cancelled import still runs every item, so each one reports as cancelled.
+              stopped ||= !isCancelled && PERMANENT_FAILURE_CODES.has(failureCode(error, "extract"));
               outcomes[index] = {
                 state: "failed",
                 result: failed(
@@ -739,7 +766,9 @@ export async function processLongTermMemorySourceBatch(options: {
                   directGameMode ? "deterministic" : "llm",
                   "extract",
                   error,
-                  cancelled(error, options.signal),
+                  isCancelled,
+                  undefined,
+                  options.languageModel?.model,
                 ),
               };
             }

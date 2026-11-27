@@ -1295,6 +1295,30 @@ async function main() {
       await updateLtmExtractionConfig({ connectionId: null }, autoRoot);
       respond = () => [];
 
+      // A permanent failure stops the batch (#2497). The piece it never started is not held back with the failed one.
+      const stoppedChat = { ...roleplayChat, id: "chat-auto-stopped", name: "Stopped" };
+      chats.push(stoppedChat);
+      messages.set(stoppedChat.id, [
+        message(stoppedChat.id, "s1", "user", "x".repeat(23_990)),
+        message(stoppedChat.id, "s2", "assistant", "y".repeat(23_990)),
+        message(stoppedChat.id, "s3", "user", "The tail."),
+      ]);
+      respond = () => {
+        throw Object.assign(new Error("fixture model is not served"), { code: "model_not_found" });
+      };
+      prompts.length = 0;
+      await autoImport(stoppedChat.id);
+      assert.equal(prompts.length, 1, "no further piece starts after the model is unavailable");
+      const stoppedNoteId = prompts[0].sourceNote.id;
+      respond = () => [];
+      prompts.length = 0;
+      await autoImport(stoppedChat.id);
+      assert.deepEqual(
+        [prompts.length, prompts.some((prompt) => prompt.sourceNote.id === stoppedNoteId)],
+        [1, false],
+        "the next reply reads the piece that never started, and the failed piece still rests",
+      );
+
       // A branch imports its own message pieces, not the ones its siblings wrote after the split, and no summaries.
       const autoEvents = async (chatId: string) =>
         (await readLtmDebugLog({}, autoRoot)).filter(
