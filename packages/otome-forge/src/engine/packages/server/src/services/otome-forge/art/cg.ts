@@ -34,6 +34,7 @@ import { normalizeBeat } from "../schemas/story.js";
 import type { OtomeStore } from "../store.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import { readBeat, readChapter } from "../story/canon.js";
+import { beatLooks, dressRun } from "../story/scene-looks.js";
 import { GALLERY_REF_PREFIX, imageConnectionFor, worldStyle, type ImageSubject } from "./image-client.js";
 import { cutoutsFor, queueCutouts, type CutoutDeps } from "./cutout.js";
 import {
@@ -536,13 +537,16 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
   const cg = beat.cg;
   if (!cg) throw noCg();
   // The node's love interests settle a name several share, and stand in for a cast that names nobody.
-  const present = (await readChapter(deps.store, runId, beat.key))?.nodes[beat.i]?.cast ?? [];
+  const chapter = await readChapter(deps.store, runId, beat.key);
+  const present = chapter?.nodes[beat.i]?.cast ?? [];
+  // #2509: each of them in the look this scene dresses them in (S/story/scene-looks.ts): its picture is their reference.
+  const dressedRun = dressRun(run, chapter ? await beatLooks(deps.store, runId, chapter, beat.i) : null);
   // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free), for the paint and for the
   // prompt review alike, so both name the same pictures.
   const subjects = await outfitCutouts(
     deps,
     runId,
-    cgSubjects(cg.cast, run.units, run.player, { present, brief: cg.brief }),
+    cgSubjects(cg.cast, dressedRun.units, dressedRun.player, { present, brief: cg.brief }),
   );
   const style = await worldStyle(imagesOf(deps), run.world.images, "scene");
   const prompt = cgPrompt(

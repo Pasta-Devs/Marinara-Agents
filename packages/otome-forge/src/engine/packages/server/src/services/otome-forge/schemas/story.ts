@@ -63,6 +63,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/haptics.js";
 import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { SCENE_OFFERED_MAX } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { isChapterKey, isLiId } from "../ids.js";
 import { RECALL_MAX } from "../memory/recall-index.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
@@ -333,6 +334,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
           level: z.number().int().min(2).max(FRIEND_MAX_LEVEL).optional(),
           place: short(200).optional(),
           look: z.object({ name: short(80), outfitLine: short(600) }).optional(),
+          herLook: z.string().min(1).max(80).optional(),
           memento: z.object({ brief: short(1200), art: PaintSchema.optional() }).optional(),
         })
         .optional(),
@@ -357,6 +359,13 @@ export function normalizeChapter(data: unknown): Chapter | null {
         .optional(),
       // 0.20.4: its small memories' ids, [] when it has none (S/story/beats.ts).
       memories: z.array(z.string().min(1).max(300)).max(200).optional(),
+      // #2509: the looks its scenes may dress each person in, and what they start in (S/story/scene-looks.ts).
+      wardrobe: z
+        .object({
+          offered: z.record(z.string().max(80), z.array(z.string().min(1).max(80)).min(1).max(SCENE_OFFERED_MAX)),
+          start: z.record(z.string().max(80), z.string().min(1).max(80)),
+        })
+        .optional(),
     },
     () => ({
       key: data.key as string,
@@ -434,6 +443,8 @@ export function normalizeBeat(data: unknown): Beat | null {
         const entries = validItems(UndoSchema, value, UNDO_MAX);
         return entries.length ? entries : undefined;
       },
+
+      wear: z.record(z.string().max(80), z.string().min(1).max(80)).optional(),
     },
     () => ({
       key: data.key as string,
@@ -479,6 +490,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     memories: _memories,
     friends: _friends,
     context: _context,
+    wardrobe: _wardrobe,
     music,
     friendStory,
     ...rest
@@ -511,6 +523,7 @@ export function toBeatView(beat: Beat): BeatView {
     confrontation: _confrontation,
     scores: _scores,
     undo: _undo,
+    wear: _wear,
     riddle,
     ...rest
   } = beat;

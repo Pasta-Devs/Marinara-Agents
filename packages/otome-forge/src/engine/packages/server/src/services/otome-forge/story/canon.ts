@@ -645,6 +645,8 @@ export type StoryContext = ForgeMemoryContext & {
    * a chapter context saved from it is marked current (chapterContextOf), and one that is not may be replaced by it.
    */
   settled?: boolean;
+  /** #2509: the key of the previous chapter it sends in full, whose last scene a chapter's looks carry on from. */
+  previous?: string;
 };
 
 /** The heading of a chapter's small memories (see the header), which the prompt sends as they are. */
@@ -1040,6 +1042,7 @@ export async function recallText(
   }
   if (earlier.length) context.recalled = earlier.map(({ chapter }) => chapter.key);
   if (!unread && !saved?.rebuilding) context.settled = true;
+  if (previousKey) context.previous = previousKey;
   // Only a pool that was read: one that failed sends none, and is chosen again on the next call.
   if (chapterPool && result && !result.poolFailed) context.memories = recalls.map(({ id }) => id).reverse();
   // The hand-off (see the header): only from a bond story, and only when nothing but his side, a figurine or a birthday

@@ -3910,8 +3910,10 @@ test("the art hears of every beat: faces when served, places and its CG once whe
   assert.equal(seen.filter(([kind]) => kind === "faces").length, 1, "faces for the beat served");
   const warned = t.logs.find((entry) => entry.level === "warn" && entry.message.includes("Art for"));
   assert.deepEqual(warned?.args, ["main-1", 0, "scene", "the art broke"], "and is logged once per failure");
-  // Served again from the store: faces again (a set may resume), no second scene paint.
+  // Served again from the store: faces again (a set may resume), no second scene paint. #2509: queued once the scene's
+  // looks are read, in the background.
   await t.call("POST", beatPath, {}, node(0));
+  await t.settle();
   assert.equal(seen.filter(([kind]) => kind === "faces").length, 2);
   assert.equal(seen.filter(([kind]) => kind === "scene").length, 2);
   // A rewrite paints its own scene and lets the replaced beat's CG go, and the lookahead it drops.

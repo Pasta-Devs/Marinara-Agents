@@ -4,13 +4,13 @@
 // GET  /runs/:run/dates                                         → DatesView
 // POST /runs/:run/dates/pulled {item, cast, herLook, gift?}     → {chapter: ChapterView, date: DateEntry, resumed}:
 //                                                               #2303, a date won from Wish with whoever she takes;
-//                                                               her look is BASE_LOOK or one she owns, worn as Wear at
-//                                                               home does before the date is planned; `gift` (#2128)
+//                                                               her look is BASE_LOOK or one she owns, worn for the
+//                                                               date only (#2509, never at home); `gift` (#2128)
 //                                                               one she owns from the Shop
 // POST /runs/:run/dates/invited {li, message, herLook, gift?}  → {chapter: ChapterView, date: DateEntry, resumed}:
 //                                                               #2424, the date he asked her on in Messages (his
 //                                                               message's id), its invitation still waiting; her look
-//                                                               is worn first, as for a pulled date (S/phone/invite.ts)
+//                                                               as for a pulled date (S/phone/invite.ts)
 // POST /runs/:run/dates/:key/finish                             → DateFinishResult
 // POST /runs/:run/art/keepsake/prompt {key}                     → {prompt, negativePrompt}
 // POST /runs/:run/art/keepsake {key, prompt?, negativePrompt?}  → {paint}
@@ -39,7 +39,7 @@ import { z } from "zod";
 import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
-import { wearLook } from "./wardrobe.js";
+import { herLookFor } from "./wardrobe.js";
 import {
   assertFreeToDate,
   checkPulledDate,
@@ -120,9 +120,9 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
       // Refused before anything is worn, given or planned: a date she has not won, a company it cannot have (a
       // grievance of theirs with her included), one where everyone has been on it, or a gift she cannot give.
       await checkPulledDate(deps, runId, input);
-      // Her look is worn as Wear at home wears it (owned and painted, or a 4xx), so the date's plan, scenes, key image
-      // and keepsake dress her in it; the love interests come as they are dressed. It stays worn afterwards.
-      await wearLook(deps, runId, { owner: "me", look: input.herLook }, { debugMode });
+      // Her look must be one she may wear (owned and painted, or a 4xx); the date's plan, scenes, key image and keepsake
+      // dress her in it (#2509: for the date only, never at home). Its love interests choose their own in its first scene.
+      await herLookFor(deps, runId, input.herLook);
       const { chapter, date, resumed } = await cancellable(deps, runId, (signal) =>
         startPulledDate(deps, runId, input, { debugMode, signal }),
       );
@@ -139,7 +139,7 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
       const debugMode = debugModeOf(request);
       // Refused before anything is worn, given or planned, as a pulled date is (his grievance with her included).
       await checkInvitedDate(deps.store, runId, input);
-      await wearLook(deps, runId, { owner: "me", look: input.herLook }, { debugMode });
+      await herLookFor(deps, runId, input.herLook);
       const { chapter, date, resumed } = await cancellable(deps, runId, (signal) =>
         startInvitedDate(deps, runId, input, { debugMode, signal }),
       );

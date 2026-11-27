@@ -37,6 +37,8 @@ import { normalizeChapter } from "../schemas/story.js";
 import { mendOpen } from "../state/friends.js";
 import { clean, planTags, type ChapterDeps } from "./chapters.js";
 import { recallText } from "./canon.js";
+import { dressed } from "./scene-looks.js";
+import { BASE_LOOK } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { friendCards } from "./friends.js";
 
 /** How many scenes each kind of friend story has. */
@@ -144,7 +146,8 @@ export async function planFriendChapter(
       label: `friend-plan/${key}`,
       messages: friendPlanMessages({
         world: run.world,
-        player: run.player,
+        // #2509: in the look picked for a hangout, else her everyday one (the story never reads her Home look).
+        player: dressed(run.player, story.friendStory?.herLook ?? BASE_LOOK),
         units: run.units,
         for: planFor,
         memory: memory.text,
@@ -290,7 +293,7 @@ export function hangoutCompany(run: RunDocuments, friends: readonly LiId[]) {
 export async function startHangout(
   deps: ChapterDeps,
   runId: string,
-  { friends, place, topic }: { friends: LiId[]; place: string; topic?: string },
+  { friends, place, topic, herLook }: { friends: LiId[]; place: string; topic?: string; herLook?: string },
   options: { debugMode: boolean; signal?: AbortSignal },
 ): Promise<Chapter> {
   const run = await readRun(deps.store, runId);
@@ -306,7 +309,15 @@ export async function startHangout(
       planFor: { kind: "hangout", friends: coming, place, ...(topic ? { topic } : {}) },
       nodes: FRIEND_STORY_NODES.hangout,
       cast: [],
-      story: { friendStory: { kind: "hangout", friends: company, ...(place ? { place } : {}) } },
+      // #2509: the look picked for her (S/story/scene-looks.ts dresses her in it for the hangout).
+      story: {
+        friendStory: {
+          kind: "hangout",
+          friends: company,
+          ...(place ? { place } : {}),
+          ...(herLook && herLook !== BASE_LOOK ? { herLook } : {}),
+        },
+      },
     },
     options,
   );

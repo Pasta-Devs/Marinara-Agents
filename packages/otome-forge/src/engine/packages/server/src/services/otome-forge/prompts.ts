@@ -1737,11 +1737,25 @@ function knownShown(unit: Pick<Unit, "name">, known: readonly NotebookEntry[]): 
 }
 
 /**
- * Who the protagonist is (name, pronouns, traits, goal, the persona) and what they wear now, for every story prompt.
- * The outfit is a love interest's appearanceLine with the outfit alone: a worn Wardrobe look. Their base look is the
- * persona's Appearance, in aboutLine already (no current code writes player.look.outfitLine), and an image-only
- * appearance is not a story fact.
- * `wearing: false` leaves it out where a prompt names the look itself (P19, P24).
+ * What the protagonist wears now: a love interest's appearanceLine with the outfit alone, a worn Wardrobe look (#2509:
+ * in the story, the look a scene dresses her in, S/story/scene-looks.ts). Their base look is the persona's Appearance,
+ * in aboutLine already (no current code writes player.look.outfitLine), and an image-only appearance is not a story
+ * fact. "" in it.
+ */
+export const protagonistLook = (player: Player) =>
+  appearanceLine({
+    ...player,
+    name: player.name || "the protagonist",
+    identityLine: "",
+    outfitLine: player.look.outfitLine,
+    bible: null,
+  });
+
+/**
+ * Who the protagonist is (name, pronouns, traits, goal, the persona) and what they wear now (protagonistLook).
+ * `wearing: false` leaves the look out where a prompt names the look itself (P19, P24), and (#2509) in the story's
+ * cached context: the story dresses her scene by scene (S/story/scene-looks.ts), never in the look she wears at home,
+ * so each scene says what she wears in its own part. The planners give her everyday look, as bibleBlock does his.
  */
 export function protagonistBlock(player: Player, { wearing = true } = {}): string {
   return [
@@ -1749,15 +1763,7 @@ export function protagonistBlock(player: Player, { wearing = true } = {}): strin
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
     aboutLine(player),
-    wearing
-      ? appearanceLine({
-          ...player,
-          name: player.name || "the protagonist",
-          identityLine: "",
-          outfitLine: player.look.outfitLine,
-          bible: null,
-        })
-      : "",
+    wearing ? protagonistLook(player) : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -1833,7 +1839,8 @@ export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], 
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
     `BIBLE: ${JSON.stringify(bond?.length ? { ...bible, bond } : bible)}`,
-    ...[appearanceLine(unit), intimacyLine(world, unit)].filter(Boolean),
+    // #2509: planners see the everyday look: the scenes choose what they wear, never Wear at home.
+    ...[appearanceLine({ ...unit, wornOutfit: undefined }), intimacyLine(world, unit)].filter(Boolean),
     // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
     // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
     // The affection line names the rank he stands at, as every other prompt's does (0.23.0).
@@ -1942,7 +1949,7 @@ export function storyContext({ world, player, units, number, arc, memory, friend
     world.mystery.question ? `The central mystery: ${world.mystery.question}` : "",
     "",
     "PROTAGONIST",
-    protagonistBlock(player),
+    protagonistBlock(player, { wearing: false }),
     ...(friends.length ? ["", friendsBlock(friends, units)] : []),
     ...(arc && purpose
       ? [
@@ -2126,7 +2133,7 @@ export function arcPlanMessages(
       .join("\n") || "(none)",
     "",
     "PROTAGONIST",
-    protagonistBlock(player),
+    protagonistBlock({ ...player, wornOutfit: undefined }),
     "",
     "THE CAST (their drives, not their prose)",
     units
@@ -2629,7 +2636,23 @@ export interface BeatMessagesInput {
   handOff?: string;
   /** 0.34.0: the protagonist's connected toys as S/haptics.ts devicesText lists them, or "" (with haptics on). */
   toys?: string;
+  /** #2509: what the people in the node wear and may change into (S/story/scene-looks.ts); absent: no one may. */
+  looks?: SceneLooks;
 }
+
+/** #2509: the looks of a node's people as the scene writer sees them: names only, never what they look like. */
+export interface SceneLooks {
+  /** Someone in the chapter may change looks: the writer gets the `wear` rule, the same for each of its scenes. */
+  change: boolean;
+  /** The protagonist and the node's love interests with more than one look: the one worn now, and all of theirs. */
+  people: Array<{ name: string; now: string; can: string[] }>;
+  /** A date's love interests who choose what to wear for it, in its first scene. */
+  choosing?: string[];
+}
+
+/** #2509: P6's `wear` (S/story/beats.ts wearOf). */
+const WEAR_RULE =
+  '- wear: in a node where someone has changed clothes, "wear": {"<exact name>": "<a look from their list under WHAT THEY WEAR>"}. It dresses them, and changes their picture, for this whole node and the ones after. Use it only when a change makes sense. Going to sleep and waking is one change: into what they wear once they are up, never into night clothes first.';
 
 export function beatMessages({
   world,
@@ -2648,6 +2671,7 @@ export function beatMessages({
   hisSide = "",
   handOff = "",
   toys = "",
+  looks,
 }: BeatMessagesInput): OtomeMessage[] {
   const backgrounds = savedBackgrounds(world);
   // #2155: his side tells one scene again from his point of view: only he thinks, and it offers no choice. Only his
@@ -2690,6 +2714,7 @@ export function beatMessages({
       : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
     `- expression: on a love interest's dialogue or thought line, or a dialogue line of one of her friends, only: ${FACES.join(", ")}, when the face shows it. Now and then a face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
+    ...(looks?.change ? [WEAR_RULE] : []),
     ...hapticRules(world),
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
     `- places: every place the node happens in, in order (at most ${BEAT_PLACES_MAX}). A place is a room, a street, a garden: never the time of day or the mood. tags: the same place as 4-8 short comma-separated English tags for an image model, with "no humans". place on a segment: which place it happens in; omit it while the scene has not moved.`,
@@ -2742,6 +2767,7 @@ export function beatMessages({
           .join("\n"),
       )
       .join("\n\n"),
+    ...wearingLines(player, looks),
     "",
     groupIntimacyFor(world, present, state),
     "",
@@ -2759,6 +2785,9 @@ export function beatMessages({
     framing,
     ...arcLines,
     dateFraming,
+    looks?.choosing?.length && node.i === 0
+      ? `${listNames(looks.choosing)} chose what to wear for this date: dress ${looks.choosing.length > 1 ? "each of them" : looks.choosing[0]} with "wear" in this scene.`
+      : "",
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
     pov
       ? `- Thought lines: ${pov.name} only.`
@@ -2791,7 +2820,7 @@ export function beatMessages({
     // message is never cached, so saying it here costs nothing. "PLUS the extra keys this node asks for" keeps the
     // choice-effects, cg and voices blocks above from reading as optional extras a strict "ONLY" would drop.
     ...toysLines(world, toys),
-    `Reply with ONLY the JSON object, no markdown and no code fence, in the shape above (plus the extra keys this node asks for, such as "choices", "effects", "cg" or "voices"): ${beatShape}`,
+    `Reply with ONLY the JSON object, no markdown and no code fence, in the shape above (plus the extra keys this node asks for, such as "choices", "effects", "cg"${looks?.change ? ', "voices" or "wear"' : ' or "voices"'}): ${beatShape}`,
     otomeContractReminder("scene"),
   ];
   return storyMessages(
@@ -2810,6 +2839,23 @@ export function beatMessages({
     // Only a Rewrite of his side shares its instructions, so they are no cache write of their own (#2091).
     { ...(pov ? { marks: "context" as const } : {}), pool },
   );
+}
+
+/** "A", "A and B", "A, B and C". */
+const listNames = (names: readonly string[]) =>
+  names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+
+/**
+ * #2509: what the protagonist wears now (her look left the cached story context, since a scene may change it), and the
+ * looks each person in the node may change into, by name. Nothing when there is neither.
+ */
+function wearingLines(player: Player, looks: SceneLooks | undefined): string[] {
+  const hers = protagonistLook(player);
+  const lists = (looks?.people ?? []).map(
+    ({ name, now, can }) =>
+      `- ${name}, in ${JSON.stringify(now)} now; their looks: ${can.map((look) => JSON.stringify(look)).join(", ")}.`,
+  );
+  return hers || lists.length ? ["", "WHAT THEY WEAR", ...(hers ? [hers] : []), ...lists] : [];
 }
 
 /**
@@ -3472,6 +3518,8 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
           .join("\n"),
       )
       .join("\n\n"),
+    // #2509: what she wears now (no look changes in a climax: everyone stays as the scene before left them).
+    ...wearingLines(player, undefined),
     "",
     groupIntimacyFor(world, present, state),
     "",
@@ -3584,6 +3632,8 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
           .join("\n"),
       )
       .join("\n\n"),
+    // #2509: what she wears now (no look changes in a climax: everyone stays as the scene before left them).
+    ...wearingLines(player, undefined),
     "",
     groupIntimacyFor(world, present, state),
     "",
@@ -5313,8 +5363,8 @@ export function datePlanMessages({
     "",
     otomeContentContract({ world, lis: [unit, ...others].map((member) => ({ name: member.name })), kind: "planner" }),
   ].join("\n");
-  // What each of them wears (a date's picked looks are worn before it is planned) is in protagonistBlock and in the
-  // bible's appearanceLine.
+  // What she wears is in protagonistBlock: the caller dresses her in the look picked for the date (#2509). The love
+  // interests are planned in their everyday looks (bibleBlock); each chooses what to wear in the date's first scene.
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
@@ -5956,7 +6006,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
     "",
     "PROTAGONIST",
-    protagonistBlock(player),
+    protagonistBlock({ ...player, wornOutfit: undefined }),
     "",
     `${name.toUpperCase()} (stage ${stage}; whose Character Story this is)`,
     bibleBlock(unit, state, [li], world),
@@ -6065,7 +6115,7 @@ export function prestigePlanMessages({
     ),
     "",
     "PROTAGONIST",
-    protagonistBlock(player),
+    protagonistBlock({ ...player, wornOutfit: undefined }),
     "",
     `${name.toUpperCase()} (stage ${liState.stage}; whose extra story this is)`,
     bibleBlock(unit, state, [li], world),
@@ -6148,7 +6198,7 @@ export function bondPlanMessages({ world, player, unit, state, rank, reveal, mem
     world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
     "",
     "PROTAGONIST",
-    protagonistBlock(player),
+    protagonistBlock({ ...player, wornOutfit: undefined }),
     "",
     `${name.toUpperCase()} (stage ${liState.stage}, bond rank ${rank.level} of 20; whose bond story this is)`,
     bibleBlock(unit, state, [li], world),

@@ -162,6 +162,8 @@ export interface BeatReply {
   cg?: unknown;
   voices?: unknown;
   riddle?: unknown;
+  /** #2509: who changes into which look (S/story/beats.ts wearOf). */
+  wear?: unknown;
 }
 
 export const BeatReplySchema: ZodType<BeatReply> = z.object({
@@ -172,6 +174,7 @@ export const BeatReplySchema: ZodType<BeatReply> = z.object({
   cg: z.unknown().optional(),
   voices: z.unknown().optional(),
   riddle: z.unknown().optional(),
+  wear: z.unknown().optional(),
 });
 
 // ── P12's and P12c's reply (the prompts: S/prompts.ts confrontationMessages, closerMessages) ──

@@ -369,6 +369,14 @@ function noticeLook(deps: RouteDeps, runId: string, look: string, li: string | u
     .finally(() => noticing.delete(key));
 }
 
+/**
+ * #2509: makes the protagonist's `look` wearable (owned, hers and painted, else a 4xx) without wearing it at home: a date
+ * or a hangout dresses her in it for that story only (S/story/scene-looks.ts). The everyday look always is.
+ */
+export async function herLookFor(deps: RouteDeps, runId: string, look: string): Promise<void> {
+  if (look !== BASE_LOOK) await wearableItem(deps, runId, look, "player");
+}
+
 /** POST .../wardrobe/wear: see the header. */
 export async function wearLook(
   deps: RouteDeps,

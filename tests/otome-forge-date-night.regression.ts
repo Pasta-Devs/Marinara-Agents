@@ -741,8 +741,12 @@ test("starting twice plans one date, and an open date is resumed rather than pla
   assert.equal((await finish(t, "main-1")).status, 404);
 });
 
-test("a date wears the owned looks picked for it, a 4★ included, and its plan and keepsake dress them in it", async () => {
-  const t = await dateWorld("r-datelook-aaaaaa", { images: true });
+test("#2509: a date dresses her in the look picked for it, for the date only; he chooses his own in its first scene", async () => {
+  // His first scene puts him in his Harbour Night (named as the reply may write it: case and spacing never count).
+  const t = await dateWorld("r-datelook-aaaaaa", {
+    images: true,
+    beat: (node) => dateBeat(node, node === 0 ? { wear: { kai: "harbour  NIGHT" } } : {}),
+  });
   const look = (id: string, kind: Item["kind"], li: string, name: string, outfitLine: string): Item => ({
     id,
     kind,
@@ -767,7 +771,7 @@ test("a date wears the owned looks picked for it, a 4★ included, and its plan 
   // A look of someone else's is refused before anything is planned.
   assert.equal((await t.call("POST", "/runs/:run/dates/pulled", { ...START, herLook: his.id })).status, 400);
   assert.equal(t.calls.length, 0, "no plan for a refused look");
-  // #2303: she picks her look; he comes in the look he wears at home.
+  // At home he wears his Harbour Night, and she her everyday look.
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
     ...unit,
     outfits: [
@@ -776,21 +780,37 @@ test("a date wears the owned looks picked for it, a 4★ included, and its plan 
     wornOutfit: his.id,
   }));
   await startDate(t, { ...START, herLook: hers.id });
-  // Worn now, as Wear at home wears them: Home, the faces and every image dress them in it.
+  // Home is as it was: the date's look is hers for the date only (made wearable, never worn).
   const unit = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
   assert.equal(unit.wornOutfit, his.id);
   const player = (await t.store.readDoc(playerId(t.runId), normalizePlayer))!;
-  assert.equal(player.wornOutfit, hers.id);
-  const plan = t.calls
-    .find((call) => isDatePlanner(call.messages))!
-    .messages.map((message) => message.content)
-    .join("\n");
-  // Each look once, in how each of them looks now (the bible's appearanceLine and the protagonist block).
-  assert.match(plan, /How Kai looks now [^\n]*; wearing HIS-LOOK: navy greatcoat, brass buttons\.\n/);
+  assert.equal(player.wornOutfit, undefined, "never worn at home");
+  assert.deepEqual(
+    player.outfits.map((outfit) => outfit.id),
+    [hers.id],
+  );
+  const contentOf = (call: { messages: CapabilityLanguageModelMessage[] }) =>
+    call.messages.map((message) => message.content).join("\n");
+  const plan = contentOf(t.calls.find((call) => isDatePlanner(call.messages))!);
+  // She is planned in her date look; he in his everyday one, never the look he wears at home.
   assert.match(plan, /looks now [^\n]*: wearing HER-LOOK: amber silk dress\.\n/);
-  for (const look of ["HIS-LOOK", "HER-LOOK"]) assert.equal(plan.split(look).length, 2, `${look} once`);
-  // The keepsake draws them in their looks, their pictures and their outfit lines alike.
+  assert.equal(plan.split("HER-LOOK").length, 2, "HER-LOOK once");
+  assert.match(plan, /How Kai looks now [^\n]*; wearing dark keeper's coat\.\n/);
+  assert.doesNotMatch(plan, /HIS-LOOK/);
   await playDate(t, "date-1", [1, 2, 1]);
+  const scene = (node: number) =>
+    contentOf(t.calls.filter((call) => !isDatePlanner(call.messages) && nodeOf(call.messages) === node).at(-1)!);
+  // His first scene asks him to choose, from his looks by name only; never one he does not own.
+  const first = scene(0);
+  assert.match(first, /Kai chose what to wear for this date: dress Kai with "wear" in this scene\./);
+  assert.match(first, /- Kai, in "everyday" now; their looks: "everyday", "Harbour Night"\./);
+  assert.match(first, /- Ines, in "Lantern Dress" now; their looks: "everyday", "Lantern Dress"\./);
+  assert.doesNotMatch(first, /HIS-LOOK|Pier Shirt/);
+  // From then on he wears it, and so does every picture of them.
+  const second = scene(1);
+  assert.match(second, /- Kai, in "Harbour Night" now/);
+  assert.match(second, /How Kai looks now [^\n]*; wearing HIS-LOOK: navy greatcoat, brass buttons\./);
+  assert.doesNotMatch(second, /chose what to wear/, "only the first scene asks");
   assert.equal((await finish(t, "date-1")).status, 200);
   const keepsake = (await t.call("POST", "/runs/:run/art/keepsake/prompt", { key: "date-1" })).body.prompt as string;
   assert.match(keepsake, /Kai: tall man, salt-white hair, grey eyes; HIS-LOOK: navy greatcoat, brass buttons/);
