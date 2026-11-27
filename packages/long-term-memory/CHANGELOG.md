@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.12 — 2026-11-28
 
 - The Review count now includes memories that a read could not save, so it may go up after this update on installs that already have some in Review. The memories the read did save still apply as before.
 
