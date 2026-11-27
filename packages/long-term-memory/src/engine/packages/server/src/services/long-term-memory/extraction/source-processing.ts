@@ -441,9 +441,10 @@ async function commitPreparedLongTermMemorySource(
     // A background read of unchanged text that keeps far fewer memories than the last read of it is more likely a
     // model slip than a better reading: it waits in Review, and the last read's draft stays if it is still waiting.
     const sourceHash = sourceHashForEvidenceUnitExtraction(prepared.sourceNote);
-    const lastRead = (await options.earlierDrafts?.())?.find(
-      (draft) => draft.source.sourceNoteId === prepared.sourceNote.id && draft.source.sourceHash === sourceHash,
-    );
+    const readsThisText = (draft: LtmExtractionDraft) =>
+      draft.source.sourceNoteId === prepared.sourceNote.id && draft.source.sourceHash === sourceHash;
+    const passedDrafts = await options.earlierDrafts?.();
+    const lastRead = passedDrafts?.find(readsThisText);
     // Units that match memories already saved are deduplicated, not kept, so a re-read of applied text counts them.
     const found = (counts?: LtmExtractionAccounting) => (counts?.keptUnits ?? 0) + (counts?.deduplications ?? 0);
     const lastFound = found(lastRead?.accounting);
@@ -454,6 +455,19 @@ async function commitPreparedLongTermMemorySource(
         prepared.sourceNote.id,
         found(accounting),
         lastFound,
+      );
+    // A reworded memory passes the duplicate match, so once a read of this text was applied, a later read that creates
+    // notes waits in Review. Any applied read counts: the newest may itself still be waiting. Drafts are listed here
+    // when the caller passed none, which covers Re-extract.
+    // A partly applied draft stays pending, and a later read supersedes it, so its applied mutation ids count too.
+    // ponytail: finished drafts expire (persistence/retention.ts), after which a re-read applies again. To hold for
+    // longer, record on the source note which text was applied.
+    const rereadOfApplied =
+      response.mutations.some((mutation) => mutation.kind === "create_note") &&
+      (passedDrafts ?? (await new LongTermMemoryDraftStore(options.root).listDrafts())).some(
+        (draft) =>
+          readsThisText(draft) &&
+          (draft.status === "accepted" || draft.status === "auto_applied" || Boolean(draft.appliedMutationIds?.length)),
       );
     const draft = await finalizeLongTermMemoryExtractionDraft(
       {
@@ -467,7 +481,7 @@ async function commitPreparedLongTermMemorySource(
         diagnostics,
         outcome,
         accounting,
-        reviewRequired: reviewRequired || fallsShort,
+        reviewRequired: reviewRequired || fallsShort || rereadOfApplied,
         ...(fallsShort && lastRead?.status === "pending" ? { keepPendingDraftId: lastRead.id } : {}),
         chatId: prepared.chatId,
         afterWrite: (draft, superseded) => addRejectedSuggestions(draft, options.root, superseded),

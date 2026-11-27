@@ -640,6 +640,7 @@ async function main() {
     );
     const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
     const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
+    const { applyLongTermMemoryDraft } = await import(`${source}/drafts/reconciliation.ts`);
     const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
     const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
     const commitRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-source-commit-"));
@@ -1850,6 +1851,91 @@ async function main() {
         LongTermMemoryDraftStore.prototype.createDraft = originalCreateDraft;
         releaseWriter();
         await writer;
+      }
+
+      // Issue #2496: a second read of text whose earlier read was applied waits in Review when it creates a memory.
+      for (const path of ["batch", "single", "partial"] as const) {
+        const rereadSource = await storage.createNote({
+          id: `source_reread_applied_${path}`,
+          title: `Reread ${path} source`,
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: `chat-reread-${path}`, chatIds: [`chat-reread-${path}`] },
+          tags: ["source_summary"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_summary", sourceId: `chat-reread-${path}`, entryId: `summary-reread-${path}` },
+          sections: { source: { text: "Priya posted a video. Damo arrived for the pickup.", updatedAt: timestamp } },
+        });
+        const read = async (events: [subjectId: string, text: string][], applyLowRisk = true) => {
+          const note = (await storage.getNote(rereadSource.id))!;
+          const units = events.map(([subjectId, text]) => ({
+            ...validUnit,
+            subjectId: `${subjectId}_${path}`,
+            text,
+            evidence: [`source_note:${note.id}`],
+            links: [{ target: note.id, relation: "extracted_from" }],
+          }));
+          options.languageModel.chatComplete = async () => ({
+            content: JSON.stringify({ summary: "Durable events.", units }),
+            finishReason: "stop",
+          });
+          const shared = { languageModel: options.languageModel, operationId: randomUUID(), applyLowRisk };
+          if (path !== "batch")
+            return (await processLongTermMemorySource({ ...shared, sourceNote: note, root: commitRoot })).draft;
+          const [result] = await processLongTermMemorySourceBatch({
+            ...shared,
+            items: [
+              { sourceId: note.id, title: note.title!, note, created: false, extractionMode: "roleplay" as const },
+            ],
+            signal: new AbortController().signal,
+            concurrency: 1,
+            root: commitRoot,
+          });
+          return result!.draft!;
+        };
+        const held = (draft: any, message: string) => {
+          assert.ok(
+            draft.mutations.some((mutation: any) => mutation.kind === "create_note"),
+            message,
+          );
+          assert.deepEqual([draft.status, draft.reviewRequired], ["pending", true], message);
+        };
+
+        // Auto-apply leaves "auto_applied"; the single path accepts by hand to cover "accepted". Accepting one of
+        // two rows leaves the draft "pending" with a saved memory, and the next read supersedes it.
+        const first = await read(
+          [
+            ["audition_posted", "Priya posted the audition video."],
+            ...(path === "partial" ? [["gate_sealed", "Mara sealed the observatory gate."] as [string, string]] : []),
+          ],
+          path === "batch",
+        );
+        const applied =
+          path === "batch"
+            ? first
+            : (
+                await applyLongTermMemoryDraft(first.id, {
+                  root: commitRoot,
+                  ...(path === "partial" ? { mutationIds: [first.mutations[0]!.id] } : {}),
+                })
+              ).draft;
+        assert.equal(
+          applied.status,
+          { batch: "auto_applied", single: "accepted", partial: "pending" }[path],
+          `${path} first read`,
+        );
+
+        held(await read([["clip_shared", "A performance clip went online."]]), `${path} second read of applied text`);
+        // The newest draft of this text is now the held one, so the check must look past it.
+        held(await read([["pickup_arrival", "Damo arrived for the pickup."]]), `${path} third read of applied text`);
+
+        await storage.updateNote(rereadSource.id, {
+          sections: { source: { text: "Willow went home after the pickup.", updatedAt: timestamp } },
+        });
+        const changed = await read([["willow_home", "Willow went home after the pickup."]]);
+        assert.equal(changed.status, "auto_applied", `${path} read of changed text still auto-applies`);
       }
     } finally {
       await rm(commitRoot, { recursive: true, force: true });

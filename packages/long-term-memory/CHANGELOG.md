@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.6.10 — 2026-11-27
+
+- If you extract a source again after saving memories from it, and its text hasn't changed, a read that would create new memories now waits in Review so you can catch reworded copies. This lasts while the earlier draft is kept. By default, a finished draft is removed after 30 days.
+
 ## 1.6.9 — 2026-11-27
 
 - Extraction no longer drops a memory because the model wrote its subject ID with capitals, spaces or punctuation. It cleans up the ID and keeps the memory.
