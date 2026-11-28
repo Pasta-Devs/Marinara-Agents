@@ -9,7 +9,7 @@
 // and reads a notebook opened from the intro. Each test runs Midnight on one project and Pearl on the other, at phone
 // width (mobile-chromium) and on the desktop (desktop-chromium).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-read-me.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -169,7 +169,7 @@ function createReadMeStub({ answered = [], notebook = [], capped = false }: Stub
           lis: Object.fromEntries(
             [KAI, MIR].map((li) => [
               li,
-              { cheat: "nudge", style: "", rupture: false, makeItRight: false, lines: { claw: null, cold: [] } },
+              { cheat: "nudge", style: "", rupture: false, lines: { claw: null, cold: [] } },
             ]),
           ),
         },
@@ -339,8 +339,8 @@ async function openOtome(page: Page): Promise<Locator> {
 /** Opens Dates from Home, then Read Me with Kai Ardent. */
 async function openReadMe(root: Locator) {
   await expect(root.getByRole("heading", { level: 1, name: "Kai Ardent" })).toBeVisible();
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await root.getByRole("button", { name: "Play: Let Kai Ardent read you" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Let Kai Ardent read you" })).toBeFocused();
 }
@@ -376,9 +376,10 @@ test("Otome Hearth Read Me: four guesses answered by button, key and words, paid
   await expect(root).toHaveAttribute("data-look", mobile ? "pearl" : "midnight");
 
   // Dates lists Read Me beside Read Kai Ardent, with its pay (more for each guess spot on or close) and its one call.
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
-  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(4);
+  // #2303: no Date Night among them; the Photo Shoot waits for an image connection.
+  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(5);
   const card = root.locator('.of-activity[data-activity="read-me"]');
   await expect(card.getByRole("heading", { name: "Let Kai Ardent read you" })).toBeVisible();
   await expect(card).toContainText(
@@ -389,8 +390,8 @@ test("Otome Hearth Read Me: four guesses answered by button, key and words, paid
     await activities
       .locator(".of-activity")
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.activity)),
-  ).toEqual(["read-him", "read-me", "date-night", "photo-shoot", "claw"]);
-  // Without an image connection the Photo Shoot is shown as unavailable: the four Play buttons above stand.
+  ).toEqual(["read-him", "read-me", "tarot", "photo-shoot", "kitty", "claw"]);
+  // Without an image connection the Photo Shoot is shown as unavailable: the five Play buttons above stand.
   await expect(activities.locator('.of-activity[data-activity="photo-shoot"]')).toContainText(
     "Needs an image connection",
   );

@@ -25,6 +25,7 @@ import type {
 import { mapAccount } from "../../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../../host/slp-storage-context.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export function createReserveStorage1(context: SlurpStorageContext) {
   const {
     db,
@@ -54,7 +55,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
     deleteStoredInteraction,
   } = context;
   const storage = {
-    async ensureNoodlerReserveState(at = new Date()): Promise<{
+    async ensureNoodlerReserveState(at = slurpWorldNow()): Promise<{
       lastObservedBudgetTime: string;
       preparationNotBefore: string;
     }> {
@@ -100,7 +101,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
     async claimNoodlerAutomaticAttempt(
       kind: "text" | "image",
       limit: number,
-      at = new Date(),
+      at = slurpWorldNow(),
     ): Promise<{ status: "claimed"; claimId: string; claimedAt: string } | { status: "exhausted" | "holding" }> {
       return db.transaction(async (tx) => {
         let state = (
@@ -285,7 +286,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
     async rescheduleNoodlerPost(
       id: string,
       publishAt: string,
-      at = new Date(),
+      at = slurpWorldNow(),
     ): Promise<"updated" | "not_found" | "not_future" | "not_editable" | "conflict"> {
       const publishMs = Date.parse(publishAt);
       if (Number.isNaN(publishMs) || publishMs <= at.getTime()) return "not_future";
@@ -386,7 +387,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
      * image bytes are gone, so the state is committed first and the file removed afterwards.
      * A crash between the two leaks a file, which `sweepOrphanedNoodlerMedia` reclaims.
      */
-    async discardNoodlerPreparedPost(id: string, at = new Date()): Promise<void> {
+    async discardNoodlerPreparedPost(id: string, at = slurpWorldNow()): Promise<void> {
       const current = (await db.select().from(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.id, id)))[0];
       await db.transaction(async (tx) =>
         tx

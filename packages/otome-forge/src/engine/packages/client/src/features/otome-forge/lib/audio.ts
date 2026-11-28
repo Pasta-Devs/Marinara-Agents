@@ -4,17 +4,18 @@
 // ──────────────────────────────────────────────
 // hooks/use-otome-audio.ts plays them through the Engine's player and voice service; this file has no host access, so
 // the regressions run it as it is.
-import { forgeStoryPersona, type ForgeVoiceSpeaker } from "@forge-kit/voice-picking.mjs";
+import { forgeSpeakerVoice, forgeStoryPersona, type ForgeVoiceSpeaker } from "@forge-kit/voice-picking.mjs";
 import type {
   AudioSettings,
   Player,
   Pronouns,
+  RunFriendView,
   RunLiView,
   Segment,
   SoundtrackTrack,
   WorldView,
 } from "../shared/api-types";
-import type { MusicMood } from "../shared/faces";
+import { sameName, type MusicMood } from "../shared/faces";
 import { voiceOf } from "./reader-state";
 
 /** The Engine's stock cues (lib/audio-service.ts AudioMusicCue) Otome falls back on. */
@@ -43,8 +44,13 @@ export const runIdOf = (runKey: string) => `otome-forge:${runKey}`;
 
 /** A speaker as the kit's voice picker reads it, plus whether "voice everyone else" must be on to voice them. */
 export interface LineSpeaker extends ForgeVoiceSpeaker {
-  /** A love interest or the protagonist: voiced whenever voices are on. Anyone else needs "voice everyone else". */
+  /**
+   * A love interest, a friend (#2458) or the protagonist: voiced whenever voices are on. Anyone else needs "voice
+   * everyone else".
+   */
   cast: boolean;
+  /** #2458: one of her friends: with no card, the voice the Engine assigned to their name comes first, as anyone else's. */
+  friend?: true;
 }
 
 /** "male" or "female" from a love interest's pronouns, for the voice pool; "" when they say neither. */
@@ -55,13 +61,14 @@ export function pronounGender(pronouns: Pronouns | undefined): "male" | "female"
 
 /**
  * Who speaks a line, for the voice picker: a love interest (his Engine card's own voice when he has one, otherwise the
- * pool for his voice), the protagonist (her persona's voice, or silence), or anyone else (the pool for the line's
- * gender). Narration and thoughts are never voiced: null.
+ * pool for his voice), the protagonist (her persona's voice, or silence), one of her friends (#2458: voiced as a love
+ * interest is), or anyone else (the pool for the line's gender). Narration and thoughts are never voiced: null.
  */
 export function lineSpeaker(
   segment: Segment,
   lis: readonly RunLiView[],
   player: Pick<Player, "name" | "personaId">,
+  friends: readonly RunFriendView[] = [],
 ): LineSpeaker | null {
   if (segment.thought || !segment.text.trim()) return null;
   const voice = voiceOf(segment, lis, player.name);
@@ -82,7 +89,84 @@ export function lineSpeaker(
   // "You", "me", or her first name where the cast could not settle it: her own voice, never the pool.
   const persona = forgeStoryPersona({ name: player.name, personaId: player.personaId }, voice.name);
   if (persona) return { name: persona.name, characterId: persona.characterId, persona: true, cast: true };
+  const friend = friends.find((candidate) => sameName(voice.name, candidate.name));
+  if (friend) {
+    const gender = friend.voiceGender || segment.gender || pronounGender(friend.pronouns);
+    return {
+      name: friend.name,
+      characterId: friend.cardId || null,
+      ...(gender ? { gender } : {}),
+      cast: true,
+      friend: true,
+    };
+  }
   return { name: voice.name, ...(segment.gender ? { gender: segment.gender } : {}), cast: false };
+}
+
+// The Engine's speaker-name normalizers (packages/client/src/lib/tts-dialogue.ts normalizeTTSCharacterName and
+// normalizeTTSCharacterBaseName), which the host contract does not expose to packages.
+const ttsName = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+function ttsBaseName(value: unknown): string {
+  let name = ttsName(value);
+  let previous = "";
+  while (name && name !== previous) {
+    previous = name;
+    name = name
+      .replace(/^[`*"'“”‘’]+|[`*"'“”‘’:]+$/g, "")
+      .replace(/\s*(?:\([^()]*\)|\[[^\]]*\]|\{[^{}]*})\s*$/g, "")
+      .trim();
+  }
+  return name.match(/^(.+?)\s+(?:[-–—:|])\s+[^-–—:|]+$/)?.[1]?.trim() || name;
+}
+
+/**
+ * The voice an Engine voice row gives a speaker by name, as the Engine's resolveTTSVoiceForSpeaker does for one with no
+ * card of its own: the row with the same name, else the rows with the same base name ("Pulcinella (Fatui)") when they
+ * all name one voice. Rows are read from the same place the kit reads them (the connection's profile, or the config).
+ * ponytail: no short-form match ("Junpei" for a card called "Junpei Iori", Engine #8638); move this into the kit's
+ * forgeSpeakerVoice (and rebuild Gacha Forge) or use the Engine's resolver once the host contract exposes it.
+ */
+export function namedVoice(config: unknown, name: string): string | null {
+  const settings = config as {
+    enabled?: boolean;
+    connectionId?: string;
+    voiceAssignments?: unknown;
+    connectionProfiles?: Record<string, { voiceAssignments?: unknown } | undefined>;
+  } | null;
+  if (!settings || (!settings.connectionId && settings.enabled === false)) return null;
+  const assignments = settings.connectionId
+    ? settings.connectionProfiles?.[settings.connectionId]?.voiceAssignments
+    : settings.voiceAssignments;
+  const rows = (Array.isArray(assignments) ? assignments : []).flatMap((row) =>
+    row && typeof row.voice === "string" && row.voice.trim() && typeof row.characterName === "string"
+      ? [{ name: row.characterName, voice: row.voice.trim() }]
+      : [],
+  );
+  const exact = ttsName(name);
+  const same = exact ? rows.find((row) => ttsName(row.name) === exact) : undefined;
+  if (same) return same.voice;
+  const base = ttsBaseName(name);
+  const voices = new Set(base ? rows.filter((row) => ttsBaseName(row.name) === base).map((row) => row.voice) : []);
+  return voices.size === 1 ? [...voices][0]! : null;
+}
+
+/**
+ * The voice that reads a speaker's line: the kit's pick (a card's own row, the protagonist's persona, the NPC pool),
+ * except that someone outside the cast with no card first takes the voice the Engine assigned to their name.
+ */
+export async function lineVoice(
+  config: unknown,
+  speaker: LineSpeaker,
+  others: boolean,
+  listVoices: (config: unknown) => Promise<string[]>,
+): Promise<string | null> {
+  const named = (!speaker.cast || speaker.friend) && !speaker.characterId ? namedVoice(config, speaker.name) : null;
+  return named ?? forgeSpeakerVoice(config, speaker, others, listVoices);
 }
 
 /** True when the settings would voice this speaker at all (the Engine may still have no voice for them). */
@@ -96,6 +180,120 @@ export function wouldVoice(settings: AudioSettings, speaker: LineSpeaker | null)
  * rewritten beat never replays the old clip. The Engine adds the connection, voice and speaker to it.
  */
 export const voiceCacheKey = (runKey: string, ref: string) => `otome-forge:${runKey}:${ref}`;
+
+/** A line as the Engine voices it: playing it and making it ahead send the same, so the clip made ahead is the one played. */
+export interface LineVoiceRequest {
+  text: string;
+  speaker: string;
+  voice: string;
+  characterId?: string;
+  cacheKey?: string;
+}
+
+/** A cue's part that asks for hesitation or rhythm ("stammering", "stutters", "hesitantly", "repeating", "repetitive"). */
+const REPEATING_CUE = /\b(?:stammer|stutter|hesita|repe(?:at|tit))/iu;
+
+/**
+ * #2448: the cued line as the voice model gets it. ElevenLabs performs a hesitation or rhythm cue ([stammers],
+ * [repeats]) by saying words twice, on top of any stammer the words already carry, so those parts of a cue are left
+ * out: "[nervous, stammering]" is voiced as "[nervous]", and a cue with nothing else in it goes.
+ */
+export function voicedText(voiced: string): string {
+  return voiced
+    .replace(/\[([^\[\]\n]{1,80})\]/gu, (cue, inner: string) => {
+      if (!REPEATING_CUE.test(inner)) return cue;
+      const kept = inner.split(/\s*,\s*|\s+and\s+/u).filter((part) => part.trim() && !REPEATING_CUE.test(part));
+      return kept.length ? `[${kept.join(", ")}]` : "";
+    })
+    .replace(/[ \t]{2,}/gu, " ")
+    .trim();
+}
+
+/**
+ * What a line is voiced with. 0.34.0: with Emotion cues on, the line as written, cues and all (but voicedText's), kept
+ * apart from the plain clip. A line voicedText changed has a key of its own, so a clip made with the cue it drops
+ * before #2448 is never replayed. `cache` false voices it with no cache key.
+ */
+export function lineVoiceRequest(
+  runKey: string,
+  ref: string,
+  segment: Segment,
+  speaker: LineSpeaker,
+  voice: string,
+  settings: Pick<AudioSettings, "emotionCues">,
+  cache = true,
+): LineVoiceRequest {
+  const voiced = settings.emotionCues ? segment.voiced : undefined;
+  const text = voiced ? voicedText(voiced) || segment.text : segment.text;
+  const key = !voiced ? ref : text === voiced ? `${ref}~cues` : `${ref}~cues2`;
+  return {
+    text,
+    speaker: segment.speaker,
+    voice,
+    ...(speaker.characterId ? { characterId: speaker.characterId } : {}),
+    ...(cache ? { cacheKey: voiceCacheKey(runKey, key) } : {}),
+  };
+}
+
+/** A line whose voice may be made ahead, with its ref (lib/reader-state.ts lineRef). */
+export interface PrepLine {
+  segment: Segment;
+  ref: string;
+}
+
+/**
+ * Makes lines' voices ahead, one at a time and in order, so each plays as its text appears. The newest list replaces
+ * the lines still waiting, and a line is asked for once. A failure stops it until `reset` (the voice settings
+ * changed), so the lines are then voiced as they appear, as before; a stopped wait (AbortError) is no failure, and
+ * neither is one from a line asked for before the last reset.
+ */
+export class VoicePrep {
+  private waiting: PrepLine[] = [];
+  private readonly asked = new Set<string>();
+  private running = false;
+  private failed = false;
+  /** Counts resets, so a line asked for before one cannot stop the lines after it. */
+  private settings = 0;
+
+  constructor(
+    private readonly make: (line: PrepLine) => Promise<void>,
+    private readonly key: (line: PrepLine) => string,
+  ) {}
+
+  set(lines: readonly PrepLine[]) {
+    this.waiting = this.failed ? [] : lines.filter((line) => !this.asked.has(this.key(line)));
+    if (!this.running) void this.run();
+  }
+
+  reset() {
+    this.waiting = [];
+    this.asked.clear();
+    this.failed = false;
+    this.settings += 1;
+  }
+
+  private async run() {
+    this.running = true;
+    try {
+      for (let line = this.waiting.shift(); line; line = this.waiting.shift()) {
+        const key = this.key(line);
+        if (this.asked.has(key)) continue;
+        this.asked.add(key);
+        const settings = this.settings;
+        try {
+          await this.make(line);
+        } catch (error) {
+          if ((error as { name?: string })?.name === "AbortError" || settings !== this.settings) continue;
+          console.warn("Otome Hearth could not voice a line ahead", error);
+          this.failed = true;
+          this.waiting = [];
+        }
+      }
+    } finally {
+      this.running = false;
+    }
+  }
+}
 
 /**
  * The ref a Home tap line is voiced under (M3): his id and a hash of the line, since the Engine keys a clip by its ref,

@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the reader's title, scene count, place and content tags. Desktop shows its tools inline; mobile keeps
 // mute, fullscreen and the disclosure visible, with the secondary tools stacked below. Rewrite names its call cost.
-// A place waiting for "Ask before painting" (or failed) offers its paint beside its name, with its cost.
+// A place waiting for "Ask before painting" (or failed) offers its paint beside its name, with its cost, and every place
+// offers a background from the Engine's library (#2147), which paints nothing.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +11,7 @@ import {
   EyeOff,
   FastForward,
   Feather,
+  Image as ImageIcon,
   MapPin,
   MoreHorizontal,
   Paintbrush,
@@ -17,12 +19,18 @@ import {
   Play,
   RefreshCw,
   Repeat,
+  RotateCcw,
   ScrollText,
   Volume2,
   VolumeX,
   type LucideIcon,
 } from "lucide-react";
-import type { ChapterKind, ChapterView, MomentKind, NodeKind } from "../../shared/api-types";
+import type { ChapterKind, ChapterView, MomentKind, NodeKind, RunLiView } from "../../shared/api-types";
+import { hisSideLiOf } from "../../shared/arcs";
+import { friendAirOfKey } from "../../shared/friends";
+import { birthdayOfKey } from "../../shared/birthdays";
+import { clearAirOfKey } from "../../shared/dates";
+import { figurineLiOf } from "../../shared/shop";
 import { FullscreenButton } from "../../components/Stage";
 import { ImageDescription } from "../../components/ImageDescription";
 import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
@@ -36,10 +44,60 @@ const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
   date: "ui.otomeForge.story.kindDate",
 };
 
-/** A chapter's eyebrow: "Chapter 3", or its kind. */
+/**
+ * A chapter's title as the player reads it. A figurine scene (#2128) or a birthday scene (#2153) has no banner item to
+ * name it, so it is titled in the player's language from its love interest's name (and the birthday's year); its saved
+ * English title is the story's own, for prompts and memory (S/items/character-story.ts), and so does a scene that clears
+ * the air with him (#2303). His side (#2155) keeps the title of the chapter it tells again, and is named as his side
+ * of it.
+ */
+export function chapterTitle(
+  t: ReturnType<typeof useTranslation>["t"],
+  chapter: Pick<ChapterView, "key" | "title">,
+  lis: ReadonlyArray<Pick<RunLiView, "id" | "name">>,
+): string {
+  const birthday = birthdayOfKey(chapter.key);
+  // #2458: a friend's scene to clear the air is named as a love interest's is.
+  const clearAir =
+    clearAirOfKey(chapter.key) ??
+    (() => {
+      const friend = friendAirOfKey(chapter.key);
+      return friend ? { li: friend.id } : null;
+    })();
+  const li = birthday?.li ?? clearAir?.li ?? figurineLiOf(chapter.key);
+  const name = li ? lis.find((entry) => entry.id === li)?.name : undefined;
+  if (name && birthday) return t("ui.otomeForge.birthday.sceneTitle", { name, year: birthday.year });
+  if (name && clearAir) return t("ui.otomeForge.phone.clearAirTitle", { name });
+  if (name) return t("ui.otomeForge.shop.sceneTitle", { name });
+  const side = hisSideLiOf(chapter.key);
+  const his = side ? lis.find((entry) => entry.id === side)?.name : undefined;
+  const title = chapter.title || t("ui.otomeForge.story.untitled");
+  return his ? t("ui.otomeForge.arcs.sideChapterTitle", { name: his, title }) : title;
+}
+
+/** #2458: a friend's own story's eyebrow, by its kind. */
+const FRIEND_KIND_KEYS = {
+  rank: "ui.otomeForge.friends.eyebrowRank",
+  mend: "ui.otomeForge.friends.eyebrowMend",
+  "clear-air": "ui.otomeForge.friends.eyebrowAir",
+  hangout: "ui.otomeForge.friends.eyebrowHangout",
+} as const;
+
+/** A chapter's eyebrow: "Chapter 3", or its kind; #2458 a friend's story by its kind; #2459 the finale or epilogue. */
 export function chapterEyebrowKey(
-  chapter: Pick<ChapterView, "kind" | "number"> & { arc?: number },
-): [string, { number?: number; arc?: number }] {
+  chapter: Pick<ChapterView, "kind" | "number"> & {
+    arc?: number;
+    friendStory?: { kind: keyof typeof FRIEND_KIND_KEYS; friends: readonly string[]; level?: number };
+    ending?: "finale" | "epilogue";
+  },
+  people: ReadonlyArray<Pick<RunLiView, "id" | "name">> = [],
+): [string, { number?: number; arc?: number; name?: string; level?: number }] {
+  if (chapter.ending === "finale") return ["ui.otomeForge.ending.eyebrowFinale", {}];
+  if (chapter.ending === "epilogue") return ["ui.otomeForge.ending.eyebrowEpilogue", {}];
+  if (chapter.friendStory) {
+    const name = people.find((person) => person.id === chapter.friendStory!.friends[0])?.name ?? "";
+    return [FRIEND_KIND_KEYS[chapter.friendStory.kind], { name, level: chapter.friendStory.level ?? 1 }];
+  }
   if (chapter.kind !== "main") return [KIND_KEYS[chapter.kind], {}];
   // #1983 M4: a main chapter in an arc names it beside its number.
   return chapter.arc
@@ -92,6 +150,8 @@ function Tool({ label, Icon, onClick, pressed, disabled, className = "" }: ToolP
 
 interface ReaderControlsProps {
   chapter: ChapterView | null;
+  /** The cast, to name a figurine scene (chapterTitle). */
+  lis: ReadonlyArray<Pick<RunLiView, "id" | "name">>;
   node: number | null;
   nodeCount: number;
   replay: boolean;
@@ -99,8 +159,15 @@ interface ReaderControlsProps {
   place?: string;
   /** Text for a picture that isn't painted (the place's, or a key image's); absent once it is. */
   imageDescription?: string;
-  /** The place's picture waits for a tap (consent, or a retry after a failure). */
-  placePaint?: { retry: boolean; busy: boolean; onPaint: () => void };
+  /** The place's picture waits for a tap (consent, a retry after a failure), or a painted one can be repainted. */
+  placePaint?: { retry: boolean; repaint: boolean; busy: boolean; onPaint: () => void };
+  /** 0.20.0: the speaking side character's sprite waits for a tap (Ask before painting) or a Retry, or a painted one
+   * can be repainted. */
+  sidePaint?: { name: string; retry: boolean; repaint: boolean; busy: boolean; onPaint: () => void };
+  /** 0.24.0: the key image on screen is painted, so it can be painted again (or, if that failed, tried again). */
+  cgPaint?: { retry: boolean; busy: boolean; onPaint: () => void };
+  /** #2147: opens the Engine's backgrounds for the place, with or without an image connection. */
+  onPlaceBackground?: () => void;
   tags: string[];
   /** The scene is showing (not loading, not the tags card or the end card). */
   reading: boolean;
@@ -111,6 +178,8 @@ interface ReaderControlsProps {
   onLog: () => void;
   onHide: () => void;
   canRewrite: boolean;
+  /** 0.38.0: why the server cannot take this scene back, so Rewrite shows greyed with the reason. */
+  rewriteBlocked?: "stance" | "moved" | "unrecorded" | null;
   /** A rewrite paints the scene's key moment again by itself (its old image is let go). */
   rewritePaints?: boolean;
   onRewrite: () => void;
@@ -120,6 +189,13 @@ interface ReaderControlsProps {
   /** Faded under a story CG's pan: nothing in it can be focused or pressed. */
   inert?: boolean;
 }
+
+/** 0.38.0: why Rewrite is greyed (use-reader rewriteBlocked). */
+const REWRITE_BLOCKED_KEYS = {
+  stance: "ui.otomeForge.reader.rewriteBlockedStance",
+  moved: "ui.otomeForge.reader.rewriteBlockedMoved",
+  unrecorded: "ui.otomeForge.reader.rewriteBlockedUnrecorded",
+} as const;
 
 export function ReaderControls(props: ReaderControlsProps) {
   const { t } = useTranslation();
@@ -165,13 +241,18 @@ export function ReaderControls(props: ReaderControlsProps) {
     };
   }, [expanded]);
   const { chapter, node, nodeCount, replay, place, tags, reading } = props;
-  const [eyebrowKey, eyebrowValues] = chapter ? chapterEyebrowKey(chapter) : ["ui.otomeForge.common.screenStory", {}];
+  const [eyebrowKey, eyebrowValues] = chapter
+    ? chapterEyebrowKey(chapter, props.lis)
+    : ["ui.otomeForge.common.screenStory", {}];
   const frameKey = frameLabelKey(chapter && node !== null ? chapter.nodes[node] : null);
   const tagKeys = tags.flatMap((tag) => tagLabelKey(tag) ?? []);
   const exitLabel = t("ui.otomeForge.reader.exit");
-  const rewriteLabel = props.rewritePaints
-    ? t("ui.otomeForge.reader.rewritePaintsLabel")
-    : t("ui.otomeForge.reader.rewriteLabel");
+  const rewriteBlocked = props.rewriteBlocked ? REWRITE_BLOCKED_KEYS[props.rewriteBlocked] : null;
+  const rewriteLabel = rewriteBlocked
+    ? t(rewriteBlocked)
+    : props.rewritePaints
+      ? t("ui.otomeForge.reader.rewritePaintsLabel")
+      : t("ui.otomeForge.reader.rewriteLabel");
   const auto = (
     <Tool
       label={t("ui.otomeForge.reader.auto")}
@@ -191,13 +272,15 @@ export function ReaderControls(props: ReaderControlsProps) {
   );
   const log = <Tool label={t("ui.otomeForge.reader.backlog")} Icon={ScrollText} onClick={props.onLog} />;
   const hide = <Tool label={t("ui.otomeForge.reader.hide")} Icon={EyeOff} disabled={!reading} onClick={props.onHide} />;
+  // Greyed with aria-disabled rather than disabled, so its reason still shows on hover and reaches a screen reader.
   const rewrite = props.canRewrite ? (
     <button
       type="button"
       className="of-reader-pill of-glass"
       aria-label={rewriteLabel}
       title={rewriteLabel}
-      onClick={props.onRewrite}
+      aria-disabled={rewriteBlocked ? true : undefined}
+      onClick={rewriteBlocked ? undefined : props.onRewrite}
     >
       <RefreshCw size={14} strokeWidth={2.1} aria-hidden="true" />
       <span>{t("ui.otomeForge.reader.rewrite")}</span>
@@ -238,7 +321,7 @@ export function ReaderControls(props: ReaderControlsProps) {
             ) : null}
           </span>
           <span className="of-reader-name">
-            {chapter ? chapter.title || t("ui.otomeForge.story.untitled") : t("ui.otomeForge.common.loading")}
+            {chapter ? chapterTitle(t, chapter, props.lis) : t("ui.otomeForge.common.loading")}
           </span>
         </h1>
         <div className="of-reader-tools of-reader-primary">
@@ -302,9 +385,11 @@ export function ReaderControls(props: ReaderControlsProps) {
                 className="of-reader-chip of-reader-chip--paint"
                 aria-disabled={props.placePaint.busy}
                 aria-label={t(
-                  props.placePaint.retry
-                    ? "ui.otomeForge.reader.placeRetryLabel"
-                    : "ui.otomeForge.reader.placePaintLabel",
+                  props.placePaint.repaint
+                    ? "ui.otomeForge.reader.placeRepaintLabel"
+                    : props.placePaint.retry
+                      ? "ui.otomeForge.reader.placeRetryLabel"
+                      : "ui.otomeForge.reader.placePaintLabel",
                   { place },
                 )}
                 onClick={(event) => {
@@ -313,7 +398,89 @@ export function ReaderControls(props: ReaderControlsProps) {
                 }}
               >
                 <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
-                {t(props.placePaint.retry ? "ui.otomeForge.reader.placeRetry" : "ui.otomeForge.reader.placePaint")}
+                {t(
+                  props.placePaint.repaint
+                    ? "ui.otomeForge.reader.placeRepaint"
+                    : props.placePaint.retry
+                      ? "ui.otomeForge.reader.placeRetry"
+                      : "ui.otomeForge.reader.placePaint",
+                )}
+              </button>
+            </li>
+          ) : null}
+          {props.cgPaint ? (
+            <li className="of-reader-chip-slot">
+              <button
+                type="button"
+                className="of-reader-chip of-reader-chip--paint"
+                aria-disabled={props.cgPaint.busy}
+                aria-label={t(
+                  props.cgPaint.retry ? "ui.otomeForge.reader.cgRetryLabel" : "ui.otomeForge.reader.cgRepaintLabel",
+                )}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!props.cgPaint?.busy) props.cgPaint?.onPaint();
+                }}
+              >
+                {props.cgPaint.retry ? (
+                  <RotateCcw size={12} strokeWidth={2.2} aria-hidden="true" />
+                ) : (
+                  <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
+                )}
+                {t(
+                  props.cgPaint.busy
+                    ? "ui.otomeForge.wish.painting"
+                    : props.cgPaint.retry
+                      ? "ui.otomeForge.reader.cgRetryChip"
+                      : "ui.otomeForge.reader.cgRepaint",
+                )}
+              </button>
+            </li>
+          ) : null}
+          {props.sidePaint ? (
+            <li className="of-reader-chip-slot">
+              <button
+                type="button"
+                className="of-reader-chip of-reader-chip--paint"
+                aria-disabled={props.sidePaint.busy}
+                aria-label={t(
+                  props.sidePaint.repaint
+                    ? "ui.otomeForge.reader.sideRepaintLabel"
+                    : props.sidePaint.retry
+                      ? "ui.otomeForge.reader.sideRetryLabel"
+                      : "ui.otomeForge.reader.sidePaintLabel",
+                  { name: props.sidePaint.name },
+                )}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!props.sidePaint?.busy) props.sidePaint?.onPaint();
+                }}
+              >
+                <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
+                {t(
+                  props.sidePaint.repaint
+                    ? "ui.otomeForge.reader.sideRepaint"
+                    : props.sidePaint.retry
+                      ? "ui.otomeForge.reader.sideRetry"
+                      : "ui.otomeForge.reader.sidePaint",
+                  { name: props.sidePaint.name },
+                )}
+              </button>
+            </li>
+          ) : null}
+          {place && props.onPlaceBackground ? (
+            <li className="of-reader-chip-slot">
+              <button
+                type="button"
+                className="of-reader-chip of-reader-chip--background"
+                aria-label={t("ui.otomeForge.reader.placeBackgroundLabel", { place })}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.onPlaceBackground?.();
+                }}
+              >
+                <ImageIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+                {t("ui.otomeForge.reader.placeBackground")}
               </button>
             </li>
           ) : null}

@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Story Writer: the full-page view (stage, book, sticky note, action bar, settings drawer)
+// Story Writer: the full-page view (stage, book, chapter bar, sticky note, action and quick bars, settings drawer,
+// prompt peek)
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -9,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type FocusEvent,
   type KeyboardEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,16 +18,26 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Loader2, RefreshCw } from "lucide-react";
 import { host } from "marinara:host";
-import { resolveDefaultConnectionId, useStoryConnections } from "../../hooks/use-engine-resources";
+import {
+  resolveDefaultConnectionId,
+  resolveImageConnectionId,
+  useStoryConnections,
+} from "../../hooks/use-engine-resources";
 import { useStoryGeneration } from "../../hooks/use-story-generation";
+import { useStoryIllustration } from "../../hooks/use-story-illustration";
 import { storyWriterKeys, usePreferences, useStoryDocument, useStoryList } from "../../hooks/use-story-writer";
 import { STORY_WRITER_ASSETS, storyWriterAssetUrl, type StoryWriterAsset } from "../../lib/story-writer/assets";
 import { downloadTextFile, storyFileName, storyToMarkdown, storyToPlainText } from "../../lib/story-writer/export";
 import { countWords, storyDisplayTitle, type StoryChapter, type StorySummary } from "../../lib/story-writer/model";
+import { generateTarget } from "../../lib/story-writer/prompt";
 import { storyThemeVariables, type ResolvedColorMode } from "../../lib/story-writer/styles-shell";
 import { generateClientId } from "../../lib/utils";
-import { ActionBar, type FullscreenControl } from "./ActionBar";
+import { ActionBar, QuickReplyBar, type FullscreenControl } from "./ActionBar";
+import type { PictureAction } from "./ChapterBlock";
+import { IllustrateDialog } from "./IllustrateDialog";
+import { PromptPeekDialog } from "./PromptPeek";
 import { StickyNote } from "./StickyNote";
+import { StoryDocument } from "./StoryDocument";
 import { StoryReader, type StoryReaderHandle } from "./StoryReader";
 import { StorySidebar, type SidebarSectionId } from "./StorySidebar";
 
@@ -123,19 +135,73 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const list = useStoryList();
   const [storyId, setStoryId] = useState<string | null>(null);
   const doc = useStoryDocument(storyId);
-  const { connections, isLoading: connectionsLoading } = useStoryConnections();
+  const { connections, imageConnections, isLoading: connectionsLoading } = useStoryConnections();
+  // The chapter the author is on: the one they last moved to in the reader or clicked into; until then the last one.
+  // Generate continues it.
+  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const generation = useStoryGeneration({
     doc,
     streaming: preferences.streaming,
     debugMode: capabilityProps.debugMode === true,
     connections,
+    selectedChapterId,
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sectionRequest, setSectionRequest] = useState<{ id: SidebarSectionId; nonce: number } | null>(null);
+  const openSection = useCallback((id: SidebarSectionId) => {
+    setSidebarOpen(true);
+    setSectionRequest((current) => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
+  }, []);
+  const illustration = useStoryIllustration({
+    doc,
+    connections,
+    imageConnections,
+    debugMode: capabilityProps.debugMode === true,
+    // The Engine's "Expose media prompts before sending" (capability props): an Engine that does not say gets the review.
+    reviewPrompts:
+      typeof capabilityProps.reviewImagePromptsBeforeSend === "boolean"
+        ? capabilityProps.reviewImagePromptsBeforeSend
+        : null,
+    selectedChapterId,
+    onNeedsConnection: () =>
+      toast.info(t("illustrate.needsConnection"), {
+        action: { label: t("illustrate.chooseConnection"), onClick: () => openSection("writing") },
+      }),
+    confirmRemove: () =>
+      confirmAction({
+        title: t("illustrate.removeTitle"),
+        message: t("illustrate.removeMessage"),
+        confirmLabel: t("illustrate.removeConfirm"),
+        tone: "destructive",
+      }),
+  });
+  const { remove: removePicture, illustrateAgain } = illustration;
+  const onPictureAction = useCallback(
+    (chapterId: string, illustrationId: string, action: PictureAction) =>
+      void (action === "remove"
+        ? removePicture(chapterId, illustrationId)
+        : illustrateAgain(chapterId, illustrationId)),
+    [removePicture, illustrateAgain],
+  );
   const [noteOpen, setNoteOpen] = useState(false);
+  const [peekOpen, setPeekOpen] = useState(false);
+  const peekOpener = useRef<HTMLElement | null>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [chapterBarHost, setChapterBarHost] = useState<HTMLDivElement | null>(null);
   const [ghostChapterId, setGhostChapterId] = useState(generateClientId);
   const [firstStoryFailed, setFirstStoryFailed] = useState(false);
   const readerRef = useRef<StoryReaderHandle>(null);
+  // The review closes into the action bar's toolbar, as the hidden note does.
+  const reviewOpen = !!illustration.review;
+  const wasReviewing = useRef(false);
+  useEffect(() => {
+    if (wasReviewing.current && !reviewOpen) {
+      requestAnimationFrame(() =>
+        dockRef.current?.querySelector<HTMLElement>(".sw-actionbar")?.focus({ preventScroll: true }),
+      );
+    }
+    wasReviewing.current = reviewOpen;
+  }, [reviewOpen]);
   const engineTheme = useSyncExternalStore(subscribeEngineTheme, readEngineTheme, (): ResolvedColorMode => "dark");
   const mobile = useMediaQuery(MOBILE_QUERY);
   const packageVersion = typeof capabilityProps.packageVersion === "string" ? capabilityProps.packageVersion : null;
@@ -210,6 +276,12 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         .filter(Boolean)
         .join(" · ")
     : "";
+  const showQuickReplies = preferences.showQuickReplies && preferences.quickReplies.length > 0;
+  // Chapter length "Off": Generate and the quick replies write into the selected chapter and never start one.
+  const writerDecides = settings?.writerDecides === true;
+  const generateChapter = writerDecides ? generateTarget(chapters, selectedChapterId) : null;
+  const generateChapterNumber = writerDecides ? (generateChapter ? chapters.indexOf(generateChapter) + 1 : 0) : null;
+  const writeMode = writerDecides ? "generate" : "next";
   const fullscreen = readFullscreen(capabilityProps.browserFullscreen, {
     enter: t("actions.enterFullscreen"),
     exit: t("actions.exitFullscreen"),
@@ -275,7 +347,11 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const exportStory = (format: "md" | "txt") => {
     if (!data) return;
     const fallback = t("app.untitled");
-    const options = { chapterLabel: (number: number) => t("reader.chapterLabel", { number }) };
+    const options = {
+      chapterLabel: (number: number) => t("reader.chapterLabel", { number }),
+      // The pictures stay in this Engine's Global Gallery: the Markdown links to them there.
+      pictureBaseUrl: window.location.origin,
+    };
     try {
       const text =
         format === "md" ? storyToMarkdown(data, fallback, options) : storyToPlainText(data, fallback, options);
@@ -298,10 +374,6 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const saveNow = async () => {
     if (await flush()) toast.success(t("stories.savedToast"));
     else toast.warning(t("stories.saveFailed"));
-  };
-  const openLibrary = () => {
-    setSidebarOpen(true);
-    setSectionRequest((current) => ({ id: "stories", nonce: (current?.nonce ?? 0) + 1 }));
   };
   const onKeyDown = (event: KeyboardEvent) => {
     // Ctrl/Cmd+S saves the story instead of opening the browser's "Save page" dialog.
@@ -334,6 +406,17 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     });
     if (confirmed) void generation.write("rewrite");
   };
+  const redoLatest = async () => {
+    const number = generation.redoChapter;
+    if (number === null) return;
+    const confirmed = await confirmAction({
+      title: t("actions.redoTitle"),
+      message: t("actions.redoMessage", { number }),
+      confirmLabel: t("actions.redoConfirm"),
+      tone: "destructive",
+    });
+    if (confirmed) void generation.redo();
+  };
   const deleteChapter = async (chapterId: string) => {
     const number = chapters.findIndex((chapter) => chapter.id === chapterId) + 1;
     const confirmed = await confirmAction({
@@ -344,8 +427,40 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     });
     if (confirmed) await doc.deleteChapter(chapterId);
   };
+  const hideNote = () => {
+    // The note unmounts with its hide button: focus held there goes to the action bar's toolbar, never to one of its
+    // buttons, where the next Enter would write or stop a chapter. The toolbar, not the dock: in short landscape the
+    // dock is display: contents and has no box to focus (Dottore, #2364).
+    const hadFocus =
+      document.activeElement instanceof HTMLElement && !!document.activeElement.closest(".sw-note-anchor");
+    setNoteOpen(false);
+    updatePreferences({ showAuthorNote: false });
+    toast.info(t("note.hidden"));
+    if (hadFocus)
+      requestAnimationFrame(() =>
+        dockRef.current?.querySelector<HTMLElement>(".sw-actionbar")?.focus({ preventScroll: true }),
+      );
+  };
+  const openPeek = () => {
+    peekOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPeekOpen(true);
+  };
+  const closePeek = () => {
+    setPeekOpen(false);
+    // The view behind the dialog is inert until this render lands; focus goes back to the button after it.
+    requestAnimationFrame(() => peekOpener.current?.focus({ preventScroll: true }));
+  };
+  // Clicking or tabbing into a chapter selects it, until the author moves to another one.
+  const selectFocusedChapter = (event: FocusEvent) => {
+    const key = (event.target as Element).closest?.("[data-sw-block]")?.getAttribute("data-sw-block");
+    if (key) setSelectedChapterId(key);
+  };
+  // Book and E-book paginate; the Document theme scrolls, with its own component in the same place.
+  const Reader = preferences.theme === "document" ? StoryDocument : StoryReader;
   const jumpToChapter = (chapterId: string) => {
     readerRef.current?.scrollToChapter(chapterId);
+    // A chapter picked from the list is the one Generate continues, even on a spread that opens on the one before.
+    setSelectedChapterId(chapterId);
     // The drawer covers the book on phones.
     if (mobile) setSidebarOpen(false);
   };
@@ -374,14 +489,16 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
       data-sw-sidebar={preferences.sidebarSide}
       data-sw-note={preferences.noteSide}
       data-sw-sidebar-open={sidebarOpen ? "true" : "false"}
+      data-sw-quick={showQuickReplies ? "true" : "false"}
+      data-sw-note-shown={preferences.showAuthorNote ? "true" : "false"}
       style={themeStyle}
       onKeyDown={onKeyDown}
     >
-      <div className="sw-frame">
+      <div className="sw-frame" inert={peekOpen || !!illustration.review}>
         <div className="sw-stage" />
-        <div className="sw-reader-slot">
+        <div className="sw-reader-slot" onFocus={selectFocusedChapter}>
           {data && settings ? (
-            <StoryReader
+            <Reader
               key={data.story.id}
               ref={readerRef}
               theme={preferences.theme}
@@ -392,9 +509,13 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
               generatingChapterId={generation.generatingChapterId}
               ghostChapterId={ghostChapterId}
               editable={generation.status === "idle"}
+              writerDecides={writerDecides}
               mariImageUrl={assetUrl(STORY_WRITER_ASSETS.mari)}
+              chapterBarHost={chapterBarHost}
               onChapterChange={onChapterChange}
               onStartChapter={onStartChapter}
+              onShownChapterChange={setSelectedChapterId}
+              onPictureAction={onPictureAction}
             />
           ) : slotMessage ? (
             <div className="sw-slot-message" role="status">
@@ -411,35 +532,56 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         </div>
         {data && settings ? (
           <>
-            <StickyNote
-              key={data.story.id}
-              side={preferences.noteSide}
-              text={settings.authorNote}
-              clearAfterChapter={settings.clearNoteAfterChapter}
-              depth={settings.authorNoteDepth}
-              open={noteOpen}
-              onOpenChange={setNoteOpen}
-              onChange={(authorNote) => doc.updateSettings({ authorNote })}
-              onDepthChange={(authorNoteDepth) => doc.updateSettings({ authorNoteDepth })}
-            />
-            <ActionBar
-              status={generation.status}
-              canWrite={generation.canWrite}
-              hasConnection={hasConnection || connectionsLoading}
-              chapterCount={chapters.length}
-              lastChapterDraft={lastChapter?.status === "draft"}
-              generatingChapterNumber={generatingIndex >= 0 ? generatingIndex + 1 : null}
-              liveWords={generation.liveWords}
-              totalWords={totalWords}
-              targetWords={settings.targetWords}
-              fullscreen={fullscreen}
-              onWrite={() => void generation.write("next")}
-              onContinue={() => void generation.write("continue")}
-              onRewrite={() => void rewriteLastChapter()}
-              onStop={generation.stop}
-              onOpenLibrary={openLibrary}
-              onFinishChapter={() => void finishChapter()}
-            />
+            <div ref={setChapterBarHost} className="sw-chapterbar" />
+            {preferences.showAuthorNote ? (
+              <StickyNote
+                key={data.story.id}
+                side={preferences.noteSide}
+                text={settings.authorNote}
+                clearAfterChapter={settings.clearNoteAfterChapter}
+                depth={settings.authorNoteDepth}
+                open={noteOpen}
+                onOpenChange={setNoteOpen}
+                onChange={(authorNote) => doc.updateSettings({ authorNote })}
+                onDepthChange={(authorNoteDepth) => doc.updateSettings({ authorNoteDepth })}
+                onHide={hideNote}
+              />
+            ) : null}
+            <div ref={dockRef} className="sw-dock">
+              <ActionBar
+                status={generation.status}
+                canWrite={generation.canWrite}
+                hasConnection={hasConnection || connectionsLoading}
+                chapterCount={chapters.length}
+                lastChapterDraft={lastChapter?.status === "draft"}
+                generateChapterNumber={generateChapterNumber}
+                canRedo={generation.redoChapter !== null}
+                generatingChapterNumber={generatingIndex >= 0 ? generatingIndex + 1 : null}
+                liveWords={generation.liveWords}
+                totalWords={totalWords}
+                targetWords={settings.targetWords}
+                fullscreen={fullscreen}
+                illustrating={illustration.phase !== "idle"}
+                hasImageConnection={resolveImageConnectionId(imageConnections, settings.imageConnectionId) !== null}
+                onWrite={() => void generation.write(writeMode)}
+                onContinue={() => void generation.write("continue")}
+                onRewrite={() => void rewriteLastChapter()}
+                onRedo={() => void redoLatest()}
+                onStop={generation.stop}
+                onOpenLibrary={() => openSection("stories")}
+                onFinishChapter={() => void finishChapter()}
+                onIllustrate={() => void illustration.illustrate()}
+              />
+              {showQuickReplies ? (
+                <QuickReplyBar
+                  replies={preferences.quickReplies}
+                  canWrite={generation.canWrite && generateChapterNumber !== 0}
+                  hasConnection={hasConnection || connectionsLoading}
+                  onSend={(request) => void generation.write(writeMode, request)}
+                  onEdit={() => openSection("quickReplies")}
+                />
+              ) : null}
+            </div>
           </>
         ) : null}
         <StorySidebar
@@ -461,15 +603,26 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
           doc={doc}
           generation={generation}
           connections={connections}
+          imageConnections={imageConnections}
           connectionsLoading={connectionsLoading}
           hasConnection={hasConnection}
           onEditConnection={(connectionId) => void openConnection(connectionId)}
           onManageConnections={manageConnections}
           onJumpToChapter={jumpToChapter}
           onDeleteChapter={(chapterId) => void deleteChapter(chapterId)}
+          onPeekPrompt={openPeek}
           totalWords={totalWords}
         />
       </div>
+      {peekOpen ? <PromptPeekDialog load={generation.peekPrompt} onClose={closePeek} /> : null}
+      {illustration.review ? (
+        <IllustrateDialog
+          key={illustration.review.status}
+          review={illustration.review}
+          onPaint={illustration.finishReview}
+          onCancel={illustration.cancel}
+        />
+      ) : null}
     </div>
   );
 }

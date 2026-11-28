@@ -2304,6 +2304,34 @@
               "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.\"]},{version:\"1.27.4\",fixed:["
             }
           ]
+        },
+        {
+          "version": "1.27.6",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.5\"",
+              "replace": "ds=\"1.27.6\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared choice-check helper. Gacha Forge's player choices work exactly as before.\"]},{version:\"1.27.5\",fixed:["
+            }
+          ]
+        },
+        {
+          "version": "1.27.7",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.6\"",
+              "replace": "ds=\"1.27.7\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,fixed:[\"Pictures paint and the Engine's connections, characters and lorebooks load when Marinara was installed with its Android app: Gacha Forge's requests to the Engine on the same device now carry the app's local secret.\"]},{version:\"1.27.6\",fixed:["
+            }
+          ]
         }
       ]
     },
@@ -4091,6 +4119,43 @@
             {
               "find": "if(U&&F.data.weaponType!==U)return",
               "replace": "if(U&&F.data.weaponType!==U&&!forgeWeaponIsForCharacter(F.data,S.data,i))return"
+            }
+          ]
+        },
+        {
+          "version": "1.27.7",
+          "commits": [],
+          "edits": [
+            {
+              "find": "function Po(e){",
+              "sourceId": "engine-local-auth",
+              "replaceFrom": "../../sources/forge-kit/engine-local-auth.mjs",
+              "reason": "Paste the shared Android local secret helper before the loopback address it is sent to"
+            },
+            {
+              "find": "a=(...h)=>{if(t)return t(...h);",
+              "replace": "a=(...h)=>{let forgeSecretHeaders=forgeEngineLocalHeaders(h[0],h[1]?.headers);forgeSecretHeaders!==h[1]?.headers&&(h[1]={...h[1],headers:forgeSecretHeaders});if(t)return t(...h);",
+              "reason": "The image client's Engine requests carry the Android local secret (#2358)"
+            },
+            {
+              "find": "let n=await fetch(Po(e)+t,{headers:{accept:\"application/json\"}});",
+              "replace": "let n=await fetch(Po(e)+t,{headers:forgeEngineLocalHeaders(Po(e),{accept:\"application/json\"})});",
+              "reason": "The lorebook reads carry the Android local secret"
+            },
+            {
+              "find": "a=await fetch(r,{headers:{accept:\"application/json\"},",
+              "replace": "a=await fetch(r,{headers:forgeEngineLocalHeaders(r,{accept:\"application/json\"}),",
+              "reason": "The connection settings read carries the Android local secret"
+            },
+            {
+              "find": "let N=await fetch(Po(qo())+E,{headers:{accept:\"application/json\"},",
+              "replace": "let N=await fetch(Po(qo())+E,{headers:forgeEngineLocalHeaders(Po(qo()),{accept:\"application/json\"}),",
+              "reason": "The connection, persona and card list reads carry the Android local secret"
+            },
+            {
+              "find": "let response=await fetch(Po(qo())+\"/api/connections\",{headers:{accept:\"application/json\"},",
+              "replace": "let response=await fetch(Po(qo())+\"/api/connections\",{headers:forgeEngineLocalHeaders(Po(qo()),{accept:\"application/json\"}),",
+              "reason": "The story memory's connection read carries the Android local secret"
             }
           ]
         }

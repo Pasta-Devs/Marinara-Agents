@@ -20,6 +20,8 @@ const EXPECTED_ROUTES = [
   "DELETE /api/long-term-memory/rejected-suggestions",
   "DELETE /api/long-term-memory/rejected-suggestions/:id",
   "GET /api/long-term-memory/backup/export",
+  "GET /api/long-term-memory/branch-hidden-tail/:chatId",
+  "GET /api/long-term-memory/branch-memories/:chatId",
   "GET /api/long-term-memory/chat-memories/:chatId",
   "GET /api/long-term-memory/debug-log",
   "GET /api/long-term-memory/debug-log/export",
@@ -30,18 +32,24 @@ const EXPECTED_ROUTES = [
   "GET /api/long-term-memory/extraction-settings",
   "GET /api/long-term-memory/integrity",
   "GET /api/long-term-memory/last-injection/:chatId",
+  "GET /api/long-term-memory/links/scope",
   "GET /api/long-term-memory/local-characters",
   "GET /api/long-term-memory/notes",
   "GET /api/long-term-memory/notes/:id",
   "GET /api/long-term-memory/notes/:id/derived",
+  "GET /api/long-term-memory/notes/:id/story-date",
+  "GET /api/long-term-memory/people/scope",
   "GET /api/long-term-memory/rejected-suggestions",
   "GET /api/long-term-memory/scope-targets",
   "GET /api/long-term-memory/settings",
   "GET /api/long-term-memory/settings/package-readers",
   "GET /api/long-term-memory/status",
+  "GET /api/long-term-memory/story-dates/scope",
+  "GET /api/long-term-memory/tidy/scope",
   "PATCH /api/long-term-memory/notes/:id",
   "POST /api/long-term-memory/backup/import",
   "POST /api/long-term-memory/backup/preview",
+  "POST /api/long-term-memory/chat-memories/:chatId/retry",
   "POST /api/long-term-memory/drafts/:id/accept",
   "POST /api/long-term-memory/drafts/:id/preflight",
   "POST /api/long-term-memory/drafts/:id/skip",
@@ -53,6 +61,8 @@ const EXPECTED_ROUTES = [
   "POST /api/long-term-memory/import/preview",
   "POST /api/long-term-memory/import/source-details",
   "POST /api/long-term-memory/import/source-notes",
+  "POST /api/long-term-memory/links/apply",
+  "POST /api/long-term-memory/links/preview",
   "POST /api/long-term-memory/notes",
   "POST /api/long-term-memory/notes/:id/extract",
   "POST /api/long-term-memory/notes/:id/scope/apply-to-derived",
@@ -62,11 +72,17 @@ const EXPECTED_ROUTES = [
   "POST /api/long-term-memory/notes/permanent-delete",
   "POST /api/long-term-memory/notes/transfer",
   "POST /api/long-term-memory/notes/transfer-preview",
+  "POST /api/long-term-memory/people/apply",
+  "POST /api/long-term-memory/people/preview",
   "POST /api/long-term-memory/rebuild",
   "POST /api/long-term-memory/rejected-suggestions/:id/resolve-identity",
   "POST /api/long-term-memory/repair",
   "POST /api/long-term-memory/search",
   "POST /api/long-term-memory/settings/reset",
+  "POST /api/long-term-memory/story-dates/apply",
+  "POST /api/long-term-memory/story-dates/preview",
+  "POST /api/long-term-memory/tidy/apply",
+  "POST /api/long-term-memory/tidy/preview",
   "PUT /api/long-term-memory/extraction-settings",
   "PUT /api/long-term-memory/settings",
 ];
@@ -101,7 +117,7 @@ async function main(routeScenario: RouteScenario) {
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions, readAllRejectedSuggestions, listRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/rejected-suggestions.ts");
-  const { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } =
+  const { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote, textHashForLtmSourceMaterial } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
   const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/subject-catalog.ts");
@@ -113,6 +129,10 @@ async function main(routeScenario: RouteScenario) {
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/recall/usage.ts");
   const { prepareGenerationLongTermMemory } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/recall/generation-injection.ts");
+  const { createLtmRecallService } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/services/recall.ts");
+  const { packageAccess } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const app = Fastify();
   const registeredRoutes: string[] = [];
   app.addHook("onRoute", (route: { method: string | string[]; url: string }) => {
@@ -159,6 +179,7 @@ async function main(routeScenario: RouteScenario) {
   const loggedErrors: unknown[] = [];
   let failGameRefine = false;
   let emptyModelResponse = false;
+  let noModelConnection = false;
   let truncatedModelResponse = false;
   let failGrammarOnce = false;
   let grammarErrorMessage = "";
@@ -349,6 +370,7 @@ async function main(routeScenario: RouteScenario) {
           languageModels: {
             async resolveForRequest(request: any) {
               modelRequests.push(request);
+              if (noModelConnection) throw new Error("No language model connection is set up.");
               if (request.model === "missing-model")
                 throw new Error("Language model connection not found: connection-a");
               // Any other resolver failure, such as the Engine's corrupt key file, can name an absolute path.
@@ -597,6 +619,152 @@ async function main(routeScenario: RouteScenario) {
         });
       }
       if (routeScenario === "backup") {
+        // Story dates must survive a backup round-trip: a chat piece's date and scan, and a date typed on a memory.
+        const storyText = "Mara reaches the observatory. Three weeks later the gate opens.";
+        const storyHash = createHash("sha256").update(storyText).digest("hex");
+        await storageService.storage.createNote({
+          id: "source_route_story",
+          title: "Imported chat messages",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          tags: ["imported_chat_messages"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_transcript", sourceId: "chat-a", entryId: "route-story" },
+          sections: {
+            source: {
+              text: storyText,
+              updatedAt: "2026-07-17T00:00:00.000Z",
+              evidence: ["chat:chat-a", "message_range:1-4"],
+            },
+          },
+        });
+        // createNote drops these fields, as it drops extractionFingerprint; updateNote stamps them.
+        await storageService.storage.updateNote("source_route_story", {
+          storyTime: { start: { date: "Spring 3", time: "dawn" }, origin: "world_state" },
+          storyTimeScan: {
+            sourceHash: storyHash,
+            jumps: [{ quote: "Three weeks later", amount: 3, unit: "week" }],
+          },
+        });
+        await storageService.storage.updateNote("world_route_fixture", {
+          storyTime: { start: { date: "First of Frostmonth" }, origin: "manual" },
+        });
+        // Those writes skip the routes, so rebuild the recall index they mark stale.
+        const storyRebuild = await app.inject({ method: "POST", url: "/api/long-term-memory/rebuild", headers });
+        assert.equal(storyRebuild.statusCode, 200, storyRebuild.body);
+        // The note editor types a date on a piece, clears it, and removes one time jump by its index and quote.
+        const editText = "Mara waits. Two days later the bell rings. A week on, snow.";
+        await storageService.storage.createNote({
+          id: "source_route_story_edit",
+          title: "Imported chat messages",
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+          tags: ["imported_chat_messages"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_transcript", sourceId: "chat-a", entryId: "route-story-edit" },
+          sections: {
+            source: {
+              text: editText,
+              updatedAt: "2026-07-17T00:00:00.000Z",
+              evidence: ["chat:chat-a", "message_range:5-6"],
+            },
+          },
+        });
+        await storageService.storage.updateNote("source_route_story_edit", {
+          storyTimeScan: {
+            sourceHash: textHashForLtmSourceMaterial({ sourceText: editText }),
+            jumps: [
+              { quote: "Two days later", amount: 2, unit: "day" },
+              { quote: "A week on", amount: 1, unit: "week" },
+            ],
+          },
+        });
+        const patchStory = (payload: object) =>
+          app.inject({
+            method: "PATCH",
+            url: "/api/long-term-memory/notes/source_route_story_edit",
+            headers,
+            payload,
+          });
+        const automatedDate = await patchStory({ storyTime: { start: { date: "Day 2" }, origin: "world_state" } });
+        assert.equal(automatedDate.statusCode, 400, "only a typed date can be set by hand");
+        const typedDate = await patchStory({ storyTime: { start: { date: "Midwinter" }, origin: "manual" } });
+        assert.equal(typedDate.statusCode, 200, typedDate.body);
+        assert.deepEqual(typedDate.json().note.storyTime, { start: { date: "Midwinter" }, origin: "manual" });
+        const storyDate = (id: string) =>
+          app.inject({ method: "GET", url: `/api/long-term-memory/notes/${id}/story-date`, headers });
+        const shownDate = await storyDate("source_route_story_edit");
+        assert.equal(shownDate.statusCode, 200, shownDate.body);
+        assert.deepEqual(shownDate.json(), {
+          text: "Midwinter",
+          source: "manual",
+          typed: { start: { date: "Midwinter" }, origin: "manual" },
+        });
+        assert.equal((await storyDate("source_route_story_missing")).statusCode, 404);
+        const clearedDate = await patchStory({ storyTime: null });
+        assert.equal(clearedDate.statusCode, 200, clearedDate.body);
+        assert.equal((await storageService.storage.getNote("source_route_story_edit"))?.storyTime, undefined);
+        const staleJump = await patchStory({ removeStoryTimeJump: { index: 0, quote: "A week on" } });
+        assert.equal(staleJump.statusCode, 409, staleJump.body);
+        assert.equal(staleJump.json().code, "ltm_story_time_jump_changed");
+        const removedJump = await patchStory({ removeStoryTimeJump: { index: 0, quote: "Two days later" } });
+        assert.equal(removedJump.statusCode, 200, removedJump.body);
+        assert.deepEqual(
+          (await storageService.storage.getNote("source_route_story_edit"))?.storyTimeScan?.jumps.map(
+            (entry: any) => entry.quote,
+          ),
+          ["A week on"],
+        );
+        // Find story dates: the scope counts each chat's pieces, and an empty apply is refused.
+        const storyScope = await app.inject({ method: "GET", url: "/api/long-term-memory/story-dates/scope", headers });
+        assert.equal(storyScope.statusCode, 200, storyScope.body);
+        assert.deepEqual(
+          storyScope.json().chats.find((entry: any) => entry.chatId === "chat-a"),
+          { chatId: "chat-a", dated: 1, checked: 1, notChecked: 0 },
+        );
+        const badApply = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/story-dates/apply",
+          headers,
+          payload: { rows: [] },
+        });
+        assert.equal(badApply.statusCode, 400, badApply.body);
+        // Preview needs a model connection; without one it says so and calls nothing.
+        const callsBeforePreview = modelCalls;
+        noModelConnection = true;
+        const noConnection = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/story-dates/preview",
+          headers,
+          payload: {},
+        });
+        noModelConnection = false;
+        assert.equal(noConnection.statusCode, 400, noConnection.body);
+        assert.equal(noConnection.json().code, "ltm_model_configuration");
+        const storyPreview = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/story-dates/preview",
+          headers,
+          payload: {},
+        });
+        // Every piece here is already dated or checked, so the preview has nothing to send.
+        assert.equal(storyPreview.statusCode, 200, storyPreview.body);
+        assert.deepEqual(
+          [
+            storyPreview.json().total,
+            storyPreview.json().checked,
+            storyPreview.json().pieces,
+            storyPreview.json().next,
+          ],
+          [2, 0, [], null],
+        );
+        assert.equal(modelCalls, callsBeforePreview);
         const backupDraft = await storageService.drafts.createDraft({
           source: { sourceNoteId: "source_route_review", chatId: "chat-a" },
           scope: { chatId: "chat-a", chatIds: ["chat-a"] },
@@ -646,6 +814,65 @@ async function main(routeScenario: RouteScenario) {
         ).statusCode,
         200,
       );
+      // Sharing is per Agent: each Agent's Can read and Can add are saved on their own.
+      {
+        const putAccess = (longTermMemoryPackageAccess: unknown) =>
+          app.inject({
+            method: "PUT",
+            url: "/api/long-term-memory/settings",
+            headers,
+            payload: { longTermMemoryPackageAccess },
+          });
+        const accessOf = async () =>
+          (await app.inject({ method: "GET", url: "/api/long-term-memory/settings", headers })).json()
+            .longTermMemoryPackageAccess;
+        const recallService = createLtmRecallService(storageService.storage);
+        assert.deepEqual(
+          JSON.parse(await readFile(join(storageService.root, "config", "settings.json"), "utf8"))
+            .longTermMemoryPackageAccess,
+          { slurp2: { read: true, add: false }, noodle: { read: true, add: false } },
+          "activation must save the per-Agent map from the default switches, which records that the migration ran",
+        );
+        const recallAs = (caller: string) =>
+          recallService.recall({ caller, queryText: "cobalt archive", characterIds: ["char-share"] });
+        const granted = await putAccess({ slurp2: { read: true, add: true }, noodle: { read: false } });
+        assert.equal(granted.statusCode, 200, granted.body);
+        assert.deepEqual(await accessOf(), {
+          slurp2: { read: true, add: true },
+          noodle: { read: false, add: false },
+        });
+        assert.ok(await recallAs("slurp2"), "an Agent with Can read on must read");
+        assert.equal(await recallAs("noodle"), null, "an Agent with Can read off must not read");
+        assert.equal(await recallAs("tally"), null, "an Agent the user never added must not read");
+        assert.equal(packageAccess({ longTermMemoryPackageAccess: await accessOf() }, "slurp2").add, true);
+        const addOff = await putAccess({ slurp2: { add: false } });
+        assert.equal(addOff.statusCode, 200, addOff.body);
+        assert.deepEqual(
+          (await accessOf()).slurp2,
+          { read: true, add: false },
+          "changing one switch must keep the Agent's other switch",
+        );
+        assert.equal(packageAccess({ longTermMemoryPackageAccess: await accessOf() }, "slurp2").add, false);
+        assert.equal((await putAccess({ noodle: { add: true } })).statusCode, 200);
+        assert.equal(
+          (await accessOf()).noodle.add,
+          false,
+          "an Agent that does not offer adding memories must never get Can add",
+        );
+        assert.equal(
+          (await putAccess({ "Bad Name!": { read: true } })).statusCode,
+          400,
+          "a malformed Agent id must be rejected",
+        );
+        assert.equal((await putAccess({ noodle: null })).statusCode, 200);
+        assert.equal((await accessOf()).noodle, undefined, "null must remove the Agent");
+        assert.equal(await recallAs("noodle"), null, "a removed Agent must not read");
+        assert.deepEqual(
+          (await putAccess({ slurp2: { read: false, add: false }, noodle: { read: true } })).json()
+            .longTermMemoryPackageAccess,
+          { slurp2: { read: false, add: false }, noodle: { read: true, add: false } },
+        );
+      }
       const status = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/status",
@@ -671,17 +898,85 @@ async function main(routeScenario: RouteScenario) {
       );
       const chatMemoriesFor = async (chatId: string) =>
         app.inject({ method: "GET", url: `/api/long-term-memory/chat-memories/${chatId}`, headers });
-      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), { chatMemories: null });
-      chats[1].metadata = { longTermMemoryChatMemories: "review" };
-      assert.deepEqual((await chatMemoriesFor("chat-b")).json(), { chatMemories: "review" });
+      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), {
+        chatMemories: null,
+        readFrom: "messages",
+        readFromOverride: null,
+        reading: false,
+        hidden: null,
+      });
+      chats[1].metadata = { longTermMemoryChatMemories: "review", longTermMemoryChatReadFrom: "summaries" };
+      assert.deepEqual((await chatMemoriesFor("chat-b")).json(), {
+        chatMemories: "review",
+        readFrom: "summaries",
+        readFromOverride: "summaries",
+        reading: false,
+        hidden: null,
+      });
+      // The global "Read from" is what a chat with no choice reads; a stored choice still wins.
+      const savedReadFrom = await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/extraction-settings",
+        headers,
+        payload: { autoImportReadFrom: "summaries" },
+      });
+      assert.equal(savedReadFrom.statusCode, 200);
+      assert.equal(savedReadFrom.json().autoImportReadFrom, "summaries", "the global Read from round-trips");
+      assert.equal(
+        (await app.inject({ method: "GET", url: "/api/long-term-memory/extraction-settings", headers })).json()
+          .autoImportReadFrom,
+        "summaries",
+      );
+      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), {
+        chatMemories: null,
+        readFrom: "summaries",
+        readFromOverride: null,
+        reading: false,
+        hidden: null,
+      });
+      const chatAMetadata = chats[0].metadata;
+      chats[0].metadata = { longTermMemoryChatReadFrom: "bogus" };
+      assert.deepEqual(
+        (await chatMemoriesFor("chat-a")).json(),
+        { chatMemories: null, readFrom: "summaries", readFromOverride: null, reading: false, hidden: null },
+        "an invalid stored Read from follows the global default",
+      );
+      chats[0].metadata = chatAMetadata;
+      chats[1].metadata = { longTermMemoryChatReadFrom: "messages" };
+      const ownChoice = (await chatMemoriesFor("chat-b")).json();
+      assert.equal(ownChoice.readFrom, "messages", "a chat's own choice beats the global one");
+      assert.equal(ownChoice.readFromOverride, "messages");
+      assert.equal(
+        (
+          await app.inject({
+            method: "PUT",
+            url: "/api/long-term-memory/extraction-settings",
+            headers,
+            payload: { autoImportReadFrom: "everything" },
+          })
+        ).statusCode,
+        400,
+        "an unknown Read from is refused",
+      );
+      await app.inject({
+        method: "PUT",
+        url: "/api/long-term-memory/extraction-settings",
+        headers,
+        payload: { autoImportReadFrom: "messages" },
+      });
       chats[1].metadata = JSON.stringify({ longTermMemoryChatMemories: "everything" });
       assert.deepEqual(
         (await chatMemoriesFor("chat-b")).json(),
-        { chatMemories: null },
+        { chatMemories: null, readFrom: "messages", readFromOverride: null, reading: false, hidden: null },
         "an unknown stored choice reads as the global default",
       );
       chats[1].metadata = {};
       assert.equal((await chatMemoriesFor("missing-chat")).statusCode, 404);
+      // Retry is for a chat that reads its messages on its own; the default here is manual.
+      const retryFor = async (chatId: string) =>
+        app.inject({ method: "POST", url: `/api/long-term-memory/chat-memories/${chatId}/retry`, headers });
+      assert.equal((await retryFor("missing-chat")).statusCode, 404);
+      assert.equal((await retryFor("chat-a")).statusCode, 409);
       const missingInjection = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/last-injection/no-recorded-recall",
@@ -751,6 +1046,7 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(missingDraft.statusCode, 404, missingDraft.body);
       assert.equal(missingDraft.json().code, "ltm_draft_not_found");
       assert.deepEqual(Object.keys(status.json().indexes).sort(), [
+        "averageMemoryTokens",
         "chunkCount",
         "chunkFormatVersion",
         "dirty",
@@ -1182,7 +1478,12 @@ async function main(routeScenario: RouteScenario) {
         url: "/api/long-term-memory/status",
         headers,
       });
-      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 6);
+      assert.equal(rebuiltStatus.json().indexes.chunkFormatVersion, 7);
+      assert.ok(
+        Number.isInteger(rebuiltStatus.json().indexes.averageMemoryTokens) &&
+          rebuiltStatus.json().indexes.averageMemoryTokens >= 1,
+        "indexed memories report their average recall cost",
+      );
       {
         // Stored vectors only count while they belong to the source recall embeds with now (#1304).
         const { configurePackageRuntime, getPackageRuntime } =
@@ -2842,7 +3143,6 @@ async function main(routeScenario: RouteScenario) {
           ...previousChatMetadata,
           longTermMemoryRecallStyle: "custom",
           longTermMemoryBudgetTokens: 512,
-          longTermMemoryMaxChunks: 1,
           longTermMemoryScoreThreshold: 0,
           longTermMemoryIncludeResolved: true,
           longTermMemoryRecallPreamble: "Recall test preview",
@@ -2907,7 +3207,6 @@ async function main(routeScenario: RouteScenario) {
         assert.deepEqual(searchResult.recallSettings, {
           mode: "roleplay",
           recallStyle: "custom",
-          maxChunks: 1,
           maxTokens: 512,
           scoreThreshold: 0,
           includeResolved: true,
@@ -2985,6 +3284,18 @@ async function main(routeScenario: RouteScenario) {
           includeResolved: false,
           weights: { semanticWeight: 0.25, lexicalWeight: 0.6, graphWeight: 0, keywordWeight: 0.4 },
         });
+        // A legacy chat memory count no longer cuts by count: it caps that chat's token budget.
+        chats[0].metadata = { ...chats[0].metadata, longTermMemoryMaxChunks: 1 };
+        const legacyCount = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/search",
+          headers,
+          payload: { queryText: recallQuery, scope: recallScope },
+        });
+        assert.equal(legacyCount.statusCode, 200, legacyCount.body);
+        assert.equal(legacyCount.json().recallSettings.maxTokens, 256);
+        assert.equal("maxChunks" in legacyCount.json().recallSettings, false);
+        assert.equal(legacyCount.json().promptBudgetTokens, 256);
       } finally {
         chats[0].metadata = previousChatMetadata;
         chats[0].characterIds = previousChatCharacterIds;
@@ -3838,16 +4149,17 @@ async function main(routeScenario: RouteScenario) {
         chatDrafts.json().some((draft: any) => draft.id === extracted.json().draft.id),
         true,
       );
-      assert.equal(
-        (
-          await app.inject({
-            method: "GET",
-            url: "/api/long-term-memory/drafts/pending-count?chatId=chat-a",
-            headers,
-          })
-        ).json().count,
-        1,
-      );
+      const pendingCount = (
+        await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/drafts/pending-count?chatId=chat-a",
+          headers,
+        })
+      ).json();
+      assert.equal(pendingCount.count, 1);
+      // The Review tab counts the memories waiting in the suggestions, not the suggestions.
+      assert.equal(pendingCount.mutations, extracted.json().draft.mutations.length);
+      assert.equal(pendingCount.mutations > 0, true);
       assert.equal(modelCalls > 1, true);
       const autoApplied = await app.inject({
         method: "POST",
@@ -4478,9 +4790,9 @@ async function main(routeScenario: RouteScenario) {
         .samples.find((sample: any) => sample.sourceId === "chat-a:summary-a");
       assert.equal(currentChatSample.status, "imported");
       assert.ok(currentChatPreview.json().totals.imported > 0);
-      // On its own the import keeps all three units and is current. In the full run an earlier step makes Mara
-      // ambiguous, so the character unit is left out and the source stays incomplete.
-      assert.equal(currentChatSample.freshness, routeScenario === "imports" ? "current" : "extraction_incomplete");
+      // On its own the import keeps all three units. In the full run an earlier step makes Mara ambiguous, so the
+      // character unit waits in Review; either way the finished reading is current and is not read again.
+      assert.equal(currentChatSample.freshness, "current");
       if (routeScenario !== "imports") {
         assert.deepEqual(
           importedChat.json().imported[0]?.outcome?.droppedCandidates.map((candidate: any) => candidate.validatorCode),
@@ -6106,8 +6418,9 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(backup.statusCode, 200, backup.body);
       assert.equal(backup.json().format, "marinara-long-term-memory");
       // Evidence is server-owned: the fixture model's fixed source_note evidence no longer rejects units from
-      // other sources, so only format, identity and link rejections remain.
-      const expectedRejectedCount = routeScenario === "backup" ? 1 : 4;
+      // other sources, and an unknown link target now removes only that link, so only format and identity
+      // rejections remain.
+      const expectedRejectedCount = routeScenario === "backup" ? 1 : 3;
       assert.equal(backup.json().rejectedSuggestions.length, expectedRejectedCount);
       const backupPreview = await app.inject({
         method: "POST",
@@ -6120,7 +6433,15 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(backupPreview.json().incoming.rejectedSuggestions, expectedRejectedCount);
       assert.equal(backupPreview.json().current.rejectedSuggestions, expectedRejectedCount);
       const replacement = backup.json();
-      replacement.notes = replacement.notes.filter((note: any) => note.id === "world_route_fixture");
+      const storyNoteIds = routeScenario === "backup" ? ["world_route_fixture", "source_route_story"] : [];
+      const exportedStoryNotes = storyNoteIds.map((id) => replacement.notes.find((note: any) => note.id === id));
+      if (routeScenario === "backup") {
+        assert.equal(exportedStoryNotes[0]?.storyTime?.origin, "manual", "the export keeps a typed date");
+        assert.equal(exportedStoryNotes[1]?.storyTimeScan?.jumps[0]?.unit, "week", "the export keeps a piece's scan");
+      }
+      replacement.notes = replacement.notes.filter(
+        (note: any) => note.id === "world_route_fixture" || storyNoteIds.includes(note.id),
+      );
       const imported = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/backup/import",
@@ -6128,6 +6449,14 @@ async function main(routeScenario: RouteScenario) {
         payload: replacement,
       });
       assert.equal(imported.statusCode, 200, imported.body);
+      for (const exported of exportedStoryNotes) {
+        const restored = await storageService.storage.getNote(exported.id);
+        assert.deepEqual(
+          { storyTime: restored?.storyTime, storyTimeScan: restored?.storyTimeScan },
+          { storyTime: exported.storyTime, storyTimeScan: exported.storyTimeScan },
+          `${exported.id} keeps its story date through a backup`,
+        );
+      }
       assert.equal(
         (await storageService.storage.listNotes()).some((note: any) => note.id === "world_route_fixture"),
         true,
@@ -6333,6 +6662,48 @@ async function main(routeScenario: RouteScenario) {
         true,
         "a receipt carrying the attempt id must correlate the recall with the confirmed injection",
       );
+      // The card's "N available": recall's own scope rule over saved memories (not sources, not archived).
+      const availableFixture = (id: string, extra: Record<string, unknown>) =>
+        storageService.storage.createNote({
+          id,
+          title: id,
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: { facts: { text: "A fixture memory.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+          ...extra,
+        });
+      const availableIds = [
+        "world_available_own",
+        "world_available_other_chat",
+        "world_available_archived",
+        "world_available_resolved",
+        "world_available_other_mode",
+      ];
+      await availableFixture("world_available_own", {});
+      await availableFixture("world_available_other_chat", { scope: { chatId: "chat-a", chatIds: ["chat-a"] } });
+      await availableFixture("world_available_archived", { status: "archived" });
+      await availableFixture("world_available_resolved", { status: "resolved" });
+      await availableFixture("world_available_other_mode", { modes: ["game"] });
+      await availableFixture("source_available_source", {
+        type: "source",
+        provenance: { kind: "character", sourceId: "character-attribution" },
+      });
+      const availableFor = async (chatId: string) =>
+        (await app.inject({ method: "GET", url: `/api/long-term-memory/last-injection/${chatId}`, headers })).json()
+          .availableCount;
+      assert.equal(
+        await availableFor("chat-b"),
+        1,
+        "only this chat's saved memories count; other chats, archived, resolved (by default), other-mode and sources do not",
+      );
+      assert.equal(await availableFor("no-such-chat"), undefined, "an unknown chat reports no count");
+      await storageService.storage.deleteNotesPermanently(availableIds);
+      assert.equal(await availableFor("chat-b"), 0);
       chats.push({
         ...chats[1],
         id: "chat-persona-a-alt",
@@ -6713,6 +7084,93 @@ async function main(routeScenario: RouteScenario) {
             JSON.stringify({ chatId: "chat-persona-a", chatIds: ["chat-persona-a"] }),
         ),
       );
+      // Issue #2495: a memory a read dropped counts in the Review count, and the kept memories still apply.
+      // Runs last because it adds notes and rejected suggestions to the shared vault.
+      {
+        const { processLongTermMemorySourceBatch } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-processing.ts");
+        const { ltmRejectedSuggestionsPath } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/paths.ts");
+        const readWithDrop = async (name: string, droppedText: string, applyLowRisk: boolean) => {
+          const note = await storageService.storage.createNote({
+            id: `source_dropped_count_${name}`,
+            title: `Dropped count ${name}`,
+            type: "source",
+            status: "active",
+            modes: ["roleplay"],
+            scope: { chatId: `chat-dropped-${name}`, chatIds: [`chat-dropped-${name}`] },
+            tags: ["source_summary"],
+            keywords: [],
+            links: [],
+            provenance: { kind: "chat_summary", sourceId: `chat-dropped-${name}`, entryId: `summary-dropped-${name}` },
+            sections: { source: { text: "Nadia gave Damo the closing slot.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+          });
+          const unit = {
+            bucket: "timeline_event",
+            subjectId: `closing_slot_${name}`,
+            sectionKey: "event",
+            text: "Nadia gave Damo the closing slot.",
+            claimKind: "change",
+            importance: "major",
+            evidence: [`source_note:${note.id}`],
+            confidence: 0.95,
+            salience: 0.9,
+            status: "active",
+            links: [{ target: note.id, relation: "extracted_from" }],
+          };
+          // A subject ID with nothing to normalize is invalid_evidence_unit_format; placeholder text is not a memory.
+          const droppedUnit =
+            droppedText === "None."
+              ? { ...unit, subjectId: `nothing_new_${name}`, text: droppedText }
+              : { ...unit, subjectId: "???", text: droppedText };
+          const [result] = await processLongTermMemorySourceBatch({
+            languageModel: {
+              chatComplete: async () => ({
+                content: JSON.stringify({ summary: "One event.", units: [unit, droppedUnit] }),
+                finishReason: "stop",
+              }),
+            } as any,
+            operationId: `10000000-0000-4000-8000-0000000024${applyLowRisk ? "95" : "96"}`,
+            applyLowRisk,
+            chatId: `chat-dropped-${name}`,
+            items: [{ sourceId: note.id, title: note.title!, note, created: false, extractionMode: "roleplay" }],
+            signal: new AbortController().signal,
+            concurrency: 1,
+            root: storageService.root,
+          });
+          return result!;
+        };
+        const get = async (url: string) => {
+          const response = await app.inject({ method: "GET", url: `/api/long-term-memory/${url}`, headers });
+          assert.equal(response.statusCode, 200, response.body);
+          return response.json();
+        };
+        const countFor = (name: string) => get(`drafts/pending-count?chatId=chat-dropped-${name}`);
+        const droppedCodes = async (name: string) =>
+          (await get(`rejected-suggestions?sourceNoteId=source_dropped_count_${name}`)).suggestions.map(
+            (item: any) => item.candidate.validatorCode,
+          );
+
+        const applied = await readWithDrop("applied", "Willow booked the van.", true);
+        assert.equal(applied.draft?.status, "auto_applied", JSON.stringify(applied));
+        assert.equal(applied.appliedMutationIds!.length > 0, true, "the kept memory still applies");
+        assert.deepEqual(await droppedCodes("applied"), ["invalid_evidence_unit_format"]);
+        assert.deepEqual(await countFor("applied"), { count: 1, mutations: 1 });
+
+        const placeholder = await readWithDrop("placeholder", "None.", true);
+        assert.equal(placeholder.draft?.status, "auto_applied", JSON.stringify(placeholder));
+        assert.deepEqual(await droppedCodes("placeholder"), ["placeholder_text"]);
+        assert.deepEqual(await countFor("placeholder"), { count: 0, mutations: 0 });
+
+        // A source with a pending draft and a dropped memory is one source, with both memories waiting.
+        const pending = await readWithDrop("pending", "Willow booked the van.", false);
+        assert.equal(pending.draft?.status, "pending", JSON.stringify(pending));
+        assert.deepEqual(await countFor("pending"), { count: 1, mutations: pending.draft!.mutations.length + 1 });
+
+        // An unreadable rejected-suggestion list must not hide the drafts that are waiting.
+        await writeFile(ltmRejectedSuggestionsPath(storageService.root), "{}");
+        assert.deepEqual(await countFor("pending"), { count: 1, mutations: pending.draft!.mutations.length });
+      }
       await cleanup();
       cleanup = undefined;
       assert.equal(

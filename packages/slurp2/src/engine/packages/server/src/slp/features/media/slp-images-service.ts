@@ -19,7 +19,7 @@ import type { SlpDeepDetailsImageRun } from "../../../../../shared/src/slp/slp-d
 import { slurpVisualBriefPromptViolatesPolicy } from "../../base/media/slp-visual-brief.js";
 import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { resolveIllustratorCharacterReferences } from "../../../services/image/illustrator-references.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import {
@@ -30,6 +30,7 @@ import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-override
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
+import { resolveSlurpLoreImageReferences } from "../../data/host/slp-lore-context.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
 import { resolveSlurpImageCompanions, slurpCompanionReferenceImages } from "./slp-image-companions.js";
 import { newSlurpImageRun, recordSlurpImageRun, slurpImageRunStyle, trackSlurpImageAttempt } from "./slp-image-run.js";
@@ -124,7 +125,9 @@ type CreatorPostImageInput = {
     | "imageGenerationPrompt"
     | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
+    | "enableLorebookContext"
     | "imageKeepOriginalFiles"
+    | "imageOnePerson"
     | "imageGenerationIncludeDescriptions"
     | "imageAppearanceMode"
     | "appearanceProfileMode"
@@ -188,7 +191,7 @@ type CreatorPostImageResult = {
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
-  /** Exact positive prompt sent to the image provider. Also stored as `metadata.imageProviderPrompt`. */
+  /** Reusable positive prompt, also stored as `metadata.imageProviderPrompt`. Lorebook guidance is added per request. */
   providerPrompt: string;
 };
 
@@ -210,7 +213,8 @@ async function generateCreatorPostImageRun(
   run: SlpDeepDetailsImageRun,
 ): Promise<CreatorPostImageResult> {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
-  const companions = await resolveSlurpImageCompanions(input.db, input.companionIds, input.account.id);
+  const companionIds = input.settings.imageOnePerson ? undefined : input.companionIds;
+  const companions = await resolveSlurpImageCompanions(input.db, companionIds, input.account.id);
   // A companion whose identity is not open keeps its source hidden too.
   const hiddenSources = [
     input.disclosureMode === "open" ? null : input.linkedPublicAccount,
@@ -248,7 +252,7 @@ async function generateCreatorPostImageRun(
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
-  const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
+  const allowReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
   run.connection.hasFallback = Boolean(imageFallback);
   run.connection.fallback = imageFallback
     ? { id: imageFallback.connectionId, name: imageFallback.connectionName, model: imageFallback.model || null }
@@ -360,7 +364,7 @@ async function generateCreatorPostImageRun(
         }
         if (
           input.settings.imageGenerationUseAvatarReferences &&
-          allowAvatarReferences &&
+          allowReferences &&
           referenceResolution.referenceImages.length > 0
         ) {
           referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
@@ -369,8 +373,8 @@ async function generateCreatorPostImageRun(
     }
   }
 
-  // Card appearance carries clothes and costumes; the scene decides what is worn in this picture.
-  if (!stageAppearance) characterDescription = slurpImageLook(characterDescription);
+  // Every appearance source carries clothes (Stage too); the wardrobe and the scene dress this picture.
+  characterDescription = slurpImageLook(characterDescription);
   // A character the image model knows is drawn from their name (0.3.5, player report). The card's
   // own name, on by default per Creator, only for an open identity; an OC's switch can be turned off.
   const sourceName = sourceCharacter ? characterNameFromRow(sourceCharacter) : sourcePersona?.name?.trim() || "";
@@ -406,9 +410,7 @@ async function generateCreatorPostImageRun(
             ? (character ? characterNameFromRow(character) : persona?.name?.trim()) || ""
             : "",
         // Descriptions off keeps every look out of the prompt, the companions' too; references stay.
-        look: includeAppearance
-          ? account.settings.stage?.appearance?.trim() || (appearance ? slurpImageLook(appearance) : "")
-          : "",
+        look: includeAppearance ? slurpImageLook(account.settings.stage?.appearance?.trim() || appearance) : "",
         card: row ? { id: row.id, avatarPath: row.avatarPath ?? null, appearance } : null,
       };
     }),
@@ -436,12 +438,7 @@ async function generateCreatorPostImageRun(
     userInstructions: input.settings.imageGenerationPrompt,
     characterDescription: "",
     characterImageInstructions,
-    // Empty on purpose. The default template concatenates this straight into the prompt the image
-    // provider receives, and "arrogant, impatient with staged sentimentality" is not a visual
-    // fact — it is noise a diffusion model still tries to draw. The rewrite already treats
-    // personality as private context that must never appear in a visual prompt; the template that
-    // produces the fallback prompt should not be the one place that disagrees. A custom template
-    // that genuinely wants it can still read the character card.
+    // The fallback template sends these fields to the image provider. Keep nonvisual personality out.
     characterPersonality: "",
   });
   const compileStyled = (prompt: string) =>
@@ -464,9 +461,7 @@ async function generateCreatorPostImageRun(
   // style values the prompt already carries, so an approved prompt is never double-styled.
   const overridePrompt = input.promptOverride?.prompt.trim();
   const compiledOverride = overridePrompt ? compileStyled(overridePrompt) : null;
-  // The rewrite is skipped when interpretation is off and discarded when it leaks, and both land on
-  // this fallback. Sending the bare draft there dropped the style profile exactly like the review
-  // path did, so the draft is compiled too.
+  // Compile the draft so a skipped or failed rewrite still gets the style.
   const draftPrompt = input.draftPrompt.trim();
   const compiledDraft = draftPrompt ? compileStyled(draftPrompt) : null;
   // A retry resends our own stored draft as the "override". That is the same string the template
@@ -547,12 +542,7 @@ async function generateCreatorPostImageRun(
         },
       })
     : null;
-  // The style profile is an Engine setting, not something the interpretation model owns. The
-  // rewrite is a text transformation, and it freely drops the style's positive tags and wording,
-  // so the rewritten text is compiled again before it reaches the provider. Without this the style
-  // applied only when the rewrite was skipped, failed, or was rejected — which is exactly why the
-  // setting looked intermittent rather than broken. The compiler dedupes against the prompt it is
-  // given, so a rewrite that kept its style is not styled twice.
+  // Reapply any style tags the rewrite dropped. The compiler keeps tags from appearing twice.
   const compiledRewrittenPrompt = rewrittenPrompt
     ? compileSlurpImagePrompt({
         kind: "illustration",
@@ -599,14 +589,14 @@ async function generateCreatorPostImageRun(
   // say "I held my phone up" (R1-050). A prompt a human approved is sent as written.
   const keep = viewpoint ? [viewpoint.phrase] : [];
   const withoutDevice = slurpWithoutCameraDevice(finalPromptBase, keep) || finalPromptBase;
-  // A rewrite that dropped the viewpoint gets it back, so a selfie still reads as one.
+  // A rewrite that dropped every viewpoint gets it back, so a selfie still reads as one.
   const finalPromptScene = skipInterpretation
     ? finalPromptBase
-    : viewpoint && !withoutDevice.includes(viewpoint.phrase)
+    : viewpoint && !slurpViewpointIn(withoutDevice)
       ? `${withoutDevice}\n${viewpoint.phrase}`
       : withoutDevice;
   // A drawn Creator or a painted style profile drops the photo words; in the story it is still a photo.
-  const styleSource = `${characterDescription}\n${characterImageInstructions}`;
+  const styleSource = `${stageAppearance || characterDescription}\n${characterImageInstructions}`;
   const medium = `${characterImageInstructions}\n${styleGuidance}`;
   const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource, medium);
   // The viewpoint in the image model's words: tags for a tag model, e621 tags for a drawn furry.
@@ -631,7 +621,7 @@ async function generateCreatorPostImageRun(
   // One copy of the look: the writer's words, Slurp's insert, or the writer's plus the missing traits.
   const finalPromptLook = slurpApplyImageLook(
     finalPromptBody,
-    redactIdentity(stageAppearance || stripAppearanceLabel(characterDescription)),
+    redactIdentity(stripAppearanceLabel(characterDescription)),
     lookMode,
     usedRewrite,
   );
@@ -675,7 +665,7 @@ async function generateCreatorPostImageRun(
   // Chosen here rather than by each caller, so a scheduled or redrawn Story is a Story too (R1-052).
   const outputWidth = input.width ?? (input.story ? input.settings.storyImageWidth : input.settings.imageWidth);
   const outputHeight = input.height ?? (input.story ? input.settings.storyImageHeight : input.settings.imageHeight);
-  const companionRefs = input.settings.imageGenerationUseAvatarReferences && allowAvatarReferences;
+  const companionRefs = input.settings.imageGenerationUseAvatarReferences && allowReferences;
   if (referenceImages?.length || (companionRefs && inPicture.length)) {
     referenceImages = await slurpCompanionReferenceImages(input.characters, inPicture, finalPrompt, referenceImages);
     run.referenceImages = referenceImages?.length ?? 0;
@@ -718,8 +708,18 @@ async function generateCreatorPostImageRun(
     };
   }
 
-  const providerRequest = {
+  const providerReferences = await resolveSlurpLoreImageReferences(input.db, {
+    enabled: input.settings.enableLorebookContext && allowReferences && !input.suppressCharacterContext,
+    source: referenceSubject,
+    texts: [input.postContent, input.promptOverride?.prompt ?? input.draftPrompt],
+    redactIdentity,
     prompt: finalPrompt,
+    referenceImages,
+  });
+  run.referenceImages = providerReferences.referenceImages?.length ?? 0;
+
+  const providerRequest = {
+    prompt: providerReferences.prompt,
     negativePrompt: finalNegativePrompt,
     model: imageModel,
     width: outputWidth,
@@ -727,7 +727,7 @@ async function generateCreatorPostImageRun(
     imageEndpointId: input.imageConnection.imageEndpointId || undefined,
     comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
     imageDefaults,
-    referenceImages,
+    referenceImages: providerReferences.referenceImages,
     debugMode: input.debugMode,
     admissionMode: input.admissionMode,
     fallback: imageFallback,
@@ -789,8 +789,7 @@ async function generateCreatorPostImageRun(
       imageModel: imageModel || "unknown",
       imageStyleProfileId: compiledPrompt.profile.id,
       noodlerMediaPath: file.filePath,
-      // What the provider actually drew from, so every surface that shows or edits the picture's
-      // prompt shows this rather than the draft it started as.
+      // Keep the reusable prompt editable. Redraws resolve fresh lorebook references and guidance.
       imageProviderPrompt: finalPrompt,
     },
     preview: null,

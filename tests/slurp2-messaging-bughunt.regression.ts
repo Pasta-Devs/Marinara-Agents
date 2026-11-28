@@ -28,7 +28,7 @@ assert.equal(new Set(burst.map((followUp) => followUp.id)).size, burst.length, "
 // Money: a fresh charged payment is not compensated, and a compensated one is never settled again.
 assert.match(
   server("data/messages/slp-messages-storage-base.ts"),
-  /row\.status === "charged" && Date\.parse\(String\(row\.updatedAt\)\) > Date\.now\(\) - 5 \* 60 \* 1000\) continue/u,
+  /row\.status === "charged" && Date\.parse\(String\(row\.updatedAt\)\) > (?:Date\.now|slurpWorldNowMs)\(\) - 5 \* 60 \* 1000\) continue/u,
 );
 assert.match(
   server("data/messages/slp-messages-storage-context.ts"),

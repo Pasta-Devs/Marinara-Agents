@@ -13,6 +13,7 @@ import type {
   SlurpTiesView,
 } from "./slp-ties-hooks";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLP_PEOPLE_EDGE_KINDS = [
   "couple",
   "crush",
@@ -51,7 +52,7 @@ const pairs = (ids: readonly string[]) => ids.flatMap((a, index) => ids.slice(in
 const key = (a: string, b: string) => [a, b].sort().join("|");
 
 /** Every tie in the view as edges. `now` decides which collabs still count. */
-export function slpPeopleEdges(view: SlurpTiesView, now = new Date()): SlpPeopleEdge[] {
+export function slpPeopleEdges(view: SlurpTiesView, now = slurpWorldNow()): SlpPeopleEdge[] {
   const bonds = (view.bonds ?? []).filter((bond) => bond.endedAt === null);
   const exBond = new Set(bonds.filter((bond) => bond.kind === "ex").map((bond) => key(bond.aId, bond.bId)));
   const edges: SlpPeopleEdge[] = bonds.map((bond) => ({

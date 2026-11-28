@@ -551,7 +551,7 @@ const beatFor = (creatorId: string, ties: SlurpCreatorTies, at: Date, couples: S
   assert.equal(readSlurpBrandDeals([deal])[0]!.markedAt, undefined, "old deals read back unmarked");
   const routes = server("features/projects/slp-creator-ties-routes.ts");
   assert.match(routes, /app\.post\("\/slurp\/ties\/deals\/:id\/posted"/u);
-  assert.match(routes, /slurpMarkDealPosted\(document\.deals, own\.deal\.id, new Date\(\)\)/u);
+  assert.match(routes, /slurpMarkDealPosted\(document\.deals, own\.deal\.id, (?:new Date|slurpWorldNow)\(\)\)/u);
   assert.match(routes, /if \(!creatorBelongsToViewer\(creator, viewer\)\)/u, "only the page's own player");
 }
 

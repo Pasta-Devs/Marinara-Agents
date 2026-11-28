@@ -5,6 +5,17 @@ import type {
 
 export type LabelLocalizer = (key: string) => string;
 
+/** Why recall left a candidate out, by the reason the recall explanation records. */
+export const recallReasonLabelKeys: Record<string, string> = {
+  budget: "ui.longTermMemory.activityview.recallReasonBudget",
+  lower_rank: "ui.longTermMemory.activityview.lowerFusedRank",
+  duplicate_text: "ui.longTermMemory.activityview.recallReasonDuplicate",
+  type_cap: "ui.longTermMemory.activityview.recallReasonTypeCap",
+  score_threshold: "ui.longTermMemory.activityview.recallReasonThreshold",
+  missing_chunk: "ui.longTermMemory.activityview.recallReasonMissingChunk",
+  prompt_budget: "ui.longTermMemory.activityview.recallReasonPromptBudget",
+};
+
 export const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> = {
   invalid_format: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
   candidate_overflow: "ui.longTermMemory.reviewqueue.rejectionReasonCandidateOverflow",
@@ -20,14 +31,24 @@ export const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, stri
   too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.rejectionReasonTooLong",
 };
 
+const healthLabelKeys = {
+  not_built: "ui.longTermMemory.longtermmemorydetail.vaultNotBuilt",
+  healthy: "ui.longTermMemory.longtermmemorydetail.vaultHealthy",
+  degraded: "ui.longTermMemory.longtermmemorydetail.vaultDegraded",
+  stale: "ui.longTermMemory.longtermmemorydetail.vaultStale",
+  corrupt: "ui.longTermMemory.longtermmemorydetail.vaultCorrupt",
+  building: "ui.longTermMemory.longtermmemorydetail.vaultRebuilding",
+  failed: "ui.longTermMemory.longtermmemorydetail.rebuildFailed",
+};
+
 export const labelKeys = {
   noteType: {
     source: "ui.longTermMemory.memoryvault.source",
-    timeline_event: "ui.longTermMemory.memoryvault.timelineEvents",
+    timeline_event: "ui.longTermMemory.memoryvault.timelineEvent",
     character: "ui.longTermMemory.memoryvault.character",
-    relationship: "ui.longTermMemory.memoryvault.relationships",
-    scene: "ui.longTermMemory.memoryvault.scenes",
-    thread: "ui.longTermMemory.memoryvault.threads",
+    relationship: "ui.longTermMemory.memoryvault.relationship",
+    scene: "ui.longTermMemory.memoryvault.scene",
+    thread: "ui.longTermMemory.memoryvault.thread",
     world: "ui.longTermMemory.memoryvault.world",
     tone: "ui.longTermMemory.memoryvault.tone",
   },
@@ -58,20 +79,13 @@ export const labelKeys = {
     medium: "ui.longTermMemory.reviewqueue.riskMedium",
     high: "ui.longTermMemory.reviewqueue.riskHigh",
   },
-  integrity: {
-    not_built: "ui.longTermMemory.longtermmemorydetail.vaultNotBuilt",
-    healthy: "ui.longTermMemory.longtermmemorydetail.vaultHealthy",
-    degraded: "ui.longTermMemory.longtermmemorydetail.vaultDegraded",
-    stale: "ui.longTermMemory.longtermmemorydetail.vaultStale",
-    corrupt: "ui.longTermMemory.longtermmemorydetail.vaultCorrupt",
-    building: "ui.longTermMemory.longtermmemorydetail.vaultRebuilding",
-    failed: "ui.longTermMemory.longtermmemorydetail.rebuildFailed",
-    loading: "ui.longTermMemory.memorysettings.loading",
-  },
+  /** Vault integrity and index health are one set of states; the Vault fix flow adds "loading". */
+  health: healthLabelKeys,
+  integrity: { ...healthLabelKeys, loading: "ui.longTermMemory.memoryvault.fixLoading" },
   maintenanceAction: {
-    rebuild_indexes: "ui.longTermMemory.memorysettings.reindexRecallData",
-    quarantine_malformed_notes: "ui.longTermMemory.memorysettings.quarantineMalformedNotes",
-    backfill_imported_source_titles: "ui.longTermMemory.memorysettings.backfillSourceTitles",
+    rebuild_indexes: "ui.longTermMemory.memoryvault.fixReindex",
+    quarantine_malformed_notes: "ui.longTermMemory.memoryvault.fixQuarantine",
+    backfill_imported_source_titles: "ui.longTermMemory.memoryvault.fixBackfillTitles",
   },
   identityMatchBasis: {
     bound_subjects: "ui.longTermMemory.memorysettings.basisBoundSubjects",
@@ -82,11 +96,11 @@ export const labelKeys = {
     unordered_pair: "ui.longTermMemory.memorysettings.basisUnorderedPair",
   },
   maintenanceResult: {
-    rebuilt: "ui.longTermMemory.memorysettings.resultRebuilt",
-    backfilled: "ui.longTermMemory.memorysettings.resultBackfilled",
-    no_titles_to_backfill: "ui.longTermMemory.memorysettings.resultNoTitlesToBackfill",
-    quarantined: "ui.longTermMemory.memorysettings.resultQuarantined",
-    no_malformed_notes: "ui.longTermMemory.memorysettings.resultNoMalformedNotes",
+    rebuilt: "ui.longTermMemory.memoryvault.fixResultRebuilt",
+    backfilled: "ui.longTermMemory.memoryvault.fixResultBackfilled",
+    no_titles_to_backfill: "ui.longTermMemory.memoryvault.fixResultNoTitlesToBackfill",
+    quarantined: "ui.longTermMemory.memoryvault.fixResultQuarantined",
+    no_malformed_notes: "ui.longTermMemory.memoryvault.fixResultNoMalformedNotes",
   },
   relation: {
     occurred_in: "ui.longTermMemory.memoryvault.relationOccurredIn",
@@ -123,15 +137,6 @@ export const labelKeys = {
     skipped: "ui.longTermMemory.activityview.skipped",
     warning: "ui.longTermMemory.activityview.warning",
     error: "ui.longTermMemory.activityview.failed",
-  },
-  indexHealth: {
-    not_built: "ui.longTermMemory.longtermmemorydetail.vaultNotBuilt",
-    healthy: "ui.longTermMemory.longtermmemorydetail.vaultHealthy",
-    degraded: "ui.longTermMemory.longtermmemorydetail.vaultDegraded",
-    stale: "ui.longTermMemory.longtermmemorydetail.vaultStale",
-    corrupt: "ui.longTermMemory.longtermmemorydetail.vaultCorrupt",
-    building: "ui.longTermMemory.longtermmemorydetail.vaultRebuilding",
-    failed: "ui.longTermMemory.longtermmemorydetail.rebuildFailed",
   },
   reviewCode: {
     source_stale: "ui.longTermMemory.reviewqueue.codeSourceStale",

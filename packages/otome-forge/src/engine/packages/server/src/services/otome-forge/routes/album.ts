@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Album (plan M4 "Album"): only what is unlocked
 // ──────────────────────────────────────────────
-// GET /runs/:run/album → AlbumView {cgs, memories, timeline, favorites, soundtrack, tells, stickers, photos}
+// GET /runs/:run/album → AlbumView {cgs, memories, timeline, favorites, soundtrack, tells, stickers, photos, cards,
+//                                   kittens}
 // - cgs: story CGs once seen (M2b: POST .../art/cg/seen), each owned Memory's CG once painted, and couple sets' pair
 //   portraits, newest first (the oldest at the bottom). The client saves an image through the Engine's
 //   services.imageDownloads.
@@ -18,8 +19,15 @@
 //   a tap to paint (S/art/stickers.ts albumStickers). Kept out of `cgs`, which Home's back layer reads.
 // - photos (#2087): the Photo Shoot's photos once painted, newest first (S/minigames/photo-shoot.ts albumPhotos), each
 //   captioned with its place. Like stickers, kept out of `cgs`: Home tapes the newest into the note instead.
-// Nothing the player has not won, seen or learned is listed: no banner item not owned, no CG not seen, no tell of a
-// secret still hidden, no theme of a chapter not begun.
+// - cards (#2151): every card of the Tarot deck, in Arcana order, then by love interest in cast order, each with its
+//   paint as the client should see it (S/art/tarot-deck.ts albumCards): painted, painting, or waiting for a tap. Only
+//   drawn cards are listed, as the deck has an entry only for a card drawn and claimed for painting; nothing else
+//   exists to show. Reading them paints nothing.
+// - kittens (0.36.0): Kitty Cards' painted kittens, hers then each love interest's in cast order, only those painted
+//   and cut out, with images on: the play view's own (S/art/kittens.ts albumKittens), each with its repaint's paint
+//   while the Album's Repaint paints it again. Reading them paints and queues nothing.
+// Nothing the player has not won, seen, drawn or learned is listed: no banner item not owned, no CG not seen, no card
+// not drawn, no tell of a secret still hidden, no theme of a chapter not begun.
 import { chapterMusicCue } from "../../../../../client/src/features/otome-forge/shared/audio.js";
 import type {
   Chapter,
@@ -44,6 +52,8 @@ import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { byStoryOrder } from "../story/chapters.js";
 import { albumStickers } from "../art/stickers.js";
+import { albumKittens } from "../art/kittens.js";
+import { albumCards, readDeck } from "../art/tarot-deck.js";
 import { albumPhotos, listPhotos } from "../minigames/photo-shoot.js";
 
 const MEMORY_KINDS: ReadonlySet<Item["kind"]> = new Set(["memory5", "moment4", "snapshot3"]);
@@ -137,7 +147,7 @@ async function chapterThemes(
 
 export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): Promise<AlbumView> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const items = await readItems(deps.store, runId);
   const owned = ownedItems(run, items);
   const cgs = albumCgs(run, items);
@@ -151,7 +161,12 @@ export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): 
     cgs,
     memories: owned
       .filter((item) => MEMORY_KINDS.has(item.kind))
-      .map((item) => ({ ...itemView(runId, item, true), read: readState(run.state, item) })),
+      .map((item) => ({
+        ...itemView(runId, item, true),
+        read: readState(run.state, item),
+        // 0.21.0: won from Wish and not looked at yet.
+        ...(run.state.owned.unseen.includes(item.id) ? { new: true as const } : {}),
+      })),
     timeline: albumTimeline(run, owned),
     favorites: run.state.favorites,
     soundtrack: [
@@ -161,6 +176,12 @@ export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): 
     tells,
     stickers: albumStickers(runId, run),
     photos: albumPhotos(await listPhotos(deps.store, runId)),
+    cards: albumCards(
+      runId,
+      await readDeck(deps.store, runId),
+      run.units.map((unit) => unit.id),
+    ),
+    kittens: albumKittens(runId, run),
   };
 }
 

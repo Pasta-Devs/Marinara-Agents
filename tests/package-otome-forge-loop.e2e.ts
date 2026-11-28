@@ -1,8 +1,8 @@
 // Otome Hearth's whole release-1 loop in the Engine's Home tab, at 1280 × 800 (Midnight) and 390 × 844 (Pearl), at
 // reduced motion and with text only, through /api/otome-forge/** answered in memory by one world: setup (premise,
 // persona, two love interests of different genders, content, connections) and the forge; a main chapter read to its
-// end; Home with his note and a tap; Reply into his thread; a wish; Wear at home; the Album; Read Them, Date Night and
-// a Claw round; Remind Me, the tracker and a Caring message. Starlight earned on one screen is spent and shown on the
+// end; Home with his note and a tap; Reply into his thread; a wish; Wear at home; the Album; Read Them, a date won from
+// Wish (#2303, planned from Album → Dates) and a Claw round; Remind Me, the tracker and a Caring message. Starlight earned on one screen is spent and shown on the
 // next. A second walk, in the other look at each size, visits the screens around the loop: Who’s home, the cast (from
 // Settings → Stories) and a bible, Rough day?, every Settings tab, the reader's Backlog and Ease off, the Album's other
 // tabs and Your stories (from Settings → Stories too).
@@ -10,7 +10,7 @@
 // nothing answers only a pointer, nothing animates at reduced motion, new lines reach a polite live region, and dialogs
 // hold focus and give it back.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-loop.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -113,7 +113,22 @@ const MAIN_BEATS: Json[] = [
   },
 ];
 
-/** Date Night: three scenes, one scored choice each. */
+/** A 4★ date won from Wish's Dates banner (#2303), owned from the start; planned from Album → Dates. */
+const DATE_ITEM = {
+  id: "dates-0-a3",
+  kind: "date4",
+  rarity: 4,
+  banner: "dates-0",
+  li: null,
+  title: "An Evening at the Aquarium",
+  premise: "Blue light and slow jellyfish.",
+  place: { name: "The Moonlit Aquarium" },
+  scenes: 3,
+  owned: true,
+  art: null,
+  story: null,
+};
+/** The date's three scenes, one scored choice each. */
 const DATE_BEATS: Json[] = [0, 1, 2].map((i) => ({
   places: [{ name: "The Moonlit Aquarium", tags: "blue glass, jellyfish" }],
   segments: [
@@ -270,6 +285,10 @@ function createLoopStub({ seeded = false } = {}) {
   let wish = false;
   let herWorn = "base";
   let dateDone = false;
+  // The date is counted once (S/minigames/date-night.ts finishDate): asking again pays nothing.
+  let dateCounted = false;
+  // Long-term recall's index (0.19.0): failed on an Engine before capability API 1.818, until Retry indexing.
+  let recall: Json = { phase: "failed", indexed: 2, total: 5, message: "FAKE-EMBEDDINGS-DOWN", choosable: false };
   const picks: Array<number | undefined> = [];
   const plush: Record<string, number> = {};
   const earned = { starlight: 0, affection: {} as Record<string, number> };
@@ -594,7 +613,14 @@ function createLoopStub({ seeded = false } = {}) {
     const bibleMatch = /^\/runs\/[^/]+\/lis\/([^/]+)\/bible$/u.exec(path);
     if (bibleMatch) {
       const li = lis().find((entry) => entry.id === bibleMatch[1])!;
-      return { status: 200, json: { bible: bible(li.name, li.pronouns) } };
+      const bond =
+        li.stage === 6
+          ? [
+              { level: 11, truth: "Being with her is the first quiet the clocks have ever let them have." },
+              { level: 12, truth: "They learned she hums when she is frightened, before anything else." },
+            ]
+          : undefined;
+      return { status: 200, json: { bible: { ...bible(li.name, li.pronouns), ...(bond ? { bond } : {}) } } };
     }
     // A failed summary: Settings → Connections (#2039) and Debug show it with its Retry.
     if (path === `${base}/memory/status`) {
@@ -605,6 +631,12 @@ function createLoopStub({ seeded = false } = {}) {
     }
     if (path === `${base}/memory/retry`) {
       return { status: 200, json: { status: { phase: "pending", retryable: false, recordCount: 3 } } };
+    }
+    if (path === `${base}/memory/recall`) return { status: 200, json: { status: recall } };
+    // Retry indexing, as on an Engine that now lets the story choose its embedding model.
+    if (path === `${base}/memory/recall/retry`) {
+      recall = { phase: "indexing", indexed: 2, total: 5, choosable: true };
+      return { status: 200, json: { status: recall } };
     }
     // Settings → Connections (#2044): the connections and the daily messages, saved as the server does.
     if (path === `${base}/settings`) {
@@ -747,7 +779,6 @@ function createLoopStub({ seeded = false } = {}) {
                 cheat: li === ILVAR ? "nudge" : "calculate",
                 style: li === ILVAR ? "Plays to an audience, all flourish and a wink." : "Calculates the angle aloud.",
                 rupture: false,
-                makeItRight: false,
                 lines: { claw: li === ILVAR ? CLAW_LINES : null, cold: [] },
               },
             ]),
@@ -791,8 +822,10 @@ function createLoopStub({ seeded = false } = {}) {
     const dateEntry = (state: string, outcome: string | null = null) => ({
       key: "date-1",
       li: ILVAR,
+      item: DATE_ITEM.id,
+      cast: [ILVAR],
       title: "An Evening at the Aquarium",
-      place: "aquarium",
+      place: "pulled",
       placeName: "The Moonlit Aquarium",
       makeItRight: false,
       state,
@@ -803,15 +836,18 @@ function createLoopStub({ seeded = false } = {}) {
     });
     if (path === `${base}/dates` && call.method === "GET") {
       const open = chapters.has("date-1") && !progress.get("date-1")!.done ? dateEntry("reading") : null;
+      const played = chapters.has("date-1") ? [dateDone ? dateEntry("finished", "great") : dateEntry("reading")] : [];
       return {
         status: 200,
         json: {
           lis: [ILVAR, ROS].map((li) => ({ li, rupture: false, open: li === ILVAR ? open : null })),
           dates: dateDone ? [dateEntry("finished", "great")] : [],
+          open: open ? [open] : [],
+          pulled: [{ item: DATE_ITEM, plays: played, playedBy: played.length ? [ILVAR] : [] }],
         },
       };
     }
-    if (path === `${base}/dates`) {
+    if (path === `${base}/dates/pulled`) {
       chapters.set("date-1", {
         key: "date-1",
         kind: "date",
@@ -826,6 +862,8 @@ function createLoopStub({ seeded = false } = {}) {
       return { status: 200, json: { date: dateEntry("reading"), resumed: false } };
     }
     if (path === `${base}/dates/date-1/finish`) {
+      const counted = !dateCounted;
+      dateCounted = true;
       return {
         status: 200,
         json: {
@@ -833,9 +871,9 @@ function createLoopStub({ seeded = false } = {}) {
           outcome: "great",
           picks: DATE_BEATS.map((_, i) => ({ text: `Take his hand (${i + 1})`, score: 1 })),
           line: "I would come here again. With you.",
-          grants: pay("date", ILVAR, 120, 100),
+          grants: counted ? pay("date", ILVAR, 120, 100) : [],
           starlight: view.starlight,
-          counted: true,
+          counted,
           repaired: false,
           mends: false,
           keepsake: { offer: true },
@@ -899,6 +937,9 @@ function createLoopStub({ seeded = false } = {}) {
     for (const step of view.forge.steps) step.state = "done";
     view.forge.phase = "ready";
     view.world.forge = view.forge;
+    // Rosalind is past her finale, with her first two bond truths written (0.24.5: the bible shows the ranks).
+    const ros = (view.lis as Json[]).find((entry) => entry.id === ROS)!;
+    Object.assign(ros, { stage: 6, level: 11, bond: { level: 11, name: "named", played: 0, next: 12 } });
     index.runs.push({ runKey: RUN, title: view.world.title, createdAt: now(), lastPlayedAt: now() });
     index.activeRun = RUN;
   }
@@ -911,11 +952,20 @@ async function stubEngine(page: Page, stub: Stub) {
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
-  // Text only: one story connection, the Engine's default.
+  // Text only: one story connection, the Engine's default, with an embedding model of its own.
   await page.route("**/api/connections", (route) =>
     route.request().method() === "GET"
       ? route.fulfill({
-          json: [{ id: "conn-text", name: "Story fixture", provider: "custom", model: "fixture", isDefault: "true" }],
+          json: [
+            {
+              id: "conn-text",
+              name: "Story fixture",
+              provider: "custom",
+              model: "fixture",
+              isDefault: "true",
+              embeddingModel: "fixture-embed",
+            },
+          ],
         })
       : route.continue(),
   );
@@ -1287,8 +1337,8 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
       connections: { narration: "conn-text" },
     });
     await expect(root.getByRole("heading", { name: "Your story is ready" })).toBeVisible({ timeout: 30_000 });
-    // Without an image connection the cast stays as initials, and the ready world says so.
-    await expect(root.getByText(/No image connection: your cast appears as initials/u)).toBeVisible();
+    // Without an image connection the cast keeps their Engine art or initials, and the ready world says so.
+    await expect(root.getByText(/Not painting: your cast appears in their Engine avatars and sprites/u)).toBeVisible();
     await auditScreen(page, root, "forge: ready");
     await expect(root.getByText(/Begin plays your prologue first/u)).toBeVisible();
     await root.getByRole("button", { name: "Begin" }).click();
@@ -1462,7 +1512,8 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(memory).toBeFocused();
-    await tabs.getByRole("tab", { name: "Memories" }).focus();
+    // 0.36.0: the Love Timeline comes right after Cards.
+    await tabs.getByRole("tab", { name: "Cards", exact: true }).click();
     await page.keyboard.press("ArrowRight");
     await expect(tabs.getByRole("tab", { name: "Love Timeline" })).toHaveAttribute("aria-selected", "true");
     await expect(root.getByText("The night Ilvar first said your name.")).toBeVisible();
@@ -1470,13 +1521,16 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("07-album");
   });
 
-  await test.step("Dates: Read Them by keyboard", async () => {
-    await dock(root, "Dates").click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await test.step("Games: Read Them by keyboard", async () => {
+    // #2429: the dock's Games (Dates are the ones won in Wish) keeps its line under the title, and names Read Them's eyebrow.
+    await dock(root, "Games").click();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
+    await expect(root.getByText("Just the two of you.", { exact: true })).toBeVisible();
     await expect(root.getByRole("radio", { name: /Ilvar Thorne/u })).toBeChecked();
     await auditScreen(page, root, "dates");
     await root.getByRole("button", { name: "Play: Read Ilvar Thorne" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Read Ilvar Thorne" })).toBeFocused();
+    await expect(root.locator(".of-rh-eyebrow")).toHaveText("Games");
     await auditScreen(page, root, "read them: intro");
     await root.getByRole("button", { name: "Begin" }).click();
     for (const [round, truth] of READ_ROUNDS.entries()) {
@@ -1493,26 +1547,39 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await auditScreen(page, root, "read them: done", score);
     await shot("08-read-them");
     await root.getByRole("button", { name: "Back" }).first().click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
     await expect(starlight(root)).toContainText(amount(2190));
   });
 
-  await test.step("Date Night: a place, the looks, three scenes and how it went", async () => {
-    await root.getByRole("button", { name: "Play: Date Night with Ilvar Thorne" }).click();
-    await expect(root.getByRole("heading", { level: 1, name: "Where to tonight?" })).toBeFocused();
-    const places = root.getByRole("group", { name: "Where you and Ilvar Thorne spend the evening" });
-    await auditScreen(page, root, "date night: places");
-    await places.locator("label").first().click();
+  await test.step("A date from Wish: who's coming, the looks, three scenes and how it went", async () => {
+    // #2303: no Date Night among the activities; the dates won from Wish are in Album → Dates.
+    await expect(root.getByRole("button", { name: /^Play: Date Night/u })).toHaveCount(0);
+    await dock(root, "Album").click();
+    const albumDates = root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Dates", exact: true });
+    await albumDates.click();
+    await expect(albumDates).toHaveAttribute("aria-selected", "true");
+    await auditScreen(page, root, "album: dates");
+    await root.getByRole("button", { name: "Plan a date: An Evening at the Aquarium" }).click();
+    await expect(root.getByRole("heading", { level: 1, name: "Who's coming?" })).toBeFocused();
+    await auditScreen(page, root, "date: who's coming");
+    await root.locator(".of-partner").filter({ hasText: "Ilvar Thorne" }).click();
+    await expect(root.getByRole("checkbox", { name: /Ilvar Thorne/u })).toBeChecked();
     await root.getByRole("button", { name: "Next: what you wear" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
-    await auditScreen(page, root, "date night: looks");
-    // Her owned look is offered (#1965), and the picker starts on what she wears now: the gown worn at home above.
+    await auditScreen(page, root, "date: looks");
+    // Her owned look is offered (#1965), and the picker starts on what she wears now: the gown worn at home above. The
+    // love interests come as they are, so only hers is picked.
     const yours = root.getByRole("group", { name: "You wear" });
     await expect(yours.getByRole("radio", { name: "Starlit Gown" })).toBeChecked();
     await expect(yours.getByRole("radio", { name: "Everyday look" })).not.toBeChecked();
+    await expect(root.locator(".of-date-summary")).toContainText("An Evening at the Aquarium at The Moonlit Aquarium");
     await root.getByRole("button", { name: "Begin the date" }).click();
-    await expect.poll(() => posts(stub, "/dates").length).toBe(1);
-    expect(posts(stub, "/dates")[0]!.body).toMatchObject({ li: ILVAR, herLook: "my-wardrobe-0-f", hisLook: "base" });
+    await expect.poll(() => posts(stub, "/dates/pulled").length).toBe(1);
+    expect(posts(stub, "/dates/pulled")[0]!.body).toMatchObject({
+      item: DATE_ITEM.id,
+      cast: [ILVAR],
+      herLook: "my-wardrobe-0-f",
+    });
     for (const [i] of DATE_BEATS.entries()) {
       await expect(line(root)).toContainText(`Scene ${i + 1}: the tanks glow blue around you.`);
       await next(root);
@@ -1541,10 +1608,28 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     expect(await keepsakeCard.evaluate((element) => getComputedStyle(element).display)).not.toBe("grid");
     const title = (await keepsakeCard.getByRole("heading", { level: 2 }).boundingBox())!;
     expect(title.width, "the title spans the card, not one word per line").toBeGreaterThan(card.width / 2);
-    await auditScreen(page, root, "date night: ending");
-    await shot("09-date-night");
-    await root.getByRole("button", { name: "Back to Dates" }).first().click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+    await auditScreen(page, root, "date: ending");
+    await shot("09-date");
+    // #2302: a keepsake that fails offers Settings → Images, and coming back opens the date at its ending again, not
+    // at who's coming. (This story has no image connection, so the paint is refused.)
+    const outcome = await ending.textContent();
+    await paintKeepsake.click();
+    await expect(keepsakeCard.getByRole("alert")).toBeVisible();
+    await keepsakeCard.getByRole("button", { name: "Change the image connection" }).click();
+    await expect(root.getByRole("tab", { name: "Images", exact: true })).toHaveAttribute("aria-selected", "true");
+    await root.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(root.getByRole("heading", { level: 1 })).toHaveText(outcome!);
+    await expect(root.getByRole("heading", { level: 1, name: "Who's coming?" })).toHaveCount(0);
+    await expect(root.locator(".of-date-keepsake").getByRole("button", { name: "Paint the keepsake" })).toBeVisible();
+    // And from the top bar's Settings too.
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(root.getByRole("heading", { level: 1 })).toHaveText(outcome!);
+    await root.getByRole("button", { name: "Back to Album" }).first().click();
+    await expect(root.getByRole("tab", { name: "Dates", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(root.locator(".of-album-date")).toContainText("Been on it: Ilvar Thorne");
+    await dock(root, "Games").click();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
     await expect(starlight(root)).toContainText(amount(2310));
   });
 
@@ -1580,7 +1665,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await auditScreen(page, root, "claw: result", result);
     await shot("10-claw");
     await root.getByRole("button", { name: "Back" }).first().click();
-    await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+    await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
     await expect(starlight(root)).toContainText(amount(2310 + 20 + 30 * caught));
   });
 
@@ -1667,6 +1752,12 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
     await auditScreen(page, root, "bible: spoiler wall");
     await root.getByRole("button", { name: "Show spoilers" }).click();
     await expect(root.getByText("Built the clock that stopped.")).toBeVisible();
+    // 0.24.5: past her finale the bible shows the bond ranks, each truth once written and a dash until then.
+    const ranks = root.locator("details").filter({ has: page.getByText("Bond ranks", { exact: true }) });
+    await expect(ranks.getByText("Rank 11 · named", { exact: true })).toBeVisible();
+    await expect(ranks).toContainText("Being with her is the first quiet the clocks have ever let them have.");
+    await expect(ranks).toContainText("Rank 20 · always");
+    await expect(ranks.locator(".of-bible-row")).toHaveCount(10);
     await auditScreen(page, root, "bible: open");
     await root.getByRole("button", { name: "Back", exact: true }).click();
     await root.getByRole("button", { name: "Back", exact: true }).click();
@@ -1708,8 +1799,25 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect(memory).toContainText("A summary failed. Retry when you’re ready.");
         await memory.getByRole("button", { name: "Retry memory upkeep" }).click();
         await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
-        // Love interests who message you each day (#2044): 0, off, until the player sets it; by keyboard, 0 to 24 only.
         const panel = root.getByRole("tabpanel");
+        // Long-term recall (0.19.0): Memory recall embeddings, Built-in only on an Engine before capability API 1.818,
+        // and the index's failure beside the story memory's, with Retry indexing.
+        const embeddings = panel.getByRole("combobox", { name: "Memory recall embeddings" });
+        await expect(embeddings).toHaveValue("");
+        await expect(embeddings.locator("option")).toHaveText(["Built-in (local)"]);
+        await expect(embeddings).toHaveAccessibleDescription(/A newer Marinara Engine lets you choose your own/u);
+        await expect(memory).toContainText("Long-term recall: indexing failed. Retry when you’re ready.");
+        await expect(memory).toContainText("FAKE-EMBEDDINGS-DOWN");
+        await memory.getByRole("button", { name: "Retry indexing" }).click();
+        await expect.poll(() => posts(stub, "/memory/recall/retry").length).toBe(1);
+        await expect(memory).toContainText(
+          "Long-term recall: indexing chapter summaries and memories (2 of 5 so far)…",
+        );
+        await expect(memory.getByRole("button", { name: "Retry indexing" })).toHaveCount(0);
+        // This Engine offers the connections with an embedding model of their own.
+        await expect(embeddings.locator("option")).toHaveText(["Built-in (local)", "Story fixture · fixture"]);
+        await expect(embeddings).toHaveAccessibleDescription(/Built-in runs on this computer/u);
+        // Love interests who message you each day (#2044): 0, off, until the player sets it; by keyboard, 0 to 24 only.
         const daily = panel.getByRole("spinbutton", { name: "Love interests who message you each day" });
         const save = panel.getByRole("button", { name: "Save changes" });
         await expect(daily).toHaveValue("0");
@@ -1743,6 +1851,16 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect(save).toBeFocused();
         await expect(save).toHaveAttribute("aria-disabled", "true");
         await auditScreen(page, root, "settings: Connections, saved", tab);
+        // A connection's own embedding model, saved with its own note; the server checks it and indexes again.
+        await panel.getByRole("combobox", { name: "Memory recall embeddings" }).selectOption("conn-text");
+        await save.click();
+        await expect
+          .poll(() => posts(stub, "/settings").at(-1)?.body)
+          .toMatchObject({ connections: { narration: "conn-text", embeddings: "conn-text" } });
+        await expect(
+          panel.getByText("Saved. Your chapter summaries and memories are indexed again with it."),
+        ).toBeVisible();
+        await expect(panel.getByRole("combobox", { name: "Memory recall embeddings" })).toHaveValue("conn-text");
       }
     }
     await page.screenshot({ path: testInfo.outputPath("settings-debug.png") });

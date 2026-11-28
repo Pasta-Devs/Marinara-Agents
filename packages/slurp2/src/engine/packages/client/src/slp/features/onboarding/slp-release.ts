@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.18";
+export const SLURP2_VERSION = "0.4.30";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,90 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.30",
+    date: "2026-11-28",
+    notes: ["Matching lorebook entries can lend their reference pictures to Slurp when Lorebook context is on."],
+  },
+  {
+    version: "0.4.29",
+    date: "2026-11-23",
+    notes: [
+      "While you roleplay with a Creator in a Marinara chat that carries Slurp activity, they no longer text you first on Slurp or remark on texts you left unanswered.",
+      "New switch: Backstage > Messaging > Pause Creator DMs. While it is on, no Creator writes to you first.",
+    ],
+  },
+  {
+    version: "0.4.28",
+    date: "2026-11-19",
+    notes: ["Search boxes in Backstage now work like the ones in Marinara Engine. Needs the latest Marinara Engine."],
+  },
+  {
+    version: "0.4.27",
+    date: "2026-11-17",
+    notes: ["A tidy-up behind the scenes. Nothing changes in how Slurp plays."],
+  },
+  {
+    version: "0.4.26",
+    date: "2026-11-17",
+    notes: [
+      "Switches, checkboxes and loading rings now look and work like the ones in Marinara Engine, and delete prompts open Marinara's own dialog. Needs the latest Marinara Engine.",
+    ],
+  },
+  {
+    version: "0.4.25",
+    date: "2026-11-16",
+    notes: [
+      "A ponytail or braid stays in the picture, even when the card says the hair is worn that way.",
+      "Pictures can show the Creator alone: Images › One person per picture. With Storylines off, no collab partner joins a post.",
+      "Creators › Refresh looks from cards drafts the looks you tick again from their cards.",
+    ],
+  },
+  {
+    version: "0.4.24",
+    date: "2026-11-16",
+    notes: [
+      "Cut-off posts and broken character cards now return clear errors. A denied relationship no longer erases a different bond on the same card line.",
+    ],
+  },
+  {
+    version: "0.4.23",
+    date: "2026-11-16",
+    notes: [
+      "Posts no longer stop in the middle of a sentence.",
+      "Two Creators whose card says they are not friends stay strangers.",
+      "Deleting a Creator now sits under its own label: Creator settings > Tools & delete.",
+    ],
+  },
+  {
+    version: "0.4.22",
+    date: "2026-11-13",
+    notes: [
+      'Pictures of a collab or couple post now show every partner. Nude pictures no longer put on clothes from the Creator\'s card or a saved look, and "completely naked" counts as no clothes.',
+      "Collab partners are drawn in only at a clothed level. Your image connection's own style instructions now come first.",
+    ],
+  },
+  {
+    version: "0.4.21",
+    date: "2026-11-12",
+    notes: [
+      "Slurp has its own date now. In Backstage > World clock you can move it forward by whole days. The days you skip stay empty, and a checkpoint is saved first. To go back, restore a checkpoint.",
+    ],
+  },
+  {
+    version: "0.4.20",
+    date: "2026-11-11",
+    notes: [
+      "Slurp now reads your characters through Marinara Engine, so they keep their names, profiles and pictures when a later Engine update changes how characters are stored.",
+    ],
+  },
+  {
+    version: "0.4.19",
+    date: "2026-11-10",
+    notes: [
+      "Your personas keep their names, profiles and looks in Slurp after the next Marinara Engine update, which stores personas in a new way.",
+    ],
+  },
   {
     version: "0.4.18",
     date: "2026-11-05",

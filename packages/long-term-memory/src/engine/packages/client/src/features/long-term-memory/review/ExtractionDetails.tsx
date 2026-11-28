@@ -60,12 +60,14 @@ export function ExtractionDetails({
       <div className="space-y-3 text-[var(--muted-foreground)]">
         {accounting ? (
           <p data-ltm-extraction-accounting>
-            {accounting.providerCandidates} {localizeUi("ui.longTermMemory.extractiondetails.providerCandidates")}{" "}
-            {accounting.normalizedAdditions} {localizeUi("ui.longTermMemory.extractiondetails.normalizedAdditions")}{" "}
-            {accounting.keptUnits} {localizeUi("ui.longTermMemory.extractiondetails.kept")}{" "}
-            {accounting.parserRejections} {localizeUi("ui.longTermMemory.extractiondetails.parserRejected")}{" "}
-            {accounting.validationRejections} {localizeUi("ui.longTermMemory.extractiondetails.validationRejectedAnd")}{" "}
-            {accounting.deduplications} {localizeUi("ui.longTermMemory.extractiondetails.deduplicated")}
+            {localizeUi("ui.longTermMemory.extractiondetails.accountingSummary", {
+              candidates: accounting.providerCandidates,
+              additions: accounting.normalizedAdditions,
+              kept: accounting.keptUnits,
+              unreadable: accounting.parserRejections,
+              notAllowed: accounting.validationRejections,
+              duplicates: accounting.deduplications,
+            })}
           </p>
         ) : null}
         {item.deduplications.length ? (

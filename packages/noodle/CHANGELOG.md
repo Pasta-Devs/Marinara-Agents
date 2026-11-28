@@ -1,5 +1,34 @@
 # Noodle release notes
 
+## 1.5.19 — 2026-11-17
+
+- Changed: Noodle's switches, checkboxes and loading rings are now the ones Marinara Engine hands to packages, so they look and work like the Engine's own. Needs a Marinara Engine with capability API 1.830 or newer.
+
+## 1.5.18 — 2026-11-15
+
+- Fixed: on Marinara Engine versions that load the character list one page at a time, Noodle found none of your characters, so there was nobody to invite. (#2318)
+
+## 1.5.17 — 2026-11-14
+
+- Fixed: "Edit image instructions" on a character's Noodle profile opens the character's Selfie instructions in the Images tab, where Marinara Engine keeps them now, instead of the Convo tab. Needs a Marinara Engine with capability API 1.826 or newer. (#2296)
+
+## 1.5.16 — 2026-11-13
+
+- Fixed: A profile now loads and pages all of that account's posts, not only the ones already loaded in the main timeline. Activity links to older posts now open the post, or show an error when it is gone. The Likes tab loads every post the account liked and has a "Load more" button. Activity also covers older posts that got recent likes, replies and reposts, and older posts that mention you. (#2273)
+
+## 1.5.15 — 2026-11-11
+
+- Changed: Noodle reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)
+
+## 1.5.14 — 2026-11-10 [highlight]
+
+- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Noodle versions read every persona there as blank: no name, description, appearance or About Me in posts, profiles and pictures. Noodle now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)
+
+## 1.5.13 — 2026-11-08
+
+- With Include descriptions on, a character's Image Generation Appearance Override now reaches Noodle's images word for word. Interpret image prompts no longer rewords or drops it, and with Interpret image prompts off it now replaces the character's Appearance instead of being left out. (#2182)
+- A character's post image that names your persona or @mentions it now includes your persona: its appearance, Image Generation Appearance Override first, with Include descriptions on, and its avatar with Use avatar references on. (#2182)
+
 ## 1.5.12 — 2026-10-30
 
 - The "Long-Term Memory isn't sharing memories" line now clears as soon as sharing is turned back on.

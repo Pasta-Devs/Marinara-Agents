@@ -13,6 +13,7 @@ import type {
   NodeKind,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { QUESTION_MAX } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
 /** The kinds of angst a conflict seed may be; a new seed never repeats one of that love interest's last two. */
@@ -60,6 +61,11 @@ export interface ChapterPlanReply {
   revealNode?: number | null;
   /** The node that carries the arc's big event, on the arc's last chapter. */
   eventNode?: number | null;
+  /**
+   * #2503: P5's questions for the player about the protagonist, read leniently (S/story/chapters.ts keeps the entries
+   * PlanQuestionSchema passes), so asking never fails a plan.
+   */
+  ask?: unknown;
   ledger: {
     relationship: Array<{ li: string; line: string }>;
     conflict: Array<{
@@ -81,6 +87,7 @@ export const ChapterPlanSchema: ZodType<ChapterPlanReply> = z.object({
   summary: text(1200).min(1),
   revealNode: z.number().int().min(0).max(11).nullable().optional(),
   eventNode: z.number().int().min(0).max(11).nullable().optional(),
+  ask: z.unknown().optional(),
   nodes: z
     .array(
       z.object({
@@ -111,6 +118,9 @@ export const ChapterPlanSchema: ZodType<ChapterPlanReply> = z.object({
     offscreen: z.array(z.object({ li: text(120), line: text(600) })).max(8),
   }),
 });
+
+/** #2503: one of P5's questions about the protagonist, with the index of the node that first needs the answer. */
+export const PlanQuestionSchema = z.object({ node: z.number().int().min(0), question: text(QUESTION_MAX) });
 
 /** #2046: a side-with scene is one choice of two to SIDE_WITH_MAX options, one per love interest (the kit allows 4). */
 export const SIDE_WITH_MAX = 4;
@@ -151,6 +161,9 @@ export interface BeatReply {
   musicMood?: unknown;
   cg?: unknown;
   voices?: unknown;
+  riddle?: unknown;
+  /** #2509: who changes into which look (S/story/beats.ts wearOf). */
+  wear?: unknown;
 }
 
 export const BeatReplySchema: ZodType<BeatReply> = z.object({
@@ -160,6 +173,8 @@ export const BeatReplySchema: ZodType<BeatReply> = z.object({
   musicMood: z.unknown().optional(),
   cg: z.unknown().optional(),
   voices: z.unknown().optional(),
+  riddle: z.unknown().optional(),
+  wear: z.unknown().optional(),
 });
 
 // ── P12's and P12c's reply (the prompts: S/prompts.ts confrontationMessages, closerMessages) ──

@@ -37,7 +37,14 @@ interface MarinaraHostNamespace {
   services?: { tts?: unknown; dialogs?: unknown };
   modules?: Record<string, unknown>;
   queryClient?: unknown;
-  components?: { Modal?: unknown };
+  components?: {
+    Modal?: unknown;
+    Switch?: unknown;
+    Checkbox?: unknown;
+    Spinner?: unknown;
+    Tabs?: unknown;
+    SearchInput?: unknown;
+  };
   data?: { emojiCatalog?: unknown };
   api?: unknown;
 }
@@ -48,9 +55,18 @@ export function marinaraHost(): MarinaraHostNamespace | null {
   return host?.version === 1 ? (host as MarinaraHostNamespace) : null;
 }
 
+/** Members added after the namespace, with the capability API that first has them. */
+const HOST_MEMBER_CAPABILITY_APIS: Record<string, string> = {
+  "the Switch component": "1.830",
+  "the Checkbox component": "1.830",
+  "the Spinner component": "1.830",
+  "the Tabs component": "1.832",
+  "the SearchInput component": "1.832",
+};
+
 /** The message a package shows, or throws, when the Engine lacks a member it needs. */
 export function hostMemberMissingMessage(member: string): string {
-  return `Marinara Engine does not provide ${member}; this package needs capability API ${HOST_CAPABILITY_API} or newer.`;
+  return `Marinara Engine does not provide ${member}; this package needs capability API ${HOST_MEMBER_CAPABILITY_APIS[member] ?? HOST_CAPABILITY_API} or newer.`;
 }
 
 /**

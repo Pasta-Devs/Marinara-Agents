@@ -19,6 +19,7 @@ import { loadSlurpDealAds, loadSlurpDealSpice } from "./slp-brand-deal-source.js
 import { loadSlurpTieCreators } from "./slp-creator-ties-service.js";
 import { slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpBrandDealLeverInput = { accountId: string; brandId?: string; productId?: string; happen?: boolean };
 
 /** What the lever shows before "Do it": who, which brand and product, the fee, fit notes, or why not. */
@@ -48,7 +49,7 @@ export async function slurpBrandDealLever(
   db: DB,
   input: SlurpBrandDealLeverInput,
   run: boolean,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{ preview: SlurpBrandDealLeverPreview; dealId: string | null }> {
   const settings = await createSlurpStorage(db).getSettings();
   const [creators, ads, spice, document] = await Promise.all([

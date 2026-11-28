@@ -2,7 +2,10 @@
 // Otome Forge: the Wardrobe (plan M4 "Wardrobe"): complete looks for each love interest and the protagonist, Wear at
 // home, Show {{name}}, couple sets and their pair portrait
 // ──────────────────────────────────────────────
-// GET  /runs/:run/wardrobe                                   → WardrobeView {him, me, couples, noticed, noticing}
+// GET  /runs/:run/wardrobe                                   → WardrobeView {him, me, couples, noticed, noticing,
+//                                                               gifts, figurines}: #2128, her Shop gifts (those her
+//                                                               Heat offers) and figurines, each with its paint
+//                                                               and picture (#2138, S/art/figurine.ts)
 // POST /runs/:run/wardrobe/wear {owner, look, li?}           → {wardrobe}; owner "me" or a love interest's id (also
 //                                                               "player" or "li:<id>"); look "base" or an owned,
 //                                                               painted look item. Her new look is noticed (P19, by `li`,
@@ -21,7 +24,8 @@
 // Home (S/routes/home.ts) shows what is worn: wornLookUrl(unit) on him, cut out there as M3 cuts out every worn look,
 // and wornLookUrl(player) on Me with `player.noticed` (P19, written here) under it; `noticingLooks` tells it the line
 // is on its way.
-import { forgeStoryExpressionCast } from "@forge-kit/story-expressions-server.mjs";
+// The view shows each look, face and couple half as its saved cut-out once ready (`cut` names those) and queues the
+// missing ones, free, as Home does (S/art/cutout.ts viewCutouts); the client cleans the rest in the browser meanwhile.
 import { z } from "zod";
 import type {
   LiId,
@@ -32,7 +36,9 @@ import type {
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { AFFECTION_EARNINGS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { FACES, isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { figurineSceneKey, giftsFor } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import {
   BASE_LOOK,
   NOTICED_WORDS_MAX,
@@ -59,6 +65,8 @@ import {
   pairView,
   paintPairNow,
 } from "../art/outfits.js";
+import { viewCutouts } from "../art/cutout.js";
+import { figurinePicture, queueFigurineCutouts, type FigurineDeps } from "../art/figurine.js";
 import { paintView, updateIfChanged } from "../art/paint.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes, type RouteDeps } from "../http.js";
@@ -68,7 +76,7 @@ import { couplesOf, ownedItems, readItem, readItems, readOwnedItem } from "../it
 import { noticedMessages, showMessages } from "../prompts.js";
 import { LINE_TOKENS, LineReplySchema, ShowReplySchema, checkLine } from "../items/replies.js";
 import { normalizePlayer } from "../schemas/player.js";
-import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { normalizeState, readRun, readyFaces, type RunDocuments } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { grant } from "../state/rewards.js";
 
@@ -143,13 +151,6 @@ function itemLook(runId: string, item: Item, owner: "me" | LiId, worn: string | 
   };
 }
 
-/** His ready faces on `url`, while expressions are on (the kit's forgeStoryExpressionCast). */
-function facesOn(world: World, unit: Unit, url: string | undefined): Partial<Record<Face, string>> | undefined {
-  if (!url) return undefined;
-  return forgeStoryExpressionCast(world.images, unit, url, FACES).expressions as
-    Partial<Record<Face, string>> | undefined;
-}
-
 /** Love interests noticing her look right now, by `${runId}|${look}` (P19 runs in the background). */
 const noticing = new Set<string>();
 
@@ -160,25 +161,58 @@ const noticing = new Set<string>();
 export const noticingLooks = (runId: string) =>
   [...noticing].filter((key) => key.startsWith(`${runId}|`)).map((key) => key.slice(runId.length + 1));
 
-export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string): Promise<WardrobeView> {
+export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<WardrobeView> {
   // Asked before the reads: a line that lands while they run then answers "on its way", never "none and done".
   const noticingNow = noticingLooks(runId);
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth story");
   const allItems = await readItems(deps.store, runId);
   const looks = ownedItems(run, allItems).filter((item) => isLookKind(item.kind));
   const owned = new Set(run.state.owned.items);
+  // 0.21.0: a look won from Wish and not looked at yet carries its dot.
+  const unseen = new Set(run.state.owned.unseen);
+  const marked = (look: LookView): LookView => (unseen.has(look.id) ? { ...look, new: true } : look);
+  const cutouts = viewCutouts(deps, runId);
+  const player = { id: "player", cutouts: run.player.cutouts ?? {} };
+  /** `url` as shown: its wearer's cut-out once ready (pushed onto `cut`), else as painted. */
+  const shown = (wearer: Pick<Unit, "id" | "cutouts">, url: string, cut: string[]) => {
+    const cutout = cutouts.ready(wearer, url);
+    if (cutout) cut.push(cutout);
+    return cutout ?? url;
+  };
+  const cutLook = (wearer: Pick<Unit, "id" | "cutouts">, view: LookView): LookView => {
+    const cut: string[] = [];
+    const faces = view.faces
+      ? (Object.fromEntries(
+          Object.entries(view.faces).map(([face, url]) => [face, url && shown(wearer, url, cut)]),
+        ) as LookView["faces"])
+      : undefined;
+    return {
+      ...view,
+      ...(view.url ? { url: shown(wearer, view.url, cut) } : {}),
+      ...(faces ? { faces } : {}),
+      ...(cut.length ? { cut } : {}),
+    };
+  };
+  const cutHalf = <T extends { url?: string }>(wearer: Pick<Unit, "id" | "cutouts"> | undefined, half: T) => {
+    const cut: string[] = [];
+    const url = half.url && wearer ? shown(wearer, half.url, cut) : half.url;
+    return { ...half, ...(url ? { url } : {}), ...(cut.length ? { cut: true as const } : {}) };
+  };
   const him: WardrobeView["him"] = {};
   for (const unit of castOf(run)) {
     const views = [
       baseLook(runId, unit.id, unit, !unit.wornOutfit),
       ...looks
         .filter((item) => lookWearer(item) === `li:${unit.id}`)
-        .map((item) => itemLook(runId, item, unit.id, unit.wornOutfit, run.world)),
+        .map((item) => marked(itemLook(runId, item, unit.id, unit.wornOutfit, run.world))),
     ];
     him[unit.id] = views.map((view) => {
-      const faces = facesOn(run.world, unit, view.url);
-      return faces ? { ...view, faces } : view;
+      // His faces are read on the painted look, before it is shown as its cut-out. Painted means all five are Otome's
+      // paints: an Engine sprite's saved cut-out is a gallery file too, so this is read before cutLook swaps them in.
+      const faces = view.url ? readyFaces(run.world, unit, view.url) : undefined;
+      const painted = !!faces && FACES.every((face) => faces[face] && !isEngineArt(faces[face]));
+      return cutLook(unit, faces ? { ...view, faces, ...(painted ? { facesPainted: true as const } : {}) } : view);
     });
   }
   const shownTo = (look: string) =>
@@ -189,8 +223,10 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
     baseLook(runId, "me", run.player, !run.player.wornOutfit),
     ...looks
       .filter((item) => lookWearer(item) === "player")
-      .map((item) => ({ ...itemLook(runId, item, "me", run.player.wornOutfit, run.world), shownTo: shownTo(item.id) })),
-  ];
+      .map((item) =>
+        marked({ ...itemLook(runId, item, "me", run.player.wornOutfit, run.world), shownTo: shownTo(item.id) }),
+      ),
+  ].map((view) => cutLook(player, view));
   const couples: CoupleSet[] = couplesOf(allItems)
     .filter(({ his, hers }) => owned.has(his.id) || owned.has(hers.id))
     .map(({ his, hers }) => {
@@ -198,30 +234,50 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
       const herOutfit = outfitOf(hers);
       const complete = owned.has(his.id) && owned.has(hers.id);
       return {
-        his: {
-          id: his.id,
-          li: his.li,
-          name: his.look?.name ?? his.title,
-          owned: owned.has(his.id),
-          ...(hisOutfit ? { url: hisOutfit.url } : {}),
-        },
-        hers: {
+        his: cutHalf(
+          run.units.find((unit) => unit.id === his.li),
+          {
+            id: his.id,
+            li: his.li,
+            name: his.look?.name ?? his.title,
+            owned: owned.has(his.id),
+            ...(hisOutfit ? { url: hisOutfit.url } : {}),
+          },
+        ),
+        hers: cutHalf(player, {
           id: hers.id,
           name: hers.look?.name ?? hers.title,
           owned: owned.has(hers.id),
           ...(herOutfit ? { url: herOutfit.url } : {}),
-        },
+        }),
         complete,
         pair: pairView(runId, run.state.album.cgs, hers.id),
         canPaintPair: complete && !!hisOutfit && !!herOutfit && !!run.world.images.connectionId,
       };
     });
+  await cutouts.queue();
   return {
     him,
     me,
     couples,
     noticed: run.player.noticed,
     noticing: noticingNow.includes(run.player.wornOutfit ?? ""),
+    // An aphrodisiac bought under NSFW Heat stays owned, and is listed (and given) only while Heat is NSFW.
+    gifts: Object.fromEntries(
+      giftsFor(run.world.content).flatMap((gift) => {
+        const count = run.state.owned.gifts[gift] ?? 0;
+        return count > 0 ? [[gift, count]] : [];
+      }),
+    ),
+    // A painted figurine's cut-out is queued here too, as Home and the Shop do (no model or image call): without it a
+    // figurine whose cut-out was never queued reads as still being cut out, and the Wardrobe would poll for it.
+    figurines: (
+      await queueFigurineCutouts(
+        deps,
+        runId,
+        castOf(run).filter((unit) => run.state.owned.figurines[unit.id]),
+      )
+    ).map((unit) => ({ li: unit.id, ...figurinePicture(runId, unit), story: { key: figurineSceneKey(unit.id) } })),
   };
 }
 
@@ -313,6 +369,14 @@ function noticeLook(deps: RouteDeps, runId: string, look: string, li: string | u
     .finally(() => noticing.delete(key));
 }
 
+/**
+ * #2509: makes the protagonist's `look` wearable (owned, hers and painted, else a 4xx) without wearing it at home: a date
+ * or a hangout dresses her in it for that story only (S/story/scene-looks.ts). The everyday look always is.
+ */
+export async function herLookFor(deps: RouteDeps, runId: string, look: string): Promise<void> {
+  if (look !== BASE_LOOK) await wearableItem(deps, runId, look, "player");
+}
+
 /** POST .../wardrobe/wear: see the header. */
 export async function wearLook(
   deps: RouteDeps,
@@ -321,7 +385,7 @@ export async function wearLook(
   { debugMode }: { debugMode: boolean },
 ): Promise<void> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth story");
   const who = ownerOf(owner, run);
   const wearer = who.kind === "me" ? "player" : (`li:${who.unit.id}` as const);
   if (look !== BASE_LOOK) await wearableItem(deps, runId, look, wearer);
@@ -332,7 +396,7 @@ export async function wearLook(
       normalizePlayer,
       (current) => wearing(current, look),
     );
-    if (!saved) throw notFound("Otome Forge run");
+    if (!saved) throw notFound("Otome Hearth story");
     if (look !== BASE_LOOK && saved.value.noticed?.look !== look) noticeLook(deps, runId, look, li, debugMode);
     return;
   }
@@ -405,7 +469,7 @@ export async function showLook(
     const his = next.lis[li]!;
     return { ...next, lis: { ...next.lis, [li]: { ...his, firsts: { ...his.firsts, [showFirst(look)]: at } } } };
   });
-  if (!saved) throw notFound("Otome Forge run");
+  if (!saved) throw notFound("Otome Hearth story");
   return { line: line.text, ...(line.face ? { face: line.face } : {}), grants };
 }
 

@@ -19,14 +19,17 @@
 //   goes through paintRecord: one paid image per connection in the high lane, the prompt built at the paid call, and a
 //   result saved only onto the record still waiting for it.
 // - The references are exactly the three the issue names, people first (a provider that keeps fewer still gets both
-//   likenesses): his chosen look, hers, then the place's picture, each fetched as a data URL; a base look with no
-//   portrait falls back to his card's or her persona's avatar, labelled as their face (it may wear something else).
-//   Only the label `photo <id>` is ever logged.
+//   likenesses): his chosen look, hers, then the place's picture, each fetched as a data URL, the looks cut out of
+//   their backdrops (0.36.7); a base look with no portrait falls back to his card's or her persona's avatar, labelled
+//   as their face (it may wear something else).
+//   When one of them has a picture that does not load, the paint fails before the paid call (Try again), rather than
+//   paying for a stranger. Only the label `photo <id>` is ever logged.
 // - The Album lists the ready photos (newest first) apart from `cgs`, which Home's back layer reads, and Home tapes the
 //   newest with its love interest into his note. A photo can be deleted, except while it paints (409 `busy`).
 import { forgeSubjectReference, type ImageIdentitySubject } from "@forge-kit/image-avatar-references.mjs";
 import { z, type ZodType } from "zod";
 import type { Paint, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import {
   PHOTO_CUSTOM,
   PHOTO_EXPRESSIONS,
@@ -39,7 +42,14 @@ import {
   type PhotoView,
 } from "../../../../../client/src/features/otome-forge/shared/photos.js";
 import { BASE_LOOK, type AlbumImage } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
-import { galleryRefIds, worldStyle } from "../art/image-client.js";
+import { loadedCutouts, type CutoutOwner } from "../art/cg.js";
+import {
+  galleryRefIds,
+  hasLikenessSource,
+  imageConnectionFor,
+  MissingLikenessError,
+  worldStyle,
+} from "../art/image-client.js";
 import {
   imagesOf,
   paintIsLive,
@@ -60,7 +70,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 
-export type PhotoDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "art">;
+export type PhotoDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "art" | "cutouts">;
 
 /** `${R}:photo:<id>`: one Photo Shoot photo. */
 export const photoId = (runId: string, id: string) => `${runId}:photo:${id}`;
@@ -154,7 +164,7 @@ export function albumPhotos(photos: readonly Photo[]): AlbumImage[] {
     .sort((a, b) => b.at.localeCompare(a.at));
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const photoNotFound = () => new OtomeForgeError(404, "No such photo.", "not-found");
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
@@ -185,6 +195,8 @@ interface PhotoLook {
   likeness: ImageIdentitySubject;
   /** The likeness is his card's or her persona's avatar (a base look with no portrait): who they are, not this look. */
   face?: true;
+  /** An Engine sprite read as it is (the kit reads only avatars and the gallery): a card unlinked after it gave him one. */
+  engineUrl?: string;
 }
 
 /**
@@ -195,7 +207,7 @@ interface PhotoLook {
 async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup: PhotoSetup) {
   const run = await readRun(deps.store, runId);
   if (!run) throw runNotFound();
-  const connectionId = run.world.images.connectionId;
+  const connectionId = imageConnectionFor(run.world.images, "scene");
   if (!connectionId) throw noConnection();
   if (!isLiId(setup.li)) throw liNotFound();
   const unit = run.units.find((candidate) => candidate.id === setup.li && candidate.bible);
@@ -209,9 +221,11 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.hisLook === BASE_LOOK
       ? {
           outfitLine: unit.outfitLine || unit.bible.look.outfitLine,
-          ...(unit.portrait
+          ...(unit.portrait && !isEngineArt(unit.portrait)
             ? { likeness: { portrait: unit.portrait } }
-            : { likeness: unit.cardId ? { cardId: unit.cardId } : {}, face: true as const }),
+            : unit.portrait && !unit.cardId
+              ? { likeness: {}, engineUrl: unit.portrait }
+              : { likeness: unit.cardId ? { cardId: unit.cardId } : {}, face: true as const }),
         }
       : await wearableLook(deps, runId, setup.hisLook, `li:${unit.id}`).then(({ outfit }) => ({
           outfitLine: outfit.outfitLine,
@@ -221,7 +235,7 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.herLook === BASE_LOOK
       ? {
           outfitLine: run.player.look.outfitLine,
-          ...(run.player.portrait
+          ...(run.player.portrait && !isEngineArt(run.player.portrait)
             ? { likeness: { portrait: run.player.portrait } }
             : { likeness: { personaId: run.player.personaId }, face: true as const }),
         }
@@ -250,19 +264,51 @@ async function buildPhoto(
   runId: string,
   setup: PhotoSetup,
   edited: Partial<ImagePrompt> = {},
-): Promise<ImagePrompt & { name: string; references: string[] }> {
-  const { run, unit, place, his, her, hisLook, herLook } = await resolveSetup(deps, runId, setup);
+): Promise<ImagePrompt & { name: string; references: string[]; characters: number; missing?: string }> {
+  const {
+    run,
+    unit,
+    place,
+    his,
+    her,
+    hisLook: hisPainted,
+    herLook: herPainted,
+  } = await resolveSetup(deps, runId, setup);
   const player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
-  const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject]> = [
-    [hisLook.face ? "li-face" : "li", hisLook.likeness],
-    [herLook.face ? "her-face" : "her", herLook.likeness],
-    ["place", { portrait: place.url }],
+  // 0.36.7: each look goes cut out of its backdrop, as a scene's people do (art/cg.ts loadedCutouts, for the paint and
+  // its prompt review alike), so only the place's picture brings a background. An avatar standing in for a look is
+  // sent as it is, and a look that cannot be cut is sent as painted: the look is what the photo shows.
+  const painted = (owner: CutoutOwner, look: PhotoLook) =>
+    look.likeness.portrait && !look.face && !look.engineUrl ? [{ owner, url: look.likeness.portrait }] : [];
+  const cutoutOf = await loadedCutouts(deps, runId, [
+    ...painted(unit.id, hisPainted),
+    ...painted("player", herPainted),
+  ]);
+  const cut = (owner: CutoutOwner, look: PhotoLook): PhotoLook => {
+    const cutout = look.likeness.portrait ? cutoutOf(owner, look.likeness.portrait) : undefined;
+    return cutout ? { ...look, likeness: { ...look.likeness, portrait: cutout } } : look;
+  };
+  const hisLook = cut(unit.id, hisPainted);
+  const herLook = cut("player", herPainted);
+  const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject, string?, string?]> = [
+    [hisLook.face ? "li-face" : "li", hisLook.likeness, unit.name, hisLook.engineUrl],
+    [herLook.face ? "her-face" : "her", herLook.likeness, player.name || "Protagonist", herLook.engineUrl],
+    ["place", { portrait: place.url }, undefined, isEngineArt(place.url) ? place.url : undefined],
   ];
   const resolved: Array<{ who: PhotoInput["references"][number]; image: string }> = [];
-  for (const [who, likeness] of sources) {
-    const image = await forgeSubjectReference(images, likeness).catch(() => null);
+  // The first of them whose picture exists but did not load: paint() stops before paying for a stranger.
+  let missing: string | undefined;
+  for (const [who, likeness, name, engineUrl] of sources) {
+    // #2147: Engine art (a background chosen for the place, a sprite an unlinked card left him) is read as it is: the
+    // kit reads only avatars and the gallery.
+    const image = await (
+      engineUrl
+        ? images.cardAvatarImage(engineUrl).then((found) => found && `data:${found.mime};base64,${found.base64}`)
+        : forgeSubjectReference(images, likeness)
+    ).catch(() => null);
     if (image) resolved.push({ who, image });
+    else if (name && !missing && (engineUrl || (await hasLikenessSource(images, likeness)))) missing = name;
   }
   const li: CgPerson = {
     name: unit.name,
@@ -274,9 +320,9 @@ async function buildPhoto(
     name: player.name || "Protagonist",
     identityLine: player.look.identityLine,
     outfitLine: herLook.outfitLine,
-    presentation: "person",
+    presentation: player.look.presentation,
   };
-  const style = await worldStyle(images, run.world.images);
+  const style = await worldStyle(images, run.world.images, "scene");
   const prompt = photoPrompt(
     {
       li,
@@ -291,10 +337,20 @@ async function buildPhoto(
     edited,
   );
   const first = unit.name.trim().split(/\s+/)[0] || "Couple";
-  return { ...prompt, name: `${first} photo`, references: resolved.map((entry) => entry.image) };
+  return {
+    ...prompt,
+    name: `${first} photo`,
+    references: resolved.map((entry) => entry.image),
+    // The two of them come first, then the place: NovelAI gets theirs alone (S/art/image-client.ts generateImage).
+    characters: resolved.filter((entry) => entry.who !== "place").length,
+    ...(missing ? { missing } : {}),
+  };
 }
 
-/** POST /runs/:run/photos/prompt: the prompt Take picture would send (the review dialog shows it). No write; 503 too. */
+/**
+ * POST /runs/:run/photos/prompt: the prompt Take picture would send (the review dialog shows it); 503 too. It paints
+ * nothing, but cuts out each look with no cut-out yet (free, art/cg.ts loadedCutouts) and waits for it (0.36.7).
+ */
 export async function photoPromptFor(deps: PhotoDeps, runId: string, setup: PhotoSetup): Promise<ImagePrompt> {
   const { prompt, negativePrompt } = await buildPhoto(deps, runId, setup);
   return { prompt, negativePrompt };
@@ -324,11 +380,12 @@ function paintPhoto(
       if (!ours(latest)) return "gone";
       const world: World | null = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) return "gone";
-      return world.images.connectionId === connectionId ? "paint" : "stopped";
+      return imageConnectionFor(world.images, "scene") === connectionId ? "paint" : "stopped";
     },
     async paint() {
       const photo = latest!;
       const built = await buildPhoto(deps, runId, { ...photo, place: photo.place.key }, edited);
+      if (built.missing) throw new MissingLikenessError(built.missing);
       sent = { prompt: built.prompt, negativePrompt: built.negativePrompt };
       const image = await images.generateImage({
         connectionId,
@@ -338,6 +395,7 @@ function paintPhoto(
         ...STICKER_SIZE,
         debugMode,
         referenceImages: built.references,
+        characters: built.characters,
       });
       return images.uploadToGallery({ image, name: built.name, prompt: built.prompt });
     },

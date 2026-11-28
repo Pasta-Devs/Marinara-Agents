@@ -19,7 +19,7 @@ import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js
 import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { SLURP_BUILT_IN_EXPLICIT_LEVEL, slurpPostLevelInstruction } from "../../modules/feed/slp-post-guidance.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
 import { listSlurpOtherCreatorSubjects } from "../../data/feed/slp-feed-subjects-storage.js";
@@ -76,6 +76,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import {
   slurpCameraSourceInstruction,
   slurpPostCameraSource,
+  slurpSceneCamera,
   slurpScreenFreeCamera,
 } from "../../modules/feed/slp-camera-source.js";
 import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
@@ -99,6 +100,7 @@ import type {
   SlpCreatorPostGenerationInput,
 } from "./slp-generation-contract.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
+import { slurpWorldNow as worldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type { GeneratedCreatorPostResult, PreparedCreatorPostResult } from "./slp-generation-contract.js";
 
 const SLP_CREATOR_POST_MAX_TOKENS = 2048;
@@ -129,7 +131,7 @@ export async function generateCreatorPost(
     fallbackConnection,
     admissionMode: input.admissionMode ?? { kind: "foreground" },
   });
-  const at = input.generatedAt ?? new Date();
+  const at = input.generatedAt ?? worldNow();
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const otherCreatorSubjects = await listSlurpOtherCreatorSubjects(db, account.id, at);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
@@ -185,8 +187,7 @@ export async function generateCreatorPost(
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
-  // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
-  // so it biases every post they ever make rather than this one.
+  // How this Creator makes things, not who they are. Stable for the account's life; it biases every post.
   const strategy = slurpCreatorStrategy(account.id, account.settings.strategy);
   const production = strategy.production;
   const effort = slurpPostEffort(production, sequence, account.id);
@@ -209,7 +210,7 @@ export async function generateCreatorPost(
     preview: input.previewOnly === true,
     model: { connection: input.connection, fallbackConnection, background: input.admissionMode?.kind === "background" },
     recentPosts,
-    at: input.generatedAt ?? new Date(),
+    at: input.generatedAt ?? worldNow(),
     publishAt: input.publicationTime,
   });
   // What this post is for, as opposed to what it is about, and how it goes out. Story and teaser
@@ -237,7 +238,7 @@ export async function generateCreatorPost(
     previewOnly: input.previewOnly,
     singlePicture: input.prepareOnly === true,
     slotId: input.slotId,
-    at: input.generatedAt ?? new Date(),
+    at: input.generatedAt ?? worldNow(),
     dueAt: input.publicationTime ?? null,
     beats:
       settings.postPlanner === "beats"
@@ -268,8 +269,7 @@ export async function generateCreatorPost(
   const textOnly = axes?.delivery === "text_only";
   // A reused picture is the picture: nothing is briefed or generated for this post.
   const postImages = imagesEnabled && !textOnly && !reusedMedia;
-  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot
-  // keeps its own camera. See `slp-camera-source.ts`.
+  // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot keeps its own camera. See `slp-camera-source.ts`.
   const screens = !(await readSlurpWorldLens(db, account.id));
   const cameraSource = variation
     ? slurpPostCameraSource(account.id, sequence, {
@@ -280,10 +280,10 @@ export async function generateCreatorPost(
         effort,
       })
     : null;
-  const camera = slurpScreenFreeCamera(shoot?.cameraSource, screens) ?? cameraSource;
+  const shootCamera = slurpScreenFreeCamera(shoot?.cameraSource, screens);
+  const camera = shootCamera ?? cameraSource;
   const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
-  // The shoot rides in the content-type block rather than a block of its own: it is part of what
-  // this post is for, and a second block would be dead for every post that is not a callback.
+  // The shoot rides in the content-type block: a block of its own would be dead for non-callback posts.
   const contentTypeInstruction = axes
     ? [
         slurpContentAxesInstruction(axes),
@@ -315,7 +315,7 @@ export async function generateCreatorPost(
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
-  const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? new Date());
+  const conditionInstruction = await describeSlurpPostCondition(db, account.id, input.generatedAt ?? worldNow());
   const contentMenu = await resolveSlurpCreatorMenu(db, account.id).catch(() => "");
   // How far this Creator's pictures go. A read failure must not cost a post, and the shipped level
   // is what an install with nothing configured would have used anyway. A collab goes as far as both pages.
@@ -339,7 +339,7 @@ export async function generateCreatorPost(
     directed,
     explicitLevel,
     dialLevel,
-    collabs: settings.creatorCollabs,
+    collabs: slpExtensionOn(settings, "storylines") ? settings.creatorCollabs : null,
     recentPosts,
     sequence,
     variation,
@@ -382,7 +382,7 @@ export async function generateCreatorPost(
       : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
     eventInstruction:
-      (await resolveSlurpEventInstruction(db, account.id, input.publicationTime ?? input.generatedAt ?? new Date())) ??
+      (await resolveSlurpEventInstruction(db, account.id, input.publicationTime ?? input.generatedAt ?? worldNow())) ??
       undefined,
     accessInstruction: [
       await resolveSlurpPostGuidance(db, account.id, input.request.access),
@@ -413,7 +413,7 @@ export async function generateCreatorPost(
     beatCompany: variation?.company,
     beatDay: beat ? beatRun.day : null,
     storyNow: slurpStoryNow(story.state, account.id, sequence, steering?.avoid, !(beat || directed || project)),
-    generatedAt: input.generatedAt ?? new Date(),
+    generatedAt: input.generatedAt ?? worldNow(),
     publicationTime: input.publicationTime,
   });
   let compiledPrompt = messages.map((message) => `# ${message.role}\n${message.content}`).join("\n\n");
@@ -496,6 +496,8 @@ export async function generateCreatorPost(
     content: protectedContent,
   };
 
+  const pictureCamera =
+    shootCamera ?? (camera && slurpSceneCamera(camera, askModelForScene && generated.scene, variation, screens));
   const wardrobeSelection = resolveSlurpWardrobeSelection({
     looks: wardrobeLooks,
     access: input.request.access,
@@ -506,11 +508,11 @@ export async function generateCreatorPost(
   });
   // What the picture is and may show, in one place so the two briefs agree on level, shoot and effort.
   const tagged = await resolveSlurpMentionedCast(db, account.id, protectedGenerated.content, false);
-  const pictureIds = [...new Set([...castIds, ...tagged.ids])];
+  const pictureIds = settings.imageOnePerson ? [] : [...new Set([...castIds, ...tagged.ids])];
   const { draftImagePrompt, visualBrief, negativePrompt, shotBriefs, pictureCast } = slurpPostPictureBriefs({
     project,
     variation,
-    camera,
+    camera: pictureCamera,
     effort,
     productionStyle: production.style,
     shoot,
@@ -519,8 +521,9 @@ export async function generateCreatorPost(
     postImages,
     access: input.request.access,
     explicitLevel,
-    partner: spiceAngle?.partner?.company ?? null,
-    cast: [...new Set([...(beat?.cast ?? []), ...mentioned.names, ...tagged.names])],
+    partner: settings.imageOnePerson ? null : (spiceAngle?.partner?.company ?? null),
+    cast: settings.imageOnePerson ? [] : [...new Set([...(beat?.cast ?? []), ...mentioned.names, ...tagged.names])],
+    beat: settings.imageOnePerson && beat ? { ...beat, cast: [] } : beat,
     modelImagePrompt: generated.imagePrompt,
     stageFacts: account.settings.stage,
     scene: generated.scene,
@@ -536,18 +539,18 @@ export async function generateCreatorPost(
   // by a run that throws later is pruned with the rest.
   let openedShootId: string | null = null;
   if (!input.previewOnly) {
-    if (axes?.intent === "set" && camera && variation) {
+    if (axes?.intent === "set" && pictureCamera && variation) {
       const opened = await openSlurpShoot(db, {
         creatorAccountId: account.id,
         place: generated.scene?.setting?.trim() || variation.place, // concrete, so callbacks name it
         company: variation.company,
-        cameraSource: camera,
+        cameraSource: pictureCamera,
         brief: slurpShootContinuity({ scene: generated.scene, selected: wardrobeSelection.look?.description, bare }),
         effort,
         theme: axes.intent,
         campaignId,
         shotsTaken: axes.delivery === "multi_image_set" ? 3 : 1,
-        at: input.generatedAt ?? new Date(),
+        at: input.generatedAt ?? worldNow(),
       }).catch((error: unknown) => {
         // A post must never fail over continuity bookkeeping.
         logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
@@ -591,7 +594,7 @@ export async function generateCreatorPost(
           demandTopic,
           project,
           projectChapter,
-          camera,
+          camera: pictureCamera,
           effort,
           visualBrief,
           strategy,
@@ -613,8 +616,7 @@ export async function generateCreatorPost(
     source: "generated" as const,
     access: input.request.access,
     projectId: project?.id ?? null,
-    // Stamped now rather than resolved later, so editing the project cannot rewrite what a
-    // published post was about.
+    // Stamped now rather than resolved later, so editing the project cannot rewrite what a published post was about.
     projectChapter,
     metadata: {
       noodlerContentFormat: format,
@@ -746,7 +748,7 @@ export async function generateCreatorPost(
       shootId,
       opportunity,
       campaignId,
-      at: input.generatedAt ?? new Date(),
+      at: input.generatedAt ?? worldNow(),
       previewOnly: input.previewOnly,
     });
     return post;

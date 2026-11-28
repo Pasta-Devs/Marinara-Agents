@@ -4,7 +4,8 @@
 // Scoped under `.of-root`, on the look's tokens. Places wear their scene's mood gradient (`.of-mood`, READER_RULES),
 // so the screen needs no image; a place the story painted wears its picture over it. The cards are `.of-date-place`,
 // apart from M2b's `.of-place` (the reader's painted backdrop layer). Layout is one column at phone width (390 px): two place cards a row, the two looks
-// side by side. Every animation stops under prefers-reduced-motion (MOTION_RULES).
+// side by side, a gift's cards (#2128) as many a row as fit. Every animation stops under prefers-reduced-motion
+// (MOTION_RULES).
 import { PALETTE } from "../../theme/tokens";
 
 const R = ".of-root";
@@ -83,6 +84,8 @@ ${R} .of-place-check {
 /* The looks: the two of them side by side. */
 ${R} .of-looks { display: flex; flex-direction: column; gap: 8px; }
 ${R} .of-looks-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+/* #2303: a pulled date shows only her looks. */
+${R} .of-looks-pair[data-single] { grid-template-columns: minmax(0, 1fr); }
 ${R} .of-looks-person { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
 ${R} .of-looks-who {
   padding: 0; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
@@ -110,6 +113,36 @@ ${R} .of-look-name {
 ${R} .of-look-name svg { color: var(--of-champagne-text); }
 ${R} .of-looks-note { display: flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }
 
+/* #2128: Bring a gift: small cards in a row (No gift first), ringed like a look when picked. */
+/* 0.34.8: Take them along and the Dates hub's pick share the gifts' title row, icon beside the words. */
+${R} .of-date-gifts .of-section-title, ${R} .of-partners .of-section-title { display: flex; align-items: center; gap: 8px; }
+${R} .of-date-gifts .of-section-title svg, ${R} .of-partners .of-section-title svg { flex: none; color: var(--of-champagne-text); }
+${R} .of-date-gift-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+${R} .of-date-gift {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; cursor: pointer; text-align: center;
+}
+${R} .of-date-gift-frame {
+  position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: 18px;
+  color: var(--of-text-faint); background: var(--of-surface-hover); border: 1px solid var(--of-border);
+  box-shadow: inset 0 1px 0 var(--of-highlight); transition: box-shadow 420ms var(--of-ease);
+}
+${R} .of-date-gift-art { width: 64%; height: 64%; filter: drop-shadow(0 3px 2px rgb(43 34 54 / 0.25)); }
+${R} .of-date-gift[data-checked="true"] .of-date-gift-frame {
+  box-shadow: 0 0 0 2px ${PALETTE.champagne}, 0 10px 26px var(--of-glow);
+}
+${R} .of-date-gift:has(input:focus-visible) .of-date-gift-frame { outline: 2px solid var(--of-focus); outline-offset: 3px; }
+${R} .of-date-gift-name {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; max-width: 100%;
+  font-size: 0.78rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere;
+}
+${R} .of-date-gift-name svg { flex: none; color: var(--of-champagne-text); }
+/* The gift in Tonight's summary and the ending, and its mark in the evenings so far. */
+${R} .of-date-gift-line { align-items: center; flex-wrap: wrap; }
+${R} .of-date-gift-line > span:not(.of-badge) { flex: 1 1 14ch; min-width: 0; }
+${R} .of-notice .of-date-gift-icon, ${R} .of-date-gift-icon { flex: none; width: 28px; height: 28px; margin: 0; }
+${R} .of-date-gift-line .of-badge { margin-inline-start: auto; }
+${R} .of-date-memory-gift { flex: none; display: grid; place-items: center; }
+
 /* Tonight, before it begins. */
 ${R} .of-date-summary {
   border-inline-start: 3px solid var(--of-li-accent, var(--of-rose));
@@ -136,6 +169,27 @@ ${R} .of-date-memory-text { display: flex; flex-direction: column; gap: 1px; fle
 ${R} .of-date-memory-title {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.06rem; line-height: 1.1; overflow-wrap: anywhere;
 }
+/* Album → Dates (#2303): a card's picture and text side by side, then its badge and button in a row below, so the
+   text keeps the card's width on a phone instead of being squeezed beside the buttons. */
+${R} .of-album-date {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px 12px; padding: 10px;
+  border-radius: 16px; background: var(--of-surface-hover); border-inline-start: 3px solid var(--of-li-accent, var(--of-rose));
+}
+${R} .of-album-date > .of-date-memory-text { grid-column: 2; gap: 3px; }
+${R} .of-album-date > .of-date-memory-text:first-child { grid-column: 1 / -1; }
+${R} .of-album-date-art {
+  width: 64px; height: 64px; border-radius: 12px; object-fit: cover; background: var(--of-surface);
+}
+${R} .of-album-date-actions {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
+}
+${R} .of-album-date-actions > .of-badge { margin-inline-end: auto; }
+${R} .of-album-date-error { flex-basis: 100%; }
+${R} .of-album-date .of-body { max-width: none; }
+/* The pin stays on the place's first line. */
+${R} .of-album-date-place { display: flex; align-items: baseline; gap: 4px; }
+${R} .of-album-date-place > svg { flex: none; align-self: center; }
+${R} .of-album-date-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; }
 
 /* How the evening went. */
 ${R} .of-date-counting { margin-top: 18px; }
@@ -190,6 +244,12 @@ ${R} .of-keepsake-photo {
   animation: of-rise 520ms var(--of-ease) both;
 }
 ${R} .of-keepsake-photo img { display: block; width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 2px; }
+/* #2276: the kept picture itself opens full size: the frame stays, the button brings no look of its own. */
+${R} .of-keepsake-open {
+  display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in;
+  border-radius: 2px; -webkit-tap-highlight-color: transparent;
+}
+${R} .of-keepsake-open:focus-visible { outline: 2px solid var(--of-accent, ${PALETTE.rose}); outline-offset: 3px; }
 ${R} .of-keepsake-caption {
   margin-top: 8px; text-align: center; font-family: var(--of-font-hand); font-size: 1.35rem; line-height: 1.1;
 }

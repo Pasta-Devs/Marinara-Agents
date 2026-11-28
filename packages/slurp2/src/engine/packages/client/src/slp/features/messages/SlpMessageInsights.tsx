@@ -34,6 +34,7 @@ import {
   Stepper,
 } from "./SlpDetailsParts";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const ADULT_LEVELS = ["ordinary", "suggestive", "provocative", "intimate", "explicit"] as const;
 const ADULT_LEVEL_HINT: Record<string, string> = {
   ordinary: "Ordinary conversation. Nothing adult is on the table here yet.",
@@ -196,7 +197,7 @@ export function SlurpRelationshipPanel({
   };
   const { t: localizeUi } = useUiTranslation();
   const { creatorState, threadState, availability } = relationship;
-  const cooling = Boolean(relationship.coolUntil && relationship.coolUntil > new Date().toISOString());
+  const cooling = Boolean(relationship.coolUntil && relationship.coolUntil > slurpWorldNow().toISOString());
   const mood = relationship.mood ?? 0;
   // The server's verdicts (R1-012). "top" is not a block: there is simply no step left.
   const riseBlock = relationship.escalation?.blockedBy ?? null;

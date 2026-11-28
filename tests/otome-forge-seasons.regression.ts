@@ -9,6 +9,11 @@
 // may be genuinely evil, that taming them is the point, that they keep whatever red lines they have, and that love does
 // not make a monster good at once; Angst no longer sanitizes cruelty.
 // 0.6.25 (#2061): the maintainer's own edit of the shared writing rules.
+// 0.36.3: the shared writing rules no longer ask for what the protagonist feels in their body.
+// 0.36.4 (#2384): the shared writing rules drop the dialogue rule (fragments, dodged questions).
+// 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
+// 0.38.2: the writing rules and the pacing line are reworded for plainer speech, narration and plot, so every prompt
+// that carries them moved.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -155,11 +160,26 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
     .digest("hex")
     .slice(0, 16);
 
-/** Taken from the 0.6.3 builder, before seasons. */
+/** Taken from the 0.6.3 builder, before seasons; 0.18.1's canon writing rule ("characters") moved them. */
+// 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so these moved.
+// 0.23.0: the affection line reads "of 20" (the bond ranks), so these moved again.
+// 0.26.0: the writing rules ask for plain prose and dialogue in each speaker's own register, so these moved again.
+// 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so these moved.
+// 2026-11-14 (#2303): the wardrobe banners ask for three 3★ looks and three Snapshots, so theirs moved; Memories is
+// unchanged, and the Dates banner's is new.
+// 2026-11-23: the affection line asks for tension, then smaller intimate scenes past level 10, so these moved.
+// 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
+// protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
+// banned in narration only, so every prompt with them moved.
+// 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two stiff patterns are banned
+// everywhere and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
+// 2026-11-28 (#2521): the writing rules' voice line is the maintainer's paragraph on distinct, natural voices, and the
+// spoken-line rule loses the clause it covers, so every prompt with the writing rules or the spoken-line rule moved.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "e75bc92590d80aa3",
-  "his-wardrobe": "7fdd86907403669a",
-  "my-wardrobe": "cdd24db38cc846a9",
+  memories: "f28ad501c1690086",
+  "his-wardrobe": "9ea281ce0897d625",
+  "my-wardrobe": "8de59df4309b34ac",
+  dates: "29e24ec1682d31ad",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {
@@ -242,7 +262,7 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
     await createdOn(t, "2026-10-05T09:00:00.000Z");
     const user = (call: number) => t.calls[call]!.messages[1]!.content as string;
 
-    // Rotation 0 starts on October 5th: all three banners are Halloween's.
+    // Rotation 0 starts on October 5th: all four banners are Halloween's.
     const october = (await t.call("POST", "/runs/:run/wish/open")).body.wish as wish.WishView;
     assert.deepEqual(october.rotation, { number: 0, startsDay: "2026-10-05", endsDay: "2026-10-18" });
     assert.deepEqual(
@@ -251,10 +271,11 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
         ["memories-0", "halloween"],
         ["his-wardrobe-0", "halloween"],
         ["my-wardrobe-0", "halloween"],
+        ["dates-0", "halloween"],
       ],
     );
-    assert.equal(t.calls.length, 3);
-    for (const call of [0, 1, 2]) {
+    assert.equal(t.calls.length, 4);
+    for (const call of [0, 1, 2, 3]) {
       assert.ok(
         user(call).includes("SEASON: this rotation is October's seasonal banner. Theme: Halloween."),
         `${call}`,
@@ -271,18 +292,20 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
         ["memories-1", false],
         ["his-wardrobe-1", false],
         ["my-wardrobe-1", false],
+        ["dates-1", false],
       ],
     );
     assert.deepEqual(
       later.echoes.map((banner) => [banner.key, banner.season]),
       [
+        ["dates-0", "halloween"],
         ["my-wardrobe-0", "halloween"],
         ["his-wardrobe-0", "halloween"],
         ["memories-0", "halloween"],
       ],
     );
-    assert.equal(t.calls.length, 6);
-    for (const call of [3, 4, 5]) assert.doesNotMatch(user(call), /SEASON:|EARLIER [A-Z]+ BANNERS/, `${call}`);
+    assert.equal(t.calls.length, 8);
+    for (const call of [4, 5, 6, 7]) assert.doesNotMatch(user(call), /SEASON:|EARLIER [A-Z]+ BANNERS/, `${call}`);
     assert.equal((await readBanner(t.store, t.runId, "memories-1"))?.season, undefined);
 
     // A year on (rotation 26 starts on October 4th, 2027), twelve later Memories banners have pushed last October's
@@ -296,13 +319,15 @@ test("Wish open plans a month's first rotation on its theme and keeps it; the ne
         ["memories-26", "halloween"],
         ["his-wardrobe-26", "halloween"],
         ["my-wardrobe-26", "halloween"],
+        ["dates-26", "halloween"],
       ],
     );
-    const memories = user(6);
+    const memories = user(8);
     const earlier = memories.split("\n").find((line) => line.startsWith("EARLIER BANNERS OF THIS KIND"))!;
     assert.ok(!earlier.includes("Lantern Vigil"), "last October's title is past the last twelve");
     assert.ok(memories.includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Lantern Vigil\n"), memories);
-    assert.ok(user(7).includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Harbour Night\n"));
+    assert.ok(user(9).includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Harbour Night\n"));
+    assert.ok(user(11).includes("EARLIER OCTOBER BANNERS OF THIS KIND (do not repeat): Lantern Regatta\n"));
   } finally {
     mock.restoreAll();
   }

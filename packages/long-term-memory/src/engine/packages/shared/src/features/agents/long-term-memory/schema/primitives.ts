@@ -235,6 +235,11 @@ export const ltmExtractionFingerprintSchema = z
   .object({
     version: z.union([z.literal(2), z.literal(3)]),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    // The source text alone, so a piece that was only re-labelled is not read again. Older fingerprints have none.
+    textHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     provenance: ltmSourceProvenanceSchema.nullable(),
     scope: ltmScopeSchema,
     modes: z.array(ltmModeSchema).min(1).max(8),
@@ -316,6 +321,65 @@ export const ltmIdentityMatchBasisSchema = z.enum([
 
 export const ltmInteropSourceSchema = z.enum(["characters", "lorebooks", "chats", "messages"]);
 
+// Story dates. A date keeps the story's own words (no calendar parsing). The origin is its trust level, strongest
+// first: manual (typed by the user), then world_state / game_clock / message_time (read from the Engine), then stated
+// (found in the chat text, with a quote the server checked). Counted positions are never stored.
+export const ltmStoryTimeOriginSchema = z.enum(["manual", "world_state", "game_clock", "message_time", "stated"]);
+export const ltmStoryTimeUnitSchema = z.enum(["day", "week", "month", "year"]);
+const ltmStoryTimeTextSchema = (max: number) =>
+  z
+    .string()
+    .min(1)
+    .max(max)
+    .regex(/^\S(?:.*\S)?$/, "Story date text cannot start or end with spaces or span lines.");
+const ltmStoryTimeSourceHashSchema = z.string().regex(/^[a-f0-9]{64}$/);
+
+export const ltmStoryTimePointSchema = z
+  .object({
+    date: ltmStoryTimeTextSchema(120).optional(),
+    time: ltmStoryTimeTextSchema(80).optional(),
+  })
+  .strict()
+  .refine((point) => point.date !== undefined || point.time !== undefined, "A story date needs a date or a time.");
+
+export const ltmStoryTimeSchema = z
+  .object({
+    start: ltmStoryTimePointSchema,
+    // Only when the piece spans a change of date or time.
+    end: ltmStoryTimePointSchema.optional(),
+    origin: ltmStoryTimeOriginSchema,
+    // The quote the date was read from (stated dates).
+    evidence: z.string().min(1).max(240).optional(),
+    // The piece text the date was read from.
+    sourceHash: ltmStoryTimeSourceHashSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.origin !== "stated" || (value.evidence !== undefined && value.sourceHash !== undefined),
+    "A date found in the chat text must keep its quote and the piece text it was read from.",
+  );
+
+// A forward time jump in a chat piece. amount null is a vague jump ("a few days"); unit null gives no length at all
+// ("some time later"). implied marks a new morning the text implies without saying so; it always counts one day.
+export const ltmStoryTimeJumpSchema = z
+  .object({
+    quote: z.string().min(1).max(240),
+    amount: z.number().int().min(1).max(1000).nullable(),
+    unit: ltmStoryTimeUnitSchema.nullable(),
+    implied: z.literal(true).optional(),
+  })
+  .strict()
+  .refine((jump) => jump.unit !== null || jump.amount === null, "A jump without a unit cannot have an amount.")
+  .refine((jump) => !jump.implied || (jump.amount === 1 && jump.unit === "day"), "An implied jump is always one day.");
+
+// What the story date scan found in one chat piece's text; checked again only when that text changes.
+export const ltmStoryTimeScanSchema = z
+  .object({
+    sourceHash: ltmStoryTimeSourceHashSchema,
+    jumps: z.array(ltmStoryTimeJumpSchema).max(100),
+  })
+  .strict();
+
 export type LtmNoteType = z.infer<typeof ltmNoteTypeSchema>;
 export type LtmStatus = z.infer<typeof ltmStatusSchema>;
 export type LtmEvidenceUnitStatus = z.infer<typeof ltmEvidenceUnitStatusSchema>;
@@ -335,3 +399,9 @@ export type LtmSourceProvenance = z.infer<typeof ltmSourceProvenanceSchema>;
 export type LtmIdentityMatchBasis = z.infer<typeof ltmIdentityMatchBasisSchema>;
 export type LtmClaimKind = z.infer<typeof ltmClaimKindSchema>;
 export type LtmInteropSource = z.infer<typeof ltmInteropSourceSchema>;
+export type LtmStoryTimeOrigin = z.infer<typeof ltmStoryTimeOriginSchema>;
+export type LtmStoryTimeUnit = z.infer<typeof ltmStoryTimeUnitSchema>;
+export type LtmStoryTimePoint = z.infer<typeof ltmStoryTimePointSchema>;
+export type LtmStoryTime = z.infer<typeof ltmStoryTimeSchema>;
+export type LtmStoryTimeJump = z.infer<typeof ltmStoryTimeJumpSchema>;
+export type LtmStoryTimeScan = z.infer<typeof ltmStoryTimeScanSchema>;

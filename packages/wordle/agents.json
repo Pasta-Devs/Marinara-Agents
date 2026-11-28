@@ -1,0 +1,19 @@
+[
+  {
+    "id": "wordle",
+    "name": "Wordle",
+    "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "conversation"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]

@@ -14,11 +14,13 @@
  * same reason: a hand-edited or imported type lands on the nearest legal value instead of throwing
  * the whole audience away.
  */
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { z } from "zod";
 import { slpFilledDefault } from "./slp-schema-defaults.js";
 
 import type { SlpCreatorFanArchetype } from "./slp-social.types.js";
 import type { SlurpSpendTier } from "./slp-population.js";
+import { slpHashFmix as hash } from "./slp-hash.js";
 
 const num = (min: number, max: number, fallback: number) =>
   z
@@ -282,21 +284,6 @@ export function slurpResolveFanType(
   return slurpFallbackFanType(types, member.archetype);
 }
 
-/** FNV-1a with the murmur3 finalizer, as the other Slurp rule modules use. */
-function hash(value: string): number {
-  let out = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 0x01000193);
-  }
-  out ^= out >>> 16;
-  out = Math.imul(out, 0x85ebca6b);
-  out ^= out >>> 13;
-  out = Math.imul(out, 0xc2b2ae35);
-  out ^= out >>> 16;
-  return out >>> 0;
-}
-
 const unit = (seed: string, salt: string): number => hash(`${salt}:${seed}`) / 0x100000000;
 
 /** Weighted pick by `share`, deterministic in the seed. Disabled types are not in the draw. */
@@ -419,7 +406,7 @@ export type SlurpFanMemorySubject = {
  */
 export function slurpFanMemoryForPrompt(
   tie: SlurpFanMemorySubject | null | undefined,
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): string | undefined {
   if (!tie) return undefined;
   const days = (value: string | null | undefined): number | null => {

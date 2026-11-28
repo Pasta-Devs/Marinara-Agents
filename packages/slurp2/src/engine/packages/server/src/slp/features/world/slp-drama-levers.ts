@@ -30,6 +30,7 @@ import { advanceSlurpDrama, loadDramaWorld } from "./slp-drama-service.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 import { SLP_STORYLINES_OFF, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLURP_DRAMA_LEVERS = ["start-drama", "end-drama"] as const;
 export type SlurpDramaLever = (typeof SLURP_DRAMA_LEVERS)[number];
 export const isSlurpDramaLever = (name: string): name is SlurpDramaLever =>
@@ -102,7 +103,7 @@ export async function previewSlurpDramaLever(
   db: DB,
   name: SlurpDramaLever,
   input: unknown,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<Pick<SlpActionPreview, "who" | "detail" | "when" | "notes" | "error" | "summary">> {
   const result = (fields: Partial<SlpActionPreview>) => ({
     who: [],
@@ -152,7 +153,7 @@ export async function runSlurpDramaLever(
   db: DB,
   name: SlurpDramaLever,
   input: unknown,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{ ok: true; value: { runId: string }; undo: SlurpDramaUndo | null } | Failure> {
   switch (name) {
     case "start-drama":
@@ -229,7 +230,7 @@ async function startDrama(
 }
 
 /** Take a start back: the drama ends; what already went out stays. False when it ended already. */
-export async function undoSlurpDramaLever(db: DB, undo: SlurpDramaUndo, at = new Date()): Promise<boolean> {
+export async function undoSlurpDramaLever(db: DB, undo: SlurpDramaUndo, at = slurpWorldNow()): Promise<boolean> {
   const ended = await mutateSlurpDramaState(db, (current) => {
     const next = slpEndDramaRun(current.state, undo.runId, at);
     return next ? { stored: { ...current, state: next }, result: true } : null;

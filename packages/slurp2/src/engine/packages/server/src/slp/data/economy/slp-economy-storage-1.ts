@@ -23,6 +23,7 @@ import { mapAccount, mapSubscription } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createEconomyStorage1(context: SlurpStorageContext) {
   const {
     db,
@@ -86,7 +87,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
         // `now()` returns an ISO string. Every use below wants a Date — `at.getTime()`, `spend`,
         // and `subscriptionPaidThrough` — so the string made the first subscribe for a viewer fail
         // with "toISOString is not a function" and return a 500.
-        const at = new Date();
+        const at = slurpWorldNow();
         // The Creator's own price, with no event applied. Renewing an existing subscription below
         // charges exactly this, as it did before platform events could move a price at all.
         const basePrice = settings.walletEnabled ? await this.getCreatorSubscriptionPrice(creatorAccountId) : 0;
@@ -322,7 +323,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
       // A removed Creator has nothing left to give access to, so Cancel ends it now. Waiting for the
       // paid week left an "Unavailable Creator" whose Cancel did nothing (#28).
       const gone = !expire && current && !(await this.getNoodlerAccountById(creatorAccountId, { includeHidden: true }));
-      if (!expire && !gone && current && Date.parse(current.paidThroughAt) > Date.now()) {
+      if (!expire && !gone && current && Date.parse(current.paidThroughAt) > slurpWorldNowMs()) {
         if (current.cancelled) return;
         await writeWallet(viewerAccountId, {
           ...wallet,

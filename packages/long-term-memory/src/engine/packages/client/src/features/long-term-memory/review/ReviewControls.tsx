@@ -44,30 +44,26 @@ export function ReviewProgress({
   pending,
   ready,
   blocked,
-  reviewed,
-  remaining,
 }: {
   sources: number;
   pending: number;
   ready: number;
   blocked: number;
-  reviewed: number;
-  remaining: number;
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   return (
     <span data-ltm-review-summary data-ltm-review-progress className="text-xs text-[var(--muted-foreground)]">
-      {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
-        sources,
-        source:
-          selectLtmPluralForm(locale, sources) === "one"
-            ? localizeUi("ui.longTermMemory.reviewqueue.source")
-            : localizeUi("ui.longTermMemory.reviewqueue.sources"),
-        pending,
-        ready,
-        blocked,
-      })}
-      {localizeUi("ui.longTermMemory.reviewqueue.reviewProgress", { reviewed, remaining })}
+      {localizeUi(
+        selectLtmPluralForm(locale, sources) === "one"
+          ? "ui.longTermMemory.reviewqueue.reviewSummaryOne"
+          : "ui.longTermMemory.reviewqueue.reviewSummaryOther",
+        {
+          sources,
+          pending,
+          ready,
+        },
+      )}
+      {blocked ? localizeUi("ui.longTermMemory.reviewqueue.reviewSummaryBlocked", { blocked }) : null}
     </span>
   );
 }

@@ -3,10 +3,14 @@
 // which plans or opens the repair chapter), the chapter being read (Continue), the next main chapter ("Who walks with
 // you this chapter?": the server offers two Leads, the one least recently with her and the one with the ripest
 // conflict; the planner adds a Foil), each love interest's route (his next free chapter, open from an affection level
-// and shut while a rupture is open), each one's affection (past level 10, prestige and the extra story it unlocks:
-// #2025), and every chapter so far as a path of its scenes.
-// Planning a chapter is one model call with Cancel while it runs, with the story so far to read meanwhile (#2040); a
-// chapter already planned opens with none.
+// and shut while a rupture is open, with his side of a big moment waiting under it: #2155), each one's affection (past
+// level 10, prestige and the extra story it unlocks: #2025), and every chapter so far as a path of its scenes.
+// #2156: a rupture he holds is his grievance with her: the banner and his route say how much space he still needs
+// before Make it right opens, the Lead dialog says why he can't lead, and his affection shows as paused. Beside each
+// one's route, "I'm upset with them" (asked first, then POST /routes/:li/upset; tapping it again takes it back).
+// Planning a chapter is one model call with Cancel while it runs, with something to do meanwhile: the story so far to
+// read while an arc is planned (#2040), the personality quiz while any other chapter is (#2174). A chapter already
+// planned opens with none, and so does his side, which is written with no model call.
 // ──────────────────────────────────────────────
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +19,7 @@ import {
   BookHeart,
   BookOpen,
   CalendarHeart,
+  Check,
   Eye,
   Feather,
   Heart,
@@ -33,12 +38,13 @@ import {
 } from "lucide-react";
 import { otomeErrorCode, useOtomeApi, type RequestBody } from "../../api";
 import { Avatar } from "../../components/Avatar";
-import { ChapterPaintCost } from "../../components/CostHint";
+import { ChapterPaintCost, CostHint, usePaintsByItself } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { Dialog } from "../../components/Dialog";
 import { useCharacterOptions } from "../../hooks/use-engine-resources";
 import { cancelStoryWork, runPath, storyQueryKey, useChapter, useStory } from "../../hooks/use-reader";
-import { accentOf } from "../../lib/accent";
+import { runQueryKey, useRun } from "../../hooks/use-run";
+import { accentOf, nameAccent } from "../../lib/accent";
 import { emptyPronouns, resolvePronouns, type PronounChoice } from "../setup/draft";
 import { PronounPicker } from "../setup/parts";
 import { ARCHETYPES, ARCHETYPE_IDS } from "../../shared/archetypes";
@@ -51,14 +57,21 @@ import type {
   RouteEntry,
   RunLiView,
   RunView,
+  BondEntry,
   StoryChapterEntry,
   StoryView,
 } from "../../shared/api-types";
-import { stageRow, type StageName } from "../../shared/arcs";
-import { PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
-import { chapterEyebrowKey } from "../reader/ReaderControls";
-
-const MAX_LEVEL = 10;
+import { hisSideLiOf, stageRow, type HisSideEntry, type StageName } from "../../shared/arcs";
+import {
+  BOND_MAX_LEVEL,
+  GRIEVANCE_CLEARED_AFFECTION,
+  MAX_LEVEL,
+  PRESTIGE_POINTS_PER_STORY,
+} from "../../shared/economy";
+import { BOND_RANKS, bondStepOf } from "../../shared/bond";
+import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
+import { Friends } from "./Friends";
+import { PersonalityQuiz } from "./PersonalityQuiz";
 
 const STATE_KEYS: Record<StoryChapterEntry["state"], string> = {
   unplanned: "ui.otomeForge.story.stateUnplanned",
@@ -98,6 +111,12 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const [choosing, setChoosing] = useState(false);
   const [arcPlan, setArcPlan] = useState<ArcTarget | null>(null);
   const arcPlanning = usePlanChapter(runKey);
+  // #2155: his side is written with no model call, so its Read shows the wait and the dialog opens only to say why it
+  // did not open; once open it stays through a Retry (which then shows the wait in it), so focus never drops.
+  const [sideDialog, setSideDialog] = useState<ArcTarget | null>(null);
+  if (arcPlan?.kind === "side" && sideDialog !== arcPlan && (arcPlanning.failed || arcPlanning.stopped)) {
+    setSideDialog(arcPlan);
+  }
 
   const head = (
     <div className="of-page-head">
@@ -138,22 +157,34 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const routes = Array.isArray(story.data.routes) ? story.data.routes : [];
   const repairs = Array.isArray(story.data.repairs) ? story.data.repairs : [];
   const prestige = Array.isArray(story.data.prestige) ? story.data.prestige : [];
-  // A main chapter in progress is the one to continue; a route or repair chapter has its own card.
+  // 0.23.0: each love interest's bond rank whose story is waiting (POST /runs/:run/bond/:li opens it).
+  const bond = Array.isArray(story.data.bond) ? story.data.bond : [];
+  // #2156: each love interest whose grievance with her stands (his repair carries the space it waits for).
+  const held = new Set(repairs.flatMap((repair) => (repair.space ? [repair.li] : [])));
+  const sides = Array.isArray(story.data.hisSides) ? story.data.hisSides : [];
+  // A main chapter in progress is the one to continue; a route or repair chapter, and his side, has its own card.
   const reading =
     chapters.find((chapter) => chapter.state === "in-progress" && chapter.kind === "main") ??
     chapters.find(
       (chapter) =>
         chapter.state === "in-progress" &&
         !routes.some((route) => route.next?.key === chapter.key) &&
-        !repairs.some((repair) => repair.key === chapter.key),
+        !repairs.some((repair) => repair.key === chapter.key) &&
+        !hisSideLiOf(chapter.key),
     ) ??
     null;
   /** Opens a route or repair chapter that is already planned; plans it (one model call) otherwise. */
+  // The ending and a friend's first make-up story have no key until planned: the planning id is never empty.
   const planArc = (target: ArcTarget) =>
-    void arcPlanning.plan(target.key, arcPath(target), {}, (key) => {
-      setArcPlan(null);
-      onOpenChapter(key);
-    });
+    void arcPlanning.plan(
+      target.key || `${target.kind}:${target.li}`,
+      arcPath(target),
+      target.kind === "side" ? { arc: target.arc } : {},
+      (key) => {
+        setArcPlan(null);
+        onOpenChapter(key);
+      },
+    );
   const openArc = (target: ArcTarget) => {
     const planned = chapters.find((chapter) => chapter.key === target.key);
     if (planned) onOpenChapter(planned.key);
@@ -180,15 +211,25 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             chapter: Math.min(story.data.arc.read + 1, story.data.arc.endsAt - story.data.arc.from + 1),
             total: story.data.arc.endsAt - story.data.arc.from + 1,
             label: story.data.arc.label,
-          })}
-          {/* #1983 M4: a breathing arc says what it is. */}
+          })}{" "}
+          {/* #1983 M4: a breathing arc says what it is (after a space, so the line wraps before it, centred). */}
           {story.data.arc.kind === "breathing" ? (
             <span className="of-badge of-badge--soft of-story-arc-kind">{t("ui.otomeForge.story.arcQuiet")}</span>
           ) : null}
         </p>
       ) : null}
       {reading ? <ContinueCard runKey={runKey} entry={reading} view={view} onOpen={onOpenChapter} /> : null}
-      {story.data.arcChoice && !reading ? <ArcChoiceCard runKey={runKey} options={story.data.arcChoice} /> : null}
+      {story.data.ending ? (
+        <EndingCard
+          ending={story.data.ending}
+          chapters={chapters}
+          reading={!!reading}
+          onEnd={() => openArc({ kind: "ending", li: "", key: "" })}
+        />
+      ) : null}
+      {story.data.arcChoice && !reading ? (
+        <ArcChoiceCard runKey={runKey} options={story.data.arcChoice} images={view.world.images} />
+      ) : null}
       {next ? (
         <section className="of-section of-glass of-story-next" aria-labelledby="of-story-next">
           <p className="of-eyebrow">{t("ui.otomeForge.story.chapterNumber", { number: next.number })}</p>
@@ -207,7 +248,9 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
       ) : null}
       {routes.length ? (
         <Routes
+          runKey={runKey}
           routes={routes}
+          repairs={repairs}
           view={view}
           chapters={chapters}
           onOpen={(route) => route.next && openArc({ kind: "route", li: route.li, key: route.next.key })}
@@ -215,16 +258,33 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             const repair = repairs.find((item) => item.li === li);
             if (repair) openArc({ kind: "repair", li, key: repair.key });
           }}
+          sides={sides}
+          bondStories={bond}
+          planning={arcPlanning.planning}
+          onReadSide={(entry) => openArc({ kind: "side", li: entry.li, key: entry.key, arc: entry.arc })}
+          ended={!!story.data.ending?.ended}
         />
       ) : null}
       <Affection
         lis={view.lis}
+        held={held}
         images={view.world.images}
         prestige={prestige}
         onPrestige={(entry) => openArc({ kind: "prestige", li: entry.li, key: entry.key })}
+        bondStories={bond}
+        onBond={(entry) => openArc({ kind: "bond", li: entry.li, key: entry.key })}
+      />
+      <Friends
+        runKey={runKey}
+        view={view}
+        block={story.data.friendBlock}
+        entries={story.data.friendStories ?? []}
+        ended={!!story.data.ending?.ended}
+        onOpenArc={(target) => openArc(target)}
+        onOpenChapter={onOpenChapter}
       />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
-      {arcPlan ? (
+      {arcPlan && (arcPlan.kind !== "side" || sideDialog === arcPlan) ? (
         <ArcPlanDialog
           view={view}
           target={arcPlan}
@@ -237,6 +297,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         <LeadDialog
           runKey={runKey}
           view={view}
+          held={held}
           next={next}
           opensArc={!story.data.arc}
           onClose={() => setChoosing(false)}
@@ -275,9 +336,9 @@ function ContinueCard({
       <div className="of-chapter-head">
         {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={46} /> : null}
         <div className="of-chapter-heading">
-          <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
+          <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead, view.friends)}</p>
           <h2 id="of-story-continue" className="of-chapter-title">
-            {entry.title || t("ui.otomeForge.story.untitled")}
+            {chapterTitle(t, entry, [...view.lis, ...(view.friends ?? [])])}
           </h2>
         </div>
       </div>
@@ -290,8 +351,21 @@ function ContinueCard({
   );
 }
 
-function eyebrow(t: ReturnType<typeof useTranslation>["t"], entry: StoryChapterEntry, lead: RunLiView | null): string {
-  const [key, values] = chapterEyebrowKey({ kind: entry.kind, number: mainNumber(entry.key) });
+function eyebrow(
+  t: ReturnType<typeof useTranslation>["t"],
+  entry: StoryChapterEntry,
+  lead: RunLiView | null,
+  people: ReadonlyArray<Pick<RunLiView, "id" | "name">> = [],
+): string {
+  const [key, values] = chapterEyebrowKey(
+    {
+      kind: entry.kind,
+      number: mainNumber(entry.key),
+      ...(entry.friendStory ? { friendStory: entry.friendStory } : {}),
+      ...(entry.ending ? { ending: entry.ending } : {}),
+    },
+    people,
+  );
   const kind = t(key, values);
   return lead ? t("ui.otomeForge.story.withLead", { chapter: kind, name: lead.name }) : kind;
 }
@@ -348,19 +422,28 @@ function NodePath({
 }
 
 /**
- * Each love interest's affection level (1–10, it only rises), as ten hearts. At level 10 (#2025), prestige: three pips,
- * progress toward the next one, and a way to the extra story three of them unlock, while it waits to be written.
+ * Each love interest's affection level (1–20, it only rises), as ten outer hearts for levels 1-10 and an inner heart in
+ * each for a bond rank once his finale is read (0.23.0). At the last rank (#2025), prestige: three pips, progress toward
+ * the next one, and a way to the extra story three of them unlock, while it waits to be written.
  */
 function Affection({
   lis,
+  held,
   images,
   prestige,
   onPrestige,
+  bondStories,
+  onBond,
 }: {
   lis: RunLiView[];
+  /** #2156: whose affection is paused while their grievance with her stands. */
+  held: ReadonlySet<string>;
   images: RunView["world"]["images"];
   prestige: PrestigeEntry[];
   onPrestige: (entry: PrestigeEntry) => void;
+  /** 0.23.0: each love interest's bond rank whose story waits. */
+  bondStories: BondEntry[];
+  onBond: (entry: BondEntry) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -371,31 +454,55 @@ function Affection({
       <ul className="of-affection-list">
         {lis.map((li) => {
           const accent = accentOf(li);
-          const level = Math.max(1, Math.min(MAX_LEVEL, li.level));
+          // 0.23.0: ten outer hearts for levels 1-10, and an inner heart in each for a bond rank once his finale is
+          // read (rank 11 is the first inner heart), so the row shows both ladders at a glance.
+          const level = Math.max(1, Math.min(BOND_MAX_LEVEL, li.level));
+          const outer = Math.min(MAX_LEVEL, level);
+          const bond = li.bond;
+          const inner = bond ? Math.max(0, Math.min(BOND_RANKS.length, bond.level - MAX_LEVEL)) : 0;
           return (
             <li key={li.id} className="of-affection" style={{ "--of-li-accent": accent } as CSSProperties}>
               <Avatar name={li.name} url={li.portrait} accent={accent} size={38} />
-              <span className="of-affection-name">{li.name}</span>
+              {/* Name and level share one line, so a long name never narrows the hearts. The level is his real one,
+                  11 to 20 past his finale, not the ten outer hearts (2026-11-19: it read "Level 10 · named"). */}
+              <span className="of-affection-head">
+                <span className="of-affection-name">{li.name}</span>
+                <span className="of-affection-level" aria-hidden="true">
+                  {t("ui.otomeForge.story.level", { level })}
+                </span>
+              </span>
               <span
                 className="of-hearts"
                 role="img"
-                aria-label={t("ui.otomeForge.story.levelOf", { name: li.name, level, max: MAX_LEVEL })}
+                aria-label={
+                  bond
+                    ? t("ui.otomeForge.story.levelOfBond", {
+                        name: li.name,
+                        level: outer,
+                        max: MAX_LEVEL,
+                        bond: inner,
+                        bondMax: BOND_RANKS.length,
+                      })
+                    : t("ui.otomeForge.story.levelOf", { name: li.name, level: outer, max: MAX_LEVEL })
+                }
               >
                 {Array.from({ length: MAX_LEVEL }, (_, index) => (
-                  <Heart
-                    key={index}
-                    size={11}
-                    strokeWidth={2}
-                    fill={index < level ? "currentColor" : "none"}
-                    data-on={index < level}
-                    aria-hidden="true"
-                  />
+                  <span key={index} className="of-heart" data-on={index < outer} aria-hidden="true">
+                    <Heart size={16} strokeWidth={1.8} fill={index < outer ? "currentColor" : "none"} />
+                    {bond ? (
+                      <Heart
+                        className="of-heart-inner"
+                        size={7}
+                        strokeWidth={2.4}
+                        // A reached rank shows the accent through its outline; one still to come is solid ink.
+                        fill={index < inner ? "none" : "currentColor"}
+                        data-inner-on={index < inner}
+                      />
+                    ) : null}
+                  </span>
                 ))}
               </span>
-              <span className="of-affection-level" aria-hidden="true">
-                {t("ui.otomeForge.story.level", { level })}
-              </span>
-              {level === MAX_LEVEL && li.prestige ? (
+              {level === BOND_MAX_LEVEL && li.prestige ? (
                 <span
                   className="of-affection-progress"
                   role="meter"
@@ -422,7 +529,11 @@ function Affection({
                   aria-valuemax={li.affectionProgress.required}
                   aria-valuenow={li.affectionProgress.current}
                   aria-valuetext={
-                    level === MAX_LEVEL
+                    // The server reports a finished ladder as a full meter (600 of 600 at level 10 with the gate shut,
+                    // 1,100 of 1,100 at the last rank); level 10 with his finale read is 0 of 650 toward rank 11.
+                    // A full bar with bond ranks open is not the end: the rank is reached and its story waits, so nine
+                    // ranks can remain behind a meter that reads as finished (Dottore, #2254).
+                    li.affectionProgress.current >= li.affectionProgress.required && !li.bond
                       ? t("ui.otomeForge.story.affectionProgressMax")
                       : t("ui.otomeForge.story.affectionProgressValue", li.affectionProgress)
                   }
@@ -430,7 +541,23 @@ function Affection({
                   {t("ui.otomeForge.story.affectionProgressCount", li.affectionProgress)}
                 </span>
               ) : null}
-              {level === MAX_LEVEL && li.prestige ? (
+              {held.has(li.id) ? (
+                <span className="of-affection-paused">{t("ui.otomeForge.story.affectionPaused")}</span>
+              ) : null}
+              {li.bond && bondStories.some((entry) => entry.li === li.id) ? (
+                <button
+                  type="button"
+                  className="of-button of-button--primary of-button--small of-bond-open"
+                  onClick={() => {
+                    const entry = bondStories.find((candidate) => candidate.li === li.id);
+                    if (entry) onBond(entry);
+                  }}
+                >
+                  <BookHeart size={14} strokeWidth={2} aria-hidden="true" />
+                  {t("ui.otomeForge.story.bondOpen", { rank: li.bond.name })}
+                </button>
+              ) : null}
+              {level === BOND_MAX_LEVEL && li.prestige ? (
                 <PrestigeRow
                   li={li}
                   images={images}
@@ -443,9 +570,7 @@ function Affection({
         })}
       </ul>
       <p className="of-hint">{t("ui.otomeForge.story.affectionHint")}</p>
-      {lis.some((li) => li.level >= MAX_LEVEL && li.prestige) ? (
-        <p className="of-hint">{t("ui.otomeForge.story.prestigeHint")}</p>
-      ) : null}
+      {lis.some((li) => li.prestige) ? <p className="of-hint">{t("ui.otomeForge.story.prestigeHint")}</p> : null}
     </section>
   );
 }
@@ -518,7 +643,7 @@ function ChapterList({
       <ol className="of-chapters">
         {chapters.map((entry, index) => {
           const lead = view.lis.find((li) => li.id === (entry.li ?? entry.lead)) ?? null;
-          const title = entry.title || t("ui.otomeForge.story.untitled");
+          const title = chapterTitle(t, entry, [...view.lis, ...(view.friends ?? [])]);
           const action =
             entry.state === "done"
               ? { key: "ui.otomeForge.story.replay", Icon: Repeat, primary: false }
@@ -552,7 +677,7 @@ function ChapterList({
                 <div className="of-chapter-head">
                   {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={34} /> : null}
                   <div className="of-chapter-heading">
-                    <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
+                    <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead, view.friends)}</p>
                     <h3 className="of-chapter-title">{title}</h3>
                   </div>
                   <span className="of-badge of-badge--soft">{t(STATE_KEYS[entry.state])}</span>
@@ -585,6 +710,8 @@ function ChapterList({
 interface LeadDialogProps {
   runKey: string;
   view: RunView;
+  /** #2156: who can't lead while their grievance with her stands (the server leaves them out of the candidates). */
+  held: ReadonlySet<string>;
   next: NonNullable<StoryView["next"]>;
   /** No arc covers the next chapter yet (the story's first): the server plans the arc before the chapter. */
   opensArc: boolean;
@@ -596,7 +723,7 @@ interface LeadDialogProps {
  * "Who walks with you this chapter?": picking a Lead plans the chapter (one model call, two when its arc is planned
  * first), with Cancel while it runs.
  */
-function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDialogProps) {
+function LeadDialog({ runKey, view, held, next, opensArc, onClose, onPlanned }: LeadDialogProps) {
   const { t } = useTranslation();
   const actionRef = useRef<HTMLButtonElement>(null);
   const { planning, failed, stopped, plan: planChapter, cancel } = usePlanChapter(runKey);
@@ -642,7 +769,8 @@ function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDi
             </p>
             <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
           </div>
-          <StorySoFar runKey={runKey} />
+          {/* #2174: the story so far while an arc is planned too; otherwise the personality quiz. */}
+          {opensArc ? <StorySoFar runKey={runKey} /> : <PersonalityQuiz runKey={runKey} lis={view.lis} />}
         </>
       ) : failed ? (
         <DeclinedPanel error={failed.error} run={view} job="structured" onRetry={() => void plan(failed.id)} />
@@ -672,6 +800,14 @@ function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDi
               );
             })}
           </ul>
+          {view.lis
+            .filter((li) => held.has(li.id) && !candidates.some((candidate) => candidate.li.id === li.id))
+            .map((li) => (
+              <p key={li.id} className="of-hint of-lead-held">
+                <HeartCrack size={13} strokeWidth={2.2} aria-hidden="true" />
+                <span>{t("ui.otomeForge.story.leadHeld", pronounValues(li))}</span>
+              </p>
+            ))}
           <p className="of-cost">
             <Feather size={14} strokeWidth={2} aria-hidden="true" />
             <span>
@@ -695,7 +831,8 @@ function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDi
 
 /**
  * "What happened so far…" (#2040): the story's running summary (the memory's saved overview, as written) to read while
- * a chapter is planned. Read afresh on each wait and never kept; nothing shows before the first summary, or when it
+ * an arc is planned (#2174: the next arc, or a chapter that opens one; any other chapter's wait has the personality
+ * quiz). Read afresh on each wait and never kept; nothing shows before the first summary, or when it
  * cannot be read. It scrolls on its own (a named, tabbable region, as the backlog's list is) under the planning status,
  * outside its live region, so the long text is never announced as status.
  */
@@ -733,7 +870,102 @@ function StorySoFar({ runKey }: { runKey: string }) {
  * The end of an arc (#1983 M2/M3): three ways on, each explained, and the cost before the tap. Breathing room and the
  * story going on plan the next arc; someone new first writes them, then the arc that brings them in.
  */
-function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options: ArcChoice[]; castFull: boolean } }) {
+/**
+ * #2459: End the Story. Once every love interest stands at level 20 it is offered (never forced); its confirmation says
+ * what follows: a finale that settles what is still open and ends happily, then an epilogue some time later, after
+ * which the story only opens to look at. Once the finale is read, the epilogue waits here; once that is read, The End.
+ */
+function EndingCard({
+  ending,
+  chapters,
+  reading,
+  onEnd,
+}: {
+  ending: NonNullable<StoryView["ending"]>;
+  chapters: readonly StoryChapterEntry[];
+  reading: boolean;
+  onEnd: () => void;
+}) {
+  const { t } = useTranslation();
+  const [asking, setAsking] = useState(false);
+  const finaleDone = !!ending.finale && chapters.some((entry) => entry.key === ending.finale && entry.state === "done");
+  if (ending.ended) {
+    return (
+      <section className="of-section of-glass of-story-ending" aria-labelledby="of-story-ending">
+        <h2 id="of-story-ending" className="of-section-title">
+          {t("ui.otomeForge.ending.endTitle")}
+        </h2>
+        <p className="of-body">{t("ui.otomeForge.ending.endText")}</p>
+      </section>
+    );
+  }
+  if (finaleDone && !ending.epilogue && !reading) {
+    return (
+      <section className="of-section of-glass of-story-ending" aria-labelledby="of-story-ending">
+        <h2 id="of-story-ending" className="of-section-title">
+          {t("ui.otomeForge.ending.epilogueTitle")}
+        </h2>
+        <p className="of-body">{t("ui.otomeForge.ending.epilogueText")}</p>
+        <button type="button" className="of-button of-button--primary" onClick={onEnd}>
+          <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.ending.epilogueOpen")}
+        </button>
+      </section>
+    );
+  }
+  if (!ending.offered) return null;
+  return (
+    <section className="of-section of-glass of-story-ending" aria-labelledby="of-story-ending">
+      <h2 id="of-story-ending" className="of-section-title">
+        {t("ui.otomeForge.ending.offerTitle")}
+      </h2>
+      <p className="of-body">{t("ui.otomeForge.ending.offerText")}</p>
+      {reading ? (
+        <p className="of-hint">{t("ui.otomeForge.ending.offerReading")}</p>
+      ) : (
+        <button type="button" className="of-button of-button--quiet of-glass" onClick={() => setAsking(true)}>
+          <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.ending.offerButton")}
+        </button>
+      )}
+      {asking ? (
+        <Dialog
+          title={t("ui.otomeForge.ending.confirmTitle")}
+          onClose={() => setAsking(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="of-button of-button--primary"
+                onClick={() => {
+                  setAsking(false);
+                  onEnd();
+                }}
+              >
+                {t("ui.otomeForge.ending.confirm")}
+              </button>
+              <button type="button" className="of-button of-button--quiet of-glass" onClick={() => setAsking(false)}>
+                {t("ui.otomeForge.ending.keepPlaying")}
+              </button>
+            </>
+          }
+        >
+          <p className="of-body">{t("ui.otomeForge.ending.confirmText")}</p>
+        </Dialog>
+      ) : null}
+    </section>
+  );
+}
+
+function ArcChoiceCard({
+  runKey,
+  options,
+  images,
+}: {
+  runKey: string;
+  options: { options: ArcChoice[]; castFull: boolean };
+  images: RunView["world"]["images"];
+}) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -747,6 +979,9 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
     try {
       await otome.post(`${runPath(runKey)}/arcs`, { choice, ...(newcomer ? { newcomer } : {}) });
       void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+      // Someone new gets their paint step on the run's next read (S/setup/forge.ts forgeCast), painting by itself or
+      // waiting in Your cast.
+      if (newcomer) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
       setArriving(false);
     } catch (error) {
       setFailed(error);
@@ -794,10 +1029,17 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
           </button>
         ))}
       </div>
-      {busy ? <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p> : null}
+      {/* Someone new's wait shows these in their dialog, never a second copy behind its scrim. */}
+      {busy && busy !== "newcomer" ? (
+        <>
+          <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p>
+          <StorySoFar runKey={runKey} />
+        </>
+      ) : null}
       {arriving ? (
         <NewcomerDialog
           runKey={runKey}
+          images={images}
           busy={busy === "newcomer"}
           onClose={() => setArriving(false)}
           onArrive={(newcomer) => void plan("newcomer", newcomer)}
@@ -807,20 +1049,29 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
   );
 }
 
-/** Who arrives (#1983 M3): one of the player's cards, or someone invented. */
+/**
+ * Who arrives (#1983 M3): one of the player's cards, or someone invented. While they and their arc are written, the
+ * dialog shows the arc's planning status and what happened so far (#2040) in place of the choices.
+ */
 function NewcomerDialog({
   runKey,
+  images,
   busy,
   onClose,
   onArrive,
 }: {
   runKey: string;
+  images: RunView["world"]["images"];
   busy: boolean;
   onClose: () => void;
   onArrive: (newcomer: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
   const cards = useCharacterOptions();
+  // #2475: a card a love interest or friend already has is not offered (the server refuses it too), as in Add a friend.
+  const run = useRun(runKey).data;
+  const linked = new Set([...(run?.lis ?? []), ...(run?.friends ?? [])].flatMap((person) => person.cardId ?? []));
+  const offered = cards.items.filter((card) => !linked.has(card.id));
   const [mode, setMode] = useState<"card" | "archetype">("card");
   const [cardId, setCardId] = useState("");
   const [name, setName] = useState("");
@@ -828,7 +1079,7 @@ function NewcomerDialog({
   // A card carries no pronouns of its own: the player picks them, as setup asks (#1985 review).
   const [pronouns, setPronouns] = useState<PronounChoice>(emptyPronouns());
   const resolved = resolvePronouns(pronouns);
-  void runKey;
+  const byItself = usePaintsByItself(images);
   return (
     <Dialog
       title={t("ui.otomeForge.story.newcomerTitle")}
@@ -860,52 +1111,86 @@ function NewcomerDialog({
         </>
       }
     >
-      <p className="of-hint">{t("ui.otomeForge.story.newcomerCost")}</p>
-      <fieldset className="of-field">
-        <label>
-          <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
-          {t("ui.otomeForge.story.newcomerCard")}
-        </label>
-        <label>
-          <input type="radio" checked={mode === "archetype"} onChange={() => setMode("archetype")} />{" "}
-          {t("ui.otomeForge.story.newcomerScratch")}
-        </label>
-      </fieldset>
-      <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
-      {mode === "card" ? (
-        <ul className="of-cast-picks">
-          {cards.items.map((card) => (
-            <li key={card.id}>
-              <button
-                type="button"
-                className="of-cast-pick of-glass"
-                aria-pressed={cardId === card.id}
-                data-chosen={cardId === card.id}
-                onClick={() => setCardId(card.id)}
-              >
-                <Avatar name={card.name} url={card.avatarUrl} accent="var(--of-champagne)" size={32} />
-                <span>{card.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {busy ? (
+        <>
+          <p className="of-hint of-planning" role="status">
+            {t("ui.otomeForge.story.arcPlanning")}
+          </p>
+          <StorySoFar runKey={runKey} />
+        </>
       ) : (
         <>
-          <label className="of-field">
-            <span>{t("ui.otomeForge.story.newcomerName")}</span>
-            <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
-            <span className="of-hint">{t("ui.otomeForge.story.newcomerNameHint")}</span>
-          </label>
-          <label className="of-field">
-            <span>{t("ui.otomeForge.story.newcomerArchetype")}</span>
-            <select value={archetype} onChange={(event) => setArchetype(event.target.value as typeof archetype)}>
-              {ARCHETYPE_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {ARCHETYPES[id].name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p className="of-hint">{t("ui.otomeForge.story.newcomerCost")}</p>
+          {images.connectionId ? (
+            <CostHint
+              images={1}
+              note={t(byItself ? "ui.otomeForge.story.newcomerLookAutoNote" : "ui.otomeForge.story.newcomerLookNote")}
+            />
+          ) : null}
+          <fieldset className="of-field">
+            <label>
+              <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
+              {t("ui.otomeForge.story.newcomerCard")}
+            </label>
+            <label>
+              <input type="radio" checked={mode === "archetype"} onChange={() => setMode("archetype")} />{" "}
+              {t("ui.otomeForge.story.newcomerScratch")}
+            </label>
+          </fieldset>
+          <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
+          {mode === "card" ? (
+            // Setup's card tiles (CastStep): a grid with a check on the one chosen. The of-cast-pick classes this used
+            // had no styles, so the list fell apart and a tap showed nothing.
+            <ul className="of-tiles of-tiles--scroll" aria-label={t("ui.otomeForge.story.newcomerCard")}>
+              {offered.map((card) => {
+                const picked = cardId === card.id;
+                return (
+                  <li key={card.id}>
+                    <button
+                      type="button"
+                      className="of-tile of-glass"
+                      data-checked={picked}
+                      aria-pressed={picked}
+                      title={card.name}
+                      onClick={() => setCardId(card.id)}
+                    >
+                      <Avatar
+                        name={card.name}
+                        url={card.avatarUrl}
+                        crop={card.avatarCrop}
+                        accent={nameAccent(card.name)}
+                      />
+                      <span className="of-tile-name">{card.name}</span>
+                      {card.title ? <span className="of-tile-title">{card.title}</span> : null}
+                      {picked ? (
+                        <span className="of-tile-check" aria-hidden="true">
+                          <Check size={12} strokeWidth={3} />
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <>
+              <label className="of-field">
+                <span>{t("ui.otomeForge.story.newcomerName")}</span>
+                <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+                <span className="of-hint">{t("ui.otomeForge.story.newcomerNameHint")}</span>
+              </label>
+              <label className="of-field">
+                <span>{t("ui.otomeForge.story.newcomerArchetype")}</span>
+                <select value={archetype} onChange={(event) => setArchetype(event.target.value as typeof archetype)}>
+                  {ARCHETYPE_IDS.map((id) => (
+                    <option key={id} value={id}>
+                      {ARCHETYPES[id].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
         </>
       )}
     </Dialog>
@@ -983,18 +1268,30 @@ function useDialogFocus(
 
 // ── Arcs: routes, ruptures and repairs ──
 
-/** A route or repair chapter, or an extra story (#2025), to open, planning it first when it has no plan yet. */
-interface ArcTarget {
-  kind: "route" | "repair" | "prestige";
-  li: string;
-  key: string;
-}
+/**
+ * A route or repair chapter, an extra story (#2025) or his side of story arc `arc` (#2155), to open, planning it first
+ * when it has no plan yet.
+ */
+type ArcTarget =
+  /** #2458: a friend's rank or make-up story (`li` is the friend); #2459: the ending's next step (`li` and `key` ""). */
+  | { kind: "route" | "repair" | "prestige" | "bond" | "rank" | "mend" | "ending"; li: string; key: string }
+  /** His side of story arc `arc` (#2155): the route always needs the arc it belongs to. */
+  | { kind: "side"; li: string; key: string; arc: number };
 
-/** POST /runs/:run/routes/:li/next, /repairs/:li or /prestige/:li. */
+const ARC_PATHS = { repair: "repairs", prestige: "prestige", bond: "bond", side: "sides" } as const;
+
+/**
+ * POST /runs/:run/routes/:li/next, /repairs/:li, /prestige/:li, /bond/:li or /sides/:li; #2458 /friends/:li/rank or
+ * /friends/:li/mend; #2459 /ending.
+ */
 const arcPath = (target: ArcTarget) =>
   target.kind === "route"
     ? `/routes/${encodeURIComponent(target.li)}/next`
-    : `/${target.kind === "prestige" ? "prestige" : "repairs"}/${encodeURIComponent(target.li)}`;
+    : target.kind === "rank" || target.kind === "mend"
+      ? `/friends/${encodeURIComponent(target.li)}/${target.kind}`
+      : target.kind === "ending"
+        ? "/ending"
+        : `/${ARC_PATHS[target.kind]}/${encodeURIComponent(target.li)}`;
 
 const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: string; locked: string }> = {
   route: {
@@ -1012,10 +1309,38 @@ const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: stri
     planning: "ui.otomeForge.arcs.planningPrestige",
     locked: "ui.otomeForge.story.prestigeLocked",
   },
+  // 0.23.0: a bond rank's story, planned on the tap like the others.
+  bond: {
+    title: "ui.otomeForge.story.bondNew",
+    planning: "ui.otomeForge.arcs.planningBond",
+    locked: "ui.otomeForge.arcs.bondLocked",
+  },
+  side: {
+    title: "ui.otomeForge.arcs.sideTitle",
+    planning: "ui.otomeForge.arcs.planningSide",
+    locked: "ui.otomeForge.arcs.sideLocked",
+  },
+  // #2458: a friend's stories, planned on the tap like the others.
+  rank: {
+    title: "ui.otomeForge.friends.rankDialogTitle",
+    planning: "ui.otomeForge.friends.planningRank",
+    locked: "ui.otomeForge.friends.lockedNow",
+  },
+  mend: {
+    title: "ui.otomeForge.friends.mendDialogTitle",
+    planning: "ui.otomeForge.friends.planningMend",
+    locked: "ui.otomeForge.friends.lockedNow",
+  },
+  // #2459: the finale, then the epilogue.
+  ending: {
+    title: "ui.otomeForge.ending.dialogTitle",
+    planning: "ui.otomeForge.ending.planning",
+    locked: "ui.otomeForge.ending.lockedNow",
+  },
 };
 
 /** Pronoun-safe text for a love interest: the name, and the pronouns stored in the bible (never assumed). */
-const pronounValues = (li: RunLiView) => ({
+const pronounValues = (li: Pick<RunLiView, "name" | "pronouns">) => ({
   name: li.name,
   subject: li.pronouns.subject,
   object: li.pronouns.object,
@@ -1058,19 +1383,29 @@ function RuptureBanner({
           </h2>
         </div>
       </div>
-      <p className="of-body">{t("ui.otomeForge.arcs.ruptureText", pronounValues(li))}</p>
-      <button
-        type="button"
-        className="of-button of-button--primary"
-        aria-label={t("ui.otomeForge.arcs.makeItRightLabel", pronounValues(li))}
-        onClick={onMakeItRight}
-      >
-        <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
-        {entry?.state === "in-progress"
-          ? t("ui.otomeForge.arcs.makeItRightContinue")
-          : t("ui.otomeForge.arcs.makeItRight")}
-      </button>
-      {entry ? null : (
+      <p className="of-body">
+        {t(repair.space ? "ui.otomeForge.arcs.heldText" : "ui.otomeForge.arcs.ruptureText", pronounValues(li))}
+      </p>
+      {repair.space ? (
+        <p className="of-hint">
+          {t("ui.otomeForge.arcs.clearReward", { ...pronounValues(li), amount: GRIEVANCE_CLEARED_AFFECTION })}
+        </p>
+      ) : null}
+      {needsSpace(repair) ? <SpaceMeter li={li} space={repair.space!} /> : null}
+      {needsSpace(repair) ? null : (
+        <button
+          type="button"
+          className="of-button of-button--primary"
+          aria-label={t("ui.otomeForge.arcs.makeItRightLabel", pronounValues(li))}
+          onClick={onMakeItRight}
+        >
+          <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
+          {entry?.state === "in-progress"
+            ? t("ui.otomeForge.arcs.makeItRightContinue")
+            : t("ui.otomeForge.arcs.makeItRight")}
+        </button>
+      )}
+      {entry || needsSpace(repair) ? null : (
         <>
           <p className="of-cost">
             <Feather size={14} strokeWidth={2} aria-hidden="true" />
@@ -1083,18 +1418,63 @@ function RuptureBanner({
   );
 }
 
+/** #2156: his grievance with her has not had its space yet, so Make it right waits. */
+const needsSpace = (repair: RepairEntry | undefined) => !!repair?.space && repair.space.had < repair.space.needed;
+
+/** #2156: how much space his grievance still needs, in words and as a bar. */
+function SpaceMeter({ li, space }: { li: RunLiView; space: NonNullable<RepairEntry["space"]> }) {
+  const { t } = useTranslation();
+  const left = Math.max(0, space.needed - space.had);
+  const label = t("ui.otomeForge.arcs.spaceLeft", { ...pronounValues(li), count: left });
+  return (
+    <div className="of-meter of-space">
+      <p className="of-route-lock">
+        <HeartCrack size={13} strokeWidth={2.2} aria-hidden="true" />
+        <span>{label}</span>
+      </p>
+      <div
+        className="of-meter-bar"
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={space.needed}
+        aria-valuenow={Math.min(space.had, space.needed)}
+      >
+        <span style={{ inlineSize: `${(Math.min(space.had, space.needed) / space.needed) * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function Routes({
+  runKey,
   routes,
+  repairs,
   view,
   chapters,
   onOpen,
   onMakeItRight,
+  sides,
+  bondStories,
+  planning,
+  onReadSide,
+  ended,
 }: {
+  runKey: string;
   routes: RouteEntry[];
+  repairs: RepairEntry[];
   view: RunView;
   chapters: StoryChapterEntry[];
   onOpen: (route: RouteEntry) => void;
   onMakeItRight: (li: string) => void;
+  sides: HisSideEntry[];
+  /** 0.24.5: each love interest's bond rank whose story waits, so his card says so past his finale. */
+  bondStories: BondEntry[];
+  /** The key being opened (usePlanChapter's `planning`), so a side's Read shows the wait. */
+  planning: string | null;
+  onReadSide: (entry: HisSideEntry) => void;
+  /** #2459: the story has ended, so no card offers anything to do. */
+  ended: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -1110,12 +1490,19 @@ function Routes({
           return (
             <RouteCard
               key={route.li}
+              runKey={runKey}
               route={route}
+              repair={repairs.find((repair) => repair.li === route.li)}
               li={li}
               entry={route.next ? (chapters.find((chapter) => chapter.key === route.next?.key) ?? null) : null}
               images={view.world.images}
               onOpen={() => onOpen(route)}
               onMakeItRight={() => onMakeItRight(route.li)}
+              sides={sides.filter((entry) => entry.li === route.li)}
+              bondWaits={bondStories.some((entry) => entry.li === route.li)}
+              planning={planning}
+              onReadSide={onReadSide}
+              ended={ended}
             />
           );
         })}
@@ -1125,24 +1512,44 @@ function Routes({
 }
 
 function RouteCard({
+  runKey,
   route,
+  repair,
   li,
   entry,
   images,
   onOpen,
   onMakeItRight,
+  sides,
+  bondWaits,
+  planning,
+  onReadSide,
+  ended,
 }: {
+  runKey: string;
   route: RouteEntry;
+  /** His repair on offer, while a rupture stands (#2156: with the space his own grievance still needs). */
+  repair?: RepairEntry;
   li: RunLiView;
   entry: StoryChapterEntry | null;
   images: RunView["world"]["images"];
   onOpen: () => void;
   onMakeItRight: () => void;
+  sides: HisSideEntry[];
+  /** 0.24.5: his bond rank is reached and its story waits (GET /runs/:run/story `bond`). */
+  bondWaits: boolean;
+  planning: string | null;
+  onReadSide: (entry: HisSideEntry) => void;
+  ended: boolean;
 }) {
   const { t } = useTranslation();
   const accent = accentOf(li);
   const next = route.next;
   const values = pronounValues(li);
+  // 0.24.5: past his finale (no next stage) the route goes on in the bond ranks, 11-20, so the card names the next one,
+  // or the one whose story waits, and is complete only at the last rank (C/shared/bond.ts bondStepOf). It said
+  // "complete" from the finale on, with ten ranks still ahead.
+  const step = next ? null : bondStepOf(li.bond, bondWaits);
   const state = !next
     ? "complete"
     : next.blockedBy === "rupture"
@@ -1174,12 +1581,24 @@ function RouteCard({
           <span className="of-badge of-badge--soft">
             {t("ui.otomeForge.arcs.stageNext", { name: t(stageNameKey(next.stage)) })}
           </span>
+        ) : step && "next" in step ? (
+          <span className="of-badge of-badge--soft">{t("ui.otomeForge.arcs.stageNext", { name: step.next.name })}</span>
         ) : null}
       </div>
       {next ? (
         <p className="of-route-line">
           <Heart size={12} strokeWidth={2} fill="currentColor" aria-hidden="true" />
           {t("ui.otomeForge.arcs.nextChapter", { ...values, level: next.requires.level })}
+        </p>
+      ) : step && "waiting" in step ? (
+        <p className="of-route-line">
+          <BookHeart size={12} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.arcs.bondWaiting", { ...values, rank: step.waiting.name })}
+        </p>
+      ) : step ? (
+        <p className="of-route-line">
+          <Heart size={12} strokeWidth={2} fill="currentColor" aria-hidden="true" />
+          {t("ui.otomeForge.arcs.bondNext", { ...values, level: step.next.level, rank: step.next.name })}
         </p>
       ) : (
         <p className="of-route-line">{t("ui.otomeForge.arcs.complete", values)}</p>
@@ -1217,12 +1636,216 @@ function RouteCard({
         <div className="of-route-lock">
           <HeartCrack size={13} strokeWidth={2.2} aria-hidden="true" />
           <span>{t("ui.otomeForge.arcs.blocked", values)}</span>
-          <button type="button" className="of-button of-button--text of-button--small" onClick={onMakeItRight}>
-            {t("ui.otomeForge.arcs.makeItRight")}
-          </button>
+          {needsSpace(repair) ? (
+            <span>
+              {t("ui.otomeForge.arcs.spaceLeft", { ...values, count: repair!.space!.needed - repair!.space!.had })}
+            </span>
+          ) : (
+            <button type="button" className="of-button of-button--text of-button--small" onClick={onMakeItRight}>
+              {t("ui.otomeForge.arcs.makeItRight")}
+            </button>
+          )}
         </div>
       ) : null}
+      {sides.map((side) => (
+        <SideRow
+          key={side.key}
+          entry={side}
+          li={li}
+          images={images}
+          opening={planning === side.key}
+          onRead={() => onReadSide(side)}
+        />
+      ))}
+      {ended ? null : <UpsetToggle runKey={runKey} li={li} upset={!!route.upset} />}
     </li>
+  );
+}
+
+/** #2155: the moment his side tells again, in the words the reader's chapter end and climaxes already use. */
+function sideMoment(t: ReturnType<typeof useTranslation>["t"], entry: HisSideEntry, li: RunLiView): string {
+  const values = pronounValues(li);
+  switch (entry.moment) {
+    case "stage":
+      return t("ui.otomeForge.arcs.stageUp", {
+        ...values,
+        stage: entry.stage,
+        stageName: t(stageNameKey(entry.stage)),
+      });
+    case "truth":
+      return t("ui.otomeForge.confrontation.truthTitle", values);
+    case "walkout":
+      return t("ui.otomeForge.confrontation.walkoutTitle", values);
+    case "opened":
+      return t("ui.otomeForge.closer.openedTitle", values);
+    case "shut":
+      return t("ui.otomeForge.closer.shutTitle", values);
+    default:
+      return t("ui.otomeForge.arcs.sideMomentRepair", values);
+  }
+}
+
+/**
+ * #2155: his side of a big moment, waiting under his route (or being read): the arc it belongs to, the moment and its
+ * chapter, and Read, which writes its chapter with no model call; its one call is its scene. It paints only a place
+ * with no picture yet. While it opens, Read is busy and the cost line (a status) says so.
+ */
+function SideRow({
+  entry,
+  li,
+  images,
+  opening,
+  onRead,
+}: {
+  entry: HisSideEntry;
+  li: RunLiView;
+  images: RunView["world"]["images"];
+  opening: boolean;
+  onRead: () => void;
+}) {
+  const { t } = useTranslation();
+  const values = pronounValues(li);
+  const title = entry.title || t("ui.otomeForge.story.untitled");
+  const titleId = `of-side-${entry.key}`;
+  return (
+    <div className="of-route-side" role="group" aria-labelledby={titleId}>
+      <p className="of-route-side-head">
+        <Eye size={15} strokeWidth={2} aria-hidden="true" />
+        <span id={titleId}>{t("ui.otomeForge.arcs.sideTitle", values)}</span>
+        <span className="of-badge of-badge--soft">
+          {entry.arc
+            ? t("ui.otomeForge.story.arcHeading", { number: entry.arc })
+            : t("ui.otomeForge.story.arcHeadingBefore")}
+        </span>
+      </p>
+      <p className="of-route-side-line">
+        {t("ui.otomeForge.arcs.sideMoment", { moment: sideMoment(t, entry, li), title })}
+      </p>
+      <div className="of-inline-actions">
+        <button
+          type="button"
+          className="of-button of-button--primary"
+          aria-label={t(entry.reading ? "ui.otomeForge.arcs.sideContinueLabel" : "ui.otomeForge.arcs.sideReadLabel", {
+            ...values,
+            title,
+          })}
+          aria-disabled={opening || undefined}
+          aria-busy={opening || undefined}
+          onClick={opening ? undefined : onRead}
+        >
+          <BookOpen size={16} strokeWidth={2} aria-hidden="true" />
+          {entry.reading ? t("ui.otomeForge.story.continue") : t("ui.otomeForge.arcs.sideRead")}
+        </button>
+        {entry.reading ? null : (
+          <>
+            <p className="of-cost" role="status">
+              <Feather size={14} strokeWidth={2} aria-hidden="true" />
+              <span>{opening ? t("ui.otomeForge.arcs.planningSide", values) : t("ui.otomeForge.arcs.sideCost")}</span>
+            </p>
+            <ChapterPaintCost images={images} cost="ui.otomeForge.arcs.sidePaintCost" />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * #2156: "I'm upset with them", beside each one's route at every stage. Pressing it asks first, then tells them (they
+ * answer in Messages: 1 call); pressing it again takes it back at once. A toggle: its name stays, aria-pressed says it.
+ */
+export function UpsetToggle({
+  runKey,
+  li,
+  upset,
+}: {
+  runKey: string;
+  /** #2458: a love interest, or one of her friends. */
+  li: Pick<RunLiView, "id" | "name" | "pronouns">;
+  upset: boolean;
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [said, setSaid] = useState("");
+  const values = pronounValues(li);
+  const send = async (next: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await otome.post(`${runPath(runKey)}/routes/${encodeURIComponent(li.id)}/upset`, { upset: next });
+      setAsking(false);
+      setSaid(t(next ? "ui.otomeForge.arcs.upsetTold" : "ui.otomeForge.arcs.upsetLetGo", values));
+      await queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="of-route-upset">
+      <button
+        type="button"
+        className="of-button of-button--quiet of-glass of-button--small of-upset-toggle"
+        aria-pressed={upset}
+        aria-disabled={busy}
+        onClick={() => (upset ? void send(false) : setAsking(true))}
+      >
+        <HeartCrack size={14} strokeWidth={2} aria-hidden="true" />
+        {t("ui.otomeForge.arcs.upsetButton", values)}
+      </button>
+      {upset ? <p className="of-hint">{t("ui.otomeForge.arcs.upsetOn", values)}</p> : null}
+      <p className="of-visually-hidden" role="status">
+        {said}
+      </p>
+      {error && !asking ? (
+        <p className="of-error" role="alert">
+          {otome.errorMessage(error)}
+        </p>
+      ) : null}
+      {asking ? (
+        <Dialog
+          title={t("ui.otomeForge.arcs.upsetTitle", values)}
+          onClose={busy ? undefined : () => setAsking(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="of-button of-button--primary"
+                aria-disabled={busy}
+                onClick={() => void send(true)}
+              >
+                {t("ui.otomeForge.arcs.upsetConfirm", values)}
+              </button>
+              <button
+                type="button"
+                className="of-button of-button--quiet of-glass"
+                aria-disabled={busy}
+                onClick={() => !busy && setAsking(false)}
+              >
+                {t("ui.otomeForge.reader.notNow")}
+              </button>
+            </>
+          }
+        >
+          <p className="of-body">{t("ui.otomeForge.arcs.upsetText", values)}</p>
+          <p className="of-cost">
+            <Feather size={14} strokeWidth={2} aria-hidden="true" />
+            <span>{t("ui.otomeForge.arcs.upsetCost", values)}</span>
+          </p>
+          {error ? (
+            <p className="of-error" role="alert">
+              {otome.errorMessage(error)}
+            </p>
+          ) : null}
+        </Dialog>
+      ) : null}
+    </div>
   );
 }
 
@@ -1246,13 +1869,15 @@ function ArcPlanDialog({
   const { t } = useTranslation();
   const actionRef = useRef<HTMLButtonElement>(null);
   useDialogFocus(actionRef, planning, failed);
-  const li = view.lis.find((item) => item.id === target.li) ?? null;
+  const li = [...view.lis, ...(view.friends ?? [])].find((item) => item.id === target.li) ?? null;
   const values = li ? pronounValues(li) : { name: "", subject: "", object: "", possessive: "" };
   const locked = failed && otomeErrorCode(failed.error) === "locked";
   return (
     <Dialog
       wide
       title={t(ARC_DIALOG_KEYS[target.kind].title, values)}
+      // Opened while it plans: focus starts on Cancel, never on the quiz under it (#2174).
+      initialFocus={planning ? actionRef : undefined}
       onClose={planning ? undefined : onClose}
       actions={
         planning ? (
@@ -1287,7 +1912,7 @@ function ArcPlanDialog({
             <p className="of-body">{t(ARC_DIALOG_KEYS[target.kind].planning, values)}</p>
             <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
           </div>
-          <StorySoFar runKey={view.runKey} />
+          <PersonalityQuiz runKey={view.runKey} lis={view.lis} />
         </>
       ) : locked ? (
         <p className="of-notice" role="alert">

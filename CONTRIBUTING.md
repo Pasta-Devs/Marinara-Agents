@@ -23,9 +23,9 @@ git pull
 git checkout -b feature/short-description
 ```
 
-Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge, and automatic Dottore review waits until they are ready. Every ready PR must pass the catalog check, CodeQL security analysis, native Code Quality analysis, and Dottore Review. Dependency changes must also pass the low-severity dependency audit. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge, and automatic review waits until they are ready. Every ready PR must pass the catalog check, CodeQL security analysis, native Code Quality analysis, and the Dottore Review status. Dependency changes must also pass the low-severity dependency audit. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
 
-Dottore is this repository's automated reviewer. The wrapper pins shared Marinara-Engine tooling and uses this repository's model variables, API-key secrets, and base-branch review rules. Automatic reviews run on ready PRs and subsequent pushes. Drafts are withheld for automatic, manual and direct requests; marking a supported PR Ready starts its review through the existing automatic trigger. If a review does not start, an owner, organization member, or collaborator can comment `/dottore`; `/dottore full` requests a full examination. Before merging, verify a **Viable** or **Viable, With Notes** verdict for the current head and resolve all confirmed findings. See the [shared Dottore guide](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/.github/dottore-review/README.md) for the commands, configuration, and trust boundaries. CodeRabbit's automatic reviews and automatic chat replies are disabled here.
+CodeRabbit is this repository's automated reviewer. It reviews each ready PR into `staging`, then each push to it, and its finished review sets the required **Dottore Review** status (`.github/workflows/coderabbit-review-gate.yml`). While CodeRabbit is rate limited, Dottore reviews the PR in its place, and his review sets the status. Dottore's wrapper pins shared Marinara-Engine tooling and uses this repository's model variables, API-key secrets, and base-branch review rules. If no review sets the status, comment `@coderabbitai review`; an owner, organization member, or collaborator can also comment `/dottore`, or `/dottore full` for a full examination. Before merging, resolve every review thread. See [CodeRabbit and Dottore](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/.github/dottore-review/README.md#coderabbit-and-dottore) in the shared Dottore guide for the commands, configuration, and trust boundaries. CodeRabbit's automatic chat replies are disabled here.
 
 The staging wrapper checks live PR readiness before starting the shared reviewer, including requests from the existing Ready trigger and manual commands. Examination starts without waiting for CI; required checks and the current-head viable review remain merge gates. The automatic dispatcher follows `DOTTORE_AUTO_REVIEW`; marking a PR Ready does not override that setting. Event dispatchers run from GitHub's default branch, so changes to their event subscriptions activate only after a normal `main` release. A staging wrapper update does not change the `main` wrapper.
 
@@ -48,7 +48,7 @@ Developer/
 
 Set `MARINARA_ENGINE_ROOT` when the Engine checkout is elsewhere.
 
-Run `node scripts/validate-vendored-engine.mjs --baseline-ref origin/staging` with `MARINARA_ENGINE_ROOT` pointing to an Engine `staging` checkout to inspect every file in `sources/engine/`. A file also tracked by Engine is current or drifted; a vendored-only file is orphaned. Untracked output in the host checkout cannot make an orphan look current. The tracked compiled snapshot under `sources/engine/packages/shared/dist/` remains in scope because `sources/package-shared.ts` imports it as a package build input. Package-owned overlays outside `sources/engine/` are not traversed. The check skips with a notice when no Engine path is supplied. CI runs it in the Noodle browser job that already checks out Engine. `scripts/vendored-engine-baseline.json` records the existing divergent copies by status and both source/host hashes; later PRs may only remove entries. New drift, changes to either side of a stale copy, and a newly missing host file fail the gate. When a copy matches Engine or is removed, remove its baseline entry too. A file absent from Engine may still be package-owned runtime code: trace its package imports before deleting it. Host-service migration is tracked in Marinara-Engine#6385.
+Run `node scripts/validate-vendored-engine.mjs --baseline-ref origin/staging` with `MARINARA_ENGINE_ROOT` pointing to an Engine `staging` checkout to inspect every file in `sources/engine/`. A file also tracked by Engine is current or drifted; a vendored-only file is orphaned. Untracked output in the host checkout cannot make an orphan look current. The tracked compiled snapshot under `sources/engine/packages/shared/dist/` remains in scope because `sources/package-shared.ts` imports it as a package build input. Package-owned overlays outside `sources/engine/` are not traversed. The check skips with a notice when no Engine path is supplied. CI runs it in the Noodle browser job that already checks out Engine. `scripts/vendored-engine-baseline.json` records the existing divergent copies by status and both source/host hashes; later PRs may only remove entries. New drift, a changed vendored copy, and a baseline entry that no longer matches fail the gate when the PR changed that copy. A copy the PR left as it was at the base ref, whose drift comes from Engine alone (a changed or removed host file, or a host file that matches it again), is reported as a warning and does not fail the gate. When a copy matches Engine or is removed in a PR, remove its baseline entry too. A file absent from Engine may still be package-owned runtime code: trace its package imports before deleting it. Host-service migration is tracked in Marinara-Engine#6385.
 
 After a fresh checkout, and whenever `package.json` or `package-lock.json` changes, install this repository's pinned build dependencies:
 
@@ -67,7 +67,7 @@ The root `package.json` pins libraries that feature sources import but that the 
 - `schemas/` — package schema documents
 - `scripts/` — catalog builders and validation
 - `sources/engine/` — captured generic Engine dependencies required to reproduce feature bundles
-- `sources/host-client-overlay/` — stands in for the Engine stores, services and components the Engine hands package clients through `globalThis.__MARINARA_HOST__` (capability API 1.341): the UI, chat, agent, Local Model, dialog, gallery, encounter, game state and backfill stores, TTS, app dialogs, the API client, the emoji catalog and `Modal`. Every feature build stacks it over `sources/engine/`, so package code uses the Engine's live objects; `scripts/esbuild-host-plugins.mjs` takes React, React Query, zustand, sonner, zod, i18next, framer-motion, tailwind-merge and clsx from the host the same way. A package must never bundle a copy of these: the build's client gates (`scripts/client-host-gates.mjs`) refuse one, and `validate-catalog.mjs` refuses a client that writes the Engine's browser storage (`marinara-engine-ui`, the active chat, drafts, pending map moves, pinned gallery images) or opens its audio cache
+- `sources/host-client-overlay/` — stands in for the Engine stores, services and components the Engine hands package clients through `globalThis.__MARINARA_HOST__` (capability API 1.341): the UI, chat, agent, Local Model, dialog, gallery, encounter, game state and backfill stores, TTS, app dialogs, the API client, the emoji catalog and `Modal`. Every feature build stacks it over `sources/engine/`, so package code uses the Engine's live objects; `scripts/esbuild-host-plugins.mjs` takes React, React Query, zustand, sonner, zod, i18next, framer-motion, tailwind-merge and clsx from the host the same way. A package must never bundle a copy of these: the build's client gates (`scripts/client-host-gates.mjs`) refuse one, and `validate-catalog.mjs` refuses a client that writes the Engine's browser storage (`marinara-engine-ui`, the active chat, drafts, pending map moves, pinned gallery images) or opens its audio cache. It also carries the package copy of the Engine's character hooks (`hooks/use-characters.ts`), moved out of `sources/engine/` so its list query could drain the Engine's character pages (#2318).
 - `sources/host-runtime-overlay/` — stands in for the stateful Engine server services Calls, Noodle and Slurp used to bundle: the Local Model, provider routing and fallback, connection admission, the command and service registries, image and video generation, and the logger. Each module calls the Engine through `api.runtime` (capability API 1.341), bound by the generated server entry in `activate()`; a missing host member answers HTTP 501 `host_feature_unavailable` instead of running a copy. The build's server gates (`scripts/server-host-gates.mjs`) refuse a bundled copy, and `scripts/server-engine-modules-baseline.json` lists the Engine storage modules that may stay bundled for reads, with a reason each; that list may only shrink
 - `sources/forge-kit/` — modules shared by Gacha Forge and Otome Hearth. Plain `.mjs` that may import only `node:` modules, because Gacha Forge pastes them into its bundle as text. Hard-coded game values are options whose defaults are Gacha Forge's.
 - `tests/` — integration proof for package behavior
@@ -249,11 +249,72 @@ Also manually install or update affected packages through **Agents → Download 
 - Target `staging`; contributions to `main` are not accepted.
 - Keep the PR focused and explain the user-facing reason for the change.
 - Mark the PR ready for review only after local validation and self-review.
-- Let Dottore review the ready PR, address confirmed findings, and verify its viable verdict covers the final head.
+- Let CodeRabbit (or Dottore, while CodeRabbit is rate limited) review the ready PR, address confirmed findings, and check that the Dottore Review status passed on the final head.
 - Outside and first-time contributors must obtain an approving review from `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Active organization members and owners do not require separate owner approval; those with repository merge permission may merge internal PRs after the required automated gates pass.
 - Update the README and linked Engine documentation when catalog membership, compatibility, setup, or user-visible behavior changes.
 - Include the generated package and catalog outputs when payloads change.
 - Never commit credentials, private user data, local model files, or unreviewed executable archives.
+
+## Package user documentation
+
+Keep the maintained user guide with its package. Someone browsing the catalog should be able to learn what a package does, what it needs and how to get a useful result without reading its source or release history. The same guidance will support the planned Engine reader and Professor Mari integration; those consumers are separate work and are not available through this convention alone.
+
+### README and topic guides
+
+Every new package needs `packages/<id>/README.md`. Start from the [package README template](.github/PACKAGE_README_TEMPLATE.md), then remove sections that do not apply. Explain:
+
+- What the package does, when to use it and any important limitations.
+- Supported modes and prerequisites, including any connection, model, external service or hardware users must configure. Keep compatibility claims consistent with the manifest.
+- How to install, activate and open it. Distinguish a Home app from an agent added to a chat, and mention a restart only when required.
+- A first useful task, with the actual UI labels and an observable result.
+- How to change common settings, recover from likely problems and find further help. Explain data retention or deletion where it affects the user's choices.
+
+A simple agent can fit its entire guide in the README. For a larger app, keep the README as a short entry page and link focused guides under `packages/<id>/docs/`, such as `getting-started.md`, `settings.md` or a named feature guide. Choose topics that match the package; do not create empty files to fill a standard list. Each topic should have a descriptive title, enough context to read on its own and a link back to the README. Use relative Markdown links and stable filenames so GitHub readers and future Engine consumers can follow them.
+
+Use direct instructions and the labels users see. Keep UI labels in **bold** and identifiers in `code`. Describe the current workflow rather than the PR that added it. Keep the canonical guide in English; maintain translations only when someone can verify them. Do not translate model prompts or user-authored content as documentation.
+
+### Development notes and release history
+
+Keep architecture, build instructions, implementation plans and contributor-only notes in a clearly labeled development area, such as `docs/development/`. Link it separately from user help. Keep release entries in the package's `CHANGELOG.md`, following [Release notes](#release-notes). A README should explain how to use the current package without requiring users to reconstruct its behavior from past updates.
+
+When reorganizing existing material, preserve useful content and inbound links. Check references before moving or removing a guide or an old plan. Do not delete historical notes or rewrite another package's manual just to make its folder match this example.
+
+### Screenshots and catalog artwork
+
+Use the existing [store layout](#store-data) for Organizer previews: `store/previews/<id>-1.webp` through `-4.webp`, numbered without gaps. Add real screenshots that help explain the package, with readable UI and demo content suitable for the public repository. Link relevant previews from guides with descriptive alt text. Screenshots supplement written steps; they should not be the only explanation of an action.
+
+`store/` owns Organizer banners, icons and previews. The older square covers under `artwork/agent-covers/` still supply catalog `iconUrl` values, so do not remove them as abandoned assets. Follow the store rebuild instructions when changing store images; a guide-only change does not require repackaging executable payloads.
+
+### Adoption and verification
+
+Apply this convention to new packages and update the relevant guidance alongside material user-visible changes. Existing packages can adopt it incrementally; an unrelated fix does not require a complete manual migration. Missing READMEs are documentation work to track, not a reason to invent usage claims or block every existing package build.
+
+Verify the instructions by following the user flow on a compatible Engine, or have someone familiar with the package check them. Source code and the original PR can establish behavior, but do not substitute for a first-use walkthrough. For a complex package, coordinate with its creator or a user who knows it before reorganizing the manual. Record what was checked and what still needs manual verification in the PR.
+
+Keep package-specific usage here and Engine-wide setup in the linked Engine guides. Do not add documentation fields to strict catalog entries or manifests.
+
+### Optional catalog documentation index
+
+Add `packages/<id>/documentation.json` to select the user help that future Engine readers and Professor Mari can retrieve. Adoption is optional; existing `documentationUrl` links remain available. Engine consumption is separate work. This index can point to an existing Engine guide during migration, without copying its content.
+
+```json
+{
+  "schemaVersion": 1,
+  "overview": { "source": "package", "path": "README.md" },
+  "guides": [
+    { "id": "settings", "title": "Settings", "source": "package", "path": "docs/settings.md" },
+    { "id": "connections", "title": "Engine connections", "source": "engine", "path": "connections/connecting-to-a-provider.md" }
+  ]
+}
+```
+
+The overview is required; `guides` defaults to an empty list. Package paths are relative to the package directory and must select `README.md` or Markdown under `docs/`, excluding `docs/development/`. Engine paths are relative to Engine's `docs/`, excluding `development/`. Check an Engine reference against the intended Engine branch; this repository cannot validate a file in another repository. Either source can include a `heading` with the visible heading text to select one section of a longer page. Paths must use forward slashes, with no traversal, URL encoding, query or fragment. Package directories, documentation indexes and selected Markdown paths must not use symlinks: repository URLs may serve the link itself instead of its target.
+
+Use unique guide IDs containing lowercase letters, digits and hyphens, starting with a letter or digit; `overview` is reserved. Limits: 32 guides, 64 characters per ID, 120 per title, 200 per heading, 32 KiB for the index and 256 KiB per package Markdown file. Publish user help explicitly; do not list architecture notes, prompts or historical plans.
+
+Run `node scripts/build-documentation.mjs` after changing the index or a selected package guide, then commit the generated `docs.json` sidecars. All package builders also use this writer. Each sidecar includes only packages visible in its catalog lane; empty sidecars are removed. Package references become paths relative to the sidecar, with a SHA-256 and byte count for the complete Markdown file. Engine references retain their docs-relative path and optional heading. The recorded package version identifies the catalog entry; it does not establish that current docs match an older installed version.
+
+Run `node scripts/tests/catalog-documentation.regression.mjs` and the normal validation commands. `validate-catalog.mjs` rejects stale sidecars and selected package files that are missing, too large or outside the allowed directory. This metadata does not change executable archives, permissions or package versions.
 
 ## Adding a New Package
 
@@ -264,7 +325,7 @@ A new package must include:
 3. Correct category, modes, entrypoints, permissions, compatibility, and restart requirement.
 4. Reproducible package payloads and a generated ZIP artifact.
 5. A catalog entry with valid hashes, sizes, and documentation URL.
-6. A row in the correct README category and detailed Engine documentation.
+6. A row in the matching README store section and a package README following [Package user documentation](#package-user-documentation). Update linked Engine documentation when host setup or integration changes.
 7. Validation and manual installation evidence in the PR.
 
 Security-sensitive permissions and executable client/server entrypoints must be narrowly scoped and justified in the PR description.

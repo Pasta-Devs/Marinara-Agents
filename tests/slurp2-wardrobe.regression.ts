@@ -71,6 +71,17 @@ assert.equal(
   "locked",
   "a missing choice also avoids a recently used compatible look",
 );
+assert.equal(
+  resolveSlurpWardrobeSelection({
+    looks,
+    access: "locked",
+    scene: { wardrobeId: null, setting: "x", action: "x", expression: "x", visualDirection: "x", outfit: "red robe" },
+    creatorName: "Mia",
+  }).look,
+  null,
+  "a scene that names its own outfit is not dressed from a guessed saved look",
+);
+
 assert.doesNotMatch(formatSlpWardrobeCloset(looks), /disabled/u);
 assert.match(slurpWardrobePrompt(looks, "public", ["both-new"], "Mia") ?? "", /public-old[\s\S]*both-new/u);
 

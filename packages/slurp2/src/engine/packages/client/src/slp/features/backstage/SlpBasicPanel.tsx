@@ -232,6 +232,7 @@ export function SlpBasicPanel(page: SlpBackstagePageProps) {
             onChange={(value) => update("paused", value)}
           />
           {more("autopurge", t("ui.slurp.settings.backstage.targets.autopurge"))}
+          {more("clock", t("ui.slurp.settings.backstage.targets.clock"))}
         </SettingsGroup>
       </div>
     </div>

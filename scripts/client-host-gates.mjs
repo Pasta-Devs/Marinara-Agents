@@ -28,6 +28,11 @@ export const HOST_CLIENT_PATHS = [
   "lib/api-client.ts",
   "lib/emoji-catalog.generated.ts",
   "components/ui/Modal.tsx",
+  "components/ui/Switch.tsx",
+  "components/ui/Checkbox.tsx",
+  "components/ui/Spinner.tsx",
+  "components/ui/Tabs.tsx",
+  "components/ui/SearchInput.tsx",
 ];
 
 const CLIENT_SOURCE = "packages/client/src/";

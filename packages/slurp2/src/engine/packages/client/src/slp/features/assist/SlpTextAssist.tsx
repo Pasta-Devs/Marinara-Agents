@@ -2,7 +2,7 @@
 // optional short note, the answer straight into the field, and Undo until the player types again.
 // Sits in the field's label row (a wrapping flex row); the note row opens under it at full width.
 import { useId, useState } from "react";
-import { Loader2, Undo2, X } from "lucide-react";
+import { Undo2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
@@ -11,6 +11,7 @@ import { noteSlpAiUseOnce, SlpUsesAiMark } from "../../modules/chrome/SlpAiMark"
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { SLP_ASSIST_NOTE_MAX, type SlpAssistField } from "../../../../../shared/src/slp/slp-actions.js";
 import { runSlpAction } from "./slp-assist-hooks";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export type SlpTextAssistRun = (input: { mode: "write" | "improve"; note: string }) => Promise<string>;
 
@@ -163,11 +164,7 @@ export function SlpTextAssist({
               </p>
             )}
             <SlpButton disabled={busy} onClick={() => void go()} className="min-h-9 px-3.5 text-xs">
-              {busy ? (
-                <Loader2 size={14} aria-hidden="true" className="animate-spin" />
-              ) : (
-                <SlpSparkleGlyph size={14} aria-hidden="true" />
-              )}
+              {busy ? <Spinner size="sm" /> : <SlpSparkleGlyph size={14} aria-hidden="true" />}
               {busy
                 ? t("ui.slurp.assist.writing", { defaultValue: "Writing…" })
                 : error

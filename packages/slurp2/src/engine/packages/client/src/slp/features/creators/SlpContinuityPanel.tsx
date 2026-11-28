@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { SearchInput } from "../../../components/ui/SearchInput";
 import { AdvancedGroup, SettingsGroup } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { formatDateTime } from "../../base/ui/slp-date-time";
@@ -213,13 +214,11 @@ export function SlurpContinuityPanel({
       {lifeDetails}
 
       <SettingsGroup title={t("ui.slurp.continuity.factsGroup", { defaultValue: "What they remember" })}>
-        <input
-          type="search"
+        <SearchInput
           value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          aria-label={t("ui.slurp.continuity.search", { defaultValue: "Search notes" })}
+          onChange={setFilter}
+          label={t("ui.slurp.continuity.search", { defaultValue: "Search notes" })}
           placeholder={t("ui.slurp.continuity.search", { defaultValue: "Search notes" })}
-          className={selectClass}
         />
         <AdvancedGroup
           title={

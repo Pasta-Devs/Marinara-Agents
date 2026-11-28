@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Story Writer: reader styles (the open book, the e-reader, pagination and the page turn)
+// Story Writer: reader styles (the open book, the e-reader, pagination, the page turn and the paperless document)
 // ──────────────────────────────────────────────
 // Colors and fonts come from the shell's custom properties on the Story Writer root (--sw-ink, --sw-page-bg, ...); the
 // values after them are only fallbacks. Geometry comes from the reader's own properties (--sw-text-w, --sw-gap, ...),
@@ -7,7 +7,10 @@
 
 const R = "marinara-capability-story-writer .sw-reader";
 const BOOK = `${R}[data-theme="book"]`;
-const EBOOK = `${R}[data-theme="ebook"]`;
+// The Document theme (StoryDocument) takes the e-book's type and colors; it has none of its device, pages or bar.
+const FLAT = ':is([data-theme="ebook"], [data-theme="document"])';
+const EBOOK = `${R}${FLAT}`;
+const DOC = `${R}[data-theme="document"]`;
 const DARK = 'marinara-capability-story-writer [data-sw-mode="dark"] .sw-reader';
 
 export const READER_STYLES = `
@@ -47,7 +50,7 @@ ${DARK}[data-theme="book"] {
   --sw-r-fold-3: rgba(0, 0, 0, 0.08);
   color: var(--sw-ink, #e9dcc3);
 }
-${DARK}[data-theme="ebook"] {
+${DARK}${FLAT} {
   --sw-r-accent: var(--sw-accent, #c9b48f);
   --sw-r-muted: var(--sw-ink-muted, color-mix(in srgb, var(--sw-ink, #d8d4cb) 55%, transparent));
   color: var(--sw-ink, #d8d4cb);
@@ -233,7 +236,7 @@ ${R} .sw-columns {
   font-kerning: normal;
   font-variant-ligatures: common-ligatures;
 }
-${R} .sw-columns ::selection {
+${R} :is(.sw-columns, .sw-document-column) ::selection {
   background: color-mix(in srgb, var(--sw-r-accent) 26%, transparent);
 }
 
@@ -343,13 +346,82 @@ ${R} .sw-body blockquote :is(p, div) + :is(p, div) {
   text-indent: 0;
   margin-top: 0.4em;
 }
-/* A drop cap and a small-caps first line open every chapter of the book; a one-line opening still clears the cap. */
+/* ── Pictures: beside the text in the book and the e-book (StoryReader sizes them), between paragraphs on a phone ── */
+${R} .sw-illustration {
+  position: relative;
+  box-sizing: border-box;
+  margin: 0.35em auto 0.8em;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sw-r-muted) 35%, transparent), 0 6px 16px -8px rgba(0, 0, 0, 0.45);
+  break-inside: avoid;
+  text-indent: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* StoryReader's whole-pixel box (data-float is set with it). Size containment makes it one unsplittable box: WebKit
+   splits a float taller than about half a page across two pages despite break-inside: avoid. */
+${R} .sw-illustration[data-float] {
+  contain: size;
+}
+${R} .sw-illustration[data-float="true"] {
+  float: right;
+  clear: right;
+  margin: 0.3em 0 0.5em 1em;
+}
+${R} .sw-illustration img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+${R} .sw-illustration-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+${R} .sw-illustration:is(:hover, :focus-within) .sw-illustration-tools {
+  opacity: 1;
+}
+@media (hover: none) {
+  ${R} .sw-illustration-tools {
+    opacity: 1;
+  }
+}
+${R} .sw-illustration-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--sw-panel-border, rgba(255, 255, 255, 0.14));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sw-panel-bg, #1c1611) 82%, transparent);
+  color: var(--sw-panel-fg, #f1e6d2);
+  cursor: pointer;
+}
+${R} .sw-illustration-button:disabled {
+  display: none;
+}
+${R} .sw-illustration-button:focus-visible {
+  outline: 2px solid var(--sw-r-accent);
+  outline-offset: 1px;
+}
+/* A drop cap and a small-caps first line open every chapter of the book; a one-line opening still clears the cap.
+   After a picture, the opening wraps around it instead (a flow-root paragraph would only sit beside it). */
 ${BOOK} .sw-body > p:first-child,
 ${BOOK} .sw-body > :is(h1, h2, h3):first-child + p {
   display: flow-root;
 }
 ${BOOK} .sw-body > p:first-child::first-letter,
-${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-letter {
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-letter,
+${BOOK} .sw-body > .sw-illustration:first-child + p::first-letter,
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + .sw-illustration + p::first-letter {
   float: left;
   margin: 0.06em 0.09em 0 0;
   padding: 0;
@@ -360,7 +432,9 @@ ${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-letter {
   line-height: 0.82;
 }
 ${BOOK} .sw-body > p:first-child::first-line,
-${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-line {
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + p::first-line,
+${BOOK} .sw-body > .sw-illustration:first-child + p::first-line,
+${BOOK} .sw-body > :is(h1, h2, h3):first-child + .sw-illustration + p::first-line {
   font-variant-caps: small-caps;
   letter-spacing: 0.03em;
 }
@@ -500,7 +574,7 @@ ${EBOOK} .sw-book {
     0 2px 4px rgba(0, 0, 0, 0.3),
     0 24px 60px -18px rgba(0, 0, 0, 0.6);
 }
-${DARK}[data-theme="ebook"] .sw-book {
+${DARK}${FLAT} .sw-book {
   background:
     linear-gradient(150deg, rgba(255, 255, 255, 0.06), transparent 35%, transparent 70%, rgba(0, 0, 0, 0.3)),
     var(--sw-bezel, #050506);
@@ -522,8 +596,8 @@ ${EBOOK} .sw-pages::after {
 ${EBOOK} .sw-page {
   background: var(--sw-page-bg, #f5f2ea);
 }
-${DARK}[data-theme="ebook"] .sw-page,
-${DARK}[data-theme="ebook"] .sw-pages {
+${DARK}${FLAT} .sw-page,
+${DARK}${FLAT} .sw-pages {
   background: var(--sw-page-bg, #16171a);
 }
 ${EBOOK} :is(.sw-page--left, .sw-page--single) {
@@ -585,7 +659,81 @@ ${EBOOK} .sw-body h1 {
   font-weight: 600;
 }
 
-/* ── Arrows and the chapter indicator ── */
+/* ── The Document theme: one column of chapters that scrolls down, a rule between them ── */
+${DOC} {
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, currentColor 28%, transparent) transparent;
+}
+${DOC}:focus-visible {
+  outline: 2px solid var(--sw-r-accent);
+  outline-offset: -2px;
+}
+${DOC} .sw-document-column {
+  box-sizing: border-box;
+  max-width: 36em;
+  margin: 0 auto;
+  padding: 1em 0.25em 3em;
+  overflow-wrap: break-word;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+}
+${DOC}[data-editable="true"] .sw-document-column {
+  cursor: text;
+}
+/* A picture sits beside the column, next to its paragraph, when the window has room; between paragraphs when not. */
+${DOC} {
+  container: sw-document / inline-size;
+}
+${DOC} .sw-illustration {
+  width: fit-content;
+  max-width: 100%;
+}
+${DOC} .sw-illustration img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: min(70vh, 32em);
+}
+@container sw-document (min-width: 72em) {
+  ${DOC} .sw-illustration {
+    float: right;
+    clear: right;
+    width: 15em;
+    margin: 0.3em -17.5em 0.8em 0;
+  }
+  /* A chapter holds its pictures: one by its last paragraph ends above the next chapter's line, not beside it. */
+  ${DOC} .sw-body:has(> .sw-illustration) {
+    display: flow-root;
+  }
+  ${DOC} .sw-illustration img {
+    width: 100%;
+    max-height: none;
+  }
+}
+${DOC} .sw-block {
+  height: auto;
+}
+${DOC} .sw-block + .sw-block {
+  margin-top: 2.5em;
+  padding-top: 2.5em;
+  border-top: 1px solid color-mix(in srgb, var(--sw-r-muted) 40%, transparent);
+}
+${DOC} .sw-chapter-head {
+  padding-top: 0;
+}
+${DOC} .sw-title-page {
+  width: auto;
+  height: auto;
+  padding: 1.5em 0 0.5em;
+  overflow: visible;
+}
+${DOC} .sw-title-start > .sw-title-mari {
+  max-height: 12em;
+}
+
+/* ── The page arrows (the chapter bar is the shell's, in styles-shell.ts) ── */
 ${R} .sw-nav-arrow {
   position: absolute;
   z-index: 8;
@@ -627,74 +775,11 @@ ${R}[data-arrows="inside"] .sw-nav-arrow:disabled {
     transform: scale(1.06);
   }
 }
-${R} :is(.sw-nav-arrow, .sw-reader-footer-bar button, .sw-title-start-button):focus-visible {
+${R} :is(.sw-nav-arrow, .sw-title-start-button):focus-visible {
   outline: 2px solid var(--sw-r-accent);
   outline-offset: 2px;
   opacity: 1;
 }
-${R} .sw-reader-footer {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  pointer-events: none;
-}
-${R} .sw-reader-footer-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  max-width: 100%;
-  padding: 2px;
-  border: 1px solid var(--sw-panel-border, rgba(255, 255, 255, 0.12));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sw-panel-bg, #1c1611) 70%, transparent);
-  color: var(--sw-panel-fg, #f1e6d2);
-  font-family: var(--sw-ui-font, system-ui, sans-serif);
-  font-size: 12.5px;
-  line-height: 1;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  pointer-events: auto;
-  user-select: none;
-  -webkit-user-select: none;
-}
-${R} .sw-reader-footer-bar button {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-${R} .sw-reader-footer-bar button:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-@media (hover: hover) {
-  ${R} .sw-reader-footer-bar button:not(:disabled):hover {
-    background: color-mix(in srgb, currentColor 12%, transparent);
-  }
-}
-${R} .sw-indicator {
-  min-width: 0;
-  padding: 0 0.5em;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
 /* ── The page turn (see page-flip.ts) ── */
 ${R} .sw-flip-layer {
   position: absolute;

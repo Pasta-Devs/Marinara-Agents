@@ -8,3 +8,6 @@ export * from "./schema/identity.js";
 export * from "./schema/drafts.js";
 export * from "./schema/sources.js";
 export * from "./schema/backup.js";
+export * from "./schema/tidy.js";
+export * from "./schema/links.js";
+export * from "./schema/people.js";

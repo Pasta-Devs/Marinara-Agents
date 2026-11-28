@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the generation core. Every model call that expects JSON goes through generateJson.
+// Otome Forge: the generation core. Every model call that expects JSON goes through generateJson, and so does a call
+// that asks for its own plain-text shape (`parse`, the personality quiz's lines, S/minigames/quiz.ts).
 // ──────────────────────────────────────────────
 // 1. Connection: the request's own, else world.connections[job], else world.connections.narration; none is a 503.
 // 2. Model: runtime.languageModels.resolveForRequest({connectionId}).
@@ -11,7 +12,9 @@
 //    chapter's earliest scenes. The timeline, the previous chapter's last scene and the newest summary always stay,
 //    and nothing outside the memory is ever cut. A cached prompt's own canon
 //    (S/story/canon.ts `cached`) is a context of its own, beside the recalls, and its summaries give way before the
-//    cached part's, each part keeping its newest (#2091). A message's `cacheBreakpoint` (#2066) is sent as it is. A
+//    cached part's, each part keeping its newest (#2091); a chapter's small memories (0.20.4, the context's `pool`) are
+//    one more, after the recalls, whose memories give way all together or not at all. A message's `cacheBreakpoint`
+//    (#2066) is sent as it is. A
 //    prompt that still leaves the reply less than the floor (or the connection's own smaller cap) is a 413 `capacity`
 //    before anything is sent, never a request the Engine would cut: its fitter would shrink the reply to 128 tokens,
 //    then cut the rules. The margin kept is the Engine's (fitSafety) with some to spare, and model.fitContext checks the
@@ -20,12 +23,15 @@
 //    cache use is logged too, when the provider reports it.
 // 5. Call: chatComplete with the reply's output size alone (the maintainer's rule): no temperature, no JSON mode, no
 //    other sampling or reasoning setting, so what the connection saves (its temperature, its reasoning effort) is what
-//    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A prompt with cache marks also asks
-//    for the hour-long cache (cacheTtl "1h", capability API 1.815; an older Engine ignores it and keeps the
-//    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote. A
+//    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A prompt with cache marks asks for
+//    the five-minute cache (cacheTtl "5m", capability API 1.815; an older Engine ignores it and keeps the connection's
+//    own cache time): every prompt that marks reads replays what it wrote within a minute or two (a scene's lookahead,
+//    a chapter's scenes), where the five-minute write costs 1.25x the input and the hour-long one 2x, so the hour buys
+//    almost no extra read and doubles every miss. A request may ask for the hour-long one where it knows better. A
 //    background call holds its job's connection admission slot throughout; it names that connection and never takes a
 //    second slot here.
-// 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn (fitted the same way);
+// 6. Parse: parseJsonish (or the request's own `parse` for a plain-text shape), then the schema, then `normalize`. On
+//    failure exactly one repair turn (fitted the same way);
 //    if that fails too, two declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty
 //    reply, a content filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's
 //    own words). A reply cut off at the token limit is never parsed and never a decline. Text is never retried in any
@@ -73,11 +79,20 @@ export interface GenerateJsonRequest<T extends object> {
   messages: OtomeMessage[];
   /**
    * The story memory the messages carry (recallText's context, its `text` inserted as it is, and when `cached` its
-   * recalls' text too): what the fit may leave out when the prompt does not fit (see the header). Without it nothing in
-   * the prompt gives way.
+   * recalls' and its chapter's small memories' text too): what the fit may leave out when the prompt does not fit (see
+   * the header). Without it nothing in the prompt gives way.
    */
-  memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext };
+  memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext; pool?: ForgeMemoryContext };
+  /** How long a prompt with cache marks stays cached (see the header): an hour unless it asks for five minutes. */
+  cacheTtl?: "5m" | "1h";
   schema: ZodType<T>;
+  /**
+   * A reply in a plain-text shape of its own: turns the text into the value the schema checks, or undefined when none
+   * of it is in that shape (a format failure, or a decline when it reads as a refusal). `replyShape` names the shape in
+   * the repair turn ("Reply again with ONLY …"). Without it the reply is one JSON object.
+   */
+  parse?: (text: string) => object | undefined;
+  replyShape?: string;
   /**
    * What the schema cannot check (an adult age, no school role…): return the value, possibly fixed, or a string naming
    * the problem, or null. A string or null sends the one repair turn.
@@ -171,14 +186,15 @@ function check<T extends object>(
   if (!text) return fail("the reply was empty", true);
   let raw: unknown;
   try {
-    raw = parseJsonish(text);
+    raw = (request.parse ?? parseJsonish)(text);
   } catch {
     raw = undefined;
   }
   // Refusal wording counts only outside a JSON object: inside one it is the character's own voice ("I can't let anyone
   // help me"), and a reply that parsed but fails its checks is a format problem.
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return fail("the reply was not one JSON object", filtered || REFUSAL.test(text.slice(0, 600)));
+    const issue = request.parse ? "the reply was not in the required format" : "the reply was not one JSON object";
+    return fail(issue, filtered || REFUSAL.test(text.slice(0, 600)));
   }
   const parsed = request.schema.safeParse(raw);
   if (!parsed.success) {
@@ -200,7 +216,7 @@ async function resolveModel(deps: GenerationDeps, connectionId: string): Promise
     return await deps.runtime.languageModels.resolveForRequest({ connectionId });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new OtomeForgeError(503, `Otome Forge could not use connection ${connectionId}: ${reason}`, "no-connection");
+    throw new OtomeForgeError(503, `Otome Hearth could not use connection ${connectionId}: ${reason}`, "no-connection");
   }
 }
 
@@ -289,9 +305,13 @@ export async function generateJson<T extends object>(
   const budget = outputBudget(request.maxTokens, model.maxOutputTokens);
   // The memory context rides on the first message, so the repair turn (the same messages and two more) carries it too.
   // The recalls' context goes first: the fitter leaves out the first context's optional blocks first, so what follows
-  // the cached part (a cached prompt's own canon, S/story/canon.ts) gives way before the cached part does (#2091).
+  // the cached part (a cached prompt's own canon, S/story/canon.ts) gives way before the cached part does (#2091), and
+  // a chapter's small memories before the story context.
   const messages = request.memory
-    ? forgeComposeMemoryPrompt(() => request.messages, [request.memory.recalls, request.memory].filter(Boolean))
+    ? forgeComposeMemoryPrompt(
+        () => request.messages,
+        [request.memory.recalls, request.memory.pool, request.memory].filter(Boolean),
+      )
     : request.messages;
   const mayCall = () => {
     request.signal?.throwIfAborted();
@@ -305,12 +325,13 @@ export async function generateJson<T extends object>(
     const sent = fitted.messages;
     logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });
     // The output size alone (see the header); debugMode and signal are the Engine's own, never sent on. A prompt with
-    // cache marks asks for the hour-long cache (capability API 1.815): a chapter's calls come minutes apart.
+    // cache marks asks for the five-minute cache (capability API 1.815): its reads come within a minute or two, and the
+    // hour-long write costs 2x the input against the five-minute one's 1.25x.
     const options = {
       maxTokens: fitted.maxTokens,
       debugMode: request.debugMode,
       signal: request.signal,
-      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: "1h" as const } : {}),
+      ...(sent.some((message) => message.cacheBreakpoint) ? { cacheTtl: request.cacheTtl ?? ("5m" as const) } : {}),
     };
     const reply = await model.chatComplete(sent, options);
     logCacheUse(runtime, label, request.debugMode, reply.usage);
@@ -320,7 +341,8 @@ export async function generateJson<T extends object>(
   const first = await complete(messages, request.label);
   if (first.ok) return { value: first.value, connectionId, model: model.model };
 
-  const note = `That reply did not match the required format: ${first.issues}. Reply again with ONLY the JSON object.`;
+  const shape = request.replyShape ?? "the JSON object";
+  const note = `That reply did not match the required format: ${first.issues}. Reply again with ONLY ${shape}.`;
   const repair: OtomeMessage[] = first.content
     ? [...messages, { role: "assistant", content: first.content }, { role: "user", content: note }]
     : [...messages, { role: "user", content: note }];

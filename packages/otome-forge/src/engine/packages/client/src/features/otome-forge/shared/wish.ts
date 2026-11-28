@@ -15,7 +15,8 @@
 import type { LiId, Paint } from "./api-types";
 import { TEN_WISH_COST, WISH_COST } from "./economy";
 
-export const BANNER_KINDS = ["memories", "his-wardrobe", "my-wardrobe"] as const;
+/** #2303: "dates" came last, so a story's earlier banners keep their order and My Wardrobe still follows His. */
+export const BANNER_KINDS = ["memories", "his-wardrobe", "my-wardrobe", "dates"] as const;
 export type BannerKind = (typeof BANNER_KINDS)[number];
 
 export function isBannerKind(value: unknown): value is BannerKind {
@@ -43,6 +44,10 @@ export type PullCount = (typeof PULL_COUNTS)[number];
 
 /** How many items of each rarity a banner holds. */
 export const BANNER_SIZES = { five: 1, four: 3, three: 6 } as const;
+/** #2303: how many of a wardrobe banner's 3★ items are looks (the rest are Snapshots); a banner from before has none. */
+export const WARDROBE_LOOKS3 = 3;
+/** #2303: how many scenes a pulled date has: a 4★ is a place to go (1–3), a 5★ a scenario of its own (4–6). */
+export const DATE_SCENES = { four: { min: 1, max: 3 }, five: { min: 4, max: 6 } } as const;
 
 /** GF's counter names: `count` pulls since the last 5★, `since4` pulls since the last 4★ or 5★. */
 export interface PityCounter {
@@ -155,7 +160,8 @@ export function rotationSeason(startsDay: string): Season | null {
 /** `${kind}-${rotation}`: a banner's key, and its document id's tail. */
 export const bannerKey = (kind: BannerKind, rotation: number) => `${kind}-${rotation}`;
 
-const BANNER_KEY = /^(memories|his-wardrobe|my-wardrobe)-(0|[1-9]\d{0,5})$/;
+const KIND_PATTERN = BANNER_KINDS.join("|");
+const BANNER_KEY = new RegExp(`^(${KIND_PATTERN})-(0|[1-9]\\d{0,5})$`);
 
 export function parseBannerKey(value: unknown): { kind: BannerKind; rotation: number } | null {
   const match = typeof value === "string" ? BANNER_KEY.exec(value) : null;
@@ -168,7 +174,8 @@ export function parseBannerKey(value: unknown): { kind: BannerKind; rotation: nu
  * memory5: a CG, a 3–5 beat Character Story and a voiced line · moment4: a one-beat Moment · snapshot3: a 2–3 sentence
  * vignette with an illustration (his Love Timeline and his private memory) · his-look5: his look, a first-wear beat and repainted faces ·
  * his-look4: another love interest's look · her-look5: her look, a first-wear beat with him and a couple set with his ·
- * her-look4: a look of hers.
+ * her-look4: a look of hers · #2303: date5: a date scenario of its own (4–6 scenes and a key image) · date4: a place to
+ * go together (1–3 scenes) · his-look3: another everyday look of the featured love interest's · her-look3: one of hers.
  */
 export const ITEM_KINDS = [
   "memory5",
@@ -178,6 +185,10 @@ export const ITEM_KINDS = [
   "his-look4",
   "her-look5",
   "her-look4",
+  "date5",
+  "date4",
+  "his-look3",
+  "her-look3",
 ] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
@@ -189,20 +200,52 @@ export const ITEM_RARITY: Record<ItemKind, Rarity> = {
   "his-look4": 4,
   "her-look5": 5,
   "her-look4": 4,
+  date5: 5,
+  date4: 4,
+  "his-look3": 3,
+  "her-look3": 3,
 };
 
-/** What each banner kind holds at each rarity. */
-export const BANNER_ITEM_KINDS: Record<BannerKind, { five: ItemKind; four: ItemKind; three: ItemKind }> = {
+/**
+ * What each banner kind holds at each rarity. #2303: `looks3`, the kind of a wardrobe banner's 3★ looks (WARDROBE_LOOKS3
+ * of its six 3★ items; the rest are Snapshots).
+ */
+export const BANNER_ITEM_KINDS: Record<
+  BannerKind,
+  { five: ItemKind; four: ItemKind; three: ItemKind; looks3?: ItemKind }
+> = {
   memories: { five: "memory5", four: "moment4", three: "snapshot3" },
-  "his-wardrobe": { five: "his-look5", four: "his-look4", three: "snapshot3" },
-  "my-wardrobe": { five: "her-look5", four: "her-look4", three: "snapshot3" },
+  "his-wardrobe": { five: "his-look5", four: "his-look4", three: "snapshot3", looks3: "his-look3" },
+  "my-wardrobe": { five: "her-look5", four: "her-look4", three: "snapshot3", looks3: "her-look3" },
+  dates: { five: "date5", four: "date4", three: "snapshot3" },
 };
+
+/**
+ * #2303: how many Snapshots a banner of `kind` holds: a wardrobe banner's six 3★ items are WARDROBE_LOOKS3 looks and
+ * the rest Snapshots.
+ */
+export const snapshotsOf = (kind: BannerKind) =>
+  BANNER_ITEM_KINDS[kind].looks3 ? BANNER_SIZES.three - WARDROBE_LOOKS3 : BANNER_SIZES.three;
 
 /** True for the looks (a his-look is his or another love interest's; a her-look is the protagonist's). */
 export const isLookKind = (kind: ItemKind) => kind.includes("-look");
 
-/** An item's slot on its banner: `f` the 5★, `a1`–`a3` the 4★s, `s1`–`s6` the Snapshots. */
-export type ItemSlot = "f" | `a${1 | 2 | 3}` | `s${1 | 2 | 3 | 4 | 5 | 6}`;
+/** #2303: a pulled date (Dates banner): a 5★ scenario or a 4★ place, played with whoever the player takes. */
+export const isDateKind = (kind: ItemKind) => kind === "date5" || kind === "date4";
+
+/**
+ * #2303: a date whose own place picture can be painted: a 4★ with a named place (S/art/outfits.ts hasArt; the banner
+ * plan never keeps a date without its place's tags). A 5★'s picture is its banner's art, painted on Wish.
+ */
+export const datePlacePaintable = (item: { kind: ItemKind; place?: { name: string } }) =>
+  item.kind === "date4" && !!item.place?.name.trim();
+
+/**
+ * An item's slot on its banner: `f` the 5★, `a1`–`a3` the 4★s, `s1`–`s6` the Snapshots, and (#2303) `l1`–`l3` a
+ * wardrobe banner's 3★ looks.
+ */
+/** #2458: `g1`–`g5` are gifts no banner writes: a friend's look for her, given at their rank-5 finale. */
+export type ItemSlot = "f" | `a${1 | 2 | 3}` | `s${1 | 2 | 3 | 4 | 5 | 6}` | `l${1 | 2 | 3}` | `g${1 | 2 | 3 | 4 | 5}`;
 
 /**
  * `${bannerKey}-${slot}` (e.g. `memories-3-f`): an item's id, the tail of its document id, and of its Character
@@ -210,14 +253,36 @@ export type ItemSlot = "f" | `a${1 | 2 | 3}` | `s${1 | 2 | 3 | 4 | 5 | 6}`;
  */
 export const itemIdOf = (key: string, slot: ItemSlot) => `${key}-${slot}`;
 
-const ITEM_ID = /^(?:memories|his-wardrobe|my-wardrobe)-(?:0|[1-9]\d{0,5})-(?:f|a[1-3]|s[1-6])$/;
+// Only ever widened: a narrower pattern would drop owned items (S/schemas/state.ts normalizeOwned).
+const ITEM_ID = new RegExp(`^(?:${KIND_PATTERN})-(?:0|[1-9]\\d{0,5})-(?:f|a[1-3]|s[1-6]|l[1-3]|g[1-5])$`);
 
 export function isItemId(value: unknown): value is string {
   return typeof value === "string" && ITEM_ID.test(value);
 }
 
 /** The banner key an item id belongs to. */
-export const bannerKeyOfItem = (itemId: string) => itemId.replace(/-(?:f|a[1-3]|s[1-6])$/, "");
+export const bannerKeyOfItem = (itemId: string) => itemId.replace(/-(?:f|a[1-3]|s[1-6]|l[1-3]|g[1-5])$/, "");
+
+/** #2458: the look a friend gives her at their rank-5 finale (the `n`th friend to give one, 1–5). */
+export const friendGiftItemId = (n: number) => itemIdOf("my-wardrobe-0", `g${n}` as ItemSlot);
+
+/**
+ * Where an owned item is kept (0.21.0): a wardrobe banner's looks (its 5★, 4★s and, #2303, 3★ `l` looks) in the
+ * Wardrobe, all else in the Album (a pulled date in its Dates tab).
+ */
+export type CollectionScreen = "wardrobe" | "album";
+
+export const collectionOf = (itemId: string): CollectionScreen =>
+  /^(?:his|my)-wardrobe-\d+-(?:f|a[1-3]|l[1-3]|g[1-5])$/.test(itemId) ? "wardrobe" : "album";
+
+/** 0.21.0: how many items won from Wish wait unseen in each (the dock's dots). */
+export type UnseenCounts = Record<CollectionScreen, number>;
+
+export function unseenCounts(unseen: readonly string[]): UnseenCounts {
+  const counts: UnseenCounts = { wardrobe: 0, album: 0 };
+  for (const id of unseen) counts[collectionOf(id)] += 1;
+  return counts;
+}
 
 /** A look's name (the world's language) and its English, visual-only outfit line. */
 export interface ItemLook {
@@ -244,6 +309,12 @@ export interface Item {
   look?: ItemLook;
   /** her-look5: the item id of his look it pairs with (the his-wardrobe banner's 5★ of the same rotation). */
   coupleWith?: string;
+  /**
+   * #2303, date5 and date4: where the date happens, named in the world's language, with English tags for its picture,
+   * and how many scenes it has (DATE_SCENES).
+   */
+  place?: { name: string; tags: string };
+  scenes?: number;
   /**
    * memory5 and new snapshot3: the illustration's English brief and cast (at most 3), as a beat's `cg`. `explicit`:
    * a memory5 brief the banner plan marked explicit, painted so only under Explicit Heat and the Explicit rating;
@@ -289,8 +360,16 @@ export interface ItemView {
   text?: string;
   look?: { name: string };
   coupleWith?: string;
+  /** #2303: a pulled date's place, by name, and its number of scenes. */
+  place?: { name: string };
+  scenes?: number;
   owned: boolean;
   art: Paint | null;
+  /**
+   * A look's `art.url` is its wearer's saved cut-out (no backdrop; set by the Wish view only): shown as it is, never
+   * cleaned in the browser.
+   */
+  cut?: true;
   story: { key: string } | null;
   voicedLine?: string;
 }
@@ -312,6 +391,8 @@ export interface BannerView {
   four: ItemView[];
   three: ItemView[];
   art: Paint | null;
+  /** A wardrobe banner's `art.url` is its wearer's saved cut-out, as an ItemView's `cut`. */
+  cut?: true;
 }
 
 /** A love interest's Memory Selector: at affection 10, once, claim one of their Memories from an Echo not owned yet. */

@@ -20,7 +20,8 @@
 // - An attempt is spent when it is reserved, before any provider work, and never retried: a failed or dropped message
 //   costs that day's slot, and a crash never pays twice.
 // - The writer is picked at random (Fisher–Yates) among the love interests the player has met, never the one whose
-//   thread she has open, whose reply is being written, or whose open conversation ends on her unanswered message.
+//   thread she has open, whose reply is being written, whose conversation is being remembered (0.47.1: nothing is
+//   armed or spent for it, so he writes later), or whose open conversation ends on her unanswered message.
 //   ponytail: "met" is a cast member once any chapter but the prologue is read (the prologue meets no one, chapter 1
 //   brings the cast in), so a newcomer may write before the scene they are met in is read; the upgrade path is the
 //   arc's newcomer chapter.
@@ -30,12 +31,13 @@
 // there meanwhile is a 409 busy. The message lands unread. The heartbeat and the open thread live in this process: a
 // restart re-arms (+60 s, never sooner).
 import { forgeChatReplyBusy } from "@forge-kit/chat-continuity-server.mjs";
-import { forgeDayKey, forgeResetIn } from "@forge-kit/time-zone-server.mjs";
+import { forgeDayKey, forgeResetIn, forgeWeekKey } from "@forge-kit/time-zone-server.mjs";
 import type {
   LiId,
   PhoneDaily,
   PhoneDueResult,
   PhoneMessage,
+  PhoneThread,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { BackgroundQueue } from "../background-queue.js";
 import { resolveConnectionId } from "../generation.js";
@@ -43,7 +45,15 @@ import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, runDocTarget, worldId } from "../ids.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { emptyThread, inThreadLock, openMessages, readThread, writeFirstMessage, type PhoneDeps } from "./chat.js";
+import {
+  emptyThread,
+  inThreadLock,
+  openMessages,
+  readThread,
+  remembering,
+  writeFirstMessage,
+  type PhoneDeps,
+} from "./chat.js";
 
 /** Attempts are never closer than this, whatever the limit (GF). */
 export const DAILY_MIN_INTERVAL_MS = 60_000;
@@ -52,7 +62,11 @@ export const DAILY_ARM_MS = 60_000;
 /** A heartbeat gap longer than this starts a new visit (GF). */
 export const DAILY_HEARTBEAT_GAP_MS = 120_000;
 const DAY_MS = 86_400_000;
-/** Local days kept: neighbouring dates cover a change of time zone without resetting today's count (GF). */
+const WEEK_MS = 7 * DAY_MS;
+/**
+ * Local days kept: neighbouring dates cover a change of time zone without resetting today's count (GF). A weekly quota
+ * (S/phone/invite.ts) keeps as many local weeks.
+ */
 const DAYS_KEPT = 4;
 
 export interface DailyDeps extends PhoneDeps {
@@ -73,7 +87,10 @@ export function noteOpenThread(runId: string, li: LiId | null): void {
   openThreads.set(runId, li);
 }
 
-function shuffled<T>(items: readonly T[], random: () => number): T[] {
+/** The thread the player has open (null: none), as last noted; the group chat's squabbles skip it too. */
+export const openThread = (runId: string): string | null => openThreads.get(runId) ?? null;
+
+export function shuffled<T>(items: readonly T[], random: () => number): T[] {
   const result = [...items];
   for (let index = result.length - 1; index > 0; index -= 1) {
     const other = Math.floor(random() * (index + 1));
@@ -83,39 +100,46 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
 }
 
 /** The love interests the player has met, in cast order (see the header). */
-const metLis = (run: RunDocuments) =>
+export const metLis = (run: RunDocuments) =>
   Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && !!unit.bible));
 
-/** The love interests who may write first now, in cast order (see the header). */
+/**
+ * The love interests who may write first now, in cast order (see the header): none named in `wrote` (today's, or for
+ * a date invitation this week's), and none whose thread `keep` refuses (S/phone/invite.ts).
+ */
 export async function dailyCandidates(
   deps: Pick<PhoneDeps, "store">,
   runId: string,
   run: RunDocuments,
-  day: string,
+  wrote: readonly LiId[] = [],
+  keep: (li: LiId, thread: PhoneThread) => boolean = () => true,
 ): Promise<LiId[]> {
   if (run.world.forge.phase !== "ready") return [];
   if (!Object.entries(run.state.chapters).some(([key, chapter]) => key !== PROLOGUE_KEY && !!chapter.completed)) {
     return [];
   }
   const open = openThreads.get(runId) ?? null;
-  const wrote = new Set(run.world.phoneDaily?.days[day]?.wrote);
-  const cast = metLis(run).filter((li) => li !== open && !wrote.has(li) && !forgeChatReplyBusy(runId, li));
-  const waiting = await Promise.all(
-    cast.map(
-      async (li) => openMessages((await readThread(deps.store, runId, li)) ?? emptyThread(li)).at(-1)?.who === "player",
-    ),
+  const cast = metLis(run).filter((li) => li !== open && !wrote.includes(li) && !forgeChatReplyBusy(runId, li));
+  const free = await Promise.all(
+    cast.map(async (li) => {
+      const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
+      return !remembering(thread) && openMessages(thread).at(-1)?.who !== "player" && keep(li, thread);
+    }),
   );
-  return cast.filter((_, index) => !waiting[index]);
+  return cast.filter((_, index) => free[index]);
 }
 
 export type DailyDecision = { status: "quota" | "waiting" } | { status: "scheduled" | "queued"; next: PhoneDaily };
 
-/** GF's rule for a heartbeat at `now` (the run's last one at `seen`): see the header. Pure but for the time zone. */
+/**
+ * GF's rule for a heartbeat at `now` (the run's last one at `seen`): see the header. Pure but for the time zone. With
+ * `week` (#2424, date invitations), the quota is per local week from Monday, spread over the week instead of the day.
+ */
 export function dailyDecision(
   daily: PhoneDaily | undefined,
-  { now, seen, limit }: { now: number; seen: number | undefined; limit: number },
+  { now, seen, limit, week = false }: { now: number; seen: number | undefined; limit: number; week?: boolean },
 ): DailyDecision {
-  const day = forgeDayKey(now);
+  const day = week ? forgeWeekKey(now) : forgeDayKey(now);
   const days = { ...daily?.days };
   const quota: PhoneDaily["days"][string] = { ...days[day], attempts: days[day]?.attempts ?? 0 };
   const older = Object.keys(days)
@@ -131,7 +155,11 @@ export function dailyDecision(
   }
   if (now < quota.nextAt) return { status: "waiting" };
   quota.attempts += 1;
-  quota.nextAt = Math.min(now + Math.max(DAILY_MIN_INTERVAL_MS, DAY_MS / limit), now + Math.max(1, forgeResetIn(now)));
+  const span = week ? WEEK_MS : DAY_MS;
+  quota.nextAt = Math.min(
+    now + Math.max(DAILY_MIN_INTERVAL_MS, span / limit),
+    now + Math.max(1, forgeResetIn(now, week ? "week" : "day")),
+  );
   return { status: "queued", next: next() };
 }
 
@@ -148,7 +176,7 @@ export async function phoneDue(
 ): Promise<PhoneDueResult> {
   if (open !== undefined) noteOpenThread(runId, open);
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const latest = run.world.phoneDaily?.last ?? null;
   const result = (status: PhoneDueResult["status"]): PhoneDueResult => ({ status, latest });
   const limit = run.world.dailyMessages ?? 0;
@@ -161,7 +189,7 @@ export async function phoneDue(
   answering.add(runId);
   try {
     const day = forgeDayKey(now);
-    const candidates = await dailyCandidates(deps, runId, run, day);
+    const candidates = await dailyCandidates(deps, runId, run, run.world.phoneDaily?.days[day]?.wrote);
     if (!candidates.length) return result("no-eligible");
     const seen = heartbeats.get(runId);
     heartbeats.set(runId, now);
@@ -174,7 +202,7 @@ export async function phoneDue(
       decided = dailyDecision(current.phoneDaily, { now, seen, limit: spread(current.dailyMessages ?? 0) });
       return "next" in decided ? { ...current, phoneDaily: decided.next } : current;
     });
-    if (!saved) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!saved) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
     if (decided.status !== "queued") return result(decided.status);
     const order = shuffled(candidates, random);
     background.ensure({

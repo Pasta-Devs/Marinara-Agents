@@ -4,7 +4,7 @@ import { cn } from "../../../lib/utils";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Avatar, SLP_IMG_FRAME_CLASS, slpImgFade } from "../../base/chrome/SlpChrome";
 import { SlurpEmptyArtwork } from "../../base/chrome/SlpEmptyArtwork";
-import { Check, ChevronRight, Loader2 } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoinAmount } from "../coin/SlpCoin";
 import type { SlurpDiscoveryGender } from "../../base/state/slp-state-types";
 import { toast } from "sonner";
@@ -15,6 +15,8 @@ import { playSlpSpendMoment, SlpGlint } from "../sparkle/SlpSparkle";
 import { SlpStoryRingAvatar } from "../story/SlpStoryRing";
 import { slurpCreatorCoverUrl } from "./slp-creator-cover";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { Spinner } from "../../../components/ui/Spinner";
 export type SlurpCreatorProfileCardCreator = {
   profile: {
     id: string;
@@ -80,7 +82,7 @@ function SlpCreatorSubscribeButton({
   if (!onToggleSubscription) return null;
   if (creator.subscribed) {
     const until = creator.subscription?.until ?? null;
-    const endsDay = until && Date.parse(until) > Date.now() ? formatUpcomingDay(until, i18n.language) : null;
+    const endsDay = until && Date.parse(until) > slurpWorldNowMs() ? formatUpcomingDay(until, i18n.language) : null;
     // Resuming inside the paid week charges nothing.
     const resume = () =>
       Promise.resolve(onToggleSubscription(creator.profile.id, false)).then(
@@ -126,7 +128,7 @@ function SlpCreatorSubscribeButton({
       () => undefined,
     );
   };
-  const pending = subscriptionPending && <Loader2 size={16} className="animate-spin" aria-hidden="true" />;
+  const pending = subscriptionPending && <Spinner size="md" />;
   if (primary) {
     return (
       <SlpPrimaryButton disabled={subscriptionPending} onClick={subscribe} className="whitespace-nowrap px-4">

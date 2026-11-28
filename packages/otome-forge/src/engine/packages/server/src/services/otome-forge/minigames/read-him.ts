@@ -61,6 +61,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { READ_HIM_WORDS, ownView, readHimMessages } from "../prompts.js";
+import { assertFreeToDate, assertNotHeld } from "./date-night.js";
 
 export const READ_HIM_MAX_TOKENS = 2400;
 /** His earlier sets whose moments P25 sees, so a new set never repeats them. */
@@ -330,7 +331,7 @@ export interface ReadHimDeps extends GenerationDeps {
   memory?: Pick<OtomeMemory, "recall" | "maintain">;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const setNotFound = () => new OtomeForgeError(404, "No such Read Him set.", "not-found");
 
@@ -347,7 +348,6 @@ export async function recalledLine(
   memory: ReadHimDeps["memory"],
   runId: string,
   unit: Pick<Unit, "id" | "name">,
-  cues: string[],
   debugMode: boolean,
 ): Promise<string> {
   if (!memory) return "";
@@ -356,14 +356,17 @@ export async function recalledLine(
       runId,
       job: "narration",
       reader: unit.id,
-      // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts).
+      // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts). No query: only the newest is
+      // read, which no older memory chosen by meaning (#2430) ever replaces, so nothing is embedded for it.
       ownStories: true,
-      query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
-    // #2066: the newest small memory he holds (recalls come in story order).
-    const top = result.status.phase === "ready" ? (result.recalls?.at(-1)?.content ?? "").trim() : "";
-    return top ? sliceTextToTokenBudget(top, RECALLED_TOKENS) : "";
+    // #2066: the newest small memory he holds (recalls come in story order); a chapter's says which it is (its tag).
+    const newest = result.status.phase === "ready" ? result.recalls?.at(-1) : undefined;
+    const top = newest?.content.trim();
+    if (!top) return "";
+    const text = sliceTextToTokenBudget(top, RECALLED_TOKENS);
+    return newest?.tag ? `${newest.tag} ${text}` : text;
   } catch {
     return "";
   }
@@ -394,10 +397,10 @@ export async function startReadHim(
     const unit = run.units.find((entry) => entry.id === li);
     if (!unit || !run.state.lis[li]) throw liNotFound();
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
-    const { liState, relationship, offscreen } = ownView(run.state, li);
+    const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
     const lately = [relationship, offscreen].filter((line) => !!line.trim());
     const [recalled, sets] = await Promise.all([
-      recalledLine(deps.memory, runId, unit, lately, debugMode),
+      recalledLine(deps.memory, runId, unit, debugMode),
       listSets(deps.store, runId),
     ]);
     const recent = sets
@@ -414,6 +417,7 @@ export async function startReadHim(
         player: run.player,
         unit,
         liState,
+        bondPlayed,
         recalled,
         lately,
         recent,
@@ -461,7 +465,11 @@ export async function answerReadHim(
   round: number,
   pick: number,
 ): Promise<ReadHimAnswer> {
-  const saved = await deps.store.updateDoc(readHimTarget(runId, setId), normalizeSet, (current) => {
+  const target = readHimTarget(runId, setId);
+  // #2156: an open set waits too while his grievance with her stands (S/minigames/date-night.ts assertFreeToDate).
+  const open = await deps.store.readDoc(target.id, normalizeSet);
+  if (open) await assertFreeToDate(deps.store, runId, open.li);
+  const saved = await deps.store.updateDoc(target, normalizeSet, (current) => {
     if (!current) throw setNotFound();
     const shown = current.rounds[round];
     if (!shown || pick >= shown.readings.length) {
@@ -572,6 +580,8 @@ export async function finishReadHim(
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     paid = current.readHim.paid.find((entry) => entry.setId === setId) ?? null;
     if (paid) return current;
+    // #2156: a set waits, unpaid and open, while his grievance with her stands.
+    assertNotHeld(current, set.li);
     const outcome = applyReadHim(current, set, currentTells, { at });
     const amount = (key: "starlight" | "affection") =>
       outcome.grants.reduce((sum, entry) => sum + (entry[key] ?? 0), 0);
@@ -601,7 +611,7 @@ export async function finishReadHim(
  * Where a finished set sits in story order: after the main chapters completed before it, among the side stories by
  * time (S/phone/memory.ts orders a closed phone session the same way).
  */
-function orderOf(state: RunState, finishedAt: string): number {
+export function orderOf(state: RunState, finishedAt: string): number {
   const mainDone = Object.entries(state.chapters).filter(
     ([key, progress]) => key.startsWith("main-") && progress.completed && progress.completed < finishedAt,
   ).length;

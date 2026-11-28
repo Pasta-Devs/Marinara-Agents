@@ -34,6 +34,7 @@ import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "../feed/slp-feed-contract
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type GarnishTone = "corporate" | "scammy" | "local" | "luxury" | "unhinged";
 export type GarnishEra = "present" | "nineties" | "cyberpunk" | "retrofuture";
 
@@ -252,7 +253,7 @@ export async function generateGarnishAds(
     generated = parse(retry.content ?? "");
   }
 
-  const now = new Date().toISOString();
+  const now = slurpWorldNow().toISOString();
   const taken = new Set(existing.map((ad) => ad.id));
   const brandIds = new Set(knownBrands.map((brand) => brand.id));
   const created: GarnishAd[] = [];

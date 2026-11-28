@@ -212,6 +212,13 @@ export function partialNameTokensMatch(name: string, entryName: string, splitCam
   return tokenTokens.every((part) => entryTokens.includes(part));
 }
 
+// A card or persona relates to a shorter form of its name ("Preston" of "Preston Farraday") and to a
+// longer one ("Vivienne Hale" of a persona "Vivienne"); callers send either to review, never bind it. The
+// longer form splits on whitespace and punctuation only, so a card "Ann" never relates to "JoAnn".
+export function trustedNameRelated(name: string, entryName: string) {
+  return partialNameTokensMatch(name, entryName) || partialNameTokensMatch(entryName, name, false);
+}
+
 // LTM's own characters relate in either direction: a new "Preston" to a saved "Preston Farraday",
 // and a new "Preston Farraday" to a saved "Preston", on the same whole-token rule. Parts split on
 // whitespace and punctuation only, so "Ann" never binds to a saved "JoAnn".
@@ -346,6 +353,23 @@ export function damerauLevenshtein(left: string, right: string) {
     }
   }
   return rows[left.length]![right.length]!;
+}
+
+const TRAILING_ID_TOKEN_PATTERN = /[\s_]+([0-9a-f]{10}|[0-9a-f]{12})$/i;
+
+/** Drops a final 10/12-hex digest token (with a digit) from a display label; never returns an empty label. */
+export function stripTrailingIdToken(text: string) {
+  const trimmed = text.trim();
+  const match = TRAILING_ID_TOKEN_PATTERN.exec(trimmed);
+  if (!match || !/\d/.test(match[1]!)) return text;
+  return trimmed.slice(0, match.index).trim() || text;
+}
+
+/** "Corwin's" / "Corwin\u2019s" -> "Corwin"; a name that is only the suffix is returned unchanged. */
+export function stripTrailingPossessive(name: string) {
+  const trimmed = name.trim();
+  const stripped = trimmed.replace(/['\u2019]s$/i, "").trim();
+  return stripped && stripped !== trimmed ? stripped : name;
 }
 
 export function subjectLabelFromKey(key: string) {

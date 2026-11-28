@@ -8,6 +8,17 @@
 // M6 adds none: the period tracker and caring messages never reach a server document (plan §1.9).
 // 0.5.0 (#1945): each love interest's notebook (`known`, what they know about the protagonist) and the newest paid
 // Read Me sets (`readMe.paid`), written in the same write.
+// 0.9.0 (#2128): the Shop's gifts and figurines (`owned.gifts`, `owned.figurines`) and the newest purchases by request
+// id (`purchases`), written in the same write as the Starlight they cost (S/routes/shop.ts).
+// 0.11.0 (#2151): the newest paid Tarot night readings (`tarot.paid`), written in the same write as their pay.
+// 0.15.0 (#2155): each love interest's big moment of each story arc his side may retell (`hisSide`, S/story/his-side.ts),
+// written in the same write as the read that made it.
+// 0.8.12 (#2127): Your thoughts… waiting for the next main chapter (`thoughts`, S/routes/home.ts writes them and
+// S/story/chapters.ts lets them go); a damaged or too long one reads as none.
+// 0.21.0: the items won from Wish not looked at yet (`owned.unseen`, S/wish/pull.ts adds them in the pull's write,
+// S/routes/items.ts `seen` lets one go); the RunView counts them by where they are kept, for the dock's dots.
+// 0.35.0: each love interest's newest Kitty Cards games (`kitty.rounds`), kept as the Claw's rounds are.
+// #2504: each love interest's notes from his Messages thread (`notes`, S/phone/chat.ts keepNotes), absent while none.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -19,14 +30,19 @@ import type {
   Ledgers,
   LiState,
   Player,
+  PlayerThoughts,
   RunState,
+  RunFriendView,
+  RunLiView,
   RunView,
+  ShopPurchaseRecord,
   TimelineEntry,
   Unit,
   WishPullRecord,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FIRST_STAGE, LAST_STAGE } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { bondRankAt, bondStoriesPlayed } from "../../../../../client/src/features/otome-forge/shared/bond.js";
 import {
   CLAW_MAX_CATCHES,
   CLAW_ROUNDS_KEPT,
@@ -35,6 +51,11 @@ import {
   plushLi,
   type ClawRound,
 } from "../../../../../client/src/features/otome-forge/shared/claw.js";
+import {
+  KITTY_POINTS_MAX,
+  KITTY_ROUND_ID,
+  type KittyRound,
+} from "../../../../../client/src/features/otome-forge/shared/kitty.js";
 import {
   READ_HIM_PAID_KEPT,
   READ_HIM_SET_ID,
@@ -51,30 +72,46 @@ import {
   type ReadMePaid,
 } from "../../../../../client/src/features/otome-forge/shared/read-me.js";
 import {
+  TAROT_PAID_KEPT,
+  TAROT_READING_ID,
+  type TarotPaid,
+} from "../../../../../client/src/features/otome-forge/shared/tarot.js";
+import {
   STARTING_STARLIGHT,
   TENSION_MAX,
   TENSION_MIN,
   TRUST_MAX,
   TRUST_MIN,
+  BOND_MAX_LEVEL,
   MAX_LEVEL,
   affectionProgressOf,
+  bondRankOf,
   levelOf,
   prestigeOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { isGiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
+import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import {
   BANNER_KINDS,
   FOUR_STAR_EVERY,
   HARD_PITY,
   isItemId,
+  unseenCounts,
   type BannerKind,
   type PityCounter,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
+import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
+import { friendLevelOf, friendProgressOf } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import { isChapterKey, isLiId, playerId, stateId, unitId, worldId } from "../ids.js";
+import { HIS_NOTE_MAX, HIS_NOTES_KEPT } from "../phone/replies.js";
 import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems, wornLookUrl } from "./common.js";
 import { normalizePlayer } from "./player.js";
+import { ARCS_MAX } from "./story-arc.js";
+import { HisSideNoteSchema } from "./story.js";
 import { normalizeUnit } from "./unit.js";
 import { normalizeWorld, toWorldView } from "./world.js";
 
@@ -92,6 +129,8 @@ const FAVORITES_MAX = 300;
 const ALBUM_MAX = 500;
 /** Pulls remembered for a retried request id (S/wish/pull.ts). */
 const PULLS_MAX = 20;
+/** Shop purchases remembered for a retried request id (S/routes/shop.ts). */
+const PURCHASES_MAX = 20;
 /** Tells are 3–5 per bible; the room covers a hand-edited one. */
 const TELLS_MAX = 20;
 
@@ -108,9 +147,12 @@ const GrievanceSchema: ZodType<Grievance> = z.object({
   severity: z.enum(["minor", "major", "rupture"]),
   opened: short(120),
   status: z.enum(["open", "addressed", "forgiven", "festering"]),
+  // #2156: the chapter whose resolve closed it (see Grievance in api-types).
+  closedBy: z.string().max(160).optional(),
 });
 
 const DisclosureSchema = z.object({ text: short(), at: z.string(), ref: short(120) });
+const ThoughtsSchema: ZodType<PlayerThoughts> = z.object({ text: z.string().min(1).max(THOUGHTS_MAX), at: short(40) });
 
 const RelationshipLineSchema = z.object({ key: short(120), li: z.string(), line: short() });
 const ConflictSchema: ZodType<Ledgers["conflicts"][number]> = z.object({
@@ -133,6 +175,7 @@ const FavoriteSchema: ZodType<Favorite> = z.object({
   li: z.string().optional(),
   text: short(2000),
   ref: short(200),
+  voiced: short(4000).optional(),
 });
 
 const AlbumCgSchema: ZodType<AlbumCg> = z.object({
@@ -144,6 +187,7 @@ const AlbumCgSchema: ZodType<AlbumCg> = z.object({
 });
 
 const ClawPlayerSchema = z.enum(["me", "partner"]);
+const ClawCheatSchema = z.enum(["steady", "nudge", "extra", "freeze", "calculate"]);
 const ClawRoundSchema: ZodType<ClawRound> = z.object({
   id: z.string().regex(CLAW_ROUND_ID),
   li: z.string(),
@@ -151,12 +195,28 @@ const ClawRoundSchema: ZodType<ClawRound> = z.object({
   at: z.string(),
   first: ClawPlayerSchema,
   caught: z.array(z.object({ prize: short(100), by: ClawPlayerSchema })).max(CLAW_MAX_CATCHES),
-  cheat: z.enum(["steady", "nudge", "extra", "freeze", "calculate"]).nullable(),
+  cheat: ClawCheatSchema.nullable(),
   paid: z.object({ starlight: z.number().int().min(0), affection: z.number().int().min(0) }),
   capped: z.boolean(),
   newPlush: z.array(short(100)).max(CLAW_MAX_CATCHES),
   firstPlush: z.boolean(),
   line: short(300).optional(),
+});
+const KittyPointsSchema = z.number().int().min(0).max(KITTY_POINTS_MAX);
+/** His cheat moment in a finished Kitty Cards game (SH/kitty.ts KittyCheat); the finish route checks the same shape. */
+export const KittyCheatSchema = z.object({ kind: ClawCheatSchema, caught: z.boolean() });
+const KittyRoundSchema: ZodType<KittyRound> = z.object({
+  id: z.string().regex(KITTY_ROUND_ID),
+  li: z.string(),
+  name: short(200),
+  at: z.string(),
+  first: ClawPlayerSchema,
+  result: z.enum(["win", "lose", "draw"]),
+  me: KittyPointsSchema,
+  partner: KittyPointsSchema,
+  cheat: KittyCheatSchema.nullable(),
+  paid: z.object({ starlight: z.number().int().min(0), affection: z.number().int().min(0) }),
+  capped: z.boolean(),
 });
 const ReadHimPaidSchema: ZodType<ReadHimPaid> = z.object({
   setId: z.string().regex(READ_HIM_SET_ID),
@@ -166,6 +226,12 @@ const ReadHimPaidSchema: ZodType<ReadHimPaid> = z.object({
 });
 const ReadMePaidSchema: ZodType<ReadMePaid> = z.object({
   setId: z.string().regex(READ_ME_SET_ID),
+  li: z.string(),
+  starlight: z.number().int().min(0),
+  affection: z.number().int().min(0),
+});
+const TarotPaidSchema: ZodType<TarotPaid> = z.object({
+  id: z.string().regex(TAROT_READING_ID),
   li: z.string(),
   starlight: z.number().int().min(0),
   affection: z.number().int().min(0),
@@ -226,17 +292,35 @@ export const defaultLiState = (): LiState => ({
   chapterDelta: {},
   grievances: [],
   rupture: null,
+  grievanceArc: null,
+  upset: null,
+  asked: null,
   disclosures: [],
   revealed: [],
   lastLead: null,
   angst: [],
   firsts: {},
+  firstKiss: null,
+  firstTime: null,
+  firstConfession: null,
   tellsLearned: [],
   known: [],
+  hisSide: [],
 });
 
+/** The longest romantic-first sentence kept (LiState.firstKiss and the rest). */
+export const FIRST_SENTENCE_MAX = 400;
+
+/**
+ * #2504: one of his notes; a damaged one is dropped on its own. A note is cut to HIS_NOTE_MAX characters (code points),
+ * which zod counts as up to twice as many (UTF-16), so an emoji-laden note is never dropped.
+ */
+const HisNoteSchema = z.object({ text: short(HIS_NOTE_MAX * 2), at: z.string().max(40) });
+
 function normalizeLiState(raw: unknown): LiState {
-  return readFields<LiState>(
+  // #2504: his notes stay absent while he has none, so a state without them reads exactly as before.
+  const notes = keepNewest(validItems(HisNoteSchema, field(raw, "notes")), HIS_NOTES_KEPT);
+  const liState = readFields<Omit<LiState, "notes">>(
     {
       points: (value) => wholeNumber(value, 0, 0),
       stage: (value) => wholeNumber(value, FIRST_STAGE, FIRST_STAGE, LAST_STAGE),
@@ -244,18 +328,35 @@ function normalizeLiState(raw: unknown): LiState {
       tension: (value) => wholeNumber(value, 0, TENSION_MIN, TENSION_MAX),
       chapterDelta: readChapterDelta,
       grievances: (value) => validItems(GrievanceSchema, value, LIST_MAX),
-      rupture: z.object({ grievanceId: short(80), since: z.string() }).nullable(),
+      // #2156: a rupture without `space` (saved before it) has its space waived.
+      rupture: z
+        .object({
+          grievanceId: short(80),
+          since: z.string(),
+          space: z.number().int().min(0).optional(),
+          // #2458: the friend who talked to him for her (the rank-5 Wingman); they appear in his repair.
+          helper: z.string().max(80).optional(),
+        })
+        .nullable(),
+      grievanceArc: z.number().int().min(0).nullable(),
+      upset: z.object({ since: z.string().max(40) }).nullable(),
+      asked: z.string().max(40).nullable(),
       disclosures: (value) => validItems(DisclosureSchema, value, LIST_MAX),
       revealed: (value) => validItems(short(80), value, LIST_MAX),
       lastLead: z.number().int().min(0).nullable(),
       angst: (value) => validItems(short(80), value, LIST_MAX),
       firsts: z.record(z.string(), z.string()),
+      firstKiss: z.string().max(FIRST_SENTENCE_MAX).nullable(),
+      firstTime: z.string().max(FIRST_SENTENCE_MAX).nullable(),
+      firstConfession: z.string().max(FIRST_SENTENCE_MAX).nullable(),
       tellsLearned: normalizeTells,
       known: (value) => keepNewest(validItems(NotebookEntrySchema, value), NOTEBOOK_MAX),
+      hisSide: (value) => keepNewest(validItems(HisSideNoteSchema, value), ARCS_MAX + 1),
     },
     defaultLiState,
     isRecord(raw) ? raw : undefined,
   );
+  return notes.length ? { ...liState, notes } : liState;
 }
 
 const defaultLedgers = (): Ledgers => ({ relationship: [], conflicts: [], offscreen: [] });
@@ -276,6 +377,8 @@ const PullRecordSchema: ZodType<WishPullRecord> = z.object({
     .max(10),
 });
 
+const PurchaseRecordSchema: ZodType<ShopPurchaseRecord> = z.object({ id: short(80), what: short(80), at: z.string() });
+
 /** Each banner kind's pity (M4): counts below the 5★ guarantee; a damaged counter starts again from 0. */
 function normalizePity(raw: unknown): Record<BannerKind, PityCounter> {
   const pity = {} as Record<BannerKind, PityCounter>;
@@ -290,8 +393,9 @@ function normalizePity(raw: unknown): Record<BannerKind, PityCounter> {
 }
 
 /**
- * The owned item ids (M4), each once, in the order won, and when each was won (kept only for an owned id), and the
- * plush shelf (M5): plush id → how many. Never capped: ownership is never dropped.
+ * The owned item ids (M4), each once, in the order won, and when each was won (kept only for an owned id), the plush
+ * shelf (M5): plush id → how many, and the Shop's (#2128): gift id → how many, and love interest → when their figurine
+ * was bought. Never capped: ownership is never dropped.
  */
 function normalizeOwned(raw: unknown): RunState["owned"] {
   const rawItems = field(raw, "items");
@@ -309,7 +413,26 @@ function normalizeOwned(raw: unknown): RunState["owned"] {
       if (isPlushId(id) && value > 0) plush[id] = value;
     }
   }
-  return { items, at, plush };
+  const gifts: RunState["owned"]["gifts"] = {};
+  const rawGifts = field(raw, "gifts");
+  if (isRecord(rawGifts)) {
+    for (const [id, count] of Object.entries(rawGifts)) {
+      const value = wholeNumber(count, 0, 0);
+      if (isGiftId(id) && value > 0) gifts[id] = value;
+    }
+  }
+  const figurines: RunState["owned"]["figurines"] = {};
+  const rawFigurines = field(raw, "figurines");
+  if (isRecord(rawFigurines)) {
+    for (const [li, bought] of Object.entries(rawFigurines)) {
+      if (isLiId(li) && typeof bought === "string" && bought.length <= 40) figurines[li] = bought;
+    }
+  }
+  // Only owned items, each once: a state from before 0.21.0 has none unseen.
+  const rawUnseen = field(raw, "unseen");
+  const ownedIds = new Set(items);
+  const unseen = [...new Set((Array.isArray(rawUnseen) ? rawUnseen : []).filter((id) => ownedIds.has(id)))];
+  return { items, at, unseen, plush, gifts, figurines };
 }
 
 /** Who Home shows (M3): a love interest of the run, else the first in cast order; him unless the player picked Me. */
@@ -319,6 +442,16 @@ function normalizeHome(raw: unknown, lis: RunState["lis"]): HomeState {
     li: typeof li === "string" && lis[li] ? li : null,
     show: field(raw, "show") === "me" ? "me" : "him",
   };
+}
+
+/** #2459: a moment's record ({at}), or null. */
+const stamp = (value: unknown): { at: string } | null =>
+  isRecord(value) && typeof value.at === "string" ? { at: clipText(value.at, 40) } : null;
+
+/** Your thoughts… waiting (#2127), or null: none, a damaged one, or one longer than the player may write. */
+function normalizeThoughts(raw: unknown): PlayerThoughts | null {
+  const parsed = ThoughtsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 export function normalizeState(data: unknown): RunState {
@@ -387,14 +520,58 @@ export function normalizeState(data: unknown): RunState {
     owned: normalizeOwned(field(data, "owned")),
     selector,
     pulls: validItems(PullRecordSchema, field(data, "pulls"), PULLS_MAX),
+    purchases: keepNewest(validItems(PurchaseRecordSchema, field(data, "purchases")), PURCHASES_MAX),
     claw: { rounds: keepClawRounds(validItems(ClawRoundSchema, field(field(data, "claw"), "rounds"))) },
+    kitty: { rounds: keepClawRounds(validItems(KittyRoundSchema, field(field(data, "kitty"), "rounds"))) },
     readHim: {
       paid: keepNewest(validItems(ReadHimPaidSchema, field(field(data, "readHim"), "paid")), READ_HIM_PAID_KEPT),
     },
     readMe: {
       paid: keepNewest(validItems(ReadMePaidSchema, field(field(data, "readMe"), "paid")), READ_ME_PAID_KEPT),
     },
+    tarot: {
+      paid: keepNewest(validItems(TarotPaidSchema, field(field(data, "tarot"), "paid")), TAROT_PAID_KEPT),
+    },
+    thoughts: normalizeThoughts(field(data, "thoughts")),
+    friends: normalizeFriends(field(data, "friends"), lis),
+    // #2459: the finale read to its end, then the epilogue, after which the story only opens to look at.
+    finale: stamp(field(data, "finale")),
+    ended: stamp(field(data, "ended")),
   };
+}
+
+const FriendGrievanceSchema = z.object({
+  text: short(),
+  severity: z.enum(["major", "rupture"]),
+  opened: short(40),
+  space: z.number().int().min(0).max(1000),
+});
+
+/**
+ * #2458: her friends, in the order they joined, at most as many as love interests can be. A friend never shares an id
+ * with a love interest; a damaged entry is dropped.
+ */
+function normalizeFriends(raw: unknown, lis: RunState["lis"]): RunState["friends"] {
+  const friends: RunState["friends"] = {};
+  if (!isRecord(raw)) return friends;
+  for (const [id, entry] of Object.entries(raw)) {
+    if (!isLiId(id) || Object.hasOwn(lis, id) || !isRecord(entry)) continue;
+    if (Object.keys(friends).length >= LIS_MAX) break;
+    const grievance = FriendGrievanceSchema.safeParse(entry.grievance);
+    const upset = isRecord(entry.upset) && typeof entry.upset.since === "string" ? { since: entry.upset.since } : null;
+    const arcOrNull = (value: unknown) => (value === null || value === undefined ? null : wholeNumber(value, 0, 0));
+    friends[id] = {
+      points: wholeNumber(entry.points, 0, 0),
+      arc: wholeNumber(entry.arc, 0, 0),
+      joinedAt: typeof entry.joinedAt === "string" ? clipText(entry.joinedAt, 40) : "",
+      grievance: grievance.success ? grievance.data : null,
+      grievanceArc: arcOrNull(entry.grievanceArc),
+      upset,
+      asked: typeof entry.asked === "string" ? clipText(entry.asked, 40) : null,
+      wingmanArc: arcOrNull(entry.wingmanArc),
+    };
+  }
+  return friends;
 }
 
 /** Lists the state keeps bounded: the newest `max` entries (ledgers, timeline and favorites grow by appending). */
@@ -432,6 +609,7 @@ export const STATE_LIMITS = {
   list: LIST_MAX,
   album: ALBUM_MAX,
   pulls: PULLS_MAX,
+  purchases: PURCHASES_MAX,
   /** A timeline entry's text and the other short texts, in UTF-16 units (clipText). */
   text: TEXT_MAX,
 };
@@ -439,7 +617,9 @@ export const STATE_LIMITS = {
 /**
  * His painted faces for `look` (the kit's forgeStoryExpressionCast: a ready set only, and only while expressions are
  * on); by default the look he wears now, his worn outfit (M4) else his portrait, the base art/expressions.ts paints
- * them on. Sets are kept per look, so a look he wore before keeps its faces.
+ * them on. Sets are kept per look, so a look he wore before keeps its faces. #2147: otherwise the set's faces that are
+ * his Engine sprites (S/art/engine-art.ts), whatever its state or the switch, since they cost nothing; a painted face
+ * of a set that is not ready stays hidden.
  */
 export function readyFaces(
   world: Pick<World, "images">,
@@ -447,7 +627,13 @@ export function readyFaces(
   look = wornLookUrl(unit),
 ): Partial<Record<Face, string>> | undefined {
   const { expressions } = forgeStoryExpressionCast(world.images, unit, look, FACES);
-  return expressions as Partial<Record<Face, string>> | undefined;
+  if (expressions) return expressions as Partial<Record<Face, string>>;
+  const set = (look ? unit.expressions[look] : undefined) as { images?: Record<string, { url?: unknown }> } | undefined;
+  const engine = FACES.flatMap((face) => {
+    const url = set?.images?.[face]?.url;
+    return isEngineArt(url) ? [[face, url] as const] : [];
+  });
+  return engine.length ? (Object.fromEntries(engine) as Partial<Record<Face, string>>) : undefined;
 }
 
 /** The cut-out of `url`, keeping an older derivative visible while a free replacement is pending. */
@@ -497,13 +683,17 @@ export function facesComing(world: Pick<World, "images">, unit: Unit): boolean {
 /**
  * The Claw Machine rounds the state keeps, in the order they were played: each love interest's newest
  * CLAW_ROUNDS_KEPT, and each one's first-plush round as well, so one love interest's play never evicts another's.
+ * Kitty Cards' games (0.35.0) are kept the same way; they have no first plush.
  * ponytail: a love interest's rounds older than his newest CLAW_ROUNDS_KEPT leave his memory and the replay guard (a
  * finish of one sent again by hand would pay again, within the day's cap); the upgrade path is rounds kept as their own
  * documents, as Read Him sets are, or a digest of each love interest's older rounds.
  */
-export function keepClawRounds(rounds: readonly ClawRound[], max = CLAW_ROUNDS_KEPT): ClawRound[] {
+export function keepClawRounds<T extends Pick<ClawRound, "li"> & { firstPlush?: boolean }>(
+  rounds: readonly T[],
+  max = CLAW_ROUNDS_KEPT,
+): T[] {
   const room = new Map<string, number>();
-  const kept: ClawRound[] = [];
+  const kept: T[] = [];
   for (let index = rounds.length - 1; index >= 0; index -= 1) {
     const round = rounds[index]!;
     const left = room.get(round.li) ?? max;
@@ -525,9 +715,83 @@ export function clipText(text: string, max: number): string {
 }
 
 /**
- * What GET /runs/:run returns. LIs follow the order of `state.lis` (setup order); a unit missing from it goes last.
+ * His level and its progress (1–20, 0.23.0): 1–10 from affection alone, and past his finale one bond rank at a time,
+ * each rank's story played before the next opens. `prestige` appears only at the last rank, and only then does the
+ * infinite loop (#2025) open; `bond` names the rank he stands at, for the Story screen.
  */
-export function toRunView(runKey: string, world: World, player: Player, units: Unit[], state: RunState): RunView {
+function bondView(
+  id: string,
+  points: number,
+  stage: number,
+  state: RunState,
+): Pick<RunLiView, "level" | "affectionProgress"> & { bond?: RunLiView["bond"]; prestige?: RunLiView["prestige"] } {
+  const open = stage >= LAST_STAGE;
+  const played = bondStoriesPlayed(state.chapters, id);
+  const level = bondRankOf(points, open, played);
+  const rank = bondRankAt(level);
+  return {
+    level,
+    affectionProgress: affectionProgressOf(points, open, played),
+    ...(rank
+      ? { bond: { level: rank.level, name: rank.name, played, next: bondRankAt(rank.level + 1)?.level ?? null } }
+      : {}),
+    // #2025: past level 20, his affection fills prestige points (only the derived numbers, never the points).
+    ...(level === BOND_MAX_LEVEL ? { prestige: prestigeOf(points, open) } : {}),
+  };
+}
+
+/** A unit's pictures as the client sees them (each as its cut-out once one is ready), shared by love interests and friends. */
+function looksOf(world: World, unit: Unit): Omit<RunFriendView, "level" | "affectionProgress" | "arc"> {
+  // Each image as its cut-out once one is ready, so he stands on every screen without a backdrop; `cut` lists the
+  // cut-outs, which the client frames whole instead of cropping and fading.
+  const cut: string[] = [];
+  const shown = (url: string) => {
+    const cutout = readyCutout(unit, url);
+    if (cutout) cut.push(cutout);
+    return cutout ?? url;
+  };
+  // Phone stickers keep the original while cleanup waits or fails; only URLs in `cut` may stand on stage.
+  const faces = readyFaces(world, unit);
+  const expressions = faces
+    ? (Object.fromEntries(Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url])) as typeof faces)
+    : undefined;
+  const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
+  const portrait = unit.portrait ? shown(unit.portrait) : undefined;
+  const wornUrl = worn ? shown(worn.url) : undefined;
+  const look = unit.bible?.look ?? unit.friend?.look;
+  return {
+    id: unit.id,
+    name: unit.name,
+    pronouns: unit.pronouns,
+    source: unit.source,
+    ...(unit.cardId ? { cardId: unit.cardId } : {}),
+    voiceGender: unit.voiceGender,
+    accent: unit.accent,
+    ...(unit.accentSampler ? { accentSampler: unit.accentSampler } : {}),
+    look: {
+      identityLine: unit.identityLine || look?.identityLine || "",
+      outfitLine: unit.outfitLine || look?.outfitLine || "",
+    },
+    ...(portrait ? { portrait } : {}),
+    ...(unit.art ? { art: unit.art } : {}),
+    ...(expressions ? { expressions } : {}),
+    ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
+    ...(cut.length ? { cut } : {}),
+  };
+}
+
+/**
+ * What GET /runs/:run returns. LIs follow the order of `state.lis` (setup order); a unit missing from it goes last.
+ * #2458: her friends follow `state.friends`, each with a level of 1–5.
+ */
+export function toRunView(
+  runKey: string,
+  world: World,
+  player: Player,
+  units: Unit[],
+  state: RunState,
+  friends: readonly Unit[] = [],
+): RunView {
   const order = Object.keys(state.lis);
   const rank = (unit: Unit) => {
     const index = order.indexOf(unit.id);
@@ -541,52 +805,34 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       .sort((a, b) => rank(a) - rank(b))
       .map((unit) => {
         const progress = state.lis[unit.id] ?? defaultLiState();
-        // Each image as its cut-out once one is ready, so he stands on every screen without a backdrop; `cut` lists the
-        // cut-outs, which the client frames whole instead of cropping and fading.
-        const cut: string[] = [];
-        const shown = (url: string) => {
-          const cutout = readyCutout(unit, url);
-          if (cutout) cut.push(cutout);
-          return cutout ?? url;
-        };
-        // Phone stickers keep the original while cleanup waits or fails; only URLs in `cut` may stand on stage.
-        const faces = readyFaces(world, unit);
-        const expressions = faces
-          ? (Object.fromEntries(
-              Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url]),
-            ) as typeof faces)
-          : undefined;
-        const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
-        const portrait = unit.portrait ? shown(unit.portrait) : undefined;
-        const wornUrl = worn ? shown(worn.url) : undefined;
+        const { expressions, worn, cut, ...looks } = looksOf(world, unit);
         return {
-          id: unit.id,
-          name: unit.name,
-          pronouns: unit.pronouns,
-          source: unit.source,
-          ...(unit.cardId ? { cardId: unit.cardId } : {}),
-          voiceGender: unit.voiceGender,
-          accent: unit.accent,
-          ...(unit.accentSampler ? { accentSampler: unit.accentSampler } : {}),
-          look: {
-            identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
-            outfitLine: unit.outfitLine || unit.bible?.look.outfitLine || "",
-          },
-          ...(portrait ? { portrait } : {}),
-          ...(unit.art ? { art: unit.art } : {}),
+          ...looks,
           ...(unit.bible?.intimacy ? { intimacy: true as const } : {}),
-          level: levelOf(progress.points),
-          affectionProgress: affectionProgressOf(progress.points),
-          // #2025: past level 10, his affection fills prestige points (only the derived numbers, never the points).
-          ...(levelOf(progress.points) === MAX_LEVEL ? { prestige: prestigeOf(progress.points) } : {}),
+          ...bondView(unit.id, progress.points, progress.stage, state),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
-          ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
-          ...(cut.length ? { cut } : {}),
+          ...(worn ? { worn } : {}),
+          ...(cut ? { cut } : {}),
         };
       }),
     forge: world.forge,
     starlight: state.wallet.starlight,
+    unseen: unseenCounts(state.owned.unseen),
+    ...(state.ended ? { ended: state.ended.at } : {}),
+    friends: friends.flatMap((unit) => {
+      const friend = state.friends[unit.id];
+      return friend
+        ? [
+            {
+              ...looksOf(world, unit),
+              level: friendLevelOf(friend.points),
+              affectionProgress: friendProgressOf(friend.points),
+              arc: friend.arc,
+            },
+          ]
+        : [];
+    }),
   };
 }
 
@@ -595,6 +841,8 @@ export interface RunDocuments {
   player: Player;
   units: Unit[];
   state: RunState;
+  /** #2458: her friends' units, in the order they joined (readFriendUnits); never counted among the love interests. */
+  friends?: Unit[];
 }
 
 /**
@@ -610,12 +858,22 @@ export async function readRun(store: Pick<OtomeStore, "readDoc">, runId: string)
   ]);
   if (!world) return null;
   const state = stored ?? normalizeState(undefined);
-  return {
-    world,
-    player: player ?? normalizePlayer(undefined),
-    units: await readCastUnits(store, runId, state),
-    state,
-  };
+  const [units, friends] = await Promise.all([
+    readCastUnits(store, runId, state),
+    readFriendUnits(store, runId, state),
+  ]);
+  return { world, player: player ?? normalizePlayer(undefined), units, state, friends };
+}
+
+/** #2458: her friends' units, in the order they joined; a unit without its friend bible is not one yet. */
+export async function readFriendUnits(
+  store: Pick<OtomeStore, "readDoc">,
+  runId: string,
+  state?: RunState | null,
+): Promise<Unit[]> {
+  const friends = (state ?? (await store.readDoc(stateId(runId), normalizeState)))?.friends ?? {};
+  const units = await Promise.all(Object.keys(friends).map((id) => store.readDoc(unitId(runId, id), normalizeUnit)));
+  return units.filter((unit): unit is Unit => !!unit?.friend);
 }
 
 /**

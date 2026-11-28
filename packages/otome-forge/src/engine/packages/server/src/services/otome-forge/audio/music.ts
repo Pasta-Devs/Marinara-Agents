@@ -77,7 +77,7 @@ export function createMusicBriefs(deps: MusicDeps) {
 
   return async (runId: string, cue: MusicMood, debugMode: boolean): Promise<string> => {
     const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-    if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
     // No music is generated, so no brief is paid for.
     if (!world.audio.generate) throw new OtomeForgeError(409, "This world does not generate music.", "conflict");
     const result = await brief({ runId, cue, debugMode });
@@ -134,7 +134,7 @@ export async function chapterMusicBrief(
 ): Promise<string> {
   const allowedWorld = async () => {
     const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-    if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
     if (!world.audio.generate || !world.audio.chapterThemes || world.audio.muted || world.audio.musicVolume <= 0)
       throw new OtomeForgeError(409, "Chapter music generation is off or muted.", "conflict");
     return world;

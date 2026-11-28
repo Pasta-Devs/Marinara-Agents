@@ -348,9 +348,13 @@ function chapterTarget(qc: QueryClient, storyId: string, chapterId: string): Sav
       const saved = result as { story: StoryRecord; chapter: StoryChapter };
       updateStoryCache(client, id, (doc) => ({
         story: mergeRecord(doc.story, saved.story),
+        // The pictures stay as the cache has them: only the illustration routes change them, and a text save that
+        // answers after one of those must not bring back the pictures from before it.
         chapters: isDirty(key)
           ? doc.chapters
-          : doc.chapters.map((chapter) => (chapter.id === chapterId ? saved.chapter : chapter)),
+          : doc.chapters.map((chapter) =>
+              chapter.id === chapterId ? { ...saved.chapter, illustrations: chapter.illustrations } : chapter,
+            ),
       }));
       syncStorySummary(client, id);
     },
@@ -413,12 +417,33 @@ function useReportQueryError(error: unknown, key: string) {
   }, [error, key]);
 }
 
+/**
+ * An illustration route's answer: the chapter's pictures and the story's record, with any text the author typed
+ * meanwhile kept as it is.
+ */
+export function applyChapterPictures(
+  qc: QueryClient,
+  storyId: string,
+  result: { story: StoryRecord; chapter: StoryChapter },
+) {
+  updateStoryCache(qc, storyId, (doc) => ({
+    story: mergeRecord(doc.story, result.story),
+    chapters: doc.chapters.map((chapter) =>
+      chapter.id === result.chapter.id ? { ...chapter, illustrations: result.chapter.illustrations } : chapter,
+    ),
+  }));
+  syncStorySummary(qc, storyId);
+}
+
 // ── Hooks ──
+
+export type PreferencesUpdate = (patch: Partial<StoryWriterPreferences>, options?: { debounce?: boolean }) => void;
 
 export function usePreferences(): {
   preferences: StoryWriterPreferences;
   isLoading: boolean;
-  update(patch: Partial<StoryWriterPreferences>): void;
+  /** Saves at once; `debounce` waits for a pause in typing, like the story settings. */
+  update: PreferencesUpdate;
 } {
   useErrorText();
   const qc = useQueryClient();
@@ -435,15 +460,16 @@ export function usePreferences(): {
   });
   useReportQueryError(query.error, "errors.loadPreferences");
   const preferences = useMemo(() => normalizePreferences(query.data ?? {}), [query.data]);
-  const update = useCallback(
-    (patch: Partial<StoryWriterPreferences>) => {
+  const update = useCallback<PreferencesUpdate>(
+    (patch, options) => {
       const next = normalizePreferences(
         patch,
         normalizePreferences(qc.getQueryData(storyWriterKeys.preferences) ?? {}),
       );
       bump(PREFERENCES_KEY);
       qc.setQueryData(storyWriterKeys.preferences, next);
-      void scheduleSave(PREFERENCES_KEY, preferencesTarget(qc), pickKeys(next, patch), null);
+      const delay = options?.debounce ? SETTINGS_SAVE_DELAY : null;
+      void scheduleSave(PREFERENCES_KEY, preferencesTarget(qc), pickKeys(next, patch), delay);
     },
     [qc],
   );
@@ -545,7 +571,8 @@ export interface StoryDocumentApi {
   setChapterTextLocal(chapterId: string, text: string): void;
   saveChapter(chapterId: string, patch: ChapterPatch, options?: { immediate?: boolean }): Promise<void>;
   createChapter(create: ChapterCreate): Promise<StoryChapter>;
-  deleteChapter(chapterId: string): Promise<void>;
+  /** Resolves to false when the delete failed (it has been reported, and the chapter loads again). */
+  deleteChapter(chapterId: string): Promise<boolean>;
   /** Sends every pending save now; resolves to false while a save is failing (it keeps retrying). */
   flush(): Promise<boolean>;
 }
@@ -652,6 +679,7 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
         summary: fields.summary ?? "",
         status: fields.status ?? "draft",
         request: fields.request ?? "",
+        illustrations: [],
         createdAt: now,
         updatedAt: now,
       };
@@ -678,7 +706,7 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
   const deleteChapter = useCallback(
     async (chapterId: string) => {
       const owner = chapterStoryId(qc, chapterId) ?? storyId;
-      if (!owner) return;
+      if (!owner) return true;
       const key = chapterKey(chapterId);
       dropSaves((saveKey) => saveKey === key);
       const uncreated = creatingChapters.delete(key);
@@ -694,12 +722,14 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
         deletingChapters.delete(chapterId);
         qc.setQueryData<StoryWithChapters>(storyWriterKeys.story(owner), (current) => mergeDocument(current, result));
         syncStorySummary(qc, owner);
+        return true;
       } catch (error) {
         deletingChapters.delete(chapterId);
         // Its create never got through, so there is nothing to delete.
-        if (uncreated && errorStatus(error) === 404) return;
+        if (uncreated && errorStatus(error) === 404) return true;
         reportError(error, "errors.deleteChapter");
         void qc.invalidateQueries({ queryKey: storyWriterKeys.story(owner) });
+        return false;
       }
     },
     [qc, storyId],

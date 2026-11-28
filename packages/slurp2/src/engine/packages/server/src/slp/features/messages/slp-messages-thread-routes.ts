@@ -32,6 +32,7 @@ import { readSlurpSupportDesk } from "../../data/creators/slp-support-desk-stora
 import { reconcileSlpThreadScene } from "./scenes/slp-roleplay-scene-origin.js";
 import { slpScenesAvailable } from "../../base/host/slp-scene-host.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const messagePageSchema = personaQuerySchema.extend({
   cursorAt: z.string().datetime().optional(),
   cursorId: z.string().trim().min(1).max(200).optional(),
@@ -98,7 +99,7 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
         (entry: { creatorAccountId: string }) => entry.creatorAccountId === thread.creatorAccountId,
       ),
       isRequest: thread.state === "request",
-      coolingOff: Boolean(thread.coolUntil && thread.coolUntil > new Date().toISOString()),
+      coolingOff: Boolean(thread.coolUntil && thread.coolUntil > slurpWorldNow().toISOString()),
       strikes,
       details,
       settings,

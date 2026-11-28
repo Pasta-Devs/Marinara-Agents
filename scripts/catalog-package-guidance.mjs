@@ -182,13 +182,19 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     activation:
       "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
   },
-  // The Engine has no Chat Settings command toggle for Blackjack yet, so characters cannot start it on their own.
-  // Typing "let's play blackjack" still opens the setup: the Engine's input matches play/start/deal plus any installed
-  // game's name or aliases (ConversationInput), with no per-game wiring.
+  // Package games get a Chat Settings command switch from Capability API 1.827 (Marinara-Engine#9266); an older Engine
+  // shows none, so the text names the switch rather than a version. Typing "let's play blackjack" opens the setup on
+  // either: the Engine's input matches play/start/deal plus any installed game's name or aliases (ConversationInput).
   blackjack: {
     modes: ["conversation"],
     activation:
-      'Install to use /blackjack manually in any Conversation chat, or type a message like "let\'s play blackjack" to open the table setup. Characters cannot start a game on their own yet.',
+      'Install to use /blackjack manually in any Conversation chat, or type a message like "let\'s play blackjack" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on.',
+  },
+  // Same as Blackjack. A character's start goes through Wordle's own hook, so it gets this chat's word and lock.
+  wordle: {
+    modes: ["conversation"],
+    activation:
+      "Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
   },
   poker: {
     modes: ["conversation"],

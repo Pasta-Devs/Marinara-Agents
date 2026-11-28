@@ -4,6 +4,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { useCancelSlurpFollowUp } from "../../features/messages/slp-message-action-hooks";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 // The connection switcher and one follow-up row.
 
 export function SlurpConnectionSwitcher({
@@ -121,7 +122,7 @@ export function SlurpFollowUpItem({
 
   const formatTime = (isoString: string) => {
     const date = new Date(isoString);
-    const now = new Date();
+    const now = slurpWorldNow();
     const diffMs = date.getTime() - now.getTime();
     const diffMin = Math.round(diffMs / 60_000);
 

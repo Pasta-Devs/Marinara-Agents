@@ -3,9 +3,13 @@
 // ──────────────────────────────────────────────
 // Both are written once by the story (S/story/*) and only ever read here, so a damaged list item is dropped and a
 // damaged field takes its default; a document with no key or no index reads as missing (null), and is written again.
-// The hidden parts (node guides, the ledger, a node's side-with mark, a beat's effects, a date's plan and its scores)
-// are stripped by toChapterView and toBeatView before anything reaches the client.
+// The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts… and the
+// earlier chapters it recalls, a birthday scene's gift, the moment his side retells, a beat's effects, a date's plan and
+// its scores) are stripped by
+// toChapterView and toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
+import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
+import { FRIEND_MAX_LEVEL, FRIEND_STORY_KINDS } from "../../../../../client/src/features/otome-forge/shared/friends.js";
 import type {
   Beat,
   BeatView,
@@ -17,31 +21,81 @@ import type {
   ConfrontationOption,
   Effect,
   ForgeChoice,
+  HisSideNote,
   Segment,
+  StateUndo,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { rewriteBlock } from "../story/rewrite-undo.js";
 import {
   CLOSER_ENDINGS,
   CLOSER_MOVES,
   CONFRONTATION_ENDINGS,
   CONFRONTATION_ROUNDS,
   FIRST_STAGE,
+  HIS_SIDE_MOMENTS,
   LAST_STAGE,
+  QUESTION_ANSWER_MAX,
+  QUESTION_MAX,
+  QUESTIONS_MAX,
+  RIDDLE_ANSWER_MAX,
+  RIDDLE_CHOICE,
+  RIDDLE_QUESTION_MAX,
   STANCES,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
-import { PRESTIGE_KINDS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import {
+  PRESTIGE_KINDS,
+  TENSION_MAX,
+  TENSION_MIN,
+  TRUST_MAX,
+  TRUST_MIN,
+} from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   DATE_PLACE_KINDS,
   type DatePlan,
   type DateScore,
 } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { isChapterKey } from "../ids.js";
+import {
+  HAPTIC_ACTIONS,
+  HAPTIC_CUES_MAX,
+  HAPTIC_PATTERNS,
+} from "../../../../../client/src/features/otome-forge/shared/haptics.js";
+import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
+import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { SCENE_OFFERED_MAX } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
+import { isChapterKey, isLiId } from "../ids.js";
+import { RECALL_MAX } from "../memory/recall-index.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
-import { JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
+import { ARCS_MAX, JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
 import { TrackSchema } from "./world.js";
 
 const short = (max = 600) => z.string().max(max);
+
+/** #2155: a big moment his side may retell (LiState.hisSide, and the side chapter's own copy). */
+export const HisSideNoteSchema: ZodType<HisSideNote> = z.object({
+  arc: z.number().int().min(0).max(ARCS_MAX),
+  ref: short(120),
+  moment: z.enum(HIS_SIDE_MOMENTS),
+  stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE),
+  trust: z.number().int().min(TRUST_MIN).max(TRUST_MAX),
+  tension: z.number().int().min(TENSION_MIN).max(TENSION_MAX),
+  open: z.array(short(80)).max(200),
+  rupture: z.object({ grievanceId: short(80), since: z.string() }).nullable(),
+  at: short(40),
+});
+
+/** 0.34.0: a segment's haptic cues as normalizeHapticCues keeps them (SH/haptics.ts). */
+export const HapticCuesSchema = z
+  .array(
+    z.object({
+      action: z.enum(HAPTIC_ACTIONS),
+      pattern: z.enum(HAPTIC_PATTERNS).optional(),
+      intensity: z.number().min(0).max(1).optional(),
+      device: short(80).optional(),
+    }),
+  )
+  .max(HAPTIC_CUES_MAX);
 
 export const SegmentSchema: ZodType<Segment> = z.object({
   speaker: short(120),
@@ -51,6 +105,8 @@ export const SegmentSchema: ZodType<Segment> = z.object({
   place: short(120).optional(),
   gender: short(20).optional(),
   exits: z.array(z.string()).optional(),
+  haptic: HapticCuesSchema.optional(),
+  voiced: short(4000).optional(),
 });
 
 const ChoiceSchema: ZodType<ForgeChoice> = z.object({
@@ -103,6 +159,7 @@ const NodeSchema: ZodType<ChapterNode> = z.object({
   judgment: z
     .object({ question: short(JUDGMENT_QUESTION), answers: z.array(short(JUDGMENT_ANSWER)).min(2).max(4) })
     .optional(),
+  riddle: z.literal(true).optional(),
 });
 
 const LedgerSchema: ZodType<ChapterLedger> = z.object({
@@ -119,6 +176,13 @@ const LedgerSchema: ZodType<ChapterLedger> = z.object({
 });
 
 const emptyLedger = (): ChapterLedger => ({ relationship: [], conflict: [], offscreen: [] });
+
+const QuestionSchema: ZodType<NonNullable<Chapter["questions"]>[number]> = z.object({
+  node: z.number().int().min(0),
+  question: short(QUESTION_MAX).min(1),
+  answer: short(QUESTION_ANSWER_MAX).min(1).optional(),
+  answeredAt: z.string().optional(),
+});
 
 const SelectionSchema = z.object({ kind: z.enum(["dialogue", "action"]), text: short(400) });
 const StanceOptionSchema: ZodType<ConfrontationOption> = z.object({
@@ -176,7 +240,11 @@ export const ConfrontationSchema: ZodType<Confrontation> = z.union([
   }),
 ]);
 
-/** A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. */
+/**
+ * A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. #2128's `gift`,
+ * #2156's `clearAir`, #2283's `second`, #2303's pulled date (`item`, `cast`, `newcomers`, `grand`) and #2424's `invited`
+ * are optional, as every date planned before them has none.
+ */
 const DatePlanSchema: ZodType<DatePlan> = z.object({
   li: z.string(),
   place: z.enum(DATE_PLACE_KINDS as [DatePlan["place"], ...DatePlan["place"][]]),
@@ -186,6 +254,19 @@ const DatePlanSchema: ZodType<DatePlan> = z.object({
   goesWrong: z.boolean(),
   makeItRight: short(80).nullable(),
   keepsake: z.object({ brief: short(1200), art: PaintSchema.optional() }),
+  gift: z.enum(GIFT_IDS).optional(),
+  clearAir: z.literal(true).optional(),
+  // A double date's invited love interest (#2283), as planned; inviting the date's own love interest was refused when
+  // the date started, not read back here.
+  second: short(80).optional(),
+  // #2303: a date won from Wish: its item, everyone taken on it (`li` first), those on it for the first time, and a
+  // 5★ date's key image.
+  item: short(80).optional(),
+  cast: z.array(short(80)).min(1).max(20).optional(),
+  newcomers: z.array(short(80)).max(20).optional(),
+  grand: z.literal(true).optional(),
+  // #2424: the date he asked her on in Messages, by his message's id.
+  invited: short(60).optional(),
 });
 
 const SCORE_VALUES: ReadonlySet<unknown> = new Set([-1, 0, 1]);
@@ -237,6 +318,54 @@ export function normalizeChapter(data: unknown): Chapter | null {
         return parsed.success ? parsed.data : undefined;
       },
       prestige: z.object({ kind: z.enum(PRESTIGE_KINDS), premise: short(600) }).optional(),
+      bond: z.object({ rank: z.number().int().min(11).max(20), reveal: short(600) }).optional(),
+      thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
+      // #2503: its plan's questions about the protagonist, and the player's answers once given.
+      questions: (value) => {
+        const questions = validItems(QuestionSchema, value, QUESTIONS_MAX);
+        return questions.length ? questions : undefined;
+      },
+      gift: z.enum(GIFT_IDS).optional(),
+      hisSide: HisSideNoteSchema.optional(),
+      friendStory: z
+        .object({
+          kind: z.enum(FRIEND_STORY_KINDS),
+          friends: z.array(z.string().refine(isLiId)).min(1).max(LIS_MAX),
+          level: z.number().int().min(2).max(FRIEND_MAX_LEVEL).optional(),
+          place: short(200).optional(),
+          look: z.object({ name: short(80), outfitLine: short(600) }).optional(),
+          herLook: z.string().min(1).max(80).optional(),
+          memento: z.object({ brief: short(1200), art: PaintSchema.optional() }).optional(),
+        })
+        .optional(),
+      ending: z.enum(["finale", "epilogue"]).optional(),
+      friends: z
+        .array(z.object({ id: z.string().refine(isLiId), level: z.number().int().min(1).max(FRIEND_MAX_LEVEL) }))
+        .max(LIS_MAX)
+        .optional(),
+      recalled: z.array(z.string().refine(isChapterKey)).min(1).max(RECALL_MAX).optional(),
+      // 0.24.2: the story context its plan or first scene read, sent by every scene (S/story/beats.ts). Bounded by no
+      // length: recallText caps nothing, and a dropped-too-long context would read as never saved (Dottore, #2262).
+      context: z
+        .object({
+          overview: z.string(),
+          details: z.array(z.object({ kind: z.string(), title: z.string(), content: z.string() })),
+          prefix: z.string(),
+          fate: z.string(),
+          optional: z.array(z.string()),
+          // 0.34.0: the timeline form it was read from. Optional, so a context saved before reads with none.
+          form: z.number().int().optional(),
+        })
+        .optional(),
+      // 0.20.4: its small memories' ids, [] when it has none (S/story/beats.ts).
+      memories: z.array(z.string().min(1).max(300)).max(200).optional(),
+      // #2509: the looks its scenes may dress each person in, and what they start in (S/story/scene-looks.ts).
+      wardrobe: z
+        .object({
+          offered: z.record(z.string().max(80), z.array(z.string().min(1).max(80)).min(1).max(SCENE_OFFERED_MAX)),
+          start: z.record(z.string().max(80), z.string().min(1).max(80)),
+        })
+        .optional(),
     },
     () => ({
       key: data.key as string,
@@ -252,9 +381,22 @@ export function normalizeChapter(data: unknown): Chapter | null {
     }),
     data,
   );
-  const chapter = withoutEmpty(read, "date");
+  const chapter = withoutEmpty(withoutEmpty(read, "date"), "questions");
   return chapter.nodes.length ? chapter : null;
 }
+
+/** 0.38.0: one change a scene made to the story state (S/story/rewrite-undo.ts), as stored on its beat. */
+const UndoSchema: ZodType<StateUndo> = z.object({
+  kind: z.enum(["pick", "finish"]),
+  choice: z.string().max(40).optional(),
+  covers: z.array(z.string().max(40)).max(8).optional(),
+  blocked: z.enum(["chapter", "stage", "repair", "his-side", "clearing"]).optional(),
+  before: z.record(z.string(), z.unknown()),
+  after: z.record(z.string(), z.unknown()),
+});
+
+/** A beat holds a few picks and one read; more is not a record any Rewrite reads. */
+const UNDO_MAX = 16;
 
 /**
  * A stored beat, or null when there is none (or it has no valid key or index, or no segments; only a node eased off
@@ -296,6 +438,13 @@ export function normalizeBeat(data: unknown): Beat | null {
       shown: z.literal(true).optional(),
       confrontation: ConfrontationSchema.optional(),
       sideWith: z.object({ choice: short(40), backs: z.record(z.string(), z.string()) }).optional(),
+      riddle: z.object({ question: short(RIDDLE_QUESTION_MAX), answer: short(RIDDLE_ANSWER_MAX) }).optional(),
+      undo: (value) => {
+        const entries = validItems(UndoSchema, value, UNDO_MAX);
+        return entries.length ? entries : undefined;
+      },
+
+      wear: z.record(z.string().max(80), z.string().min(1).max(80)).optional(),
     },
     () => ({
       key: data.key as string,
@@ -314,13 +463,16 @@ export function normalizeBeat(data: unknown): Beat | null {
     }),
     data,
   );
-  const beat = withoutEmpty(read, "scores");
+  const beat = withoutEmpty(withoutEmpty(read, "scores"), "undo");
   return beat.segments.length || beat.easedOff ? beat : null;
 }
 
 /**
  * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, a date's plan
- * (GET .../dates shows a date) or an extra story's premise (#2025).
+ * (GET .../dates shows a date), an extra story's premise (#2025), the Your thoughts… its plan read (#2127; Home shows
+ * the player only the ones still waiting), a birthday scene's gift (#2153), the moment his side retells (#2155), the
+ * earlier chapters it recalls (0.19.0) or its small memories (0.20.4). A main chapter's questions about the protagonist
+ * (#2503) go with it, so the reader can ask them.
  */
 export function toChapterView(chapter: Chapter): ChapterView {
   const {
@@ -330,11 +482,24 @@ export function toChapterView(chapter: Chapter): ChapterView {
     grievance: _grievance,
     date: _date,
     prestige: _prestige,
+    bond: _bond,
+    thoughts: _thoughts,
+    gift: _gift,
+    hisSide: _hisSide,
+    recalled: _recalled,
+    memories: _memories,
+    friends: _friends,
+    context: _context,
+    wardrobe: _wardrobe,
     music,
+    friendStory,
     ...rest
   } = chapter;
+  // #2458: a friend's story shows its kind, friends, level, place and memento's paint; never the plan's look or brief.
+  const { look: _look, memento, ...story } = friendStory ?? { kind: "rank", friends: [] };
   return {
     ...rest,
+    ...(friendStory ? { friendStory: { ...story, ...(memento?.art ? { memento: { art: memento.art } } : {}) } } : {}),
     ...(music?.track ? { music: { track: music.track } } : {}),
     nodes: nodes.map(({ i, kind, moment, cg, gate }) => ({
       i,
@@ -348,9 +513,31 @@ export function toChapterView(chapter: Chapter): ChapterView {
 
 /**
  * The beat as the client sees it: without its effects, its stored confrontation (it gets a view) or a date beat's
- * scores.
+ * scores. A riddle goes without its answer, and the word the player answered it with is that option's label, never
+ * the canon's (S/story/beats.ts chooseOption), which says whether it was right.
  */
 export function toBeatView(beat: Beat): BeatView {
-  const { effects: _effects, applied: _applied, confrontation: _confrontation, scores: _scores, ...rest } = beat;
-  return rest;
+  const {
+    effects: _effects,
+    applied: _applied,
+    confrontation: _confrontation,
+    scores: _scores,
+    undo: _undo,
+    wear: _wear,
+    riddle,
+    ...rest
+  } = beat;
+  const view: BeatView = riddle
+    ? {
+        ...rest,
+        riddle: { question: riddle.question },
+        choices: rest.choices.map((choice) =>
+          choice.id === RIDDLE_CHOICE
+            ? { ...choice, options: choice.options.map((option) => ({ ...option, text: option.selection.text })) }
+            : choice,
+        ),
+      }
+    : rest;
+  // 0.38.0: only a scene a Rewrite cannot take back says so.
+  return rewriteBlock(beat) ? { ...view, rewritable: false } : view;
 }

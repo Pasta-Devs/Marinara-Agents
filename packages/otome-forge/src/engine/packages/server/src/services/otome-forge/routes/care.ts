@@ -8,7 +8,7 @@
 //      line would date one. One limit stays: a line the Engine's shared logger writes while the model call runs (a
 //      provider's rate-limit, retry or fallback warning) carries this route's pattern and its time, never the line or
 //      the note (README, Remind Me).
-// GET  /runs/:run/calendar                → CalendarView {birthdays, anniversaries, bannerEnds}
+// GET  /runs/:run/calendar                → CalendarView {birthdays, anniversaries, bannerEnds, celebrate?}
 // The calendar reads days in the request's time zone. Cycle data never reaches the server except as the care line, so
 // the cycle row and the protagonist's own birthday are drawn by the client from this device's storage. Labels are
 // story text (the world's title, a Love Timeline entry, a love interest's name), shown as written; the client's copy
@@ -18,6 +18,7 @@ import { z } from "zod";
 import type { CalendarView, LiId } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { BIRTHDAY_PATTERN } from "../../../../../client/src/features/otome-forge/shared/bible.js";
 import { careLineAllowed, serveCareNote } from "../care/care-note.js";
+import { birthdayOffers } from "../home/birthday.js";
 import { todayKey } from "../home/note.js";
 import {
   OtomeForgeError,
@@ -51,7 +52,8 @@ const ANNIVERSARY_KIND = /^(?:stage-\d+|first-[a-z0-9-]+)$/;
  *   birthdays      each love interest's bible birthday, in cast order;
  *   anniversaries  the day the story began (labelled with the world's title) and each first of the Love Timeline
  *                  (ANNIVERSARY_KIND, labelled with its entry's text), oldest first, with the year it happened;
- *   bannerEnds     the last day of each banner still running, soonest first.
+ *   bannerEnds     the last day of each banner still running, soonest first;
+ *   celebrate      #2153: the birthdays that can be celebrated now (S/home/birthday.ts), absent for none.
  */
 export function calendarView(run: RunDocuments, banners: readonly unknown[], today: string): CalendarView {
   const order = Object.keys(run.state.lis);
@@ -92,7 +94,8 @@ export function calendarView(run: RunDocuments, banners: readonly unknown[], tod
   }
   bannerEnds.sort((a, b) => a.day.localeCompare(b.day) || a.banner.localeCompare(b.banner));
 
-  return { birthdays, anniversaries, bannerEnds };
+  const celebrate = birthdayOffers(run, today);
+  return { birthdays, anniversaries, bannerEnds, ...(celebrate.length ? { celebrate } : {}) };
 }
 
 const CareNoteBody = z.object({
@@ -131,7 +134,7 @@ export const registerCareRoutes: RegisterRoutes = (router, deps) => {
           if (error instanceof OtomeForgeError) throw error;
           // An unexpected failure is a plain 500 here and never logged, unlike other routes' (createHandle logs the
           // path): a line naming this route, or a stack through the care code, would date a cycle day in the log.
-          throw new OtomeForgeError(500, "Otome Forge could not complete the request.");
+          throw new OtomeForgeError(500, "Otome Hearth could not complete the request.");
         }
       }),
     ),
@@ -142,7 +145,7 @@ export const registerCareRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { runId } = runParam(request);
       const [run, banners] = await Promise.all([readRun(store, runId), store.listRun("banner", runId)]);
-      if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+      if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       return calendarView(
         run,
         banners.map((record) => record.data),

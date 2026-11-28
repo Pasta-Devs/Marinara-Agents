@@ -2,28 +2,111 @@
 // Otome Forge: Close and remember, labelled just "Close" so it fits beside his name on one row at any phone width; its
 // accessible name and tooltip still say "Close and remember". The open conversation becomes a memory only this love
 // interest can recall (a chat source with audience [li]), the next message starts a new one, and closing grants a
-// little affection (capped per day). One close at a time: the confirm button is inert while it runs, and the trigger
-// while a reply is on its way or nothing is open to remember, its tooltip and description saying which. The server
-// holds one send or close per thread (409 busy), and a close sent again after it landed gets the same memory and earns
-// nothing.
+// little affection (capped per day). One close at a time: the confirm button is inert while it is sent, and the
+// trigger while a reply is on its way, the conversation is being remembered or nothing is open to remember, its
+// tooltip and description saying which. The server holds one send or close per thread (409 busy), and a close sent
+// again after it landed gets the same memory and earns nothing. In the group chat (#2154) the memory is everyone's in
+// it, and it earns nothing.
+// 0.47.1: the server answers once the close is accepted and writes the memory in the background, so the thread goes
+// back to Messages at once (onClosed). closeSent remembers the closes this page sent, so the list can say once what
+// each earned when it lands (ThreadList); CloseRetry is Try again for a close that failed, in the list and the thread.
+// ClosesLanding reads the run view again each time one lands while the list is not showing.
 // ──────────────────────────────────────────────
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookHeart } from "lucide-react";
-import { useOtomeApi } from "../../api";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { BookHeart, RotateCcw } from "lucide-react";
+import { forgeStepErrorKey, useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
-import type { PhoneCloseResult, RunLiView } from "../../shared/api-types";
-import { phonePath } from "./PhoneScreen";
+import { runQueryKey } from "../../hooks/use-run";
+import type { LiId, PhoneCloseResult, PhoneCloseView, PhoneListView } from "../../shared/api-types";
+import { GROUP_THREAD } from "../../shared/home";
+import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 
-interface CloseAndRememberProps {
-  runKey: string;
-  li: RunLiView;
-  /** Why it is inert: a reply is still on its way (`waiting`), or there is no open conversation (`empty`). */
-  blocked: "waiting" | "empty" | null;
-  onClosed: (result: PhoneCloseResult) => void;
+/** The closes this page sent and is waiting on, by `${runKey} ${thread}`: the start of the session each will add. */
+export const sentCloses = new Map<string, number>();
+export const closeKey = (runKey: string, id: LiId) => `${runKey} ${id}`;
+
+/** After an accepted close: waits for it, shows the list's row remembering at once, and reads the list and thread. */
+export async function closeSent(queryClient: QueryClient, runKey: string, id: LiId, result: PhoneCloseResult) {
+  if ("remembering" in result) {
+    sentCloses.set(closeKey(runKey, id), result.start);
+    // A list read already on its way would land after this with no close in it, and stop the wait (sentRemembering).
+    await queryClient.cancelQueries({ queryKey: phoneQueryKey(runKey) });
+    queryClient.setQueryData<PhoneListView>(phoneQueryKey(runKey), (list) =>
+      list
+        ? {
+            ...list,
+            threads: list.threads.map((row) => (row.li === id ? { ...row, closing: {} } : row)),
+            group: list.group && id === GROUP_THREAD ? { ...list.group, closing: {} } : list.group,
+          }
+        : list,
+    );
+  }
+  void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
+  void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, id) });
 }
 
-export function CloseAndRemember({ runKey, li, blocked, onClosed }: CloseAndRememberProps) {
+/**
+ * The threads whose close this page sent that `list` still shows being remembered (every one of them before the list is
+ * read), as one key ("" for none).
+ */
+const sentRemembering = (runKey: string, list: PhoneListView | undefined) => {
+  const rows = new Map<LiId, PhoneCloseView>(list ? list.threads.map((row) => [row.li, row]) : []);
+  if (list?.group) rows.set(GROUP_THREAD, list.group);
+  const prefix = closeKey(runKey, "");
+  return [...sentCloses.keys()]
+    .filter((key) => key.startsWith(prefix))
+    .map((key) => key.slice(prefix.length))
+    .filter((id) => {
+      const closing = rows.get(id)?.closing;
+      return !list || (!!closing && !closing.error);
+    })
+    .join(" ");
+};
+
+/**
+ * While the Messages list is not showing (the player went Home, or anywhere else) and a close this page sent is still
+ * being remembered, polls the list's query, and reads the run view again each time one lands, so Home's affection and
+ * level show it while another is still remembered. The closes it waits on are the ones sentCloses holds, so it polls
+ * even when nothing has read the list yet (a thread opened from Home). ThreadList still says once what each earned
+ * when the list next shows; while it shows, it does all this itself.
+ */
+export function ClosesLanding({ runKey, listShown }: { runKey: string; listShown: boolean }) {
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const list = useQuery({
+    queryKey: phoneQueryKey(runKey),
+    queryFn: () => otome.get<PhoneListView>(phonePath(runKey)),
+    enabled: (query) => !listShown && !!sentRemembering(runKey, query.state.data),
+    refetchInterval: BUSY_POLL_MS,
+  });
+  const waiting = sentRemembering(runKey, list.data);
+  const was = useRef(waiting);
+  useEffect(() => {
+    const still = new Set(waiting.split(" "));
+    const landed = was.current.split(" ").some((id) => id && !still.has(id));
+    if (landed && !listShown) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    was.current = waiting;
+  }, [listShown, queryClient, runKey, waiting]);
+  return null;
+}
+
+interface CloseAndRememberProps {
+  /** The thread's path (PhoneScreen phonePath). */
+  path: string;
+  /** What the dialog says becomes of the conversation, and why the trigger waits while a reply is on its way. */
+  text: string;
+  waitText: string;
+  /**
+   * Why it is inert: a reply is still on its way (`waiting`), the conversation is being remembered (`remembering`), or
+   * there is no open conversation (`empty`).
+   */
+  blocked: "waiting" | "remembering" | "empty" | null;
+  onClosed: (result: PhoneCloseResult) => Promise<void>;
+}
+
+export function CloseAndRemember({ path, text, waitText, blocked, onClosed }: CloseAndRememberProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const [asking, setAsking] = useState(false);
@@ -33,19 +116,21 @@ export function CloseAndRemember({ runKey, li, blocked, onClosed }: CloseAndReme
   const reasonId = useId();
   const reason =
     blocked === "waiting"
-      ? t("ui.otomeForge.phone.closeWait", { name: li.name })
-      : blocked === "empty"
-        ? t("ui.otomeForge.phone.closeNothing")
-        : null;
+      ? waitText
+      : blocked === "remembering"
+        ? t("ui.otomeForge.phone.closeRemembering")
+        : blocked === "empty"
+          ? t("ui.otomeForge.phone.closeNothing")
+          : null;
 
   const close = async () => {
     if (closing) return;
     setClosing(true);
     setError(null);
     try {
-      const result = await otome.post<PhoneCloseResult>(`${phonePath(runKey, li.id)}/close`);
+      const result = await otome.post<PhoneCloseResult>(`${path}/close`);
       setAsking(false);
-      onClosed(result);
+      await onClosed(result);
     } catch (failure) {
       setError(otome.errorMessage(failure));
     } finally {
@@ -103,7 +188,7 @@ export function CloseAndRemember({ runKey, li, blocked, onClosed }: CloseAndReme
             </>
           }
         >
-          <p className="of-body">{t("ui.otomeForge.phone.closeText", { name: li.name })}</p>
+          <p className="of-body">{text}</p>
           {error ? (
             <p className="of-notice of-notice--error" role="alert">
               {error}
@@ -112,5 +197,49 @@ export function CloseAndRemember({ runKey, li, blocked, onClosed }: CloseAndReme
         </Dialog>
       ) : null}
     </>
+  );
+}
+
+/**
+ * 0.47.1: a close that failed in the background, why (its stored code), and Try again, which closes it again. Its
+ * button goes once the close is accepted, so `onRetried` moves focus on (the list: to his row; the thread: back to it).
+ */
+export function CloseRetry({
+  runKey,
+  id,
+  error,
+  onRetried,
+}: {
+  runKey: string;
+  id: LiId;
+  error: string;
+  onRetried: () => void;
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const retry = async () => {
+    if (busy) return;
+    setBusy(true);
+    setFailure(null);
+    try {
+      await closeSent(queryClient, runKey, id, await otome.post<PhoneCloseResult>(`${phonePath(runKey, id)}/close`));
+      onRetried();
+    } catch (problem) {
+      setFailure(otome.errorMessage(problem));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="of-notice of-notice--error of-reader-notice" role="alert">
+      <span>{t("ui.otomeForge.phone.closeFailed", { reason: failure ?? t(forgeStepErrorKey(error)) })}</span>
+      <button type="button" className="of-button of-button--text" aria-disabled={busy} onClick={() => void retry()}>
+        <RotateCcw size={14} strokeWidth={2.2} aria-hidden="true" />
+        {t("ui.otomeForge.common.retry")}
+      </button>
+    </div>
   );
 }

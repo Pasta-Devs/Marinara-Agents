@@ -25,7 +25,6 @@ export type ImageRating = (typeof IMAGE_RATINGS)[number];
 /** allow: may be written; veil: happens off the page only; line: never written, not even implied. */
 export const LIMIT_LEVELS = ["allow", "veil", "line"] as const;
 export type LimitLevel = (typeof LIMIT_LEVELS)[number];
-export type CustomLimitLevel = Exclude<LimitLevel, "allow">;
 
 export const LIMIT_IDS = [
   "violence-others",
@@ -43,9 +42,10 @@ export const LIMIT_IDS = [
 ] as const;
 export type LimitId = (typeof LIMIT_IDS)[number];
 
+/** One of the player's own limits: their words, at Allow, Veil or Line like a built-in limit. */
 export interface CustomLimit {
   text: string;
-  level: CustomLimitLevel;
+  level: LimitLevel;
 }
 
 export interface ContentSettings {
@@ -214,6 +214,38 @@ export function limitIsFixed(id: LimitId, content: Pick<ContentSettings, "heat" 
   return false;
 }
 
+/** The two consent limits, in the order the contract names them (#2279). */
+const CONSENT_LIMITS: readonly LimitId[] = ["dubious-consent", "non-consent"];
+
+/**
+ * #2279: true while dubious consent or non-consent may still happen, at Allow or as a Veil (off the page): neither is
+ * held at Line. limitIsFixed takes the gate as confirmed, as the prompts do. The prompts' open refusal and the Dark
+ * notice in Settings → Content both follow this.
+ */
+export function consentOpen(content: ContentSettings) {
+  return CONSENT_LIMITS.some((id) => !limitIsFixed(id, content, true) && content.limits[id] !== "line");
+}
+
+/** #2279: the consent limits the player set to Allow (never merely a Veil), in that order. */
+export function consentAllowedIds(content: ContentSettings): LimitId[] {
+  return CONSENT_LIMITS.filter((id) => !limitIsFixed(id, content, true) && content.limits[id] === "allow");
+}
+
+/**
+ * The content once the Heat control picks `heat`: SFW drops the protagonist's role; any other Heat takes the limits
+ * again from the levels the player kept (`picks`, playerLimits), as a Darkness change does, so a consent limit an SFW
+ * round trip held at Line comes back to Allow (#2279). The caller still holds what the new Heat fixes at Line.
+ */
+export function contentWithHeat(
+  content: ContentSettings,
+  heat: Heat,
+  picks: Partial<Record<LimitId, LimitLevel>>,
+): ContentSettings {
+  if (heat !== "sfw") return { ...content, heat, limits: limitsForDarkness(content.darkness, picks) };
+  const { mcRole: _role, ...rest } = content;
+  return { ...rest, heat };
+}
+
 /**
  * The content as it may be used: without the gate, Heat drops to SFW and Dark to Angst; fixed limits become Lines;
  * custom limits are trimmed, emptied ones dropped, and capped. Only ever lowers a setting.
@@ -255,7 +287,7 @@ export function normalizeContent(data: unknown): ContentSettings {
   for (const raw of Array.isArray(rawCustom) ? rawCustom : []) {
     const text = field(raw, "text");
     const level = field(raw, "level");
-    if (typeof text === "string" && (level === "veil" || level === "line")) custom.push({ text, level });
+    if (typeof text === "string" && isOneOf(LIMIT_LEVELS, level)) custom.push({ text, level });
   }
   const mcRole = field(data, "mcRole");
   return {

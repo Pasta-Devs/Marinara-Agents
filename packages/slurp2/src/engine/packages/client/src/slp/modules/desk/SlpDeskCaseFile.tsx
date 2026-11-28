@@ -11,6 +11,7 @@ import {
   type SlpSupportDesk,
 } from "../../../../../shared/src/slp/slp-support-desk.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 const TIER_TONE: Record<SlpDeskTier, string> = {
   wary: "bg-[var(--slurp-danger,var(--destructive))]",
   neutral: "bg-[var(--slurp-muted)]",
@@ -18,7 +19,7 @@ const TIER_TONE: Record<SlpDeskTier, string> = {
   partner: "bg-[var(--slurp-success)]",
 };
 
-const days = (until: string, at = Date.now()) => Math.max(1, Math.ceil((Date.parse(until) - at) / 86_400_000));
+const days = (until: string, at = slurpWorldNowMs()) => Math.max(1, Math.ceil((Date.parse(until) - at) / 86_400_000));
 
 /** The Trust tier as a small chip, for the thread header and the desk rows. */
 export function SlpDeskTrustChip({ desk, className }: { desk: SlpSupportDesk; className?: string }) {
@@ -95,7 +96,7 @@ export function SlpDeskCaseFile({
     t(`ui.slurp.desk.${key}`, { defaultValue, ...values });
   const tier = slpDeskTier(desk.trust);
   const risk = Math.round(slpDeskDailyRisk(desk.suspicion) * 100);
-  const now = Date.now();
+  const now = slurpWorldNowMs();
   const status = [
     desk.pausedAt ? tx("status.left", "Left Slurp") : null,
     desk.leaving ? tx("status.leaving", "Leaving in {{count}} days", { count: days(desk.leaving.until, now) }) : null,

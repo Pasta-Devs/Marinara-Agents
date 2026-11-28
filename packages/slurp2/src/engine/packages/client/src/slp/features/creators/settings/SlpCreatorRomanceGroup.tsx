@@ -4,6 +4,7 @@ import { Avatar } from "../../../base/chrome/SlpChrome";
 import { SettingsGroup, Toggle } from "../../../modules/settings/SlpSettingsControls";
 import { noteClass } from "../slp-creator-classes";
 import { useSlurpCreatorSteering, useSlurpCreatorSteeringMutations } from "../slp-steering-hooks";
+import { Checkbox } from "../../../../components/ui/Checkbox";
 
 /**
  * Romance with other Creators (0.3.17): off, or only with the Creators picked here (none picked =
@@ -44,8 +45,7 @@ export function SlpCreatorRomanceGroup({
       <p className={noteClass}>{note}</p>
       {others.map((partner) => (
         <label key={partner.id} className="flex min-h-11 items-center gap-3 text-sm font-semibold">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={chosen.includes(partner.id)}
             onChange={() => toggle(partner.id)}
             disabled={!ready}

@@ -2,7 +2,7 @@
   {
     "id": "haptic",
     "name": "Haptic Feedback",
-    "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first.",
+    "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. No toy yet? No worries, you can grab one now with a discount from Lovense! https://www.lovense.com/r/dupchb",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

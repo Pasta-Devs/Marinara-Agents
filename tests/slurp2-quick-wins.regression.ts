@@ -33,7 +33,7 @@ assert.match(placement, /SLP_BACKSTAGE_PAGE_PLACEMENT[\s\S]*spice: slurp\("spice
 assert.match(nav, /\.\.\.SLP_BACKSTAGE_PAGE_PLACEMENT/u);
 
 // 5. Accessibility: names that say what the control is.
-assert.match(inputs, /role="switch"\s+aria-labelledby=\{labelId\}/u, "Own value switch is named by its field");
+assert.match(inputs, /<Switch\s+aria-labelledby=\{labelId\}/u, "Own value switch is named by its field");
 assert.match(controls, /aria-label=\{label \? `\$\{label\}: −1` : "−1"\}/u, "stepper buttons name their field");
 assert.match(
   controls,
@@ -48,5 +48,5 @@ assert.match(settings, /walletEnabled: true/u);
 assert.doesNotMatch(settings, /Wallet economy\. Off by default/u);
 
 // 7. The trends tick never fails the world tick.
-assert.match(scheduler, /advanceSlurpTrends\(app\.db, new Date\(\)\)\.catch\(/u);
+assert.match(scheduler, /advanceSlurpTrends\(app\.db, slurpWorldNow\(\)\)\.catch\(/u);
 console.log("slurp2 quick wins ok");

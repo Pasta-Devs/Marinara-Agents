@@ -20,6 +20,8 @@
 // ready it is also the featured item's art, so the item's first open (S/items/open.ts) pays for nothing more.
 // Owned Snapshots are private memory: itemMemorySources gives each to the kit as a `chat` with audience [its love
 // interest], so only that love interest recalls it (S/memory/sources.ts).
+// The view shows a look's art, and a wardrobe banner's, as its wearer's saved cut-out once ready (`cut` says so) and
+// queues the missing ones, free, as Home does (S/art/cutout.ts viewCutouts); the client cleans the rest meanwhile.
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
 import type {
@@ -33,6 +35,7 @@ import {
   BANNER_ITEM_KINDS,
   BANNER_KINDS,
   bannerKey,
+  isLookKind,
   itemIdOf,
   parseBannerKey,
   pityView,
@@ -50,17 +53,22 @@ import {
   type WishOpenResult,
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { cgReferences, cgSubjects } from "../art/cg.js";
+import { cgReferences, cgSubjects, outfitCutouts, warnUnmatched } from "../art/cg.js";
+import { viewCutouts } from "../art/cutout.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
-import { bannerArtOwner, itemArtOwner } from "../art/outfits.js";
+import { addOutfit, bannerArtOwner, itemArtOwner, lookWearer } from "../art/outfits.js";
 import {
   imagesOf,
   paintRecord,
   paintSettled,
   paintView,
+  releaseReplacedImage,
+  repainting,
+  samePicture,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type PaintCheck,
 } from "../art/paint.js";
 import {
@@ -69,16 +77,17 @@ import {
   SCENE_SIZE,
   bannerPlanMessages,
   cgPrompt,
-  explicitMemoryArt,
   lookPrompt,
   memoryArtBrief,
   momentBriefs,
+  placePrompt,
 } from "../prompts.js";
 import { generateJson, readOrGenerate } from "../generation.js";
 import { itemView } from "../items/open.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
-import { bannerId, itemId, mainChapterNumber, runDocTarget, stateId, unitId, worldId } from "../ids.js";
-import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { bannerId, itemId, mainChapterNumber, playerId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { normalizePlayer } from "../schemas/player.js";
+import { normalizeState, readCastUnits, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
@@ -88,11 +97,11 @@ import { cancellable } from "../story/beats.js";
 import { recallText } from "../story/canon.js";
 import { BANNER_PLAN_TOKENS, BannerPlanSchema, normalizeBannerPlan, type BannerPlan } from "./replies.js";
 
-export type WishDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "memory" | "cancellation">;
+export type WishDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "memory" | "cancellation" | "cutouts">;
 
 export { bannerArtOwner };
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const bannerNotFound = () => new OtomeForgeError(404, "No such banner.", "not-found");
 
 // ── Reading ──
@@ -235,20 +244,48 @@ const creating = new Map<string, number>();
  * ponytail: reads every banner's ten items on each view; the ceiling is a few hundred banners (years of two-week
  * rotations), and the upgrade path is the item fields a view needs copied onto the banner document.
  */
-export async function wishView(deps: Pick<WishDeps, "store">, runId: string): Promise<WishView> {
+export async function wishView(
+  deps: Pick<WishDeps, "store" | "runtime" | "cutouts">,
+  runId: string,
+): Promise<WishView> {
   const { store } = deps;
-  const [world, state, banners] = await Promise.all([
+  const [world, state, banners, player] = await Promise.all([
     store.readDoc(worldId(runId), normalizeWorld),
     store.readDoc(stateId(runId), normalizeState),
     readBanners(store, runId),
+    store.readDoc(playerId(runId), normalizePlayer),
   ]);
   if (!world || !state) throw runNotFound();
   const rotation = currentRotation(world);
-  const items = await readItems(store, runId, banners.flatMap(bannerItemIds));
+  const [items, units] = await Promise.all([
+    readItems(store, runId, banners.flatMap(bannerItemIds)),
+    readCastUnits(store, runId, state),
+  ]);
   const owned = new Set(state.owned.items);
+  const cutouts = viewCutouts(deps, runId);
+  const wearers = new Map<string, Pick<Unit, "id" | "cutouts">>([
+    ["player", { id: "player", cutouts: player?.cutouts ?? {} }],
+    ...units.map((unit) => [`li:${unit.id}`, unit] as const),
+  ]);
+  /** A look's art (`look` is its item) as its wearer's cut-out once ready, which `cut` says. */
+  const cutArt = <T extends { art: Paint | null; cut?: true }>(view: T, look: Pick<ItemView, "kind" | "li">): T => {
+    const wearer = isLookKind(look.kind) ? wearers.get(lookWearer(look) ?? "") : undefined;
+    const url = view.art?.state === "ready" ? view.art.url : undefined;
+    const cutout = wearer && url ? cutouts.ready(wearer, url) : undefined;
+    return cutout && view.art ? { ...view, art: { ...view.art, url: cutout }, cut: true } : view;
+  };
   const views = banners
     .map((banner) => toBannerView(runId, banner, items, owned, rotation.number))
-    .filter((view): view is BannerView => !!view);
+    .filter((view): view is BannerView => !!view)
+    // A banner's art is its 5★'s picture, on its wearer.
+    .map((view) => ({
+      ...cutArt(view, view.five),
+      five: cutArt(view.five, view.five),
+      four: view.four.map((item) => cutArt(item, item)),
+      // #2303: a wardrobe banner's 3★ looks.
+      three: view.three.map((item) => cutArt(item, item)),
+    }));
+  await cutouts.queue();
   const current = views.filter((view) => view.rotation === rotation.number);
   return {
     starlight: state.wallet.starlight,
@@ -291,7 +328,10 @@ interface CreateOptions {
   active?: () => boolean;
 }
 
-/** The items a plan writes, in banner order (5★, 4★s, Snapshots). */
+/**
+ * The items a plan writes, in banner order (5★, 4★s, then the 3★s: #2303, a wardrobe banner's looks before its
+ * Snapshots). A date (#2303) is no one's: the player takes whoever they like on it.
+ */
 function itemsOf(
   key: string,
   kind: BannerKind,
@@ -311,25 +351,38 @@ function itemsOf(
     story: null,
     createdAt: at,
   });
+  const dated = (entry: { place?: Item["place"]; scenes?: number }) => ({
+    ...(entry.place ? { place: entry.place } : {}),
+    ...(entry.scenes ? { scenes: entry.scenes } : {}),
+  });
   const five: Item = {
-    ...base("f", kinds.five, featured.id, plan.featured.title),
+    ...base("f", kinds.five, kind === "dates" ? null : featured.id, plan.featured.title),
     ...(plan.featured.premise ? { premise: plan.featured.premise } : {}),
     ...(plan.featured.look ? { look: plan.featured.look } : {}),
     ...(plan.featured.cg ? { cg: plan.featured.cg } : {}),
     ...(coupleWith ? { coupleWith } : {}),
+    ...dated(plan.featured),
   };
   const four = plan.four.map((entry, index): Item => ({
     ...base(`a${index + 1}` as ItemSlot, kinds.four, entry.li, entry.title),
     ...(entry.premise ? { premise: entry.premise } : {}),
     ...(entry.look ? { look: entry.look } : {}),
     ...(entry.cg ? { cg: entry.cg } : {}),
+    ...dated(entry),
   }));
-  const three = plan.snapshots.map((entry, index): Item => ({
+  // His Wardrobe's 3★ looks are the featured love interest's; My Wardrobe's are the protagonist's.
+  const looks = kinds.looks3
+    ? plan.looks.map((entry, index): Item => ({
+        ...base(`l${index + 1}` as ItemSlot, kinds.looks3!, kind === "his-wardrobe" ? featured.id : null, entry.title),
+        look: entry.look,
+      }))
+    : [];
+  const snapshots = plan.snapshots.map((entry, index): Item => ({
     ...base(`s${index + 1}` as ItemSlot, kinds.three, entry.li, entry.title),
     text: entry.text,
     ...(entry.cg ? { cg: entry.cg } : {}),
   }));
-  return { five, four, three };
+  return { five, four, three: [...looks, ...snapshots] };
 }
 
 /** Writes the banner (after its items) unless one is stored already; null when the run was deleted meanwhile. */
@@ -416,7 +469,6 @@ async function createBanner(
     featured,
     playerName: run.player.name,
     moments: momentBriefs(kind, run.world),
-    explicitArt: explicitMemoryArt(kind, run.world),
   };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
@@ -556,27 +608,47 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
   if (!five) throw bannerNotFound();
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
+  // #2303: a Dates banner shows its 5★ date's place with nobody in it, painted as a scene's place is (S/art/places.ts).
+  if (banner.kind === "dates") {
+    if (!five.place) throw bannerNotFound();
+    const place = five.place;
+    const prompt = placePrompt({ name: place.name, tags: place.tags, world: run.world, style }, edited);
+    return {
+      ...prompt,
+      paint: async (connectionId: string, debugMode: boolean): Promise<PaintedImage> => {
+        const image = await images.generateImage({
+          connectionId,
+          name: place.name,
+          prompt: prompt.prompt,
+          negativePrompt: prompt.negativePrompt,
+          ...SCENE_SIZE,
+          debugMode,
+        });
+        return images.uploadToGallery({ image, name: place.name, prompt: prompt.prompt });
+      },
+    };
+  }
   if (banner.kind === "memories") {
-    const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
-    // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;
-    // a lowered world paints the clothed brief written beside it.
-    const { brief, explicit } = memoryArtBrief(five.cg, five.title, run.world);
+    // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+    const subjects = await outfitCutouts(deps, runId, cgSubjects(five.cg?.cast ?? [], run.units, run.player));
+    // Banner art stays clothed (at most Suggestive), a Memory's cover too (#2467).
+    const brief = memoryArtBrief(five.cg, five.title);
     const prompt = cgPrompt(
       {
         brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        use: explicit ? "cg" : "clothed",
-        explicit,
+        use: "clothed",
         references: cgReferences(subjects).labels,
       },
       edited,
     );
     return {
       ...prompt,
-      paint: (connectionId: string, debugMode: boolean): Promise<PaintedImage> =>
-        images.generateBannerArt({
+      paint: (connectionId: string, debugMode: boolean): Promise<PaintedImage> => {
+        warnUnmatched(deps.runtime.logger, `banner ${banner.key}`, subjects);
+        return images.generateBannerArt({
           connectionId,
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
@@ -585,7 +657,8 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,
           debugMode,
-        }),
+        });
+      },
     };
   }
   // A look on its wearer: his (His Wardrobe) or the protagonist's (My Wardrobe), with the look's outfit line.
@@ -600,7 +673,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
     : {
         name: run.player.name || "Protagonist",
         identityLine: run.player.look.identityLine,
-        presentation: "person" as const,
+        presentation: run.player.look.presentation,
       };
   const subject: ImageSubject = unit
     ? {
@@ -623,7 +696,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
       images.generatePortrait({
         connectionId,
         name: person.name,
-        unit: subject,
+        unit: { ...subject, who: person.name },
         prompt: prompt.prompt,
         negativePrompt: prompt.negativePrompt,
         ...LOOK_SIZE,
@@ -653,25 +726,49 @@ function paintBanner(
   const mine = (banner: Banner | null) =>
     banner?.key === key && banner.art?.state === "pending" && banner.art.at === at;
   const save = async (art: Paint) => {
-    const saved = await updateIfChanged(deps.store, target, normalizeBanner, (banner) =>
-      mine(banner) ? { ...banner, art } : undefined,
-    );
+    let replaced: Paint | null | undefined;
+    const saved = await updateIfChanged(deps.store, target, normalizeBanner, (banner) => {
+      if (!mine(banner)) return undefined;
+      replaced = banner.art;
+      return { ...banner, art: withKeptPicture(art, replaced) };
+    });
     if (!saved?.changed) return false;
-    // The banner's art is its featured item's own picture: the item takes it while its own is not painted, so its
-    // first open (S/items/open.ts) finds it painted, and a claim of its own still waiting stops before paying. Still in
-    // the slot, and never thrown: the banner's art is saved already, and its image must stay.
+    // The banner's art is its featured item's own picture: the item takes it while its own is not painted, and (0.24.0)
+    // while its own is the picture this repaint replaces, so one repaint moves both rather than leaving the item behind.
+    // Still in the slot, and never thrown: the banner's art is saved already, and its image must stay.
     const five = saved.value.items.five[0];
     if (art.state === "ready" && five) {
-      await updateIfChanged(deps.store, runDocTarget("item", itemId(runId, five)), normalizeItem, (item) =>
-        item.id === five && item.art?.state !== "ready" ? { ...item, art } : undefined,
-      ).catch((error: unknown) =>
+      const shared = await updateIfChanged(
+        deps.store,
+        runDocTarget("item", itemId(runId, five)),
+        normalizeItem,
+        (item) =>
+          item.id === five && (item.art?.state !== "ready" || samePicture(item.art, replaced))
+            ? { ...item, art: withKeptPicture(art, item.art ?? undefined) }
+            : undefined,
+      ).catch((error: unknown) => {
         deps.runtime.logger.warn(
           "[otome-forge] sharing banner %s's art with its item failed: %s",
           key,
           error instanceof Error ? error.message : String(error),
-        ),
-      );
+        );
+        return null;
+      });
+      // A wardrobe banner's 5★ is a look: its place in the wardrobe follows the picture the banner now shows too.
+      // Never thrown, for the same reason as the item update: the banner's art is saved, and its image must stay.
+      if (shared?.changed)
+        await addOutfit(deps, runId, shared.value, { repoint: true }).catch((error: unknown) => {
+          deps.runtime.logger.warn(
+            "[otome-forge] moving banner %s's look in the wardrobe failed: %s",
+            key,
+            error instanceof Error ? error.message : String(error),
+          );
+          return null;
+        });
     }
+    // 0.24.0: a repaint replaces the picture it painted over; only a gallery image neither the banner nor its item still
+    // holds is deleted (the Engine refuses to delete one a document refers to).
+    if (saved.value.art?.state === "ready") await releaseReplacedImage(deps, replaced, saved.value.art);
     return true;
   };
   return paintRecord(deps, {
@@ -685,9 +782,10 @@ function paintBanner(
       ]);
       if (!world || !banner || !mine(banner)) return "gone";
       // Its featured item's art (the same picture) is painted: it is the banner's art too, and nothing more is paid.
+      // 0.24.0: unless it is the very picture this repaint replaces, which the pending record still shows.
       const five = banner.items.five[0];
       const featured = five ? await readItem(deps.store, runId, five) : null;
-      if (featured?.art?.state === "ready") {
+      if (featured?.art?.state === "ready" && !samePicture(featured.art, banner.art)) {
         await save(featured.art);
         return "gone";
       }
@@ -707,8 +805,8 @@ function paintBanner(
 }
 
 /**
- * POST /runs/:run/wish/art: the tap that paints a banner's art now (its consent, or Retry). A ready one is returned as
- * it is; a tap while it paints waits for that paint, so no tap pays twice.
+ * POST /runs/:run/wish/art: the tap that paints a banner's art now (its consent, Retry, or 0.24.0 a repaint of a ready
+ * one, which its featured item follows). A tap while it paints waits for that paint, so no tap pays twice.
  */
 export async function paintBannerArtNow(
   deps: WishDeps,
@@ -722,8 +820,12 @@ export async function paintBannerArtNow(
     return banner;
   };
   const owner = bannerArtOwner(key);
+  const before = await read();
   // The featured item's art is the same picture: a tap while that paints waits for it (it then becomes this art).
-  const five = (await read()).items.five[0];
+  const five = before.items.five[0];
+  // Only a picture that was already painted when the tap began is one the tap repaints (0.24.0). One that lands while the
+  // tap waits — the item's shared paint above — is the tap's answer, so adopting it keeps a tap from paying twice.
+  const painted = before.art?.state === "ready";
   if (five) await paintSettled(runId, itemArtOwner(five));
   return tapPaint(
     runId,
@@ -733,8 +835,8 @@ export async function paintBannerArtNow(
       return { value: art, art: art ?? undefined };
     },
     async () => {
-      const banner = await read();
-      if (banner.art?.state === "ready") return banner.art;
+      const current = await read();
+      if (!painted && current.art?.state === "ready") return bannerArtView(runId, current);
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!world) throw runNotFound();
       const connectionId = world.images.connectionId;
@@ -744,10 +846,7 @@ export async function paintBannerArtNow(
         deps.store,
         runDocTarget("banner", bannerId(runId, key)),
         normalizeBanner,
-        (current) =>
-          current.key === key && current.art?.state !== "ready"
-            ? { ...current, art: { state: "pending" as const, at } }
-            : undefined,
+        (current) => (current.key === key ? { ...current, art: repainting(current.art, at) } : undefined),
       );
       if (!saved?.value.key) throw bannerNotFound();
       if (saved.changed) await paintBanner(deps, runId, key, at, connectionId, { ...options, consent: true });

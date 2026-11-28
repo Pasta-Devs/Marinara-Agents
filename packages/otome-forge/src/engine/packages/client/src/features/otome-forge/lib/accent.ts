@@ -29,17 +29,23 @@ const HEX = /^#[0-9a-f]{6}$/i;
 /**
  * How the portrait picker works, bumped when its result changes meaning. An accent saved by an older picker is treated
  * as unset, so a story already in progress re-picks its colours instead of keeping what the old one left behind.
+ * v3: the portrait is sampled from the run itself, not only the forge screen, so an LI added mid-story (#2251) is
+ * picked too.
  */
-export const ACCENT_SAMPLER_VERSION = 2;
+export const ACCENT_SAMPLER_VERSION = 3;
 
-/** A palette colour picked from a stable hash of the name. */
+/**
+ * A colour picked from a stable hash of the name, for an LI with no portrait to sample yet. It spreads over the whole
+ * hue wheel in the picker's own soft range, so two names collide only by chance (one degree in 360) rather than by
+ * sharing one of eight palette tones: "Pierro" and "Tartaglia" both hashed to the same pink before v3.
+ */
 export function nameAccent(name: string): string {
   let hash = 2166136261;
   for (const char of name.trim().toLocaleLowerCase()) {
     hash ^= char.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16777619);
   }
-  return ACCENT_PALETTE[(hash >>> 0) % ACCENT_PALETTE.length]!;
+  return hslToHex(((hash >>> 0) % 3600) / 10, 0.62, 0.74);
 }
 
 /** True while the stored accent is not his own yet (unset, from an older picker, the server default, or his name). */

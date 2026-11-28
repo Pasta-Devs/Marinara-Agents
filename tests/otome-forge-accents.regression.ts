@@ -157,7 +157,20 @@ test("the cast ends up with a different accent each", () => {
   const cast: string[] = [];
   for (const name of names) cast.push(pickDistinctAccent(sampled, name, cast));
   assert.equal(new Set(cast).size, names.length, `every plate differs: ${cast.join(", ")}`);
-  assert.ok(cast.every((colour) => ACCENT_PALETTE.some((tone) => tone === colour) || colour === sampled.toUpperCase()));
+  assert.ok(
+    cast.every((colour) => /^#[0-9A-F]{6}$/u.test(colour)),
+    `every plate is a colour: ${cast.join(", ")}`,
+  );
+});
+
+test("the colour from a name spreads over the wheel, so two names rarely share one", () => {
+  // Before v3 the name fell into one of eight palette tones, and these two shared a pink: an LI added mid-story showed
+  // the same plate as another in the cast (#2249).
+  assert.notEqual(nameAccent("Pierro").toUpperCase(), nameAccent("Tartaglia").toUpperCase());
+  assert.ok(/^#[0-9A-F]{6}$/u.test(nameAccent("Pierro")), "the name colour is a hex colour");
+  // Names collide by chance on the wheel, not by sharing a tone: a cast of twenty has more distinct tones than eight.
+  const names = Array.from({ length: 20 }, (_, i) => `Love ${i}`);
+  assert.ok(new Set(names.map((name) => nameAccent(name).toUpperCase())).size > ACCENT_PALETTE.length);
 });
 
 test("an accent from an older picker is picked again, so a story already in progress is recoloured", () => {

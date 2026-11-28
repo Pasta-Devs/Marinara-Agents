@@ -31,10 +31,7 @@ assert.equal(
 );
 
 // R1-087: the Collect day is the Slurp day; nothing earned is not "all collected".
-assert.match(
-  read("server/src/slp/modules/economy/slp-earnings.ts"),
-  /const dayKey = \(at: Date\) => slurpDayKey\(at\);/u,
-);
+assert.match(read("server/src/slp/modules/economy/slp-earnings.ts"), /payoutOn === slurpDayKey\(at\)/u);
 assert.match(read("client/src/slp/app/screens/SlpCollectCard.tsx"), /ui\.slurp\.wallet\.nothingToCollect/u);
 // R1-088 / R1-089: refunds and ended subscriptions have their own words.
 assert.match(wallet, /entry\.kind === "income" && entry\.note\?\.startsWith\("refund:"\)/u);

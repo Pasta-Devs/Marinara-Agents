@@ -31,6 +31,7 @@ import { slurpSupportDeskKey } from "../creators/slp-support-desk-storage.js";
 import { slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 import { slurpPackGate } from "../../modules/world/events/slp-content-packs.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createStoryEngineStorage(context: SlurpStorageContext) {
   const { settingsStore } = context;
   const wardrobe = createWardrobeStorage(context);
@@ -60,7 +61,7 @@ export function createStoryEngineStorage(context: SlurpStorageContext) {
       };
     },
     /** The running events' multiplier on one target, for one Creator or (no id) for everybody. */
-    async platformInfluenceMultiplier(target: SlpInfluenceTarget, creatorAccountId?: string, at = new Date()) {
+    async platformInfluenceMultiplier(target: SlpInfluenceTarget, creatorAccountId?: string, at = slurpWorldNow()) {
       const settings = await this.getSettings();
       // A running storyline's stage influences on its lead count with the events (PR 6).
       const stages =
@@ -85,7 +86,7 @@ export function createStoryEngineStorage(context: SlurpStorageContext) {
      * Settings as the post reserve reads them: "feed.posting-rate" events scale posts per day for
      * everybody (it is one Slurp-wide setting), inside the setting's own 1–96 range.
      */
-    async getPostingSettings(at = new Date()) {
+    async getPostingSettings(at = slurpWorldNow()) {
       const settings = await this.getSettings();
       const rate = await this.platformInfluenceMultiplier("feed.posting-rate", undefined, at);
       return rate === 1
@@ -126,7 +127,7 @@ export function createStoryEngineStorage(context: SlurpStorageContext) {
         }
       }
     },
-    async reconcileStoryEvents(at = new Date()) {
+    async reconcileStoryEvents(at = slurpWorldNow()) {
       const [settings, accounts, existing] = await Promise.all([
         this.getSettings(),
         this.listNoodlerAccounts(),
@@ -163,7 +164,7 @@ export function createStoryEngineStorage(context: SlurpStorageContext) {
       ]);
       return result.occurrences;
     },
-    async startStoryEvent(eventId: string, at = new Date()) {
+    async startStoryEvent(eventId: string, at = slurpWorldNow()) {
       const settings = await this.getSettings();
       const event = settings.platformEvents.find((item) => item.id === eventId);
       if (!event) return null;
@@ -203,7 +204,7 @@ export function createStoryEngineStorage(context: SlurpStorageContext) {
     async setStoryOccurrenceStatus(
       id: string,
       status: "active" | "dismissed" | "completed" | "cancelled",
-      at = new Date(),
+      at = slurpWorldNow(),
     ) {
       const occurrences = await this.listStoryOccurrences();
       const index = occurrences.findIndex((item) => item.id === id);
@@ -233,7 +234,7 @@ export function createStoryEngineStorage(context: SlurpStorageContext) {
      * Undo of "Start now" (Stir): cancel a running occurrence and take back the facts and chances it
      * granted. False once it has ended or changed; what it removed from the world stays removed.
      */
-    async cancelStartedStoryEvent(id: string, at = new Date()) {
+    async cancelStartedStoryEvent(id: string, at = slurpWorldNow()) {
       const occurrences = await this.listStoryOccurrences();
       const occurrence = occurrences.find((item) => item.id === id);
       if (!occurrence || occurrence.status !== "active" || occurrence.endsAt <= at.toISOString()) return false;

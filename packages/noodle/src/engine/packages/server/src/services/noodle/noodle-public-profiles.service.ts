@@ -7,7 +7,7 @@ import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/
 import { parseGameJsonish } from "../game/jsonish.js";
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
-import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createCharactersStorage } from "../../lib/host-characters-storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { parseNoodleGeneratedProfiles } from "./noodle-generated-profiles.js";
 import { allocateAmbientProfileHandles } from "./noodle-ambient-profile-generation.service.js";

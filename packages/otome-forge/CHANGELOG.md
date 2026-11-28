@@ -1,5 +1,585 @@
 # Otome Hearth release notes
 
+## 0.49.3 — 2026-11-28
+
+- Characters sound less alike and less scripted. The story prompt's rule on how people speak is replaced with a fuller one: voices differ in cadence, vocabulary and formality, people interrupt, hesitate, dodge and chat about nothing, and being clever shows in what someone notices, not in how exactly they talk. The change reaches your story from the next scene.
+- A new love interest's or friend's bible no longer gets a way of building sentences, such as numbering their points, as a verbal habit, and its sample lines read as said on the spot. A story made earlier keeps its bibles: if someone in it keeps counting things off, edit their voice in **Your cast**.
+
+## 0.49.2 — 2026-11-28
+
+- A love interest who comes into a scene in other clothes now changes on screen too. The scene writer was describing changes of clothes without the command that dresses the picture, so the sprite stayed in the old look. The scene writer may also put someone in night clothes before they sleep; it no longer skips straight to the next day's clothes. The changes reach your story from the next scene.
+
+## 0.49.1 — 2026-11-27
+
+- Characters speak less like a script. Four lines of the story prompt are reworded: speech is said on the spot and no longer has to come in whole sentences, counted points ("One… Two…") and mirrored pairs ("You have X, and I have Y") are banned, and a love interest's grand way of talking shows only now and then. The change reaches your story from the next scene.
+
+## 0.49.0 — 2026-11-27
+
+- In the story, the love interests and your protagonist change into looks they own when a scene calls for it, and their picture changes too. Each chapter offers everyone's everyday look plus up to three 3★, two 4★ and one 5★ painted looks, picked at random. A chapter starts in what everyone wore when the previous one ended.
+- **Wear at home** now changes only Home. The story no longer dresses anyone in what you pick there.
+- On a date, the love interest chooses their own look in its first scene. The look you pick for yourself on a date or a hangout is for that outing only, and Home keeps its own.
+- A scene's key image, a date's keepsake and a hangout's memento show everyone in what they wear in that scene.
+- The first time a scene puts a love interest in a look, that look gets its five faces, as **Wear at home** does.
+
+## 0.48.0 — 2026-11-27
+
+- **Album → Hangouts** shows rounded cards, as **Album → Dates** does.
+- **Close** stops a hangout while it's being planned. A friend's invitation you were accepting stays open.
+- **Plan a hangout** has an optional **What do you want to talk about?** field, for up to 300 characters.
+- Before a main chapter's first scene, its planner may ask you up to two questions about your protagonist, in **Before this chapter**. Each answer shapes the scene it was asked for.
+- In their own **Messages** thread, a love interest can note down something you tell them. They keep three notes, a new one replacing the oldest, and remember them in Messages and in the story. You don't see the notes.
+- With an image connection, a love interest can send a selfie (1 image) in their own thread. A reply's selfie paints by itself unless **Ask before painting** or prompt review is on. One in a message they write first waits for **Paint the selfie**. Explicit Heat and the Explicit image rating allow an explicit one.
+
+## 0.47.2 — 2026-11-26
+
+- With a NovelAI connection, a picture of two or more people sends NovelAI a reference for each person who has a picture, as NovelAI's own app does, so each one's own picture guides how they look. Before, it sent only the main character's reference, which gave everyone that person's face and hair.
+- On NovelAI and other tag models, a key image of a scene that isn't explicit is much less likely to come out nude, even under Explicit Heat and the Explicit image rating. Its negative prompt now also names nudity in tags (`nude, topless, nipples, sex`), which those models read.
+
+## 0.47.1 — 2026-11-25
+
+- **Close and remember** sends you back to **Messages** at once and writes the memory in the background. The row says **Remembering…**, then what it earned. A close that fails keeps the conversation open, with **Try again**.
+- **Repaint**, **Repaint expressions** and a reviewed **Paint the cast** paint in the background. You can leave **Your cast** while they paint, and the new picture appears once it's saved.
+
+## 0.47.0 — 2026-11-25
+
+- Friends have stickers of their own, one for each friend level: five in all. With images on, they are painted as a love interest's are. **Album → Stickers** lists them after the love interests', with **Repaint**. A friend's Messages thread offers them, and the friend sends them too.
+- In **Everyone**, you can send every sticker you have: yours, and every painted one of your love interests and friends.
+- **Story → Friends** no longer shows a line about each friend under their stars.
+- In **Album → Hangouts**, **Plan a hangout** no longer touches the hangouts below it.
+
+## 0.46.2 — 2026-11-25
+
+- **Add a friend** from someone you've met lets you choose one of your characters for them, or none. The one their name matches comes chosen, and their portrait is painted from that character's picture, as a love interest's is.
+- **Settings → Stories → Your cast** lists your friends under the love interests. Each has their appearance, their character card and their bible, behind **Show spoilers**, and you can edit it. Their faces can be repainted there too.
+- A friend's portrait, looks and faces are cut out of their background, as a love interest's are, so they no longer stand on pink. A portrait painted before this is cut out the next time the story opens.
+
+## 0.46.1 — 2026-11-25
+
+- A tag image style profile (**Danbooru / Illustrious**, **Anime**) no longer writes its own description into image prompts; its tags still apply.
+- NovelAI backgrounds follow your **Image style**: they no longer switch to NovelAI's own scenery style.
+- Memory covers stay at most Suggestive, as banner art and looks do. Only story CGs of explicit scenes can be explicit.
+
+## 0.46.0 — 2026-11-24
+
+- **Settings → Images** has **Backgrounds** and **Scene art**: another image connection for places, and for story CGs, date keepsakes, hangout mementos and photos. Both use your image connection until you choose.
+- With a NovelAI connection, pictures are written in NovelAI's style: tags with the people counts first, its quality tags and its negative preset. A scene sends NovelAI one character reference, and the prompt decides what everyone wears.
+- **Image style** now adds to your Engine image style instead of replacing it.
+- Explicit key images name what they show plainly and are drawn uncensored.
+
+## 0.45.0 — 2026-11-24
+
+- **Friends:** on **Story**, **Add a friend** takes someone you've met, one of your characters or someone new: platonic, five levels shown as stars, as many as your love interests, one each story arc. Each gets a bible, a painted portrait and faces, a voice and a **Messages** thread.
+- Chapters bring friends in, and they earn friendship there, in Messages and on hangouts, planned in **Album → Hangouts**, with a memento to paint. Each level from 2 to 5 opens a story with them; level 5's gives you a look and their card, and they can talk to a love interest for you.
+- Friends can be hurt, and a make-up story clears it. **Settings → Connections** sets how often they write or invite you each week.
+- **End the Story:** once every love interest reaches level 20, play a finale, then an epilogue. Afterwards every chapter can still be read.
+
+## 0.44.1 — 2026-11-24
+
+- Stories have more friction. People in the world want their own things, so they clash with you and with each other, and the love interests clash among themselves too. Most story arcs now have an antagonist; breathing-room arcs still don't.
+- With **Emotion cues** on, a line that starts with "…" keeps it in the dialogue box. "…and something" no longer shows as "and something".
+
+## 0.44.0 — 2026-11-24
+
+- You can choose Home's music. In **Album → Soundtrack**, press the house beside a track to play it on Home and the other story screens instead of Home's own music. A mood or a chapter's theme can be chosen. Press the house again to go back.
+
+## 0.43.1 — 2026-11-24
+
+- A side character's sprite can be painted again. While they speak, **Repaint** with their name sits beside the place's own **Repaint**, for 1 image. Their sprite stays on screen while the new one paints, and stays if that paint fails.
+
+## 0.43.0 — 2026-11-24
+
+- Setup's **Connections** step now asks for **Voices** and **Music**, as in **Settings → Audio**: **Voice the dialogue**, **Voice everyone else**, **Emotion cues** and music generation. The prologue is written and played with what you choose there.
+- A new story paints each love interest's expressions right after their portrait, before the prologue's places and key moments.
+- Changing the **Story** connection no longer turns **Planning**, **Messages** or **Memory** into **Same as Story** when they used the same connection. Each keeps the connection you picked for it.
+- With **Emotion cues** on, voiced lines no longer repeat words. Scenes no longer ask for stammering, stuttering or hesitation cues, which ElevenLabs performs by saying words twice, and such cues in older scenes are left out when their lines are voiced.
+
+## 0.42.0 — 2026-11-23
+
+- Once in every arc, the middle chapter's last scene ends on a riddle, a small mystery or a suspect to name. Tap **Answer…** and type one word. Capitals, accents and punctuation don't matter, so "nozka" counts for "nóżka". The next chapter plays out what follows from a right or a wrong answer.
+
+## 0.41.0 — 2026-11-23
+
+- An arc can take you far from where the story began, to another city or land of its world. Its goal is an event, an adventure, a problem or a mystery of its own, solved in its last chapter, and love interests still reveal the central mystery arc by arc.
+- At any Heat, a love interest's affection brings scenes of tension at first and, past level 10, smaller intimate scenes too, such as a massage or a bath together.
+- Memories, Moments, first-wear and figurine scenes are side stories set between main chapters. The next main chapter carries on from the previous one, not from them; only a bond story is picked up from.
+- Dialogue and narration read more naturally: conversations run like real ones, and your protagonist may be silly or wrong. Sentence patterns such as "not X, but Y" are banned in narration only.
+
+## 0.40.0 — 2026-11-23
+
+- Love interests can bring back older moments you shared with them outside the story. Conversations you closed in Messages (the group chat's too), Snapshots, Tarot night readings and your Read Them, Claw Machine and Kitty Cards games are now indexed by meaning, as chapter summaries are, with the story's **Memory recall embeddings** (Built-in by default, with no model calls). Before, a prompt carried only the newest of them. When a story has more than fit, the few older ones closest to the scene or message now go in first. In Messages they go in beside the newest, after the part of the prompt that is cached, so a conversation's replies still read it from the cache.
+- They reach only the prompts they reached before: a love interest's own only theirs and scenes they're in, the group chat's only those of who was in it.
+- With a connection chosen for **Memory recall embeddings**, those memories are sent to it too, and so is what a prompt is about when it looks for them.
+
+## 0.39.1 — 2026-11-23
+
+- The bottom bar's **Dates** is now **Games**, and so is its page, with "Just the two of you." still under the title. Read Them, Read Me and Tarot night name it above their title too. **Dates** now means only the dates you win on Wish's Dates banner and plan from Album → Dates.
+
+## 0.39.0 — 2026-11-20
+
+- Love interests can ask you on dates in Messages. **Settings → Connections → Date invitations each week** sets how often (0, the default, turns it off). The one you've spent the fewest scenes with lately asks. **Accept** lets you pick your look and a gift, then they choose where you go and what you do: three scenes, paid as any new date.
+- What you write in Messages can hurt them, in their thread or in **Everyone**. A serious hurt is their grievance against you, as one from the story is, and they need space until you make it right in Routes. A milder one is remembered and costs 15 affection.
+- Setup's **Connections** step asks how often they write on their own: messages each day, group chat squabbles each day and date invitations each week.
+
+## 0.38.3 — 2026-11-20
+
+- In a Confrontation, no stance wins by default. Press works when they lied or are in the wrong, Yield when they argue out of worry for you, Hold when you are in the right, and Reveal when what you tell them is what the argument is really about. A Reveal that answers their pain with your own makes them close off. Before, Reveal got through almost every time.
+
+## 0.38.2 — 2026-11-19
+
+- Characters talk more plainly. The writing rules now say that most of what people say means what it says, even behind a mask, and that a face which contradicts the words is only an occasional beat. A spoken line can be a single word as well as a few sentences, and anyone may joke when it fits them. Some models, Claude among them, wrote nearly every line as hidden meaning that was hard to follow.
+- Twists need a build-up, as emotional payoffs already did, and the plot has to make sense to an ordinary reader. A new story's central mystery is planned so that it makes sense once it is revealed.
+
+## 0.38.1 — 2026-11-19
+
+- On the Story screen's **Between you**, a love interest past their finale now shows their real level, from **Level 11** to **Level 20**. Before, every bond rank showed as Level 10 followed by the rank's name, such as "Level 10 · named".
+
+## 0.38.0 — 2026-11-19
+
+- **Rewrite** now stays in the reader for the whole scene, in dates and Character Stories as in the main story. Before, it disappeared as soon as you picked a choice, and dates and Character Stories put their choice early in every scene.
+- Rewriting a scene takes back your choices in it: the trust, affection, grievances and secrets told that they changed go back to how they were, and you choose again in the new scene.
+- You can also rewrite the scene you just read to its end, until you open the next one. Its Starlight is taken back, and you earn it again when you read the new scene.
+- **Rewrite** shows greyed, saying why, when a scene can't be taken back: a Confrontation once a stance is played, a scene whose end moved the story on (a new stage, a mended rift, the chapter's end), or a choice made before this update.
+
+## 0.37.0 — 2026-11-19
+
+- A scene's voice lines are now made as soon as the scene opens, one after another in order. Each line's voice starts as its text starts typing. Before, a line's voice was made only when the line appeared, so it started after its text. A scene's first line still starts typing at once, and its voice follows once it is made.
+- The lines after a choice are made ahead too, and the reply to your pick once you pick it. Leaving a scene stops making the rest of its voices.
+- Voices are made ahead only while **Voice the dialogue** is on, the **Voices** volume is up and nothing is muted. If one can't be made, the rest are voiced as they appear, as before, until you switch **Voice the dialogue**, **Voice everyone else** or muting off or on.
+- This needs a Marinara Engine update that can make a voice ahead without playing it. On an older Engine, voices play as before.
+
+## 0.36.9 — 2026-11-19
+
+- The story, messages and every other text Otome Hearth writes are now told not to fall into patterns. Lines of the same kind, such as narration, speech, thoughts and messages, should not keep opening or running the same way, and scenes and replies should not keep the same build. Some models, Gemini among them, kept starting every thought with "My … feels" and building scenes the same way.
+
+## 0.36.8 — 2026-11-19
+
+- In messages and the group chat, love interests now text the way people do in a chat, as far as it fits who they are: capitals when they scream, stretched words like "nooo", emoji, a one-word reply. A stiff or formal one still texts stiff and formal.
+- They send stickers the way people do too: to react, tease, sulk or answer without words, not only when a picture says it better than words. A reply still has at most one sticker, or one from each of them in the group chat.
+- A message that puts an emoticon after your name, such as "ines :(", is no longer mistaken for a line written as you, so the reply no longer fails. A conversation's remembered line keeps such a message whole too, instead of cutting it down to "P".
+
+## 0.36.7 — 2026-11-18
+
+- Dates now lists Kitty Cards above the Claw Machine, so the Claw Machine is last.
+- The couple portrait and the Photo Shoot now send each look cut out, with no background, as scene pictures do. A look that isn't cut out yet is cut first, for free, and one that can't be cut is sent as painted. The Photo Shoot still sends the place's picture as the background.
+- Error messages now say "story" instead of "run", as in "No such Otome Hearth story."
+
+## 0.36.6 — 2026-11-18
+
+- Error messages now say Otome Hearth instead of the package's old name, Otome Forge. So do its log lines and browser console warnings.
+- When a love interest's linked character card can't be read, the server log now tags the warning as Otome Hearth's instead of Gacha Forge's.
+
+## 0.36.5 — 2026-11-18
+
+- Pictures of people in a scene (story pictures, date keepsakes, Wish art, banners and tarot cards) now show everyone in the outfit they wear. Each person's picture is sent as the outfit they have on, or their painted base look, instead of their card's or persona's picture. Until an outfit has a picture, their avatar is sent and the outfit is described in words.
+- That outfit picture is sent cut out, with no background. One that isn't cut out yet is cut first, for free. If that fails, the avatar is sent instead.
+- Scene pictures no longer ask for "two arms, two legs and five fingers", which pulled legs into close-up shots. They now tell the image model to avoid bad anatomy, merged bodies, extra or missing limbs and malformed hands.
+
+## 0.36.4 — 2026-11-18
+
+- Characters no longer talk in short, clipped one-liners that make little sense in the scene. Each line now says what that person would really say right then, in everyday words, and can run to a few sentences.
+
+## 0.36.3 — 2026-11-18
+
+- Your thoughts in a scene no longer open with how your body feels every time, such as "My stomach knots" or "My heart is pounding in my chest". The story no longer asks for a bodily feeling each time something happens to you.
+
+## 0.36.2 — 2026-11-18
+
+- Scrollbars in Otome Hearth, such as the one in a scene's narration and dialogue box, now use your Midnight or Pearl look's colours instead of Marinara Engine's accent.
+
+## 0.36.1 — 2026-11-18
+
+- On **Between you**, the small hearts for ranks 11 to 20 now show the ranks you've reached in their colour, and the ones still to come empty. They were the other way round.
+
+## 0.36.0 — 2026-11-17
+
+- **Kittens in the Album.** A **Kittens** tab keeps the kittens painted of you and your love interests, to see large, save, or **Repaint** (1 image). The old one stays until the new one is ready.
+- The Album's tabs now start with **Memories**, **Dates** and **CGs**, and it opens on **Memories**.
+- Kitty Cards: **How {name} plays** describes how they cheat at Kitty Cards, not the Claw Machine, and every painted kitten shows above the first move.
+- The Claw Machine no longer moves down when a love interest's line appears.
+- Starlight from dates is capped at 300 a day, was 400.
+- In **Lines & Veils**, your own limits can be **Allow** as well as **Veil** or **Line**, and their row fits a phone.
+
+## 0.35.0 — 2026-11-17
+
+- **Kitty Cards.** A new date in Dates, our version of Love and Deep Space's kitty card game. Take turns putting kittens into eight cups: a kitten in a cup of its own colour scores twice its number, and in a white cup its number. In some games your love interest cheats once, in their own way: they swap two cups, doze off, look away while you sneak a card, offer a trade face down, or let you take a card back. You can catch some of these. A game makes no model call and pays 20 Starlight and 30 affection, and a win 20 Starlight more, within the day's limits. Their lines are written ahead with their other lines, and a story from before this version gets them in the background.
+- **Your own kittens.** With an image connection, you and each love interest are painted once as a kitten, which shows on one of the value-5 cards. **Ask before painting** and prompt review hold them for **Paint our kittens**.
+
+## 0.34.13 — 2026-11-17
+
+- **Ten hearts on one line.** On the Story screen's **Between you**, a love interest's ten hearts could wrap the last one onto a line of its own on a phone, with a larger text size or a long level and counter. They now always stay on one line. Where there is no room for them at full size, they get a little smaller.
+
+## 0.34.12 — 2026-11-17
+
+- **Pickers show a card's title.** When two characters or two personas share a name, the setup's character and persona pickers, the newcomer picker on the Story screen and the card link in a love interest's bible now show each one's title / comment from Marinara Engine (such as "Modern AU version") under its name, so you can tell them apart. Searching the pickers finds a title too.
+
+## 0.34.11 — 2026-11-17
+
+- **Open named sits under the hearts.** On the Story screen's **Between you**, a love interest with a bond story waiting showed its **Open** button beside his picture, which pushed his name to the middle and wrapped his hearts into three short rows. His row now lines up with the others: his name where theirs is, his ten hearts on one line, and the button on a row of its own under them.
+
+## 0.34.10 — 2026-11-17
+
+- **Portraits paint in the Android app.** When Marinara was installed with its Android app, the Engine refused Otome Hearth's requests for the image style profiles, portraits, cut-outs and the gallery with "401: Android local authentication required", so no picture was painted. Those requests now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.
+
+## 0.34.9 — 2026-11-17
+
+- **New looks don't copy your avatar's hood.** A look is painted with your persona avatar (or his card picture) as the likeness, and when that picture wore a hood or a hat, every new look wore it too. The picture is now used only for the face, hair and build: a look wears just the outfit it was written with, and a hood or hat only when that outfit has one. Looks you already have keep their pictures; tap **Repaint** to paint one again.
+- **No more stray pixels at a look's edges.** A look is painted on a flat backdrop that its cut-out then removes, and a plum cardigan was painted on magenta, so the cut-out ate its edges. The backdrop is now chosen from more colour names (plum, burgundy, wine, lilac, sage, moss, denim and others) and mostly from the clothes, which are what touch it. Repaint a look that shows the specks.
+
+## 0.34.8 — 2026-11-16
+
+- **Take them along sits in its card on an iPhone.** On a date's **Who's coming?**, the title and its icon sat on the card's top edge, with a second frame showing above it. They are now inside the card, side by side, and the Dates screen's **Who are you spending time with?** card is fixed the same way.
+- **The chapter count is centred.** On the Story home, the arc line is centred under the title, and "chapter 3 of 5" always stays on one line.
+- **Paint it shows painting at once.** In **Album → Dates**, tapping **Paint it** on a 4★ date shows **Painting…** right away, and the picture appears when it is ready. You no longer need to leave the screen and come back.
+
+## 0.34.7 — 2026-11-16
+
+- **Explicit scenes engage the whole body.** Under NSFW: Explicit, sex scenes are now asked to engage the characters' entire bodies, every surface and orifice, with touch that carries the power dynamic between them. Fade and SFW stories are unchanged.
+
+## 0.34.6 — 2026-11-16
+
+- **The retry's line numbers match what was written.** When a repeated line or a masked love interest's thought is removed before a scene's choices are checked, the retry now says so, because the numbers it quotes count the lines without it. His side's retries no longer point to choice rules its scenes don't have, and a few retry messages are clearer (a quoted number, a stray empty entry in a branch, the places counted).
+
+## 0.34.5 — 2026-11-16
+
+- **A scene whose choices break a rule says which one.** When a scene's choices don't follow the format, the retry now tells the model exactly what to fix, such as "choice 2, option 3 has 10 branch segments; a small choice needs 1 to 8 in every option". Before, it always repeated the same four rules, so a scene that broke any other rule (a choice placed after the last line, a fifth place, a big choice before the chapter's last scene) failed the same way again and the chapter could not go on.
+
+## 0.34.4 — 2026-11-16
+
+- **Condensing keeps only what matters most.** When the timeline is condensed or shortened, fitting 5,000 words now comes first: the model may leave details out entirely and keeps only the biggest choices, where each relationship stands, what changed for good, the open threads and the people who still matter. Before, it was asked to keep every choice, every relationship turn and every change, so long stories kept coming back too long.
+
+## 0.34.3 — 2026-11-16
+
+- **Retry picks up where the summary stopped.** When condensing the timeline fails because it is still too long after three shortenings, **Retry the summary** now shortens the last result again. Before, it condensed the whole timeline again and ran all three shortenings from the start, which can take half an hour on a slow model. Restarting Marinara Engine forgets the last result, so a Retry after that condenses again.
+
+## 0.34.2 — 2026-11-15
+
+- **A too-long timeline gets shortened.** When condensing the timeline comes back over 5,000 words, the result goes back on its own, told how long it is and how many words to cut, up to three times. Before, the whole timeline went back with it, and the model copied it out again, so the rebuild stopped.
+- **Prompts keep the old timeline during a rebuild.** Until a rebuild finishes, story prompts use the earlier timeline instead of the half-rebuilt one. A half-rebuilt timeline covered only the first chapters, so every later chapter went in on its own and a chapter plan could pass 160,000 tokens.
+
+## 0.34.1 — 2026-11-15
+
+- **The timeline rebuild can finish.** The condensing prompt no longer also asks to keep every event, which fought its 5,000-word limit. Models kept bringing back about 7,400 words, so the rebuild stopped with **Retry the summary**. Until it finishes, each later chapter is sent on its own, which made chapter prompts very large.
+- **Summaries keep a story's periods and pregnancies.** Summaries no longer leave out anyone's period or cycle, so a character's period or a pregnancy in your story is remembered like anything else. The period tracker's data still never reaches memory.
+
+## 0.34.0 — 2026-11-15
+
+- **Emotion cues.** Turn on **Emotion cues** in **Settings → Audio → Voices**: with voiced dialogue, new scenes mark how lines are said, like [hushed whisper] or [gasps]. The voice performs them; the dialogue box hides them. ElevenLabs v3 and v4 act on them; other models may read the brackets aloud.
+- **Haptics.** In an explicit story, **Settings → Audio → Haptics** connects your toys through Intiface Central and tests them all. Sex scenes then drive them, each cue looping until the story changes it, and in Messages you can hand him the remote. **Stop the toys** stays on screen while they play.
+- **Memory keeps its newest chapters.** Condensing the timeline now keeps the newest three chapters as written and refuses a result that comes back too long, which had lost chapters. Every story's timeline is rebuilt once from its saved summaries.
+
+## 0.33.3 — 2026-11-15
+
+- **Date cards that fit a phone.** In Album → Dates, each date's text now uses the card's full width, with **Plan a date**, **Read again** and an evening's outcome in one row below it.
+- **A picture for 4★ dates.** A 4★ date now paints its place, with nobody in it, when you first open it, 1 image, as a 5★ date shows its banner's picture. A date won before this update offers **Paint it** in Album → Dates.
+- **Narration and dialogue.** Every story prompt now asks narration to show what happens, not what doesn't. Dialogue should sound spoken, in each speaker's own voice, with everyday words. No echoing or parroting.
+
+## 0.33.2 — 2026-11-15
+
+- **A date opens where you left it.** Going to Settings from a date's scenes or its ending and coming back opens it there again, where it used to start over at its first step. A trip to Settings no longer resets the Album to its first tab either.
+- **A failed keepsake can switch connections.** When a keepsake fails to paint, **Change the image connection** opens Settings → Images. Back returns to the date's ending, where you can paint the keepsake again. One still painting when you left shows as painting until it lands.
+
+## 0.33.1 — 2026-11-15
+
+- **Dates sits next to Memories in Wish.** Wish's tabs now read Memories, Dates, the love interest's wardrobe, My Wardrobe, Echoes and Shop.
+- **No dates card on the Dates screen.** Dates shows only its activities, today's rewards and the plush shelf. Plan your won dates from Album → Dates.
+- **Dates no longer slides sideways on a phone.** The love interests to pick from, on Dates and on a date's **Who's coming?**, wrap onto rows, so the screen only scrolls down.
+
+## 0.33.0 — 2026-11-15
+
+- **Dates come from Wish.** A Dates banner arrives every fortnight: a 5★ date scenario (4–6 scenes and a key image), three 4★ places to go (1–3 scenes) and six Snapshots. Dates follow your Heat.
+- **Take whoever you like.** Plan a won date from Wish or Album → Dates, with one love interest, several or everyone. Each choice is judged by what the group likes, and you can bring a gift.
+- **Each love interest goes on a date once.** After that it only replays for them; add someone new and a new date is written. A new date pays 120 Starlight, and its affection is shared by its first-timers.
+- **Date Night is gone from Dates.** Earlier evenings stay in Album → Dates.
+- **Clearing the air is its own scene,** opened when you accept the invitation.
+- **More looks.** His and My Wardrobe banners hold three 3★ everyday looks in place of three Snapshots.
+
+## 0.32.2 — 2026-11-15
+
+- **Characters outside the cast keep the voice you gave them.** With **Voice everyone else** on, a character outside the cast who has an Engine character card now speaks with the voice assigned to that card in the Engine's voice settings, matched by name as the Engine's own chats do. Before, they got one of the Engine's default voices. Anyone with no assigned voice still gets a default voice.
+
+## 0.32.1 — 2026-11-14
+
+- **A line written twice shows once.** When the model writes a scene line twice in a row, the same or with a word or two more at its end, only the first stays. That includes a line right after a choice that repeats what you chose. Scenes written before this update are not changed.
+
+## 0.32.0 — 2026-11-14
+
+- **Recall follows the lead.** When a main chapter is planned, the earlier chapters it brings back in detail now come only from chapters the love interest you picked to lead it led: main chapters they led, and their own route and repair chapters. A route or repair chapter comes back marked as private to them. The condensed timeline, the recent chapters' summaries and the last chapter in full are sent as before.
+
+## 0.31.0 — 2026-11-14
+
+- **Repaint a couple set's portrait.** In the Wardrobe, a painted pair portrait now offers **Repaint the pair portrait**, for 1 image. The old portrait stays on screen while the new one paints, and stays if the paint fails. The new one replaces it in the Album too.
+- **Repaint a sticker.** In the Album's **Stickers** tab, a painted sticker offers **Repaint**, for 1 image. Chats keep showing the old sticker until the new one is ready. After that, every message that sent it shows the new one.
+
+## 0.30.0 — 2026-11-14
+
+- **The story knows what happened when.** Every chapter's summary now reaches the model with its place in the story: "[Chapter 3]" for a main chapter, "[Character Story 2, after chapter 3]" for a Character Story, and "[After chapter 3]" for route, repair, date and his-side chapters. The condensed part of the timeline says which chapters it covers ("[Chapters 1–4]"), and a chapter recalled by meaning goes as "Chapter 3 in detail".
+- **Stories in progress get it too.** The tags are added when each prompt is built, so a saved story has them on its next scene or message, with nothing summarized again. A chapter you are partway through keeps the story it was planned with, so its tags start with the next chapter.
+
+## 0.29.0 — 2026-11-14
+
+- **Messages read like people texting.** Love interests write in plain, everyday words, the way a real person types, with no ornate metaphors or lines that belong in a novel. This holds in private threads and in the group chat.
+- **No more echoing.** A love interest no longer repeats your words back, quotes them or restates what you said; they answer in their own words.
+
+## 0.28.0 — 2026-11-13
+
+- **Scenes keep their shape.** The reply format a scene is written in is now stated again at the end of the request, so a model no longer drifts into prose, a code fence or stray commentary when the instructions sit far back in a long prompt. Nothing about the story changes; a malformed reply was already retried once, and this is what makes that retry unnecessary.
+
+## 0.27.0 — 2026-11-13
+
+- **The protagonist is drawn as herself.** Image prompts now use the protagonist's presentation — man, woman, or person — derived from the pronouns chosen at run creation. Stories started with she/her pronouns painted the protagonist as a generic person before this fix.
+
+## 0.26.0 — 2026-11-13
+
+- **Double dates.** Once a love interest has reached affection level 10, a date with him can invite a second love interest who has also reached level 10. The evening is written for the three of them: both are in every scene, and what passes between the two of them is part of it. Under Explicit Heat it can turn intimate between the three of them; below that it stays a warm evening for three.
+- **Shared affection.** A double date's affection is split evenly between the two love interests, the gift included, and each share counts against that love interest's own daily cap.
+- **Who can be invited.** Someone at level 10 with no grievance between you. A love interest whose own evening with you is still waiting cannot join until it is finished.
+- **Plainer prose, truer voices.** Everyday words, not ornate metaphors and stacked adjectives; dialogue in the register a character's own life taught them, so a common man sounds like one; and choices written plainly.
+
+## 0.25.0 — 2026-11-13
+
+- **Sex scenes go further.** Under Explicit Heat, the act is written like explicit erotic fanfiction: moment by moment, in graphic detail, on what each body does and feels, with the pleasure building before anyone climaxes. It no longer jumps from the first touch to the finish in a few lines.
+- **Affection by how it went.** The lead earns 150 for the truth or Opened up, 100 for a standoff, Almost or no climax, and 50 for a walkout or Shut out. Route chapters follow the same rule. The second love interest earns 50 (was 60).
+- **Dubious consent and non-consent actually happen.** When either is set to Allow, the story treats them as something that may happen, not just a warning label. Within the Lines and Veils, a love interest or villain may press on past a refusal. A notice in Settings → Content explains this while either limit is open. Raising Heat no longer silently resets a consent limit you set to Allow.
+
+## 0.24.6 — 2026-11-12
+
+- **The bible shows the bond ranks.** Past a love interest's finale, their bible now has a Bond ranks section: each rank from 11 ("named") to 20 ("always") with the truth it reveals about them. The truths are written when their first bond story, rank 11, opens; until then the section says so.
+
+## 0.24.5 — 2026-11-12
+
+- **A route past its finale shows the bond ranks ahead.** Once a love interest's finale was read, their card in Routes said their route was complete, though affection keeps going to level 20 through the bond ranks. The card now names the next rank (rank 11, "named", first) and the affection it needs, says when a rank's story is waiting for you, and only calls the route complete at the last rank.
+
+## 0.24.4 — 2026-11-12
+
+- **The Image style is set off with a comma everywhere.** A Memories banner's art (Wish → paint the banner), key images, outfit scenes, keepsakes, Photo Shoot photos and tarot cards with people ran your Image style straight into the first sentence of the picture's prompt ("soft watercolor The lamp room at night…"). They now follow it with a comma, as a cast repaint and every other picture already did.
+
+## 0.24.3 — 2026-11-12
+
+- **A chapter keeps its story on smaller connections too.** 0.24.2 kept the story a chapter opened with, but a scene that had to leave out some older chapters to fit a smaller connection rebuilt the story from scratch to do it, and so went back to the newer version after all. A chapter now keeps every part of its story, so a scene that has to leave something out leaves it out of the chapter's own.
+
+## 0.24.2 — 2026-11-12
+
+- **A chapter keeps the story it was opened with.** The story so far a chapter's first scene is written from is now saved with the chapter and sent to every one of its scenes, instead of being re-read each time. Before this, story memory being tidied up in the background while you read could hand a later scene a slightly different version of events than the earlier ones — the same chapter told two ways — and made every prompt after it cost full price again.
+
+## 0.24.1 — 2026-11-12
+
+- **Cheaper prompts.** Every prompt Otome Hearth sends to Claude now asks for the five-minute prompt cache instead of the hour-long one. A cached prompt is usually read again within a minute or two (the next scene, the next beat of a chapter), where the five-minute cache costs a quarter of the input to write and the hour-long one twice it — so the hour mostly doubled the price of a prompt that was read seconds later. Group replies, which had been paying the hour-long price, now use the five-minute one too.
+
+## 0.24.0 — 2026-11-11
+
+- **You can paint a picture again.** Any picture Otome Hearth has already painted can now be painted a second time when you want a different take: a scene's key image, the place it happens in, a Wish banner, a look in the Wardrobe, or a tarot card. The new picture costs one image, and the old one stays on screen while it paints, so nothing goes blank if the paint fails. Once the new one arrives it replaces the old one everywhere it showed, including your Album, and the old image leaves your gallery.
+
+## 0.23.1 — 2026-11-11
+
+- **Each bond rank's truth stays with you.** Past the finale, the story keeps every bond reveal you have reached, rather than the three newest, so a truth learned at rank 11 still holds at rank 15; the card's own size limit still governs what it sends.
+- **The story speaks of the rank by name.** A settled couple's card and every prompt that writes their words now read the rank's word beside its number ("bond rank 15 of 20 — tested"), the same rank the Story screen shows.
+- **An afternoon stays an afternoon.** A scene told from their side counts only the bond ranks reached by the moment it retells, so it never carries what was learned weeks later.
+
+## 0.23.0 — 2026-11-11
+
+- **The relationship keeps growing after the confession.** Once affection reaches 10 and their story's finale is played, ten more ranks open, each a small heart filling inside the ten on Story: Named, Kept, Told, Hungry, Tested, Afraid, Chosen, Ahead, Home and Always. Each has its own canon story of settling into being together, from a secret they never told and what they want in bed (in an NSFW story) to your first real fight, the fear of leaving you, why they stay, and the future they want.
+- **One rank at a time.** A rank's story is played before the next opens, so banked affection skips none; each level from 11 to 20 costs 650, then 50 more.
+- **New reveals replace the old ones.** Past the finale the story carries what each new rank reveals, not the secrets their route already told.
+- **Extra stories now wait for the last rank:** prestige opens at bond rank 20 instead of level 10.
+
+## 0.22.7 — 2026-11-11
+
+- **A new love interest gets his own colour.** A love interest who joins the story after it has started, such as one an arc adds, now has his name tag and glow picked from his own portrait like everyone else's, instead of keeping a colour that could match another love interest's. Names that don't share a portrait yet spread across the colour wheel, so two of them rarely look alike. A story already in progress picks its colours again when it is opened.
+
+## 0.22.6 — 2026-11-11
+
+- **The Wardrobe loads faster.** A look whose five expressions are painted now shows a small check next to "Expressions" instead of the five faces, so opening the Wardrobe no longer downloads every face of every look.
+
+## 0.22.5 — 2026-11-11
+
+- **A chapter no longer ends on a choice you never get to make.** When a chapter's last scene leaves a decision to you, it now ends on that choice for you to pick, instead of saying you'll decide later. The next chapter also never acts as if you chose something you weren't offered.
+
+## 0.22.4 — 2026-11-10
+
+- **Firsts are remembered for good.** A love interest's first kiss, first time and first confession with you are now kept permanently. When a chapter's summary is written, it notes any of the three that happened there for the first time, in one sentence saying how and in which chapter, and that sentence goes with them into every later scene, so the story never treats it as a first again. Each one also joins the Love Timeline, and the calendar marks it every year, as "First kiss with Kai". Stories you've already started begin with none noted.
+
+## 0.22.3 — 2026-11-10
+
+- **Love interests can show they want you.** The slow burn now holds back love, not attraction. Through their first four stages, a love interest may flirt, tease and say outright that they find you attractive, as far as their mask lets them, but still won't confess or become your partner. A kiss given out of feeling waits for their fifth stage, where a confession can come too.
+- **Your affection level shows in the story.** Each love interest's affection level now reaches the scenes, so the higher it is, the more drawn to you they act, within what their stage allows.
+- The README now gives the right affection level costs: level 2 takes 200 points, and each level after it 50 more.
+
+## 0.22.2 — 2026-11-10
+
+- **Wardrobe and Wish art shows faster.** Looks, faces and wardrobe banner art now use the cut-outs Otome Hearth already saves on the server. Before, your browser downloaded each full painting, sent it to Marinara Engine to remove its backdrop and waited for the result, for every look and face on screen. Art that isn't cut out yet still shows the old way, and is cut out in the background for your next visit.
+
+## 0.22.1 — 2026-11-10
+
+- **A stray thought no longer costs the whole scene.** While a love interest is still behind their mask, the story can't show their thoughts. When the model writes one anyway, Otome Hearth now drops just that line and keeps the rest of the scene, instead of asking the model to write it again. This works the same in Confrontations and Closers.
+
+## 0.22.0 — 2026-11-10
+
+- **Portraits and expressions paint by themselves.** With an image connection, a new story paints every love interest's portrait and yours once their bibles are written. With **Expressions** on, their faces follow in the background. Card characters are painted too, instead of using their Engine sprites or avatar. **Ask before painting** and prompt review still hold the portraits for **Paint the cast**. Without an image connection, your Engine sprites and avatars are used as before.
+- **Someone new gets a portrait in Your cast.** A love interest who arrives at the end of an arc now appears in **Your cast** with their portrait: it paints by itself with an image connection, or waits for **Paint the cast** with **Ask before painting** or prompt review on. Someone who arrived before this update gets theirs the next time you open the story.
+- Stories you've already started keep their **Paint the cast** button: portraits waiting there don't start painting by themselves.
+
+## 0.21.6 — 2026-11-10
+
+- **Figurine and birthday scenes no longer count as your last Character Story.** One you read after a Character Story no longer takes its place: the next main chapter picks up from that Character Story, and main, route and repair chapters keep it as the last one you played. Their love interest still remembers the scene.
+
+## 0.21.5 — 2026-11-10
+
+- **Choosing a card for someone new works again.** When you bring someone new into the story from your cards at the end of an arc, your cards show as a grid of tiles, and the one you tap gets a check, as in setup.
+
+## 0.21.4 — 2026-11-10
+
+- **Your Messages model designs the small art.** Side characters' looks, love interests' stickers and their Claw Machine plushies are now written by your Messages connection instead of Planning. There's nothing new to set: left on **Same as Story**, Messages uses your Story connection.
+
+## 0.21.3 — 2026-11-10
+
+- **Love interests stop repeating their habits.** The signs written in a love interest's bible (how they act when stressed, their tics, what gives them away) are now only some of the ways they can react. They show one now and then among other, fresh reactions, and never repeat the same gesture or sentence within a chapter.
+
+## 0.21.2 — 2026-11-09
+
+- **The next main chapter carries on from a Character Story.** When a Character Story is the last thing you played, the next main chapter picks up from how it ended, including any choice you made at its end. Love interests who weren't in it still don't know what happened there.
+
+## 0.21.1 — 2026-11-09
+
+- **A scene's key image gives way when the scene moves on.** Once the story goes to another place, that place's background takes over instead of the image staying until the end of the scene. Naming the same room again keeps it.
+
+## 0.21.0 — 2026-11-08
+
+- **The top left button is a house.** It takes you Home, as before, and its circle is in the colour of whoever is with you there, beside their name.
+- **New items have a dot.** Anything you win from Wish shows a small dot in the Wardrobe or the Album: on the dock, on the tab that holds it, and by the item itself. The dot goes once you click the item (or one of its buttons).
+
+## 0.20.4 — 2026-11-08
+
+- **Every scene of a chapter remembers the same small moments.** A chapter now picks its small memories (message exchanges, Snapshots, Read Him, Claw Machine and Tarot rounds, Read Me notes and dates) once, for everyone in it, and each of its scenes is written with the same ones, marked with who knows them. On an Anthropic connection, after the first scene they're sent at the cached price instead of in full every time. Something that happens during a chapter is remembered from the next one.
+
+## 0.20.3 — 2026-11-08
+
+- **Route and repair chapters cost less to start.** Their plan now opens with the same story the chapter's scenes are written from, and on an Anthropic connection caches it, so the first scene reads it at the cached price instead of writing it all again. The plan sees the same things as before, in a different order. This works when your Planning and Narration connections are the same, as for main chapters.
+
+## 0.20.2 — 2026-11-08
+
+- **Messages cost less.** When you text a love interest on an Anthropic connection, everything that stays the same through the conversation (their card, what they know of the story, your earlier conversations) is cached for five minutes, so each reply after the first sends it at the cached price instead of in full. A daily message they send first is cached the same way for your answer.
+
+## 0.20.0 — 2026-11-08
+
+- **Side characters who keep coming back get a sprite.** Turn on **Side character sprites** in **Settings → Images**. Once a side character has spoken in two different chapters, their one full-body sprite stands where a love interest's figure does while they speak. It's one neutral picture, with no expressions. Stories you already started count the scenes you've read.
+- **Your own characters look like themselves.** Someone whose name matches one of your Engine character cards gets their sprite as soon as they speak, painted with that card's avatar and full-body sprite as references. Two cards with the same name are never guessed between.
+- **What it costs.** Each one takes 1 call on your Planning connection to write their look (none for a character card), then 1 image. With **Ask before painting** on, tap **Paint** beside the place while they speak.
+
+## 0.19.1 — 2026-11-08
+
+- **Not every chapter ends in a Confrontation or a Closer.** A main chapter has one only when it builds to it, and otherwise ends on an ordinary scene or a moment. A story arc's last chapter still has one for its big event. Confrontations and Closers still alternate, counting only chapters that have one.
+
+## 0.19.0 — 2026-11-08
+
+- **Long stories remember their beginnings in detail.** As a story grows, its early chapters are condensed again and again. Now each main chapter brings back up to three earlier chapters that matter to it, by their original summaries, in its plan and every scene. Only chapters everyone in it may know come back, and nothing changes when none is close enough.
+- **Stories you already have too.** Chapter summaries are indexed in the background when you open a story and after each new summary, with no model call. The built-in model runs on this computer and its index is stored with the story.
+- **Memory recall embeddings.** In **Settings → Connections**, choose **Built-in (local)** or an Engine connection with its own embedding model, for example one better at your story's language. An older Engine offers only Built-in. Beside it you see how many summaries are indexed, or why indexing failed, with **Retry indexing**.
+
+## 0.18.2 — 2026-11-08
+
+- **Their side shows what you never saw.** A love interest's side of a big moment is now a scene you weren't there for, just before it or right after you left, instead of the same scene told again. It opens once they reach **Wound**; earlier moments don't count.
+
+## 0.18.1 — 2026-11-08
+
+- **Stories meet the world's important people.** Chapters now bring in major side characters with real parts, not only passing locals, so they can grow into love interests or antagonists later. In a story set in an existing world, that means its own canon characters tied to your love interests.
+- **Premise suggestions may use existing worlds.** Surprise me no longer avoids names, places and characters from existing books, films and games.
+
+## 0.18.0 — 2026-11-08
+
+- **Your Tarot cards are in the Album.** A new **Cards** section keeps every card you've drawn at Tarot night with an image connection, in deck order, each labelled with whose it is, such as "The Lovers · Ren". Tap a painted card to see it large and save it, as you would a CG. A card still painting says so, and one waiting for your tap, or one that failed, offers **Paint it** or **Try painting it again** with its cost right there.
+
+## 0.17.2 — 2026-11-08
+
+- **Send a sticker with your words.** In Messages, picking a sticker now attaches it to your message instead of sending it at once. It shows above the box with a remove button; write something if you like, then tap **Send** to send the sticker and your words together. Picking another sticker swaps it.
+- **The personality quiz on date waits too.** While Date Night plans your evening, and while Read Him, Read Me or Tarot night is being set or read, tap **Play the personality quiz** to answer statements as you wait.
+
+## 0.17.1 — 2026-11-08
+
+- **Faces, framed as faces.** The small portrait circles now frame each love interest at the face instead of the middle of the body: their painted look is anchored at the top and zoomed to the head and shoulders, so no crown is cut. In the personality quiz, the portraits beside their answers no longer lose their left edge.
+
+## 0.17.0 — 2026-11-07
+
+- **Take the personality quiz while a chapter is planned.** While a chapter is being planned, tap **Play the personality quiz** and answer statements from strongly disagree to strongly agree. After each answer you see how every love interest answered the same statement, and how alike the two of you are so far. Statements about sex and kinks appear only when Heat is NSFW. Once you've answered them all, 50 new statements are written for you in the background.
+- **Your love interests answer it once.** A new story writes their answers in the background after their bibles, in one call on your Planning connection. A story you started before this update gets theirs in the background the next time you open it, and someone new who joins later gets theirs the same way.
+- **What happened so far… now shows while an arc is planned.** Planning any other chapter offers the quiz instead, and **Who said what?** still plays while a scene is written.
+
+## 0.16.0 — 2026-11-07
+
+- **Grievances.** Only a serious break now leaves a love interest with a grievance against you, at most once a story arc. Until you make it right they can't lead a chapter, their affection doesn't grow and your dates with them wait, with nothing lost. After two story chapters of space, **Make it right** in Routes plans the one chapter that clears it, for 300 affection. A grievance from before needs no space.
+- **I'm upset with them.** Tell a love interest from Routes that you're upset with them (1 call: they answer in Messages), and take it back any time. They know it in their messages and in the story, and may ask you out once to clear the air: accept, and it's your next Date Night with them, somewhere they choose.
+
+## 0.15.0 — 2026-11-07
+
+- **Their side.** After a big moment with a love interest (a route chapter that moves your bond on a stage, a Closer that ends with them opening up or shutting you out, a confrontation that ends in the truth or a walkout, or a rift you mend), Routes offers their side of it: the same scene, told from their point of view, with their thoughts. The chapter's end tells you when one waits. There is one per story arc for each love interest; until you read it, it follows the arc's newest big moment. Opening it is free, writing it is 1 model call, it paints only a place that has no picture yet, and reading it pays 30 Starlight. It becomes part of that chapter: the next chapter is written knowing both.
+
+## 0.14.0 — 2026-11-07
+
+- **Touch your love interest on Home.** Tap their head, cheek, chest or hand for a line in their own voice, and their face answers where you touched. Their reactions grow bolder as you grow closer, from their mask at first to someone who is yours. Under NSFW Heat (Fade or Explicit) you can touch their crotch too, and a touch to their chest or crotch is an intimate one, as far as your Heat and Lines & Veils allow. A touch never waits for the model, earns nothing, and is voiced when voices are on. Without a picture of them, the places are labelled buttons under their initials.
+- **Stories in progress catch up once.** On your next Home visit, each love interest's lines are written again in the background, 1 call each, to add the new places; until then Cheek plays a few stock lines. Under NSFW Heat, changing Heat, Darkness, Lines & Veils or your role writes them once more.
+
+## 0.13.1 — 2026-11-07
+
+- **Starting a new arc no longer fails on wordy chapter outlines.** When the model described a chapter of the next arc in more than a short sentence, the plan was refused and you saw "The model's reply wasn't in the expected format." Longer chapter descriptions are now accepted, so going on with the story works with models that write more, such as thinking models on high effort.
+- **Later arcs no longer fail on mystery reveals you already know.** In a longer story, planning the next arc could fail with the same error when the model scheduled a piece of the mystery, or its truth, that earlier arcs had already revealed. The planner is now told what you already know, and a repeated reveal is skipped instead of failing the arc.
+
+## 0.13.0 — 2026-11-07
+
+- **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.
+- **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.
+
+## 0.12.0 — 2026-11-07
+
+- **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.
+
+## 0.11.0 — 2026-11-07
+
+- **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.
+- **A Tarot deck painted for your story.** With an image connection, each card is painted the first time it is drawn and kept: your cards show you, theirs show them, and the Lovers, the Sun, Temperance and Judgement show you both. At most 3 images a reading, only for cards not painted yet; Ask before painting and prompt review wait for your tap. Without one, the cards are Otome Hearth's own gold line art.
+
+## 0.10.0 — 2026-11-07
+
+- **Your Engine art comes first.** A love interest from a character card now appears in the card's sprites (Full Body → Neutral, else Neutral) or, without sprites, its avatar, and you in your persona's avatar, from the moment the story is made, before anything is painted. Their sprites for love, blushing, smirk, sad, angry and the like become their faces, and only the faces they lack are painted, never while **Ask before painting** is on. A story in progress gives Engine art to anyone who has no portrait yet; looks already painted stay.
+- **Choose a background for any place.** **Background** beside a story location opens your Engine backgrounds: the one you pick shows there, on Home, on dates and in photos, and nothing is painted. A painting it replaces is kept. Turn on **Ask before painting** to choose before a place is painted.
+- **Don't paint**, the first choice of the image connection in **Settings → Images**, turns painting off and keeps to your Engine art.
+
+## 0.9.6 — 2026-11-07
+
+- **Answer a chapter's last decision in your own words.** When a chapter ends on a choice that lasts, **Write your own…** now waits under the offered answers: write something you say or something you do instead, and it becomes your choice, as lasting as any other. The story carries on from it, and the next chapter of that storyline starts from your words. Every other choice keeps its offered answers, because the scenes after them are already written ahead. Choosing your own words costs nothing extra.
+
+## 0.9.5 — 2026-11-07
+
+- **Scene pictures show your love interests and you.** In a picture of two or more people, such as a key image, a Memory's or a Character Story's art, or a date's keepsake, each person is now painted from their own picture, so their faces match even while they wear a look; the look they wear is still described. When the story names someone another way, with a title, as "you", by a surname or a fuller name, or without its accents, the picture still knows who it is. When a saved picture of someone can't be loaded, the painting stops before anything is paid for and lets you try again, instead of painting a stranger.
+
+## 0.9.4 — 2026-11-06
+
+- **Otome Hearth uses a little less battery.** It does less drawing on every screen, and stops work you can't see. The soft glows drifting behind each screen are blurred once instead of on every frame. Once Home has appeared, the scene hidden behind your room is no longer drawn at all, and in Midnight the window's light takes less work to draw. The glows hidden behind the reader hold still, and so do Home's stars at dawn and by day, when the sky hides them. Nothing looks, moves or sounds different.
+
+## 0.9.3 — 2026-11-06
+
+- **Figurines are painted.** A love interest's figurine is now a painted picture of them as a small collectible figure in the look they wear, standing on a display base, instead of a drawing. It is painted once, right after you buy it (1 image, with your image connection), then cut out so it stands on the Shop's shelf, in your Wardrobe and on Home. **Ask before painting** and prompt review wait for your tap, and a paint that fails shows **Try painting it again**. Opening the Shop no longer draws every figurine with your Planning model. A figurine you bought before 0.9.3 shows **Paint it** in the Shop and the Wardrobe.
+
+## 0.9.2 — 2026-11-06 [quiet]
+
+- **The aphrodisiac's bottle is whole.** Its neck now meets the heart-shaped body on the Shop's shelf and in the Wardrobe.
+
+## 0.9.1 — 2026-11-06
+
+- **Less affection from activities each day.** Date Night, Read Them, Read Me, the Claw Machine, Close and remember and Show him now earn at most 150 affection per love interest a day, down from 300. Story chapters still earn without a limit, and so does a gift you give on a date.
+
+## 0.9.0 — 2026-11-06
+
+- **A Shop in Wish.** Spend Starlight on gifts: flowers, chocolates, wine, and under NSFW Heat an aphrodisiac. They wait in your Wardrobe until a date.
+- **Bring a gift to Date Night.** Pick one with your looks and give it in the first scene: they react in their own voice, and the evening can change because of it. The gift earns extra affection, even past the daily cap.
+- **Figurines of your love interests.** Each one is drawn just for them and costs 5,000 Starlight. Buying one unlocks a short, funny scene with them, and the figurine joins you on Home.
+
+## 0.8.12 — 2026-11-06
+
+- **Tell the story what's on your mind.** A new thought-bubble button on Home, beside Remind Me, opens Your thoughts…: write what your protagonist is thinking about what happened lately, something to look into, something a love interest did that you can't let go of, or that you'd like a hug today. The next main story chapter takes it into account in its plan and its scenes, then lets it go. Until then a dot on the button shows it's waiting, and you can change or clear it. Sending it costs nothing extra.
+
+## 0.8.11 — 2026-11-06
+
+- **Chapters remember your last Character Story.** A main, route or repair chapter led by another love interest now always knows the Character Story you played last, even before its summary is written, so it no longer contradicts what happened there. That story stays private between you and its love interest: the others still don't know what happened in it.
+
 ## 0.8.10 — 2026-11-06 [highlight]
 
 - **Scenes are written as they were before 0.8.9**: each one when you reach it, and the next one ahead while you read. 0.8.9 wrote the rest of the chapter ahead, so later scenes missed the small choices you made along the way. The fixes for pictures that hung and for the Story connection stay.

@@ -26,6 +26,7 @@ import {
   slurpPickFanType,
   type SlurpFanType,
 } from "./slp-fan-types.js";
+import { slpHashFmix as hash } from "./slp-hash.js";
 
 /**
  * Handle stems, one merged bank. Used to be five separate flavour presets; merged into one pool
@@ -380,22 +381,6 @@ export type SlurpPopulationMember = {
   activeHour: number;
   joinedAt: string;
 };
-
-function hash(value: string): number {
-  let out = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 0x01000193);
-  }
-  // The finalizer is load-bearing. Plain FNV-1a barely avalanches its last byte, and seeds here
-  // are sequential, so without it consecutive members would come out nearly identical.
-  out ^= out >>> 16;
-  out = Math.imul(out, 0x85ebca6b);
-  out ^= out >>> 13;
-  out = Math.imul(out, 0xc2b2ae35);
-  out ^= out >>> 16;
-  return out >>> 0;
-}
 
 const pick = <T>(list: readonly T[], seed: string, salt: string): T => list[hash(`${salt}:${seed}`) % list.length]!;
 

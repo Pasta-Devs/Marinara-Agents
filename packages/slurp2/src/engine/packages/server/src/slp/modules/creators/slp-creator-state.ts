@@ -1,3 +1,4 @@
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The state that makes one Slurp Creator more than a single mood number.
  *
@@ -405,7 +406,7 @@ export function creatorStateDeltaForSignal(signal: SlurpCreatorStateSignal): Slu
 }
 
 /** The modifiers still running at `at`. Expiry is a clock read, so nothing has to sweep them. */
-export function activeSlurpModifiers(state: SlurpCreatorState, at = new Date()): SlurpCreatorModifier[] {
+export function activeSlurpModifiers(state: SlurpCreatorState, at = slurpWorldNow()): SlurpCreatorModifier[] {
   return state.modifiers.filter((modifier) => {
     const until = Date.parse(modifier.until);
     return Number.isFinite(until) && until > at.getTime();
@@ -413,7 +414,7 @@ export function activeSlurpModifiers(state: SlurpCreatorState, at = new Date()):
 }
 
 /** What the active modifiers tell the model, in the order they arrived. */
-export function slurpModifierLines(state: SlurpCreatorState, at = new Date()): string[] {
+export function slurpModifierLines(state: SlurpCreatorState, at = slurpWorldNow()): string[] {
   return activeSlurpModifiers(state, at).map((modifier) => SLURP_MODIFIERS[modifier.kind].line);
 }
 
@@ -428,7 +429,7 @@ export function addSlurpModifier(
   state: SlurpCreatorState,
   kind: SlurpModifierKind,
   source: string,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): SlurpCreatorState {
   const definition = SLURP_MODIFIERS[kind];
   const until = new Date(at.getTime() + definition.hours * 3_600_000).toISOString();
@@ -452,7 +453,7 @@ export function readSlurpCreatorState(raw: unknown, fallbackUpdatedAt: string): 
   const intent = SLURP_ADULT_INTENTS.includes(record.intent as SlurpAdultIntent)
     ? (record.intent as SlurpAdultIntent)
     : SLURP_CREATOR_STATE_DEFAULT.intent;
-  const now = Date.now();
+  const now = slurpWorldNowMs();
   const modifiers = Array.isArray(record.modifiers)
     ? record.modifiers
         .filter((entry): entry is SlurpCreatorModifier => {

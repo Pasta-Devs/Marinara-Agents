@@ -21,7 +21,7 @@ async function main() {
       `${name} must not expose legacy product markers`,
     );
   }
-  assert.match(view, /<NoodleHome navigation=\{navigation\} onNavigate=\{setNavigation\} \/>/);
+  assert.match(view, /<NoodleHome\s+navigation=\{navigation\}\s+onNavigate=\{setNavigation\}/);
   assert.doesNotMatch(view, /SlurpHome|mode === "noodler"/);
   assert.match(navigation, /mode: "public"/);
   assert.doesNotMatch(navigation, /mode: "noodler"|tab\?: "noodle" \| "noodler"/);

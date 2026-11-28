@@ -11,6 +11,7 @@ import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs"
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import * as wish from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import {
+  addOutfit,
   itemArtPrompt,
   paintItemNow,
   queueItemArt,
@@ -21,10 +22,12 @@ import {
   itemId,
   runDocTarget,
   stateId,
+  unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import {
   normalizeBanner,
   normalizeItem,
@@ -72,14 +75,24 @@ test("a rotation is floor(days since the world was created / 14), with its first
   assert.equal(wish.parseBannerKey("his-wardrobe-01"), null);
   assert.ok(wish.isItemId("my-wardrobe-3-s6"));
   assert.ok(!wish.isItemId("my-wardrobe-3-s7"));
+  // #2303: the Dates banner and a wardrobe banner's 3★ looks; a wardrobe look stays in the Wardrobe, a date in the Album.
+  assert.deepEqual(wish.parseBannerKey("dates-4"), { kind: "dates", rotation: 4 });
+  assert.ok(wish.isItemId("dates-4-f") && wish.isItemId("his-wardrobe-2-l3") && !wish.isItemId("his-wardrobe-2-l4"));
+  assert.equal(wish.bannerKeyOfItem("my-wardrobe-2-l1"), "my-wardrobe-2");
+  assert.deepEqual(["his-wardrobe-2-l1", "my-wardrobe-2-s1", "dates-2-f", "dates-2-a1"].map(wish.collectionOf), [
+    "wardrobe",
+    "album",
+    "album",
+    "album",
+  ]);
 });
 
-test("a read creates nothing; Wish open creates the rotation's three banners once, even when opened twice at once", async () => {
+test("a read creates nothing; Wish open creates the rotation's four banners once, even when opened twice at once", async () => {
   const t = await wishWorld({ runKey: "r-m4bann01-aaaaaa", images: NO_IMAGES, replies: rotationReplies() });
   const read = await t.call("GET", "/runs/:run/wish");
   assert.equal(read.status, 200);
   assert.deepEqual(read.body.banners, []);
-  assert.deepEqual(read.body.missing, ["memories", "his-wardrobe", "my-wardrobe"]);
+  assert.deepEqual(read.body.missing, ["memories", "his-wardrobe", "my-wardrobe", "dates"]);
   assert.equal(read.body.creating, false);
   assert.equal(t.calls.length, 0, "a read never calls a model");
   assert.equal((await t.store.listRun("banner", t.runId)).length, 0);
@@ -91,7 +104,7 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
   assert.equal(first.status, 200, JSON.stringify(first.body));
   assert.deepEqual(first.body.failed, []);
   assert.deepEqual(second.body.wish.banners, first.body.wish.banners);
-  assert.equal(t.calls.length, 3, "one P20 call per banner");
+  assert.equal(t.calls.length, 4, "one P20 call per banner");
   const view = first.body.wish as wish.WishView;
   assert.deepEqual(
     view.banners.map((banner) => [banner.key, banner.featuredLi, banner.echo]),
@@ -99,9 +112,49 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
       ["memories-0", KAI, false],
       ["his-wardrobe-0", KAI, false],
       ["my-wardrobe-0", KAI, false],
+      ["dates-0", KAI, false],
     ],
   );
   assert.deepEqual(view.missing, []);
+  // #2303: a wardrobe banner's 3★ items are its three looks (the featured love interest's on His Wardrobe, hers on
+  // My Wardrobe), then three Snapshots.
+  const his = view.banners[1]!;
+  assert.deepEqual(
+    his.three.map((item) => [item.id, item.kind, item.li]),
+    [
+      ["his-wardrobe-0-l1", "his-look3", KAI],
+      ["his-wardrobe-0-l2", "his-look3", KAI],
+      ["his-wardrobe-0-l3", "his-look3", KAI],
+      ["his-wardrobe-0-s1", "snapshot3", KAI],
+      ["his-wardrobe-0-s2", "snapshot3", MIR],
+      ["his-wardrobe-0-s3", "snapshot3", SOL],
+    ],
+  );
+  assert.deepEqual(
+    view.banners[2]!.three.slice(0, 3).map((item) => [item.kind, item.li, item.look?.name]),
+    [
+      ["her-look3", null, "Everyday 1"],
+      ["her-look3", null, "Everyday 2"],
+      ["her-look3", null, "Everyday 3"],
+    ],
+  );
+  // #2303: a date is no one's (the player takes whoever they like), with its place and its scenes, 4–6 for the 5★
+  // and 1–3 for each 4★.
+  const dates = view.banners[3]!;
+  assert.deepEqual(
+    [dates.five, ...dates.four].map((item) => [item.kind, item.li, item.place?.name, item.scenes]),
+    [
+      ["date5", null, "The Regatta Pier", 5],
+      ["date4", null, "Night Market", 1],
+      ["date4", null, "Old Observatory", 2],
+      ["date4", null, "Tide Pools", 3],
+    ],
+  );
+  assert.equal(dates.five.premise?.startsWith("The harbour races paper lanterns"), true);
+  assert.deepEqual((await readItem(t.store, t.runId, "dates-0-f"))?.place, {
+    name: "The Regatta Pier",
+    tags: "the regatta pier, evening, lanterns, no people",
+  });
   assert.deepEqual(view.pity.memories, { fiveIn: 60, fourIn: 10 });
   const memories = view.banners[0]!;
   assert.equal(memories.title, "Lantern Vigil");
@@ -135,14 +188,44 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
 
   // P20 for My Wardrobe was told which look it pairs with.
   assert.match(t.calls[2]!.messages[1]!.content, /THIS PAIRS WITH: "Harbour Night"/);
+  // #2303: P20 for the Dates banner plans dates for whoever comes, and asks His Wardrobe for three 3★ looks.
+  const datesPlan = t.calls[3]!.messages[0]!.content;
+  assert.match(datesPlan, /DATES: each date is one the player plays with love interests of their choosing/);
+  assert.match(datesPlan, /never name or assume who that is/);
+  assert.match(t.calls[1]!.messages[0]!.content, /Exactly 3 entries in "four", 3 in "looks" and 3 in "snapshots"/);
   // Opening again once they exist calls no model.
   const again = await t.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(again.body.failed, []);
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
+});
+
+test("a Memories banner's art prompt follows the Image style with a comma, as a wardrobe banner's and a repaint's do", async () => {
+  // A Memories banner is a CG (S/prompts.ts cgPrompt): its sentences run on with spaces, which once ran the style into
+  // the first one ("soft watercolor At the lamp.").
+  const promptOf = async (runKey: string, style: string, banner: string) => {
+    const t = await wishWorld({
+      runKey,
+      images: { ask: true, style },
+      replies: rotationReplies(),
+    });
+    assert.equal((await t.call("POST", "/runs/:run/wish/open")).status, 200);
+    await paintsDone();
+    const { status, body } = await t.call("POST", "/runs/:run/wish/art/prompt", { banner });
+    assert.equal(status, 200, JSON.stringify(body));
+    assert.equal(t.paid.length, 0, "reading a prompt paints nothing");
+    return body.prompt as string;
+  };
+  for (const [n, banner] of ["memories-0", "his-wardrobe-0"].entries()) {
+    const prompt = await promptOf(`r-bstyle0${n}-aaaaaa`, "soft watercolor", banner);
+    assert.match(prompt, /^soft watercolor, [^,\s]/u, `${banner}: ${prompt}`);
+  }
+  // A style that ends with its own comma keeps one.
+  const ended = await promptOf("r-bstyle02-aaaaaa", "soft watercolor, ", "memories-0");
+  assert.match(ended, /^soft watercolor, [^,\s]/u, ended);
 });
 
 test("every banner stores a Snapshot's optional English illustration brief without painting unowned rewards", async () => {
-  const kinds = ["memories", "his-wardrobe", "my-wardrobe"] as const;
+  const kinds = ["memories", "his-wardrobe", "my-wardrobe", "dates"] as const;
   const brief = `A quiet shared cup of tea beside the lantern.\nKeep the authored spacing  here. ${"Evening light and the quiet room. ".repeat(150)}FINAL ILLUSTRATION DETAIL.`;
   assert.ok(brief.length > 4000);
   const replies = kinds.map((kind) => {
@@ -174,20 +257,20 @@ test("every banner stores a Snapshot's optional English illustration brief witho
     assert.equal("cg" in banner.three[0], false, "the private image brief stays on the server");
   }
   assert.deepEqual(t.paid, [], "planning and listing Snapshot rewards do not paint their pictures");
-  assert.equal(t.calls.length, 3, "the existing one planner call per banner is enough");
+  assert.equal(t.calls.length, 4, "the existing one planner call per banner is enough");
   await setImages(t.store, t.runId, { connectionId: "conn-image" });
   for (const kind of kinds) {
-    const pulled = await pullWish(t.deps, t.runId, { banner: `${kind}-0`, count: 1, random: () => 0.5 });
+    // #2303: a wardrobe banner's 3★ items are its three looks, then its Snapshots: 0.99 picks the last of them.
+    const pulled = await pullWish(t.deps, t.runId, { banner: `${kind}-0`, count: 1, random: () => 0.99 });
     assert.equal(pulled.results[0]!.item.kind, "snapshot3");
     assert.equal(pulled.results[0]!.item.art, null);
   }
   await t.call("GET", "/runs/:run/wish");
   assert.deepEqual(t.paid, [], "wishes and list reads do not paint even with image generation enabled");
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
 });
 
-test("an explicit Memory's art is painted explicit only under Explicit Heat and the Explicit rating (#1951)", async () => {
-  // The plan keeps the key image's mark only when the reply set it.
+test("a Memory's cover is never explicit (#2467): the plan keeps no mark, and an older mark paints its clothed brief", async () => {
   const kai = { id: KAI, name: "Kai" } as Unit;
   const cast = [kai, { id: MIR, name: "Mireille" } as Unit, { id: SOL, name: "Sol" } as Unit];
   // Above SFW Heat each 4★ Moment carries its own brief, so an explicit premise never reaches its picture.
@@ -198,57 +281,24 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
       premise: "EXPLICIT-PREMISE: they end the night in bed together.",
       ...(briefs ? { cgBrief: "MOMENT-BRIEF: the quay at dusk, walking under the lanterns.", cgCast: ["Ines"] } : {}),
     }));
-    // An explicit brief carries its clothed twin, which a lowered world paints instead.
     const featured = {
       ...reply.featured,
-      cgBrief: "EXPLICIT-BRIEF: undressed in the lamp room, bodies pressed together by the great lens.",
-      clothedBrief: "CLOTHED-BRIEF: the lamp room just after, both of them wrapped in one blanket by the great lens.",
+      cgBrief: "PLAIN-BRIEF: the lamp room at night, the great lens behind them.",
+      clothedBrief: "CLOTHED-BRIEF: the lamp room just after, both of them wrapped in one blanket.",
       explicit,
     };
     return { ...reply, featured, four };
   };
-  // The plan keeps the mark only where it offered one (Explicit Heat and the Explicit rating), as a story CG's.
-  const cgOf = (explicit: unknown, offered = true) =>
-    (
-      normalizeBannerPlan(marked(explicit), {
-        kind: "memories",
-        units: cast,
-        featured: kai,
-        explicitArt: offered,
-      }) as BannerPlan
-    ).featured.cg!;
-  assert.equal(cgOf(true).explicit, true);
-  assert.match(cgOf(true).clothed ?? "", /^CLOTHED-BRIEF/, "the clothed twin is kept beside the mark");
-  assert.equal("explicit" in cgOf(true, false), false, "a mark the plan was never offered is dropped");
-  assert.equal("clothed" in cgOf(true, false), false);
-  const twinless = { ...marked(true), featured: { ...marked(true).featured, clothedBrief: undefined } };
-  assert.match(
-    String(normalizeBannerPlan(twinless, { kind: "memories", units: cast, featured: kai, explicitArt: true })),
-    /featured\.clothedBrief is missing/,
-    "an explicit brief without its clothed twin is repaired",
-  );
-  // A null twin (the reply's natural answer when explicit is false) passes the schema; an explicit one still needs it.
-  for (const explicit of [false, null]) {
-    const unmarked = { ...marked(explicit), featured: { ...marked(explicit).featured, clothedBrief: null } };
-    assert.ok(BannerPlanSchema.safeParse(unmarked).success, `explicit ${explicit} with a null clothedBrief`);
-    const plain = normalizeBannerPlan(unmarked, { kind: "memories", units: cast, featured: kai, explicitArt: true });
-    assert.equal("explicit" in (plain as BannerPlan).featured.cg!, false);
-    assert.equal("clothed" in (plain as BannerPlan).featured.cg!, false);
-  }
-  const nullTwin = { ...marked(true), featured: { ...marked(true).featured, clothedBrief: null } };
-  assert.ok(BannerPlanSchema.safeParse(nullTwin).success);
-  assert.match(
-    String(normalizeBannerPlan(nullTwin, { kind: "memories", units: cast, featured: kai, explicitArt: true })),
-    /featured\.clothedBrief is missing/,
-  );
-  // A mark with no twin (none can be saved now) paints from the title when the world is lowered.
-  const lowered = { content: { heat: "fade" }, images: { rating: "explicit" } } as Parameters<typeof memoryArtBrief>[2];
-  assert.deepEqual(memoryArtBrief({ brief: "EXPLICIT", explicit: true }, "Lantern Vigil", lowered), {
-    brief: "Lantern Vigil",
-    explicit: false,
-  });
-  assert.equal("explicit" in cgOf(false), false);
-  assert.equal("explicit" in cgOf(null), false);
+  // A reply that still marks its cover explicit keeps no mark and no twin: the cover is painted from its brief.
+  const cg = (normalizeBannerPlan(marked(true), { kind: "memories", units: cast, featured: kai }) as BannerPlan)
+    .featured.cg!;
+  assert.equal("explicit" in cg, false);
+  assert.equal("clothed" in cg, false);
+  assert.match(cg.brief, /^PLAIN-BRIEF/);
+  // An item planned before 0.46.1 with the mark paints its clothed twin, or its title without one.
+  assert.equal(memoryArtBrief({ brief: "EXPLICIT", explicit: true, clothed: "CLOTHED" }, "Lantern Vigil"), "CLOTHED");
+  assert.equal(memoryArtBrief({ brief: "EXPLICIT", explicit: true }, "Lantern Vigil"), "Lantern Vigil");
+  assert.equal(memoryArtBrief({ brief: "PLAIN" }, "Lantern Vigil"), "PLAIN");
   const moments = (briefs: boolean, required: boolean) =>
     normalizeBannerPlan(marked(true, briefs), {
       kind: "memories",
@@ -265,64 +315,43 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
     cast: ["Mireille", "Ines"],
   });
 
-  type Settings = readonly ["explicit" | "fade", "explicit" | "suggestive" | "sfw"];
-  // Plans the banner under `planned`, then paints it with a tap under `painted` (Ask before painting holds it).
-  const paint = async (runKey: string, planned: Settings, painted: Settings) => {
-    const offered = planned[0] === "explicit" && planned[1] === "explicit";
-    // A plan offered explicit art writes an explicit brief and its clothed twin; one that was not writes a clothed brief.
-    const reply = offered
-      ? marked(true)
-      : { ...marked(true), featured: { ...marked(true).featured, cgBrief: "PLAIN-BRIEF: the lamp room at night." } };
-    const replies = [JSON.stringify(reply), ...rotationReplies().slice(1)];
-    const t = await wishWorld({ runKey, images: { rating: planned[1], ask: true }, replies });
-    const set = async ([heat, rating]: Settings) => {
-      await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
-        ...world,
-        content: enforceContent({ ...world.content, heat }, true),
-      }));
-      await setImages(t.store, t.runId, { rating });
-    };
-    await set(planned);
-    await t.call("POST", "/runs/:run/wish/open");
-    const memories = ((await t.call("GET", "/runs/:run/wish")).body as wish.WishView).banners[0]!;
-    assert.equal(memories.kind, "memories");
-    const item = (await readItem(t.store, t.runId, memories.five.id))!;
-    assert.equal(item.cg?.explicit === true, offered, "the item keeps the mark only where the plan offered it");
-    await set(painted);
-    await t.call("POST", "/runs/:run/wish/art", { banner: memories.key });
-    await paintsDone();
-    // The Memory's own art (its first open, or Repaint) is built the same way as the banner's.
-    const own = await itemArtPrompt(t.deps, t.runId, item);
-    // A Moment's picture comes from its own brief, never its premise, and stays clothed.
-    const moment = (await readItem(t.store, t.runId, memories.four[0]!.id))!;
-    const momentArt = await itemArtPrompt(t.deps, t.runId, moment);
-    assert.match(momentArt.prompt, /MOMENT-BRIEF/);
-    assert.doesNotMatch(momentArt.prompt, /EXPLICIT-PREMISE|explicit adult scene|nsfw/);
-    assert.match(momentArt.prompt, /\bclothed\b/);
-    return [t.paid.find((call) => call.method === "generateBannerArt")!.request, own] as const;
-  };
-  const top = ["explicit", "explicit"] as const;
-  for (const request of await paint("r-m4bann40-aaaaaa", top, top)) {
-    assert.match(request.prompt, /explicit adult scene/);
-    assert.match(request.prompt, /EXPLICIT-BRIEF/);
-    assert.match(request.negativePrompt, /child, childlike/);
-  }
-  for (const [runKey, planned, painted] of [
-    // Lowered after the plan: the paid call checks again.
-    ["r-m4bann41-bbbbbb", top, ["explicit", "suggestive"]],
-    ["r-m4bann42-cccccc", top, ["fade", "explicit"]],
-    ["r-m4bann43-dddddd", top, ["explicit", "sfw"]],
-    // Raised after a plan that was never offered the mark: it was not kept.
-    ["r-m4bann44-eeeeee", ["fade", "explicit"], top],
+  // Under Explicit Heat and the Explicit rating the banner art, the cover's item art and a Moment's all stay clothed,
+  // and an older item marked explicit paints its clothed twin.
+  const runKey = "r-m4bann40-aaaaaa";
+  const replies = [JSON.stringify(marked(true)), ...rotationReplies().slice(1)];
+  const t = await wishWorld({ runKey, images: { rating: "explicit", ask: true }, replies });
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    content: enforceContent({ ...world.content, heat: "explicit" }, true),
+  }));
+  await setImages(t.store, t.runId, { rating: "explicit" });
+  await t.call("POST", "/runs/:run/wish/open");
+  const memories = ((await t.call("GET", "/runs/:run/wish")).body as wish.WishView).banners[0]!;
+  assert.equal(memories.kind, "memories");
+  await t.call("POST", "/runs/:run/wish/art", { banner: memories.key });
+  await paintsDone();
+  const banner = t.paid.find((call) => call.method === "generateBannerArt")!.request;
+  await t.store.updateDoc(runDocTarget("item", itemId(t.runId, memories.five.id)), normalizeItem, (item) => ({
+    ...item,
+    cg: {
+      ...item.cg!,
+      brief: "EXPLICIT-BRIEF: undressed by the great lens.",
+      explicit: true,
+      clothed: "CLOTHED-BRIEF",
+    },
+  }));
+  const older = await itemArtPrompt(t.deps, t.runId, (await readItem(t.store, t.runId, memories.five.id))!);
+  const moment = await itemArtPrompt(t.deps, t.runId, (await readItem(t.store, t.runId, memories.four[0]!.id))!);
+  for (const [prompt, brief] of [
+    [banner.prompt, /PLAIN-BRIEF/],
+    [older.prompt, /CLOTHED-BRIEF/],
+    [moment.prompt, /MOMENT-BRIEF/],
   ] as const) {
-    for (const clothed of await paint(runKey, planned, painted)) {
-      const at = `planned ${planned.join("/")}, painted ${painted.join("/")}`;
-      assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw|EXPLICIT-BRIEF/, at);
-      assert.match(clothed.prompt, /\bclothed\b/, at);
-      // A Memory marked explicit paints its clothed twin; one never marked paints its own (clothed) brief.
-      assert.match(clothed.prompt, planned === top ? /CLOTHED-BRIEF/ : /PLAIN-BRIEF/, at);
-    }
+    assert.match(prompt, brief);
+    assert.doesNotMatch(prompt, /explicit adult scene|nsfw|EXPLICIT-BRIEF|EXPLICIT-PREMISE/);
+    assert.match(prompt, /\bclothed\b/);
   }
+  assert.match(banner.negativePrompt, /child, childlike/);
 });
 
 test("a Snapshot planned without a title is named by its first words, or its first characters when it has no spaces", () => {
@@ -339,6 +368,27 @@ test("a Snapshot planned without a title is named by its first words, or its fir
   assert.equal(plan("The lamp hums while they share a late tea, neither saying much."), "The lamp hums while they…");
   const unspaced = "灯台の灯りがゆっくり回るあいだ、二人は黙ってお茶を飲み、どちらも本心を口にしなかった。".repeat(4);
   assert.equal(plan(unspaced), `${[...unspaced].slice(0, 12).join("")}…`, "a short label, not the whole text");
+});
+
+test("#2303: a date's scene count is held to its rarity's range, and one left out or null takes the middle", () => {
+  const kai = { id: KAI, name: "Kai" } as Unit;
+  const cast = [kai, { id: MIR, name: "Mireille" } as Unit, { id: SOL, name: "Sol" } as Unit];
+  const counts = (scenes: unknown) => {
+    const reply = bannerReply("dates");
+    const asked = {
+      ...reply,
+      featured: { ...reply.featured, scenes },
+      four: reply.four.map((entry) => ({ ...entry, scenes })),
+    };
+    const planned = normalizeBannerPlan(asked as never, { kind: "dates", units: cast, featured: kai });
+    assert.equal(typeof planned, "object", String(planned));
+    const plan = planned as BannerPlan;
+    return [plan.featured.scenes, ...plan.four.map((entry) => entry.scenes)];
+  };
+  assert.deepEqual(counts(null), [5, 2, 2, 2]);
+  assert.deepEqual(counts(undefined), [5, 2, 2, 2]);
+  assert.deepEqual(counts(0), [4, 1, 1, 1]);
+  assert.deepEqual(counts(9), [6, 3, 3, 3]);
 });
 
 test("P20 keeps the knowledge boundary, the contracts and only what the whole cast may know", async () => {
@@ -402,17 +452,17 @@ test("a pull succeeds with a model that throws if called, and an Echo pulls on t
   const pulled = await t.call("POST", "/runs/:run/wish/pull", { banner: "memories-0", count: 10 });
   assert.equal(pulled.status, 200, JSON.stringify(pulled.body));
   assert.equal(pulled.body.results.length, 10);
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
 
   // Fourteen days on: rotation 1 opens with Mireille (featured least recently) and rotation 0 waits in Echoes.
   await ageWorld(t, 15);
   const stale = await t.call("GET", "/runs/:run/wish");
-  assert.deepEqual(stale.body.missing, ["memories", "his-wardrobe", "my-wardrobe"], "not created by a read");
-  assert.equal(stale.body.echoes.length, 3);
-  assert.equal(t.calls.length, 3);
+  assert.deepEqual(stale.body.missing, ["memories", "his-wardrobe", "my-wardrobe", "dates"], "not created by a read");
+  assert.equal(stale.body.echoes.length, 4);
+  assert.equal(t.calls.length, 4);
   const echo = await t.call("POST", "/runs/:run/wish/pull", { banner: "his-wardrobe-0", count: 1 });
   assert.equal(echo.status, 200, "an Echo is pullable");
-  assert.equal(t.calls.length, 3);
+  assert.equal(t.calls.length, 4);
 });
 
 test("the next rotation features whoever was featured least recently, and My Wardrobe pairs with His Wardrobe", async () => {
@@ -430,11 +480,13 @@ test("the next rotation features whoever was featured least recently, and My War
       ["memories-1", MIR],
       ["his-wardrobe-1", MIR],
       ["my-wardrobe-1", MIR],
+      ["dates-1", MIR],
     ],
   );
   assert.deepEqual(
     second.echoes.map((banner) => [banner.key, banner.echo]),
     [
+      ["dates-0", true],
       ["my-wardrobe-0", true],
       ["his-wardrobe-0", true],
       ["memories-0", true],
@@ -442,14 +494,15 @@ test("the next rotation features whoever was featured least recently, and My War
   );
   assert.equal((await readItem(t.store, t.runId, "my-wardrobe-1-f"))?.coupleWith, "his-wardrobe-1-f");
   // P20 hears the earlier titles of its kind, so it does not repeat them.
-  assert.match(t.calls[3]!.messages[1]!.content, /EARLIER BANNERS OF THIS KIND \(do not repeat\): Lantern Vigil/);
+  assert.match(t.calls[4]!.messages[1]!.content, /EARLIER BANNERS OF THIS KIND \(do not repeat\): Lantern Vigil/);
+  assert.match(t.calls[7]!.messages[1]!.content, /EARLIER BANNERS OF THIS KIND \(do not repeat\): Lantern Regatta/);
   await ageWorld(t, 29);
   const third = (await t.call("POST", "/runs/:run/wish/open")).body.wish as wish.WishView;
   assert.deepEqual(
     third.banners.map((banner) => banner.featuredLi),
-    [SOL, SOL, SOL],
+    [SOL, SOL, SOL, SOL],
   );
-  assert.equal(third.echoes.length, 6);
+  assert.equal(third.echoes.length, 8);
 });
 
 test("a kind that fails is reported and created on the next open; My Wardrobe waits for His Wardrobe", async () => {
@@ -461,6 +514,7 @@ test("a kind that fails is reported and created on the next open; My Wardrobe wa
       JSON.stringify(bannerReply("memories")),
       bad,
       bad,
+      JSON.stringify(bannerReply("dates")),
       JSON.stringify(bannerReply("his-wardrobe")),
       JSON.stringify(bannerReply("my-wardrobe")),
     ],
@@ -473,14 +527,14 @@ test("a kind that fails is reported and created on the next open; My Wardrobe wa
   ]);
   assert.deepEqual(
     opened.body.wish.banners.map((banner: { key: string }) => banner.key),
-    ["memories-0"],
+    ["memories-0", "dates-0"],
   );
   assert.deepEqual(opened.body.wish.missing, ["his-wardrobe", "my-wardrobe"]);
-  assert.equal(t.calls.length, 3, "My Wardrobe made no call of its own");
+  assert.equal(t.calls.length, 4, "My Wardrobe made no call of its own");
   const retried = await t.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(retried.body.failed, []);
   assert.deepEqual(retried.body.wish.missing, []);
-  assert.equal(t.calls.length, 5);
+  assert.equal(t.calls.length, 6);
 
   // Without a connection the open says so for every kind and writes nothing.
   const u = await wishWorld({ runKey: "r-m4bann06-ffffff", images: NO_IMAGES });
@@ -491,7 +545,7 @@ test("a kind that fails is reported and created on the next open; My Wardrobe wa
   const none = await u.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(
     none.body.failed.map((entry: { code: string }) => entry.code),
-    ["no-connection", "no-connection", "no-connection"],
+    ["no-connection", "no-connection", "no-connection", "no-connection"],
   );
   assert.equal((await u.store.listRun("item", u.runId)).length, 0);
 });
@@ -549,6 +603,8 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
       ["generateBannerArt", 768, 1344],
       ["generatePortrait", 832, 1216],
       ["generatePortrait", 832, 1216],
+      // #2303: the Dates banner's art is its 5★ date's place, painted as a scene's place is, with nobody in it.
+      ["generateImage", 768, 1344],
     ],
   );
   const memoryArt = t.paid[0]!.request;
@@ -557,27 +613,32 @@ test("banner art paints once, in the background, or waits for its tap under Ask 
   assert.match(memoryArt.negativePrompt, /child, childlike/);
   assert.match(t.paid[1]!.request.prompt, /navy greatcoat, brass buttons/);
   assert.match(t.paid[2]!.request.prompt, /deep blue silk dress/);
+  assert.match(t.paid[3]!.request.prompt, /the regatta pier, evening, lanterns, no people/);
+  assert.equal(t.paid[3]!.request.units, undefined, "a place has no likeness to send");
   const view = (await t.call("GET", "/runs/:run/wish")).body as wish.WishView;
   assert.deepEqual(
     view.banners.map((banner) => banner.art?.state),
-    ["ready", "ready", "ready"],
+    ["ready", "ready", "ready", "ready"],
   );
   // Each banner's art is its featured item's own picture, so the item's first open finds it painted; others have none.
   for (const banner of view.banners) {
-    assert.deepEqual((await readItem(t.store, t.runId, banner.five.id))?.art, banner.art);
+    // The view shows a look banner's art as its free cut-out once it is ready; the item keeps the painted original.
+    const stored = (await readItem(t.store, t.runId, banner.five.id))?.art;
+    assert.deepEqual({ ...stored, url: undefined }, { ...banner.art, url: undefined });
+    assert.ok([stored?.url, `${stored?.url}.cut.png`].includes(banner.art?.url), banner.kind);
     assert.equal(banner.five.art?.url, banner.art?.url);
     assert.equal((await readItem(t.store, t.runId, banner.four[0]!.id))?.art, null);
   }
-  // A tap on ready art pays nothing.
+  // 0.24.0: a tap on ready art repaints it (see the repaint test below); it is still ready when it answers.
   assert.equal((await t.call("POST", "/runs/:run/wish/art", { banner: "memories-0" })).body.art.state, "ready");
-  assert.equal(t.paid.length, 3);
+  assert.equal(t.paid.length, 5);
 
   // Ask before painting: nothing paints by itself; two taps at once pay once.
   const u = await wishWorld({ runKey: "r-m4bann09-iiiiii", images: { ask: true }, replies: rotationReplies() });
   const asked = await u.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(
     asked.body.wish.banners.map((banner: wish.BannerView) => banner.art?.state),
-    ["waiting-consent", "waiting-consent", "waiting-consent"],
+    ["waiting-consent", "waiting-consent", "waiting-consent", "waiting-consent"],
   );
   await paintsDone();
   assert.equal(u.paid.length, 0);
@@ -636,7 +697,7 @@ test("a featured 5★ and its banner share one picture: whichever paints first i
   await held;
   const tapped = await tap;
   await paintsDone();
-  assert.equal(u.paid.length, 3, "one paid image per banner, none more for the item");
+  assert.equal(u.paid.length, 4, "one paid image per banner, none more for the item");
   const banner = (await u.call("GET", "/runs/:run/wish")).body.banners[0] as wish.BannerView;
   assert.deepEqual([tapped?.url, (await item(u, "memories-0-f")).art?.url], [banner.art?.url, banner.art?.url]);
 
@@ -647,8 +708,15 @@ test("a featured 5★ and its banner share one picture: whichever paints first i
   await queueItemArt(v.deps, v.runId, await item(v, "memories-0-f"), { debugMode: false });
   const cg = await paintItemNow(v.deps, v.runId, "memories-0-f", { debugMode: false });
   assert.equal(cg?.state, "ready");
+  // 0.24.0: a tap on a painted banner repaints it. Its featured 5★ held that same picture, so the item follows the new
+  // one rather than keeping the image the repaint replaced, which then leaves the gallery.
   const again = await v.call("POST", "/runs/:run/wish/art", { banner: "memories-0" });
-  assert.deepEqual([again.body.art.state, again.body.art.url, v.paid.length], ["ready", cg?.url, 1]);
+  assert.equal(again.body.art.state, "ready");
+  assert.notEqual(again.body.art.ref, cg?.ref);
+  assert.equal(v.paid.filter((call) => call.method === "generateBannerArt").length, 2, "one more paid picture");
+  const shared = (await item(v, "memories-0-f"))!;
+  assert.deepEqual([shared.art?.url, shared.art?.ref], [again.body.art.url, again.body.art.ref]);
+  assert.deepEqual(v.deleted, [cg!.ref!.slice("global-gallery:".length)]);
 });
 
 test("a banner tap and its 5★'s open that both claimed pay once: whichever paints shares it inside the lane", async () => {
@@ -715,7 +783,7 @@ test("a teardown stops banner art still waiting for its paid call", async () => 
   const view = (await call("GET", "/runs/:run/wish")).body as wish.WishView;
   assert.deepEqual(
     view.banners.map((banner) => banner.art?.state),
-    ["stopped", "stopped", "stopped"],
+    ["stopped", "stopped", "stopped", "stopped"],
   );
 });
 
@@ -738,4 +806,132 @@ test("owned Snapshots are private memory of their love interest, in the order th
   }
   // Banners and items go with the run when it is deleted (RUN_DOC_KINDS).
   assert.ok(normalizeBanner(t.fake.rows.get(bannerId(t.runId, "memories-0"))!.data).key);
+});
+
+test("a tap on a painted banner repaints it, and its featured 5★ follows the picture it now shows", async () => {
+  // Its own connection, so the lane it waits on is nobody else's (the suite's shared one may still be held).
+  const connectionId = "conn-repaint-banner";
+  // Deletes answer as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+  const t = await wishWorld({
+    runKey: "r-m4bann17-qqqqqq",
+    images: { connectionId },
+    replies: rotationReplies(),
+    engineDeletes: true,
+  });
+  const opened = await t.call("POST", "/runs/:run/wish/open");
+  assert.equal(opened.status, 200, JSON.stringify(opened.body));
+  await paintSlot(connectionId, async () => undefined);
+  const shown = (await t.call("GET", "/runs/:run/wish")).body as wish.WishView;
+  const banner = shown.banners[0]!;
+  const before = banner.art!;
+  assert.equal(before.state, "ready");
+  const five = banner.five.id;
+  assert.deepEqual((await readItem(t.store, t.runId, five))?.art, before, "the item holds the same picture");
+  const paid = t.paid.length;
+
+  const again = await t.call("POST", "/runs/:run/wish/art", { banner: banner.key });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(again.body.art.state, "ready");
+  assert.notEqual(again.body.art.ref, before.ref, "a new picture, not the same one returned");
+  assert.equal(t.paid.length, paid + 1, "a repaint costs one image");
+  // The banner and its 5★ share one picture: the item moves to the new one with it, so neither keeps the replaced image.
+  assert.deepEqual(
+    [(await readItem(t.store, t.runId, five))?.art?.url, (await readItem(t.store, t.runId, five))?.art?.ref],
+    [again.body.art.url, again.body.art.ref],
+  );
+  assert.deepEqual(t.deleted, [before.ref!.slice("global-gallery:".length)], "the replaced image leaves the gallery");
+  // The picture it painted over is gone from both, so nothing points at it any more.
+  assert.notEqual((await readBanner(t.store, t.runId, banner.key))?.art?.ref, before.ref);
+
+  // A wardrobe banner's 5★ is a look: once it is in his wardrobe (its open put it there), a repaint of the banner moves
+  // that entry too, so wearing it shows the new picture rather than the one the repaint replaced.
+  const lookId = shown.banners.find((entry) => entry.kind === "his-wardrobe")!.five.id;
+  const look = (await readItem(t.store, t.runId, lookId))!;
+  assert.equal(look.art?.state, "ready");
+  await addOutfit(t.deps, t.runId, look);
+  const worn = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.outfits.find(
+    (entry) => entry.id === lookId,
+  );
+  assert.ok(worn, "the painted look is in his wardrobe");
+  const repaintedLook = await t.call("POST", "/runs/:run/wish/art", { banner: shown.banners[1]!.key });
+  assert.equal(repaintedLook.body.art.state, "ready");
+  const afterLook = (await readItem(t.store, t.runId, lookId))!;
+  assert.deepEqual([afterLook.art?.url, afterLook.art?.ref], [repaintedLook.body.art.url, repaintedLook.body.art.ref]);
+  const wornNow = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.outfits.find(
+    (entry) => entry.id === lookId,
+  );
+  assert.deepEqual([wornNow?.url, wornNow?.ref], [afterLook.art?.url, afterLook.art?.ref], "worn from the new picture");
+});
+
+test("a banner tap made while its 5★ paints adopts the shared picture instead of painting it again", async () => {
+  const u = await wishWorld({ runKey: "r-m4bann18-rrrrrr", replies: rotationReplies() });
+  await u.call("POST", "/runs/:run/wish/open");
+  await u.store.updateDoc(runDocTarget("state", stateId(u.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: { items: [...state.owned.items, "memories-0-f"] },
+  }));
+  const five = "memories-0-f";
+  // Neither painted yet: the 5★'s own tap paints first, and the banner tap is made while that paint is in the lane.
+  await u.store.updateDoc(runDocTarget("banner", bannerId(u.runId, "memories-0")), normalizeBanner, (banner) => ({
+    ...banner,
+    art: undefined,
+  }));
+  await u.store.updateDoc(runDocTarget("item", itemId(u.runId, five)), normalizeItem, (item) => ({
+    ...item,
+    art: null,
+  }));
+  let open = () => {};
+  const held = paintSlot("conn-image", () => new Promise<void>((resolve) => (open = resolve)));
+  const before = u.paid.filter((call) => call.method === "generateBannerArt").length;
+  const itemPainting = paintItemNow(u.deps, u.runId, five, { debugMode: false });
+  // The 5★'s paint must own its slot before the banner tap looks, or the tap's wait finds nothing to wait for.
+  await until(async () => (await readItem(u.store, u.runId, five))?.art?.state === "pending", "the 5★'s claim");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const tap = paintBannerArtNow(u.deps, u.runId, "memories-0", { debugMode: false });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  open();
+  await held;
+  const painted = await itemPainting;
+  const tapped = await tap;
+  await paintsDone();
+  // One picture, shared: the item's paint is the banner's, so the banner tap pays nothing more.
+  assert.equal(u.paid.filter((call) => call.method === "generateBannerArt").length, before + 1, "no second picture");
+  assert.equal(tapped?.state, "ready");
+  assert.deepEqual([tapped?.url, tapped?.ref], [painted?.url, painted?.ref], "the item's picture became the banner's");
+  assert.deepEqual((await readItem(u.store, u.runId, five))?.art?.ref, tapped?.ref);
+});
+
+test("a banner repaint whose wardrobe write fails still saves its picture and warns", async () => {
+  const t = await wishWorld({
+    runKey: "r-m4bann19-ssssss",
+    images: { connectionId: "conn-fail-outfit" },
+    replies: rotationReplies(),
+  });
+  await t.call("POST", "/runs/:run/wish/open");
+  await paintSlot("conn-fail-outfit", async () => undefined);
+  const shown = (await t.call("GET", "/runs/:run/wish")).body as wish.WishView;
+  const wardrobe = shown.banners.find((banner) => banner.kind === "his-wardrobe")!;
+  assert.equal(wardrobe.art?.state, "ready");
+  const before = wardrobe.art!.ref;
+  // The look is already in his wardrobe, so the repaint has an entry to move.
+  await addOutfit(t.deps, t.runId, (await readItem(t.store, t.runId, wardrobe.five.id))!);
+  // The wearer's own document refuses every write, as a store failure does mid-repaint.
+  const store = Object.create(t.store) as typeof t.store;
+  store.updateDoc = async (id, normalize, change) => {
+    if (String((id as { id?: unknown }).id ?? id).includes(":unit:")) throw new Error("storage is read-only");
+    return t.store.updateDoc(id, normalize, change);
+  };
+  const deps = { ...t.deps, store };
+  const paid = t.paid.length;
+  const repainted = await paintBannerArtNow(deps, t.runId, wardrobe.key, { debugMode: false });
+  await paintsDone();
+  // The banner holds its new picture and the replaced one is released; the wardrobe write is what was lost, and it warned.
+  assert.equal(repainted?.state, "ready");
+  assert.notEqual(repainted?.ref, before);
+  assert.equal(t.paid.length, paid + 1);
+  assert.ok(
+    t.logs.some((entry) => entry.level === "warn" && String(entry.message).includes("wardrobe")),
+    "the lost wardrobe write is warned about",
+  );
+  assert.deepEqual(t.deleted, [before!.slice("global-gallery:".length)], "the replaced image still leaves the gallery");
 });

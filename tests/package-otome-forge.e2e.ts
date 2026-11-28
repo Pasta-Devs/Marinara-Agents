@@ -2,7 +2,8 @@
 // and cards), the 18+ gate when Explicit is picked, forging with Retry and paint consent, the stage at desktop and phone
 // sizes, and one visit to the real package server (beside Gacha Forge when MARINARA_PACKAGE_IDS installs it).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expectCustomLimitFits } from "./fixtures/otome-forge-limits.ts";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -69,13 +70,15 @@ function createOtomeStub() {
         level: 1,
         stage: 1,
       }));
+      // As the server does: looks paint by themselves unless Ask before painting or prompt review holds them.
+      const paint = setup.images.ask || call.body!.reviewImagePrompts ? "waiting-consent" : "pending";
       const forge = {
         phase: "forging",
         steps: [
           { id: "world-plan", state: "pending" },
           ...lis.map((li: Json) => ({ id: `bible:${li.id}`, state: "pending" })),
-          ...lis.map((li: Json) => ({ id: `paint:${li.id}`, state: "waiting-consent" })),
-          { id: "paint:player", state: "waiting-consent" },
+          ...lis.map((li: Json) => ({ id: `paint:${li.id}`, state: paint })),
+          { id: "paint:player", state: paint },
         ],
       };
       run = {
@@ -93,6 +96,8 @@ function createOtomeStub() {
           content: setup.content,
           images: setup.images,
           connections: setup.connections,
+          // The server's world view always carries its audio settings (normalizeWorld); 0.34.0's haptics read them.
+          audio: {},
           forge,
         },
         player: { personaId: setup.protagonist.personaId, name: "Mira Vale", pronouns: setup.protagonist.pronouns },
@@ -137,7 +142,13 @@ async function stubEngine(page: Page, stub: ReturnType<typeof createOtomeStub>) 
       : route.continue(),
   );
   await page.route("**/api/characters/personas/list**", (route) =>
-    route.fulfill({ json: [{ id: "persona-mira", name: "Mira Vale", avatarPath: null }] }),
+    // #2365: two personas share a name; the second's title / comment tells them apart.
+    route.fulfill({
+      json: [
+        { id: "persona-mira", name: "Mira Vale", avatarPath: null },
+        { id: "persona-mira-au", name: "Mira Vale", comment: "Modern AU", avatarPath: null },
+      ],
+    }),
   );
   // Two pages, so the picker has to follow hasMore.
   await page.route("**/api/characters/catalog**", (route) => {
@@ -146,7 +157,13 @@ async function stubEngine(page: Page, stub: ReturnType<typeof createOtomeStub>) 
       json:
         offset === 0
           ? { items: [{ id: "card-ilvar", name: "Ilvar Thorne", avatarPath: null }], hasMore: true }
-          : { items: [{ id: "card-dottore", name: "Dottore", avatarPath: null }], hasMore: false },
+          : {
+              items: [
+                { id: "card-dottore", name: "Dottore", avatarPath: null },
+                { id: "card-dottore-au", name: "Dottore", comment: "Doctor AU", avatarPath: null },
+              ],
+              hasMore: false,
+            },
     });
   });
   await page.route("**/api/otome-forge/**", async (route) => {
@@ -227,6 +244,12 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
 
   // 2. You: a persona and pronouns the player chooses.
   await expect(root.getByRole("heading", { name: "Who are you here?" })).toBeFocused();
+  // #2365: a persona's title shows under its name, so two of the same name can be told apart.
+  const miraTiles = root.locator("label.of-tile").filter({ hasText: "Mira Vale" });
+  await expect(miraTiles).toHaveCount(2);
+  await expect(miraTiles.nth(0).locator(".of-tile-title")).toHaveCount(0);
+  await expect(miraTiles.nth(1).locator(".of-tile-name")).toHaveText("Mira Vale");
+  await expect(miraTiles.nth(1).locator(".of-tile-title")).toHaveText("Modern AU");
   await pick(root, "Mira Vale");
   await pick(root.getByRole("group", { name: "Your pronouns" }), "she/her");
   await root.getByRole("button", { name: "Next" }).click();
@@ -234,7 +257,11 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
   // 3. Cast: the card picker pages until hasMore clears; Next needs two LIs with pronouns.
   await expect(root.getByRole("heading", { name: "Who waits for you?" })).toBeVisible();
   await root.getByRole("button", { name: "Ilvar Thorne" }).click();
-  await root.getByRole("button", { name: "Dottore" }).click();
+  // #2365: the card's title shows under its name, and picks the card it names.
+  const dottoreAu = root.locator("button.of-tile").filter({ hasText: "Doctor AU" });
+  await expect(dottoreAu.locator(".of-tile-name")).toHaveText("Dottore");
+  await expect(dottoreAu.locator(".of-tile-title")).toHaveText("Doctor AU");
+  await root.locator("button.of-tile").filter({ hasText: "Dottore" }).filter({ hasNotText: "Doctor AU" }).click();
   for (const name of ["Ilvar Thorne", "Dottore"]) {
     await pick(root.getByRole("group", { name: `Pronouns for ${name}` }), "he/him");
   }
@@ -256,15 +283,27 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
   await expect(gate).toBeHidden();
   await expect(root.getByRole("radio", { name: /NSFW: Explicit/ })).toBeChecked();
   expect(stub.index.ageGate?.confirmedAt).toEqual(expect.any(String));
+  // Your own limits take Allow, Veil or Line, as the built-in ones do; a new one starts at Line.
+  await root.getByRole("button", { name: "Add your own", exact: true }).click();
+  const ownText = root.getByRole("textbox", { name: "Your limit 1", exact: true });
+  await expect(ownText).toHaveAttribute("placeholder", "Name a theme…");
+  await ownText.fill("Infidelity");
+  const own = root.getByRole("group", { name: "Level of your limit 1", exact: true });
+  await expect(own.locator(".of-pill")).toHaveText(["Allow", "Veil", "Line"]);
+  await expect(own.getByRole("radio", { name: "Line", exact: true })).toBeChecked();
+  await pick(own, "Allow");
+  await expect(own.getByRole("radio", { name: "Allow", exact: true })).toBeChecked();
+  await expectCustomLimitFits(page, root.locator(".of-custom-limit"), (name) => testInfo.outputPath(name));
   await root.getByRole("button", { name: "Next" }).click();
 
-  // 5. Connections: the Engine default; images optional.
+  // 5. Connections: the Engine default; images optional. Ask before painting holds the looks for the tap below.
   await expect(root.getByLabel("Story", { exact: true })).toHaveValue("conn-text");
   await root.getByLabel("Image connection").selectOption("conn-image");
+  await root.getByRole("switch", { name: "Ask before painting" }).check();
   await root.getByRole("button", { name: "Next" }).click();
 
   // 6. Review shows the paint cost, then the world is made.
-  await expect(root.getByText("Paints 3 images")).toBeVisible();
+  await expect(root.getByText("Paints 3 images · base looks, only when you tap Paint the cast")).toBeVisible();
   await root.getByRole("button", { name: "Forge our story" }).click();
   await expect(root.getByRole("heading", { name: "Forging your story" })).toBeVisible();
   const created = stub.calls.find((call) => call.path.endsWith("/runs") && call.method === "POST")!.body!;
@@ -276,8 +315,8 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
       { source: "card", cardId: "card-ilvar", pronouns: { subject: "he", object: "him", possessive: "his" } },
       { source: "card", cardId: "card-dottore", pronouns: { subject: "he", object: "him", possessive: "his" } },
     ],
-    content: { heat: "explicit", darkness: "angst" },
-    images: { connectionId: "conn-image", rating: "sfw" },
+    content: { heat: "explicit", darkness: "angst", custom: [{ text: "Infidelity", level: "allow" }] },
+    images: { connectionId: "conn-image", rating: "sfw", ask: true },
     connections: { narration: "conn-text" },
   });
   expect(await page.evaluate(() => localStorage.getItem("otome-forge:setup-draft:v1"))).toBeNull();

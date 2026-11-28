@@ -6,7 +6,10 @@
 // interest instead of "They'll remember that.". A Confrontation node (M2b) is played as a beat whose choices are the
 // four stances (lib/reader-state.ts confrontationBeat): each stance is sent once, and the server reveals the next round
 // or, after the third, the ending, which closes on its own card. A key image is marked seen once it has been shown,
-// after the server has heard the read reached it; a paint that waits for consent is painted on a tap.
+// after the server has heard the read reached it; a paint that waits for consent is painted on a tap, as is a recurring
+// side character's sprite (0.20.0, SceneArt.sides). #2503: a main chapter whose plan asked about the protagonist asks
+// its questions first, and its first beat is asked for once they are answered; a beat refused as `needs-answer` (a
+// chapter planned ahead) reads the chapter again, which brings them.
 // ──────────────────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +31,7 @@ import {
   ruptureHold,
   skipTarget,
   speakerLi,
+  stageLooks,
   worldPlaces,
   type BeatResponse,
   type Picks,
@@ -38,6 +42,7 @@ import type {
   AffectionChange,
   BeatView,
   ChapterDetail,
+  ChapterView,
   ChoiceOption,
   ClimaxEnding,
   ConfrontationView,
@@ -46,6 +51,7 @@ import type {
   Grant,
   LiId,
   Paint,
+  PlaceArt,
   ReadResult,
   RunView,
   SceneArt,
@@ -54,6 +60,7 @@ import type {
   WorldView,
 } from "../shared/api-types";
 import { useOtomeProps } from "../props";
+import { OWN_OPTION } from "../shared/arcs";
 import { LIMIT_IDS, type LimitId } from "../shared/content";
 import { placeKey } from "../shared/places";
 import { memoryQueryKey } from "./use-memory";
@@ -89,7 +96,7 @@ export async function cancelStoryWork(post: ReturnType<typeof useOtomeApi>["post
   try {
     await post<{ ok: boolean }>(`${runPath(runKey)}/cancel`);
   } catch (error) {
-    console.warn("Otome Forge could not cancel the story's writing", error);
+    console.warn("Otome Hearth could not cancel the story's writing", error);
   }
 }
 
@@ -181,7 +188,10 @@ const PAINT_POLL_TRIES = 144;
 const AFTER_VOICE_MS = 900;
 
 /** What a tap paints: a key image is held by its chapter and node, as the reader may move on before it is sent. */
-type PaintTarget = { kind: "cg"; key: string; i: number } | { kind: "place"; place: string };
+type PaintTarget =
+  | { kind: "cg"; key: string; i: number }
+  | { kind: "place"; place: string }
+  | { kind: "side"; key: string; name: string; repaint?: boolean };
 
 /** A paint whose prompt is shown for editing before it is sent. */
 export interface PaintReview {
@@ -242,8 +252,13 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const [auto, setAuto] = useState(false);
   const [finished, setFinished] = useState(false);
   const [chapterGrants, setChapterGrants] = useState<Grant[]>([]);
-  /** What this read changed in the arcs: a stage a route chapter's gate opened, a rupture a repair closed. */
-  const [arcNews, setArcNews] = useState<{ stageUp?: { li: LiId; stage: number }; repaired?: LiId }>({});
+  /**
+   * What this read changed in the arcs: a stage a route chapter's gate opened, a rupture a repair closed, a big moment
+   * whose side waits in Routes (#2155).
+   */
+  const [arcNews, setArcNews] = useState<{ stageUp?: { li: LiId; stage: number }; repaired?: LiId; hisSide?: LiId }>(
+    {},
+  );
   const [toasts, setToasts] = useState<ReaderToast[]>([]);
   const [choosing, setChoosing] = useState<string | null>(null);
   const [choiceError, setChoiceError] = useState<string | null>(null);
@@ -253,6 +268,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
    * end, a Rewrite or an Ease off (holdFor).
    */
   const [held, setHeld] = useState<LiId | null>(null);
+  /** 0.38.0: the version of the beat (refBase) whose read to the end moved more than the scene, so no Rewrite. */
+  const [readMovedOn, setReadMovedOn] = useState<string | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [starred, setStarred] = useState<ReadonlySet<string>>(() => new Set());
   /** The read (position id) whose Confrontation ending card is showing. */
@@ -270,6 +287,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const tags = detail?.chapter.tags ?? [];
   // Dark chapters open with their content tags; the first beat waits until the player begins.
   const askTags = tags.length > 0 && node === 0 && !tagsSeen;
+  // #2503: then the plan's questions about the protagonist, while any is unanswered: no beat is asked for meanwhile.
+  const questions = detail?.chapter.questions ?? [];
+  const askQuestions = !askTags && !finished && questions.some((entry) => !entry.answer);
   const nodeCount = detail?.chapter.nodes.length ?? 0;
   const ready = load?.status === "ready" && load.node === node ? load : null;
   const beat = ready?.beat ?? null;
@@ -287,6 +307,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const [sceneTick, setSceneTick] = useState(0);
   const [sceneUnavailable, setSceneUnavailable] = useState<string | null>(null);
   const sceneArt = scene && scene.id === sceneId ? scene.art : null;
+  // #2509: who stands in which look, kept from the chapter's last scene until this one's read answers.
+  const looks = stageLooks(scene, sceneId, `${runKey}:${chapterKey}/`);
   const place = timeline?.lines
     .slice(0, lineIndex + 1)
     .reverse()
@@ -400,17 +422,47 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         // The beat is written now, and the server is writing the next one ahead.
         void queryClient.invalidateQueries({ queryKey: chapterQueryKey(runKey, chapterKey) });
       } catch (error) {
-        if (!controller.signal.aborted) setLoad({ status: "failed", node: index, error });
+        if (controller.signal.aborted) return;
+        setLoad({ status: "failed", node: index, error });
+        // #2503: a chapter planned ahead asks first; read again, the chapter brings its questions.
+        if (otomeErrorCode(error) === "needs-answer") {
+          void queryClient.invalidateQueries({ queryKey: chapterQueryKey(runKey, chapterKey) });
+        }
       }
     },
     [base, chapterKey, otome, protagonist, queryClient, runKey],
   );
 
   useEffect(() => {
-    if (node === null || !detail || askTags || finished) return;
+    if (node === null || !detail || askTags || askQuestions || finished) return;
     if (load && load.node === node) return;
     void fetchBeat(node);
-  }, [askTags, detail, fetchBeat, finished, load, node]);
+  }, [askQuestions, askTags, detail, fetchBeat, finished, load, node]);
+
+  /**
+   * #2503: saves the answers (one per question, in order); the chapter's first beat is asked for next. Rejects on
+   * failure; a 409 `conflict` (answered already, in another tab or by a send whose reply was lost, or the chapter
+   * finished) reads the chapter again too, which closes Before this chapter.
+   */
+  const answerQuestions = useCallback(
+    async (answers: string[]) => {
+      const { chapter } = await otome
+        .post<{ chapter: ChapterView }>(`${base}/answers`, { answers })
+        .catch((error: unknown) => {
+          if (otomeErrorCode(error) === "conflict") {
+            setLoad(null);
+            refreshStory();
+          }
+          throw error;
+        });
+      queryClient.setQueryData<ChapterDetail>(chapterQueryKey(runKey, chapterKey), (shown) =>
+        shown ? { ...shown, chapter: { ...shown.chapter, questions: chapter.questions } } : shown,
+      );
+      setLoad(null);
+      refreshStory();
+    },
+    [base, chapterKey, otome, queryClient, refreshStory, runKey],
+  );
 
   // Leaving drops the request, never the write: the server finishes the beat and keeps it for the next visit (only
   // Cancel stops a write).
@@ -453,13 +505,15 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       setLoad({ status: "ready", node, beat: next, confrontation: shown });
       setPosition(openPosition(next, node, false, protagonist));
       refreshStory();
+      // 0.38.0: the old scene's picks and read were taken back: affection, Starlight and levels follow.
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
     } catch (error) {
       if (controller.signal.aborted) return;
       setLoad(rewriteFrom.current);
       rewriteFrom.current = null;
       if (!holdFor(error)) setNotice(otome.errorMessage(error));
     }
-  }, [base, holdFor, node, otome, protagonist, ready, refreshStory]);
+  }, [base, holdFor, node, otome, protagonist, queryClient, ready, refreshStory, runKey]);
 
   // ── Reading progress ──
 
@@ -472,10 +526,15 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       if (beatStarlight > 0) pushToast({ kind: "starlight", amount: beatStarlight });
       const chapterOnes = grants.filter((grant) => grant.source !== "beat");
       if (chapterOnes.length) setChapterGrants((list) => [...list, ...chapterOnes]);
-      const { stageUp, repaired } = result;
-      if (stageUp || repaired) {
-        setArcNews((news) => ({ ...news, ...(stageUp ? { stageUp } : {}), ...(repaired ? { repaired } : {}) }));
-        // The story screen's routes and repairs follow from it.
+      const { stageUp, repaired, hisSide } = result;
+      if (stageUp || repaired || hisSide) {
+        setArcNews((news) => ({
+          ...news,
+          ...(stageUp ? { stageUp } : {}),
+          ...(repaired ? { repaired } : {}),
+          ...(hisSide ? { hisSide } : {}),
+        }));
+        // The story screen's routes, repairs and sides follow from it.
         void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
       }
       if (typeof result.starlight === "number") {
@@ -502,11 +561,12 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         .post<ReadResult>(`${base}/beats/${node}/read`, { segment })
         .then((result) => {
           applyRead(result);
+          if (result.rewritable === false) setReadMovedOn(refBase);
           if (end) setHeld(null);
           return true;
         })
         .catch((error: unknown) => {
-          console.warn("Otome Forge could not save how far the beat was read", error);
+          console.warn("Otome Hearth could not save how far the beat was read", error);
           if (end) {
             // Next sends it again; nothing moves on until the server has it. A rupture that opened elsewhere holds
             // the gate (holdFor).
@@ -542,7 +602,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       if (!last || !line || index === null || last.replay || line.main <= last.reported) return;
       otome
         .post<ReadResult>(`${path}/beats/${index}/read`, { segment: line.main })
-        .catch((error: unknown) => console.warn("Otome Forge could not save how far the beat was read", error));
+        .catch((error: unknown) => console.warn("Otome Hearth could not save how far the beat was read", error));
     },
     // On unmount only; the ref holds the latest place.
     [],
@@ -562,7 +622,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const wantsFaces = !!images.connectionId && images.expressions;
 
   useEffect(() => {
-    if (!sceneId || node === null || !images.connectionId) return;
+    // #2509: read without an image connection too: the scene's looks come only from here (free; it paints nothing).
+    if (!sceneId || node === null) return;
     let live = true;
     let tries = 0;
     let timer = 0;
@@ -575,7 +636,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       waitingForFaces(art) ||
       // A first-wear look is waited for with expressions off too, while it paints and then its cut-out: only this read
       // brings it, as the run's own reads stand him in his worn look.
-      art.lookComing === true;
+      art.lookComing === true ||
+      // A side character's sprite while it paints or is cut out (0.20.0).
+      Object.values(art.sides ?? {}).some((side) => side.coming === true);
     const look = async () => {
       tries += 1;
       try {
@@ -642,7 +705,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       if (result?.unlocked === true) pushToast({ kind: "cg" });
     } catch (error) {
       seenCgs.current.delete(refBase);
-      console.warn("Otome Forge could not mark a key image seen", error);
+      console.warn("Otome Hearth could not mark a key image seen", error);
     }
   }, [cg, chapterKey, current, node, otome, position, pushToast, refBase, report, runKey]);
 
@@ -673,6 +736,33 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
             setScene((shown) =>
               shown && shown.id === sceneId && shown.art.cg
                 ? { ...shown, art: { ...shown.art, cg: { ...shown.art.cg, art } } }
+                : shown,
+            );
+        } else if (target.kind === "side") {
+          const result = await otome.post<{ art?: Paint | null }>(`${runPath(runKey)}/art/side`, {
+            key: target.key,
+            ...(target.repaint ? { repaint: true } : {}),
+            ...edited,
+          });
+          const art = result?.art;
+          // Onto every name the scene shows them under, only on the scene it was tapped on (shown.id against this
+          // render's sceneId, as the key image); the scene's next read brings the cut-out, and a scene shown since its
+          // own poll.
+          if (art)
+            setScene((shown) =>
+              shown && shown.id === sceneId
+                ? {
+                    ...shown,
+                    art: {
+                      ...shown.art,
+                      sides: Object.fromEntries(
+                        Object.entries(shown.art.sides ?? {}).map(([name, side]) => [
+                          name,
+                          side.key === target.key ? { ...side, art } : side,
+                        ]),
+                      ),
+                    },
+                  }
                 : shown,
             );
         } else {
@@ -710,7 +800,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         const initial =
           target.kind === "cg"
             ? await otome.post<ImagePrompt>(`${runPath(runKey)}/art/cg/prompt`, { key: target.key, i: target.i })
-            : await otome.post<ImagePrompt>(`${runPath(runKey)}/art/place/prompt`, { place: target.place });
+            : target.kind === "side"
+              ? await otome.post<ImagePrompt>(`${runPath(runKey)}/art/side/prompt`, { key: target.key })
+              : await otome.post<ImagePrompt>(`${runPath(runKey)}/art/place/prompt`, { place: target.place });
         setReview({ target, initial, busy: false, error: null });
       } catch (error) {
         setNotice(otome.errorMessage(error));
@@ -727,6 +819,36 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     [chapterKey, node, paint],
   );
   const paintPlace = useCallback((place: string) => paint({ kind: "place", place }), [paint]);
+  /** 0.20.0: a recurring side character's sprite, on the tap (its consent, or Retry); `repaint` paints a ready one again. */
+  const paintSide = useCallback(
+    (key: string, name: string, repaint = false) => paint({ kind: "side", key, name, ...(repaint ? { repaint } : {}) }),
+    [paint],
+  );
+  /** #2147: a background from the Engine's library as the place's picture (nothing painted); rejects on failure. */
+  const chooseBackground = useCallback(
+    async (place: string, url: string) => {
+      const chosen = await otome.post<{ place: PlaceArt; world: WorldView }>(
+        `${runPath(runKey)}/art/place/background`,
+        { place, url },
+      );
+      patchRun(queryClient, runKey, (shown) => ({ ...shown, world: { ...shown.world, ...chosen.world } }));
+      // The scene's own copy of the place too, so a painted picture it replaced never stands in meanwhile.
+      setScene(
+        (shown) =>
+          shown && {
+            ...shown,
+            art: {
+              ...shown.art,
+              places: shown.art.places.map((entry) =>
+                placeKey(entry.name) === placeKey(place) ? chosen.place : entry,
+              ),
+            },
+          },
+      );
+      setSceneTick((tick) => tick + 1);
+    },
+    [otome, queryClient, runKey],
+  );
   const sendReview = useCallback(
     (edited: ImagePrompt) => {
       if (!review || review.busy) return;
@@ -757,7 +879,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       return;
     }
     // A key image shown in this beat whose unlock failed is tried once more now that the whole beat is read.
-    if (cg?.art?.state === "ready" && current.main >= cg.at && !seenCgs.current.has(refBase)) void markCgSeen();
+    // A picture seen is unlocked whatever its repaint is doing (0.24.0, S/art/cg.ts markCgSeen).
+    if (cg?.art?.url && current.main >= cg.at && !seenCgs.current.has(refBase)) void markCgSeen();
     refreshStory();
     void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
     if (node < nodeCount - 1) {
@@ -817,16 +940,18 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
 
   // ── Choices ──
 
-  // Two quick presses share the render's `choosing`: the ref lets only the first one through.
+  // Two quick presses share the render's `choosing`: the ref lets only the first one through. Resolves whether the
+  // pick went through (#2146: the own-words dialog closes only then). An option OWN_OPTION carries the player's own
+  // words as its selection (a chapter's closing decision), which the server appends to the choice.
   const choosingRef = useRef(false);
   const choose = useCallback(
-    async (choice: ForgeChoice, option: ChoiceOption) => {
-      if (preparingBackground || !beat || !position || node === null || choosing || choosingRef.current) return;
+    async (choice: ForgeChoice, option: ChoiceOption): Promise<boolean> => {
+      if (preparingBackground || !beat || !position || node === null || choosing || choosingRef.current) return false;
       setChoiceError(null);
       // Picked on an earlier read: this read shows the other branch, and nothing changes.
       if (canonOption(beat, choice)) {
         setPosition({ ...position, picks: { ...position.picks, [choice.id]: option.id }, line: lineIndex + 1 });
-        return;
+        return true;
       }
       setChoosing(choice.id);
       choosingRef.current = true;
@@ -846,13 +971,14 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
           );
           const by = Array.isArray(result.rememberedBy) ? result.rememberedBy : [];
           if (result.remembered) pushToast({ kind: "remember", li: by.length === 1 ? by[0]! : null });
+          return true;
         } catch (error) {
           setChoiceError(otome.errorMessage(error));
+          return false;
         } finally {
           choosingRef.current = false;
           setChoosing(null);
         }
-        return;
       }
       try {
         const result = await otome.post<{
@@ -860,7 +986,11 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
           remembered: boolean;
           rememberedBy?: LiId[];
           affection?: AffectionChange[];
-        }>(`${base}/beats/${node}/choose`, { choice: choice.id, option: option.id });
+        }>(`${base}/beats/${node}/choose`, {
+          choice: choice.id,
+          option: option.id,
+          ...(option.id === OWN_OPTION ? { own: option.selection } : {}),
+        });
         const picked = result.beat.choiceCanon[choice.id] ?? option.id;
         setLoad({ status: "ready", node, beat: result.beat });
         // A big choice at the last line adds its selection after it: the new end is reported again.
@@ -877,8 +1007,10 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         // Named only when the pick touched one love interest; "They'll remember that." otherwise.
         const by = Array.isArray(result.rememberedBy) ? result.rememberedBy : [];
         if (result.remembered && !moved.length) pushToast({ kind: "remember", li: by.length === 1 ? by[0]! : null });
+        return true;
       } catch (error) {
         setChoiceError(otome.errorMessage(error));
+        return false;
       } finally {
         choosingRef.current = false;
         setChoosing(null);
@@ -1018,6 +1150,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         ref: entry.ref,
         keep: !starred.has(entry.ref),
         ...(li ? { li } : {}),
+        ...(entry.line.segment.voiced ? { voiced: entry.line.segment.voiced } : {}),
       });
       setStarred(new Set((Array.isArray(favorites) ? favorites : []).map((favorite) => favorite.ref)));
     },
@@ -1028,17 +1161,26 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   // `locked`.
   const heldBy = held ?? (load?.status === "failed" ? ruptureHold(otomeErrorCode(load.error), detail?.chapter) : null);
 
+  // 0.38.0: Rewrite shows for the scene on screen while its chapter is open, after its picks and its read to the end too
+  // (the server takes them back, S/story/rewrite-undo.ts). It is greyed, saying why, when the server cannot.
   const canRewrite =
     !preparingBackground &&
     !heldBy &&
     !!ready &&
     !!position &&
     !position.replay &&
-    // Read to its end, the beat is canon (the server refuses); a choice still waiting at the last line keeps it open.
-    !(position.ended && !pendingChoice) &&
+    !finished &&
     !ready.beat.easedOff &&
-    !ready.beat.choices.some((choice) => canonOption(ready.beat, choice)) &&
     !(detail?.beats ?? []).some((item) => item.i > ready.node && item.state === "read");
+  const rewriteBlocked: "stance" | "moved" | "unrecorded" | null = !canRewrite
+    ? null
+    : ready?.confrontation?.rounds.some((round) => round.picked)
+      ? "stance"
+      : readMovedOn === refBase
+        ? "moved"
+        : ready?.beat.rewritable === false
+          ? "unrecorded"
+          : null;
 
   // Ease off is there for every node not yet finished, until its end is saved: while its scene is read, opened or
   // written, and after a Cancel or a failure (the server cuts a node with no beat before its first line). A node read
@@ -1066,6 +1208,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     tags,
     askTags,
     beginChapter: () => setTagsSeen(true),
+    questions,
+    askQuestions,
+    answerQuestions,
     load,
     beat,
     position,
@@ -1096,6 +1241,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     canEaseOff,
     veil,
     canRewrite,
+    rewriteBlocked,
     rewrite,
     cancel,
     retry,
@@ -1109,8 +1255,12 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     outcomeKind,
     showOutcome,
     currentRef,
+    /** This version of the beat's line refs start with it (lib/reader-state.ts lineRef). */
+    refBase,
     cg,
     sceneArt,
+    /** #2509: the looks the stage stands the love interests in (lib/reader-state.ts stageLooks). */
+    looks,
     place,
     placeInfo,
     placeUrl,
@@ -1121,6 +1271,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     markCgSeen,
     paintCg,
     paintPlace,
+    paintSide,
+    chooseBackground,
     painting,
     review,
     sendReview,

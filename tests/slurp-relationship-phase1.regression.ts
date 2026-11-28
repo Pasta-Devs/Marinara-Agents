@@ -175,7 +175,7 @@ for (const copy of [storage]) {
 for (const copy of [storage]) {
   assert.match(
     copy,
-    /deliveryClaimToken = newId\(\)[\s\S]*?deliveryClaimedAt[\s\S]*?Date\.now\(\) - 5 \* 60 \* 1000/u,
+    /deliveryClaimToken = newId\(\)[\s\S]*?deliveryClaimedAt[\s\S]*?(?:Date\.now|slurpWorldNowMs)\(\) - 5 \* 60 \* 1000/u,
     "delivery claims must have a unique owner and five-minute lease",
   );
   assert.match(
@@ -202,7 +202,7 @@ assert.match(storage, /async deliverCommission\([\s\S]{0,220}?queueCommissionOpe
 // Only the viewer may cancel an accepted commission, and only when no future delivery is set.
 assert.match(
   storage,
-  /commission\.state === "accepted"[\s\S]*?by === "viewer"[\s\S]*?!commission\.deliverAt \|\| commission\.deliverAt <= new Date\(\)\.toISOString\(\)/u,
+  /commission\.state === "accepted"[\s\S]*?by === "viewer"[\s\S]*?!commission\.deliverAt \|\| commission\.deliverAt <= (?:new Date|slurpWorldNow)\(\)\.toISOString\(\)/u,
 );
 assert.match(
   storage,
@@ -255,7 +255,7 @@ assert.ok(
 );
 assert.match(
   route,
-  /commission\.state === "accepted"[\s\S]*?isViewer[\s\S]*?!commission\.deliverAt \|\| commission\.deliverAt <= new Date\(\)\.toISOString\(\)/u,
+  /commission\.state === "accepted"[\s\S]*?isViewer[\s\S]*?!commission\.deliverAt \|\| commission\.deliverAt <= (?:new Date|slurpWorldNow)\(\)\.toISOString\(\)/u,
 );
 assert.match(client, /commission\.state === "accepted"[\s\S]*?Cancel and refund/u);
 
@@ -274,7 +274,7 @@ assert.match(
 );
 assert.match(
   slurp,
-  /spend\(sender, "tip", amount, new Date\(\), creator\.handle, operationId, binding\)[\s\S]*?creditEarningsNow\([\s\S]*?operationId/u,
+  /spend\(sender, "tip", amount, (?:new Date|slurpWorldNow)\(\), creator\.handle, operationId, binding\)[\s\S]*?creditEarningsNow\([\s\S]*?operationId/u,
   "tip debits and creator credits must share the stable operation ID",
 );
 const tipCreator = slurp.slice(

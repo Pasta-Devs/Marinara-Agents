@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   type LtmEvidenceUnit,
   type LtmExtractionDroppedCandidate,
@@ -28,6 +29,7 @@ import {
   normalizeSubjectIdentifier,
   sourceBackedNpcNames,
   stripNotePrefix,
+  stripTrailingPossessive,
   subjectLabelFromKey,
 } from "./subject-names.js";
 import {
@@ -64,6 +66,8 @@ export type LtmSubjectIdentityResolution = {
   legacyBindings: Map<string, LtmSubject[]>;
   aliasChoices: Map<string, { title: string; canonicalName: string }>;
   skippedUnits: number;
+  /** Provisional local characters a relationship accepted; the compile adds a minimal note for each kept one. */
+  minimalCharacters: { subject: LtmSubject; name: string }[];
 };
 
 export type LtmSubjectIdentityCandidate = Pick<
@@ -734,6 +738,18 @@ function resolveLtmSubjectIdentitiesWithContext({
     }
   }
 
+  // A relationship may point only at a character the Memory Vault can show. The provisional local characters it
+  // accepted in this batch are reported so the compile can add a minimal character note for each one a kept
+  // relationship needs (see minimalCharacterUnit); an existing catalog subject is never provisional.
+  const minimalCharacters = new Map<string, { subject: LtmSubject; name: string }>();
+  for (const item of resolved) {
+    if (item.unit.bucket !== "relationship_state") continue;
+    for (const subject of item.unit.subjects ?? []) {
+      const entry = batchNames.provisionalKeys.has(subject.key) ? index.byKey.get(subject.key) : undefined;
+      if (entry) minimalCharacters.set(subject.key, { subject, name: entry.name });
+    }
+  }
+
   const remapTargets = new Map<string, Set<string>>();
   for (const item of resolved) {
     const targets = remapTargets.get(item.originalNoteId) ?? new Set<string>();
@@ -804,7 +820,68 @@ function resolveLtmSubjectIdentitiesWithContext({
     legacyBindings,
     aliasChoices,
     skippedUnits,
+    minimalCharacters: [...minimalCharacters.values()],
   };
+}
+
+/**
+ * A minimal "appears in this chat" character unit for a provisional local character that only a relationship named.
+ * It carries the name and the relationship's own evidence and nothing else. The id is derived, so a repeated
+ * extraction targets the same note.
+ * ponytail: richer facts wait for the next extraction that mentions the character.
+ */
+export function minimalCharacterUnit(
+  relationship: LtmEvidenceUnit,
+  character: { subject: LtmSubject; name: string },
+): LtmEvidenceUnit {
+  const entry: TrustedLtmSubjectCatalogEntry = {
+    subject: character.subject,
+    name: character.name,
+    aliases: [],
+    canonicalSlug: normalizeSubjectName(character.name),
+  };
+  const subjectId = subjectIdForTarget(canonicalNoteIdForEntries([entry], "character_fact"), "character_fact");
+  const {
+    title: _title,
+    dimensions: _dimensions,
+    dimensionChanges: _changes,
+    ...rest
+  } = withoutSubjectIdentity(relationship);
+  return {
+    ...rest,
+    id: derivedUnitId(relationship.id, character.subject.key),
+    bucket: "character_fact",
+    subjectId,
+    sectionKey: "facts",
+    text: `${character.name} appears in this chat.`.slice(0, 2_000),
+    claimKind: "static",
+    importance: "minor",
+    keywords: [],
+    status: "active",
+    links: [],
+    subjectNames: [character.name],
+    subjectKeys: [character.subject.key],
+    subjects: [character.subject],
+  };
+}
+
+/** A stable uuid-shaped id, so re-running the same extraction yields the same synthetic unit. */
+function derivedUnitId(unitId: string, subjectKey: string) {
+  const hex = createHash("sha256").update(`${unitId}\u0000${subjectKey}`).digest("hex");
+  const variant = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * The ambiguous local token a name falls under: its own, or, for a possessive form ("Corwin's") that no trusted
+ * entry carries, the bare name's. A possessive of an ambiguous name stays ambiguous instead of minting a new key.
+ */
+function ambiguousLocalToken(index: CatalogIndex, familyId: string, name: string) {
+  const token = normalizeSubjectName(name);
+  if (index.ambiguousLocalNames.has(`${familyId}\u0000${token}`)) return token;
+  if (index.exact.has(token)) return null;
+  const bare = normalizeSubjectName(stripTrailingPossessive(name));
+  return bare && bare !== token && index.ambiguousLocalNames.has(`${familyId}\u0000${bare}`) ? bare : null;
 }
 
 function preResolveBatchSubjectNames({
@@ -845,8 +922,9 @@ function preResolveBatchSubjectNames({
       matches.set(name, saved);
       continue;
     }
-    if (familyId && index.ambiguousLocalNames.has(`${familyId}\u0000${normalizedName}`)) {
-      matches.set(name, localAmbiguousMatch(index, familyId, normalizedName));
+    const ambiguousToken = familyId ? ambiguousLocalToken(index, familyId, name) : null;
+    if (familyId && ambiguousToken) {
+      matches.set(name, localAmbiguousMatch(index, familyId, ambiguousToken));
       continue;
     }
     const direct = matchDirectName(index, name);
@@ -873,6 +951,19 @@ function preResolveBatchSubjectNames({
     matches.set(name, relation);
     trustedRelationMatches.set(name, relation);
   }
+  // A surname beside a longer form of a card or persona name ("Farraday" beside "Ashleigh Farraday" of a card
+  // "Ashleigh") is the same person, so it joins that review instead of forking its own character.
+  for (const name of admissibleUnknownNames) {
+    if (trustedRelationMatches.has(name)) continue;
+    const related = [...trustedRelationMatches].find(
+      ([other, relation]) => relation.basis === "partial_name_requires_review" && nameTokensRelated(name, other),
+    )?.[1];
+    if (related?.status !== "ambiguous") continue;
+    const entries = related.keys.flatMap((key) => index.byKey.get(key) ?? []);
+    const review = partialNameReview(name, entries, familyId !== null);
+    matches.set(name, review);
+    trustedRelationMatches.set(name, review);
+  }
 
   const canonicalNames = uniqueStrings(admissibleUnknownNames.filter((name) => !trustedRelationMatches.has(name))).sort(
     (left, right) =>
@@ -890,8 +981,10 @@ function preResolveBatchSubjectNames({
   for (const [slug, candidates] of canonicalNamesBySlug) {
     if (new Set(candidates).size !== 1) continue;
     const name = candidates[0]!;
+    // A possessive form ("Corwin's") mints the bare name's key; existing keys and catalog entries are untouched.
+    const bareName = stripTrailingPossessive(name);
     const subject =
-      (mode === undefined || mode === "roleplay") && scope ? localCharacterSubjectForName(scope, name) : null;
+      (mode === undefined || mode === "roleplay") && scope ? localCharacterSubjectForName(scope, bareName) : null;
     if (!subject) continue;
     // Longest names come first, so a shorter form new in this batch relates to the full name
     // made just before it instead of forking its own character.
@@ -906,9 +999,9 @@ function preResolveBatchSubjectNames({
     if (existing) continue;
     const entry: TrustedLtmSubjectCatalogEntry = {
       subject,
-      name,
+      name: bareName,
       aliases: [],
-      canonicalSlug: slug,
+      canonicalSlug: normalizeSubjectName(bareName) || slug,
       // A local subject exists only when scope is set.
       ...(ltmScopeFamilyId(scope!) ? { familyId: ltmScopeFamilyId(scope!)! } : {}),
     };
@@ -936,7 +1029,7 @@ function preResolveBatchSubjectNames({
 
   for (const name of admissibleUnknownNames) {
     if (trustedRelationMatches.has(name)) continue;
-    matches.set(name, matchDirect(index, normalizeSubjectName(name)));
+    matches.set(name, matchDirectName(index, name));
   }
 
   return { matches, provisionalKeys, aliasChoices: new Map(), savedMatches, skippedNames };
@@ -963,8 +1056,9 @@ function resolveAndCacheSubjectName(
     (context?.mode === undefined || context?.mode === "roleplay") && context?.scope
       ? ltmScopeFamilyId(context.scope)
       : null;
-  if (familyId && index.ambiguousLocalNames.has(`${familyId}\u0000${normalizedName}`)) {
-    const match = localAmbiguousMatch(index, familyId, normalizedName);
+  const ambiguousToken = familyId ? ambiguousLocalToken(index, familyId, name) : null;
+  if (familyId && ambiguousToken) {
+    const match = localAmbiguousMatch(index, familyId, ambiguousToken);
     batch.matches.set(name, match);
     return match;
   }
@@ -983,7 +1077,8 @@ function resolveAndCacheSubjectName(
     return match;
   }
   if (familyId && context?.scope) {
-    const subject = localCharacterSubjectForName(context.scope, name);
+    const bareName = stripTrailingPossessive(name);
+    const subject = localCharacterSubjectForName(context.scope, bareName);
     if (subject && batch.provisionalKeys.has(subject.key)) {
       const match: SubjectMatch = { status: "ambiguous", keys: [], basis: "batch_provisional_duplicate" };
       batch.matches.set(name, match);
@@ -997,9 +1092,9 @@ function resolveAndCacheSubjectName(
       }
       const entry: TrustedLtmSubjectCatalogEntry = {
         subject,
-        name,
+        name: bareName,
         aliases: [],
-        canonicalSlug: normalizedName,
+        canonicalSlug: normalizeSubjectName(bareName) || normalizedName,
         familyId,
       };
       addCatalogEntry(index, entry);

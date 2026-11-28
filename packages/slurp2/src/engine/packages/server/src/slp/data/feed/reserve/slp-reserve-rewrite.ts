@@ -12,6 +12,7 @@ import { slurpPlanRewritable, slurpPreparedRewriteCost } from "../../../modules/
 import { findSlurpOpportunityBySlot } from "../slp-opportunity-storage.js";
 import { listOpenSlurpCampaignStages } from "../slp-campaign-storage.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 async function preparedFor(db: DB, creatorAccountId: string) {
   return (
     await db
@@ -24,7 +25,7 @@ async function preparedFor(db: DB, creatorAccountId: string) {
 export async function countSlurpPreparedRewrite(
   db: DB,
   creatorAccountId: string,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{ posts: number; calls: number }> {
   const rows = await preparedFor(db, creatorAccountId);
   return slurpPreparedRewriteCost(
@@ -35,7 +36,11 @@ export async function countSlurpPreparedRewrite(
 }
 
 /** Back to scheduled slots, like a post written for an older card. Returns how many. */
-export async function rewriteSlurpPreparedPosts(db: DB, creatorAccountId: string, at = new Date()): Promise<number> {
+export async function rewriteSlurpPreparedPosts(
+  db: DB,
+  creatorAccountId: string,
+  at = slurpWorldNow(),
+): Promise<number> {
   const rows = (await preparedFor(db, creatorAccountId)).filter(
     (row) => row.state === "prepared" && Date.parse(row.publishAt) > at.getTime(),
   );

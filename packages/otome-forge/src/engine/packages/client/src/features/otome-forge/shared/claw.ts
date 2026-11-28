@@ -5,7 +5,8 @@
 // (S/minigames/claw.ts). Nothing here, and nothing in a round, calls a model or paints an image: the prizes are six
 // drawn plushes plus each love interest's own, the animal that fits them, drawn once in the background (#1954,
 // S/minigames/plush.ts), or until then their look (cut out once Home has made it) or their initials in a round frame.
-import type { ActivityGrant, ClawCheat, LiId, LinesView } from "./api-types";
+import type { ActivityGrant, ClawCheat, KittyLines, LiId, LinesView } from "./api-types";
+import type { KittenView } from "./kitty";
 
 /** The outline every plush is drawn with, the series' and the love interests' own (S/minigames/plush.ts). */
 export const PLUSH_INK = "#3b2a40";
@@ -108,7 +109,7 @@ export interface ClawFinishResult {
   starlight: number;
 }
 
-/** GET /runs/:run/play: what the Dates hub and the Claw Machine show before a game. */
+/** GET /runs/:run/play: what the Dates hub, the Claw Machine and Kitty Cards show before a game. */
 export interface PlayView {
   /** The request's local day, "YYYY-MM-DD". */
   dayKey: string;
@@ -119,12 +120,12 @@ export interface PlayView {
   /** The plush shelf: prize id → how many. */
   plush: Record<string, number>;
   /**
-   * How each love interest plays (bible.play), whether a rupture stands between them, and whether Date Night with them
-   * is Make it right: the open date's own plan while its rupture stands when one is open (a date keeps the kind it was
-   * planned with), else whether a rupture stands. `plush`: the picture their plush wears (their look, cut out once Home
-   * has made the cut-out), absent without a look. `animal`: their own plush, the animal that fits them drawn as SVG
+   * How each love interest plays (bible.play) and whether a rupture stands between them. `plush`: the picture their
+   * plush wears (their look, cut out once Home has made the cut-out), absent without a look. `animal`: their own plush, the animal that fits them drawn as SVG
    * (#1954), as a data URL; absent until it is drawn, and it replaces the framed look when present. `lines`: the Claw Machine's lines, their fixed claw lines and the
-   * cold ones a rupture uses (as GET /lis/:li/lines gives them, read here so the machine never queues a pack's write).
+   * cold ones a rupture uses (as GET /lis/:li/lines gives them, read here so the machine never queues a pack's write),
+   * and (0.35.0) his Kitty Cards lines, by the claw lines' content rule, absent until his own exist and during a
+   * rupture.
    */
   lis: Record<
     LiId,
@@ -132,10 +133,18 @@ export interface PlayView {
       cheat: ClawCheat;
       style: string;
       rupture: boolean;
-      makeItRight: boolean;
+      /** #2156: his grievance with her stands: every date with him waits until his repair (SH/dates.ts heldAgainst). */
+      held?: boolean;
       plush?: string;
       animal?: string;
-      lines: Pick<LinesView, "claw" | "cold">;
+      lines: Pick<LinesView, "claw" | "cold"> & { kitty?: KittyLines };
     }
   >;
+  /**
+   * 0.35.0, with images on only: Kitty Cards' painted kittens (S/art/kittens.ts), the protagonist's first, then each
+   * love interest's with a bible, in cast order (SH/kitty.ts kittenCards puts them on the cards).
+   */
+  kittens?: KittenView[];
+  /** A kitten may still land without a tap (one is owed, painting or being cut out): the client reads again. */
+  kittensPending?: true;
 }

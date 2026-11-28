@@ -6,7 +6,7 @@
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Download, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Download, Trash2, X } from "lucide-react";
 import { Dialog } from "../../components/Dialog";
 import { imageFilename, useImageDownload } from "../../lib/image-download";
 import { useOtomeProps } from "../../props";
@@ -19,6 +19,9 @@ const SOURCE_KEYS: Record<AlbumImage["source"], string> = {
   pair: "ui.otomeForge.album.sourcePair",
   sticker: "ui.otomeForge.album.sourceSticker",
   photo: "ui.otomeForge.album.sourcePhoto",
+  card: "ui.otomeForge.album.sourceCard",
+  keepsake: "ui.otomeForge.album.sourceKeepsake",
+  kitten: "ui.otomeForge.album.sourceKitten",
 };
 
 interface CgViewerProps {
@@ -29,6 +32,8 @@ interface CgViewerProps {
   onClose: () => void;
   /** Offers Delete for the image shown (a photo); resolves once it is deleted, and throws when it was not. */
   onDelete?: (image: AlbumImage) => Promise<void>;
+  /** #2276: offers reading the date behind a keepsake again. */
+  onReread?: () => void;
 }
 
 /** "When" for a timestamp, in the player's language and time zone. */
@@ -45,7 +50,7 @@ export function useFormatAt() {
   };
 }
 
-export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: CgViewerProps) {
+export function CgViewer({ view, images, index, onIndex, onClose, onDelete, onReread }: CgViewerProps) {
   const { t } = useTranslation();
   const formatAt = useFormatAt();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -179,6 +184,19 @@ export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: Cg
             >
               <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
               {t("ui.otomeForge.album.deletePhoto")}
+            </button>
+          ) : null}
+          {onReread ? (
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass"
+              onClick={() => {
+                onClose();
+                onReread();
+              }}
+            >
+              <BookOpen size={16} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.dateNight.keepsakeReread")}
             </button>
           ) : null}
           {download.state !== "unavailable" ? (

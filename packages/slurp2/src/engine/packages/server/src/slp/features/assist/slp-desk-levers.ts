@@ -35,6 +35,7 @@ import type { SlpActionParsed } from "../../../../../shared/src/slp/slp-actions.
 import type { SlpActionPreview } from "../../../../../shared/src/slp/slp-stir.js";
 import type { SlpAssistOutcome } from "./slp-assist-service.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export const SLP_DESK_LEVERS = [
   "grant-perk",
   "set-challenge",
@@ -123,7 +124,7 @@ export async function runSlpDeskLever(
   db: DB,
   name: SlpDeskLever,
   raw: unknown,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlpAssistOutcome<unknown> | Done<unknown>> {
   const storage = createSlurpStorage(db);
   const settings = await deskSettings(db);
@@ -430,7 +431,7 @@ export async function previewSlpDeskLever(
   db: DB,
   name: SlpDeskLever,
   input: Record<string, unknown>,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<Partial<SlpActionPreview>> {
   const storage = createSlurpStorage(db);
   const settings = await deskSettings(db);

@@ -8,6 +8,9 @@ export const STORY_WRITER_PACKAGE_ID = "story-writer";
 
 export const DEFAULT_SYSTEM_PROMPT =
   "You are an excellent writer for the user. Your goal is to write the next chapter of this fictional story.";
+/** What an unchanged default prompt says with Chapter length "Off (I decide)", which never asks for a chapter. */
+export const DEFAULT_WRITER_SYSTEM_PROMPT =
+  "You are an excellent writer for the user. Your goal is to write the next part of this fictional story.";
 export const DEFAULT_BANNED_PHRASES = "ozone, jaws working, Elara";
 export const DEFAULT_CONTINUE_MESSAGE = "Continue.";
 export const DEFAULT_CHAPTER_WORDS = 2000;
@@ -21,6 +24,8 @@ export const LIMITS = {
   summary: 20_000,
   timelineEvents: 200,
   timelineEventText: 1_000,
+  quickReplies: 24,
+  quickReplyLabel: 40,
   selectedIds: 200,
   chapterWords: { min: 100, max: 20_000 },
   targetWords: { min: 1_000, max: 2_000_000 },
@@ -28,13 +33,26 @@ export const LIMITS = {
   authorNoteDepth: { min: 0, max: 100 },
   fontSize: { min: 12, max: 36 },
   chaptersPerStory: 2_000,
+  illustrationsPerChapter: 100,
+  picturePrompt: 4_000,
+  picturePrefix: 1_000,
+  illustrationAnchor: 120,
 } as const;
 
-export type StoryTheme = "book" | "ebook";
+/** "document": no pages, one column of chapters that scrolls down. A package before 0.3.0 reads it as "book". */
+export type StoryTheme = "book" | "ebook" | "document";
 export type StoryColorMode = "app" | "light" | "dark";
 export type StorySide = "left" | "right";
 
-/** Reading and layout preferences. One document per Engine install, shared by every story. */
+/** A saved instruction the quick bar sends in place of the continue message. */
+export interface QuickReply {
+  id: string;
+  /** What the button shows; empty = the instruction itself. */
+  label: string;
+  text: string;
+}
+
+/** Reading and layout preferences and the quick replies. One document per Engine install, shared by every story. */
 export interface StoryWriterPreferences {
   theme: StoryTheme;
   colorMode: StoryColorMode;
@@ -46,9 +64,13 @@ export interface StoryWriterPreferences {
   fontSize: number;
   sidebarSide: StorySide;
   noteSide: StorySide;
+  /** Hiding the sticky note only hides it: its text is still sent with every chapter. */
+  showAuthorNote: boolean;
   streaming: boolean;
   pageAnimation: boolean;
   lastStoryId: string | null;
+  showQuickReplies: boolean;
+  quickReplies: QuickReply[];
 }
 
 export interface TimelineEvent {
@@ -61,8 +83,24 @@ export interface TimelineEvent {
 export interface StorySettings {
   title: string;
   connectionId: string | null;
+  /** The Engine image connection Illustrate paints with; null = none, and Illustrate never makes a paid call. */
+  imageConnectionId: string | null;
+  /** Put before every picture prompt Illustrate writes (artist or quality tags, say); "" = none. */
+  picturePromptPrefix: string;
+  /** Put before the negative prompt every picture is painted with; "" = none. */
+  pictureNegativePrefix: string;
+  /**
+   * Send the avatars of the story's characters and personas the picture prompt names with the picture, as references.
+   * Absent (a story from before 0.7.0) = true.
+   */
+  pictureReferences: boolean;
   /** Target length of one chapter, in words. */
   chapterWords: number;
+  /**
+   * Chapter length "Off (I decide)": Generate writes into the chapter the author is on, never ends one and never starts
+   * one. `chapterWords` is kept for when a length is picked again. Absent (a story from before 0.5.0) = false.
+   */
+  writerDecides: boolean;
   /** Target length of the whole story, in words; null = open-ended. */
   targetWords: number | null;
   characterIds: string[];
@@ -105,16 +143,41 @@ export interface StorySettings {
 
 export type ChapterStatus = "draft" | "complete";
 
+/** A picture beside a paragraph of a chapter, painted by the Engine's image connection and kept in its Global Gallery. */
+export interface StoryIllustration {
+  id: string;
+  /** `global-gallery:<id>`: while a package document holds it, the Engine refuses to delete that gallery image. */
+  image: string;
+  /** Where the Engine serves the picture: /api/global-gallery/file/<name>. */
+  url: string;
+  /** The picture prompt it was painted from, which is also its description for screen readers. */
+  prompt: string;
+  width: number;
+  height: number;
+  /** The block it sits beside, by its index among the chapter's blocks (markdownBlocks) when it was painted... */
+  paragraph: number;
+  /** ...and that block's opening words, which find it again after the text above it changes (anchorIndex). */
+  anchor: string;
+}
+
 export interface StoryChapter {
   id: string;
   storyId: string;
   /** Markdown. */
   text: string;
   summary: string;
-  /** "draft": started by the author, or cut off; Write continues it. "complete": Write starts a new chapter. */
+  /**
+   * "draft": started by the author, or cut off; Write continues it. "complete": Write starts a new chapter. Generate
+   * (Chapter length "Off") never changes it.
+   */
   status: ChapterStatus;
   /** The user message that produced this chapter, so history replays what was really asked. */
   request: string;
+  /**
+   * Its pictures, in the order they were painted. Only the illustration routes change them: a chapter save, a
+   * generation, Continue and Rewrite write the text and leave them as they are.
+   */
+  illustrations: StoryIllustration[];
   createdAt: string;
   updatedAt: string;
 }
@@ -156,7 +219,23 @@ export interface StoryWithChapters {
 // POST   /story-writer/stories/:id/chapters  ChapterCreate → StoryWithChapters
 // PATCH  /story-writer/stories/:id/chapters/:chapterId  ChapterPatch → { story: StoryRecord; chapter: StoryChapter }
 // DELETE /story-writer/stories/:id/chapters/:chapterId     → StoryWithChapters
-// Errors: { error: string } with 400 (invalid input), 404 (unknown story/chapter), 409 (chapter id taken).
+// POST   /story-writer/stories/:id/chapters/:chapterId/illustrations  IllustrationCreate
+//                                                          → { story: StoryRecord; chapter: StoryChapter }
+// DELETE /story-writer/stories/:id/chapters/:chapterId/illustrations/:illustrationId
+//                                                          → { story: StoryRecord; chapter: StoryChapter }
+// Errors: { error: string } with 400 (invalid input), 404 (unknown story/chapter), 409 (chapter id taken), 502 (the
+// Engine could not paint or keep the picture).
+
+/** Paints a picture with the Engine's image connection and puts it in the chapter beside one of its blocks. */
+export interface IllustrationCreate {
+  connectionId: string;
+  prompt: string;
+  paragraph: number;
+  anchor: string;
+  /** Illustrate again: the illustration this one takes the place of. */
+  replace?: string;
+  debugMode?: boolean;
+}
 
 export interface ChapterCreate {
   /** Optional client id (CLIENT_ID_PATTERN), so a chapter the author starts typing keeps its element. */
@@ -195,9 +274,12 @@ export function defaultPreferences(): StoryWriterPreferences {
     fontSize: 18,
     sidebarSide: "left",
     noteSide: "right",
+    showAuthorNote: true,
     streaming: true,
     pageAnimation: true,
     lastStoryId: null,
+    showQuickReplies: true,
+    quickReplies: [],
   };
 }
 
@@ -205,7 +287,12 @@ export function defaultStorySettings(): StorySettings {
   return {
     title: "",
     connectionId: null,
+    imageConnectionId: null,
+    picturePromptPrefix: "",
+    pictureNegativePrefix: "",
+    pictureReferences: true,
     chapterWords: DEFAULT_CHAPTER_WORDS,
+    writerDecides: false,
     targetWords: null,
     characterIds: [],
     personaIds: [],
@@ -269,46 +356,70 @@ export function normalizePreferences(patch: unknown, base: StoryWriterPreference
   const fontColor = "fontColor" in input ? input.fontColor : base.fontColor;
   const lastStoryId = "lastStoryId" in input ? input.lastStoryId : base.lastStoryId;
   const preferences: StoryWriterPreferences = {
-    theme: oneOf(input.theme, ["book", "ebook"], base.theme),
+    theme: oneOf(input.theme, ["book", "ebook", "document"], base.theme),
     colorMode: oneOf(input.colorMode, ["app", "light", "dark"], base.colorMode),
     fontFamily: text(input.fontFamily, 200, base.fontFamily).trim(),
     fontColor: typeof fontColor === "string" && (fontColor === "" || HEX_COLOR.test(fontColor)) ? fontColor : "",
     fontSize: integer(input.fontSize, LIMITS.fontSize, base.fontSize),
     sidebarSide: oneOf(input.sidebarSide, ["left", "right"], base.sidebarSide),
     noteSide: oneOf(input.noteSide, ["left", "right"], base.noteSide),
+    showAuthorNote: typeof input.showAuthorNote === "boolean" ? input.showAuthorNote : base.showAuthorNote,
     streaming: typeof input.streaming === "boolean" ? input.streaming : base.streaming,
     pageAnimation: typeof input.pageAnimation === "boolean" ? input.pageAnimation : base.pageAnimation,
     lastStoryId: typeof lastStoryId === "string" && lastStoryId.length <= 200 ? lastStoryId : null,
+    showQuickReplies: typeof input.showQuickReplies === "boolean" ? input.showQuickReplies : base.showQuickReplies,
+    quickReplies: normalizeEntries(input.quickReplies, base.quickReplies, "reply", LIMITS.quickReplies, (item) => ({
+      label: text(item.label, LIMITS.quickReplyLabel, "").trim(),
+      text: text(item.text, LIMITS.shortText, "").trim(),
+    })),
   };
   return preferences;
 }
 
-function normalizeTimeline(value: unknown, fallback: TimelineEvent[]): TimelineEvent[] {
+/**
+ * A list of entries with a required text (timeline events, quick replies): entries without text are dropped, each
+ * keeps a valid unique id or gets one, and the list is capped. A non-array keeps the fallback.
+ */
+function normalizeEntries<T extends { text: string }>(
+  value: unknown,
+  fallback: Array<T & { id: string }>,
+  prefix: string,
+  limit: number,
+  read: (item: Record<string, unknown>) => T,
+): Array<T & { id: string }> {
   if (!Array.isArray(value)) return fallback;
-  const events: TimelineEvent[] = [];
+  const entries: Array<T & { id: string }> = [];
   const seen = new Set<string>();
   for (const item of value) {
     if (!isRecord(item)) continue;
-    const eventText = text(item.text, LIMITS.timelineEventText, "").trim();
-    if (!eventText) continue;
+    const entry = read(item);
+    if (!entry.text) continue;
     let id = typeof item.id === "string" && CLIENT_ID_PATTERN.test(item.id) ? item.id : "";
-    if (!id || seen.has(id)) id = `event-${events.length.toString(36)}-${eventText.length.toString(36)}-${seen.size}`;
+    if (!id || seen.has(id))
+      id = `${prefix}-${entries.length.toString(36)}-${entry.text.length.toString(36)}-${seen.size}`;
     seen.add(id);
-    events.push({ id, text: eventText, done: item.done === true });
-    if (events.length >= LIMITS.timelineEvents) break;
+    entries.push({ id, ...entry });
+    if (entries.length >= limit) break;
   }
-  return events;
+  return entries;
 }
 
 /** Merges a partial settings `patch` over `base` and returns complete, valid settings. */
 export function normalizeStorySettings(patch: unknown, base: StorySettings = defaultStorySettings()): StorySettings {
   const input = isRecord(patch) ? patch : {};
   const connectionId = "connectionId" in input ? input.connectionId : base.connectionId;
+  const imageConnectionId = "imageConnectionId" in input ? input.imageConnectionId : base.imageConnectionId;
   const targetWords = "targetWords" in input ? input.targetWords : base.targetWords;
   return {
     title: text(input.title, 300, base.title),
     connectionId: typeof connectionId === "string" && connectionId.trim() ? connectionId.trim().slice(0, 200) : null,
+    imageConnectionId:
+      typeof imageConnectionId === "string" && imageConnectionId.trim() ? imageConnectionId.trim().slice(0, 200) : null,
+    picturePromptPrefix: text(input.picturePromptPrefix, LIMITS.picturePrefix, base.picturePromptPrefix),
+    pictureNegativePrefix: text(input.pictureNegativePrefix, LIMITS.picturePrefix, base.pictureNegativePrefix),
+    pictureReferences: typeof input.pictureReferences === "boolean" ? input.pictureReferences : base.pictureReferences,
     chapterWords: integer(input.chapterWords, LIMITS.chapterWords, base.chapterWords),
+    writerDecides: typeof input.writerDecides === "boolean" ? input.writerDecides : base.writerDecides,
     targetWords:
       targetWords === null || targetWords === "" || targetWords === 0
         ? null
@@ -335,14 +446,48 @@ export function normalizeStorySettings(patch: unknown, base: StorySettings = def
     clearNoteAfterChapter:
       typeof input.clearNoteAfterChapter === "boolean" ? input.clearNoteAfterChapter : base.clearNoteAfterChapter,
     chapterTitles: typeof input.chapterTitles === "boolean" ? input.chapterTitles : base.chapterTitles,
-    timeline: normalizeTimeline(input.timeline, base.timeline),
+    timeline: normalizeEntries(input.timeline, base.timeline, "event", LIMITS.timelineEvents, (item) => ({
+      text: text(item.text, LIMITS.timelineEventText, "").trim(),
+      done: item.done === true,
+    })),
     autoTimeline: typeof input.autoTimeline === "boolean" ? input.autoTimeline : base.autoTimeline,
     keepFullChapters: integer(input.keepFullChapters, LIMITS.keepFullChapters, base.keepFullChapters),
     autoSummarize: typeof input.autoSummarize === "boolean" ? input.autoSummarize : base.autoSummarize,
   };
 }
 
-/** Normalizes a chapter write. Unknown statuses keep the base status. */
+export const GALLERY_REF_PREFIX = "global-gallery:";
+const GALLERY_REF = /^global-gallery:[A-Za-z0-9_-]{1,200}$/;
+const GALLERY_FILE_URL = /^\/api\/global-gallery\/file\/[A-Za-z0-9._%-]{1,300}$/;
+
+/** A chapter's stored pictures: each with a valid id, gallery reference and gallery URL, at most one per id. */
+export function normalizeIllustrations(value: unknown): StoryIllustration[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const list: StoryIllustration[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const { id, image, url } = item;
+    if (typeof id !== "string" || !CLIENT_ID_PATTERN.test(id) || seen.has(id)) continue;
+    if (typeof image !== "string" || !GALLERY_REF.test(image)) continue;
+    if (typeof url !== "string" || !GALLERY_FILE_URL.test(url)) continue;
+    seen.add(id);
+    list.push({
+      id,
+      image,
+      url,
+      prompt: text(item.prompt, LIMITS.picturePrompt, ""),
+      width: integer(item.width, { min: 1, max: 8192 }, 1024),
+      height: integer(item.height, { min: 1, max: 8192 }, 1024),
+      paragraph: integer(item.paragraph, { min: 0, max: 1_000_000 }, 0),
+      anchor: text(item.anchor, LIMITS.illustrationAnchor, ""),
+    });
+    if (list.length >= LIMITS.illustrationsPerChapter) break;
+  }
+  return list;
+}
+
+/** Normalizes a chapter write. Unknown statuses keep the base status. Pictures are never part of one. */
 export function normalizeChapterPatch(patch: unknown): ChapterPatch {
   const input = isRecord(patch) ? patch : {};
   const result: ChapterPatch = {};
@@ -372,6 +517,12 @@ export function countWords(markdown: string): number {
 export function chapterTitle(markdown: string): string {
   const match = /^\s*#{1,3}\s+(.+?)\s*#*\s*$/m.exec(markdown.split(/\n\s*\n/, 1)[0] ?? "");
   return match?.[1]?.trim() ?? "";
+}
+
+/** A prompt with a prefix in front, joined as the Engine joins a connection's own prompt prefix ("prefix, prompt"). */
+export function withPrefix(prefix: string, prompt: string): string {
+  const lead = prefix.trim().replace(/[\s,;.]+$/, "");
+  return (lead && prompt.trim() ? `${lead}, ${prompt.trim()}` : lead || prompt.trim()).slice(0, LIMITS.picturePrompt);
 }
 
 export function storyDisplayTitle(settings: Pick<StorySettings, "title">, fallback: string): string {

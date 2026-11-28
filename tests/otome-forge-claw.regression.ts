@@ -231,7 +231,7 @@ test("every round pays, even with nothing caught, within the day's activity caps
   assert.deepEqual(three.body.grants[0], { source: "claw", starlight: 20 + 3 * 30 });
   assert.deepEqual(three.body.newPlush, ["bunny", "whale", "star"]);
 
-  // The day's activity Starlight is capped at 400 in all, and affection at 300 per love interest.
+  // The day's activity Starlight is capped (ACTIVITY_STARLIGHT_DAILY_CAP) in all, and affection per love interest.
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
     daily: {
@@ -360,14 +360,14 @@ test("the play view: today's caps, the shelf, and how each love interest plays",
     cheat: "nudge",
     style: "Careful and patient, lines it up twice.",
     rupture: false,
-    makeItRight: false,
+    held: false,
     lines: { claw: { cheer: ["c"], cheat: ["x"], win: ["w"], miss: ["m"], plush: [PLUSH_LINE] }, cold: [] },
   });
   assert.deepEqual(view.lis[MIR], {
     cheat: "steady",
     style: "",
     rupture: false,
-    makeItRight: false,
+    held: false,
     lines: { claw: null, cold: [] },
   });
   // A new local day shows nothing earned yet.

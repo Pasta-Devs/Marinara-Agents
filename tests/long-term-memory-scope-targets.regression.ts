@@ -5,6 +5,7 @@ import {
   buildScopeMemoryPresence,
   deriveScopeBranchChats,
   deriveScopeConversations,
+  indexById,
   type ScopeTargetChat,
   type ScopeTargetGroup,
   uniqueById,
@@ -159,6 +160,38 @@ assert.deepEqual(
     { id: "b", order: 2 },
   ],
   "place lists keep the first target for each id in order",
+);
+
+// A library of 21,000 characters froze the Vault: it matched each character to its target with a scan of the
+// whole list on every render. `indexById` answers the same lookup from one Map and keeps the first duplicate.
+const libraryCharacters = Array.from({ length: 21_000 }, (_, index) => ({
+  id: `char-${index}`,
+  label: `Card ${index}`,
+}));
+const libraryTargets = [
+  { id: "all", label: "All" },
+  ...libraryCharacters.map((character) => ({ id: `character:${character.id}`, label: character.label })),
+  { id: "character:char-7", label: "Duplicate of char-7" },
+];
+const libraryStartedAt = performance.now();
+const libraryTargetsById = indexById(libraryTargets);
+const libraryResolved = libraryCharacters.map((character) => libraryTargetsById.get(`character:${character.id}`)!);
+assert.ok(
+  performance.now() - libraryStartedAt < 1_000,
+  "21,000 characters resolve their targets in well under a second",
+);
+assert.equal(libraryResolved.length, 21_000);
+for (const index of [0, 7, 10_500, 20_999]) {
+  assert.deepEqual(
+    libraryResolved[index],
+    libraryTargets.find((candidate) => candidate.id === `character:${libraryCharacters[index]!.id}`),
+    `the index returns what the scan returned for character ${index}`,
+  );
+}
+assert.equal(
+  libraryTargetsById.get("character:missing"),
+  undefined,
+  "an unknown id resolves to nothing, as the scan did",
 );
 
 process.stdout.write("Long-Term Memory scope target regression: grouped chats and filtered branches stay aligned\n");

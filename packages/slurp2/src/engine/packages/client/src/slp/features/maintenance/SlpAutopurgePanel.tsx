@@ -1,4 +1,4 @@
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 
@@ -14,6 +14,7 @@ import { SlurpMaintenanceHealth } from "./SlpMaintenanceHealth";
 import { MaintenanceTask, focusRing, quietButton } from "./SlpMaintenanceTask";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { formatBytes, localDateTimeValue } from "../../modules/settings/slp-backstage-format";
+import { Spinner } from "../../../components/ui/Spinner";
 
 const RETENTION_PRESETS = [
   { value: 1, unit: "weeks" },
@@ -209,11 +210,7 @@ export function SlpAutopurgePanel(page: SlpBackstagePageProps) {
             onClick={() => void runAutopurgeNow()}
             className={`inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--slurp-on-accent)] hover:opacity-90 disabled:opacity-50 ${focusRing}`}
           >
-            {runAutopurge.isPending ? (
-              <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            ) : (
-              <Trash2 size={15} aria-hidden="true" />
-            )}
+            {runAutopurge.isPending ? <Spinner size="md" /> : <Trash2 size={15} aria-hidden="true" />}
             {t("ui.slurp.settings.autopurge.runNow")}
           </button>
         </MaintenanceTask>

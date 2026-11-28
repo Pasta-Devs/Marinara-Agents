@@ -9,6 +9,8 @@ import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continui
 import { slurpRequestActionEffect, type SlurpRequestAction } from "../../modules/messages/slp-request-actions.js";
 import { normalizeSlurpDemandTopic } from "../../modules/feed/slp-demand.js";
 
+import { parseRecord } from "../../modules/creators/slp-public-support.js";
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpThreadRequest = {
   id: string;
   text: string;
@@ -22,14 +24,14 @@ export async function listSlurpThreadRequests(db: DB, threadId: string): Promise
   const actions = new Map<string, SlurpRequestAction>();
   for (const row of rows) {
     if (row.eventType !== "request_action") continue;
-    const payload = JSON.parse(String(row.payload ?? "{}")) as { requestId?: string; action?: SlurpRequestAction };
+    const payload = parseRecord(row.payload) as { requestId?: string; action?: SlurpRequestAction };
     if (payload.requestId && payload.action) actions.set(payload.requestId, payload.action);
   }
   return rows
     .filter((row) => row.eventType === "request_received" && row.status !== "retracted")
     .map((row) => ({
       id: String(row.id),
-      text: String((JSON.parse(String(row.payload ?? "{}")) as { text?: string }).text ?? ""),
+      text: String((parseRecord(row.payload) as { text?: string }).text ?? ""),
       occurredAt: String(row.occurredAt),
       action: actions.get(String(row.id)) ?? null,
     }))
@@ -57,7 +59,7 @@ const requestsInFlight = new Set<string>();
 export async function applySlurpRequestAction(
   db: DB,
   input: SlurpRequestActionInput,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpRequestActionResult> {
   if (requestsInFlight.has(input.requestId)) return "in_progress";
   requestsInFlight.add(input.requestId);
@@ -80,8 +82,21 @@ async function applyRequestActionOnce(
   if (!request || request.eventType !== "request_received" || request.creatorAccountId !== input.creatorAccountId) {
     return "not_found";
   }
-  const answered = (await listSlurpThreadRequests(db, input.threadId)).find((entry) => entry.id === input.requestId);
-  if (answered?.action) return "already_answered";
+  // The fingerprint survives damaged payload JSON and identifies exactly the request already answered.
+  const answers = await db
+    .select({ payload: slurpContinuityEvents.payload, fingerprint: slurpContinuityEvents.fingerprint })
+    .from(slurpContinuityEvents)
+    .where(
+      and(eq(slurpContinuityEvents.threadId, input.threadId), eq(slurpContinuityEvents.eventType, "request_action")),
+    );
+  if (
+    answers.some(
+      (row) =>
+        row.fingerprint === `request-action:${input.requestId}` ||
+        parseRecord(row.payload).requestId === input.requestId,
+    )
+  )
+    return "already_answered";
   if (input.action === "aggregate" && !input.topic?.trim()) return "topic_required";
   const creator = await createSlurpStorage(db).getNoodlerAccountById(input.creatorAccountId);
   const identity = creator ? slurpContinuityIdentityOf(creator) : null;

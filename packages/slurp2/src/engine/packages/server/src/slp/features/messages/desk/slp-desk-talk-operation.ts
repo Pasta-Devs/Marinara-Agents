@@ -25,6 +25,7 @@ import {
 } from "../../../../../../shared/src/slp/slp-support-desk.js";
 import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export async function applySlurpDeskTalk(
   db: DB,
   input: {
@@ -36,7 +37,7 @@ export async function applySlurpDeskTalk(
     at?: Date;
   },
 ): Promise<void> {
-  const at = input.at ?? new Date();
+  const at = input.at ?? slurpWorldNow();
   const messages = createSlurpMessagesStorage(db);
   const allSettings = await createSlurpStorage(db).getSettings();
   // Support desk off: Support's talk changes no case file (the prompt asks for no "desk" answer either).

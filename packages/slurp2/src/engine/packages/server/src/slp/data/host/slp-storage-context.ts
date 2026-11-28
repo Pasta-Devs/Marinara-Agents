@@ -61,7 +61,7 @@ import {
   SLURP_PAID_WELL_COINS,
   SlurpCreatorState,
 } from "../../modules/creators/slp-creator-state.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { SLURP_SETTINGS_KEY, SLURP_CREATOR_STATE_KEY, slurpViewerSettingsKey } from "./slp-storage-constants.js";
 import {
   parseRecord,
@@ -81,6 +81,7 @@ import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { mapAccount, snapshotForAccount, mapPost, mapInteraction } from "./slp-storage-mappers.js";
 import { slpArcsLive, slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createSlurpStorageContext(db: DB) {
   const settingsStore = createAppSettingsStorage(db);
 
@@ -115,7 +116,7 @@ export function createSlurpStorageContext(db: DB) {
     return out;
   };
 
-  const writeProjects = async (creatorAccountId: string, projects: readonly SlurpProject[], at = new Date()) => {
+  const writeProjects = async (creatorAccountId: string, projects: readonly SlurpProject[], at = slurpWorldNow()) => {
     const entries: unknown[] = [];
     for (const project of projects) {
       const { partnerNames: _names, ...plain } = project;
@@ -259,7 +260,7 @@ export function createSlurpStorageContext(db: DB) {
     mutate: (state: SlurpCreatorState) => SlurpCreatorState,
   ): Promise<void> => {
     const key = `${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`;
-    const state = readSlurpCreatorState(await settingsStore.get(key), new Date().toISOString());
+    const state = readSlurpCreatorState(await settingsStore.get(key), slurpWorldNow().toISOString());
     await settingsStore.set(key, JSON.stringify(mutate(state)));
   };
 
@@ -307,13 +308,13 @@ export function createSlurpStorageContext(db: DB) {
         (slpExtensionOn(settings, "storylines")
           ? await slurpDramaStageFactor(settingsStore, creatorAccountId, "economy.creator-earnings")
           : 1) *
-        slurpInfluenceMultiplier(slpLiveEvents(settings), new Date(), "economy.creator-earnings", {
+        slurpInfluenceMultiplier(slpLiveEvents(settings), slurpWorldNow(), "economy.creator-earnings", {
           occurrences,
           creator: { id: creatorAccountId },
         }),
     );
     const current = readSlurpEarnings(await settingsStore.get(slurpEarningsKey(creatorAccountId)));
-    const next = earnCreatorIncome(current, kind, amount, new Date(), note, id);
+    const next = earnCreatorIncome(current, kind, amount, slurpWorldNow(), note, id);
     if (next === current) return;
     await writeEarnings(creatorAccountId, next);
     try {

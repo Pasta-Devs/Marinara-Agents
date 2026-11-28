@@ -1,8 +1,9 @@
-import { AlertCircle, Database, HardDrive, Loader2, MessageCircle, UsersRound } from "lucide-react";
+import { AlertCircle, Database, HardDrive, MessageCircle, UsersRound } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { useTranslation } from "react-i18next";
 import type { SlurpAutopurgePreview, SlurpMaintenanceSummary } from "./slp-maintenance-hooks";
 import { formatBytes } from "../../modules/settings/slp-backstage-format";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export function SlurpMaintenanceHealth({
   summary,
@@ -22,7 +23,7 @@ export function SlurpMaintenanceHealth({
         className="flex min-h-24 items-center justify-center gap-2 rounded-xl bg-[var(--slurp-surface-raised)] text-sm text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]"
         role="status"
       >
-        <Loader2 size={17} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        <Spinner size="md" />
         {t("ui.slurp.settings.maintenance.health.measuring", { defaultValue: "Measuring Slurp storage…" })}
       </div>
     );

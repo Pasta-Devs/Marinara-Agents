@@ -82,11 +82,11 @@ async function main() {
       text: "The lost caravan still has not reached the northern pass.",
     }),
     note({
-      id: "timeline_damo_arrival",
+      id: "timeline_tobin_arrival",
       type: "timeline_event",
-      title: "Damo Arrival",
+      title: "Tobin Arrival",
       sectionKey: "event",
-      text: "Damo arrived at the northern gate before dusk.",
+      text: "Tobin arrived at the northern gate before dusk.",
       links: [{ target: sourceNote.id, relation: "extracted_from" }],
     }),
     note({
@@ -224,6 +224,26 @@ async function main() {
       assert.equal(result.remaps.size, 0, "an exact derived id must be left to scoped-targets");
     }
 
+    // A model that reuses a listed subjectId names a note that exists: a same-title lookalike must neither pull the
+    // claim away from it nor send it to review, on the bounded index and on the complete commit-time set.
+    for (const overrides of [{}, { candidateNotes: notes }]) {
+      const result = await reconcile(
+        [
+          unit({
+            bucket: "world_fact",
+            subjectId: "echo_pair_a",
+            sectionKey: "facts",
+            title: "Echo Pair",
+            text: "The echo pair repeats the same vow.",
+          }),
+        ],
+        overrides,
+      );
+      assert.equal(result.remaps.size, 0, "the unit's own existing note stays its target");
+      assert.deepEqual(result.diagnostics, [], "a lookalike does not send a reused subjectId to review");
+      assertCounts(result, { groups: 1, created: 1 });
+    }
+
     // Identity match: the model invents a different subjectId but names the same subject.
     {
       const result = await reconcile([
@@ -334,25 +354,25 @@ async function main() {
       const result = await reconcile([
         unit({
           bucket: "timeline_event",
-          subjectId: "damo_gate_arrival",
+          subjectId: "tobin_gate_arrival",
           sectionKey: "event",
-          title: "Damo Arrival",
-          text: "Damo arrived at the northern gate before dusk.",
+          title: "Tobin Arrival",
+          text: "Tobin arrived at the northern gate before dusk.",
           links: [{ target: sourceNote.id, relation: "extracted_from" }],
         }),
         unit({
           bucket: "world_fact",
           subjectId: "gate_witness",
           sectionKey: "facts",
-          text: "The northern gate was opened for Damo.",
-          links: [{ target: "timeline_damo_gate_arrival", relation: "evidenced_by" }],
+          text: "The northern gate was opened for Tobin.",
+          links: [{ target: "timeline_tobin_gate_arrival", relation: "evidenced_by" }],
         }),
       ]);
-      assert.equal(result.remaps.get("timeline_damo_gate_arrival"), "timeline_damo_arrival");
+      assert.equal(result.remaps.get("timeline_tobin_gate_arrival"), "timeline_tobin_arrival");
       const dependent = result.units.find((candidate) => candidate.subjectId === "gate_witness");
       assert.deepEqual(
         dependent!.links.map((link) => link.target),
-        ["timeline_damo_arrival"],
+        ["timeline_tobin_arrival"],
         "links to a remapped candidate must follow the resolved note id",
       );
     }
@@ -448,7 +468,7 @@ async function main() {
         [
           unit({
             bucket: "world_fact",
-            subjectId: "echo_chamber",
+            subjectId: "echo_chamber_study",
             sectionKey: "facts",
             title: "Echo Chamber",
             text: "The echo chamber is being studied again.",

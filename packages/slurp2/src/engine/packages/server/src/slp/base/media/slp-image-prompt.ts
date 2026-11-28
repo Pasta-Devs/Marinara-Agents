@@ -64,23 +64,29 @@ export function stripAppearanceLabel(value: string): string {
  * often as a second person in the costume. Clothing now comes from the post's own scene, so the
  * clothes are dropped here: only the clothing part of a sentence (V, user), so "Her curvy figure looks
  * great in tight clothing" keeps "Her curvy figure looks great" and "red hair, green eyes and a black
- * hoodie" keeps the hair and eyes. A Creator's own Stage appearance is trusted as written.
+ * hoodie" keeps the hair and eyes. A Creator's own Stage appearance gets the same filter: a Stage
+ * look drafted from a card kept its clothes, and nude pictures came out dressed.
  * A tag list (Danbooru card) is the exception: it goes over whole, outfit tags too (`slurpImageLook`).
  * ponytail: a keyword filter over sentences and clauses. If cards need finer handling, generate a look
  * once per Creator with a language model and store it as Stage appearance.
  */
 const CLOTHING_SENTENCE =
   /\b(?:wear|wears|wearing|worn|dress|dresses|dressed|outfits?|cloth(?:es|ing)|fashion|favou?rs|cosplay|costumes?|accessor(?:y|ies)|carries|carrying|shoes|boots|jewel(?:ry|lery)|hoodies?|shirts?|skirts?|jeans|jackets?|gowns?|couture|heels|lingerie|bikinis?|sweaters?|uniforms?)\b/iu;
-const MAX_LOOK_LENGTH = 600;
+// A long Stage look is written on purpose; 600 cut its last traits (scars, tattoos) off.
+const HAIR_WITH = /\s+with\s+(?:[\p{L}'-]+\s+){0,3}$/u;
+const MAX_LOOK_LENGTH = 2_000;
 /** Two or more commas and no sentence end: a tag list, not prose. */
 const TAG_LIST = /^[^.!?]*,[^.!?]*,[^.!?]*$/u;
 /** Where a sentence splits into clauses; the separator stays with the clause after it. */
 const CLAUSE_BREAK = /(,\s*|;\s*|\s+(?:and|but|while)\s+|\s+[—–]\s+)/u;
 /** What a kept clause of a clothing sentence must be about: the body, not a mood or a habit. */
 const BODY_TRAIT =
-  /\b(?:hair|eyes?|skin|face|figure|body|build|frame|legs?|arms?|hips?|waist|chest|breasts?|curves?|curvy|shoulders?|lips?|smile|teeth|nose|jaw|cheeks?|freckle[sd]?|scars?|tattoo(?:s|ed)?|piercings?|muscles?|muscular|abs|tall|short|petite|slim|slender|lean|thick|chubby|stocky|athletic|height|cm|feet|ft|ears?|tail|fur|horns?|wings?|scales?|complexion|tan(?:ned)?|pale)\b/iu;
+  /\b(?:hair|ponytails?|pigtails?|braids?|braided|plaits?|buns?|bangs|twintails|updo|eyes?|skin|face|figure|body|build|frame|legs?|arms?|hips?|waist|chest|breasts?|curves?|curvy|shoulders?|lips?|smile|teeth|nose|jaw|cheeks?|freckle[sd]?|scars?|tattoo(?:s|ed)?|piercings?|muscles?|muscular|abs|tall|short|petite|slim|slender|lean|thick|chubby|stocky|athletic|height|cm|feet|ft|ears?|tail|fur|horns?|wings?|scales?|complexion|tan(?:ned)?|pale)\b/iu;
 /** "… looks great in tight clothing": the clothes come in a phrase at the end. */
 const CLOTHES_PHRASE = /\s+(?:in|under|beneath)\s+(?:[\p{L}'-]+\s+){0,3}$/u;
+const HAIR = /\b(?:hair|ponytails?|pigtails?|braids?|braided|plaits?|buns?|bangs|twintails|updo)\b/iu;
+// In a hair clause a wear verb is the hair's own ("wears her hair", "hair worn long") unless a garment follows ("hair wearing a cap").
+const WEAR_VERB = /\b(?:wear|wears|wearing|worn)\b(?!\s+(?:a|an|some)\b)/giu;
 
 /** A sentence without its clothing clauses: only its body traits, or "" when it has none. */
 function withoutClothes(sentence: string): string {
@@ -90,11 +96,15 @@ function withoutClothes(sentence: string): string {
   let kept = "";
   for (let index = 0; index < parts.length; index += 2) {
     let clause = parts[index]!.trim();
-    const hit = CLOTHING_SENTENCE.exec(clause);
+    // "Hair worn in a ponytail" is a hairstyle, not clothing: blank the verb, keep the offsets.
+    const scan = HAIR.test(clause) ? clause.replace(WEAR_VERB, (verb) => " ".repeat(verb.length)) : clause;
+    const hit = CLOTHING_SENTENCE.exec(scan);
     if (hit) {
-      const phrase = CLOTHES_PHRASE.exec(clause.slice(0, hit.index));
+      const lead = clause.slice(0, hit.index);
+      // A hairstyle may also hang on "with a hoodie".
+      const phrase = CLOTHES_PHRASE.exec(lead) ?? (HAIR.test(clause) ? HAIR_WITH.exec(lead) : null);
       const before = phrase ? clause.slice(0, phrase.index).trim() : "";
-      clause = before.split(/\s+/u).length >= 2 && !CLOTHING_SENTENCE.test(before) ? before : "";
+      clause = before.split(/\s+/u).length >= 2 && !CLOTHING_SENTENCE.test(scan.slice(0, phrase.index)) ? before : "";
     }
     if (!BODY_TRAIT.test(clause)) clause = "";
     if (clause) kept += kept ? `${parts[index - 1] ?? " "}${clause}` : clause;

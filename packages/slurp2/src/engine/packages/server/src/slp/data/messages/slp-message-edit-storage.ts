@@ -9,7 +9,8 @@ import { slurpMessageClaims, slurpMessages, slurpReplyBubbles, slurpThreads } fr
 import { mapMessage } from "./slp-messages-storage-helpers.js";
 import type { SlurpMessage } from "./slp-messages-storage-types.js";
 
-const now = () => new Date().toISOString();
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+const now = () => slurpWorldNow().toISOString();
 
 /** Keep the inbox preview in step with the newest message that is left. */
 async function refreshPreview(tx: DB, threadId: string) {

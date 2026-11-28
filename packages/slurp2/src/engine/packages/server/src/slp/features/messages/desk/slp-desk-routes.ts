@@ -16,6 +16,7 @@ import { slpDeskAdjust } from "../../../../../../shared/src/slp/slp-support-desk
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../../shared/src/slp/slp-support.js";
 import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export const SLP_DESK_OFF = "The Support desk is switched off in Backstage.";
 
 const personaBody = z.object({ personaId: z.string().trim().min(1), creatorAccountId: z.string().trim().min(1) });
@@ -24,6 +25,8 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
   const { messages, ownsCreator, requireViewer, slurp } = messaging;
   // ponytail: one process; two tabs answering the same Offer at once get one run. A row claim if multi-process.
   const answering = new Set<string>();
+  // Same ceiling: a double click on "resolved" gets one line and one Creator reply.
+  const resolving = new Set<string>();
   const deskOff = async () => !slpExtensionOn(await slurp.getSettings(), "supportDesk");
 
   /** Every Creator the player can write to as Support, with their case file and Support thread. */
@@ -99,34 +102,41 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     if (await ownsCreator(viewer.id, parsed.data.creatorAccountId))
       return reply.code(403).send({ error: "Support writes to Creators you do not run." });
-    const current = await readSlurpSupportDesk(app.db, parsed.data.creatorAccountId);
-    if (!current.ticket || current.ticket.status === "resolved")
-      return reply.code(409).send({ error: "There is no open ticket." });
-    const at = new Date();
-    const settings = (await slurp.getSettings()).supportDesk;
-    await updateSlurpSupportDesk(app.db, parsed.data.creatorAccountId, (desk) =>
-      desk.ticket && desk.ticket.status !== "resolved"
-        ? slpDeskAdjust(
-            { ...desk, ticket: { ...desk.ticket, status: "resolved", resolvedAt: at.toISOString(), rating: null } },
-            { text: `Ticket resolved: ${desk.ticket.topic}` },
-            settings,
-            at,
-          )
-        : desk,
-    );
-    const line = await appendSlurpDeskLine(app.db, parsed.data.creatorAccountId, {
-      as: "support",
-      content: `Slurp Support marked your ticket "${current.ticket.topic}" as resolved. How did we do?`,
-      metadata: { deskTicketResolved: true },
-    });
-    if (!line) return reply.code(404).send({ error: "Creator not found" });
-    const outcome = await replyToSlurpMessage(app.db, { threadId: line.threadId, triggerMessageId: line.id }).catch(
-      (error: unknown) => {
-        logger.warn(error, "[slurp-desk] The Creator could not answer the resolved ticket");
-        return { status: "failed" as const };
-      },
-    );
-    return { message: line, replyStatus: outcome.status };
+    if (resolving.has(parsed.data.creatorAccountId))
+      return reply.code(409).send({ error: "This ticket is already being resolved." });
+    resolving.add(parsed.data.creatorAccountId);
+    try {
+      const current = await readSlurpSupportDesk(app.db, parsed.data.creatorAccountId);
+      if (!current.ticket || current.ticket.status === "resolved")
+        return reply.code(409).send({ error: "There is no open ticket." });
+      const at = slurpWorldNow();
+      const settings = (await slurp.getSettings()).supportDesk;
+      await updateSlurpSupportDesk(app.db, parsed.data.creatorAccountId, (desk) =>
+        desk.ticket && desk.ticket.status !== "resolved"
+          ? slpDeskAdjust(
+              { ...desk, ticket: { ...desk.ticket, status: "resolved", resolvedAt: at.toISOString(), rating: null } },
+              { text: `Ticket resolved: ${desk.ticket.topic}` },
+              settings,
+              at,
+            )
+          : desk,
+      );
+      const line = await appendSlurpDeskLine(app.db, parsed.data.creatorAccountId, {
+        as: "support",
+        content: `Slurp Support marked your ticket "${current.ticket.topic}" as resolved. How did we do?`,
+        metadata: { deskTicketResolved: true },
+      });
+      if (!line) return reply.code(404).send({ error: "Creator not found" });
+      const outcome = await replyToSlurpMessage(app.db, { threadId: line.threadId, triggerMessageId: line.id }).catch(
+        (error: unknown) => {
+          logger.warn(error, "[slurp-desk] The Creator could not answer the resolved ticket");
+          return { status: "failed" as const };
+        },
+      );
+      return { message: line, replyStatus: outcome.status };
+    } finally {
+      resolving.delete(parsed.data.creatorAccountId);
+    }
   });
 
   /** The player, as a Creator they run, answers an Offer AI Support sent them. */

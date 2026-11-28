@@ -9,13 +9,14 @@ import { logger } from "../../../lib/logger.js";
 import { newId } from "../../../utils/id-generator.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { randomUUID } from "node:crypto";
+import { slurpInEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { readSlurpSpice, resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import { readSlurpCreatorFitText } from "../../data/creators/slp-flavour-source.js";
 import { readSlurpCreatorSteering } from "../../data/creators/slp-steering-storage.js";
-import { slpStorylineGated } from "../../modules/world/events/slp-drama-cast.js";
+import { pairKey, slpStorylineGated } from "../../modules/world/events/slp-drama-cast.js";
 import { getSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { selectSlurpExplicitLevel } from "../../modules/feed/slp-post-guidance.js";
 import { SLP_EXPLICIT_LEVELS, slpClampExplicitLevel } from "../../../../../shared/src/slp/slp-spice.js";
@@ -51,12 +52,11 @@ import { mutateSlurpCreatorTies, readSlurpCreatorTiesDocument } from "../../data
 import { slurpApplyDramaTie } from "../../modules/projects/slp-drama-ties.js";
 import type { SlurpTieCreator } from "../../modules/projects/slp-creator-ties.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** The world is loaded at most this often; due beats go out on every tick. */
 const ADVANCE_EVERY_MS = 20 * 60_000;
 /** A comment goes on a post from the last few days, or waits for one. */
 const COMMENT_POST_DAYS = 3;
-
-const pairKey = (kind: string, a: string, b: string) => `${kind}:${[a, b].sort().join("|")}`;
 
 /** The runtime's view of the world: live Creators and the player's pages, their spice, and the ties. */
 export async function loadDramaWorld(
@@ -217,6 +217,9 @@ async function sendDramaJob(
       });
       return sent ? true : "drop";
     }
+    // "Pause Creator DMs": no unasked text, and no empty chat opened for one.
+    const paused = (await createSlurpStorage(db).getSettings()).messagesCreatorDmsPaused;
+    if (paused || slurpInEngineRoleplay(job.actorId)) return "drop";
     let thread = await messages.getThread(viewer, job.actorId);
     if (!thread) {
       const opened = await messages.openThread(viewer, job.actorId, "creator", "waive");
@@ -292,7 +295,7 @@ function hashOf(value: string): number {
  * One world tick: every 20 minutes the runtime moves (the switched-on entries, the level, the ties),
  * and on every tick what is due goes out. Nothing switched on and nothing running: nothing happens.
  */
-export async function advanceSlurpDrama(db: DB, at = new Date()): Promise<void> {
+export async function advanceSlurpDrama(db: DB, at = slurpWorldNow()): Promise<void> {
   const storage = createSlurpStorage(db);
   const settings = await storage.getSettings();
   // "Pause all": no drama moves while Slurp is paused. Storylines off holds it the same way.
@@ -453,7 +456,7 @@ export async function planSlurpDramaBeat(
 export async function answerSlurpDramaChoice(
   db: DB,
   input: { runId: string; option: number; stage?: string },
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<"answered" | "taken" | "late"> {
   const result = await mutateSlurpDramaState(db, (current) => {
     const next = slpAnswerDramaChoice(current.state, input.runId, input.option, at, input.stage);

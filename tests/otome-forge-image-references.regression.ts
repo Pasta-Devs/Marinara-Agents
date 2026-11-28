@@ -1,4 +1,5 @@
 // Inspect actual loopback requests: selected-card full_neutral, then its current avatar, then retained Otome art.
+// Scene art (0.36.5) sends each person's worn outfit instead, and their avatar only while it has no picture.
 // Metadata URLs and invalid sprite filenames never become fetch targets.
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -6,6 +7,7 @@ import {
   createImageClient,
   type ImageSubject,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
+import { paintCgNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
 import { paintPairNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
 import {
   itemId,
@@ -15,13 +17,20 @@ import {
   unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { takePhoto } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/photo-shoot.ts";
+import {
+  photoPromptFor,
+  takePhoto,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/photo-shoot.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { artWorld, PNG } from "./fixtures/otome-forge-art.ts";
+import type {
+  Player,
+  Unit,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import { artWorld, beat, KEY, PNG, saveBeat, seedChapter } from "./fixtures/otome-forge-art.ts";
 import { KAI } from "./fixtures/otome-forge-story.ts";
 
 const data = (value: string) => `data:image/png;base64,${Buffer.from(value).toString("base64")}`;
@@ -44,8 +53,16 @@ function engine({
 }: { sprites?: unknown; missing?: string[]; spriteMime?: string } = {}) {
   const reads: string[] = [];
   const generations: Array<{ referenceImages?: string[] }> = [];
+  /** What the client warned, formatted. */
+  const warnings: string[] = [];
+  const format = (message: string, ...args: unknown[]) =>
+    args.reduce<string>((text, arg) => text.replace("%s", String(arg)).replace("%d", String(arg)), message);
   const client = createImageClient({
     baseUrl: "http://127.0.0.1:9",
+    logger: {
+      debug: () => undefined,
+      warn: (message: string, ...args: unknown[]) => void warnings.push(format(message, ...args)),
+    },
     fetch: (async (url, init) => {
       const path = String(url).replace("http://127.0.0.1:9", "");
       reads.push(path);
@@ -71,7 +88,7 @@ function engine({
       assert.fail(`unexpected fetch ${path}`);
     }) as typeof globalThis.fetch,
   });
-  return { client, reads, generations };
+  return { client, reads, generations, warnings, missing };
 }
 
 test("a portrait sends the card's full body AND its avatar; a scene sends one per subject", async () => {
@@ -168,45 +185,83 @@ test("Otome's reference opt-in preserves persona identity, scene outfit ordering
   );
 });
 
+/**
+ * The free cleanup as the Engine runs it, reading the picture from `host`: a file that is gone is never cut (0.36.5).
+ * `cut` lists what it was asked to cut; `refuse` fails a cut whose file is there.
+ */
+function fileCutter(host: ReturnType<typeof engine>, { refuse = [] as string[] } = {}) {
+  const cut: string[] = [];
+  return {
+    cut,
+    client: {
+      cutOut: async (url: string) => {
+        cut.push(url);
+        if (host.missing.includes(url) || refuse.includes(url)) throw new Error("missing");
+        return { url: `${url}.cut.png`, id: `cut-${url}` };
+      },
+      deleteGalleryImage: async () => true,
+    },
+  };
+}
+
+const hisLook = "/api/global-gallery/file/his-pair-look.png";
+const herLook = "/api/global-gallery/file/her-pair-look.png";
+
+/** A run whose couple set (his look, her look) is owned and painted, painted through `host`'s real client. */
+async function pairWorld(runKey: string, host: ReturnType<typeof engine>, cardId?: string, cutter = fileCutter(host)) {
+  const t = await artWorld({ runKey });
+  t.deps.images = host.client;
+  t.deps.cutouts = cutter.client;
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    source: cardId ? "card" : "archetype",
+    cardId,
+  }));
+  const his = normalizeItem({
+    id: "his-wardrobe-0-f",
+    kind: "his-look5",
+    li: KAI,
+    banner: "his-wardrobe-0",
+    look: { name: "His pair look", outfitLine: "blue coat" },
+    art: { state: "ready", at: "now", url: hisLook },
+  });
+  const her = normalizeItem({
+    id: "my-wardrobe-0-f",
+    kind: "her-look5",
+    banner: "my-wardrobe-0",
+    coupleWith: his.id,
+    look: { name: "Her pair look", outfitLine: "amber dress" },
+    art: { state: "ready", at: "now", url: herLook },
+  });
+  for (const item of [his, her]) {
+    await t.store.mutateDoc(runDocTarget("item", itemId(t.runId, item.id)), normalizeItem, () => item);
+  }
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: { ...state.owned, items: [his.id, her.id] },
+  }));
+  return { ...t, paint: () => paintPairNow(t.deps, t.runId, her.id, { debugMode: false }) };
+}
+
 test("a real couple-portrait paint sends each of them once, as their pair look, in order (2026-11-03)", async () => {
   for (const [i, scenario] of ["neutral", "missing", "no-card"].entries()) {
-    const t = await artWorld({ runKey: `r-pairrefs${i}-aaaaaa` });
     const host = engine(scenario === "missing" ? { sprites: [] } : {});
-    t.deps.images = host.client;
-    await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
-      ...unit,
-      source: scenario === "no-card" ? "archetype" : "card",
-      cardId: scenario === "no-card" ? undefined : "card-dottore",
-    }));
-    const hisLook = "/api/global-gallery/file/his-pair-look.png";
-    const herLook = "/api/global-gallery/file/her-pair-look.png";
-    const his = normalizeItem({
-      id: "his-wardrobe-0-f",
-      kind: "his-look5",
-      li: KAI,
-      banner: "his-wardrobe-0",
-      look: { name: "His pair look", outfitLine: "blue coat" },
-      art: { state: "ready", at: "now", url: hisLook },
-    });
-    const her = normalizeItem({
-      id: "my-wardrobe-0-f",
-      kind: "her-look5",
-      banner: "my-wardrobe-0",
-      coupleWith: his.id,
-      look: { name: "Her pair look", outfitLine: "amber dress" },
-      art: { state: "ready", at: "now", url: herLook },
-    });
-    for (const item of [his, her]) {
-      await t.store.mutateDoc(runDocTarget("item", itemId(t.runId, item.id)), normalizeItem, () => item);
-    }
-    await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
-      ...state,
-      owned: { ...state.owned, items: [his.id, her.id] },
-    }));
-    assert.equal((await paintPairNow(t.deps, t.runId, her.id, { debugMode: false })).state, "ready");
+    const t = await pairWorld(`r-pairrefs${i}-aaaaaa`, host, scenario === "no-card" ? undefined : "card-dottore");
+    assert.equal((await t.paint()).state, "ready");
     assert.equal(host.generations.length, 1);
-    // His card's full body beside his look was two standing pictures of him: the model merged bodies.
-    assert.deepEqual(host.generations[0]!.referenceImages, [data(hisLook), data(herLook)], scenario);
+    // His card's full body beside his look was two standing pictures of him: the model merged bodies. Each look goes
+    // cut out of its backdrop (0.36.7).
+    assert.deepEqual(
+      host.generations[0]!.referenceImages,
+      [data(`${hisLook}.cut.png`), data(`${herLook}.cut.png`)],
+      scenario,
+    );
+    // Each picture is the pair look they wear, so it dresses them both (0.36.5).
+    assert.match(
+      (host.generations[0] as { promptOverrides: Array<{ prompt: string }> }).promptOverrides[0]!.prompt,
+      /Use them only for each person's face, hair, build and clothing, never/,
+      scenario,
+    );
     assert.ok(
       !host.reads.some((path) => path.startsWith("/api/characters/personas/")),
       "the persona keeps its painted pair-look reference",
@@ -215,13 +270,48 @@ test("a real couple-portrait paint sends each of them once, as their pair look, 
   }
 });
 
-test("a real Photo Shoot paint sends his look, her look and the place to the Engine as given (#2087)", async () => {
-  const t = await artWorld({ runKey: "r-photorefs-aaaaaa" });
-  const host = engine();
+test("a pair look that cannot be cut, or whose cut-out file is gone, is sent as painted (0.36.7)", async () => {
+  // Her look's cut fails; his cut-out was saved, but its file is gone since.
+  const host = engine({ missing: [`${hisLook}.cut.png`] });
+  const cutter = fileCutter(host, { refuse: [herLook] });
+  const t = await pairWorld("r-pairuncut-aaaaaa", host, "card-dottore", cutter);
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cutouts: { [hisLook]: { state: "ready", at: "2026-11-18T00:00:00.000Z", url: `${hisLook}.cut.png` } },
+  }));
+  assert.equal((await t.paint()).state, "ready", "neither stops the paint");
+  // The look is what the portrait shows, so it is sent as painted, never swapped for an avatar.
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(hisLook), data(herLook)]);
+  assert.deepEqual(cutter.cut, [herLook], "his saved cut-out is not cut again");
+});
+
+test("a pair look whose file is gone fails the pair portrait before anything is paid for (#2145)", async () => {
+  const host = engine({ missing: [hisLook] });
+  const t = await pairWorld("r-pairgone-aaaaaa", host, "card-dottore");
+  const art = await t.paint();
+  assert.equal(art.state, "failed");
+  assert.match(art.error ?? "", /No picture of Kai could be loaded/);
+  assert.equal(host.generations.length, 0, "nothing was painted or paid for");
+});
+
+const his = "/api/global-gallery/file/kai-everyday.png";
+const hers = "/api/global-gallery/file/ines-everyday.png";
+const place = "/api/global-gallery/file/lamp-room.png";
+const setup = {
+  id: "ph-mh1abc-abcdef",
+  li: KAI,
+  place: "the-lamp-room",
+  hisLook: "base",
+  herLook: "base",
+  his: { expression: "smile", pose: "hug" },
+  her: { expression: "smile", pose: "hug" },
+};
+
+/** A run with his and her everyday portraits and a painted Lamp Room, photographed through `host`'s real client. */
+async function photoWorld(runKey: string, host: ReturnType<typeof engine>, cutter = fileCutter(host)) {
+  const t = await artWorld({ runKey });
   t.deps.images = host.client;
-  const his = "/api/global-gallery/file/kai-everyday.png";
-  const hers = "/api/global-gallery/file/ines-everyday.png";
-  const place = "/api/global-gallery/file/lamp-room.png";
+  t.deps.cutouts = cutter.client;
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
     ...unit,
     cardId: "card-dottore",
@@ -237,24 +327,255 @@ test("a real Photo Shoot paint sends his look, her look and the place to the Eng
       "the-lamp-room": { name: "The Lamp Room", tags: "lighthouse", art: { state: "ready", at: "now", url: place } },
     },
   }));
-  const photo = await takePhoto(
-    t.deps,
-    t.runId,
-    {
-      id: "ph-mh1abc-abcdef",
-      li: KAI,
-      place: "the-lamp-room",
-      hisLook: "base",
-      herLook: "base",
-      his: { expression: "smile", pose: "hug" },
-      her: { expression: "smile", pose: "hug" },
-    },
-    { debugMode: true },
-  );
+  return t;
+}
+
+test("a real Photo Shoot paint sends his look, her look and the place to the Engine as given (#2087)", async () => {
+  const host = engine();
+  const t = await photoWorld("r-photorefs-aaaaaa", host);
+  const photo = await takePhoto(t.deps, t.runId, setup, { debugMode: true });
   assert.equal(photo.art.state, "ready");
   assert.equal(host.generations.length, 1);
-  // generateImage is not the kit's wrapped scene paint: no card sprite or avatar is put in front of the looks.
-  assert.deepEqual(host.generations[0]!.referenceImages, [data(his), data(hers), data(place)]);
+  // generateImage is not the kit's wrapped scene paint: no card sprite or avatar is put in front of the looks. Each look
+  // goes cut out of its backdrop (0.36.7); the place keeps its picture.
+  assert.deepEqual(host.generations[0]!.referenceImages, [
+    data(`${his}.cut.png`),
+    data(`${hers}.cut.png`),
+    data(place),
+  ]);
   assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "his card's sprites are not read");
   assert.equal(t.calls.length, 0);
+});
+
+test("a Photo Shoot look that cannot be cut is sent as painted, and the place is never cut (0.36.7)", async () => {
+  const host = engine();
+  const cutter = fileCutter(host, { refuse: [his] });
+  const t = await photoWorld("r-photouncut-aaaaaa", host, cutter);
+  const photo = await takePhoto(t.deps, t.runId, setup, { debugMode: true });
+  assert.equal(photo.art.state, "ready", "a failed cut never stops the photo");
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(his), data(`${hers}.cut.png`), data(place)]);
+  assert.deepEqual(cutter.cut.sort(), [hers, his].sort(), "only the looks are cut");
+});
+
+test("a Photo Shoot whose picture of him is gone fails before paying; its prompt can still be reviewed (#2145)", async () => {
+  const host = engine({ missing: [his] });
+  const t = await photoWorld("r-photogone-aaaaaa", host);
+  assert.match((await photoPromptFor(t.deps, t.runId, setup)).prompt, /Kai/);
+  const photo = await takePhoto(t.deps, t.runId, setup, { debugMode: true });
+  assert.equal(photo.art.state, "failed");
+  assert.match(photo.art.error ?? "", /No picture of Kai could be loaded/);
+  assert.equal(host.generations.length, 0, "nothing was painted or paid for");
+});
+
+const gown = "/api/global-gallery/file/gown.png";
+const look = (id: string, url: string) => ({ id, name: id, outfitLine: `${id} outfit`, url, at: "now" });
+
+/** A run whose key image (beat 1) shows `cast`, painted through `host`'s real client; Kai and Ines changed first. */
+async function keyImage(
+  runKey: string,
+  host: ReturnType<typeof engine>,
+  cast: string[],
+  kai: Partial<Unit> = {},
+  her: Partial<Player> = {},
+) {
+  const t = await artWorld({ runKey });
+  t.deps.images = host.client;
+  // The free cleanup reads the look as the Engine serves it: a file that is gone is never cut (0.36.5).
+  t.deps.cutouts = fileCutter(host).client;
+  await seedChapter(t.store, t.runId);
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({ ...unit, ...kai }));
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    ...her,
+  }));
+  await saveBeat(t.store, t.runId, beat(1, { cg: { at: 0, brief: "At the lamp.", cast }, places: [] }));
+  return { ...t, paint: () => paintCgNow(t.deps, t.runId, KEY, 1, { debugMode: false }) };
+}
+
+test("a group key image sends each person's worn outfit, and their avatar only while the outfit has no picture (0.36.5)", async () => {
+  const wearing = {
+    kai: { cardId: "card-dottore", outfits: [look("winter", outfit)], wornOutfit: "winter" },
+    her: { outfits: [look("gown", gown)], wornOutfit: "gown" },
+  };
+  // The maintainer's call: each person is the outfit they wear, one picture each; no card sprite or avatar is read.
+  {
+    const host = engine();
+    const t = await keyImage("r-groupref0-aaaaaa", host, ["Kai", "Ines"], wearing.kai, wearing.her);
+    assert.equal((await t.paint())?.state, "ready");
+    assert.equal(host.generations.length, 1);
+    const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
+    // Each look cut out of its backdrop before it is sent.
+    assert.deepEqual(body.referenceImages, [data(`${outfit}.cut.png`), data(`${gown}.cut.png`)]);
+    assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "no card sprite is read");
+    assert.match(
+      body.promptOverrides[0]!.prompt,
+      /Reference images, in order: Kai; Ines\. Use them only for each person's face, hair, build and clothing,/,
+    );
+    assert.match(body.promptOverrides[0]!.prompt, /Kai: [^.]*winter outfit\./, "the outfit line names it too");
+  }
+  // His base look an Engine sprite and her portrait her persona's avatar: no outfit has a picture, so each sends their
+  // avatar (his card's, never its full-body sprite) and the outfit lines dress them.
+  {
+    const host = engine();
+    const t = await keyImage(
+      "r-groupref1-aaaaaa",
+      host,
+      ["Kai", "Ines"],
+      {
+        cardId: "card-dottore",
+        portrait: "/api/sprites/card-dottore/file/full_neutral.png",
+      },
+      { portrait: "/api/avatars/file/persona.png" },
+    );
+    assert.equal((await t.paint())?.state, "ready");
+    const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
+    assert.deepEqual(body.referenceImages, [data("/api/avatars/file/card.png"), data("/api/avatars/file/persona.png")]);
+    assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "the sprite is never read");
+    assert.match(
+      body.promptOverrides[0]!.prompt,
+      /Reference images, in order: Kai; Ines\. Use them only for each person's face, hair and build,/,
+    );
+  }
+});
+
+test("beside others, someone whose only picture is the look they wear sends that look once, as them (#2145)", async () => {
+  const host = engine();
+  const t = await keyImage("r-grouplook-aaaaaa", host, ["Kai", "Ines"], {
+    outfits: [look("winter", outfit)],
+    wornOutfit: "winter",
+  });
+  assert.equal((await t.paint())?.state, "ready");
+  const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
+  assert.deepEqual(body.referenceImages, [data(`${outfit}.cut.png`), data("/api/avatars/file/persona.png")]);
+  assert.ok(!host.reads.includes(outfit), "the uncut look is never sent");
+  assert.match(body.promptOverrides[0]!.prompt, /Reference images, in order: Kai; Ines\./);
+});
+
+test("a cut-out saved as ready whose file is gone sends the avatar, and the outfit line dresses them (0.36.5)", async () => {
+  const cutout = `${outfit}.cut.png`;
+  const host = engine({ missing: [cutout] });
+  const t = await keyImage(
+    "r-cutgone0-aaaaaa",
+    host,
+    ["Kai", "Ines"],
+    {
+      cardId: "card-dottore",
+      outfits: [look("winter", outfit)],
+      wornOutfit: "winter",
+      cutouts: { [outfit]: { state: "ready", at: "2026-11-18T00:00:00.000Z", url: cutout } },
+    },
+    { outfits: [look("gown", gown)], wornOutfit: "gown" },
+  );
+  assert.equal((await t.paint())?.state, "ready", "a missing cut-out never stops the paint");
+  const body = host.generations[0] as { referenceImages?: string[]; promptOverrides: Array<{ prompt: string }> };
+  assert.deepEqual(body.referenceImages, [data("/api/avatars/file/card.png"), data(`${gown}.cut.png`)]);
+  assert.ok(!host.reads.includes(outfit), "the uncut look is never sent");
+  assert.match(
+    body.promptOverrides[0]!.prompt,
+    /Use them only for each person's face, hair and build, and for the clothing of Ines, never/,
+  );
+  assert.match(body.promptOverrides[0]!.prompt, /Kai: [^.]*winter outfit\./, "his outfit line dresses him");
+});
+
+test("a key image cuts out only the outfits of the people it draws (0.36.5)", async () => {
+  const cut: string[] = [];
+  const host = engine();
+  const t = await keyImage(
+    "r-cutonly0-aaaaaa",
+    host,
+    ["Kai"],
+    { outfits: [look("winter", outfit)], wornOutfit: "winter" },
+    {
+      outfits: [look("gown", gown)],
+      wornOutfit: "gown",
+    },
+  );
+  const cutter = t.deps.cutouts!;
+  t.deps.cutouts = { ...cutter, cutOut: (url) => (cut.push(url), cutter.cutOut(url)) };
+  assert.equal((await t.paint())?.state, "ready");
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(`${outfit}.cut.png`)]);
+  assert.deepEqual(cut, [outfit], "her gown, not in the picture, is not cut");
+  const her = await t.store.readDoc(playerId(t.runId), normalizePlayer);
+  assert.equal(her?.cutouts?.[gown], undefined, "nor queued for later");
+});
+
+test("a group key image fails before paying when one person's only picture is gone (#2145)", async () => {
+  const gone = "/api/global-gallery/file/kai-gone.png";
+  for (const [i, kai] of [
+    { portrait: gone },
+    { portrait: gone, outfits: [look("winter", outfit)], wornOutfit: "winter" },
+  ].entries()) {
+    const host = engine({ missing: [gone, outfit] });
+    const t = await keyImage(`r-groupgone${i}-aaaaaa`, host, ["Kai", "Ines"], kai);
+    const failed = await t.paint();
+    assert.equal(failed?.state, "failed");
+    assert.match(failed?.error ?? "", /No picture of Kai could be loaded/);
+    assert.equal(host.generations.length, 0, "nothing was painted or paid for");
+  }
+});
+
+test("names the story writes another way still send that person: a surname, a title, you, the protagonist (#2145)", async () => {
+  for (const [i, cast] of [
+    ["Ren", "You"],
+    ["Lord Kai", "the protagonist"],
+  ].entries()) {
+    const host = engine();
+    const t = await keyImage(`r-castnames${i}-aaaaaa`, host, cast, {
+      name: "Kai Ren",
+      portrait: "/api/global-gallery/file/kai.png",
+    });
+    assert.equal((await t.paint())?.state, "ready");
+    assert.deepEqual(
+      host.generations[0]!.referenceImages,
+      [data("/api/global-gallery/file/kai.png.cut.png"), data("/api/avatars/file/persona.png")],
+      cast.join(", "),
+    );
+  }
+});
+
+test("a likeness whose file is gone fails the key image before paying, and Retry paints it once it is back (#2145)", async () => {
+  const gone = "/api/global-gallery/file/kai-gone.png";
+  const missing = [gone];
+  const host = engine({ missing });
+  const t = await keyImage("r-cggone-aaaaaa", host, ["Kai"], { portrait: gone });
+  const failed = await t.paint();
+  assert.equal(failed?.state, "failed");
+  assert.match(failed?.error ?? "", /No picture of Kai could be loaded to send as a reference/);
+  assert.equal(host.generations.length, 0, "nothing was painted or paid for");
+  missing.length = 0;
+  assert.equal((await t.paint())?.state, "ready", "Retry");
+  assert.equal(host.generations.length, 1);
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(gone)]);
+});
+
+test("someone with no picture at all is painted from the description, as before (#2145)", async () => {
+  const host = engine();
+  // An archetype's new look before he has any portrait: nothing to send, and nothing that failed to load.
+  await host.client.generateOutfit({ ...request, unit: { kind: "character", outfits: [], who: "Kai" } });
+  assert.equal(host.generations.length, 1);
+  assert.equal(host.generations[0]!.referenceImages, undefined);
+  assert.ok(
+    host.warnings.includes("[otome-forge] generateOutfit: Kai has no picture to send; painted from the description"),
+    "the paint says so",
+  );
+});
+
+test("an adopted Engine sprite portrait, which the kit never reads, stops no key image while his card has an avatar (#2147)", async () => {
+  const kai = { cardId: "card-dottore", portrait: "/api/sprites/card-dottore/file/full_neutral.png" };
+  // 0.36.5: an Engine base look is no outfit picture, so he sends his card's avatar, never its full-body sprite.
+  for (const [i, options] of [
+    [0, {}],
+    [1, { missing: ["/api/sprites/card-dottore"] }],
+  ] as const) {
+    const host = engine({ missing: [...(options.missing ?? [])] });
+    const t = await keyImage(`r-engineref${i}-aaaaaa`, host, ["Kai", "Ines"], kai, {
+      portrait: "/api/avatars/file/persona.png",
+    });
+    assert.equal((await t.paint())?.state, "ready");
+    assert.equal(host.generations.length, 1);
+    assert.deepEqual(host.generations[0]!.referenceImages, [
+      data("/api/avatars/file/card.png"),
+      data("/api/avatars/file/persona.png"),
+    ]);
+  }
 });

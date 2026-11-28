@@ -465,6 +465,12 @@ test.describe("package-owned Noodle interface", () => {
       },
     });
     expect(savedDefaults.ok()).toBe(true);
+    const publicDefaults = await page.request.get("/api/app-settings/translator-defaults");
+    expect(publicDefaults.ok()).toBe(true);
+    const savedTranslator = JSON.parse((await publicDefaults.json()).value) as { translationDeeplApiKey: string };
+    expect(savedTranslator.translationDeeplApiKey).toBe("••••••••");
+    // Engine resolves this placeholder from its encrypted defaults. Its stored-secrets regression checks
+    // the real /translate route's outbound Authorization; a browser never receives the saved key.
     await page.request.get("/api/noodle");
     const postResponse = await page.request.post("/api/noodle/posts", {
       data: {
@@ -502,7 +508,12 @@ test.describe("package-owned Noodle interface", () => {
       // The original stays above its translation.
       await expect(article.getByText(post.content, { exact: true })).toBeVisible();
       expect(translateBodies).toEqual([
-        { text: post.content, provider: "deepl", targetLanguage: "PL", deeplApiKey: "test-key" },
+        {
+          text: post.content,
+          provider: "deepl",
+          targetLanguage: "PL",
+          deeplApiKey: savedTranslator.translationDeeplApiKey,
+        },
       ]);
       await article.getByRole("button", { name: "Post actions", exact: true }).click();
       await article.getByRole("button", { name: "Hide translation", exact: true }).click();
@@ -2339,14 +2350,15 @@ test.describe("package-owned Noodle interface", () => {
     await expect(desktopAccountSwitcher).toBeVisible();
     await expect(mobileBottomNav).toBeHidden();
 
-    await page.locator('[data-tour="sidebar-toggle"]').click();
+    // The Chats list and the panels share one sidebar, so an open panel takes one sidebar width.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(desktopAccountSwitcher).toBeVisible();
     await page.locator('[data-tour="panel-settings"]').click();
     await expect.poll(() => center.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1024);
     await expect(mobileBottomNav).toBeVisible();
     await expect(desktopAccountSwitcher).toBeHidden();
 
     await page.locator('[data-tour="panel-settings"]').click();
-    await page.locator('[data-tour="sidebar-toggle"]').click();
     await expect(desktopAccountSwitcher).toBeVisible();
     await expect(mobileBottomNav).toBeHidden();
 

@@ -157,7 +157,7 @@ export async function serveCareNote(
   { careLine, allowed }: { careLine?: string; allowed: () => boolean },
 ): Promise<CareNoteResult> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const unit = run.units.find((entry) => entry.id === li);
   if (!unit || !run.state.lis[li]) throw liNotFound();
   if (careLine !== undefined && !allowedCareLines(run.player).has(careLine)) {

@@ -12,9 +12,11 @@ export type ScreenId =
   | "dates"
   | "read-him"
   | "read-me"
+  | "tarot"
   | "date-night"
   | "photo-shoot"
   | "claw"
+  | "kitty"
   | "wish"
   | "wardrobe"
   | "album"
@@ -33,9 +35,11 @@ export const RUN_SCREENS: ReadonlySet<ScreenId> = new Set([
   "dates",
   "read-him",
   "read-me",
+  "tarot",
   "date-night",
   "photo-shoot",
   "claw",
+  "kitty",
   "wish",
   "wardrobe",
   "album",
@@ -61,12 +65,15 @@ export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   home: "ui.otomeForge.common.screenHome",
   story: "ui.otomeForge.common.screenStory",
   reader: "ui.otomeForge.common.screenReader",
+  // #2429: shown as "Games"; "Dates" now names only the dates won in Wish. The id and key stay "dates".
   dates: "ui.otomeForge.common.screenDates",
   "read-him": "ui.otomeForge.common.screenReadHim",
   "read-me": "ui.otomeForge.common.screenReadMe",
+  tarot: "ui.otomeForge.common.screenTarot",
   "date-night": "ui.otomeForge.common.screenDateNight",
   "photo-shoot": "ui.otomeForge.common.screenPhotoShoot",
   claw: "ui.otomeForge.common.screenClaw",
+  kitty: "ui.otomeForge.kitty.title",
   wish: "ui.otomeForge.common.screenWish",
   wardrobe: "ui.otomeForge.common.screenWardrobe",
   album: "ui.otomeForge.common.screenAlbum",

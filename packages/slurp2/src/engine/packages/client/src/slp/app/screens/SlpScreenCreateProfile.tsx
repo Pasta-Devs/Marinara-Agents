@@ -1,9 +1,10 @@
-import { Check, ChevronRight, Loader2, Search } from "lucide-react";
+import { Check, ChevronRight, Search } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { disclosureOptions, WizardFooter } from "../../features/creators/SlpStageProfileForm";
 import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { fieldClass, SourceAccountAvatar } from "./SlpHomeHelpers";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export function StageProfileSourcePicker({
   accounts,
@@ -71,8 +72,7 @@ export function StageProfileSourcePicker({
         )}
         {isLoading ? (
           <div className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-[var(--noodle-divider)] py-12 text-sm text-[var(--muted-foreground)]">
-            <Loader2 size={18} className="animate-spin" />{" "}
-            {localizeUi("ui.noodle.stageprofilesourcepicker.loadingSources")}
+            <Spinner size="md" /> {localizeUi("ui.noodle.stageprofilesourcepicker.loadingSources")}
           </div>
         ) : isError ? (
           <div className="mt-4 rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/5 p-6 text-center">
@@ -153,7 +153,7 @@ export function StageProfileSourcePicker({
             disabled={isLoadingMore}
             className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--noodle-divider)] text-sm font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
           >
-            {isLoadingMore && <Loader2 size={15} className="animate-spin" />}
+            {isLoadingMore && <Spinner size="md" />}
             {isLoadingMore
               ? localizeUi("ui.noodle.stageprofilesourcepicker.loadingMore")
               : localizeUi("ui.noodle.stageprofilesourcepicker.loadMoreCharacters")}

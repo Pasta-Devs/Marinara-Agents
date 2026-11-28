@@ -52,11 +52,25 @@ const divergedChatB = { ...divergedChatA, id: "chat-diverged-b", name: "Draft B"
 async function main() {
   const [
     { configurePackageRuntime },
-    { previewPackageInterop, sourcePackageDetails, importPackageInterop, transcriptPieces },
+    {
+      previewPackageInterop,
+      sourcePackageDetails,
+      importPackageInterop,
+      transcriptPieces,
+      loadChatStoryTimeSources,
+      stampPieceStoryTime,
+    },
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
     { LongTermMemoryStorage },
     { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig },
-    { armLtmAutoImport, isLtmAutoImportArmed, LTM_AUTO_IMPORT_QUIET_MS },
+    {
+      armLtmAutoImport,
+      isFinishedSummary,
+      isLtmAutoImportArmed,
+      retryLtmAutoImport,
+      LTM_AUTO_IMPORT_QUIET_MS,
+      LTM_AUTO_IMPORT_RETRY_MS,
+    },
     { readLtmDebugLog },
     { LongTermMemoryDraftStore },
   ] = await Promise.all([
@@ -207,11 +221,26 @@ async function main() {
       };
     },
   };
+  // World State snapshots per chat, in message order, on swipe 0 unless set. An Engine without listGameStates offers
+  // only the newest.
+  const gameStates = new Map<
+    string,
+    Array<{ messageId: string; swipeIndex?: number; date: string | null; time: string | null }>
+  >();
+  const onSwipe = (chatId: string) => (gameStates.get(chatId) ?? []).map((row) => ({ swipeIndex: 0, ...row }));
+  let hostListsGameStates = true;
+  let gameStatesFail = false;
+  // A chat whose messages cannot be read.
+  let messagesFailFor: string | undefined;
+  // Runs while an import reads World State, after it listed the vault's notes and before it writes them.
+  let duringImport: (() => Promise<void>) | undefined;
   let releaseRuntime: (() => void) | undefined;
   let messageReads = 0;
   // Each extraction prompt, and the units the fixture model answers it with.
   const prompts: any[] = [];
   let respond: (prompt: any) => unknown[] = () => [];
+  // "length" answers as a model that hit its output limit.
+  let finishReason = "stop";
   await runWithSafeCleanup(
     "Long-Term Memory chat transcript import",
     async () => {
@@ -238,7 +267,7 @@ async function main() {
               async chatComplete(promptMessages: Array<{ content: string }>) {
                 const prompt = JSON.parse(promptMessages.at(-1)!.content);
                 prompts.push(prompt);
-                return { content: JSON.stringify({ summary: "", units: respond(prompt) }), finishReason: "stop" };
+                return { content: JSON.stringify({ summary: "", units: respond(prompt) }), finishReason };
               },
             };
           },
@@ -251,8 +280,23 @@ async function main() {
             return chats;
           },
           async listMessages(chatId: string) {
+            if (chatId === messagesFailFor) throw new Error("Message table is locked");
             messageReads += 1;
             return messages.get(chatId) ?? [];
+          },
+          async getGameState(chatId: string) {
+            if (gameStatesFail) throw new Error("World State table is locked");
+            await duringImport?.();
+            return onSwipe(chatId).at(-1) ?? null;
+          },
+          get listGameStates() {
+            return hostListsGameStates
+              ? async (chatId: string) => {
+                  if (gameStatesFail) throw new Error("World State table is locked");
+                  await duringImport?.();
+                  return onSwipe(chatId);
+                }
+              : undefined;
           },
           ...advancedMemoryHost,
         },
@@ -449,9 +493,9 @@ async function main() {
         deleted.samples.map(({ sourceId, status, freshness }) => ({ sourceId, status, freshness })),
         [
           { sourceId: "chat-roleplay:messages:r1", status: "imported", freshness: "source_updated" },
-          { sourceId: "chat-roleplay:messages:r5", status: "imported", freshness: "source_updated" },
+          { sourceId: "chat-roleplay:messages:r5", status: "imported", freshness: "current" },
         ],
-        "deleting an earlier message keeps a later imported piece's cut, renumbered, instead of pulling it into the earlier one",
+        "deleting an earlier message keeps a later imported piece's cut, renumbered, instead of pulling it into the earlier one; its text did not change, so it is not read again",
       );
       roleplayMessages[3] = message(roleplayChat.id, "r5", "user", "z".repeat(23_900), { hiddenFromAI: true });
       const hidden = await previewPackageInterop({ source: "messages", chatId: roleplayChat.id, limit: 100 }, root);
@@ -584,8 +628,7 @@ async function main() {
         "a cause listed from the previous piece is linked and committed",
       );
 
-      // Each of these runs on its own chat: a dropped candidate keeps a piece out of auto-apply, so the rejection
-      // cannot share a chat with the committed link.
+      // Each of these runs on its own chat, so one scenario's committed memories cannot change another's prompt.
       const importPieces = (
         chatId: string,
         first: string,
@@ -637,6 +680,277 @@ async function main() {
         [["update_section", listedThread]],
         "reusing the listed subjectId updates that thread instead of adding another",
       );
+
+      // World and tone memories: a later piece lists the chat's existing ones, and reusing a listed subjectId grows
+      // that note instead of saving the same rule again. A different subjectId still creates a note.
+      let worldMode: "reuse" | "new" = "reuse";
+      respond = (prompt) => {
+        const from = { target: prompt.sourceNote.id, relation: "extracted_from" };
+        if (prompt.sourceText.includes("The seal cracks")) {
+          return [
+            unit({
+              bucket: "world_fact",
+              subjectId: "front_rule",
+              sectionKey: "facts",
+              title: "Rule of the Front",
+              text: "Nobody crosses the Front after dark.",
+              links: [from],
+            }),
+            unit({
+              bucket: "tone",
+              subjectId: "dread",
+              sectionKey: "observations",
+              title: "Creeping Dread",
+              text: "The story keeps a creeping dread.",
+              links: [from],
+            }),
+          ];
+        }
+        const listed = prompt.existingWorld?.[0];
+        return [
+          unit({
+            bucket: "world_fact",
+            subjectId: worldMode === "reuse" ? listed.subjectId : "salt_roads",
+            sectionKey: "facts",
+            title: worldMode === "reuse" ? "Rule of the Front" : "The Salt Roads",
+            text: worldMode === "reuse" ? "Patrols enforce the Front's curfew." : "The salt roads belong to the guild.",
+            links: [from],
+          }),
+          unit({
+            bucket: "tone",
+            subjectId: prompt.existingTone[0].subjectId,
+            sectionKey: "observations",
+            title: "Creeping Dread",
+            text: "The dread deepens near the Front.",
+            links: [from],
+          }),
+        ];
+      };
+      for (const mode of ["reuse", "new"] as const) {
+        worldMode = mode;
+        const chatId = `chat-world-${mode}`;
+        prompts.length = 0;
+        // Its own store, so no other scenario's world or tone memories sit in the scope.
+        const worldRoot = join(dataDir, `world-${mode}`, "long-term-memory");
+        await importPieces(chatId, `${mode}-1`, `${mode}-2`, true, worldRoot);
+        assert.equal("existingWorld" in prompts[0], false, "a scope with no world memories omits the list");
+        assert.equal("existingTone" in prompts[0], false, "a scope with no tone memories omits the list");
+        assert.deepEqual(
+          prompts[1].existingWorld.map((item: { title: string }) => item.title),
+          ["Rule of the Front"],
+          "the second piece lists the world memory the first saved",
+        );
+        assert.deepEqual(
+          prompts[1].existingTone.map((item: { title: string }) => item.title),
+          ["Creeping Dread"],
+          "the second piece lists the tone memory the first saved",
+        );
+        const added = await new LongTermMemoryStorage(worldRoot).listNotes();
+        const worlds = added.filter((note) => note.type === "world");
+        const tones = added.filter((note) => note.type === "tone");
+        assert.equal(tones.length, 1, "the tone memory is updated, not repeated");
+        assert.equal(
+          worlds.length,
+          mode === "reuse" ? 1 : 2,
+          mode === "reuse"
+            ? "reusing the listed world subjectId adds no world note"
+            : "a different rule still creates one",
+        );
+        if (mode === "reuse") {
+          assert.ok(
+            JSON.stringify(worlds[0]!.sections).includes("curfew"),
+            "the reused world note carries the second piece's claim",
+          );
+        }
+      }
+
+      // A model with nothing to add must not leave a placeholder memory. Each answer runs on its own store, and a
+      // real sentence that merely contains "ignore" is kept.
+      const respondBeforePlaceholders = respond;
+      for (const [index, placeholder] of ["- ignore", "None."].entries()) {
+        respond = (prompt) => {
+          const from = { target: prompt.sourceNote.id, relation: "extracted_from" };
+          if (prompt.sourceText.includes("The seal cracks")) return [];
+          return [
+            unit({
+              bucket: "timeline_event",
+              subjectId: "seal_nothing",
+              sectionKey: "event",
+              title: "Nothing new",
+              text: placeholder,
+              claimKind: "change",
+              links: [from],
+            }),
+            unit({
+              bucket: "timeline_event",
+              subjectId: "guards_ignore",
+              sectionKey: "event",
+              title: "The guards ignore the warning",
+              text: "The guards ignore the warning at the gate.",
+              claimKind: "change",
+              links: [from],
+            }),
+          ];
+        };
+        const placeholderRoot = join(dataDir, `placeholder-${index}`, "long-term-memory");
+        const placeholderRun = await importPieces(
+          `chat-placeholder-${index}`,
+          `p${index}a`,
+          `p${index}b`,
+          true,
+          placeholderRoot,
+        );
+        const placeholderPiece = placeholderRun.imported[1];
+        assert.equal(placeholderPiece.extractionStatus, "succeeded", "a placeholder unit does not fail its piece");
+        assert.ok(
+          placeholderPiece.diagnostics.some(
+            (item: { code: string }) => item.code === "candidate_dropped_placeholder_output",
+          ),
+          `"${placeholder}" is reported as dropped placeholder output`,
+        );
+        assert.equal(
+          JSON.stringify(placeholderPiece.outcome.droppedCandidates).includes("placeholder_output"),
+          true,
+          "the unit is dropped as placeholder output",
+        );
+        const derived = JSON.stringify(
+          (await new LongTermMemoryStorage(placeholderRoot).listNotes()).filter((note) => note.type !== "source"),
+        );
+        assert.equal(derived.includes(placeholder), false, `"${placeholder}" is saved in no memory`);
+        assert.equal(derived.includes("The guards ignore the warning at the gate."), true, "a real sentence is kept");
+      }
+
+      // A model that answers with nothing but a placeholder says the same as an empty list: the source is read.
+      respond = () => [
+        unit({
+          bucket: "timeline_event",
+          subjectId: "nothing_new",
+          sectionKey: "event",
+          title: "Nothing new",
+          text: "- ignore",
+          claimKind: "change",
+          links: [{ target: "unused", relation: "extracted_from" }],
+        }),
+      ];
+      const onlyPlaceholderRun = await importPieces(
+        "chat-only-placeholder",
+        "o1",
+        "o2",
+        true,
+        join(dataDir, "only-placeholder", "long-term-memory"),
+      );
+      assert.deepEqual(
+        onlyPlaceholderRun.imported.map((item: any) => [item.extractionStatus, item.markedCurrent]),
+        [
+          ["succeeded", true],
+          ["succeeded", true],
+        ],
+        "an answer of only placeholders marks the source read instead of failing it every pass",
+      );
+
+      // An empty units list is a valid answer: the piece succeeds and its source is marked read with the new
+      // fingerprint, which now carries a text-only hash.
+      respond = () => [];
+      const emptyRoot = join(dataDir, "empty-units", "long-term-memory");
+      const emptyRun = await importPieces("chat-empty", "e1", "e2", true, emptyRoot);
+      assert.deepEqual(
+        emptyRun.imported.map((item: any) => [item.extractionStatus, item.markedCurrent, item.outcome.state]),
+        [
+          ["succeeded", true, "no_suggestions_created"],
+          ["succeeded", true, "no_suggestions_created"],
+        ],
+        "an empty answer is a successful reading",
+      );
+      const emptyStorage = new LongTermMemoryStorage(emptyRoot);
+      const savedFingerprint = async () =>
+        (await emptyStorage.listNotes()).find((note) => note.id === emptyRun.imported[0].note.id)!
+          .extractionFingerprint!;
+      assert.match(
+        (await savedFingerprint()).textHash ?? "",
+        /^[a-f0-9]{64}$/,
+        "the saved fingerprint keeps a text hash",
+      );
+
+      // A source cut again with the same text but another title or message range is not read again, and its
+      // fingerprint is refreshed. Changed text is, and so is a fingerprint saved before the text hash existed.
+      const { extractionFingerprintForLtmSourceNote } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
+      const staleFingerprint = async (options: { text?: string; keepTextHash?: boolean }) => {
+        const note = (await emptyStorage.listNotes()).find((item) => item.id === emptyRun.imported[0].note.id)!;
+        const source = note.sections.source!;
+        const read = {
+          ...note,
+          title: "An older cut",
+          sections: {
+            ...note.sections,
+            source: {
+              ...source,
+              text: options.text ?? source.text,
+              evidence: [...(source.evidence ?? []), "message_range:99-100"],
+            },
+          },
+        };
+        const { textHash, ...withoutTextHash } = extractionFingerprintForLtmSourceNote(read, {
+          extractionMode: note.extractionFingerprint!.extractionMode,
+        });
+        await emptyStorage.updateNote(note.id, {
+          extractionFingerprint: options.keepTextHash === false ? withoutTextHash : { ...withoutTextHash, textHash },
+        });
+      };
+      const freshnessOfFirst = async () =>
+        (await previewPackageInterop({ source: "messages", chatId: "chat-empty", limit: 100 }, emptyRoot)).samples.find(
+          (sample: any) => sample.sourceId === "chat-empty:messages:e1",
+        )!.freshness;
+      const readFirstPiece = (options: { keepPendingDrafts?: boolean } = { keepPendingDrafts: true }) => {
+        prompts.length = 0;
+        return importPackageInterop(
+          {
+            source: "messages",
+            chatId: "chat-empty",
+            sourceIds: ["chat-empty:messages:e1"],
+            destinationScope: { characterIds: ["character-kirei"] },
+            extract: true,
+            applyLowRisk: true,
+            limit: 100,
+          },
+          emptyRoot,
+          new AbortController().signal,
+          options,
+        );
+      };
+      await staleFingerprint({});
+      assert.equal(await freshnessOfFirst(), "current", "a re-cut piece with the same text is not listed as updated");
+      const recut = await readFirstPiece();
+      assert.equal(prompts.length, 0, "a re-cut piece with the same text makes no model call");
+      assert.equal(recut.imported[0].extractionStatus, "not_started");
+      assert.equal(recut.batchStatus, "success");
+      const refreshed = await savedFingerprint();
+      assert.equal(
+        refreshed.sourceHash,
+        extractionFingerprintForLtmSourceNote(
+          (await emptyStorage.listNotes()).find((note) => note.id === emptyRun.imported[0].note.id)!,
+          { extractionMode: refreshed.extractionMode },
+        ).sourceHash,
+        "the fingerprint is refreshed to the piece's current labels",
+      );
+      // A manual import is an explicit read: it extracts even when only the labels moved.
+      await staleFingerprint({});
+      const manualRecut = await readFirstPiece({});
+      assert.equal(prompts.length, 1, "a manual import reads a re-cut piece");
+      assert.equal(manualRecut.imported[0].extractionStatus, "succeeded");
+      await staleFingerprint({});
+      await staleFingerprint({ text: "The seal held, an older telling." });
+      assert.equal(await freshnessOfFirst(), "source_updated", "changed text is still listed as updated");
+      await readFirstPiece();
+      assert.equal(prompts.length, 1, "changed text is read again");
+      await staleFingerprint({ keepTextHash: false });
+      assert.equal(await freshnessOfFirst(), "source_updated", "a fingerprint without a text hash behaves as before");
+      await readFirstPiece();
+      assert.equal(prompts.length, 1, "a fingerprint without a text hash is read again");
+      const { textHash: _unused, ...legacyFingerprint } = await savedFingerprint();
+      await emptyStorage.updateNote(emptyRun.imported[0].note.id, { extractionFingerprint: legacyFingerprint });
+      assert.equal(await freshnessOfFirst(), "current", "an unchanged piece with an old fingerprint stays current");
+      respond = respondBeforePlaceholders;
 
       // Hands-off: with no explicit request, "Accept safe changes automatically" decides whether safe work applies.
       // Each run uses its own store, so earlier fixtures cannot make its proposals ambiguous.
@@ -777,7 +1091,8 @@ async function main() {
         "and the next save removes it from the file",
       );
 
-      // Hands-off import: a reply arms a quiet-period run that imports the chat's summaries and closed pieces.
+      // Hands-off import: a reply arms a quiet-period run that imports the chat's closed message pieces. Its summary is a
+      // manual import from Sources, because it describes the same beats and would save each event twice.
       const autoRoot = join(dataDir, "auto", "long-term-memory");
       await updateLtmExtractionConfig({ autoImportChatSources: true, useAdvancedMemory: true }, autoRoot);
       const autoChat = {
@@ -806,26 +1121,52 @@ async function main() {
           await new Promise((resolveWait) => setTimeout(resolveWait, 10));
         assert.equal(isLtmAutoImportArmed(autoRoot, chatId), false, "the background run finishes");
       };
+      // Which summaries count as finished: a fixed range, a Game session, and a Conversation day or week once it has ended.
+      const day = (offset: number) => {
+        const now = new Date();
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+        const two = (value: number) => String(value).padStart(2, "0");
+        return `${two(date.getDate())}.${two(date.getMonth() + 1)}.${date.getFullYear()}`;
+      };
+      const finished = (sourceId: string, messageRange?: { first: number; last: number }) =>
+        isFinishedSummary({ sourceId, messageRange } as Parameters<typeof isFinishedSummary>[0]);
+      assert.deepEqual(
+        [
+          finished("c:sum-1", { first: 1, last: 2 }),
+          finished("c:game-session-2"),
+          finished("c:summary"),
+          finished(`c:day:${day(-1)}`),
+          finished(`c:day:${day(0)}`),
+          finished(`c:week:${day(-8)}`),
+          finished(`c:week:${day(-3)}`),
+        ],
+        [true, true, false, true, false, true, false],
+        "a changing summary and a day or week still running stay manual",
+      );
       prompts.length = 0;
       await autoImport(autoChat.id);
       assert.deepEqual(
         (await readLtmDebugLog({}, autoRoot))
           .filter((event) => event.action === "auto_import")
           .map(({ source, status, counts }) => ({ source, status, imported: counts?.imported })),
-        [
-          { source: "chats", status: "ok", imported: 1 },
-          { source: "messages", status: "ok", imported: 2 },
-        ],
-        "the summary and both closed pieces import, each source logged in Activity",
+        [{ source: "messages", status: "ok", imported: 2 }],
+        "both closed pieces import and are logged in Activity; the chat's summary is not read in the background",
       );
-      assert.equal(prompts.length, 3, "each imported source is extracted once");
+      assert.equal(prompts.length, 2, "each closed piece is extracted once, and the summary is not");
       assert.deepEqual(
         (await new LongTermMemoryStorage(autoRoot).listNotes({ type: "source" }))
           .filter((note) => note.provenance?.sourceId === autoChat.id)
           .map((note) => note.provenance?.kind)
           .sort(),
-        ["chat_summary", "chat_transcript", "chat_transcript"],
-        "a host's Advanced Memory scene recaps are not a source; the chat's own summary and messages are",
+        ["chat_transcript", "chat_transcript"],
+        "a chat with both a summary and messages auto-imports only message pieces: no `chats` source note",
+      );
+      assert.equal(
+        (await previewPackageInterop({ source: "chats", chatId: autoChat.id, limit: 100 }, autoRoot)).samples.find(
+          (sample) => sample.sourceId.startsWith(`${autoChat.id}:`),
+        )?.status,
+        "pending",
+        "and the summary still waits for a manual import from Sources",
       );
       assert.deepEqual(
         (await previewPackageInterop({ source: "messages", chatId: autoChat.id, limit: 100 }, autoRoot)).samples.map(
@@ -839,7 +1180,36 @@ async function main() {
         "the open tail waits until it closes",
       );
       await autoImport(autoChat.id);
-      assert.equal(prompts.length, 3, "a reply with nothing new makes no model call");
+      assert.equal(prompts.length, 2, "a reply with nothing new makes no model call");
+
+      // "Newest messages to leave for later": a finished piece waits until that many newer messages follow it.
+      await updateLtmExtractionConfig({ autoImportLeaveMessages: 2 }, autoRoot);
+      const leaveChat = { ...roleplayChat, id: "chat-auto-leave", name: "Leave" };
+      chats.push(leaveChat);
+      messages.set(leaveChat.id, [
+        message(leaveChat.id, "l1", "user", "x".repeat(23_990)),
+        message(leaveChat.id, "l2", "assistant", "y".repeat(23_990)),
+        message(leaveChat.id, "l3", "user", "The tail is still being written."),
+      ]);
+      const leaveStatuses = async () =>
+        (await previewPackageInterop({ source: "messages", chatId: leaveChat.id, limit: 100 }, autoRoot)).samples.map(
+          ({ status }) => status,
+        );
+      prompts.length = 0;
+      await autoImport(leaveChat.id);
+      assert.deepEqual(
+        [prompts.length, await leaveStatuses()],
+        [1, ["imported", "pending", "pending"]],
+        "with 2 left, the piece ending at message 2 of 3 waits and the one ending at message 1 imports",
+      );
+      messages.get(leaveChat.id)!.push(message(leaveChat.id, "l4", "assistant", "One more reply."));
+      await autoImport(leaveChat.id);
+      assert.deepEqual(
+        [prompts.length, await leaveStatuses()],
+        [2, ["imported", "imported", "pending"]],
+        "and imports once two newer messages follow it",
+      );
+      await updateLtmExtractionConfig({ autoImportLeaveMessages: 0 }, autoRoot);
 
       // A failing selection is not retried on every reply.
       const failingChat = { ...roleplayChat, id: "chat-auto-failing", name: "Failing" };
@@ -862,9 +1232,94 @@ async function main() {
       );
       await autoImport(failingChat.id);
       assert.equal(prompts.length, attempts, "the same failed selection is not retried");
+      assert.ok(
+        (await readLtmDebugLog({}, autoRoot)).filter((event) => event.chatId === failingChat.id).at(-1)?.error?.code,
+        "the event keeps the failed piece's reason (a model's own text stays in the server log)",
+      );
+      // Retry in Chat Settings forgets the failed selection and runs it again.
+      const retryOnce = async () => {
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          retryLtmAutoImport(autoRoot, failingChat.id, "roleplay");
+          mock.timers.tick(LTM_AUTO_IMPORT_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
+        for (let tries = 0; isLtmAutoImportArmed(autoRoot, failingChat.id) && tries < 500; tries += 1)
+          await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+      };
+      await retryOnce();
+      assert.equal(prompts.length, 2 * attempts, "Retry runs the failed selection again");
+      // A passing provider error heals on its own: a reply after the retry window tries the selection once more.
+      const realNow = Date.now;
+      Date.now = () => realNow() + LTM_AUTO_IMPORT_RETRY_MS;
+      try {
+        await autoImport(failingChat.id);
+      } finally {
+        Date.now = realNow;
+      }
+      assert.equal(prompts.length, 3 * attempts, "the failed selection is retried after the window");
+      // A piece that keeps failing is not read again alongside a newly closed piece; only Retry reads it again.
+      // The next piece's prompt quotes the failed piece as context, so a read is told apart by its source note.
+      const failedNoteId = prompts[0].sourceNote.id;
+      const readsFailedPiece = (prompt: any) => prompt.sourceNote.id === failedNoteId;
+      respond = (prompt) => {
+        if (readsFailedPiece(prompt)) throw new Error("fixture model is down");
+        return [];
+      };
+      messages
+        .get(failingChat.id)!
+        .push(
+          message(failingChat.id, "f5", "assistant", "z".repeat(23_990)),
+          message(failingChat.id, "f6", "user", "A new tail."),
+        );
+      prompts.length = 0;
+      await autoImport(failingChat.id);
+      assert.ok(prompts.length > 0, "the newly closed piece is read");
+      assert.ok(!prompts.some(readsFailedPiece), "and the piece that failed is not read again with it");
+      await retryOnce();
+      assert.ok(prompts.some(readsFailedPiece), "Retry reads the failed piece again");
+      // Choosing another connection, or the retry window passing, also reads the held piece again.
+      prompts.length = 0;
+      await updateLtmExtractionConfig({ connectionId: "fixture-connection-2" }, autoRoot);
+      await autoImport(failingChat.id);
+      assert.ok(prompts.some(readsFailedPiece), "another connection reads the failed piece again");
+      prompts.length = 0;
+      Date.now = () => realNow() + LTM_AUTO_IMPORT_RETRY_MS;
+      try {
+        await autoImport(failingChat.id);
+      } finally {
+        Date.now = realNow;
+      }
+      assert.ok(prompts.some(readsFailedPiece), "and so does the retry window");
+      await updateLtmExtractionConfig({ connectionId: null }, autoRoot);
       respond = () => [];
 
-      // A branch imports its own summaries, not the ones its siblings wrote after the split.
+      // A permanent failure stops the batch (#2497). The piece it never started is not held back with the failed one.
+      const stoppedChat = { ...roleplayChat, id: "chat-auto-stopped", name: "Stopped" };
+      chats.push(stoppedChat);
+      messages.set(stoppedChat.id, [
+        message(stoppedChat.id, "s1", "user", "x".repeat(23_990)),
+        message(stoppedChat.id, "s2", "assistant", "y".repeat(23_990)),
+        message(stoppedChat.id, "s3", "user", "The tail."),
+      ]);
+      respond = () => {
+        throw Object.assign(new Error("fixture model is not served"), { code: "model_not_found" });
+      };
+      prompts.length = 0;
+      await autoImport(stoppedChat.id);
+      assert.equal(prompts.length, 1, "no further piece starts after the model is unavailable");
+      const stoppedNoteId = prompts[0].sourceNote.id;
+      respond = () => [];
+      prompts.length = 0;
+      await autoImport(stoppedChat.id);
+      assert.deepEqual(
+        [prompts.length, prompts.some((prompt) => prompt.sourceNote.id === stoppedNoteId)],
+        [1, false],
+        "the next reply reads the piece that never started, and the failed piece still rests",
+      );
+
+      // A branch imports its own message pieces, not the ones its siblings wrote after the split, and no summaries.
       const autoEvents = async (chatId: string) =>
         (await readLtmDebugLog({}, autoRoot)).filter(
           (event) => event.action === "auto_import" && event.chatId === chatId,
@@ -874,18 +1329,26 @@ async function main() {
         ...autoBranch,
         id: "chat-auto-sibling",
         name: "Sibling",
-        metadata: { summaryEntries: [{ id: "sum-sibling", content: "Only the sibling saw this." }] },
       };
       chats.push(autoBranch, autoSibling);
       messages.set(autoBranch.id, [message(autoBranch.id, "g1", "user", "The tail.")]);
-      messages.set(autoSibling.id, [message(autoSibling.id, "g1-other", "user", "Another tail.")]);
+      messages.set(autoSibling.id, [
+        message(autoSibling.id, "g1-other", "user", "x".repeat(23_990)),
+        message(autoSibling.id, "g2-other", "user", "Another tail."),
+      ]);
       prompts.length = 0;
       await autoImport(autoBranch.id);
-      assert.deepEqual(await autoEvents(autoBranch.id), [], "a sibling's summary is not imported into the branch");
+      assert.deepEqual(await autoEvents(autoBranch.id), [], "a sibling's pieces are not imported into the branch");
       assert.equal(prompts.length, 0);
 
-      // An extraction that drops units leaves its source unfinished, so the next reply does not extract it again.
-      const droppingChat = { ...roleplayChat, id: "chat-auto-dropping", name: "Dropping" };
+      // An extraction that drops a unit but keeps others is finished: the kept memory is saved by the chat's choice, the
+      // dropped one waits in Review, and the next reply does not read the piece again.
+      const droppingChat = {
+        ...roleplayChat,
+        id: "chat-auto-dropping",
+        name: "Dropping",
+        metadata: { longTermMemoryChatMemories: "save" },
+      };
       chats.push(droppingChat);
       messages.set(droppingChat.id, [
         message(droppingChat.id, "p1", "user", "x".repeat(23_990)),
@@ -906,43 +1369,167 @@ async function main() {
       prompts.length = 0;
       await autoImport(droppingChat.id);
       assert.equal(prompts.length, 1, "the closed piece is extracted");
+      const droppingEvent = (await autoEvents(droppingChat.id)).at(-1);
+      assert.equal(droppingEvent?.status, "ok", "a dropped unit no longer leaves the piece unfinished");
+      assert.equal(droppingEvent?.counts?.applied, 1, "the kept memory is saved");
       assert.equal(
-        (await autoEvents(droppingChat.id)).at(-1)?.status,
-        "error",
-        "a dropped unit is logged as unfinished",
+        (await previewPackageInterop({ source: "messages", chatId: droppingChat.id, limit: 100 }, autoRoot)).samples[0]
+          ?.freshness,
+        "current",
       );
       await autoImport(droppingChat.id);
-      assert.equal(prompts.length, 1, "the unfinished selection is not extracted on every reply");
+      assert.equal(prompts.length, 1, "the finished piece is not extracted again");
 
-      // The same for an edited source, whose note keeps the fingerprint of the text it was imported from.
+      // The same for an edited source: its note takes the fingerprint of the new text.
       const dropping = respond;
       respond = () => [];
       const editedChat = {
         ...roleplayChat,
         id: "chat-auto-edited",
         name: "Edited",
-        metadata: { summaryEntries: [{ id: "sum-edit", content: "The gate is shut." }] },
       };
       chats.push(editedChat);
-      messages.set(editedChat.id, [message(editedChat.id, "e1", "user", "The tail.")]);
+      const editedMessages = [
+        message(editedChat.id, "e1", "user", "a".repeat(23_990)),
+        message(editedChat.id, "e2", "user", "The tail."),
+      ];
+      messages.set(editedChat.id, editedMessages);
       const editedFreshness = async () =>
-        (await previewPackageInterop({ source: "chats", chatId: editedChat.id, limit: 100 }, autoRoot)).samples.find(
-          (sample) => sample.sourceId.startsWith(`${editedChat.id}:`),
+        (await previewPackageInterop({ source: "messages", chatId: editedChat.id, limit: 100 }, autoRoot)).samples.find(
+          (sample) => sample.sourceId === `${editedChat.id}:messages:e1`,
         )?.freshness;
       prompts.length = 0;
       await autoImport(editedChat.id);
-      assert.equal(prompts.length, 1, "the summary is imported");
+      assert.equal(prompts.length, 1, "the closed piece is imported");
       assert.equal(await editedFreshness(), "current");
-      editedChat.metadata.summaryEntries[0]!.content = "The gate is open.";
+      editedMessages[0]!.content = "b".repeat(23_990);
       assert.equal(await editedFreshness(), "source_updated");
       respond = dropping;
       await autoImport(editedChat.id);
-      assert.equal(prompts.length, 2, "the edited summary is extracted again");
-      assert.equal((await autoEvents(editedChat.id)).at(-1)?.status, "error", "a dropped unit is logged as unfinished");
-      assert.equal(await editedFreshness(), "source_updated", "the source still shows as edited");
+      assert.equal(prompts.length, 2, "the edited piece is extracted again");
+      assert.equal((await autoEvents(editedChat.id)).at(-1)?.status, "ok", "a dropped unit is not a failure");
+      assert.equal(await editedFreshness(), "current", "the source is up to date");
       await autoImport(editedChat.id);
-      assert.equal(prompts.length, 2, "the unfinished edit is not extracted on every reply");
+      assert.equal(prompts.length, 2, "the finished edit is not extracted again");
       respond = () => [];
+      prompts.length = 0;
+
+      // "Read from: Summaries": the chat reads its finished summaries instead of its message pieces, never both. A
+      // summary with no fixed range is rewritten as the chat grows, so it stays a manual import from Sources.
+      // A sibling branch of the same group has a ranged summary of its own, which this branch must not read.
+      const summariesSibling = {
+        ...roleplayChat,
+        id: "chat-auto-summaries-sibling",
+        name: "Summaries sibling",
+        groupId: "group-summaries",
+        metadata: {
+          summaryEntries: [{ id: "sum-x", content: "The sibling's story.", rangeStartIndex: 1, rangeEndIndex: 1 }],
+        },
+      };
+      const summariesChat = {
+        ...roleplayChat,
+        id: "chat-auto-summaries",
+        name: "Summaries",
+        groupId: "group-summaries",
+        metadata: {
+          longTermMemoryChatReadFrom: "summaries",
+          summaryEntries: [
+            { id: "sum-a", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 1 },
+            { id: "sum-b", content: "The guard fled.", rangeStartIndex: 2, rangeEndIndex: 2 },
+            { id: "sum-c", content: "A rolling recap that keeps changing." },
+          ],
+        },
+      };
+      chats.push(summariesChat, summariesSibling);
+      messages.set(summariesSibling.id, []);
+      messages.set(summariesChat.id, [
+        message(summariesChat.id, "s1", "user", "x".repeat(23_990)),
+        message(summariesChat.id, "s2", "assistant", "y".repeat(23_990)),
+        message(summariesChat.id, "s3", "user", "The tail is still being written."),
+      ]);
+      const summaryStatuses = async () =>
+        (await previewPackageInterop({ source: "chats", chatId: summariesChat.id, limit: 100 }, autoRoot)).samples.map(
+          ({ sourceId, status }) => ({ sourceId, status }),
+        );
+      prompts.length = 0;
+      await autoImport(summariesChat.id);
+      assert.equal(prompts.length, 2, "each finished summary is extracted once, and no message piece is");
+      assert.deepEqual(
+        (await autoEvents(summariesChat.id)).map(({ source, status, counts }) => ({
+          source,
+          status,
+          imported: counts?.imported,
+        })),
+        [{ source: "chats", status: "ok", imported: 2 }],
+        "the run reads the chats source and is logged in Activity",
+      );
+      assert.deepEqual(
+        await summaryStatuses(),
+        [
+          { sourceId: "chat-auto-summaries:sum-a", status: "imported" },
+          { sourceId: "chat-auto-summaries:sum-b", status: "imported" },
+          { sourceId: "chat-auto-summaries:sum-c", status: "pending" },
+        ],
+        "the unranged summary waits for a manual import",
+      );
+      assert.deepEqual(
+        (await previewPackageInterop({ source: "chats", chatId: summariesSibling.id, limit: 100 }, autoRoot)).samples
+          .filter(({ sourceId }) => sourceId.startsWith(`${summariesSibling.id}:`))
+          .map(({ sourceId, status }) => ({ sourceId, status })),
+        [{ sourceId: "chat-auto-summaries-sibling:sum-x", status: "pending" }],
+        "a sibling branch's summary is left to its own chat",
+      );
+      assert.deepEqual(
+        (
+          await previewPackageInterop({ source: "messages", chatId: summariesChat.id, limit: 100 }, autoRoot)
+        ).samples.map(({ status }) => status),
+        ["pending", "pending", "pending"],
+        "the chat's message pieces stay unread while it reads summaries",
+      );
+      await autoImport(summariesChat.id);
+      assert.equal(prompts.length, 2, "a reply with nothing new makes no model call");
+      chats[chats.indexOf(summariesChat)] = {
+        ...summariesChat,
+        metadata: { ...summariesChat.metadata, longTermMemoryChatReadFrom: "messages" },
+      };
+      await autoImport(summariesChat.id);
+      assert.equal(prompts.length, 4, "switched back to Messages, the chat reads its two closed pieces as before");
+
+      // The global "Read from" applies to a chat with no choice of its own; a stored choice still wins.
+      const globalReadChat = (id: string, choice?: string) => {
+        const chat = {
+          ...roleplayChat,
+          id,
+          name: id,
+          metadata: {
+            ...(choice ? { longTermMemoryChatReadFrom: choice } : {}),
+            summaryEntries: [{ id: "sum-g", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 1 }],
+          },
+        };
+        chats.push(chat);
+        messages.set(id, [message(id, `${id}-1`, "user", "x".repeat(23_990)), message(id, `${id}-2`, "user", "Tail.")]);
+        return chat;
+      };
+      const readStatuses = async (chatId: string, source: "chats" | "messages") =>
+        (await previewPackageInterop({ source, chatId, limit: 100 }, autoRoot)).samples
+          .filter(({ sourceId }) => sourceId.startsWith(`${chatId}:`))
+          .map(({ status }) => status);
+      await updateLtmExtractionConfig({ autoImportReadFrom: "summaries" }, autoRoot);
+      const followsGlobal = globalReadChat("chat-read-global");
+      const ownMessages = globalReadChat("chat-read-own-messages", "messages");
+      prompts.length = 0;
+      await autoImport(followsGlobal.id);
+      assert.equal(prompts.length, 1, "no chat choice: the global Summaries reads the finished summary");
+      assert.deepEqual(await readStatuses(followsGlobal.id, "chats"), ["imported"]);
+      assert.deepEqual(
+        await readStatuses(followsGlobal.id, "messages"),
+        ["pending", "pending"],
+        "its messages stay unread",
+      );
+      await autoImport(ownMessages.id);
+      assert.equal(prompts.length, 2, "a chat set to Messages reads its closed piece under the global Summaries");
+      assert.deepEqual(await readStatuses(ownMessages.id, "chats"), ["pending"], "and leaves its summary unread");
+      await updateLtmExtractionConfig({ autoImportReadFrom: "messages" }, autoRoot);
       prompts.length = 0;
 
       // "Memories from this chat": the chat's choice beats the global one for the run's re-check and its accept step.
@@ -1000,6 +1587,212 @@ async function main() {
       respond = () => [];
       prompts.length = 0;
 
+      // A reading cut off by the model's output limit is unfinished, and its memories wait in Review. A later pass must
+      // not read the same text again: that would replace the waiting draft with a second attempt.
+      const cutChat = {
+        ...roleplayChat,
+        id: "chat-auto-cut",
+        name: "Cut",
+      };
+      chats.push(cutChat);
+      const cutMessages = [
+        message(cutChat.id, "c1", "user", "a".repeat(23_990)),
+        message(cutChat.id, "c2", "user", "The tail."),
+      ];
+      messages.set(cutChat.id, cutMessages);
+      respond = (prompt) => [
+        unit({
+          bucket: "timeline_event",
+          subjectId: "bridge_falls",
+          sectionKey: "event",
+          title: "The bridge falls",
+          // Each reading words it differently, so no attempt deduplicates against another.
+          text: `The bridge falls, reading ${prompts.length}.`,
+          claimKind: "change",
+          links: [{ target: prompt.sourceNote.id, relation: "extracted_from" }],
+        }),
+      ];
+      const cutPending = async () => draftStore.listDrafts({ status: "pending", chatId: cutChat.id });
+      finishReason = "length";
+      try {
+        await autoImport(cutChat.id);
+      } finally {
+        finishReason = "stop";
+      }
+      assert.equal(prompts.length, 1, "the closed piece is read");
+      assert.equal((await autoEvents(cutChat.id)).at(-1)?.status, "error", "a cut-off reading is logged as unfinished");
+      const [cutDraft] = await cutPending();
+      assert.ok(cutDraft?.mutations.length, "its memories wait in Review");
+      const cutEvents = (await autoEvents(cutChat.id)).length;
+      mock.timers.enable({ apis: ["setTimeout"] });
+      try {
+        retryLtmAutoImport(autoRoot, cutChat.id, "roleplay");
+        mock.timers.tick(LTM_AUTO_IMPORT_QUIET_MS);
+      } finally {
+        mock.timers.reset();
+      }
+      for (let tries = 0; isLtmAutoImportArmed(autoRoot, cutChat.id) && tries < 500; tries += 1)
+        await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+      assert.equal(prompts.length, 1, "a later pass does not read the same text while its draft waits");
+      assert.deepEqual(
+        (await cutPending()).map((draft) => draft.id),
+        [cutDraft!.id],
+        "and the waiting draft is kept",
+      );
+      const restEvents = (await autoEvents(cutChat.id)).slice(cutEvents);
+      assert.deepEqual(
+        restEvents.map((event) => [event.status, event.counts?.waiting]),
+        [["ok", 1]],
+        "Retry logs once that the memories wait in Review, which clears the unfinished reading",
+      );
+      // Changed text is read again and replaces the draft, as before.
+      cutMessages[0]!.content = "b".repeat(23_990);
+      await autoImport(cutChat.id);
+      assert.equal(prompts.length, 2, "changed text is read again");
+      assert.equal((await draftStore.getDraft(cutDraft!.id))?.status, "superseded", "and replaces the waiting draft");
+      // A manual import still reads the same text again and replaces its draft.
+      const [readAgain] = await cutPending();
+      const cutSourceId = (
+        await previewPackageInterop({ source: "messages", chatId: cutChat.id, limit: 100 }, autoRoot)
+      ).samples.find((sample) => sample.sourceId === `${cutChat.id}:messages:c1`)!.sourceId;
+      await importPackageInterop(
+        {
+          source: "messages",
+          sourceIds: [cutSourceId],
+          chatId: cutChat.id,
+          mode: "roleplay",
+          extract: true,
+          limit: 100,
+        },
+        autoRoot,
+        new AbortController().signal,
+      );
+      assert.equal(prompts.length, 3, "a manual import reads the same text again");
+      assert.equal((await draftStore.getDraft(readAgain!.id))?.status, "superseded", "and replaces its draft");
+      // A changed reading context makes the waiting draft stale, so a background pass reads the same text again.
+      const [staleDraft] = await cutPending();
+      await importPackageInterop(
+        {
+          source: "messages",
+          sourceIds: [cutSourceId],
+          chatId: cutChat.id,
+          mode: "roleplay",
+          modes: ["roleplay", "game"],
+          extract: true,
+          limit: 100,
+        },
+        autoRoot,
+        new AbortController().signal,
+        { keepPendingDrafts: true },
+      );
+      assert.equal(prompts.length, 4, "a background pass reads text whose waiting draft went stale");
+      assert.equal((await draftStore.getDraft(staleDraft!.id))?.status, "superseded", "and replaces the stale draft");
+      // A background read of the same text that keeps far fewer memories than the last read waits in Review, and the
+      // last read's waiting draft stays.
+      const bridgeFacts = [
+        "The ferry runs only at dawn.",
+        "Toll keepers wear copper masks.",
+        "The river smells of iron after rain.",
+        "Lanterns on the east bank are green.",
+        "Fishermen avoid the third pier.",
+        "The old mill grinds salt, not grain.",
+        "Bells ring twice when the tide turns.",
+        "Every bridge stone carries a carved number.",
+      ];
+      const bridgeFact = (text: string, index: number) =>
+        unit({ bucket: "world_fact", subjectId: `bridge_fact_${index}`, sectionKey: "facts", text });
+      respond = () => bridgeFacts.map(bridgeFact);
+      await importPackageInterop(
+        {
+          source: "messages",
+          sourceIds: [cutSourceId],
+          chatId: cutChat.id,
+          mode: "roleplay",
+          extract: true,
+          limit: 100,
+        },
+        autoRoot,
+        new AbortController().signal,
+      );
+      const [fullRead] = await cutPending();
+      assert.equal(fullRead?.extractionOutcome?.keptUnits, 8, "the full read keeps every memory");
+      respond = () => [bridgeFact(bridgeFacts[0]!, 0)];
+      const shortImport = await importPackageInterop(
+        {
+          source: "messages",
+          sourceIds: [cutSourceId],
+          chatId: cutChat.id,
+          mode: "roleplay",
+          modes: ["roleplay", "game"],
+          extract: true,
+          applyLowRisk: true,
+          limit: 100,
+        },
+        autoRoot,
+        new AbortController().signal,
+        { keepPendingDrafts: true },
+      );
+      assert.equal(prompts.length, 6, "a background pass reads the text again once the full read went stale");
+      const [shortResult] = shortImport.imported;
+      assert.equal(shortResult?.outcome?.keptUnits, 1);
+      assert.deepEqual(shortResult?.appliedMutationIds, [], "the short read is not saved automatically");
+      assert.equal(shortResult?.draft?.reviewRequired, true, "it waits in Review");
+      assert.equal(shortResult?.draft?.status, "pending");
+      assert.equal((await draftStore.getDraft(fullRead!.id))?.status, "pending", "the full read's draft stays");
+      // A manual read keeps today's behaviour: it replaces both and needs no review.
+      await importPackageInterop(
+        {
+          source: "messages",
+          sourceIds: [cutSourceId],
+          chatId: cutChat.id,
+          mode: "roleplay",
+          extract: true,
+          limit: 100,
+        },
+        autoRoot,
+        new AbortController().signal,
+      );
+      const [manualShort] = await cutPending();
+      assert.equal(manualShort?.reviewRequired, false, "a manual short read needs no extra review");
+      for (const id of [fullRead!.id, shortResult!.draft!.id])
+        assert.equal((await draftStore.getDraft(id))?.status, "superseded", "a manual read replaces both drafts");
+      // Once a full read is saved, reading the same answer again finds the saved memories: that is not a short read.
+      respond = () => bridgeFacts.map(bridgeFact);
+      const savedRead = await importPackageInterop(
+        {
+          source: "messages",
+          sourceIds: [cutSourceId],
+          chatId: cutChat.id,
+          mode: "roleplay",
+          extract: true,
+          applyLowRisk: true,
+          limit: 100,
+        },
+        autoRoot,
+        new AbortController().signal,
+      );
+      assert.equal(savedRead.imported[0]?.appliedMutationIds.length, 8, "the full read is saved");
+      const reread = await importPackageInterop(
+        {
+          source: "messages",
+          sourceIds: [cutSourceId],
+          chatId: cutChat.id,
+          mode: "roleplay",
+          modes: ["roleplay", "game"],
+          extract: true,
+          applyLowRisk: true,
+          limit: 100,
+        },
+        autoRoot,
+        new AbortController().signal,
+        { keepPendingDrafts: true },
+      );
+      assert.equal(reread.imported[0]?.extractionStatus, "succeeded", "a changed context reads the saved text again");
+      assert.ok((reread.imported[0]?.outcome?.keptUnits ?? 0) < 3, "the saved memories are not kept twice");
+      assert.equal(reread.imported[0]?.draft?.reviewRequired, false, "so the re-read does not wait in Review");
+      respond = () => [];
+      prompts.length = 0;
+
       // Turning the setting off cancels a run that is already waiting.
       messages.get(failingChat.id)!.push(message(failingChat.id, "f3", "user", "y".repeat(23_990)));
       const failingEvents = (await autoEvents(failingChat.id)).length;
@@ -1015,11 +1808,345 @@ async function main() {
         await new Promise((resolveWait) => setTimeout(resolveWait, 10));
       assert.equal(prompts.length, 0, "a run armed before the setting was turned off makes no model call");
       assert.equal((await autoEvents(failingChat.id)).length, failingEvents, "and logs nothing");
+
+      // Story dates from what the Engine saved for each piece's own messages, with no model call.
+      const storyRoot = join(dataDir, "story-dates", "long-term-memory");
+      const storyStore = new LongTermMemoryStorage(storyRoot);
+      const storyChat = (
+        chatId: string,
+        mode: string,
+        ids: string[],
+        metadata: Record<string, unknown> | string = {},
+      ) => {
+        chats.push({ ...roleplayChat, id: chatId, name: chatId, mode, metadata });
+        // The long first message closes its piece, so each chat has a one-message piece and then the rest.
+        messages.set(
+          chatId,
+          ids.map((id, index) =>
+            message(chatId, id, index % 2 ? "assistant" : "user", index ? `Line ${index}.` : "x".repeat(23_990)),
+          ),
+        );
+        return importPackageInterop(
+          {
+            source: "messages",
+            chatId,
+            sourceIds: [`${chatId}:messages:${ids[0]}`, `${chatId}:messages:${ids[1]}`],
+            extract: false,
+            limit: 100,
+          },
+          storyRoot,
+          new AbortController().signal,
+        );
+      };
+      const datesOf = async (chatId: string) =>
+        (await storyStore.listNotes({ type: "source" }))
+          .filter((note) => note.provenance?.sourceId === chatId)
+          .sort((left, right) => left.title.localeCompare(right.title))
+          .map((note) => {
+            if (!note.storyTime || note.storyTime.origin === "manual") return note.storyTime;
+            const { sourceHash, ...date } = note.storyTime;
+            assert.match(sourceHash ?? "", /^[a-f0-9]{64}$/, "an Engine date records the piece text it was read for");
+            return date;
+          });
+      // Roleplay: the first and last World State date or time on the piece's messages; a snapshot of a message that
+      // is not in any piece (another swipe or branch) dates nothing.
+      gameStates.set("chat-story-rp", [
+        { messageId: "sr1", date: " 14 Frostmonth ", time: "dusk\nfalling" },
+        { messageId: "sr2", date: "14 Frostmonth", time: "midnight" },
+        { messageId: "sr3", date: null, time: null },
+        // A malformed row from the host is skipped.
+        { messageId: "sr3", date: 42 as never, time: "dawn" },
+        { messageId: "sr4", date: "15 Frostmonth", time: "morning" },
+        { messageId: "sr-swiped-away", date: "1 Thawmonth", time: null },
+      ]);
+      await storyChat("chat-story-rp", "roleplay", ["sr1", "sr2", "sr3", "sr4"]);
+      const rpDates = [
+        { start: { date: "14 Frostmonth", time: "dusk falling" }, origin: "world_state" },
+        {
+          start: { date: "14 Frostmonth", time: "midnight" },
+          end: { date: "15 Frostmonth", time: "morning" },
+          origin: "world_state",
+        },
+      ];
+      assert.deepEqual(await datesOf("chat-story-rp"), rpDates, "Roleplay pieces carry the tracker's dates");
+      // A re-import never replaces a date the user typed.
+      const [rpFirst] = (await storyStore.listNotes({ type: "source" })).filter(
+        (note) => note.provenance?.sourceId === "chat-story-rp" && note.title.endsWith("message 1"),
+      );
+      const typed = { start: { date: "Midsummer" }, origin: "manual" as const };
+      await storyStore.updateNote(rpFirst!.id, { storyTime: typed });
+      gameStates.get("chat-story-rp")![0]!.date = "20 Frostmonth";
+      await importPackageInterop(
+        {
+          source: "messages",
+          chatId: "chat-story-rp",
+          sourceIds: ["chat-story-rp:messages:sr1"],
+          extract: false,
+          limit: 100,
+        },
+        storyRoot,
+        new AbortController().signal,
+      );
+      assert.deepEqual(await datesOf("chat-story-rp"), [typed, rpDates[1]], "a re-import keeps the typed date");
+      // A date typed while an import waits on the vault lock is read under it, so the import does not replace it.
+      await storyStore.updateNote(rpFirst!.id, { storyTime: rpFirst!.storyTime });
+      const { withLtmVaultLock } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/vault-lock.ts");
+      duringImport = async () => {
+        duringImport = undefined;
+        void withLtmVaultLock(storyRoot, async () => {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          await storyStore.updateNote(rpFirst!.id, { storyTime: typed });
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      };
+      await importPackageInterop(
+        {
+          source: "messages",
+          chatId: "chat-story-rp",
+          sourceIds: ["chat-story-rp:messages:sr1"],
+          extract: false,
+          limit: 100,
+        },
+        storyRoot,
+        new AbortController().signal,
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-rp"),
+        [typed, rpDates[1]],
+        "a re-import keeps a date typed while it waited for the lock",
+      );
+      // Without listGameStates, the newest snapshot dates only the piece that holds its message.
+      hostListsGameStates = false;
+      gameStates.set("chat-story-fallback", [
+        { messageId: "sf1", date: "2 Thawmonth", time: null },
+        { messageId: "sf2", date: "3 Thawmonth", time: "noon" },
+      ]);
+      await storyChat("chat-story-fallback", "roleplay", ["sf1", "sf2"]);
+      assert.deepEqual(
+        await datesOf("chat-story-fallback"),
+        [undefined, { start: { date: "3 Thawmonth", time: "noon" }, origin: "world_state" }],
+        "the newest snapshot dates its own piece and no other",
+      );
+      // The newest snapshot can belong to a swipe the user moved away from; it dates nothing.
+      gameStates.set("chat-story-swipe", [{ messageId: "sw2", swipeIndex: 1, date: "5 Thawmonth", time: null }]);
+      await storyChat("chat-story-swipe", "roleplay", ["sw1", "sw2"]);
+      assert.deepEqual(
+        await datesOf("chat-story-swipe"),
+        [undefined, undefined],
+        "a snapshot of a swiped-away reply dates nothing",
+      );
+      // A newest snapshot outside every piece dates nothing, and a Roleplay chat ignores a game clock.
+      gameStates.set("chat-story-outside", [{ messageId: "so-swiped-away", date: "9 Thawmonth", time: null }]);
+      await storyChat("chat-story-outside", "roleplay", ["so1", "so2"], { gameTime: { day: 4, hour: 9, minute: 0 } });
+      assert.deepEqual(
+        await datesOf("chat-story-outside"),
+        [undefined, undefined],
+        "a piece with no Engine date stays undated",
+      );
+      hostListsGameStates = true;
+      // A World State the host fails to read leaves the pieces undated but imported; a later read dates an undated one.
+      gameStatesFail = true;
+      const failedRead = await storyChat("chat-story-later", "roleplay", ["sl1", "sl2"]);
+      gameStatesFail = false;
+      assert.deepEqual(
+        [failedRead.writeFailures.length, await datesOf("chat-story-later")],
+        [0, [undefined, undefined]],
+        "a failed World State read still imports the pieces",
+      );
+      gameStates.set("chat-story-later", [{ messageId: "sl2", date: "6 Thawmonth", time: null }]);
+      await storyChat("chat-story-later", "roleplay", ["sl1", "sl2"]);
+      assert.deepEqual(
+        await datesOf("chat-story-later"),
+        [undefined, { start: { date: "6 Thawmonth" }, origin: "world_state" }],
+        "a re-import dates a piece imported undated",
+      );
+      // Game: the clock dates only the piece holding the chat's newest message.
+      await storyChat(
+        "chat-story-game",
+        "game",
+        ["sg1", "sg2"],
+        JSON.stringify({ gameTime: { day: 3, hour: 14, minute: 5 } }),
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-game"),
+        [undefined, { start: { date: "Day 3", time: "14:05" }, origin: "game_clock" }],
+        "the game clock dates the newest piece only",
+      );
+      const gameSources = await loadChatStoryTimeSources(
+        chats.find((chat) => chat.id === "chat-story-game")!,
+        messages.get("chat-story-game")!,
+      );
+      assert.equal(
+        stampPieceStoryTime(
+          { messageIds: ["sg2"], sourceText: "Line 1." },
+          { ...gameSources, gameStates: [{ messageId: "sg2", date: "Harvest Eve", time: null }] },
+        )?.origin,
+        "world_state",
+        "a World State date wins over the game clock",
+      );
+      // Conversation: the real date of the first message, and of the last when the day differs, in the server's zone.
+      const zone = process.env.TZ;
+      process.env.TZ = "Pacific/Auckland";
+      try {
+        const talkId = "chat-story-talk";
+        chats.push({ ...roleplayChat, id: talkId, name: talkId, mode: "conversation" });
+        messages.set(talkId, [
+          { ...message(talkId, "st1", "user", "x".repeat(23_990)), createdAt: "2026-10-27T20:30:00.000Z" },
+          { ...message(talkId, "st2", "assistant", "Line 1."), createdAt: "2026-10-28T01:00:00.000Z" },
+          { ...message(talkId, "st3", "user", "Line 2."), createdAt: "2026-10-28T12:15:00.000Z" },
+        ]);
+        await importPackageInterop(
+          {
+            source: "messages",
+            chatId: talkId,
+            sourceIds: [`${talkId}:messages:st1`, `${talkId}:messages:st2`],
+            extract: false,
+            limit: 100,
+          },
+          storyRoot,
+          new AbortController().signal,
+        );
+      } finally {
+        if (zone === undefined) delete process.env.TZ;
+        else process.env.TZ = zone;
+      }
+      assert.deepEqual(
+        await datesOf("chat-story-talk"),
+        [
+          { start: { date: "2026-10-28", time: "09:30" }, origin: "message_time" },
+          {
+            start: { date: "2026-10-28", time: "14:00" },
+            end: { date: "2026-10-29", time: "01:15" },
+            origin: "message_time",
+          },
+        ],
+        "Conversation pieces carry the real date",
+      );
+
+      // A chat summary takes the date its messages carry, by the rules of a message piece, when it says which messages
+      // it covers; a summary with no range, or a range the chat no longer has, imports undated.
+      const summaryChat = async (
+        chatId: string,
+        mode: string,
+        metadata: Record<string, unknown>,
+        entries: string[],
+      ) => {
+        chats.push({ ...roleplayChat, id: chatId, name: chatId, mode, metadata });
+        return importPackageInterop(
+          {
+            source: "chats",
+            chatId,
+            sourceIds: entries.map((entry) => `${chatId}:${entry}`),
+            extract: false,
+            limit: 100,
+          },
+          storyRoot,
+          new AbortController().signal,
+        );
+      };
+      const summaryEntries = [
+        { id: "sum-a", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 2 },
+        { id: "sum-b", content: "The tide turned.", rangeStartIndex: 3, rangeEndIndex: 4 },
+        { id: "sum-gone", content: "A range the chat lost.", rangeStartIndex: 5, rangeEndIndex: 9 },
+        { id: "sum-last", content: "A last-N summary.", messageCount: 20 },
+      ];
+      messages.set(
+        "chat-story-sum",
+        ["ss1", "ss2", "ss3", "ss4"].map((id, index) => message("chat-story-sum", id, "user", `Line ${index}.`)),
+      );
+      gameStates.set("chat-story-sum", [
+        { messageId: "ss1", date: "14 Frostmonth", time: null },
+        { messageId: "ss2", date: "15 Frostmonth", time: null },
+        { messageId: "ss4", date: "20 Frostmonth", time: null },
+      ]);
+      const summaryResult = await summaryChat(
+        "chat-story-sum",
+        "roleplay",
+        { summaryEntries },
+        summaryEntries.map((entry) => entry.id),
+      );
+      assert.equal(summaryResult.writeFailures.length, 0);
+      assert.deepEqual(
+        await datesOf("chat-story-sum"),
+        [
+          { start: { date: "14 Frostmonth" }, end: { date: "15 Frostmonth" }, origin: "world_state" },
+          { start: { date: "20 Frostmonth" }, origin: "world_state" },
+          undefined,
+          undefined,
+        ],
+        "a numbered summary takes the World State dates of its messages; one without a usable range stays undated",
+      );
+      // A World State that cannot be read leaves a summary undated but imported, and a later import dates it.
+      gameStatesFail = true;
+      messages.set("chat-story-sum-late", messages.get("chat-story-sum")!);
+      gameStates.set("chat-story-sum-late", gameStates.get("chat-story-sum")!);
+      const lateResult = await summaryChat(
+        "chat-story-sum-late",
+        "roleplay",
+        { summaryEntries: summaryEntries.slice(0, 1) },
+        ["sum-a"],
+      );
+      gameStatesFail = false;
+      assert.deepEqual(
+        [lateResult.writeFailures.length, await datesOf("chat-story-sum-late")],
+        [0, [undefined]],
+        "a failed read still imports the summary",
+      );
+      await importPackageInterop(
+        {
+          source: "chats",
+          chatId: "chat-story-sum-late",
+          sourceIds: ["chat-story-sum-late:sum-a"],
+          extract: false,
+          limit: 100,
+        },
+        storyRoot,
+        new AbortController().signal,
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-sum-late"),
+        [{ start: { date: "14 Frostmonth" }, end: { date: "15 Frostmonth" }, origin: "world_state" }],
+        "a re-import dates a summary imported undated",
+      );
+      // A chat whose messages cannot be read imports its summary undated, without a write failure.
+      messages.set("chat-story-sum-nomsg", messages.get("chat-story-sum")!);
+      messagesFailFor = "chat-story-sum-nomsg";
+      const noMessagesResult = await summaryChat(
+        "chat-story-sum-nomsg",
+        "roleplay",
+        { summaryEntries: summaryEntries.slice(0, 1) },
+        ["sum-a"],
+      );
+      messagesFailFor = undefined;
+      assert.deepEqual(
+        [noMessagesResult.writeFailures.length, await datesOf("chat-story-sum-nomsg")],
+        [0, [undefined]],
+        "an unreadable chat still imports its summary",
+      );
+      // Conversation: a day summary takes its day, a week summary the seven days from the Monday in its key.
+      await summaryChat(
+        "chat-story-days",
+        "conversation",
+        {
+          daySummaries: { "28.10.2026": { summary: "Tea in the kitchen." } },
+          weekSummaries: { "26.10.2026": "A week of tea." },
+        },
+        ["day:28.10.2026", "week:26.10.2026"],
+      );
+      assert.deepEqual(
+        await datesOf("chat-story-days"),
+        [
+          { start: { date: "2026-10-26" }, end: { date: "2026-11-01" }, origin: "message_time" },
+          { start: { date: "2026-10-28" }, origin: "message_time" },
+        ],
+        "Conversation day and week summaries carry their own days",
+      );
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, kept piece cuts, previous-piece context, and chat import detail ok\n",
+    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, kept piece cuts, previous-piece context, chat import detail, and Engine story dates ok\n",
   );
 }
 

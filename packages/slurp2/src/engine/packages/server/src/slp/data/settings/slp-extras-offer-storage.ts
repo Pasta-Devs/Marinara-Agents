@@ -13,6 +13,7 @@ import {
 import { createSlurpStorage } from "../slp-storage.js";
 import { slurpPausedNow } from "./slp-pause-storage.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const KEY = "slurp2.extrasOffer";
 
 // ponytail: an in-process queue like the trends; two Engine processes writing at once could lose one change.
@@ -42,7 +43,7 @@ function mutate<T>(
 export function readSlurpExtrasOffer(db: DB): Promise<SlpExtrasOffer | null> {
   return mutate(db, async (state) => {
     const paused = await slurpPausedNow(db);
-    const now = slpExtrasOfferNow(state, await createSlurpStorage(db).getSettings(), new Date(), paused);
+    const now = slpExtrasOfferNow(state, await createSlurpStorage(db).getSettings(), slurpWorldNow(), paused);
     return { state: now.changed ? now.state : null, result: now.offer };
   });
 }

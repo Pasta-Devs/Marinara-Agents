@@ -6,11 +6,30 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { humanizeLabel } from "../display-labels";
 import type { AvailabilityChatTarget, AvailabilityTarget } from "../AvailabilityTabRail";
-import type { PickerTarget } from "./TargetPicker";
+
+export type PickerTarget = {
+  id: string;
+  label: string;
+  comment?: string;
+  kind: "chat" | "group" | "character" | "persona" | "local_character";
+};
 
 export const modes: readonly LtmMode[] = ["conversation", "roleplay", "game"];
 
 export type Target = { id: string; label: string; scope?: LtmScope; comment?: string; chatName?: string | null };
+
+/** The place each chat's Vault last showed, kept while the app is open so leaving and coming back lands where you were. */
+export const sessionTargets = new Map<string, Target>();
+export const sessionSecondaryTargets = new Map<string, Target>();
+
+/**
+ * Chat Settings' "Show" asks the Vault to open on this chat's own place, whatever place it last showed. Chat Settings is
+ * its own host view, so it leaves the place here for the Vault to read when it mounts; the Vault fills in the scope.
+ */
+export function showChatPlaceInVault(chatId: string, label: string) {
+  sessionTargets.set(chatId, { id: `chat:${chatId}`, label });
+  sessionSecondaryTargets.delete(chatId);
+}
 
 export type AvailabilityTargets = {
   characters: AvailabilityTarget[];

@@ -1,12 +1,15 @@
 // Otome Hearth: the player's own banned phrases (Settings → Content), beside the built-in list.
 // - Typed phrases are split at commas, semicolons and line breaks, unquoted and kept once (Story Writer's rule).
-// - With none, the banned-phrases line is the one every prompt carried before, byte for byte; with some, it ends with
-//   them, quoted, in every prompt that writes story or a character's words: scenes, messages and caring messages.
+// - With none, the banned-phrases line is the built-in one; with some, they follow the built-in list, quoted, in every
+//   prompt that writes story or a character's words: scenes, messages and caring messages.
+// - 2026-11-23: the built-in sentence patterns ("not X, but Y" and the like) are banned in narration only, last.
 // - POST /runs/:run/settings saves them as typed (trimmed), refuses a list over its limit, and an empty one clears it.
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BANNED_PHRASES,
+  NARRATION_BANNED_PATTERNS,
+  STIFF_PATTERNS,
   OWN_BANNED_PHRASES_MAX,
   parseBannedPhrases,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/banned-phrases.ts";
@@ -38,11 +41,29 @@ test("typed phrases are split, unquoted and kept once", () => {
 test("with none of their own, the line is the one before; with some, it ends with them quoted", () => {
   assert.equal(bannedPhrasesRule(), BANNED_PHRASES_RULE);
   assert.equal(bannedPhrasesRule(""), BANNED_PHRASES_RULE);
-  assert.equal(BANNED_PHRASES_RULE, `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}.`);
+  const narration = ` In narration, never use these sentence patterns either: ${NARRATION_BANNED_PATTERNS.join("; ")}.`;
+  assert.equal(
+    BANNED_PHRASES_RULE,
+    `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}.${narration}`,
+  );
   assert.equal(
     bannedPhrasesRule(OWN),
-    `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}; "wet heat"; "slick folds"; "tell me to stop".`,
+    `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}; "wet heat"; "slick folds"; "tell me to stop".${narration}`,
   );
+  // #2513: two constructions nobody says on the spot are banned everywhere, with the built-in phrases, named as
+  // patterns, never as lines; each once in the line.
+  assert.ok(
+    BANNED_PHRASES_RULE.includes(
+      "; instant apologies; counting off points (one: X, two: Y); mirrored pairs (you X, I Y). In narration,",
+    ),
+  );
+  for (const pattern of STIFF_PATTERNS) assert.equal(BANNED_PHRASES_RULE.split(pattern).length, 2, pattern);
+  // Speech may use them as people do: they are banned in narration alone, never in the list for every line.
+  for (const pattern of ["not X, but Y", "if X, then Y", "negative parallelisms"]) {
+    assert.ok(NARRATION_BANNED_PATTERNS.includes(pattern as never), pattern);
+    assert.ok(!BANNED_PHRASES.includes(pattern), pattern);
+  }
+  assert.ok(BANNED_PHRASES.includes("I'll always protect you"), "the spoken clichés stay banned everywhere");
 });
 
 test("scenes, messages and caring messages all carry the player's own banned phrases", () => {

@@ -10,7 +10,12 @@
 // wrapper also needs characterCard, personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the
 // references it is given (a place has none; an expression edit has its base) and saves nothing: uploadToGallery keeps
 // it, in the shape the kit's expressions module calls.
-import { forgeSubjectReference, forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
+import { forgeEngineLocalHeaders } from "@forge-kit/engine-local-auth.mjs";
+import {
+  forgeLocalAvatarPath,
+  forgeSubjectReference,
+  forgeWrapImageReferenceClient,
+} from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 
 /** Whose likeness a look keeps: the fields forgeWrapImageReferenceClient reads to find a reference image. */
@@ -19,11 +24,62 @@ export interface ImageSubject {
   cardId?: string;
   personaId?: string;
   portrait?: string;
-  /** A second likeness the kit tries after `portrait` (cgSubjects: the setup portrait behind a worn look). */
+  /** The last likeness the kit tries, after the card or persona avatar and `portrait` (cgSubjects: their outfit). */
   avatarPath?: string;
+  /**
+   * Only the card or persona avatar, never the card's full-body sprite: scene art's stand-in while someone's outfit has
+   * no picture yet (art/cg.ts cgSubjects), so no picture shows clothes the prompt does not name.
+   */
+  avatarOnly?: true;
   outfits?: unknown[];
   /** The look worn now: the kit sends its image after the faces for scene and banner art. */
   wornOutfit?: string;
+  /**
+   * The person this paint must show as themselves (their name, for the error). When they have a picture to send but
+   * none of it loads, the paint stops before the paid call (MissingLikenessError) instead of painting a stranger.
+   */
+  who?: string;
+}
+
+/** A person's pictures exist but none could be loaded: thrown before the paid call, so the paint fails with Retry. */
+export class MissingLikenessError extends Error {
+  constructor(who: string) {
+    super(`No picture of ${who} could be loaded to send as a reference, so nothing was painted or paid for.`);
+    this.name = "MissingLikenessError";
+  }
+}
+
+/** The look the subject wears, as the kit finds it (sent only with scene art). */
+function wornLookPath(subject: Pick<ImageSubject, "wornOutfit" | "outfits">): string {
+  const id = str(subject.wornOutfit);
+  const outfits = (Array.isArray(subject.outfits) ? subject.outfits : []) as Array<{
+    id?: unknown;
+    url?: unknown;
+  } | null>;
+  return id ? forgeLocalAvatarPath(outfits.find((item) => str(item?.id) === id)?.url) : "";
+}
+
+/**
+ * Whether the subject has a picture the kit could send: a portrait, avatarPath or (for scene art) worn look the Engine
+ * serves, or a card or persona whose avatar it serves. Reads the card or persona only; no image is fetched.
+ */
+export async function hasLikenessSource(
+  client: Pick<ImageClient, "characterCard" | "personaAvatar">,
+  subject: Omit<ImageSubject, "kind">,
+  scene = false,
+): Promise<boolean> {
+  if ([subject.portrait, subject.avatarPath].some((path) => forgeLocalAvatarPath(path))) return true;
+  if (scene && wornLookPath(subject)) return true;
+  try {
+    const avatar = str(subject.cardId)
+      ? (await client.characterCard(str(subject.cardId)))?.avatarPath
+      : str(subject.personaId)
+        ? await client.personaAvatar(str(subject.personaId))
+        : "";
+    return !!forgeLocalAvatarPath(avatar);
+  } catch {
+    return false;
+  }
 }
 
 export interface PortraitRequest {
@@ -58,6 +114,11 @@ export interface ImageRequest {
   height: number;
   debugMode: boolean;
   referenceImages?: string[];
+  /**
+   * How many of `referenceImages`, first in order, picture someone in it, one each (absent: one). NovelAI is sent those
+   * alone, never the outfit or place pictures after them, which it would read as more people.
+   */
+  characters?: number;
 }
 
 /** An image the Engine painted, not saved yet. `overrideTook` is false when the Engine compiled its own prompt. */
@@ -86,6 +147,8 @@ export interface StyleProfile {
   negativeTags: string;
   /** The profile writes tag prompts (its promptMode is "tagged" or "danbooru"), not sentences. */
   tagged?: boolean;
+  /** #2465: NovelAI paints it, so the prompt leads with its people counts (S/prompts.ts novelAiCounts). */
+  novelai?: boolean;
 }
 
 /** An Engine image style profile as Settings → Images lists it (GET /image-style-profiles). */
@@ -115,8 +178,14 @@ export interface ImageClient {
   }): Promise<{ id: string; url: string }>;
   /** The chosen image style profile, else the Engine's default, else the first; empty when there is none. */
   styleProfile(profileId?: string): Promise<StyleProfile>;
+  /** #2465: the connection paints with NovelAI (paintsWithNovelAi); false when it cannot be read. */
+  novelAi?(connectionId: string): Promise<boolean>;
   /** The Engine's image style profiles and its default, for the picker (empty when they cannot be read). */
   styleProfiles?(): Promise<{ defaultProfileId: string; profiles: StyleProfileOption[] }>;
+  /** #2147: the card's or persona's Engine sprites, as file paths built here (S/art/engine-art.ts). Throws. */
+  sprites?(ownerId: string): Promise<Array<{ expression: string; url: string }>>;
+  /** #2147: the Engine's background library, the player's and Game Assets' (art/places.ts chooseBackground). Throws. */
+  backgrounds?(): Promise<Array<{ url: string; filename: string; tags: string[] }>>;
   deleteGalleryImage(id: string): Promise<boolean>;
   characterCard(cardId: string): Promise<{ avatarPath: string } | null>;
   personaAvatar(personaId: string): Promise<string>;
@@ -137,16 +206,37 @@ const IMAGE_TYPES: Record<string, string> = {
 
 /**
  * The style every picture of a world is painted in: the Engine's style profile, with the player's own image style
- * (Settings → Images) in place of the profile's style words when they have written one.
+ * (Settings → Images) before the profile's style words when they have written one.
  */
 export async function worldStyle(
-  images: Pick<ImageClient, "styleProfile">,
-  settings: { styleProfileId?: string; style?: string },
+  images: Pick<ImageClient, "styleProfile" | "novelAi">,
+  settings: { styleProfileId?: string; style?: string } & Partial<ImageConnections>,
+  kind: ImageKind = "art",
 ): Promise<StyleProfile> {
   const profile = await images.styleProfile(settings.styleProfileId);
   const own = str(settings.style);
-  return own ? { ...profile, styleText: own } : profile;
+  // The player's own words lead, and the profile's style words follow: they add to it, never replace it.
+  const styled = own ? { ...profile, styleText: [own, profile.styleText].filter(Boolean).join(", ") } : profile;
+  // #2465: NovelAI paints this kind of picture, so its prompt is in NovelAI's style whatever the profile says: tags,
+  // its quality tags and its negative preset's words (the API adds neither), and for people its people counts.
+  const connectionId = imageConnectionFor({ connectionId: null, ...settings }, kind);
+  if (!connectionId || !(await images.novelAi?.(connectionId))) return styled;
+  const tags = (...parts: string[]) => parts.map(str).filter(Boolean).join(", ");
+  return {
+    ...styled,
+    tagged: true,
+    novelai: true,
+    positiveTags: tags(styled.positiveTags, NOVELAI_QUALITY),
+    negativeTags: tags(styled.negativeTags, NOVELAI_NEGATIVE, kind === "background" ? "" : NOVELAI_PEOPLE_NEGATIVE),
+  };
 }
+
+/** #2465: NovelAI's quality tags (its app adds them; the API does not), which end the prompt. */
+export const NOVELAI_QUALITY = "very aesthetic, masterpiece, no text";
+/** #2465: V5's Heavy negative preset, in words (the API takes only its number), and its human focus for people. */
+export const NOVELAI_NEGATIVE =
+  "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page";
+export const NOVELAI_PEOPLE_NEGATIVE = "@_@, mismatched pupils, glowing eyes, bad anatomy";
 
 /** The Engine sends at most this many references to the provider (characters.routes.ts avatar-generation). */
 export const REFERENCES_MAX = 4;
@@ -209,6 +299,18 @@ export function loopbackBaseUrl(env: Record<string, string | undefined> = proces
   return `${scheme}://127.0.0.1:${Number.isFinite(port) ? port : 7860}`;
 }
 
+/**
+ * `fetchImpl` with the Android local secret added to each request for this device's Engine (#2357): an Android app
+ * install refuses the device's own requests without it. The caller's headers are plain objects and are kept; a
+ * request that gets no secret is passed on as it was.
+ */
+export function withEngineLocalAuth(fetchImpl: Fetch): Fetch {
+  return (url, init) => {
+    const headers = forgeEngineLocalHeaders(String(url), init?.headers as Record<string, string> | undefined);
+    return fetchImpl(url, headers === init?.headers ? init : { ...init, headers });
+  };
+}
+
 /** The avatar-generation override id the Engine matches for `name` (characters.routes.ts avatarGenerationPromptId). */
 export function avatarOverrideId(name: string): string {
   const slug = name
@@ -241,9 +343,12 @@ function parseJson(value: string): unknown {
 /** The loopback client, wrapped so portraits and scenes carry their subjects' avatars as references. */
 export function createImageClient({
   baseUrl = loopbackBaseUrl(),
-  fetch: fetchImpl = globalThis.fetch,
+  fetch: injectedFetch = globalThis.fetch,
   logger,
 }: { baseUrl?: string; fetch?: Fetch; logger?: Logger } = {}): ImageClient {
+  const fetchImpl = withEngineLocalAuth(injectedFetch);
+  /** Whether the wrapper found a picture of each subject it was handed (subjectReference), for generateBannerArt. */
+  const pictured = new WeakMap<object, boolean>();
   async function request(path: string, init?: RequestInit): Promise<unknown> {
     const response = await fetchImpl(`${baseUrl}${path}`, init);
     if (!response.ok) {
@@ -253,7 +358,10 @@ export function createImageClient({
       } catch {
         reason = "";
       }
-      throw new Error(`engine ${path} -> ${response.status}${reason ? `: ${reason}` : ""}`);
+      // #2147: with its status, so a card that is gone (404) is told from a failed read (S/art/engine-art.ts).
+      throw Object.assign(new Error(`engine ${path} -> ${response.status}${reason ? `: ${reason}` : ""}`), {
+        status: response.status,
+      });
     }
     return response.json();
   }
@@ -273,7 +381,24 @@ export function createImageClient({
   };
 
   const client: ImageClient = {
-    async generateImage({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
+    async generateImage({
+      connectionId,
+      name,
+      prompt,
+      negativePrompt,
+      width,
+      height,
+      debugMode,
+      referenceImages,
+      characters = 1,
+    }) {
+      // #2465: every prompt here names what people wear, so on NovelAI the prompt dresses them rather than the
+      // reference (the Engine's preferReferenceOutfit, which an Engine before it ignores). 0.47.2: NovelAI got only the
+      // picture's focus, and drew everyone in a picture of two with that one face; V5 tells several character
+      // references apart (the maintainer's test), so it gets one per person in the picture, as NovelAI's own client
+      // sends them.
+      const novelai = !!referenceImages?.length && !!(await client.novelAi?.(connectionId));
+      if (novelai) referenceImages = referenceImages!.slice(0, characters);
       const result = (await request("/api/characters/avatar-generation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -286,6 +411,7 @@ export function createImageClient({
           height,
           debugMode,
           referenceImages: referenceImages?.length ? referenceImages.slice(0, REFERENCES_MAX) : undefined,
+          ...(novelai && referenceImages?.length ? { preferReferenceOutfit: false } : {}),
           promptOverrides: [{ id: avatarOverrideId(name), prompt, negativePrompt }],
         }),
       })) as { image?: unknown; prompt?: unknown } | null;
@@ -349,9 +475,11 @@ export function createImageClient({
       return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
-    async generateBannerArt({ units: _units, ...request }) {
-      // `units` only tell the wrapper whose references to add; they are in `referenceImages` by now.
-      const image = await client.generateImage(request);
+    async generateBannerArt({ units, ...request }) {
+      // `units` told the wrapper whose references to add: the pictures found for them come first in `referenceImages`,
+      // one each, before any worn outfit's, so only those count as people.
+      const characters = units.filter((unit) => pictured.get(unit) === true).length;
+      const image = await client.generateImage({ ...request, characters });
       return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
@@ -363,15 +491,32 @@ export function createImageClient({
         const profile = find(str(profileId)) ?? find(defaultProfileId) ?? list[0];
         if (!profile) return empty;
         const mode = str(profile.promptMode);
+        const tagged = mode === "tagged" || mode === "danbooru";
         return {
-          styleText: str(profile.baseStyle) === "auto" ? "" : str(profile.styleText),
+          // #2467: a tag profile's style text describes the profile ("Danbooru-tagged anime generation for SDXL…"), and
+          // its tags carry the style: the Engine leaves it out of tag prompts, and so does Otome. Auto's is an instruction.
+          styleText: str(profile.baseStyle) === "auto" || tagged ? "" : str(profile.styleText),
           positiveTags: str(profile.positiveTags),
           negativeTags: str(profile.negativeTags),
-          tagged: mode === "tagged" || mode === "danbooru",
+          tagged,
         };
       } catch (error) {
         logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));
         return empty;
+      }
+    },
+
+    async novelAi(connectionId) {
+      try {
+        const rows: unknown = await request("/api/connections");
+        const row = (Array.isArray(rows) ? rows : []).find(
+          (entry): entry is Record<string, unknown> =>
+            !!entry && typeof entry === "object" && str((entry as Record<string, unknown>).id) === connectionId,
+        );
+        return !!row && paintsWithNovelAi(row);
+      } catch (error) {
+        logger?.warn("[otome-forge] could not read the image connection %s: %s", connectionId, String(error));
+        return false;
       }
     },
 
@@ -394,6 +539,41 @@ export function createImageClient({
         logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));
         return { defaultProfileId: "", profiles: [] };
       }
+    },
+
+    async sprites(ownerId) {
+      const id = str(ownerId);
+      if (!id || id.includes("..") || /[\\/]/u.test(id)) return [];
+      const rows: unknown = await request(`/api/sprites/${encodeURIComponent(id)}`);
+      // Never a URL from the metadata: the file path is built from the id and a filename of a plain stem, never SVG.
+      return (Array.isArray(rows) ? rows : []).flatMap((row) => {
+        const filename = str(row?.filename);
+        const stem = /^([a-z0-9_-]+)\.(?:png|jpe?g|webp|gif|avif)$/iu.exec(filename)?.[1];
+        return stem && str(row?.expression) === stem
+          ? [
+              {
+                expression: stem.toLowerCase(),
+                url: `/api/sprites/${encodeURIComponent(id)}/file/${encodeURIComponent(filename)}`,
+              },
+            ]
+          : [];
+      });
+    },
+
+    async backgrounds() {
+      const rows: unknown = await request("/api/backgrounds");
+      return (Array.isArray(rows) ? rows : []).flatMap((row) => {
+        const url = str(row?.url);
+        const file = /^\/api\/(?:backgrounds|game-assets)\/file\/[^?#\\]+\.(?:png|jpe?g|webp|gif|avif)$/iu.test(url);
+        if (!file || url.split("/").some((part) => part === "." || part === "..")) return [];
+        return [
+          {
+            url,
+            filename: str(row?.filename),
+            tags: Array.isArray(row?.tags) ? row.tags.map(str).filter(Boolean) : [],
+          },
+        ];
+      });
     },
 
     async deleteGalleryImage(id) {
@@ -437,46 +617,71 @@ export function createImageClient({
       }
     },
   };
+  /**
+   * Who he is. A card's neutral full body is the best likeness there is, but the avatar is only replaced by it when one
+   * of the two is all we have: a portrait gets BOTH (the full body first, then the avatar), so the paint has his build
+   * and his face. Scenes keep one per subject, because the four-reference budget is shared across the whole cast.
+   * Never a URL from sprite metadata: the file route is derived from the selected id and a verified filename.
+   */
+  async function likeness(client: ImageClient, subject: Omit<ImageSubject, "kind">, method?: string) {
+    const cardId = str(subject.cardId);
+    const both = method === "generatePortrait" || method === "generateOutfit";
+    if (cardId && !subject.avatarOnly && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
+      try {
+        const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
+        const neutral = Array.isArray(sprites)
+          ? sprites.find(
+              (sprite) =>
+                str(sprite?.expression).toLowerCase() === "full_neutral" &&
+                /^full_neutral\.(?:png|jpe?g|gif|webp|avif)$/iu.test(str(sprite?.filename)),
+            )
+          : undefined;
+        if (neutral) {
+          const image = await client.cardAvatarImage(
+            `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(str(neutral.filename))}`,
+          );
+          if (image) {
+            const full = `data:${image.mime};base64,${image.base64}`;
+            if (!both) return full;
+            const avatar = await forgeSubjectReference(client, subject);
+            return avatar && avatar !== full ? [full, avatar] : full;
+          }
+        }
+      } catch (error) {
+        // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
+        logger?.debug?.("[otome-forge] no neutral full body for %s: %s", cardId, String(error));
+      }
+    }
+    return forgeSubjectReference(client, subject);
+  }
+
   return forgeWrapImageReferenceClient(client, logger, {
     logPrefix: "[otome-forge]",
     /**
-     * Who he is. A card's neutral full body is the best likeness there is, but the avatar is only replaced by it when one
-     * of the two is all we have: a portrait gets BOTH (the full body first, then the avatar), so the paint has his build
-     * and his face. Scenes keep one per subject, because the four-reference budget is shared across the whole cast.
-     * Never a URL from sprite metadata: the file route is derived from the selected id and a verified filename.
+     * Their likeness. A subject with `who` whose pictures exist but none loads stops the paint before the paid call;
+     * with no picture at all it is painted from the description, as before.
      */
-    async subjectReference(client, subject, { method } = {}) {
-      const cardId = str(subject.cardId);
-      const both = method === "generatePortrait" || method === "generateOutfit";
-      if (cardId && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
-        try {
-          const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
-          const neutral = Array.isArray(sprites)
-            ? sprites.find(
-                (sprite) =>
-                  str(sprite?.expression).toLowerCase() === "full_neutral" &&
-                  /^full_neutral\.(?:png|jpe?g|gif|webp|avif)$/iu.test(str(sprite?.filename)),
-              )
-            : undefined;
-          if (neutral) {
-            const image = await client.cardAvatarImage(
-              `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(str(neutral.filename))}`,
-            );
-            if (image) {
-              const full = `data:${image.mime};base64,${image.base64}`;
-              if (!both) return full;
-              const avatar = await forgeSubjectReference(client, subject);
-              return avatar && avatar !== full ? [full, avatar] : full;
-            }
-          }
-        } catch (error) {
-          // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
-          logger?.debug?.("[otome-forge] no neutral full body for %s: %s", cardId, String(error));
-        }
-      }
-      return forgeSubjectReference(client, subject);
+    async subjectReference(client, subject, options = {}) {
+      const found = await subjectPicture(client, subject, options.method);
+      pictured.set(subject, !!found);
+      return found;
     },
   });
+
+  async function subjectPicture(client: ImageClient, subject: Omit<ImageSubject, "kind">, method?: string) {
+    const found = await likeness(client, subject, method);
+    const { who, ...rest } = subject as Omit<ImageSubject, "kind">;
+    if (found || !who) return found;
+    // Alone in a scene, the look they wear may still show them (the kit adds it too; one picture is sent once).
+    const scene = method === "generateBannerArt";
+    const worn = scene ? wornLookPath(rest) : "";
+    const image = worn ? await client.cardAvatarImage(worn) : null;
+    if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
+    // A picture that did not load (a deleted file): a stranger would be painted and paid for instead.
+    if (await hasLikenessSource(client, rest, scene)) throw new MissingLikenessError(who);
+    logger?.warn("[otome-forge] %s: %s has no picture to send; painted from the description", method, who);
+    return null;
+  }
 }
 
 const clients = new WeakMap<object, ImageClient>();
@@ -489,4 +694,44 @@ export function imageClientFor(runtime: Pick<CapabilityRuntimeHost, "logger">): 
     clients.set(runtime, client);
   }
   return client;
+}
+
+/**
+ * #2465: an Engine image connection that paints with NovelAI, as the Engine resolves its backend (@marinara-engine/shared
+ * resolveImageBackend): its named service when it has one, else a NovelAI model or address.
+ * ponytail: a copy of that rule's NovelAI branch, since a package cannot import the Engine's code; a proxy the Engine
+ * reaches NovelAI through reads as not NovelAI. Upgrade path: the Engine telling packages a connection's backend.
+ */
+export function paintsWithNovelAi(row: Record<string, unknown>): boolean {
+  const model = str(row.model).toLowerCase();
+  const service = (str(row.imageService) || str(row.imageGenerationSource)).toLowerCase();
+  if (service && service !== model) return service === "novelai";
+  let host = "";
+  try {
+    host = new URL(str(row.baseUrl)).hostname.toLowerCase();
+  } catch {
+    // No address: the model decides.
+  }
+  return model.includes("nai-diffusion") || host === "novelai.net" || host.endsWith(".novelai.net");
+}
+
+/** What a picture is, for the connection that paints it (Settings → Images). */
+export type ImageKind = "background" | "scene" | "art";
+
+/**
+ * The connection that paints a `kind` of picture: a background (a place) or scene art (a story CG, a date's keepsake, a
+ * hangout's memento, a photo) by its own choice when one is made, anything else and an unchosen kind by the image
+ * connection. Null for a world played without images: the image connection turns pictures on, never the other two.
+ */
+export interface ImageConnections {
+  connectionId: string | null;
+  backgroundConnectionId?: string;
+  sceneConnectionId?: string;
+}
+
+export function imageConnectionFor(images: ImageConnections, kind: ImageKind): string | null {
+  if (!images.connectionId) return null;
+  const own =
+    kind === "background" ? images.backgroundConnectionId : kind === "scene" ? images.sceneConnectionId : undefined;
+  return own || images.connectionId;
 }

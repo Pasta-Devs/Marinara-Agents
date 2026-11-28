@@ -13,6 +13,7 @@ import type { SlurpBootstrap } from "../../modules/settings/slp-settings.js";
 import { mapManagedPost, mapPostUnlock } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createEconomyTailStorage1(context: SlurpStorageContext) {
   const {
     db,
@@ -63,7 +64,7 @@ export function createEconomyTailStorage1(context: SlurpStorageContext) {
     ): Promise<void> {
       const run = enqueueFinancial(async () => {
         const current = await this.getEarnings(creatorAccountId);
-        const next = earnCreatorIncome(current, kind, amount, new Date(), note);
+        const next = earnCreatorIncome(current, kind, amount, slurpWorldNow(), note);
         if (next !== current) await writeEarnings(creatorAccountId, next);
       });
       await run;
@@ -74,7 +75,7 @@ export function createEconomyTailStorage1(context: SlurpStorageContext) {
     },
     async bootstrap(): Promise<SlurpBootstrap> {
       const posts = await this.listPosts({ limit: 160 });
-      const scheduler = slpRefreshSchedulerStatus(await this.ensureRefreshSchedule(new Date()), new Date());
+      const scheduler = slpRefreshSchedulerStatus(await this.ensureRefreshSchedule(slurpWorldNow()), slurpWorldNow());
       return {
         settings: await this.getSettings(),
         scheduler,

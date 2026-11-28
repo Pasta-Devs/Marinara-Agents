@@ -45,7 +45,7 @@ export async function fillIntimacy(
   return readOrGenerate(runId, read, async () => {
     signal?.throwIfAborted();
     const run = await readRun(deps.store, runId);
-    if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
     if (!intimacyOpen(run.world.content)) {
       throw new OtomeForgeError(409, "Intimacy preferences are for adult NSFW stories only.", "conflict");
     }

@@ -570,7 +570,7 @@ test("an unexpected failure of a care request is a plain 500 that is never logge
   const call = careRoutes({ ...t.deps, store: broken }, "r-care13-aaaaaa");
   const result = await call("POST", "/runs/:run/care-note", { body: { li: KAI, careLine: DAY_TWO } });
   assert.equal(result.status, 500);
-  assert.deepEqual(result.body, { error: "Otome Forge could not complete the request." });
+  assert.deepEqual(result.body, { error: "Otome Hearth could not complete the request." });
   assert.equal(result.headers["cache-control"], "no-store");
   assert.deepEqual(t.logs, [], "createHandle would log the care-note path; the route keeps it out of the log");
   assert.deepEqual(writtenAtDefault(t.logs), []);

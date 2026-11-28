@@ -10,6 +10,10 @@ import type {
   RunState,
 } from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { defaultContent } from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import {
+  defaultFriendState,
+  type FriendBible,
+} from "../../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/friends.ts";
 import { runForeground } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
   createHandle,
@@ -28,10 +32,12 @@ import {
   worldId,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
+  OVERVIEW_STYLE,
   serializeTimeline,
   type TimelineEntry,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import { registerArcRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/arcs.ts";
+import { registerFriendRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/friends.ts";
 import { registerStoryRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
 import { normalizeIndex } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/index.ts";
 import { normalizePlayer } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
@@ -88,6 +94,55 @@ export function bible(changes: Partial<Bible> = {}): Bible {
   };
 }
 
+/** #2458: Kaveh, a friend of hers (never a love interest), and his friend bible. */
+export const KAVEH = "li-kaveh-ab12";
+export function friendBible(changes: Partial<FriendBible> = {}): FriendBible {
+  return {
+    age: 24,
+    role: "Architect of the harbour's new bridge",
+    howWeMet: "They share a wall in the lantern-keepers' row.",
+    publicFace: "Sharp-tongued and always right.",
+    personality: "Proud, fussy, secretly soft.",
+    wound: "A failed bridge.",
+    want: "To build something that lasts.",
+    need: "To let someone help.",
+    fear: "Being ordinary.",
+    flaws: ["stubborn"],
+    virtues: ["loyal"],
+    voice: { register: "Precise and dry.", tics: ["Honestly."], samples: { warm: "W", teasing: "T", worried: "R" } },
+    likes: ["blueprints"],
+    dislikes: ["mess"],
+    growth: { "1": "RANK-ONE", "2": "RANK-TWO", "3": "RANK-THREE", "4": "RANK-FOUR", "5": "RANK-FIVE" },
+    onLis: { [KAI]: { stance: "ships", why: "KAI-STANCE-WHY" }, "li-ghost-0000": { stance: "against", why: "gone" } },
+    onHer: "Worried she works too hard.",
+    arcana: "star",
+    look: { identityLine: "tall, ash hair", outfitLine: "linen coat", presentation: "man" },
+    ...changes,
+  };
+}
+
+/** Kaveh as her friend already, with his friend bible and `unit` on top, at `points` of friendship. */
+export async function seedFriend(
+  t: { store: Pick<OtomeStore, "mutateDoc" | "updateDoc">; runId: string },
+  unit: Record<string, unknown> = {},
+  points = 0,
+) {
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAVEH)), normalizeUnit, (current) => ({
+    ...current,
+    id: KAVEH,
+    name: "Kaveh",
+    pronouns: HE,
+    friend: friendBible(),
+    identityLine: "tall, ash hair",
+    outfitLine: "linen coat",
+    createdAt: "2026-11-24T10:00:00.000Z",
+    ...unit,
+  }));
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    friends: { [KAVEH]: { ...defaultFriendState(0, "2026-11-24T10:00:00.000Z"), points } },
+  }));
+}
 /** The ready world: index, world, player, three LIs with bibles, and their state (`lis` overrides per LI). */
 export async function storyWorld({
   runKey,
@@ -96,7 +151,9 @@ export async function storyWorld({
   content = defaultContent(),
   cancellation = false,
   personas = [],
+  characters = [],
   arcReply,
+  quizReply,
   model = {},
 }: {
   runKey: string;
@@ -105,10 +162,14 @@ export async function storyWorld({
   content?: ReturnType<typeof defaultContent>;
   cancellation?: boolean;
   personas?: Array<{ id: string; data: unknown }>;
+  /** The player's Engine character cards (0.20.0: side characters are matched to them). */
+  characters?: FakeRuntimeOptions["characters"];
   /** #1983 M4: the arc plan the fake writes, when a test needs one that differs from the default. */
   arcReply?: (prompt: string) => string;
-  /** The fake connection's context window, output cap and background admission (#2039). */
-  model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens" | "admissionRun">;
+  /** #2174: the personality quiz lines the fake writes, when a test needs other ones than fakeQuizReply's. */
+  quizReply?: FakeRuntimeOptions["quizReply"];
+  /** The fake connection's context window, output cap and background admission (#2039), and the embedders (0.19.0). */
+  model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens" | "admissionRun" | "embeddings" | "embeddingsFor">;
 }) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
@@ -116,7 +177,9 @@ export async function storyWorld({
     documents: fake.documents,
     replies,
     personas,
+    characters,
     ...(arcReply ? { arcReply } : {}),
+    ...(quizReply ? { quizReply } : {}),
     ...model,
   });
   const runId = runIdOf(runKey);
@@ -185,6 +248,7 @@ export function storyRoutes(deps: RouteDeps, runKey: string) {
   };
   registerStoryRoutes(router, deps);
   registerArcRoutes(router, deps);
+  registerFriendRoutes(router, deps);
   return async (method: "GET" | "POST", path: string, body: object = {}, params: Record<string, string> = {}) => {
     const handler = routes.get(`${method} ${path}`);
     assert.ok(handler, `${method} ${path} is registered`);
@@ -273,12 +337,16 @@ export const MIREILLE_ONLY = [
   "MIR-REPAIR-OFFSCREEN",
 ];
 export const RUPTURE_ID = "g-3";
-export function withMireillesPrivateRows(state: RunState, { rupture = false } = {}): RunState {
+/** `holder` "protagonist": the rupture is one she holds (from before #2156), so his dates stay open. */
+export function withMireillesPrivateRows(
+  state: RunState,
+  { rupture = false, holder = "li" as "li" | "protagonist" } = {},
+): RunState {
   const kai = state.lis[KAI]!;
   const grievance = (id: string, text: string, opened: string, severity: "minor" | "rupture" = "minor") => ({
     id,
     li: KAI,
-    by: "li" as const,
+    by: severity === "rupture" ? holder : ("li" as const),
     text,
     severity,
     opened,
@@ -453,7 +521,7 @@ export async function saveStoryMemory(
         content: serializeTimeline({ head, entries }),
         sources: [...entries.map((entry) => entry.key), ...covered].map(stamp),
       },
-      overviewStyle: 4,
+      overviewStyle: OVERVIEW_STYLE,
       status: { phase: "ready", retryable: false },
     }),
   );

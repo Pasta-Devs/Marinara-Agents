@@ -23,6 +23,7 @@ import { readSlurpCouplePartner } from "../projects/slp-projects-contract.js";
 import type { SlurpTieStamp } from "../../modules/projects/slp-tie-stamp.js";
 import { SLP_EXPLICIT_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * How far this post may go: the Creator's level, and for a collab the lower of the two pages', since
  * the joint post shows on both and the partner's subscribers read it there too.
@@ -100,7 +101,8 @@ export async function planSlurpPostSpice(
     /** This post's planned level and the Creator's ceiling, both under the Slurp-wide limit. */
     explicitLevel: SlurpExplicitLevel;
     dialLevel: SlurpExplicitLevel;
-    collabs: readonly SlurpCreatorCollab[];
+    /** `null` while Storylines is off: no collab or couple partner joins the post. */
+    collabs: readonly SlurpCreatorCollab[] | null;
     recentPosts: readonly { metadata?: unknown }[];
     sequence: number;
     variation: SlurpPostVariation | null;
@@ -120,7 +122,7 @@ export async function planSlurpPostSpice(
   // A sponsored post, a rivalry post or a fight / breakup is about that; the spice stays for the other posts.
   const tie = input.beat?.tie;
   const partners =
-    postLevel === "explicit" && locked
+    postLevel === "explicit" && locked && input.collabs
       ? await spicePartners(db, input.account.id, input.collabs, tie).catch(() => ({
           collabs: [],
           ...(tie?.kind === "collab" || tie?.kind === "couple" ? { madeWith: null } : {}),
@@ -142,7 +144,7 @@ export async function planSlurpPostSpice(
           feed:
             // A trend adoption skips the damping: being alike is its point (docs/TRENDS.md).
             postLevel !== "none" && (locked || input.teaser) && input.beat?.anchorKind !== "trend"
-              ? await listSlurpFeedSpice(db, input.account.id, input.at ?? new Date())
+              ? await listSlurpFeedSpice(db, input.account.id, input.at ?? slurpWorldNow())
               : [],
           sequence: input.sequence,
           teasedKind: input.teasedKind,

@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
-// Story Writer sidebar: chapters and summaries, the timeline, and the author's note option
+// Story Writer sidebar: chapters and summaries, the timeline, the author's note option and the prompt peek
 // ──────────────────────────────────────────────
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDown, ArrowUp, ChevronDown, Layers, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Layers, Plus, ScanEye, Sparkles, Trash2, X } from "lucide-react";
 import { chaptersToSummarize, type StoryGenerationApi } from "../../../hooks/use-story-generation";
 import { generateClientId } from "../../../lib/utils";
 import {
@@ -14,7 +14,7 @@ import {
   type StorySettings,
   type TimelineEvent,
 } from "../../../lib/story-writer/model";
-import { NumberField, TextField, Toggle, useDraftText, useNumberFormat } from "./fields";
+import { EntryText, NumberField, TextField, Toggle, useNumberFormat } from "./fields";
 
 type SettingsChange = (patch: Partial<StorySettings>, options?: { immediate?: boolean }) => void;
 
@@ -28,6 +28,7 @@ export function ToolsSection(props: {
   onSaveSummary(chapterId: string, summary: string): void;
   onDeleteChapter(chapterId: string): void;
   onJump(chapterId: string): void;
+  onPeekPrompt(): void;
 }) {
   const { t } = useTranslation();
   const { settings, onChange, chapters, generation, canGenerate } = props;
@@ -39,6 +40,7 @@ export function ToolsSection(props: {
       <h4 className="sw-subheading">{t("tools.chapters")}</h4>
       <ChapterList
         chapters={chapters}
+        showDrafts={!settings.writerDecides}
         canGenerate={canGenerate}
         generation={generation}
         onSaveSummary={props.onSaveSummary}
@@ -101,16 +103,29 @@ export function ToolsSection(props: {
       <h4 className="sw-subheading">{t("tools.authorNote")}</h4>
       <Toggle
         label={t("tools.clearNote")}
-        hint={t("tools.clearNoteHint")}
+        hint={t(settings.writerDecides ? "tools.clearNoteHintGenerate" : "tools.clearNoteHint")}
         checked={settings.clearNoteAfterChapter}
         onChange={(clearNoteAfterChapter) => onChange({ clearNoteAfterChapter }, { immediate: true })}
       />
+
+      <h4 className="sw-subheading">{t("tools.prompt")}</h4>
+      <div className="sw-field">
+        <div className="sw-button-row">
+          <button type="button" className="sw-button" onClick={props.onPeekPrompt}>
+            <ScanEye size={15} aria-hidden="true" />
+            {t("tools.peek")}
+          </button>
+        </div>
+        <p className="sw-hint">{t(settings.writerDecides ? "tools.peekHintGenerate" : "tools.peekHint")}</p>
+      </div>
     </>
   );
 }
 
 function ChapterList(props: {
   chapters: StoryChapter[];
+  /** Off when the writer decides: then a draft is only a chapter nobody has marked finished. */
+  showDrafts: boolean;
   canGenerate: boolean;
   generation: StoryGenerationApi;
   onSaveSummary(chapterId: string, summary: string): void;
@@ -157,7 +172,9 @@ function ChapterList(props: {
                   {number}
                 </span>
                 <span className="sw-toc-title">{displayTitle}</span>
-                {chapter.status === "draft" ? <span className="sw-toc-tag">{t("tools.draft")}</span> : null}
+                {props.showDrafts && chapter.status === "draft" ? (
+                  <span className="sw-toc-tag">{t("tools.draft")}</span>
+                ) : null}
                 <span className="sw-toc-words">{formatNumber(words)}</span>
               </button>
               <button
@@ -252,9 +269,10 @@ function TimelineEditor(props: { events: TimelineEvent[]; onChange: SettingsChan
                   replace(events.map((item) => (item.id === event.id ? { ...item, done: !item.done } : item)))
                 }
               />
-              <EventText
+              <EntryText
                 value={event.text}
                 label={t("tools.eventText", { number: index + 1 })}
+                maxLength={LIMITS.timelineEventText}
                 onChange={(text) =>
                   replace(
                     events.map((item) => (item.id === event.id ? { ...item, text } : item)),
@@ -317,32 +335,5 @@ function TimelineEditor(props: { events: TimelineEvent[]; onChange: SettingsChan
         </form>
       ) : null}
     </>
-  );
-}
-
-/**
- * An event's text. Stored events are trimmed and never empty, so clearing the field keeps the old text (delete has its
- * own button) and a trailing space being typed is not an outside change.
- */
-function EventText(props: { value: string; label: string; onChange(text: string): void }) {
-  const [draft, update] = useDraftText(
-    props.value,
-    (text) => {
-      if (text.trim() && text.trim() !== props.value) props.onChange(text);
-    },
-    (text) => text.trim().slice(0, LIMITS.timelineEventText),
-  );
-  return (
-    <input
-      type="text"
-      className="sw-input"
-      value={draft}
-      maxLength={LIMITS.timelineEventText}
-      aria-label={props.label}
-      onChange={(event) => update(event.target.value)}
-      onBlur={() => {
-        if (!draft.trim()) update(props.value);
-      }}
-    />
   );
 }

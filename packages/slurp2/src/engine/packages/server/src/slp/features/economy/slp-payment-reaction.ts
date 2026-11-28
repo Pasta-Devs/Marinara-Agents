@@ -5,6 +5,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { replyToSlurpMessage } from "../messages/slp-messages-contract.js";
 import { slurpIsCouplePage } from "../projects/slp-projects-contract.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 const PAYMENT_REACTION_QUIET_MS = 2 * 60 * 60_000;
 /**
  * How often a payment earns a reply at all. A tip or a commission is a gesture aimed at her; an
@@ -56,7 +57,7 @@ export async function reactToSlurpPayment(
     // a stored marker is a fan message, and the away scheduler answered it later even when this
     // path had decided to stay quiet.
     if (Math.random() >= REACTION_CHANCE[input.kind]) return;
-    const since = new Date(Date.now() - PAYMENT_REACTION_QUIET_MS).toISOString();
+    const since = new Date(slurpWorldNowMs() - PAYMENT_REACTION_QUIET_MS).toISOString();
     const event = await messages.appendMessage(thread.id, {
       id: `payment-reaction:${input.kind}:${input.viewerAccountId}:${input.creatorAccountId}:${Date.now()}`,
       senderAccountId: input.viewerAccountId,

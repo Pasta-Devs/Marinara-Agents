@@ -75,6 +75,11 @@ async function main() {
       assert.equal(await service.retract({ caller: "slurp2", recordId: "fact:f1" }), null);
       assert.equal(await noteCount(), 1, "nothing is written while adding is off");
       await updateLtmGlobalSettings({ longTermMemoryAcceptFromPackages: true }, root);
+      await updateLtmGlobalSettings({ longTermMemoryPackageAccess: { slurp2: { add: false } } }, root);
+      assert.equal(await service.submit(record), null, "Slurp's own Can add switch off stops its records");
+      assert.equal(await service.retract({ caller: "slurp2", recordId: "fact:f1" }), null);
+      assert.equal(await noteCount(), 1, "nothing is written while Slurp may not add");
+      await updateLtmGlobalSettings({ longTermMemoryPackageAccess: { slurp2: { add: true } } }, root);
 
       // 2. Only a known caller, valid input and a live signal are accepted.
       assert.equal(await service.submit({ ...record, caller: "other-pkg" }), null, "an unknown caller gets null");

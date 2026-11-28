@@ -11,7 +11,7 @@
 //
 // Resolution: composure starts at 2 and moves by each picked option's own −1, 0 or +1 within 0–4 (SH/arcs.ts). After
 // round 3, 0 is the truth (trust +1), 4 a walkout (a major grievance he holds, or a rupture when trust is at −2 or
-// below), anything else a standoff (tension +1). Each Reveal records her disclosure. All of it is first play only:
+// below, as long as #2156's once-an-arc rule allows: S/state/relationship.ts), anything else a standoff (tension +1). Each Reveal records her disclosure. All of it is first play only:
 // every stance is saved on the beat once, and its effects reach `${R}:state` through applyChoiceEffects, whose
 // `applied` entries (`${i}/stance-<k>`, `${i}/confrontation`) make each land exactly once, with the per-beat and
 // per-chapter clamps. Everything here is pure.
@@ -147,10 +147,14 @@ export interface SegmentLists {
   /** The list in its saved shape from `start` (the place it opens in); null when nothing usable is left. */
   list(raw: unknown, start: string): { segments: Segment[]; places: Array<{ name: string; tags: string }> } | null;
   /**
-   * Why the list's thoughts break the rules (a love interest's before stage 2, or a second one in the scene), or "".
-   * `counts` holds each love interest's thoughts on the way to this list, and gets the list's added.
+   * Why the list's thoughts break the rules (a second one of a love interest's in the scene), or "". `counts` holds each
+   * love interest's thoughts on the way to this list, and gets the list's added.
    */
   thoughts(raw: unknown[], counts: Map<string, number>): string;
+  /** The list without masked love interests' thought lines, and where an index into it moves (beats.ts withoutMaskedThoughts). */
+  unmask(raw: unknown): { segments: unknown; at(index: unknown): unknown };
+  /** 0.34.0: the protagonist's own line as shown: without Emotion cues while they are on (beats.ts withoutCues). */
+  shown?(text: string): string;
 }
 
 /** The stored parts a P12 (P12c) reply becomes: the opening (the beat's segments) and the rest of the game. */
@@ -201,9 +205,12 @@ export function normalizeConfrontationReply(
     for (const seen of alternatives) for (const [li, count] of seen) most.set(li, Math.max(most.get(li) ?? 0, count));
     return most;
   };
-  const tooLong = lengths("opening", reply.opening, CONFRONTATION_OPENING_MAX);
+  // A masked love interest's thought line is dropped from every list, not refused; the CG's `at` moves with the opening.
+  const unmaskedOpening = lists.unmask(reply.opening);
+  const rawOpening = unmaskedOpening.segments;
+  const tooLong = lengths("opening", rawOpening, CONFRONTATION_OPENING_MAX);
   if (tooLong) return tooLong;
-  const openingThought = thought(reply.opening, counts);
+  const openingThought = thought(rawOpening, counts);
   if (openingThought) return openingThought;
   // Every place a list is set in (a round or an ending may move on), in order, so each one is recorded and painted;
   // more than BEAT_PLACES_MAX get the repair turn, as an ordinary beat's do. A place first met with no description takes
@@ -220,13 +227,14 @@ export function normalizeConfrontationReply(
     }
     return "";
   };
-  const opening = lists.list({ segments: reply.opening, places: reply.places }, node.place ?? "");
+  const opening = lists.list({ segments: rawOpening, places: reply.places }, node.place ?? "");
   if (!opening) return "opening needs at least one segment with text";
   forgeSpeakerGenders(reply, opening.segments);
   const crowded = keep(opening.places);
   if (crowded) return crowded;
   let place = lastPlace(opening.segments, node.place ?? "");
-  const list = (name: string, raw: unknown, max: number, seen: Map<string, number>): Segment[] | string => {
+  const list = (name: string, written: unknown, max: number, seen: Map<string, number>): Segment[] | string => {
+    const raw = lists.unmask(written).segments;
     if (!Array.isArray(raw) || !raw.length) return `${name} needs 1 to ${max} segments`;
     if (raw.length > max) return `${name} has more than ${max} segments`;
     const problem = thought(raw, seen);
@@ -271,7 +279,12 @@ export function normalizeConfrontationReply(
       if (typeof segments === "string") return segments;
       const move = Number(option[spec.moveField]);
       if (![-1, 0, 1].includes(move)) return `rounds[${index}].options.${stance}.${spec.moveField} must be -1, 0 or 1`;
-      options[stance] = { label, selection: { kind, text: said }, segments, composure: move as -1 | 0 | 1 };
+      options[stance] = {
+        label: lists.shown?.(label) ?? label,
+        selection: { kind, text: lists.shown?.(said) ?? said },
+        segments,
+        composure: move as -1 | 0 | 1,
+      };
     }
     rounds.push({ his, options });
     counts = busiest(answers);
@@ -311,7 +324,7 @@ export function normalizeConfrontationReply(
   const cg = record(reply.cg);
   const brief = str(cg.brief, 1200);
   if (cgOpen && brief) {
-    const at = Number(cg.at);
+    const at = Number(unmaskedOpening.at(cg.at));
     body.cg = {
       at: Number.isInteger(at) ? Math.max(0, Math.min(opening.segments.length - 1, at)) : 0,
       brief,
@@ -482,13 +495,14 @@ function withOpenedUp(state: RunState, li: LiId, chapter: Pick<Chapter, "key" | 
  * Every effect the beat's saved moves have earned and the state does not have yet: each Reveal's (Mirror's)
  * disclosure, and the ending's effects once it is reached, with an Opened up Closer's first. A replay, or an effect
  * that already landed, changes nothing. The walkout reads trust from the state it lands on, so the rupture rule sees
- * the trust of that moment.
+ * the trust of that moment. `arc` is the story arc it lands in (#2156: his grievance opens once an arc).
  */
 export function applyConfrontation(
   state: RunState,
   chapter: Pick<Chapter, "key" | "nodes" | "title">,
   beat: Pick<Beat, "i" | "confrontation">,
   at: string,
+  arc?: number,
 ): ConfrontationOutcome {
   const confrontation = beat.confrontation;
   if (!confrontation) return { state, remembered: false, rememberedBy: [] };
@@ -502,6 +516,7 @@ export function applyConfrontation(
       choice,
       resolves: chapter.nodes[beat.i]?.resolves ?? [],
       at,
+      arc,
     });
     next = outcome.state;
     for (const li of outcome.rememberedBy) rememberedBy.add(li);

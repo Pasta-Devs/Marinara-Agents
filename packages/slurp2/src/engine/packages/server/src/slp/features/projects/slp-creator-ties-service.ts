@@ -75,6 +75,7 @@ import { bookSlurpHeldSlot, readSlurpSlotTimes } from "../feed/slp-held-slots-co
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 import { slpBrandDealsPace, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Storage = ReturnType<typeof createSlurpStorage>;
 type Account = Awaited<ReturnType<Storage["listNoodlerAccounts"]>>[number];
 
@@ -83,7 +84,7 @@ export const slurpRunsItself = (account: { kind: string; sourceKind?: string | n
   !(account.kind === "persona" && account.sourceKind === "persona");
 
 /** Every Creator as the tie rules see them: fit text from the card, tags, reach. Shared couple pages are not Creators here. */
-export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<SlurpTieCreator[]> {
+export async function loadSlurpTieCreators(db: DB, at = slurpWorldNow()): Promise<SlurpTieCreator[]> {
   const storage = createSlurpStorage(db);
   const [all, settings] = await Promise.all([storage.listNoodlerAccounts(), storage.getSettings()]);
   const accounts = all.filter((account: Account) => !slurpIsCouplePage(account));
@@ -132,7 +133,7 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
  * Settle what went up, then (every few hours) let the world answer, offer, and start or move ties.
  * Settling runs every tick, so a joint post reaches the partner's page within one tick.
  */
-export async function advanceSlurpCreatorTies(db: DB, at = new Date()): Promise<void> {
+export async function advanceSlurpCreatorTies(db: DB, at = slurpWorldNow()): Promise<void> {
   // "Pause all": ties, couples and bonds stand still while Slurp is paused.
   if (await slurpPausedNow(db)) return;
   await settleSlurpTiePosts(db, at);
@@ -491,7 +492,7 @@ export async function applySlurpPlayerUs(
   db: DB,
   input: { creatorId: string; pageId: string; step: SlurpPlayerCoupleStep; why: string },
 ): Promise<SlurpCouple | null> {
-  const at = new Date();
+  const at = slurpWorldNow();
   const creators = await loadSlurpTieCreators(db, at);
   const creator = creators.find((entry) => entry.id === input.creatorId);
   const page = creators.find((entry) => entry.id === input.pageId);
@@ -535,7 +536,7 @@ export async function agreeSlurpCollabInDm(
     document: {
       ...document,
       ties: slurpAgreeCollabInDm(document.ties, host, partner, {
-        at: new Date(),
+        at: slurpWorldNow(),
         id: newId(),
         idea: input.idea,
         hostShare: input.hostShare,

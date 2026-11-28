@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
+import { engineResourceKeys } from "../lib/story-writer/engine-library";
 import type { PromptCharacter, PromptLoreEntry } from "../lib/story-writer/prompt";
 
 export interface ConnectionOption {
@@ -30,19 +31,11 @@ const STALE_TIME = 30_000;
 const CHARACTER_PAGE_SIZE = 100;
 const MAX_CHARACTERS = 2_000;
 const DETAIL_CHARS = 140;
-const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio_generation", "audio", "decision"]);
+const IMAGE_PROVIDER = "image_generation";
+const NON_TEXT_PROVIDERS = new Set([IMAGE_PROVIDER, "video_generation", "audio_generation", "audio", "decision"]);
 const EMPTY_CONNECTIONS: ConnectionOption[] = [];
 const EMPTY_ITEMS: PickerItem[] = [];
 const EMPTY_FONTS: string[] = [];
-
-export const engineResourceKeys = {
-  connections: ["story-writer", "engine", "connections"] as const,
-  characters: ["story-writer", "engine", "characters"] as const,
-  character: (id: string) => ["story-writer", "engine", "character", id] as const,
-  personas: ["story-writer", "engine", "personas"] as const,
-  lorebooks: ["story-writer", "engine", "lorebooks"] as const,
-  fonts: ["story-writer", "engine", "fonts"] as const,
-};
 
 function isRecord(value: unknown): value is Row {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -91,32 +84,52 @@ export function readSavedMaxTokens(defaultParameters: unknown): number | null {
   return typeof maxTokens === "number" && Number.isFinite(maxTokens) && maxTokens > 0 ? Math.floor(maxTokens) : null;
 }
 
-function toConnectionOption(row: Row): ConnectionOption[] {
-  const id = text(row.id);
-  const provider = text(row.provider);
-  if (!id || NON_TEXT_PROVIDERS.has(provider) || row.profileImportReviewRequired === "true") return [];
-  return [
-    {
-      id,
-      name: text(row.name).trim() || text(row.model) || id,
-      model: text(row.model),
-      provider,
-      isDefault: row.isDefault === "true" || row.isDefault === true,
-      savedMaxTokens: readSavedMaxTokens(row.defaultParameters),
-    },
-  ];
+function connectionOption(row: Row, id: string, provider: string): ConnectionOption {
+  return {
+    id,
+    name: text(row.name).trim() || text(row.model) || id,
+    model: text(row.model),
+    provider,
+    isDefault: row.isDefault === "true" || row.isDefault === true,
+    savedMaxTokens: readSavedMaxTokens(row.defaultParameters),
+  };
 }
 
-export function useStoryConnections(): { connections: ConnectionOption[]; isLoading: boolean } {
+/** A connection that writes text, or (`image`) one that paints, as Story Writer lists them. */
+function toConnectionOption(row: Row, image = false): ConnectionOption[] {
+  const id = text(row.id);
+  const provider = text(row.provider);
+  if (!id || row.profileImportReviewRequired === "true") return [];
+  const kept = image ? provider === IMAGE_PROVIDER : !NON_TEXT_PROVIDERS.has(provider);
+  return kept ? [connectionOption(row, id, provider)] : [];
+}
+
+const EMPTY_CONNECTION_LISTS = { text: EMPTY_CONNECTIONS, image: EMPTY_CONNECTIONS };
+
+/** The connections that write text and the ones that paint (for Illustrate), from one read of the Engine's list. */
+export function useStoryConnections(): {
+  connections: ConnectionOption[];
+  imageConnections: ConnectionOption[];
+  isLoading: boolean;
+} {
   const query = useQuery({
     queryKey: engineResourceKeys.connections,
-    queryFn: async () =>
-      rowsOf(await api.get<unknown>("/connections"))
-        .flatMap(toConnectionOption)
-        .sort(byName),
+    queryFn: async () => {
+      const rows = rowsOf(await api.get<unknown>("/connections"));
+      return {
+        text: rows.flatMap((row) => toConnectionOption(row)).sort(byName),
+        image: rows.flatMap((row) => toConnectionOption(row, true)).sort(byName),
+      };
+    },
     staleTime: STALE_TIME,
   });
-  return { connections: query.data ?? EMPTY_CONNECTIONS, isLoading: query.isLoading };
+  const lists = query.data ?? EMPTY_CONNECTION_LISTS;
+  return { connections: lists.text, imageConnections: lists.image, isLoading: query.isLoading };
+}
+
+/** The image connection Illustrate paints with: only one the story chose, and only while it still exists. */
+export function resolveImageConnectionId(connections: ConnectionOption[], chosen: string | null): string | null {
+  return chosen && connections.some((connection) => connection.id === chosen) ? chosen : null;
 }
 
 /** The story's own connection while it exists, else the Engine's default, else the first one. */

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { Check, ChevronRight } from "lucide-react";
 import type { LtmMode, LtmNote, LtmScope } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
@@ -8,13 +9,11 @@ import {
   normalizeLtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { errorMessage } from "../api";
-import { Button, lockedActionProps, StatusSurface } from "../shared-controls";
+import { Button, lockedActionProps, ModeCheckboxes, RemovableChip, StatusSurface } from "../shared-controls";
 import { type LtmTranslationFunction } from "../localization";
 import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
-import type { PickerTarget } from "./TargetPicker";
 import { availabilityEntries, hasExplicitScope, modes, sameModes, sameScope, wholeChatBranchIds } from "./vault-shared";
-import type { AvailabilityTargets } from "./vault-shared";
-import { Pill } from "./Pill";
+import type { AvailabilityTargets, PickerTarget } from "./vault-shared";
 
 export function MemoryAvailabilityWorkbench({
   note,
@@ -157,16 +156,6 @@ export function MemoryAvailabilityWorkbench({
     setScope(normalizeLtmScope(next));
     setError("");
   };
-  const toggleMode = (mode: LtmMode) => {
-    if (selectedModes.includes(mode)) {
-      if (selectedModes.length === 1) {
-        setError(localizeUi("ui.longTermMemory.memoryvault.lastModeRequired"));
-        return;
-      }
-      setSelectedModes(selectedModes.filter((value) => value !== mode));
-    } else setSelectedModes([...selectedModes, mode]);
-    setError("");
-  };
   const save = async () => {
     if (busy) return;
     if (!entries.length && !legacyGlobalModeOnly) {
@@ -182,7 +171,7 @@ export function MemoryAvailabilityWorkbench({
     try {
       await onSave(scope, selectedModes);
     } catch (cause) {
-      setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability")));
+      toast.error(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotSaveAvailability")));
     } finally {
       setBusy(false);
     }
@@ -207,25 +196,17 @@ export function MemoryAvailabilityWorkbench({
         </div>
       </header>
       {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
-      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
-        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {modes.map((mode) => (
-            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={selectedModes.includes(mode)}
-                onChange={() => toggleMode(mode)}
-              />
-              {modeLabel(mode)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <ModeCheckboxes
+        modes={modes}
+        selected={selectedModes}
+        onChange={(next) => {
+          setSelectedModes(next);
+          setError("");
+        }}
+        labelFor={modeLabel}
+        legend={localizeUi("ui.longTermMemory.memoryvault.chatModes")}
+        help={localizeUi("ui.longTermMemory.memoryvault.modesEligibilityHelp")}
+      />
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availableIn")}</h3>
@@ -244,9 +225,13 @@ export function MemoryAvailabilityWorkbench({
         ) : (
           <div className="flex flex-wrap gap-1.5" data-ltm-availability-pills>
             {entries.map((entry) => (
-              <Pill key={`${entry.kind}:${entry.id}`} label={entry.label} onRemove={() => remove(entry.kind, entry.id)}>
+              <RemovableChip
+                key={`${entry.kind}:${entry.id}`}
+                label={entry.label}
+                onRemove={() => remove(entry.kind, entry.id)}
+              >
                 {entry.label}
-              </Pill>
+              </RemovableChip>
             ))}
           </div>
         )}

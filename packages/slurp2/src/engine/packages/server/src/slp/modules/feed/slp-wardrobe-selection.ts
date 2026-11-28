@@ -77,7 +77,8 @@ export function resolveSlurpWardrobeSelection(input: {
   if (requested && slpWardrobeLookFits(requested, input.access)) {
     return { look: resolve(requested), requestedId, fallback: false };
   }
-  if (input.bare) return { look: null, requestedId, fallback: Boolean(requestedId) };
+  // The scene's own outfit wins over a guessed saved look, as a bare picture does.
+  if (input.bare || input.scene?.outfit?.trim()) return { look: null, requestedId, fallback: Boolean(requestedId) };
   const recent = input.recentIds ?? [];
   const recency = new Map(recent.map((id, index) => [id, index]));
   const compatible = input.looks.filter((look) => slpWardrobeLookFits(look, input.access));

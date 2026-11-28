@@ -217,17 +217,16 @@ export const slurpSettingsSchema = z.object({
   pageConnectionId: z.string().nullable().default(null),
   /** The LLM connection that enhances picture prompts; null = Slurp's text connection. */
   imagePromptConnectionId: z.string().nullable(),
-  /**
-   * Engine image style profile for Slurp pictures. Null uses the connection's profile, then the
+  /** Engine image style profile for Slurp pictures. Null uses the connection's profile, then the
    * Engine default. When set, the connection's own prompt prefixes are left out: a chosen style
-   * replaces them rather than stacking on top of them.
-   */
+   * replaces them rather than stacking on top of them. */
   imageStyleProfileId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
   imagePromptInterpretation: z.string().max(20_000),
   enableImageInterpretation: z.boolean(),
   imageGenerationUseAvatarReferences: z.boolean(),
   imageKeepOriginalFiles: z.boolean(),
+  imageOnePerson: z.boolean(),
   imageGenerationIncludeDescriptions: z.boolean(),
   /** How the look reaches the picture prompt: `slurpApplyImageLook`. */
   imageAppearanceMode: z.enum(["writer", "insert", "both"]),
@@ -373,15 +372,15 @@ export const slurpSettingsSchema = z.object({
   /** Share of a fan's payment that reaches the viewer's own creator, as a percentage. */
   walletCreatorRevenueSharePercent: z.number().int().min(0).max(100),
   /**
-   * Creators answer a message you left unanswered while you were away.
-   *
-   * On by default, because a chat nobody ever answers is not a chat. Off leaves the whole
-   * background reply loop asleep: a creator then answers only while you are in the conversation.
-   * Commissions and the later bubbles of a reply already sent still arrive — those are owed.
+   * Creators answer a message you left unanswered while you were away. On by default, because a chat nobody ever
+   * answers is not a chat. Off leaves the whole background reply loop asleep: a creator then answers only while you are
+   * in the conversation. Commissions and the later bubbles of a reply already sent still arrive — those are owed.
    */
   messagesAwayRepliesEnabled: z.boolean(),
   /** One unsolicited text, then none until a real reply. See `slurpAllowsUnsolicitedText`. */
   messagesPauseFollowUpsUntilReply: z.boolean(),
+  /** No Creator writes first while on; owed texts wait, unasked ones are dropped. */
+  messagesCreatorDmsPaused: z.boolean(),
   /** Messages one reply is broken into. One keeps a reply in a single bubble. */
   messagesReplyBubbleLimit: z.number().int().min(1).max(4),
   /** Where a creator nobody has configured by hand starts. */
@@ -544,6 +543,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   // reference image simply ignores the references.
   imageGenerationUseAvatarReferences: true,
   imageKeepOriginalFiles: false,
+  imageOnePerson: false,
   imageGenerationIncludeDescriptions: true,
   imageAppearanceMode: "writer",
   appearanceProfileMode: "high_confidence",
@@ -620,6 +620,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   },
   messagesAwayRepliesEnabled: true,
   messagesPauseFollowUpsUntilReply: false,
+  messagesCreatorDmsPaused: false,
   messagesReplyBubbleLimit: 3,
   messagesDefaultDmPolicy: SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
   messagesDefaultRequestFee: SLURP_DEFAULT_CREATOR_MESSAGING.requestFee,

@@ -34,7 +34,7 @@ const TrackBody = z.object({
 /** Every field optional: the kit bounds and defaults each one (no credentials are ever kept). */
 const SettingsBody = z.object({ audio: z.record(z.string(), z.unknown()) });
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 
 export const registerAudioRoutes: RegisterRoutes = (router, deps) => {
   const { store, handle } = deps;

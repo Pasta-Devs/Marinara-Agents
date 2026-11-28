@@ -4,8 +4,13 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink, RotateCcw } from "lucide-react";
-import { resolveDefaultConnectionId, type ConnectionOption } from "../../../hooks/use-engine-resources";
+import {
+  resolveDefaultConnectionId,
+  resolveImageConnectionId,
+  type ConnectionOption,
+} from "../../../hooks/use-engine-resources";
 import { DEFAULT_SYSTEM_PROMPT, LIMITS, type StorySettings } from "../../../lib/story-writer/model";
+import { systemPromptOf } from "../../../lib/story-writer/prompt";
 import { NumberField, TextField, Toggle, useNumberFormat } from "./fields";
 
 const CHAPTER_PRESETS = [
@@ -18,6 +23,8 @@ export function WritingSection(props: {
   settings: StorySettings;
   onChange(patch: Partial<StorySettings>, options?: { immediate?: boolean }): void;
   connections: ConnectionOption[];
+  /** Image connections, for Illustrate. */
+  imageConnections: ConnectionOption[];
   connectionsLoading: boolean;
   onEditConnection(connectionId: string): void;
   onManageConnections(): void;
@@ -28,8 +35,10 @@ export function WritingSection(props: {
   const { t } = useTranslation();
   const formatNumber = useNumberFormat();
   const selectId = useId();
-  const { settings, onChange, connections } = props;
+  const imageSelectId = useId();
+  const { settings, onChange, connections, imageConnections } = props;
   const connectionId = resolveDefaultConnectionId(connections, settings.connectionId);
+  const imageConnectionId = resolveImageConnectionId(imageConnections, settings.imageConnectionId);
   const target = settings.targetWords;
   const percent = target ? Math.min(100, Math.round((props.totalWords / target) * 100)) : 0;
   return (
@@ -86,14 +95,88 @@ export function WritingSection(props: {
         )}
       </div>
 
+      {/* Never a default: without a choice here, Illustrate sends nothing and costs nothing. */}
+      <div className="sw-field">
+        <label className="sw-label" htmlFor={imageSelectId}>
+          {t("writing.imageConnection")}
+        </label>
+        {props.connectionsLoading && imageConnections.length === 0 ? (
+          <p className="sw-empty">{t("writing.loadingConnections")}</p>
+        ) : imageConnections.length === 0 ? (
+          <>
+            <p className="sw-hint">{t("writing.noImageConnections")}</p>
+            <div className="sw-button-row">
+              <button type="button" className="sw-button" onClick={props.onManageConnections}>
+                <ExternalLink size={15} aria-hidden="true" />
+                {t("writing.manageConnections")}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <select
+              id={imageSelectId}
+              className="sw-select"
+              value={imageConnectionId ?? ""}
+              aria-describedby={`${imageSelectId}-hint`}
+              onChange={(event) => onChange({ imageConnectionId: event.target.value || null }, { immediate: true })}
+            >
+              <option value="">{t("writing.imageConnectionNone")}</option>
+              {imageConnections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {`${connection.name}${connection.model ? ` · ${connection.model}` : ""}`}
+                </option>
+              ))}
+            </select>
+            <p id={`${imageSelectId}-hint`} className="sw-hint">
+              {t("writing.imageConnectionHint")}
+            </p>
+          </>
+        )}
+      </div>
+
+      {imageConnectionId ? (
+        <>
+          <TextField
+            label={t("writing.picturePromptPrefix")}
+            hint={t("writing.picturePromptPrefixHint")}
+            placeholder={t("writing.picturePromptPrefixPlaceholder")}
+            value={settings.picturePromptPrefix}
+            maxLength={LIMITS.picturePrefix}
+            multiline
+            rows={2}
+            onChange={(picturePromptPrefix) => onChange({ picturePromptPrefix })}
+          />
+          <TextField
+            label={t("writing.pictureNegativePrefix")}
+            hint={t("writing.pictureNegativePrefixHint")}
+            placeholder={t("writing.pictureNegativePrefixPlaceholder")}
+            value={settings.pictureNegativePrefix}
+            maxLength={LIMITS.picturePrefix}
+            multiline
+            rows={2}
+            onChange={(pictureNegativePrefix) => onChange({ pictureNegativePrefix })}
+          />
+          <Toggle
+            label={t("writing.pictureReferences")}
+            hint={t("writing.pictureReferencesHint")}
+            checked={settings.pictureReferences}
+            onChange={(pictureReferences) => onChange({ pictureReferences }, { immediate: true })}
+          />
+        </>
+      ) : null}
+
+      {/* "Off (I decide)" keeps the number for when a length is picked again; typing one picks it. */}
       <NumberField
         label={t("writing.chapterLength")}
         extra={<span className="sw-label-extra">{t("writing.wordsUnit")}</span>}
-        value={settings.chapterWords}
+        value={settings.writerDecides ? null : settings.chapterWords}
         min={LIMITS.chapterWords.min}
         max={LIMITS.chapterWords.max}
         step={100}
-        onCommit={(chapterWords) => chapterWords !== null && onChange({ chapterWords })}
+        placeholder={settings.writerDecides ? t("writing.presetOff") : undefined}
+        hint={settings.writerDecides ? t("writing.chapterLengthOffHint") : undefined}
+        onCommit={(chapterWords) => chapterWords !== null && onChange({ chapterWords, writerDecides: false })}
       >
         <div className="sw-button-row" role="group" aria-label={t("writing.presetsLabel")}>
           {CHAPTER_PRESETS.map((preset) => (
@@ -101,12 +184,20 @@ export function WritingSection(props: {
               key={preset.key}
               type="button"
               className="sw-chip"
-              aria-pressed={settings.chapterWords === preset.words}
-              onClick={() => onChange({ chapterWords: preset.words }, { immediate: true })}
+              aria-pressed={!settings.writerDecides && settings.chapterWords === preset.words}
+              onClick={() => onChange({ chapterWords: preset.words, writerDecides: false }, { immediate: true })}
             >
               {t("writing.preset", { name: t(`writing.${preset.key}`), words: formatNumber(preset.words) })}
             </button>
           ))}
+          <button
+            type="button"
+            className="sw-chip"
+            aria-pressed={settings.writerDecides}
+            onClick={() => onChange({ writerDecides: true }, { immediate: true })}
+          >
+            {t("writing.presetOff")}
+          </button>
         </div>
       </NumberField>
 
@@ -164,7 +255,8 @@ export function WritingSection(props: {
       <TextField
         label={t("writing.prompt")}
         hint={t("writing.promptHint")}
-        value={settings.systemPrompt}
+        // An unchanged default reads as the prompt the model gets: "the next part" when the writer decides.
+        value={systemPromptOf(settings, settings.writerDecides)}
         multiline
         rows={5}
         extra={

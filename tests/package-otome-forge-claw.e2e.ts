@@ -6,13 +6,13 @@
 // arrow and the buttons, with the claw swinging, dropping and carrying; then a Read Him set played by keyboard, where
 // nothing marks the true reading before it is answered, focus follows each moment, and a tell is learned. Across them,
 // the merge with M2b and M3: his claw lines and his Read Him lines are voiced in his card's voice (M2b's audio), each
-// moment shows the painted face it names, his plush wears his Home cut-out (M3), and Date Night's picker offers a
-// place the story painted, over its picture, beside its own cards (each one visible, apart from the reader's layer).
+// moment shows the painted face it names, and his plush wears his Home cut-out (M3).
 // His lines come with GET /play, so the machine never asks for GET .../lines (which may queue a pack's write); its
 // sounds play at the world's sound-effect volume and never while Mute everything is on; during a rupture his lines are
-// Home's cold ones, voiced under Home's own ref; and the Date Night card says what it may paint.
+// Home's cold ones, voiced under Home's own ref. #2303: Date Night is no longer an activity, and Dates has no card for
+// the dates won from Wish (they are in Album → Dates).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-claw.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -47,7 +47,6 @@ const FILE = "/api/global-gallery/file";
 const LOOK = `${FILE}/kai-look.png`;
 const CUTOUT = `${FILE}/kai-cut.png`;
 const COLD = `${FILE}/kai-cold.png`;
-const PLACE_ART = `${FILE}/conservatory.png`;
 /** A 1×1 PNG for every gallery image the stub names. */
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -90,14 +89,6 @@ function createClawStub({ finishFailures = 0, rupture = false, audio = { tts: tr
       forge: { phase: "ready", steps: [] },
       // Voices on (Settings → Audio, M2b), so his lines are voiced through the Engine's voice service.
       audio,
-      // A place the story painted (M2b): Date Night offers it over its picture.
-      places: {
-        "the-glass-conservatory": {
-          name: "The Glass Conservatory",
-          tags: "glasshouse, ferns, rain, no humans",
-          art: { state: "ready", at: now(), url: PLACE_ART },
-        },
-      },
     },
     player: {
       personaId: "persona-mira",
@@ -184,7 +175,6 @@ function createClawStub({ finishFailures = 0, rupture = false, audio = { tts: tr
               cheat: "nudge",
               style: "Plays to an audience, all flourish and a wink.",
               rupture,
-              makeItRight: rupture,
               // His look's Home cut-out (M3), which his plush wears.
               plush: CUTOUT,
               lines: { claw: KAI_CLAW, cold: COLD_LINES },
@@ -193,7 +183,6 @@ function createClawStub({ finishFailures = 0, rupture = false, audio = { tts: tr
               cheat: "calculate",
               style: "Calculates the angle aloud.",
               rupture: false,
-              makeItRight: false,
               lines: { claw: null, cold: [] },
             },
           },
@@ -240,17 +229,6 @@ function createClawStub({ finishFailures = 0, rupture = false, audio = { tts: tr
       }
       return { status: 200, json: result };
     }
-    // Date Night (S/routes/dates.ts): no date yet; planning one is refused here (the picker is what is under test).
-    if (path === `${base}/dates` && call.method === "GET") {
-      return {
-        status: 200,
-        json: {
-          lis: [KAI, MIR].map((li) => ({ li, rupture: false, open: null })),
-          dates: [],
-        },
-      };
-    }
-    if (path === `${base}/dates`) return { status: 503, json: { error: "No connection.", code: "no-connection" } };
     // Read Him (S/routes/read-him.ts): a round's truth, thought and tell only in its answer; the first pick stands.
     if (path === `${base}/read-him`) {
       const rounds = READ_ROUNDS.map(({ context, line, face, readings }) => ({ context, line, face, readings }));
@@ -497,20 +475,19 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   await expect(root.getByRole("heading", { level: 1, name: "Kai Ardent" })).toBeVisible();
 
   // Dates: who Home is about is picked first; each activity names them, with its pay and its cost.
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  const title = root.getByRole("heading", { level: 1, name: "Dates" });
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  const title = root.getByRole("heading", { level: 1, name: "Games" });
   await expect(title).toBeFocused();
   await expect(root.getByRole("radio", { name: /Kai Ardent/ })).toBeChecked();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
   await expect(activities.getByRole("heading", { name: "Read Kai Ardent" })).toBeVisible();
-  await expect(activities.getByRole("heading", { name: "Date Night with Kai Ardent" })).toBeVisible();
   await expect(activities.getByRole("heading", { name: "Claw Machine with Kai Ardent" })).toBeVisible();
-  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(4);
+  // #2303: no Date Night among them (five to play with Kitty Cards; the Photo Shoot needs an image connection), and
+  // nothing else about dates: they are won in Wish and planned from Album → Dates.
+  await expect(activities.getByRole("heading", { name: /Date Night/ })).toHaveCount(0);
+  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(5);
   await expect(activities).toContainText("No model calls");
-  // Date Night's card says what it may paint besides the keepsake: its scenes paint places and faces as any scene does.
-  await expect(activities).toContainText(
-    "4 model calls · new places and unpainted faces use your image connection · 1 more image for a keepsake",
-  );
+  await expect(root.getByRole("region", { name: "Your dates" })).toHaveCount(0);
   await expect(activities).toContainText("+20 Starlight a round, +30 for each plush · +30 affection");
   await expect(root.getByRole("progressbar", { name: "Starlight from activities" })).toHaveAttribute(
     "aria-valuenow",
@@ -629,8 +606,8 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
 
 /** Opens Dates from Home; Home's own requests are over once its heading has focus. */
 async function openDates(root: Locator) {
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
 }
 
 /** From Dates, opens the Claw Machine with Kai Ardent, lets him go first, and cheers until his cheat goes off. */
@@ -687,6 +664,46 @@ test("Otome Forge Claw Machine under Mute everything plays no sound, and during 
   expect(pageErrors).toEqual([]);
 });
 
+test("Otome Hearth Dates on a narrow phone with six love interests: their cards wrap, and the screen only scrolls down", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  const stub = createClawStub();
+  const she = { subject: "she", object: "her", possessive: "her" };
+  for (const [n, name] of ["Seraphina Valcourt", "Theodric Ashgrove", "Lysandra", "Bartholomew Quill"].entries())
+    stub.view.lis.push({
+      id: `li-extra-000${n + 3}`,
+      name,
+      pronouns: she,
+      source: "archetype",
+      accent: "#B8E7A6",
+      level: 1,
+      stage: 1,
+    });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
+  const cards = root.locator(".of-partner-list .of-partner");
+  await expect(cards).toHaveCount(6);
+  // A row that scrolled sideways once made the whole screen slide on a phone: the cards wrap onto rows instead.
+  const tops = await cards.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top));
+  expect(new Set(tops.map(Math.round)).size).toBeGreaterThan(1);
+  const wide = await root.evaluate((element) =>
+    [element, ...element.querySelectorAll<HTMLElement>(".of-page, .of-partner-list")]
+      .filter((each) => each.scrollWidth > each.clientWidth + 1)
+      .map((each) => each.className),
+  );
+  expect(wide).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await page.screenshot({ path: testInfo.outputPath("dates-six-at-360.png") });
+  expect(pageErrors).toEqual([]);
+});
+
 test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, drops and carries", async ({
   page,
 }, testInfo) => {
@@ -698,7 +715,7 @@ test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, dr
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub);
   const root = await openOtome(page);
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   await root.getByRole("button", { name: "Play: Claw Machine with Kai Ardent" }).click();
   await root.getByRole("button", { name: "Me first" }).click();
 
@@ -708,9 +725,10 @@ test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, dr
   const clawX = async () =>
     Number(await glass.evaluate((element) => getComputedStyle(element).getPropertyValue("--cx")));
   const start = await clawX();
-  // Holding → moves the claw; letting go, it swings on its cable.
+  // Holding → moves the claw; letting go, it swings on its cable. Held until it has gone far enough, not for a fixed
+  // time: ClawMachine.tsx caps each frame's step, so a runner drawing fewer frames covers less ground per second (#2140).
   await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(700);
+  await expect.poll(clawX, { timeout: 5_000, intervals: [50] }).toBeGreaterThan(start + 0.15);
   await page.keyboard.up("ArrowRight");
   const moved = await clawX();
   expect(moved).toBeGreaterThan(start + 0.15);
@@ -730,16 +748,37 @@ test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, dr
   expect(await clawX()).toBeLessThan(moved);
   await page.screenshot({ path: testInfo.outputPath("05-aim.png") });
 
-  // Drop: the cable runs out, then the claw comes home over the chute.
+  // Drop: the cable runs out past half for about a second, then the claw comes home over the chute and waits there
+  // about 2 s (his turn's banner and his thinking). A test step can outlast either moment: the phone-sized screenshot
+  // below took 4.8 s in CI (#2470). So the page notes how far the cable ran (the loop writes it to the glass every
+  // frame) and where the claw was when the stage left "drop", and the test checks those notes.
+  type DropNote = { cable: number; endX: number };
+  const game = root.locator(".of-claw-game");
+  await game.evaluate((element) => {
+    const read = (name: string) =>
+      Number(getComputedStyle(element.querySelector(".of-claw-glass")!).getPropertyValue(name));
+    const note: DropNote = { cable: 0, endX: Number.NaN };
+    (window as unknown as { __clawDrop: DropNote }).__clawDrop = note;
+    let dropping = false;
+    new MutationObserver((_, observer) => {
+      if (element.getAttribute("data-stage") === "drop") {
+        dropping = true;
+        note.cable = Math.max(note.cable, read("--cc"));
+      } else if (dropping) {
+        note.endX = read("--cx");
+        observer.disconnect();
+      }
+    }).observe(element, { subtree: true, attributeFilter: ["style", "data-stage"] });
+  });
   await action.focus();
   await page.keyboard.press(" ");
-  await expect(root.locator(".of-claw-game")).toHaveAttribute("data-stage", "drop");
+  await expect(game).toHaveAttribute("data-stage", "drop");
   await page.waitForTimeout(650);
-  const cable = Number(await glass.evaluate((element) => getComputedStyle(element).getPropertyValue("--cc")));
-  expect(cable).toBeGreaterThan(0.5);
   await page.screenshot({ path: testInfo.outputPath("06-drop.png") });
-  await expect(root.locator(".of-claw-game")).not.toHaveAttribute("data-stage", "drop", { timeout: 6_000 });
-  expect(Math.abs((await clawX()) - 0.11)).toBeLessThan(0.02);
+  await expect(game).not.toHaveAttribute("data-stage", "drop", { timeout: 6_000 });
+  const drop = await page.evaluate(() => (window as unknown as { __clawDrop: DropNote }).__clawDrop);
+  expect(drop.cable).toBeGreaterThan(0.5);
+  expect(Math.abs(drop.endX - 0.11)).toBeLessThan(0.02);
   // His turn follows; he moves the claw himself.
   await expect(action).toHaveAttribute("data-mode", "cheer", { timeout: 6_000 });
   await page.waitForTimeout(2_200);
@@ -759,7 +798,7 @@ test("Otome Forge Read Kai Ardent at phone width: no answer before the pick, key
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub);
   const root = await openOtome(page);
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
   await root.getByRole("button", { name: "Play: Read Kai Ardent" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Read Kai Ardent" })).toBeFocused();
   await recordSpeech(page);
@@ -820,63 +859,5 @@ test("Otome Forge Read Kai Ardent at phone width: no answer before the pick, key
   expect(lines.every((line) => line.voice === "Kai Voice" && line.text === READ_ROUNDS[0]!.line)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: testInfo.outputPath("10-read-done.png"), fullPage: true });
-  expect(pageErrors).toEqual([]);
-});
-
-test("Otome Forge Date Night's places: its own cards and a place the story painted, over its picture", async ({
-  page,
-}, testInfo) => {
-  test.setTimeout(90_000);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  const stub = createClawStub();
-  const pageErrors: string[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
-  await stubRoutes(page, stub);
-  const root = await openOtome(page);
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await root.getByRole("button", { name: "Play: Date Night with Kai Ardent" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Where to tonight?" })).toBeFocused();
-
-  // Nine cards of its own and the story's painted place, each one shown (M2b's reader layer `.of-place` is apart).
-  const group = root.getByRole("group", { name: "Where you and Kai Ardent spend the evening" });
-  await expect(group.getByRole("radio")).toHaveCount(10);
-  const cards = root.locator(".of-date-place");
-  await expect(cards).toHaveCount(10);
-  for (const style of await cards.evaluateAll((elements) =>
-    elements.map((element) => {
-      const computed = getComputedStyle(element);
-      return { opacity: computed.opacity, position: computed.position };
-    }),
-  )) {
-    expect(style).toEqual({ opacity: "1", position: "relative" });
-  }
-  await expect(root.locator(".of-place")).toHaveCount(0);
-  const painted = root.locator('.of-date-place[data-place="story"]');
-  await expect(painted).toContainText("The Glass Conservatory");
-  await expect(painted.locator("img")).toHaveAttribute("src", PLACE_ART);
-  await expect(root.getByText("From your story")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await painted.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: testInfo.outputPath("11-date-places.png") });
-
-  // Picking it carries its key; the summary names it as the story does.
-  await painted.click();
-  await expect(group.getByRole("radio", { name: /The Glass Conservatory/ })).toBeChecked();
-  await root.getByRole("button", { name: "Next: what you wear" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
-  await expect(root.locator(".of-date-summary")).toContainText("The Glass Conservatory, with Kai Ardent");
-  await root.getByRole("button", { name: "Begin the date" }).click();
-  await expect
-    .poll(() => stub.calls.filter((call) => call.method === "POST" && call.path.endsWith("/dates")).length)
-    .toBe(1);
-  const planned = stub.calls.find((call) => call.method === "POST" && call.path.endsWith("/dates"))!;
-  expect(planned.body).toMatchObject({
-    li: KAI,
-    place: "story",
-    storyPlace: "the-glass-conservatory",
-    herLook: "base",
-    hisLook: "base",
-  });
   expect(pageErrors).toEqual([]);
 });

@@ -20,7 +20,7 @@ useEffect = () => {}, useMemo = () => {}, useRef = () => {}, useState = () => {}
   "marinara:host": "export const host = globalThis.fixture.host;",
   "../../../lib/api-client": "export const api = globalThis.fixture.api;",
   "../../../lib/tts-service": `export const ttsUnavailableReason = null;
-export const ttsService = { getActiveId: () => null };`,
+export const ttsService = { getActiveId: () => null, speakSequence: (...args) => globalThis.fixture.speak(...args) };`,
   "../api": "export const useOtomeApi = () => {};",
   "../props": "export const useOtomeProps = () => {};",
   "./use-run": "export const patchRun = () => {};",
@@ -66,7 +66,7 @@ const deferred = () => {
 };
 
 function fixture(readManifest = () => manifest, brief) {
-  const calls = { manifest: 0, play: [], stop: 0, api: [], brief: [] };
+  const calls = { manifest: 0, play: [], stop: 0, api: [], brief: [], speak: [] };
   const player = {
     playMusic: (tag, assets) => calls.play.push({ tag, assets }),
     stopMusic: () => (calls.stop += 1),
@@ -100,12 +100,15 @@ function fixture(readManifest = () => manifest, brief) {
       api: {
         get: async (url) => {
           calls.api.push({ method: "GET", url });
-          return { configured: true, music: true, connectionId: "connection-1" };
+          return { configured: true, music: true, connectionId: "connection-1", voices: ["voice-a"] };
         },
         post: async (url) => {
           calls.api.push({ method: "POST", url });
           assert.fail("No paid audio generation is expected");
         },
+      },
+      speak: async (requests) => {
+        calls.speak.push(...requests);
       },
     },
   });
@@ -276,4 +279,63 @@ test("a saved chapter theme held from the Album plays its own track with chapter
   await settle();
   assert.equal(f.calls.play.at(-1).tag, theme.tag, "a chosen music folder never stands in for the theme");
   assert.equal(f.calls.api.length + f.calls.brief.length, 0);
+});
+
+test("0.44.0: Home plays the Soundtrack row chosen for it, a screen's own music still wins, and nothing is made", async (t) => {
+  const theme = {
+    cue: "chapter-main-1",
+    connectionId: "connection-1",
+    tag: "music:contexts:otome-forge:theme",
+    path: "music/contexts/otome-forge/theme.mp3",
+  };
+  const f = fixture(() => ({ assets: { ...manifest.assets, [theme.tag]: { path: theme.path } } }));
+  t.after(() => f.controller.dispose());
+  f.controller.configure(f.settings({ generate: false }));
+  f.controller.setBaseCue("home");
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag);
+  f.controller.configure(f.settings({ homeCue: theme.cue, homeTrack: theme }));
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, theme.tag, "the chosen theme plays on Home as soon as it is saved");
+  const held = f.controller.claim("tense");
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag, "a screen holding its own music still plays it");
+  held.release();
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, theme.tag);
+  f.controller.setBaseCue(null);
+  await settle();
+  assert.equal(f.calls.stop > 0, true, "silence is still silence");
+  f.controller.setBaseCue("home");
+  f.controller.configure(f.settings({ homeCue: "", homeTrack: null }));
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag, "pressed again, Home plays its own music");
+  assert.equal(f.calls.api.length + f.calls.brief.length, 0);
+});
+
+test("0.34.0: with Emotion cues on, a line's cues are what the voice reads, under a clip key of their own", async (t) => {
+  const f = fixture();
+  t.after(() => f.controller.dispose());
+  f.controller.setDeps({
+    post: () => assert.fail("Voicing a line asks for no brief"),
+    debugMode: false,
+    lis: [{ id: "li-kai-ab12", name: "Kai", cardId: "", voiceGender: "male", pronouns: null }],
+    player: { name: "Ines", personaId: "" },
+    onTracks() {},
+  });
+  const line = { speaker: "Kai", text: "I love you.", voiced: "[hushed whisper] I love you. [gasps]" };
+  const said = async (settings, segment, options) => {
+    f.controller.configure(f.settings({ tts: true, dialogueVolume: 1, muted: false, ...settings }));
+    assert.equal(await f.controller.speak(segment, "main-1/0r0/1", options), "spoken");
+    const { text, cacheKey } = f.calls.speak.at(-1);
+    return { text, cacheKey };
+  };
+  const key = "otome-forge:r-foldertest-aaaaaa:main-1/0r0/1";
+  assert.deepEqual(await said({ emotionCues: true }, line), { text: line.voiced, cacheKey: `${key}~cues` });
+  assert.deepEqual(await said({ emotionCues: false }, line), { text: "I love you.", cacheKey: key });
+  assert.deepEqual(await said({ emotionCues: true }, { speaker: "Kai", text: "Hm." }), { text: "Hm.", cacheKey: key });
+  assert.deepEqual(await said({ emotionCues: true }, line, { cache: false }), {
+    text: line.voiced,
+    cacheKey: undefined,
+  });
 });

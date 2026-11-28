@@ -22,10 +22,12 @@ import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packag
 import {
   runDocTarget,
   unitId,
+  worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { PLUSH_RETRY_MS } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/plush.ts";
 import { registerClawRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/claw.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import { KAI, MIR, SOL, storyWorld } from "./fixtures/otome-forge-story.ts";
 
@@ -204,6 +206,23 @@ test("GET /play draws each love interest's plush once, in the background, and sh
   assert.equal(t.plushCalls().length, 3, "a kept plush is never drawn again");
   const logged = t.logs.filter((entry) => entry.level === "debugOverride" && entry.args[0] === "plush");
   assert.ok(logged.length >= 1, "the prompt is logged in debug mode");
+});
+
+test("each plush is drawn on the Messages connection, never Planning", async () => {
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10).
+  const t = await plushWorld("r-plushchat-aaaaaa", [
+    plushReply("raven"),
+    plushReply("black cat"),
+    plushReply("red fox"),
+  ]);
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "conn-text", structured: "conn-plan", chat: "conn-chat" },
+  }));
+  await t.play();
+  await t.settle();
+  assert.equal(t.plushCalls().length, 3);
+  assert.deepEqual([...new Set(t.plushCalls().map((call) => call.connectionId))], ["conn-chat"]);
 });
 
 test("a refused plush is repaired once, and a love interest whose plush failed is left alone for a while", async (context) => {

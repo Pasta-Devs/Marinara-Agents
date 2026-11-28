@@ -13,11 +13,14 @@ import {
   countWords,
   defaultPreferences,
   normalizeChapterPatch,
+  normalizeIllustrations,
   normalizePreferences,
   normalizeStorySettings,
   storyDocumentId,
   type StoryChapter,
+  type StoryIllustration,
   type StoryRecord,
+  type StorySettings,
   type StorySummary,
   type StoryWithChapters,
   type StoryWriterPreferences,
@@ -62,9 +65,9 @@ export interface StoryPersistence {
 
 /** An error the routes may show the client as is. */
 export class StoryWriterError extends Error {
-  readonly statusCode: 400 | 404 | 409;
+  readonly statusCode: 400 | 404 | 409 | 502;
 
-  constructor(statusCode: 400 | 404 | 409, message: string) {
+  constructor(statusCode: 400 | 404 | 409 | 502, message: string) {
     super(message);
     this.name = "StoryWriterError";
     this.statusCode = statusCode;
@@ -77,6 +80,8 @@ const CHAPTER_PREFIX = chapterDocumentId("");
 const MAX_ATTEMPTS = 3;
 const STORY_NOT_FOUND = "Story not found.";
 const CHAPTER_NOT_FOUND = "Chapter not found.";
+const ILLUSTRATION_NOT_FOUND = "Picture not found.";
+const TOO_MANY = `A chapter can have at most ${LIMITS.illustrationsPerChapter} pictures.`;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -130,6 +135,7 @@ function parseChapter(document: StoryDocument): StoryChapter {
     summary: fields.summary ?? "",
     status: fields.status ?? "draft",
     request: fields.request ?? "",
+    illustrations: normalizeIllustrations(data.illustrations),
     createdAt: stringOr(data.createdAt, document.createdAt),
     updatedAt: stringOr(data.updatedAt, document.updatedAt),
   };
@@ -224,6 +230,17 @@ async function readChapters(documents: StoryDocumentStore, story: StoryRecord): 
   });
 }
 
+/** One chapter of a story, or a 404. */
+async function readStoryChapter(documents: StoryDocumentStore, storyId: string, chapterId: string) {
+  const story = await readStory(documents, storyId);
+  const document = story.chapterIds.includes(chapterId)
+    ? await documents.getById(PACKAGE_ID, chapterDocumentId(chapterId))
+    : null;
+  const chapter = document ? parseChapter(document) : null;
+  if (!chapter || chapter.storyId !== storyId) throw new StoryWriterError(404, CHAPTER_NOT_FOUND);
+  return { story, chapter };
+}
+
 function totalsOf(chapters: StoryChapter[]) {
   return {
     chapterIds: chapters.map((chapter) => chapter.id),
@@ -272,6 +289,46 @@ export function createStoryStore(persistence: StoryPersistence, options: { now?:
       now(),
     );
     return { story: next, chapters };
+  }
+
+  /**
+   * Changes a chapter's pictures and nothing else. `previous` is what they were, so the caller can delete the gallery
+   * image of one that went.
+   */
+  function changeIllustrations(
+    storyId: unknown,
+    chapterId: unknown,
+    change: (current: StoryIllustration[]) => StoryIllustration[],
+  ): Promise<{ story: StoryRecord; chapter: StoryChapter; previous: StoryIllustration[] }> {
+    const id = requireId(storyId, "Story");
+    const targetId = requireId(chapterId, "Chapter");
+    return serialized(storyDocumentId(id), () =>
+      inTransaction(async (documents) => {
+        const at = now();
+        const story = await readStory(documents, id);
+        if (!story.chapterIds.includes(targetId)) throw new StoryWriterError(404, CHAPTER_NOT_FOUND);
+        const { previous, next: chapter } = await updateDocument(
+          documents,
+          CHAPTER,
+          chapterDocumentId(targetId),
+          (current) => {
+            if (current.storyId !== id) throw new StoryWriterError(404, CHAPTER_NOT_FOUND);
+            return { ...current, illustrations: change(current.illustrations), updatedAt: at };
+          },
+          CHAPTER_NOT_FOUND,
+          at,
+        );
+        const { next } = await updateDocument(
+          documents,
+          STORY,
+          storyDocumentId(id),
+          (current) => ({ ...current, updatedAt: at }),
+          STORY_NOT_FOUND,
+          at,
+        );
+        return { story: next, chapter, previous: previous.illustrations };
+      }),
+    );
   }
 
   return {
@@ -423,6 +480,7 @@ export function createStoryStore(persistence: StoryPersistence, options: { now?:
           summary: fields.summary ?? "",
           status: fields.status ?? "draft",
           request: fields.request ?? "",
+          illustrations: [],
           createdAt: at,
           updatedAt: at,
         };
@@ -513,6 +571,50 @@ export function createStoryStore(persistence: StoryPersistence, options: { now?:
           return { story: next, chapter };
         }),
       );
+    },
+
+    /**
+     * Checks that a picture can go into the chapter (it exists, and has room or `replaceId`), before anything is
+     * painted and paid for. Answers the story's settings, which say how to paint it.
+     */
+    async checkIllustration(storyId: unknown, chapterId: unknown, replaceId?: string): Promise<StorySettings> {
+      const id = requireId(storyId, "Story");
+      const targetId = requireId(chapterId, "Chapter");
+      const { story, chapter } = await readStoryChapter(persistence.documents, id, targetId);
+      if (replaceId && !chapter.illustrations.some((item) => item.id === replaceId)) {
+        throw new StoryWriterError(404, ILLUSTRATION_NOT_FOUND);
+      }
+      if (!replaceId && chapter.illustrations.length >= LIMITS.illustrationsPerChapter) {
+        throw new StoryWriterError(400, TOO_MANY);
+      }
+      return story.settings;
+    },
+
+    /** Puts a painted picture in the chapter, in place of `replaceId` when it is given (Illustrate again). */
+    addIllustration(storyId: unknown, chapterId: unknown, illustration: StoryIllustration, replaceId?: string) {
+      return changeIllustrations(storyId, chapterId, (current) => {
+        const replacing = current.some((item) => item.id === replaceId);
+        // Two pictures painted at once both passed checkIllustration: the one that finds the chapter full is refused.
+        if (!replacing && current.length >= LIMITS.illustrationsPerChapter) throw new StoryWriterError(400, TOO_MANY);
+        // The picture it replaces was removed meanwhile: the new one is added.
+        const list = normalizeIllustrations(
+          replacing ? current.map((item) => (item.id === replaceId ? illustration : item)) : [...current, illustration],
+        );
+        // Every write either stores the new picture or fails, so the caller can delete one that was not stored.
+        if (!list.some((item) => item.id === illustration.id)) {
+          throw new StoryWriterError(502, "The Global Gallery did not keep the picture.");
+        }
+        return list;
+      });
+    },
+
+    /** Takes a picture out of the chapter. Its gallery image is the caller's to delete. */
+    removeIllustration(storyId: unknown, chapterId: unknown, illustrationId: unknown) {
+      return changeIllustrations(storyId, chapterId, (current) => {
+        if (!current.some((item) => item.id === illustrationId))
+          throw new StoryWriterError(404, ILLUSTRATION_NOT_FOUND);
+        return current.filter((item) => item.id !== illustrationId);
+      });
     },
 
     async deleteChapter(storyId: unknown, chapterId: unknown): Promise<StoryWithChapters> {

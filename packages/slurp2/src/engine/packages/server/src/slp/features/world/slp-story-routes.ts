@@ -28,6 +28,7 @@ import { slurpContentPackSummaries, slurpPackGate } from "../../modules/world/ev
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const PREVIEW_TTL_MS = 15 * 60_000;
 /** `pack` is kept for an uploaded pack only: it becomes the pack's record in the Packs list on apply. */
 type StagedPreview = { expiresAt: number; preview: SlpStoryPackPreview; pack?: SlpStoryPackInput };
@@ -58,7 +59,7 @@ const RESERVED_PACK_IDS = () =>
 export async function slpStoryRoutes(app: FastifyInstance, { noodle }: SlpRouteDeps) {
   const previews = new Map<string, StagedPreview>();
   const prune = () => {
-    const now = Date.now();
+    const now = Date.now(); // preview TTL: infrastructure, real clock
     for (const [id, staged] of previews) if (staged.expiresAt <= now) previews.delete(id);
   };
 
@@ -199,7 +200,7 @@ export async function slpStoryRoutes(app: FastifyInstance, { noodle }: SlpRouteD
             ...(pack.author ? { author: pack.author } : {}),
             topics: pack.topics ?? [],
             occasions: pack.occasions ?? [],
-            importedAt: new Date().toISOString(),
+            importedAt: slurpWorldNow().toISOString(),
           },
         ];
       await writeSlurpDramaLibrary(app.db, library);

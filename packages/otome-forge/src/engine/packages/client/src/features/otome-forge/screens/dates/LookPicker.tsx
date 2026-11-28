@@ -1,8 +1,10 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Date Night's looks. What each of them wears tonight, side by side: every look they own and can wear (the
 // Wardrobe's own list, GET /runs/:run/wardrobe), their everyday look first, or initials on their colour when a look has
-// no image. Starting the date wears the picks, as Wear at home does (S/routes/dates.ts), so they stay on afterwards.
-// The Photo Shoot (#2087) reuses it with its own note: a photo wears nothing. Looks show matte-cleaned (LookImage).
+// no image. #2509: the pick dresses her for that date or hangout only (S/story/scene-looks.ts), never at home; the love
+// interests choose their own looks in a date's first scene.
+// The Photo Shoot (#2087) reuses it with its own note: a photo wears nothing. Looks show matte-cleaned (LookImage): the
+// Wardrobe's saved cut-outs as they are, the rest cleaned in the browser.
 // ──────────────────────────────────────────────
 import { useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +16,8 @@ import type { Player, RunLiView } from "../../shared/api-types";
 import type { LookView } from "../../shared/wardrobe";
 
 interface LookPickerProps {
-  partner: RunLiView;
+  /** Whose looks show beside hers; none (#2303, a pulled date) shows only hers, the love interests coming as they are. */
+  partner: RunLiView | null;
   player: Player;
   /** Their looks and yours, from the Wardrobe; absent while it loads (only the everyday looks show). */
   hisLooks?: LookView[];
@@ -23,7 +26,7 @@ interface LookPickerProps {
   herLook: string;
   onChange: (looks: { hisLook: string; herLook: string }) => void;
   /**
-   * In place of "worn for the date, and stay on afterwards" (the Photo Shoot wears nothing). Always shown, with the
+   * In place of "for this outing only" (the Photo Shoot wears nothing). Always shown, with the
    * unpainted-look hint after it when there is one (that hint stands in for Date Night's own line).
    */
   note?: string;
@@ -54,7 +57,9 @@ interface LookCardProps {
 /** One person's looks as a radio group (one card per look they can wear). */
 function LookCard({ group, who, name, url, looks, accent, value, onPick }: LookCardProps) {
   const { t } = useTranslation();
-  const shown = looks.length ? looks : [{ id: BASE_LOOK, name: "", url } as Pick<LookView, "id" | "name" | "url">];
+  const shown = looks.length
+    ? looks
+    : [{ id: BASE_LOOK, name: "", url } as Pick<LookView, "id" | "name" | "url" | "cut">];
   return (
     <fieldset className="of-looks-person" style={{ "--of-li-accent": accent } as CSSProperties}>
       <legend className="of-looks-who">{who}</legend>
@@ -74,8 +79,10 @@ function LookCard({ group, who, name, url, looks, accent, value, onPick }: LookC
             <span className="of-look-frame" aria-hidden="true">
               <LookImage
                 src={image}
+                cut={!!image && !!look.cut?.includes(image)}
                 alt=""
                 loading="lazy"
+                decoding="async"
                 fallback={<span className="of-look-initials">{initialsOf(name)}</span>}
               />
             </span>
@@ -103,17 +110,19 @@ export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLo
   ].filter(Boolean);
   return (
     <div className="of-looks">
-      <div className="of-looks-pair">
-        <LookCard
-          group={`${id}-his`}
-          who={t("ui.otomeForge.dateNight.lookTheirs", { name: partner.name })}
-          name={partner.name}
-          url={partner.portrait}
-          looks={his}
-          accent={accentOf(partner)}
-          value={hisLook}
-          onPick={(look) => onChange({ hisLook: look, herLook })}
-        />
+      <div className="of-looks-pair" data-single={partner ? undefined : true}>
+        {partner ? (
+          <LookCard
+            group={`${id}-his`}
+            who={t("ui.otomeForge.dateNight.lookTheirs", { name: partner.name })}
+            name={partner.name}
+            url={partner.portrait}
+            looks={his}
+            accent={accentOf(partner)}
+            value={hisLook}
+            onPick={(look) => onChange({ hisLook: look, herLook })}
+          />
+        ) : null}
         <LookCard
           group={`${id}-hers`}
           who={t("ui.otomeForge.dateNight.lookYours")}

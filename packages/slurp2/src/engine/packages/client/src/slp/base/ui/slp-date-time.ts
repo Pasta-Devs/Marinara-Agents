@@ -1,3 +1,4 @@
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 const browserHour12 = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12;
 
@@ -55,7 +56,7 @@ function cached<T extends Intl.NumberFormat | Intl.DateTimeFormat | Intl.Relativ
  * The list and feed time (design language §7 Timestamp): "now", "4m", "2h", "Tue", "Sep 12", and
  * "Sep 12, 2025" for another year. A time in the future (scheduled) reads as the full date.
  */
-export function formatRelativeTime(value: string, locale: string, now = Date.now()) {
+export function formatRelativeTime(value: string, locale: string, now = slurpWorldNowMs()) {
   const date = new Date(value);
   const at = date.getTime();
   if (Number.isNaN(at)) return "";
@@ -93,7 +94,7 @@ export function formatFullTime(value: string, locale: string) {
  * A day ahead, as short as it can be said: "Fri" inside the next six days, "Oct 2" after that,
  * "Oct 2, 2027" in another year. For "renews Fri" / "ends Fri" on a subscription.
  */
-export function formatUpcomingDay(value: string, locale: string, now = Date.now()) {
+export function formatUpcomingDay(value: string, locale: string, now = slurpWorldNowMs()) {
   const date = new Date(value);
   const at = date.getTime();
   if (Number.isNaN(at)) return "";
@@ -107,7 +108,7 @@ export function formatUpcomingDay(value: string, locale: string, now = Date.now(
 }
 
 /** A clock time ahead: "4:30 PM" today, "Fri 4:30 PM" on a later day ("Next refill …", "Draw again at …"). */
-export function formatUpcomingClock(value: string, locale: string, now = Date.now()) {
+export function formatUpcomingClock(value: string, locale: string, now = slurpWorldNowMs()) {
   const clock = formatClockTime(value, locale);
   if (!clock || slpDayKey(value) === slpDayKey(now)) return clock;
   return `${formatUpcomingDay(value, locale, now)} ${clock}`;
@@ -124,7 +125,7 @@ export function slpDayKey(value: string | number | Date) {
  * A day heading for a list grouped by day (wallet ledger): "Today", "Yesterday", then "Tue, Sep 23",
  * with the year only for another year. Today / Yesterday come from Intl, so every locale gets its word.
  */
-export function formatDayHeading(value: string, locale: string, now = Date.now()) {
+export function formatDayHeading(value: string, locale: string, now = slurpWorldNowMs()) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const today = new Date(now);

@@ -4,25 +4,34 @@
 // A place is recorded the first time a written beat names it, under placeKey(name), with the beat's English tags. With
 // an image connection it is painted then, in the background, unless Ask before painting is on (or the player reviews
 // image prompts): then it waits for the tap (`waiting-consent`). A place with no tags is never painted; it takes the
-// tags of a later beat that describes it. Only a tap paints a failed or stopped place again, and
-// a ready one is never repainted. Without an image connection the place is kept with no art, and the reader shows its
+// tags of a later beat that describes it. Only a tap paints a failed or stopped place again, or (0.24.0) repaints a
+// ready one; an automatic pass always leaves a ready place alone. Without an image connection the place is kept with no
 // gradient. Painting goes through paintRecord (art/paint.ts): one paid image at a time per connection, the record
 // re-checked right before the call, and the image saved only onto the record that asked for it.
+// #2147: the player may instead choose a background from the Engine's library for any place (chooseBackground), which
+// paints nothing. With a connection and Ask before painting off, a new place is painted as soon as its beat is written,
+// so the choice replaces it; Ask before painting lets places wait, to choose before anything is paid for.
+// ponytail: the painting a background replaces is kept on the place (`painted`) and leaves the gallery only with the
+// story, so a stray tap in the picker never loses a paid image; nothing shows it again yet. The upgrade path is a
+// "Your painting" tile in the picker that sets it back.
 import type { Paint, PlaceArt, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { placeKey } from "../../../../../client/src/features/otome-forge/shared/places.js";
 import { runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
-import { worldStyle } from "./image-client.js";
+import { GALLERY_REF_PREFIX, imageConnectionFor, worldStyle } from "./image-client.js";
 import { type ImagePrompt, SCENE_SIZE, placePrompt } from "../prompts.js";
 import {
   imagesOf,
   paintRecord,
   paintView,
+  releaseReplacedImage,
+  repainting,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -158,7 +167,7 @@ export async function paintBeatPlaces(
           claimed = planned?.paints ?? [];
           return planned ? { ...current, places: planned.places } : undefined;
         });
-        connectionId = result?.value.images.connectionId ?? "";
+        connectionId = result ? (imageConnectionFor(result.value.images, "background") ?? "") : "";
         if (!result?.changed || !connectionId) claimed = [];
       }
     });
@@ -195,10 +204,10 @@ export async function placePromptFor(
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-  if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   const place = world.places[placeKey(name)];
   if (!place) throw notFound();
-  const style = await worldStyle(imagesOf(deps), world.images);
+  const style = await worldStyle(imagesOf(deps), world.images, "background");
   return placePrompt({ name: place.name, tags: place.tags, world, style }, edited);
 }
 
@@ -225,7 +234,7 @@ async function paintPlace(
     async check(): Promise<PaintCheck> {
       latest = await deps.store.readDoc(worldId(runId), normalizeWorld);
       if (!latest || !ours(latest)) return "gone";
-      if (latest.images.connectionId !== connectionId) return "stopped";
+      if (imageConnectionFor(latest.images, "background") !== connectionId) return "stopped";
       // An automatic paint waits for the tap once Ask before painting is turned on.
       if (!options.consent && latest.images.ask) return "waiting-consent";
       return "paint";
@@ -234,7 +243,7 @@ async function paintPlace(
       // Built now, so the rating and the 18+ gate are the ones in force at the paid call.
       const world = latest!;
       const place = world.places[key]!;
-      const style = await worldStyle(images, world.images);
+      const style = await worldStyle(images, world.images, "background");
       const { prompt, negativePrompt } = placePrompt(
         { name: place.name, tags: place.tags, world, style },
         options.edited,
@@ -250,19 +259,28 @@ async function paintPlace(
       return images.uploadToGallery({ image, name: place.name, prompt });
     },
     async save(art) {
-      const result = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) =>
-        ours(current)
-          ? { ...current, places: { ...current.places, [key]: { ...current.places[key]!, art } } }
-          : undefined,
-      );
-      return !!result?.changed;
+      let replaced: Paint | undefined;
+      const result = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
+        if (!ours(current)) return undefined;
+        replaced = current.places[key]!.art;
+        return {
+          ...current,
+          places: { ...current.places, [key]: { ...current.places[key]!, art: withKeptPicture(art, replaced) } },
+        };
+      });
+      if (!result?.changed) return false;
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+      if (result.value.places[key]?.art?.state === "ready")
+        await releaseReplacedImage(deps, replaced, result.value.places[key]?.art);
+      return true;
     },
   });
 }
 
 /**
- * POST /runs/:run/art/place: the tap that paints a place now (its consent, or Retry). Waits for the paint and resolves
- * the place as left; a ready place is returned as it is, and a tap while it is painting waits for that same paint.
+ * POST /runs/:run/art/place: the tap that paints a place now (its consent, Retry, or 0.24.0 a repaint of a ready one).
+ * Waits for the paint and resolves the place as left; a tap while it is painting waits for that same paint, so no tap
+ * pays twice.
  */
 export async function paintPlaceNow(
   deps: ArtDeps,
@@ -286,26 +304,54 @@ export async function paintPlaceNow(
     },
     async () => {
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-      if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+      if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       if (!world.places[key]) throw notFound();
-      if (world.places[key].art?.state === "ready") return read();
       if (!world.places[key].tags.trim()) throw untagged();
-      const connectionId = world.images.connectionId;
+      const connectionId = imageConnectionFor(world.images, "background");
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
-      const pending: Paint = { state: "pending", at };
       const claim = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
         const place = current.places[key];
         if (!place) throw notFound();
         if (!place.tags.trim()) throw untagged();
-        return place.art?.state !== "ready" && current.images.connectionId === connectionId
-          ? { ...current, places: { ...current.places, [key]: { ...place, art: pending } } }
+        return imageConnectionFor(current.images, "background") === connectionId
+          ? { ...current, places: { ...current.places, [key]: { ...place, art: repainting(place.art, at) } } }
           : undefined;
       });
-      if (!claim) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+      if (!claim) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
       if (claim.changed)
         await paintPlace(deps, runId, key, at, connectionId, { debugMode, consent: true, edited, active });
       return read();
     },
   );
+}
+
+/**
+ * POST /runs/:run/art/place/background (#2147): a background from the Engine's library (the player's or a Game Assets
+ * one) as the place's picture, chosen by the player; nothing is painted, and a place with no description can have one
+ * too. A painting it replaces is kept as `painted` (the header). 400 for a url the library does not list, 409 `busy`
+ * while the place paints, 404 for a place the story has not been to.
+ */
+export async function chooseBackground(deps: ArtDeps, runId: string, name: string, url: string): Promise<PlaceArt> {
+  const images = imagesOf(deps);
+  if (!((await images.backgrounds?.()) ?? []).some((background) => background.url === url)) {
+    throw new OtomeForgeError(400, "That background is not in your Engine library.", "bad-request");
+  }
+  const key = placeKey(name);
+  const release = startPaint(runId, ownerOf(key));
+  if (!release) throw new OtomeForgeError(409, "This place is being painted.", "busy");
+  try {
+    const art: Paint = { state: "ready", at: new Date().toISOString(), url };
+    const world = await deps.store.updateDoc(worldTarget(runId), normalizeWorld, (current) => {
+      const place = current.places[key];
+      if (!place) throw notFound();
+      // A ready place is never painted again, so it has at most this one painting to keep.
+      const painted = place.art?.ref?.startsWith(GALLERY_REF_PREFIX) ? place.art : place.painted;
+      return { ...current, places: { ...current.places, [key]: { ...place, art, ...(painted ? { painted } : {}) } } };
+    });
+    if (!world) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
+    return placeView(runId, key, world.places[key]!);
+  } finally {
+    release();
+  }
 }

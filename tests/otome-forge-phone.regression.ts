@@ -6,20 +6,31 @@
 // source recalled only by its own love interest, unread and seen, and a run deleted mid-reply leaving no thread; P17
 // keeps recalled memory whole beside the previous chapter in full; a card name of any length never costs a session; a
 // note's full length fits the Reply quote; Close and remember never waits behind the run's story queue, yet still holds
-// its thread, and P18 gets a thinking model's summary room (#2039). Daily messages (#2044): off by default, armed a
-// minute after the app opens, spaced 24 h / limit apart and never past the local midnight of the request's zone, a
-// spent attempt never retried, a random met love interest who is not in the open thread, not busy and not waiting on
-// her message, written by P17 "first" in the background lane on the chat connection (never the run's foreground
-// queue), dropped when the thread changed meanwhile, and landing unread.
+// its thread, and P18 gets a thinking model's summary room (#2039). 0.47.1: a close answers before its summary, which
+// runs once in the background lane while sends and first messages wait; a restart's mark resumes once from a read or
+// the heartbeat, a failure keeps the conversation open with Try again, and her next message lets it go; one landing on
+// a later day never turns the daily tally back.
+// Daily messages (#2044): off by default, armed a minute after the app opens, spaced 24 h / limit apart and never past
+// the local midnight of the request's zone, a spent attempt never retried, a random met love interest who is not in
+// the open thread, not busy and not waiting on her message, written by P17 "first" in the background lane on the chat
+// connection (never the run's foreground queue), dropped when the thread changed meanwhile, and landing unread.
+// #2504: his [note: …] and [selfie: …] in his own thread only: taken out of his message, his notes kept on his state
+// (the newest three) and read after P17's cached part, and his selfie painted once, by itself or on Paint.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type {
   Beat,
   Chapter,
+  ImageSettings,
   PhoneMessage,
   PhoneThread,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import {
+  ACTIVITY_STARLIGHT_DAILY_CAP,
+  OUTSIDE_AFFECTION_DAILY_CAP,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 import { NOTE_TEXT_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
@@ -27,6 +38,8 @@ import {
   COMFORT_RULE,
   SUMMARY_WORDING,
   chatReplyMessages,
+  groupChatMessages,
+  sharedState,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   createHandle,
@@ -62,19 +75,52 @@ import {
   dailyJobKey,
   phoneDue,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/daily.ts";
-import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
-import { normalizeChatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
+import {
+  inviteDue,
+  inviteJobKey,
+  leastSeenFirst,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/invite.ts";
+import { friendDue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/friends.ts";
+import { applyMessageHurts } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
+import { heldAgainst } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/dates.ts";
+import {
+  CLOSE_TRIES,
+  closeJobKey,
+  phoneMemorySources,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
+import {
+  normalizeChatMemory,
+  normalizeChatReply,
+  normalizeGroupReply,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
 import { registerPhoneRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/phone.ts";
-import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import {
+  defaultLiState,
+  normalizeState,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
   normalizeBeat,
   normalizeChapter,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
-import type { FakeReply, FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
-import { KAI, MIR, SOL, json, saveStoryMemory, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { within, type FakeReply, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
+import { fakeImages, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
+import {
+  HE,
+  KAI,
+  KAVEH,
+  MIR,
+  SOL,
+  friendBible,
+  json,
+  saveStoryMemory,
+  seedFriend,
+  squeezedMemory,
+  storyWorld,
+} from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
 // #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
@@ -123,7 +169,7 @@ function phoneRoutes(deps: RouteDeps, runKey: string) {
   return async (
     method: "GET" | "POST",
     path: string,
-    { li, body = {}, timeZone = "UTC" }: { li?: string; body?: object; timeZone?: string } = {},
+    { li, id, body = {}, timeZone = "UTC" }: { li?: string; id?: string; body?: object; timeZone?: string } = {},
   ) => {
     const handler = routes.get(`${method} ${path}`);
     assert.ok(handler, `${method} ${path} is registered`);
@@ -146,7 +192,7 @@ function phoneRoutes(deps: RouteDeps, runKey: string) {
         url: path,
         body: method === "POST" ? fields : undefined,
         query: method === "GET" ? fields : {},
-        params: { run: runKey, ...(li ? { li } : {}) },
+        params: { run: runKey, ...(li ? { li } : {}), ...(id ? { id } : {}) },
       },
       reply,
     );
@@ -160,9 +206,19 @@ async function phoneWorld(
     replies?: FakeReply[];
     withMemory?: boolean;
     model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens">;
+    /** 0.47.1: the background lane Close and remember runs in; off where a test builds its own (dailyWorld). */
+    lane?: boolean;
+    /**
+     * #2504: an image connection with these settings, painted by a fake image client that counts paid calls (`paid`);
+     * `before` runs before each paid call answers.
+     */
+    art?: Partial<ImageSettings> & { before?: (call: PaidCall) => void | Promise<void> };
   } = {},
 ) {
   const t = await storyWorld({ runKey, replies: options.replies ?? phoneModel(), model: options.model ?? {} });
+  const { before, ...settings } = options.art ?? {};
+  const painter = options.art ? fakeImages(before ? { before } : {}) : undefined;
+  if (options.art) await setImages(t.store, t.runId, { connectionId: "conn-image", ...settings });
   let memory: OtomeMemory | undefined;
   if (options.withMemory) {
     memory = createOtomeMemory({
@@ -171,10 +227,37 @@ async function phoneWorld(
       readSources: async (runId) => phoneMemorySources(t.store, runId, (await t.state())!),
     });
   }
-  const deps: RouteDeps = { ...t.deps, handle: createHandle(t.runtime.logger), ...(memory ? { memory } : {}) };
+  const background = options.lane === false ? undefined : createBackgroundQueue(t.runtime);
+  const deps: RouteDeps = {
+    ...t.deps,
+    handle: createHandle(t.runtime.logger),
+    ...(memory ? { memory } : {}),
+    ...(background ? { background } : {}),
+    // A free cut-out, as artWorld's, for the likeness a selfie sends.
+    ...(painter
+      ? {
+          images: painter.images,
+          cutouts: {
+            cutOut: async (url: string) => ({ url: `${url}.cut.png`, id: `cut-${url}` }),
+            deleteGalleryImage: async () => true,
+          },
+        }
+      : {}),
+  };
   const thread = async (li: string): Promise<PhoneThread | null> =>
     t.store.readDoc(chatId(t.runId, li), normalizeThread);
-  return { ...t, deps, memory, thread, phone: phoneRoutes(deps, runKey) };
+  const phone = phoneRoutes(deps, runKey);
+  /** 0.47.1: lets thread `li`'s close job finish, and returns the thread as it left it. */
+  const remembered = async (li: string = KAI) => {
+    for (let round = 0; round < 400 && background?.has(closeJobKey(t.runId, li)); round += 1) await tick();
+    return (await thread(li))!;
+  };
+  /** Close and remember, accepted, then landed: the accept's answer and the thread. */
+  const closeAndWait = async (li: string = KAI, timeZone = "UTC") => {
+    const accepted = await phone("POST", close, { li, timeZone });
+    return { accepted, thread: await remembered(li) };
+  };
+  return { ...t, deps, background, memory, thread, phone, remembered, closeAndWait, paid: painter?.paid ?? [] };
 }
 
 /** Holds the first model call until `release()` (`reached` resolves once it waits); later calls answer at once. */
@@ -327,6 +410,16 @@ test("a reply written as the protagonist on a later line is refused, an ordinary
   assert.match(refused("He waits.\nInes: fine") as string, /^a message was written as Ines/);
   const kept = refused("Kai: Meet at 7:30\nBring the key.");
   assert.deepEqual(kept, { messages: [{ text: "Meet at 7:30\nBring the key." }] });
+  // 0.36.8 (#2394): an emoticon after a name is his message, kept whole; a speaker's colon still counts, space or not.
+  for (const text of ["ines :(", "Ines :P", "INES :D", "Ines:3", "omg\nines :((", "Kai :)", "Ines :-P see you"]) {
+    assert.deepEqual(refused(text), { messages: [{ text }] }, text);
+  }
+  assert.match(refused("Ines:fine") as string, /^a message was written as Ines/);
+  assert.match(refused("Ines: :(") as string, /^a message was written as Ines/);
+  // P18's quote keeps an emoticon line whole instead of cutting it after the name.
+  const conversation = "Ines: you ate my pie\nKai: Kai :P";
+  const memory = normalizeChatMemory({ memory: "She caught him.", quote: "Kai :P" }, names, conversation);
+  assert.deepEqual(memory, { memory: "She caught him.", quote: "Kai :P" });
 });
 
 test("P17 is a message from him alone: boundary, chat contract, comfort rule, stage, rupture, the note, nothing hidden", async () => {
@@ -378,10 +471,21 @@ test("P17 is a message from him alone: boundary, chat contract, comfort rule, st
     "Your mask has started to crack",
     "A rupture stands between you",
     "anything about their life outside the story",
+    // 0.29.0: he never echoes her words, and texts like a person, not a novel.
+    "Never parrot or echo what Ines wrote",
+    "Text the way a real person texts: plain, everyday words",
+    // 0.36.8 (#2394): the thread reads like a chat (capitals to scream, emoji and so on), as far as fits who writes.
+    "- Whatever carries these messages, they read like a chat, as far as it fits the one writing",
+    "CAPS to scream when excited, angry or flustered",
+    "Someone stiff or formal still texts stiff and formal",
   ]) {
     assert.ok(head.includes(part), `system has: ${part.slice(0, 50)}`);
   }
-  const user = prompt.at(-1)!.content;
+  // 0.20.2: the cached part (his card, the story, the conversations that are over), then the thread now.
+  const user = prompt
+    .filter((message) => message.role === "user")
+    .map((message) => message.content)
+    .join("\n");
   assert.ok(user.includes(`Ines: (replying to your note: "${quote}") I read your note.`));
   assert.ok(user.includes("He mended the north lens alone."));
   assert.ok(user.includes("Open grievance g-1"));
@@ -396,25 +500,22 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   const today = localDay("UTC");
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    daily: { dayKey: today, starlight: 0, affection: { [KAI]: 297 } },
+    daily: { dayKey: today, starlight: 0, affection: { [KAI]: OUTSIDE_AFFECTION_DAILY_CAP - 3 } },
   }));
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const points = (await t.state()).lis[KAI]!.points;
 
-  const closed = await t.phone("POST", close, { li: KAI });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
+  const { accepted, thread } = await t.closeAndWait();
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+  assert.deepEqual(accepted.body, { remembering: true, start: 0 }, "accepted; its session will start at 0");
+  assert.equal((await t.state()).lis[KAI]!.points, points + 3, "capped at the day's limit");
   assert.deepEqual(
-    closed.body.grants,
-    [{ source: "close-and-remember", li: KAI, affection: 3 }],
-    "capped at 300 a day",
+    thread.sessions.map((session) => [session.start, session.count, session.name, session.affection]),
+    [[0, 3, "Kai", 3]],
+    "the session keeps what its close earned",
   );
-  assert.equal((await t.state()).lis[KAI]!.points, points + 3);
-  const thread = (await t.thread(KAI))!;
-  assert.deepEqual(
-    thread.sessions.map((session) => [session.start, session.count, session.name]),
-    [[0, 3, "Kai"]],
-  );
+  assert.deepEqual(thread.sessions[0]!.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
+  assert.equal(thread.closing, undefined, "landed: the mark is off");
   assert.equal("suggestions" in thread, false);
 
   const memoryCall = t.calls.find((call) => isMemoryPrompt(call.messages))!;
@@ -426,55 +527,374 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
 
   const calls = t.calls.length;
   const replay = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([replay.status, replay.body.memory.text, replay.body.grants], [200, MEMORY.memory, []]);
+  assert.deepEqual([replay.status, replay.body], [200, { memory: thread.sessions[0]!.memory }]);
   assert.equal(t.calls.length, calls, "a replay makes no call");
   assert.equal((await t.thread(KAI))!.sessions.length, 1);
 
   const view = await t.phone("GET", page, { li: KAI });
-  assert.deepEqual([view.body.activeCount, view.body.past], [0, 1]);
+  assert.deepEqual([view.body.activeCount, view.body.past, view.body.closing], [0, 1, undefined]);
+  assert.deepEqual(view.body.remembered, { start: 0, affection: 3 });
   assert.ok((view.body.messages as Array<{ archived: boolean }>).every((message) => message.archived));
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads.find((entry: { li: string }) => entry.li === KAI);
+  assert.deepEqual([row.closing, row.remembered], [undefined, { start: 0, affection: 3 }]);
 
   // The day's cap is reached: the next conversation is remembered and earns nothing.
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
-  const capped = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([capped.status, capped.body.grants], [200, []]);
+  const capped = await t.closeAndWait();
+  assert.deepEqual([capped.accepted.status, capped.accepted.body], [200, { remembering: true, start: 3 }]);
   assert.deepEqual(
-    (await t.thread(KAI))!.sessions.map((session) => [session.start, session.count]),
+    capped.thread.sessions.map((session) => [session.start, session.count, session.affection]),
     [
-      [0, 3],
-      [3, 3],
+      [0, 3, 3],
+      [3, 3, undefined],
     ],
   );
   assert.equal((await t.state()).lis[KAI]!.points, points + 3);
 });
 
-test("Close and remember never waits behind the run's story queue, and its thread still takes one write at a time", async () => {
+test("Close and remember answers before its summary, which runs once in the background lane while sends wait", async () => {
   const t = await phoneWorld("r-phoneq-aaaaaa");
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   // A story write (a lookahead beat, say) holds the run's foreground queue the whole time.
   let free!: () => void;
   const story = runForeground(t.runId, () => new Promise<void>((resolve) => (free = resolve)));
+  const admitted: string[] = [];
+  const admission = t.runtime.integrations!.admission!;
+  const admit = admission.run.bind(admission);
+  Object.assign(admission, {
+    run: (connectionId: string, mode: { kind: string }, operation: () => Promise<unknown>) => {
+      admitted.push(`${connectionId} ${mode.kind}`);
+      return admit(connectionId, mode as never, operation);
+    },
+  });
   const release = gateFirstCall(t.runtime);
   try {
-    const closing = t.phone("POST", close, { li: KAI });
-    const started = await Promise.race([
-      release.reached.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)),
-    ]);
-    assert.ok(started, "P18 is written at once, not behind the story write");
-    // While it is summarized, the thread takes no other write.
-    const busy = await t.phone("POST", send, { li: KAI, body: { text: "Wait." } });
-    assert.deepEqual([busy.status, busy.body.code], [409, "busy"]);
+    const accepted = await within(t.phone("POST", close, { li: KAI }), "the close's answer");
+    assert.deepEqual([accepted.status, accepted.body], [200, { remembering: true, start: 0 }], "answered at once");
+    const mark = (await t.thread(KAI))!.closing!;
+    assert.deepEqual([mark.start, mark.end, mark.day, mark.error], [0, 3, localDay("UTC"), undefined]);
+    await within(release.reached, "the summary's call");
+    assert.ok(t.background!.has(closeJobKey(t.runId, KAI)), "P18 is written by the background lane's job");
+    assert.deepEqual(admitted, ["conn-text foreground"], "the player's own close, on P18's connection, never waits");
+    assert.equal((await t.thread(KAI))!.closing!.tries, 1, "the summary was counted before its call");
+    // While it is remembered: the list and the thread say so, Close answers the same, and sending waits.
+    const view = await t.phone("GET", page, { li: KAI });
+    assert.deepEqual([view.body.closing, view.body.busy, view.body.activeCount], [{}, false, 3]);
+    const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+    assert.deepEqual([row.li, row.closing], [KAI, {}]);
+    const again = await t.phone("POST", close, { li: KAI });
+    assert.deepEqual([again.status, again.body], [200, { remembering: true, start: 0 }]);
+    for (const body of [{ text: "Wait." }, { retry: true }]) {
+      const busy = await within(t.phone("POST", send, { li: KAI, body }), `the busy send ${JSON.stringify(body)}`);
+      assert.deepEqual([busy.status, busy.body.code], [409, "busy"], JSON.stringify(body));
+    }
+    assert.equal((await t.thread(KAI))!.messages.length, 3, "nothing new went in");
     release();
-    const closed = await closing;
-    assert.equal(closed.status, 200, JSON.stringify(closed.body));
-    assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
-    assert.equal((await t.thread(KAI))!.sessions.length, 1, "remembered while the story write still runs");
+    const thread = await t.remembered();
+    assert.deepEqual(
+      thread.sessions.map((session) => [session.start, session.count, session.affection]),
+      [[0, 3, 5]],
+      "remembered while the story write still runs",
+    );
+    assert.equal(thread.closing, undefined);
+    assert.equal(t.calls.filter((call) => isMemoryPrompt(call.messages)).length, 1, "one summary");
   } finally {
     release();
     free();
     await story;
   }
+  // Sending opens the next conversation (its reply waits behind the story write, so after it).
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Now?" } })).status, 200);
+});
+
+test("Close and remember: a restart's mark resumes once from a read and is never remembered twice", async () => {
+  const t = await phoneWorld("r-phoner-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const mark = (tries: number) =>
+    t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+      ...thread,
+      closing: { start: 0, end: 3, at: `2026-11-25T10:00:0${tries}.000Z`, tries, day: localDay("UTC") },
+    }));
+  // A restart left the close counted once, with no job for it here: reading the list queues it again, once.
+  await mark(1);
+  const points = (await t.state()).lis[KAI]!.points;
+  assert.equal((await t.phone("GET", "/runs/:run/phone")).status, 200);
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200, "a second read queues nothing more");
+  const thread = await t.remembered();
+  assert.deepEqual(
+    [thread.sessions.length, thread.closing, t.calls.filter((call) => isMemoryPrompt(call.messages)).length],
+    [1, undefined, 1],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Its session landed before the restart: only the mark comes off, with no call and no second grant, and memory
+  // upkeep is queued for the session, as when it lands.
+  await mark(1);
+  const calls = t.calls.length;
+  const upkeeps: string[] = [];
+  const maintain = async ({ runId }: { runId: string }) => {
+    upkeeps.push(runId);
+    return true;
+  };
+  const watched = phoneRoutes({ ...t.deps, memory: { maintain } as unknown as OtomeMemory }, "r-phoner-aaaaaa");
+  await watched("GET", page, { li: KAI });
+  const again = await t.remembered();
+  assert.deepEqual([again.sessions.length, again.closing, t.calls.length, upkeeps], [1, undefined, calls, [t.runId]]);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Two summaries never landed: it fails as stopped, the conversation stays open, and Try again closes it.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (current) => ({
+    ...current,
+    closing: { start: 3, end: 6, at: "2026-11-25T10:01:00.000Z", tries: CLOSE_TRIES, day: localDay("UTC") },
+  }));
+  const before = t.calls.length;
+  await t.phone("GET", "/runs/:run/phone");
+  const stopped = await t.remembered();
+  assert.deepEqual([stopped.closing?.error, stopped.sessions.length, t.calls.length], ["stopped", 1, before]);
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual(row.closing, { error: "stopped" });
+  const retried = await t.closeAndWait();
+  assert.deepEqual(retried.accepted.body, { remembering: true, start: 3 });
+  assert.deepEqual(
+    [retried.thread.sessions.map((session) => [session.start, session.count]), retried.thread.closing],
+    [
+      [
+        [0, 3],
+        [3, 3],
+      ],
+      undefined,
+    ],
+  );
+});
+
+test("0.47.1: the heartbeat queues a close a restart left too, so first messages there wait only while it is remembered", async () => {
+  const t = await phoneWorld("r-phonez-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-25T10:00:01.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  assert.equal((await t.phone("POST", "/runs/:run/phone/due", { body: { open: null } })).status, 200);
+  const thread = await t.remembered();
+  assert.deepEqual([thread.sessions.length, thread.closing], [1, undefined]);
+});
+
+/** Fails the next `times` writes that take a thread's close mark off (`left()` says how many are still to fail). */
+function failUnmarks(t: Awaited<ReturnType<typeof phoneWorld>>, times: number) {
+  let left = times;
+  const mutate = t.store.mutateDoc.bind(t.store);
+  t.store.mutateDoc = ((target, normalize, change, options) =>
+    mutate(
+      target,
+      normalize,
+      async (current) => {
+        const next = await change(current);
+        const [before, after] = [current, next] as Array<Partial<PhoneThread>>;
+        if (left > 0 && before.closing && after.sessions && !after.closing) {
+          left -= 1;
+          throw new Error("The disk is full.");
+        }
+        return next;
+      },
+      options,
+    )) as typeof t.store.mutateDoc;
+  return { left: () => left };
+}
+
+test("Close and remember: once its session is saved, a mark that will not come off is tried again, never failed or paid twice", async () => {
+  const t = await phoneWorld("r-phones-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const points = (await t.state()).lis[KAI]!.points;
+  // The first write that takes the mark off fails: the second lands, with what it earned.
+  const once = failUnmarks(t, 1);
+  const { thread } = await t.closeAndWait();
+  assert.equal(once.left(), 0);
+  assert.deepEqual(
+    [thread.closing, thread.sessions.map((session) => [session.start, session.affection])],
+    [undefined, [[0, 5]]],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Every try fails: the mark stays with no error (no Try again for a conversation that is remembered), and the next
+  // read only takes it off, with no call and no second grant.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  const always = failUnmarks(t, 2);
+  const stuck = await t.closeAndWait();
+  assert.equal(always.left(), 0);
+  assert.deepEqual(
+    [stuck.thread.closing?.error, stuck.thread.closing?.start, stuck.thread.sessions.length],
+    [undefined, 3, 2],
+  );
+  const calls = t.calls.length;
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual([row.li, row.closing], [KAI, {}], "still remembering, not failed");
+  const settled = await t.remembered();
+  assert.deepEqual([settled.closing, settled.sessions.length, t.calls.length], [undefined, 2, calls]);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 10, "each close paid once");
+  assert.deepEqual((await t.phone("GET", page, { li: KAI })).body.closing, undefined);
+});
+
+test("Close and remember: a session saved before its write rejects is remembered and paid once, never failed", async () => {
+  const t = await phoneWorld("r-phonej-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const points = (await t.state()).lis[KAI]!.points;
+  // The write that appends the session commits, then the check that the story is still there fails once.
+  const { mutateDoc, readDoc } = t.store;
+  let armed = true;
+  let failWorldRead = false;
+  t.store.mutateDoc = (async (target, normalize, change, options) => {
+    const saved = await mutateDoc(target, normalize, change, options);
+    const thread = saved as Partial<PhoneThread>;
+    if (armed && target.id === chatId(t.runId, KAI) && thread.closing && thread.sessions?.length) {
+      armed = false;
+      failWorldRead = true;
+    }
+    return saved;
+  }) as typeof mutateDoc;
+  t.store.readDoc = ((id, normalize) => {
+    if (failWorldRead && id === worldId(t.runId)) {
+      failWorldRead = false;
+      return Promise.reject(new Error("The disk is busy."));
+    }
+    return readDoc(id, normalize);
+  }) as typeof readDoc;
+  const { thread } = await t.closeAndWait();
+  Object.assign(t.store, { mutateDoc, readDoc });
+  assert.deepEqual([armed, failWorldRead], [false, false], "the read after the session's write failed");
+  assert.deepEqual(
+    [thread.closing, thread.sessions.map((session) => [session.start, session.affection])],
+    [undefined, [[0, 5]]],
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+  const row = (await t.phone("GET", "/runs/:run/phone")).body.threads[0];
+  assert.deepEqual([row.li, row.closing, row.remembered], [KAI, undefined, { start: 0, affection: 5 }], "no Try again");
+});
+
+test("Close and remember: with no connection, a saved close only comes off; a read whose requeue fails still answers", async () => {
+  const t = await phoneWorld("r-phonec-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  await t.closeAndWait();
+  const points = (await t.state()).lis[KAI]!.points;
+  // Its session landed before a restart, and the connection P18 used is gone.
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-25T10:00:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "" },
+  }));
+  const calls = t.calls.length;
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200);
+  const thread = (await t.thread(KAI))!;
+  assert.deepEqual([thread.closing, thread.sessions.length, t.calls.length], [undefined, 1, calls]);
+  assert.equal((await t.state()).lis[KAI]!.points, points, "no second grant");
+
+  // An unfinished close still fails as no-connection; one whose write fails leaves the list answering, and the
+  // threads after it are still seen to.
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (current) => ({
+    ...current,
+    messages: [...current.messages, { id: "m-late-0001", who: "player", text: "Hello?", at: current.messages[0]!.at }],
+    closing: { start: 3, end: 4, at: "2026-11-25T10:01:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  await t.store.mutateDoc(chatTarget(t.runId, MIR), normalizeThread, (current) => ({
+    ...current,
+    li: MIR,
+    messages: [{ id: "m-mir-0001", who: "player", text: "Hi.", at: "2026-11-25T09:00:00.000Z" }],
+    closing: { start: 0, end: 1, at: "2026-11-25T10:02:00.000Z", tries: 1, day: localDay("UTC") },
+  }));
+  const mutate = t.store.mutateDoc.bind(t.store);
+  t.store.mutateDoc = ((target, ...rest) =>
+    target.id === chatId(t.runId, KAI)
+      ? Promise.reject(new Error("The disk is full."))
+      : mutate(target, ...rest)) as typeof t.store.mutateDoc;
+  const list = await t.phone("GET", "/runs/:run/phone");
+  assert.equal(list.status, 200, JSON.stringify(list.body));
+  const row = (li: string) => list.body.threads.find((entry: { li: string }) => entry.li === li);
+  assert.deepEqual(row(KAI).closing, {}, "the view it read");
+  assert.deepEqual((await t.thread(MIR))!.closing?.error, "no-connection", "the next thread's close was seen to");
+  assert.ok(t.logs.some((entry) => entry.level === "warn" && String(entry.message).includes("not queued again")));
+  // Its mark stands for the next read.
+  t.store.mutateDoc = mutate;
+  assert.equal((await t.phone("GET", page, { li: KAI })).status, 200);
+  assert.equal((await t.thread(KAI))!.closing?.error, "no-connection");
+});
+
+test("Close and remember: a close that lands on a later day counts against that day's cap and never turns the tally back", async () => {
+  const t = await phoneWorld("r-phoned-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  // Closed yesterday, left by a restart; today's activities have already reached both caps.
+  const today = localDay("UTC");
+  const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const daily = {
+    dayKey: today,
+    starlight: ACTIVITY_STARLIGHT_DAILY_CAP,
+    affection: { [KAI]: OUTSIDE_AFFECTION_DAILY_CAP },
+  };
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({ ...state, daily }));
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    closing: { start: 0, end: 3, at: "2026-11-24T23:59:00.000Z", tries: 1, day: yesterday },
+  }));
+  const points = (await t.state()).lis[KAI]!.points;
+  await t.phone("GET", "/runs/:run/phone");
+  const thread = await t.remembered();
+  assert.deepEqual(
+    thread.sessions.map((session) => [session.start, session.affection]),
+    [[0, undefined]],
+    "remembered, and today's cap is already reached",
+  );
+  const state = await t.state();
+  assert.deepEqual(state.daily, daily, "today's tally is kept");
+  assert.equal(state.lis[KAI]!.points, points);
+
+  // The next close today is remembered too, and still earns nothing past the cap.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Still up." } })).status, 200);
+  const next = await t.closeAndWait();
+  assert.deepEqual(
+    [next.thread.sessions.map((session) => [session.start, session.affection]), next.thread.closing],
+    [
+      [
+        [0, undefined],
+        [3, undefined],
+      ],
+      undefined,
+    ],
+  );
+  assert.deepEqual([(await t.state()).daily, (await t.state()).lis[KAI]!.points], [daily, points]);
+});
+
+test("Close and remember: a failed summary keeps the conversation open with its reason, and her next message lets it go", async () => {
+  const t = await phoneWorld("r-phonef-aaaaaa", { replies: [json(REPLY), "", "", ...phoneModel()] });
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  const failed = await t.closeAndWait();
+  assert.equal(failed.accepted.status, 200, JSON.stringify(failed.accepted.body));
+  assert.deepEqual(
+    [failed.thread.closing?.error, failed.thread.sessions.length, archivedCount(failed.thread)],
+    ["declined", 0, 0],
+    "nothing was lost",
+  );
+  const view = await t.phone("GET", page, { li: KAI });
+  assert.deepEqual([view.body.closing, view.body.activeCount], [{ error: "declined" }, 3]);
+  const points = (await t.state()).lis[KAI]!.points;
+  // A failed close holds nothing back: her next message goes in and lets it go.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Hello?" } })).status, 200);
+  assert.equal((await t.thread(KAI))!.closing, undefined);
+  const landed = await t.closeAndWait();
+  assert.deepEqual(
+    landed.thread.sessions.map((session) => [session.start, session.count, session.affection]),
+    [[0, 6, 5]],
+    "the next close remembers all of it",
+  );
+  assert.equal((await t.state()).lis[KAI]!.points, points + 5);
+
+  // Without a lane, or a connection for P18, the close is refused before anything is marked.
+  const u = await phoneWorld("r-phonef-bbbbbb", { lane: false });
+  assert.equal((await u.phone("POST", send, { li: KAI, body: { text: "Hi" } })).status, 200);
+  const refused = await u.phone("POST", close, { li: KAI });
+  assert.deepEqual([refused.status, refused.body.code], [503, "no-connection"]);
+  assert.equal((await u.thread(KAI))!.closing, undefined);
 });
 
 test("P18 is a summary: it may write at least 10240 tokens for a thinking model, or the connection's lower cap", async () => {
@@ -485,8 +905,8 @@ test("P18 is a summary: it may write at least 10240 tokens for a thinking model,
   ] as const) {
     const t = await phoneWorld(`r-phone${maxOutputTokens ?? 0}-aaaaaa`, { model: { maxOutputTokens } });
     assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
-    const closed = await t.phone("POST", close, { li: KAI });
-    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    const { accepted } = await t.closeAndWait();
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
     const maxTokens = t.calls.find((call) => isMemoryPrompt(call.messages))!.options!.maxTokens!;
     assert.ok(maxTokens >= least, `cap ${maxOutputTokens}: P18 may write ${maxTokens}`);
     if (maxOutputTokens) assert.ok(maxTokens <= maxOutputTokens);
@@ -512,10 +932,12 @@ test("the grant lands once through a stale write, a one-sided talk earns nothing
     (await t.phone("POST", send, { li: KAI, body: { text: "Are you there?" }, timeZone: late })).status,
     422,
   );
-  const lonely = await t.phone("POST", close, { li: KAI, timeZone: early });
-  assert.equal(lonely.status, 200, JSON.stringify(lonely.body));
-  assert.deepEqual(lonely.body.grants, [], "a conversation with nothing from him earns nothing");
-  assert.equal(lonely.body.memory.quote, "", "a quote the conversation does not hold is dropped");
+  const lonely = await t.closeAndWait(KAI, early);
+  assert.equal(lonely.accepted.status, 200, JSON.stringify(lonely.accepted.body));
+  const alone = lonely.thread.sessions[0]!;
+  assert.equal(alone.affection, undefined, "a conversation with nothing from him earns nothing");
+  assert.equal(alone.memory.quote, "", "a quote the conversation does not hold is dropped");
+  assert.equal((await t.state()).daily.affection[KAI], 300);
 
   // A full conversation on her early-zone day: a new day, so the cap from the late zone's day does not apply. Two
   // stale revisions on the way make both writes apply again, and still the session and the grant land once.
@@ -523,13 +945,16 @@ test("the grant lands once through a stale write, a one-sided talk earns nothing
   t.fake.interfere(chatId(t.runId, KAI));
   t.fake.interfere(stateId(t.runId));
   const before = (await t.state()).lis[KAI]!.points;
-  const closed = await t.phone("POST", close, { li: KAI, timeZone: early });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
+  const closed = await t.closeAndWait(KAI, early);
+  assert.equal(closed.accepted.status, 200, JSON.stringify(closed.accepted.body));
+  assert.deepEqual(
+    closed.thread.sessions.map((session) => session.affection),
+    [undefined, 5],
+  );
   const state = await t.state();
   assert.equal(state.lis[KAI]!.points, before + 5);
+  // The day it was closed on, in her zone, though the summary ran after the request.
   assert.deepEqual(state.daily, { dayKey: localDay(early), starlight: 0, affection: { [KAI]: 5 } });
-  assert.equal((await t.thread(KAI))!.sessions.length, 2);
 });
 
 test("a closed session is a chat source for its love interest only: recalled by him, never by another", async () => {
@@ -747,8 +1172,13 @@ test("P17 keeps the overview and recalled details whole beside the previous chap
   const phone = phoneRoutes({ ...t.deps, memory: memory as unknown as OtomeMemory }, "r-phonea-aaaaaa");
   const sent = await phone("POST", send, { li: KAI, body: { text: "Do you remember my sister's name?" } });
   assert.equal(sent.status, 200, JSON.stringify(sent.body));
-  const user = t.calls.find((call) => isReplyPrompt(call.messages))!.messages.at(-1)!.content;
-  for (const mark of ["OVERVIEW-MARK", "OLD-SESSION-MARK", "# Previous chapter in full: Harbour", "LATEST-END-MARK"]) {
+  const user = t.calls.find((call) => isReplyPrompt(call.messages))!.messages[1]!.content;
+  for (const mark of [
+    "OVERVIEW-MARK",
+    "OLD-SESSION-MARK",
+    "# Previous chapter in full: [Chapter 1] Harbour",
+    "LATEST-END-MARK",
+  ]) {
     assert.ok(user.includes(mark), `P17 holds ${mark}`);
   }
   assert.ok(user.includes("LATEST-START-MARK"), "the previous chapter goes in whole, as GF's chat gets it");
@@ -785,17 +1215,16 @@ test("a card name of any length never costs a session: clipped as written, the m
   }));
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const before = (await t.state()).lis[KAI]!.points;
-  const closed = await t.phone("POST", close, { li: KAI });
-  assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.equal(closed.body.grants.length, 1);
-  const thread = (await t.thread(KAI))!;
+  const { accepted, thread } = await t.closeAndWait();
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
   assert.deepEqual(
     thread.sessions.map((session) => [session.start, session.count, [...(session.name ?? "")].length]),
     [[0, 2, SESSION_NAME_MAX]],
   );
+  assert.equal(thread.sessions[0]!.affection, 5);
   assert.equal(archivedCount(thread), 2, "nothing reopens");
   const replay = await t.phone("POST", close, { li: KAI });
-  assert.deepEqual([replay.status, replay.body.grants], [200, []], "a second Close earns nothing");
+  assert.deepEqual([replay.status, "memory" in replay.body], [200, true], "a second Close earns nothing");
   assert.equal((await t.state()).lis[KAI]!.points, before + 5);
 
   // A stored session or message with a display field out of bounds keeps its place; only that field is dropped.
@@ -847,7 +1276,7 @@ function inZone<T>(timeZone: string, operation: () => Promise<T>): Promise<T> {
 
 /** A forged world with chapter 1 read (the cast is met), a background lane and a chat connection of its own. */
 async function dailyWorld(runKey: string, { limit, replies }: { limit?: number; replies?: FakeReply[] } = {}) {
-  const t = await phoneWorld(runKey, { replies: replies ?? phoneModel(DAILY) });
+  const t = await phoneWorld(runKey, { replies: replies ?? phoneModel(DAILY), lane: false });
   const background = createBackgroundQueue(t.runtime);
   const deps = { ...t.deps, background };
   // Which connection each admitted job held, and how.
@@ -1088,6 +1517,83 @@ test("daily messages skip the open thread, a busy one and one waiting on her mes
   assert.equal(t.firstCalls().length, 2);
 });
 
+test("0.47.1: no one writes first in a thread being remembered: nothing is armed for it, and the job checks it again", async () => {
+  const t = await dailyWorld("r-daily8-aaaaaa", { limit: 24 });
+  // Every admitted job waits here until `open()`, as it would for the Engine's slot.
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const admission = t.runtime.integrations!.admission!;
+  const admit = admission.run.bind(admission);
+  Object.assign(admission, {
+    run: async (connectionId: string, mode: { kind: string }, operation: () => Promise<unknown>) => {
+      await opened;
+      return admit(connectionId, mode as never, operation);
+    },
+  });
+  const closing = { start: 0, end: 2, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
+  const mark = (marked: boolean) =>
+    Promise.all(
+      [KAI, MIR, SOL].map((li) =>
+        t.store.mutateDoc(chatTarget(t.runId, li), normalizeThread, (thread) => ({
+          ...thread,
+          li,
+          messages: [
+            { id: "m-her-0001", who: "player", text: "Are you up?", at: "2026-11-02T08:50:00.000Z" },
+            { id: "m-his-0001", who: "li", text: "Always.", at: "2026-11-02T08:51:00.000Z" },
+          ],
+          closing: marked ? closing : undefined,
+        })),
+      ),
+    );
+  // Each conversation is being remembered: nothing is armed or spent, so a message comes later.
+  await mark(true);
+  assert.equal((await t.due(T0, { open: null })).status, "no-eligible");
+  assert.equal(await t.daily(), undefined, "nothing armed or spent");
+
+  // Queued before the closes, which are accepted while the job waits for admission: no provider work, nothing joins
+  // the conversations being remembered, and the attempt stays spent, as for a busy thread.
+  await mark(false);
+  assert.equal((await t.due(T0 + 1_000)).status, "scheduled");
+  assert.equal((await t.due(T0 + 61_000)).status, "queued");
+  await mark(true);
+  open();
+  await t.drain();
+  assert.equal(t.firstCalls().length, 0, "no provider work");
+  for (const li of [KAI, MIR, SOL]) assert.equal((await t.thread(li))!.messages.length, 2, li);
+  assert.deepEqual([(await t.daily())!.days["2026-11-02"]!.attempts, (await t.daily())!.last], [1, undefined]);
+
+  // Once they are remembered, one of them writes first as before.
+  await mark(false);
+  assert.equal((await t.due(T0 + 61_000 + 8 * HOUR)).status, "scheduled");
+  assert.equal((await t.due(T0 + 121_000 + 8 * HOUR)).status, "queued");
+  await t.drain();
+  assert.equal(t.firstCalls().length, 1);
+});
+
+test("0.47.1: her friends write first in a thread being remembered no more than love interests do", async () => {
+  const t = await dailyWorld("r-daily9-aaaaaa");
+  await seedFriend(t);
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    friendMessages: 1,
+  }));
+  const closing = { start: 0, end: 1, at: "2026-11-02T08:59:00.000Z", tries: 1, day: "2026-11-02" };
+  const mark = (marked: boolean) =>
+    t.store.mutateDoc(chatTarget(t.runId, KAVEH), normalizeThread, (thread) => ({
+      ...thread,
+      li: KAVEH,
+      messages: [{ id: "m-his-0001", who: "li", text: "Coffee?", at: "2026-11-02T08:51:00.000Z" }],
+      closing: marked ? closing : undefined,
+    }));
+  const beat = async (now: number) =>
+    (await inZone("UTC", () => friendDue(t.deps, t.runId, "message", { open: null, now, debugMode: true }))).status;
+  await mark(true);
+  assert.equal(await beat(T0), "no-eligible");
+  assert.equal((await t.store.readDoc(worldId(t.runId), normalizeWorld))!.friendWeekly, undefined, "nothing spent");
+  await mark(false);
+  assert.equal(await beat(T0 + 1_000), "scheduled");
+});
+
 test("a daily message holds his thread while it is written, and is dropped when the thread changed meanwhile", async () => {
   const t = await dailyWorld("r-daily4-aaaaaa", { limit: 24 });
   const release = gateFirstCall(t.runtime);
@@ -1131,9 +1637,775 @@ test("P17 written first changes only its task line: the same role, rules, bounda
   const reply = chatReplyMessages(input);
   const first = chatReplyMessages({ ...input, first: true });
   assert.equal(first[0]!.content, reply[0]!.content, "the system message is the same");
-  const lines = (messages: typeof reply) => messages[1]!.content.split("\n");
+  assert.equal(first[1]!.content, reply[1]!.content, "the cached part is the same: a reply reads what it wrote");
+  const lines = (messages: typeof reply) => messages[2]!.content.split("\n");
   const changed = lines(first).filter((line) => !lines(reply).includes(line));
   assert.equal(changed.length, 1);
   assert.ok(changed[0]!.includes(FIRST_LINE));
   assert.ok(lines(first).includes("(no messages yet)"));
+});
+
+test("P17 caches all but the thread now and its task, for five minutes, so the next reply reads it (0.20.2)", async () => {
+  const t = await phoneWorld("r-phonec-aaaaaa", { replies: phoneModel() });
+  for (const text of ["Are you awake?", "The lamp is out again."]) {
+    const sent = await t.phone("POST", send, { li: KAI, body: { text } });
+    assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  }
+  const [one, two] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.ok(one && two, "two replies");
+  for (const call of [one, two]) {
+    assert.deepEqual(
+      call.messages.map((message) => [message.role, message.cacheBreakpoint === true]),
+      [
+        ["system", true],
+        ["user", true],
+        ["user", false],
+      ],
+    );
+    assert.equal((call.options as { cacheTtl?: string }).cacheTtl, "5m");
+    assert.ok(call.messages[2]!.content.startsWith("THE THREAD NOW"), "the thread and the task follow the cached part");
+    assert.ok(!call.messages[1]!.content.includes("Are you awake?"), "no message of the thread in the cached part");
+  }
+  assert.equal(two.messages[0]!.content, one.messages[0]!.content, "the same instructions");
+  assert.equal(two.messages[1]!.content, one.messages[1]!.content, "the same card, story and conversations over");
+  assert.ok(two.messages[2]!.content.includes("The lamp is out again."));
+});
+
+// ── Date invitations (#2424) ──
+
+const INVITE = { messages: [{ text: "Are you free tonight? I know a place. Let me take you." }] };
+const DATE_LINE = "you are writing to Ines first, on your own, to ask them out on a date";
+/** Answers P17 with a daily message, or with his invitation when it is asked for. */
+const inviteModel = () =>
+  Array.from(
+    { length: 40 },
+    () => (messages: Messages) => json(messages.at(-1)!.content.includes(DATE_LINE) ? INVITE : DAILY),
+  );
+
+/** dailyWorld with date invitations at `limit` a week (daily messages off), and their own heartbeat and job. */
+async function inviteWorld(runKey: string, limit?: number) {
+  const t = await dailyWorld(runKey, { replies: inviteModel() });
+  const setInvites = (value: number) =>
+    t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      dateInvites: value,
+    }));
+  if (limit !== undefined) await setInvites(limit);
+  const due = (now: number, { open }: { open?: string | null } = {}) =>
+    inZone("UTC", () => inviteDue(t.deps, t.runId, { open, now, debugMode: true }));
+  const drain = async () => {
+    for (let round = 0; round < 400 && t.background.has(inviteJobKey(t.runId)); round += 1) await tick();
+  };
+  const weekly = async () => (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.inviteWeekly;
+  return { ...t, setInvites, due, drain, weekly };
+}
+
+/** A chapter as leastSeenFirst reads it: its kind and each node's cast. */
+const timeChapter = (key: string, kind: Chapter["kind"], casts: string[][]) =>
+  ({ key, kind, nodes: casts.map((cast, i) => ({ i, kind: "beat", guide: "", cast })) }) as unknown as Chapter;
+
+test("date invitations: the one she spent the least time with lately asks; ties go to the one seen longest ago", async () => {
+  const now = Date.parse("2026-11-20T12:00:00.000Z");
+  const day = (n: number) => new Date(now - n * 86_400_000).toISOString();
+  const chapters: Record<string, Chapter> = {
+    "main-3": timeChapter("main-3", "main", [[KAI, MIR], [KAI], [MIR], [KAI]]),
+    "route-li-kai-ab12-1": timeChapter("route-li-kai-ab12-1", "route", [[KAI], [KAI]]),
+    // A Character Story of Mireille's: her time too.
+    "story-item-0001": timeChapter("story-item-0001", "story", [[MIR]]),
+    // A date and his side are never time with him in the story.
+    "date-1": timeChapter("date-1", "date", [[SOL], [SOL], [SOL]]),
+    "side-li-sol-ef56-1": timeChapter("side-li-sol-ef56-1", "story", [[SOL]]),
+    // Older than a week: only says when she was last with Sol.
+    "main-1": timeChapter("main-1", "main", [[SOL]]),
+  };
+  const store = { readDoc: async (id: string) => chapters[id.split(":chapter:")[1] ?? ""] ?? null };
+  const progress = (completed: string | null) => ({ beatsRead: 1, completed, applied: [] });
+  const state = {
+    chapters: {
+      "main-1": progress(day(20)),
+      "main-3": progress(day(2)),
+      "route-li-kai-ab12-1": progress(day(1)),
+      "story-item-0001": progress(day(3)),
+      "date-1": progress(day(1)),
+      "side-li-sol-ef56-1": progress(day(1)),
+      "main-4": progress(null),
+    },
+  };
+  // This week: Kai 5 scenes, Mireille 3, Sol none (his date and his side do not count).
+  assert.deepEqual(await leastSeenFirst(store as never, "r", state, [KAI, MIR, SOL], now), [SOL, MIR, KAI]);
+  // Tied at none this week: Sol was seen 20 days ago, a newcomer never, so the newcomer asks first.
+  const NEW = "li-new-aa00";
+  assert.deepEqual(await leastSeenFirst(store as never, "r", state, [SOL, NEW], now), [NEW, SOL]);
+  // Nothing read at all: cast order.
+  assert.deepEqual(await leastSeenFirst(store as never, "r", { chapters: {} }, [MIR, KAI], now), [MIR, KAI]);
+});
+
+test("date invitations: off by default, weekly, each love interest once a week, carrying the invitation", async () => {
+  const t = await inviteWorld("r-invit1-aaaaaa");
+  assert.deepEqual(await t.due(T0), { status: "disabled", latest: null }, "absent is 0: off");
+  await t.setInvites(2);
+  assert.equal((await t.due(T0)).status, "scheduled");
+  assert.equal((await t.due(T0 + 60_000)).status, "queued");
+  // Monday's week, the attempt spent before any call, the next 7 days / 2 away.
+  assert.deepEqual((await t.weekly())!.days["2026-11-02"], {
+    attempts: 1,
+    nextAt: T0 + 60_000 + 84 * HOUR,
+  });
+  await t.drain();
+  // Nothing read this week and main-1 has no chapter to read: a tie, so cast order: Kai asks.
+  const thread = (await t.thread(KAI))!;
+  assert.deepEqual(
+    thread.messages.map((message) => [message.who, message.text, message.invite]),
+    [["li", INVITE.messages[0]!.text, { status: "pending", kind: "date" }]],
+  );
+  assert.equal(unreadCount(thread), 1);
+  assert.equal(t.calls.length, 1);
+  const prompt = t.calls[0]!.messages.at(-1)!.content;
+  assert.ok(prompt.includes(DATE_LINE), prompt.slice(-600));
+  assert.ok(!prompt.includes('add "invite": true'), "a date invitation is never also an invitation to clear the air");
+  assert.deepEqual(t.admitted, ["conn-chat background"]);
+  const weekly = (await t.weekly())!;
+  assert.deepEqual(weekly.days["2026-11-02"]!.wrote, [KAI]);
+  assert.equal(weekly.last!.li, KAI);
+  // The client hears of it through the heartbeat route's `invite` (this route table has no background lane).
+  const both = await t.phone("POST", "/runs/:run/phone/due", { body: { open: null } });
+  assert.deepEqual(both.body.invite.latest, weekly.last);
+
+  // Kai asked this week and his invitation waits: Mireille asks next, and only once the next attempt is due.
+  assert.equal((await t.due(T0 + 2 * HOUR)).status, "scheduled", "a new visit re-arms");
+  assert.equal((await t.due(T0 + 60_000 + 84 * HOUR)).status, "scheduled");
+  assert.equal((await t.due(T0 + 120_000 + 84 * HOUR)).status, "queued");
+  await t.drain();
+  assert.equal((await t.thread(MIR))!.messages.at(-1)!.invite?.kind, "date");
+  assert.equal((await t.thread(KAI))!.messages.length, 1);
+  assert.equal((await t.due(T0 + 180_000 + 84 * HOUR)).status, "quota", "two this week");
+  // A new week starts the count again; Sol, who has not asked, is the one left free.
+  assert.equal((await t.due(T0 + 7 * 24 * HOUR)).status, "scheduled");
+  assert.equal((await t.due(T0 + 7 * 24 * HOUR + 60_000)).status, "queued");
+  await t.drain();
+  assert.equal((await t.thread(SOL))!.messages.at(-1)!.invite?.kind, "date");
+});
+
+test("date invitations: one whose invitation started waiting after the heartbeat is passed over for the next", async () => {
+  // The review of #2427: the job read the candidates at the heartbeat; Kai's clear-air invitation lands before it runs.
+  const t = await inviteWorld("r-invit3-aaaaaa", 1);
+  assert.equal((await t.due(T0)).status, "scheduled");
+  assert.equal((await t.due(T0 + 60_000)).status, "queued");
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    li: KAI,
+    messages: [
+      {
+        id: "m-clear-0001abcd",
+        who: "li" as const,
+        text: "Let me make it up to you.",
+        at: new Date(T0).toISOString(),
+        invite: { status: "pending" as const },
+      },
+    ],
+  }));
+  await t.drain();
+  assert.equal((await t.thread(KAI))!.messages.length, 1, "Kai, no longer free, writes nothing");
+  assert.deepEqual((await t.thread(MIR))!.messages.at(-1)!.invite, { status: "pending", kind: "date" });
+  assert.equal(t.calls.length, 1, "Kai's refusal cost no call");
+});
+
+test("date invitations: never from one who holds a grievance with her, and Decline is the thread's own", async () => {
+  const t = await inviteWorld("r-invit2-aaaaaa", 1);
+  // Kai holds a grievance with her (#2156): his dates wait, so he never asks.
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: {
+      ...state.lis,
+      [KAI]: {
+        ...state.lis[KAI]!,
+        grievances: [
+          {
+            id: "g-x",
+            li: KAI,
+            by: "li",
+            text: "She lied to me.",
+            severity: "rupture",
+            opened: "main-1/2",
+            status: "open",
+          },
+        ],
+        rupture: { grievanceId: "g-x", since: "2026-11-01T20:00:00.000Z", space: 0 },
+      },
+    },
+  }));
+  assert.equal((await t.due(T0)).status, "scheduled");
+  assert.equal((await t.due(T0 + 60_000)).status, "queued");
+  await t.drain();
+  assert.equal(await t.thread(KAI), null);
+  const asked = (await t.thread(MIR))!.messages.at(-1)!;
+  assert.deepEqual(asked.invite, { status: "pending", kind: "date" });
+
+  // Her Accept is the date's looks step (POST /dates/invited); here it is refused, and nothing changes.
+  const invite = "/runs/:run/phone/:li/invite";
+  const accept = await t.phone("POST", invite, { li: MIR, body: { message: asked.id, accept: true } });
+  assert.deepEqual([accept.status, accept.body.code], [409, "conflict"]);
+  // Telling her upset to another love interest, or taking one back, never lapses his date invitation.
+  await t.phone("POST", "/runs/:run/routes/:li/upset", { li: MIR, body: { upset: false } }).catch(() => undefined);
+  const declined = await t.phone("POST", invite, { li: MIR, body: { message: asked.id, accept: false } });
+  assert.deepEqual([declined.status, declined.body.status], [200, "declined"]);
+  assert.deepEqual((await t.thread(MIR))!.messages.at(-1)!.invite, { status: "declined", kind: "date" });
+  assert.equal(t.calls.length, 1, "no call for an answer");
+});
+
+// ── Hurts in Messages (#2424) ──
+
+test("a hurtful message: his reply names the hurt, and a serious one opens his grievance with her once", async () => {
+  const hurtReply = (severity: string) => ({
+    messages: [{ text: "Don't. Don't talk to me right now." }],
+    hurt: { text: "She said I was only ever a use to her.", severity },
+  });
+  let severity = "rupture";
+  const t = await phoneWorld("r-hurt01-aaaaaa", {
+    replies: Array.from({ length: 10 }, () => (messages: Messages) => {
+      if (isReplyPrompt(messages)) return json(hurtReply(severity));
+      throw new Error("Unexpected prompt");
+    }),
+  });
+  const pointsBefore = (await t.state())!.lis[KAI]!.points;
+  const sent = await t.phone("POST", send, {
+    li: KAI,
+    body: { text: "You were only ever useful.", id: "c-hurt-0001" },
+  });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  assert.deepEqual(sent.body.held, [KAI], "the thread says he needs space");
+  let kai = (await t.state())!.lis[KAI]!;
+  assert.ok(heldAgainst(kai), "a serious hurt is his grievance with her (#2156)");
+  const grievance = kai.grievances.at(-1)!;
+  assert.deepEqual(
+    [grievance.by, grievance.severity, grievance.opened, grievance.text],
+    ["li", "rupture", "chat/c-hurt-0001", "She said I was only ever a use to her."],
+  );
+  assert.equal(kai.rupture!.grievanceId, grievance.id);
+  assert.equal(kai.points, Math.max(0, pointsBefore - 15));
+  // The same message again (a retried request) keeps what landed: no second grievance, no second loss.
+  const again = await t.phone("POST", send, {
+    li: KAI,
+    body: { text: "You were only ever useful.", id: "c-hurt-0001" },
+  });
+  assert.equal(again.status, 200);
+  assert.equal((await t.state())!.lis[KAI]!.grievances.length, kai.grievances.length);
+  // His own thread holds it: only his readers know it; a group reader does not.
+  assert.equal(sharedState(kai).grievances.length, 0);
+
+  // Another serious hurt in the same arc is remembered, as major: his grievance opens at most once an arc.
+  assert.deepEqual(sent.body.hurt, [KAI], "the client reads the run again: his affection fell");
+  const mir = await t.phone("POST", send, { li: MIR, body: { text: "Leave me alone.", id: "c-hurt-0002" } });
+  assert.deepEqual(mir.body.held, [MIR]);
+  severity = "minor";
+  const minor = await t.phone("POST", send, { li: SOL, body: { text: "You're boring.", id: "c-hurt-0003" } });
+  assert.equal(minor.body.held, undefined, "a milder hurt locks nothing");
+  const sol = (await t.state())!.lis[SOL]!;
+  assert.deepEqual([heldAgainst(sol), sol.grievances.at(-1)!.severity], [false, "minor"]);
+  kai = (await t.state())!.lis[KAI]!;
+  const outcome = applyMessageHurts(
+    await t.state().then((state) => state!),
+    [{ li: KAI, text: "Again.", severity: "rupture" }],
+    { ref: "chat/c-hurt-0009", at: "2026-11-20T10:00:00.000Z", arc: kai.grievanceArc ?? 0 },
+  );
+  assert.deepEqual(outcome.opened, [], "his grievance opens at most once an arc, and one stands");
+  assert.equal(outcome.state.lis[KAI]!.grievances.at(-1)!.severity, "major", "remembered as major");
+  assert.equal(outcome.state.lis[KAI]!.rupture!.grievanceId, kai.rupture!.grievanceId, "the first still stands");
+  // Past GRIEVANCES_MAX (60) unresolved ones he keeps no more from messages, so none is lost on save, nor a rupture
+  // left naming a grievance the state no longer holds.
+  const before = (await t.state())!;
+  const crowded = {
+    ...before,
+    lis: {
+      ...before.lis,
+      [SOL]: {
+        ...before.lis[SOL]!,
+        grievances: Array.from({ length: 60 }, (_, n) => ({
+          id: `g-old-${n}`,
+          li: SOL,
+          by: "li" as const,
+          text: `Old hurt ${n}.`,
+          severity: "minor" as const,
+          opened: `main-1/${n}`,
+          status: "open" as const,
+        })),
+      },
+    },
+  };
+  const full = applyMessageHurts(crowded, [{ li: SOL, text: "One more.", severity: "rupture" }], {
+    ref: "chat/c-hurt-0010",
+    at: "2026-11-20T10:00:00.000Z",
+    arc: 9,
+  });
+  assert.deepEqual([full.hurt, full.opened, full.state.lis[SOL]!.grievances.length], [[], [], 60]);
+});
+
+test("a hurt is read only from a reply to her, and in the group chat for members by name", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const raw = { messages: [{ text: "Fine." }], hurt: { text: "She mocked my father.", severity: "MAJOR" } };
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, true), {
+    messages: [{ text: "Fine." }],
+    hurt: { text: "She mocked my father.", severity: "major" },
+  });
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, false), { messages: [{ text: "Fine." }] });
+  // A severity that is not listed, or no words, names no hurt.
+  assert.deepEqual(
+    normalizeChatReply({ ...raw, hurt: { text: "x", severity: "furious" } }, names, [], false, false, true),
+    { messages: [{ text: "Fine." }] },
+  );
+  const members = [
+    { id: KAI, name: "Kai", stickers: [] },
+    { id: MIR, name: "Mireille", stickers: [] },
+  ];
+  const group = normalizeGroupReply(
+    {
+      messages: [{ speaker: "Kai", text: "Wow." }],
+      hurt: [
+        { speaker: "Mireille", text: "She laughed at my singing.", severity: "minor" },
+        { speaker: "Mireille", text: "Twice.", severity: "major" },
+        { speaker: "Ines", text: "Not a member.", severity: "major" },
+      ],
+    },
+    { player: "Ines", members, yours: [] },
+    { answering: "lol your singing" },
+  );
+  assert.deepEqual(group, {
+    messages: [{ li: KAI, text: "Wow." }],
+    hurt: [{ li: MIR, text: "She laughed at my singing.", severity: "minor" }],
+  });
+  const squabble = normalizeGroupReply(
+    {
+      messages: [
+        { speaker: "Kai", text: "a" },
+        { speaker: "Mireille", text: "b" },
+      ],
+      hurt: [{ speaker: "Kai", text: "c", severity: "minor" }],
+    },
+    { player: "Ines", members, yours: [] },
+    { squabble: true },
+  );
+  assert.equal(typeof squabble === "object" && "hurt" in squabble, false, "a squabble answers nothing of hers");
+  // Everyone in the group saw it: a hurt from the group chat is the whole cast's to know.
+  const state = applyMessageHurts(
+    { lis: { [MIR]: defaultLiState(), [KAI]: defaultLiState() }, chapters: {} } as never,
+    [{ li: MIR, text: "She laughed at my singing.", severity: "minor" }],
+    { ref: "group/c-grp-0001", at: "2026-11-20T10:00:00.000Z", arc: 0 },
+  ).state;
+  assert.equal(sharedState(state.lis[MIR]!).grievances.length, 1);
+});
+
+// ── #2504: his notes and selfie in his own thread ──
+
+const selfie = "/runs/:run/phone/:li/messages/:id/selfie";
+/** His three earlier notes. */
+const OLD_NOTES = [1, 2, 3].map((n) => ({ text: `OLD-NOTE-${n}`, at: `2026-11-2${n}T10:00:00.000Z` }));
+const NOTES_LINE = (texts: string[]) =>
+  `What Kai wrote down to remember about the protagonist, word for word: ${texts.map((text) => JSON.stringify(text)).join("; ")}`;
+
+test("#2504: the parser takes his commands out in his own thread only: the newest three notes, one selfie, other brackets kept", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const raw = {
+    messages: [
+      { text: "[selfie: at the lamp room window, half a smile]" },
+      { text: "Wish you were here [Café Lumière] [SELFIE]" },
+      { text: `[note: a][note:   b  ][Note: c][note: d][note:   ]` },
+    ],
+  };
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, true, true), {
+    messages: [
+      { text: "", selfie: { brief: "at the lamp room window, half a smile" } },
+      { text: "Wish you were here [Café Lumière]" },
+    ],
+    // Four notes in one reply: a new note replaces the oldest, so the first goes.
+    notes: ["b", "c", "d"],
+  });
+  // A friend's thread, and every call before #2504, reads them as text, as before.
+  assert.deepEqual(normalizeChatReply(raw, names, [], false, false, true), { messages: raw.messages });
+  // A note's words are kept as written, cut to 300 characters; a plain [selfie] shows nothing in particular.
+  const long = "x".repeat(400);
+  assert.deepEqual(
+    normalizeChatReply({ messages: [{ text: `Hi [note: ${long}] [selfie]` }] }, names, [], false, false, true, true),
+    { messages: [{ text: "Hi", selfie: { brief: "" } }], notes: ["x".repeat(300)] },
+  );
+  // An emoji is one character but two in a JS string: a note cut to 300 of them is kept on his state all the same.
+  const sung = normalizeChatReply(
+    { messages: [{ text: `Hi [note: ${"🎵".repeat(400)}]` }] },
+    names,
+    [],
+    false,
+    false,
+    true,
+    true,
+  ) as { notes: string[] };
+  assert.deepEqual(sung.notes, ["🎵".repeat(300)]);
+  const at = "2026-11-27T10:00:00.000Z";
+  const kept = normalizeState({ lis: { [KAI]: { ...defaultLiState(), notes: [{ text: sung.notes[0]!, at }] } } });
+  assert.deepEqual(kept.lis[KAI]!.notes, [{ text: "🎵".repeat(300), at }]);
+  // [explicit selfie: …] is a selfie too, marked explicit.
+  assert.deepEqual(
+    normalizeChatReply(
+      { messages: [{ text: "[Explicit  Selfie: on the sheets]" }] },
+      names,
+      [],
+      false,
+      false,
+      true,
+      true,
+    ),
+    { messages: [{ text: "", selfie: { brief: "on the sheets", explicit: true } }] },
+  );
+  // A reply of notes alone has nothing for her: the repair turn asks for a message too.
+  assert.equal(
+    normalizeChatReply({ messages: [{ text: "[note: likes rain]" }] }, names, [], false, false, true, true),
+    "the reply had no message from Kai: a [note] is never shown, so write a message to them too",
+  );
+  assert.equal(normalizeChatReply({ messages: [{ text: "  " }] }, names), "the reply had no message from Kai");
+  // The group chat reads them as text too.
+  assert.deepEqual(
+    normalizeGroupReply(
+      { messages: [{ speaker: "Kai", text: "Hm. [note: a] [selfie]" }] },
+      { player: "Ines", members: [{ id: KAI, name: "Kai", stickers: [] }], yours: [] },
+    ),
+    { messages: [{ li: KAI, text: "Hm. [note: a] [selfie]" }] },
+  );
+});
+
+test("#2504: a command's words may hold brackets and line breaks, all of it hidden; one never closed takes nothing", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const listed = [{ id: "li-kai-ab12:smug", name: "kai_smug", about: "smug" }];
+  const read = (...texts: string[]) =>
+    normalizeChatReply({ messages: texts.map((text) => ({ text })) }, names, listed, false, false, true, true);
+  assert.deepEqual(
+    read(
+      "Okay [note: prefers [green tea]]",
+      "Sleep. [NOTE: hums\nwhen nervous] [selfie: by the [old] lamp] [kai_smug]",
+    ),
+    {
+      messages: [
+        { text: "Okay" },
+        { text: "Sleep.", sticker: "li-kai-ab12:smug", selfie: { brief: "by the [old] lamp" } },
+      ],
+      notes: ["prefers [green tea]", "hums\nwhen nervous"],
+    },
+  );
+  // One never closed stays as text: what follows it in its message, and the next message, are read as ever.
+  assert.deepEqual(read("[note: likes [rain] and [Café Lumière] [kai_smug] [selfie]", "Night. [note: rain]"), {
+    messages: [
+      { text: "[note: likes [rain] and [Café Lumière]", sticker: "li-kai-ab12:smug", selfie: { brief: "" } },
+      { text: "Night." },
+    ],
+    notes: ["rain"],
+  });
+});
+
+test("#2504: his [note] leaves his message and is kept word for word, the newest three, read after P17's cached part", async () => {
+  const reply = {
+    messages: [
+      { text: "[note: She hates the rain but loves the sound of it.]" },
+      { text: "Noted. [note:   Takes her tea with honey.  ] Go to sleep." },
+    ],
+  };
+  const t = await phoneWorld("r-notes1-aaaaaa", { replies: phoneModel(reply) });
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, notes: OLD_NOTES } },
+  }));
+  const sent = await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  // The message of a note alone goes; the other keeps its words around it.
+  assert.deepEqual(
+    (await t.thread(KAI))!.messages.map((message) => [message.who, message.text]),
+    [
+      ["player", "Are you awake?"],
+      ["li", "Noted. Go to sleep."],
+    ],
+  );
+  const kept = ["OLD-NOTE-3", "She hates the rain but loves the sound of it.", "Takes her tea with honey."];
+  assert.deepEqual(
+    (await t.state()).lis[KAI]!.notes!.map((note) => note.text),
+    kept,
+    "a new note replaces the oldest",
+  );
+  const [first] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.match(
+    first!.messages[0]!.content,
+    /- To remember something about Ines word for word, write \[note: what to remember\] in a message; Ines never sees it\. You keep 3 notes, and a new one replaces the oldest\./,
+  );
+  assert.doesNotMatch(first!.messages[0]!.content, /\[selfie/, "no selfie without an image connection");
+  // The next reply reads his notes word for word, after the cached part (they change from reply to reply).
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Night." } })).status, 200);
+  const [, second] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.ok(second!.messages[2]!.content.startsWith(`${NOTES_LINE(kept)}\n\nTHE THREAD NOW`));
+  assert.equal(second!.messages[0]!.content, first!.messages[0]!.content, "the same instructions");
+  assert.equal(second!.messages[1]!.content, first!.messages[1]!.content, "the cached part never holds them");
+});
+
+test("#2504: a friend's thread and the group chat neither offer nor keep his commands", async () => {
+  const t = await phoneWorld("r-notes2-aaaaaa", {
+    replies: phoneModel({ messages: [{ text: "[note: She owes me lunch.] Lunch? [selfie]" }] }),
+    art: {},
+  });
+  await seedFriend(t);
+  const sent = await t.phone("POST", send, { li: KAVEH, body: { text: "Hi!" } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  const [call] = t.calls.filter((entry) => isReplyPrompt(entry.messages));
+  assert.doesNotMatch(system(call!.messages), /\[note:|\[selfie/);
+  const theirs = (await t.thread(KAVEH))!.messages.at(-1)!;
+  assert.deepEqual([theirs.text, theirs.selfie], ["[note: She owes me lunch.] Lunch? [selfie]", undefined]);
+  const state = await t.state();
+  assert.equal(state.lis[KAVEH], undefined);
+  assert.equal(JSON.stringify(state).includes("She owes me lunch"), false, "nothing kept");
+  assert.equal(t.paid.length, 0);
+  // P17g offers neither, and reads no one's notes.
+  const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
+  const kai = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  const group = groupChatMessages({
+    world,
+    player: { name: "Ines", pronouns: { subject: "she", object: "her", possessive: "her" }, traits: [], about: "" },
+    members: [{ unit: kai, liState: sharedState({ ...defaultLiState(), notes: OLD_NOTES }), stickers: [] }],
+    yours: [],
+    tail: [],
+    memories: [],
+    story: "",
+  });
+  const text = group.map((message) => message.content).join("\n");
+  assert.doesNotMatch(text, /\[note:|\[selfie|OLD-NOTE|wrote down to remember/);
+});
+
+test("#2504: P17 offers [selfie] only in his own thread with an image connection for scene art", async () => {
+  const t = await phoneWorld("r-selfie0-aaaaaa");
+  const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
+  const unit = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  const input = {
+    world,
+    player: { name: "Ines", pronouns: { subject: "she", object: "her", possessive: "her" }, traits: [], about: "" },
+    unit,
+    liState: (await t.state()).lis[KAI]!,
+    tail: [],
+    memories: [],
+    story: "",
+  };
+  const rule =
+    "- To send Ines a photo of yourself, write [selfie: what the photo shows, in English] in a message, rarely, when you would.";
+  const withImages = (images: Partial<ImageSettings>) =>
+    chatReplyMessages({ ...input, world: { ...world, images: { ...world.images, ...images } } })[0]!.content;
+  assert.ok(!withImages({}).includes(rule), "no image connection");
+  assert.ok(withImages({ connectionId: "conn-image" }).includes(rule));
+  assert.ok(withImages({ connectionId: "conn-image", sceneConnectionId: "conn-scene" }).includes(rule));
+  // Without notes, P17 is as it was: the same bytes with an empty list.
+  assert.deepEqual(chatReplyMessages({ ...input, liState: { ...input.liState, notes: [] } }), chatReplyMessages(input));
+  // Explicit Heat with haptics on: without scene art his note line runs straight into the haptics rule, no blank line.
+  const explicit = {
+    ...world,
+    content: { ...world.content, heat: "explicit" as const },
+    audio: { ...world.audio, haptics: true },
+  };
+  const instructions = (images: Partial<ImageSettings>) =>
+    chatReplyMessages({ ...input, world: { ...explicit, images: { ...world.images, ...images } } })[0]!.content;
+  assert.ok(instructions({}).includes("a new one replaces the oldest.\n- The protagonist may hand you the remote"));
+  // With the Explicit rating too, a selfie may be explicit, as a story CG may; at Suggestive, only the plain one.
+  const explicitRule = `${rule.slice(0, -1)}; for one that shows nudity or sex, write [explicit selfie: …] instead, in plain explicit words.`;
+  assert.ok(instructions({ connectionId: "conn-image", rating: "explicit" }).includes(explicitRule));
+  assert.ok(instructions({ connectionId: "conn-image", rating: "suggestive" }).includes(rule));
+  assert.ok(
+    !withImages({ connectionId: "conn-image", rating: "explicit" }).includes("[explicit selfie"),
+    "Heat decides",
+  );
+});
+
+/** A friend's P17 with one of her stickers and haptics on, from fixed documents. */
+function friendChatPrompt() {
+  return chatReplyMessages({
+    world: normalizeWorld({
+      setting: "A harbour city.",
+      language: "English",
+      content: { heat: "explicit" },
+      audio: { haptics: true },
+    }),
+    player: normalizePlayer({ name: "Ines" }),
+    unit: { id: KAVEH, name: "Kaveh", pronouns: HE, friend: friendBible() } as never,
+    liState: defaultLiState(),
+    tail: [],
+    memories: [],
+    story: "",
+    stickers: { his: [], yours: [{ id: "s1", name: "Pout", about: "a pout" }], name: () => null },
+    friend: { bible: friendBible(), level: 2, lis: [{ id: KAI, name: "Kai" }] },
+  });
+}
+
+/**
+ * That prompt on staging before #2504 (2026-11-27): a friend's thread never offers his commands. Retaken the same day
+ * for #2513, which rewords the writing rules it carries, and on 2026-11-28 for #2521, which replaces their voice line.
+ */
+const FRIEND_CHAT_BEFORE = "b91d041843928d48";
+
+test("#2504: a friend's P17 is byte for byte as it was before his commands", () => {
+  const digest = createHash("sha256").update(JSON.stringify(friendChatPrompt())).digest("hex").slice(0, 16);
+  assert.equal(digest, FRIEND_CHAT_BEFORE);
+});
+
+test("#2504: with Ask before painting off, his selfie paints right after his reply, once, as a picture of him alone", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const reply = {
+    messages: [
+      { text: "Look. [selfie: at the lamp room window, the harbour lights behind him]" },
+      { text: "[selfie]" },
+    ],
+  };
+  const t = await phoneWorld("r-selfie1-aaaaaa", { replies: phoneModel(reply), art: { before: () => held } });
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: "/api/global-gallery/file/kai.png",
+  }));
+  const sent = await t.phone("POST", send, { li: KAI, body: { text: "Show me." } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  const his = (sent.body.messages as PhoneMessage[]).filter((message) => message.who === "li");
+  // One selfie a reply: the second message held only another one, so it goes.
+  assert.deepEqual(
+    his.map((message) => [message.text, message.selfie?.brief, message.selfie?.art?.state]),
+    [["Look.", "at the lamp room window, the harbour lights behind him", "pending"]],
+  );
+  const id = his[0]!.id;
+  // While it paints the thread says so, and another tap is busy.
+  await until(() => t.paid.length === 1, "the paid call");
+  const painting = await t.phone("GET", page, { li: KAI });
+  assert.equal((painting.body.messages as PhoneMessage[]).at(-1)!.selfie?.art?.state, "pending");
+  const busy = await t.phone("POST", selfie, { li: KAI, id });
+  assert.deepEqual([busy.status, busy.body.code], [409, "busy"]);
+  release();
+  await until(async () => (await t.thread(KAI))!.messages.at(-1)!.selfie?.art?.state === "ready", "the selfie");
+  const { method, request } = t.paid[0]!;
+  assert.equal(method, "generateBannerArt");
+  assert.equal(request.connectionId, "conn-image");
+  assert.deepEqual([request.width, request.height], [832, 1216], "a portrait");
+  assert.match(
+    request.prompt,
+    /A selfie Kai took to send in a message: at the lamp room window, the harbour lights behind him\./,
+  );
+  assert.match(request.prompt, /one person, selfie/);
+  assert.match(request.prompt, /Draw exactly one person, once/);
+  assert.doesNotMatch(request.prompt, /Ines/, "him alone");
+  assert.match(request.negativePrompt, /extra people/);
+  assert.equal(request.debugMode, true);
+  assert.deepEqual(
+    request.units?.map((unit) => (unit as { avatarPath?: string }).avatarPath),
+    ["/api/global-gallery/file/kai.png.cut.png"],
+    "his likeness",
+  );
+  const art = (await t.thread(KAI))!.messages.at(-1)!.selfie!.art!;
+  assert.deepEqual([art.url, art.ref], ["/api/global-gallery/file/img1.png", "global-gallery:img1"]);
+  // A ready one is returned as it is, and nothing more is paid; the thread shows it.
+  const again = await t.phone("POST", selfie, { li: KAI, id });
+  assert.deepEqual([again.status, again.body.art.state, t.paid.length], [200, "ready", 1]);
+  assert.equal((await t.phone("GET", page, { li: KAI })).body.messages.at(-1).selfie.art.url, art.url);
+  // His next reply reads the selfie he sent.
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Cute." } })).status, 200);
+  const last = t.calls.filter((call) => isReplyPrompt(call.messages)).at(-1)!;
+  assert.ok(
+    last.messages[2]!.content.includes("Kai: Look. [selfie: at the lamp room window, the harbour lights behind him]"),
+  );
+});
+
+test("#2504: with Ask before painting on, or prompt review, his selfie waits for Paint, its prompt reviewed first", async () => {
+  const reply = { messages: [{ text: "[selfie: grinning on the pier]" }] };
+  const t = await phoneWorld("r-selfie2-aaaaaa", { replies: phoneModel(reply), art: { ask: true } });
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Where are you?" } })).status, 200);
+  await tick();
+  const message = (await t.thread(KAI))!.messages.at(-1)!;
+  assert.deepEqual([message.text, message.selfie], ["", { brief: "grinning on the pier" }]);
+  assert.equal(t.paid.length, 0, "nothing painted by itself");
+  const prompt = await t.phone("POST", `${selfie}/prompt`, { li: KAI, id: message.id });
+  assert.equal(prompt.status, 200, JSON.stringify(prompt.body));
+  assert.match(prompt.body.prompt, /A selfie Kai took to send in a message: grinning on the pier\./);
+  assert.equal(t.paid.length, 0, "the review pays nothing");
+  const painted = await t.phone("POST", selfie, {
+    li: KAI,
+    id: message.id,
+    body: { prompt: `${prompt.body.prompt} EDITED-WORDS` },
+  });
+  assert.deepEqual([painted.status, painted.body.art.state], [200, "ready"]);
+  assert.equal(t.paid.length, 1);
+  assert.match(t.paid[0]!.request.prompt, /EDITED-WORDS/);
+  // Her message has no selfie, and an unknown id names none.
+  const hers = (await t.thread(KAI))!.messages.find((entry) => entry.who === "player")!;
+  assert.equal((await t.phone("POST", selfie, { li: KAI, id: hers.id })).status, 404);
+  assert.equal((await t.phone("POST", selfie, { li: KAI, id: "NOT AN ID" })).status, 404);
+
+  // Ask before painting off, but the player reviews image prompts: it waits for Paint too.
+  const u = await phoneWorld("r-selfie3-aaaaaa", { replies: phoneModel(reply), art: {} });
+  const reviewed = await u.phone("POST", send, { li: KAI, body: { text: "Where?", reviewImagePrompts: true } });
+  assert.equal(reviewed.status, 200);
+  await tick();
+  assert.deepEqual((await u.thread(KAI))!.messages.at(-1)!.selfie, { brief: "grinning on the pier" });
+  assert.equal(u.paid.length, 0);
+  // A paint a restart left pending reads as stopped, with Retry.
+  await u.store.mutateDoc(chatTarget(u.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    messages: thread.messages.map((entry) =>
+      entry.selfie
+        ? { ...entry, selfie: { ...entry.selfie, art: { state: "pending" as const, at: "2026-11-27T10:00:00.000Z" } } }
+        : entry,
+    ),
+  }));
+  assert.equal((await u.phone("GET", page, { li: KAI })).body.messages.at(-1).selfie.art.state, "stopped");
+
+  // Without an image connection a selfie cannot be painted.
+  const v = await phoneWorld("r-selfie4-aaaaaa", { replies: phoneModel(reply) });
+  assert.equal((await v.phone("POST", send, { li: KAI, body: { text: "Where?" } })).status, 200);
+  const unpainted = (await v.thread(KAI))!.messages.at(-1)!;
+  assert.deepEqual(unpainted.selfie, { brief: "grinning on the pier" });
+  const refused = await v.phone("POST", selfie, { li: KAI, id: unpainted.id });
+  assert.deepEqual([refused.status, refused.body.code], [503, "no-connection"]);
+});
+
+test("#2504: under Explicit Heat and the Explicit rating his [explicit selfie: …] paints explicit; the toggles cap it", async () => {
+  // His first reply sends an explicit selfie, and every later one a plain selfie.
+  const replies = [
+    phoneModel({
+      messages: [{ text: "Don't show anyone. [explicit selfie: lying back on the sheets, nothing on]" }],
+    })[0]!,
+    ...phoneModel({ messages: [{ text: "[selfie: on the pier]" }] }),
+  ];
+  const t = await phoneWorld("r-selfie5-aaaaaa", { replies, art: { ask: true } });
+  const toggles = (heat: "explicit" | "fade", rating: "explicit" | "suggestive") =>
+    t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      content: { ...world.content, heat },
+      images: { ...world.images, rating },
+    }));
+  await toggles("explicit", "explicit");
+  for (const text of ["Show me.", "And now?"]) {
+    assert.equal((await t.phone("POST", send, { li: KAI, body: { text } })).status, 200);
+  }
+  const [bold, calm] = (await t.thread(KAI))!.messages.filter((message) => message.selfie);
+  assert.deepEqual(
+    [bold!.text, bold!.selfie],
+    ["Don't show anyone.", { brief: "lying back on the sheets, nothing on", explicit: true }],
+  );
+  assert.deepEqual(calm!.selfie, { brief: "on the pier" });
+  const negative = async (id: string) => {
+    const prompt = await t.phone("POST", `${selfie}/prompt`, { li: KAI, id });
+    assert.equal(prompt.status, 200, JSON.stringify(prompt.body));
+    return prompt.body.negativePrompt as string;
+  };
+  // Painted as a story CG of an explicit scene: uncensored, and still only adults.
+  const explicitNegative = await negative(bold!.id);
+  assert.doesNotMatch(explicitNegative, /explicit sexual activity/);
+  assert.match(explicitNegative, /censored/);
+  assert.match(explicitNegative, /child, childlike, minor/);
+  // A plain selfie stays at most Suggestive, and so does his explicit one once either toggle is lowered.
+  assert.match(await negative(calm!.id), /nudity, explicit sexual activity/);
+  await toggles("explicit", "suggestive");
+  assert.match(await negative(bold!.id), /nudity, explicit sexual activity/);
+  await toggles("fade", "explicit");
+  assert.match(await negative(bold!.id), /nudity, explicit sexual activity/);
+  // P17 offered the explicit form, and his next reply reads it as he sent it.
+  const [first, second] = t.calls.filter((call) => isReplyPrompt(call.messages));
+  assert.match(first!.messages[0]!.content, /write \[explicit selfie: …\] instead/);
+  assert.ok(
+    second!.messages[2]!.content.includes(
+      "Kai: Don't show anyone. [explicit selfie: lying back on the sheets, nothing on]",
+    ),
+  );
 });

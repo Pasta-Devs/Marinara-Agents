@@ -288,6 +288,14 @@ overwrite an already-released version's artifact file if you forget to bump `VER
 
 ## Changelog
 
+### 0.1.34
+- **Pictures paint in the Android app.** On a Marinara installed with its Android app, the Engine
+  answered Quartermaster's connection read and image generation with "401: Android local
+  authentication required", so no item image or outfit portrait could be generated. Those requests
+  now carry the app's local secret (`MARINARA_ANDROID_SECRET`, or the first line of
+  `~/.marinara-engine/android-secret`), read the way the `mari` command reads it. They only ever go
+  to the Engine on the same device.
+
 ### 0.1.33
 - **Delete file always deletes the file it names.** If the item's image changed while the item
   editor's Delete file / Unlink choice was open (an upload, a generation, or a rename), Delete file

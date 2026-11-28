@@ -9,9 +9,11 @@ import type { ZodType } from "zod";
 import type { OtomeErrorCode } from "../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type { OtomeArt } from "./art/expressions.js";
+import type { OtomeHaptics } from "./haptics.js";
 import type { ImageClient } from "./art/image-client.js";
 import type { BackgroundQueue } from "./background-queue.js";
 import type { OtomeMemory } from "./memory/memory.js";
+import type { RecallIndex } from "./memory/recall-index.js";
 import { isLiId, isRunKey, runIdOf } from "./ids.js";
 import type { OtomeStore } from "./store.js";
 import type { CutoutClient } from "./art/cutout.js";
@@ -75,8 +77,8 @@ export function createHandle(logger: OtomeLogger): Handle {
           .status(error.statusCode)
           .send(error.code ? { error: error.message, code: error.code } : { error: error.message });
       }
-      logger.error(error, "Otome Forge request failed: %s %s", request.method ?? "", request.url ?? "");
-      return reply.status(500).send({ error: "Otome Forge could not complete the request." });
+      logger.error(error, "Otome Hearth request failed: %s %s", request.method ?? "", request.url ?? "");
+      return reply.status(500).send({ error: "Otome Hearth could not complete the request." });
     }
   };
 }
@@ -103,6 +105,8 @@ export interface RouteDeps {
   cutouts?: CutoutClient;
   /** Private story memory (S/memory/memory.ts); without it prompts carry no recall. */
   memory?: OtomeMemory;
+  /** Long-term recall's index (S/memory/recall-index.ts); without it nothing is indexed or recalled in detail. */
+  recall?: RecallIndex;
   /** The run-scoped Cancel for story writes (forge-kit story-cancel-server). */
   cancellation?: ForgeStoryCancellation;
   /** The package's background lane (line packs, M3); without it nothing is written in the background. */
@@ -112,11 +116,13 @@ export interface RouteDeps {
    * beat written, a replaced beat's CG released. Without it nothing is painted.
    */
   art?: OtomeArt;
+  /** 0.34.0: the toys, through the Engine's Intiface connection (S/haptics.ts); without it nothing is played. */
+  haptics?: OtomeHaptics;
 }
 
 export type RegisterRoutes = (router: OtomeRouter, deps: RouteDeps) => void;
 
-function param(request: OtomeRequest, name: string): unknown {
+export function param(request: OtomeRequest, name: string): unknown {
   const params = request.params;
   return params && typeof params === "object" ? (params as Record<string, unknown>)[name] : undefined;
 }
@@ -124,7 +130,7 @@ function param(request: OtomeRequest, name: string): unknown {
 /** The `:run` param as its run key and run id R, or a 404 (a malformed key names no run). */
 export function runParam(request: OtomeRequest): { runKey: string; runId: string } {
   const runKey = param(request, "run");
-  if (!isRunKey(runKey)) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!isRunKey(runKey)) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   return { runKey, runId: runIdOf(runKey) };
 }
 

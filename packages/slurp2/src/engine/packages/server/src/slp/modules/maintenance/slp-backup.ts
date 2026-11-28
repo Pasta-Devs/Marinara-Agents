@@ -219,6 +219,9 @@ export function isRestoreInspectionExpired(expiresAt: number, at = Date.now()): 
  * wallets, earnings, storylines, goals, wardrobe, prices and canon live in the same namespace and are
  * restored with the tables, because a restore replaces all Slurp data.
  */
+/** The AI call ledger is spend, not data: a restore leaves it alone, so rewinding cannot hand back spent calls. */
+export const isSlurpSpendLedgerKey = (key: string): boolean => key === "slurp2.model-budget-ledger";
+
 export function isSlurpPreferenceSettingKey(key: string): boolean {
   return (
     key === "slurp2.settings" ||

@@ -16,6 +16,7 @@ import type {
 import { useChatStore } from "../../stores/chat.store";
 import { useBlackjackGameStore } from "../../stores/blackjack-game.store";
 import { useBlackjackMove, useBlackjackState, useResignBlackjack } from "../../hooks/use-blackjack";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 
 interface Props {
   chatId: string;
@@ -204,7 +205,14 @@ export function BlackjackBoard({ chatId }: Props) {
           <button
             type="button"
             onClick={() => {
-              if (view.status === "finished" || window.confirm("End this blackjack game?")) resign.mutate();
+              if (view.status === "finished") resign.mutate();
+              else
+                void showConfirmDialog({
+                  title: "End game",
+                  message: "End this blackjack game?",
+                  confirmLabel: "End game",
+                  tone: "destructive",
+                }).then((ok) => ok && resign.mutate());
             }}
             className="rounded p-1 text-[var(--muted-foreground)] hover:bg-[var(--muted)] active:scale-90"
             title={view.status === "finished" ? "Close" : "End game"}

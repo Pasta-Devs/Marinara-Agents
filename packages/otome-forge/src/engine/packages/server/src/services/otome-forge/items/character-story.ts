@@ -11,6 +11,10 @@
 // - his-look5: one node, the first time he wears the look, with no planning call.
 // - her-look5: the same for the protagonist's 5★ look, with the love interest whose look it is a couple set with (the
 //   item's `li`, the wearer of the his-look5 it names), who sees it first.
+// - #2128, a figurine bought in the Shop: one node, `story-figurine-<li>` (SH/shop.ts figurineSceneKey), written on
+//   the purchase with no planning call and no banner item behind it: the love interest finds out about the figurine.
+// - #2153, a birthday celebrated from Remind Me: one node, `story-birthday-<li>-<year>` (SH/birthdays.ts), built the
+//   same way (S/home/birthday.ts): his birthday, how late it is, and the Shop gift given, if any.
 // Every node holds only its love interest: the chapter is his own (kind "story", `li`), so its canon reaches only his
 // own prompts and scenes he is in (S/story/canon.ts), like a route chapter. Writing it is idempotent: planning runs
 // in the run's foreground queue, which reads the chapter again first, so two opens plan once, and the item's `story`
@@ -22,6 +26,13 @@ import type {
   RunState,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { birthdaySceneKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
+import { clearAirSceneKey } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import {
+  GIFT_PROMPT_NAMES,
+  figurineSceneKey,
+  type GiftId,
+} from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { NOTICED_WORDS_MAX } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import type { Item } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { updateIfChanged } from "../art/paint.js";
@@ -33,7 +44,7 @@ import { normalizeChapter } from "../schemas/story.js";
 import { normalizeItem } from "../schemas/wish.js";
 import { recallText } from "../story/canon.js";
 import { clean, planLedger, planNodes, planTags, type ChapterDeps, type PlannedChapter } from "../story/chapters.js";
-import { storyPlanMessages } from "../prompts.js";
+import { clearAirText, storyPlanMessages } from "../prompts.js";
 import {
   STORY_NODES_MAX,
   STORY_NODES_MIN,
@@ -166,6 +177,102 @@ export function singleStoryChapter(
   };
 }
 
+/**
+ * #2128: the one-node scene a figurine bought in the Shop unlocks, built with no model call: funny and cute, the love
+ * interest finding out the protagonist bought a figurine of them. Its title is English, as its guide is: the story's own,
+ * for prompts and memory. The player reads it in their language (C/screens/reader/ReaderControls.tsx chapterTitle).
+ */
+export function figurineStoryChapter(unit: Pick<Unit, "id" | "name">, at: string): Chapter {
+  const { name } = unit;
+  const guide = `A FIGURINE SCENE between ${name} and the protagonist: ${name} finds out the protagonist bought a small collectible figurine of ${name} (a chibi ${name} on a round display base, in ${name}'s own look) and reacts in character. Make it funny and cute: how ${name} takes being made into a figurine, what ${name} thinks of the likeness, and where it ends up at home. One complete scene, with its own small turn.`;
+  return {
+    key: figurineSceneKey(unit.id),
+    kind: "story",
+    li: unit.id,
+    lead: unit.id,
+    title: `${name} in Miniature`,
+    tags: [],
+    summary: "",
+    nodes: singleNode(unit.id, guide),
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "",
+  };
+}
+
+/** Saves a love interest's figurine scene, unless it is saved already (the first save wins); returns its key. */
+export async function ensureFigurineStory(
+  deps: Pick<ChapterDeps, "store">,
+  runId: string,
+  unit: Pick<Unit, "id" | "name">,
+): Promise<string> {
+  const chapter = figurineStoryChapter(unit, new Date().toISOString());
+  await deps.store.mutateDoc(
+    runDocTarget("chapter", chapterId(runId, chapter.key)),
+    normalizeChapter,
+    (current) => current ?? chapter,
+  );
+  return chapter.key;
+}
+
+/**
+ * #2153: the one-node scene a birthday celebrated from Remind Me opens, built with no model call: his birthday (or how
+ * many days ago it was), and its special moment, the gift given (or none). Its title is English, as its guide is, and
+ * the player reads it in their language (C/screens/reader/ReaderControls.tsx chapterTitle). `gift` stays on the
+ * chapter, so its affection is paid when the scene is read to its end (S/state/rewards.ts).
+ */
+export function birthdayStoryChapter(
+  unit: Pick<Unit, "id" | "name">,
+  { year, daysLate, gift }: { year: number; daysLate: number; gift?: GiftId },
+  at: string,
+): Chapter {
+  const { name } = unit;
+  const day = daysLate
+    ? `${name}'s birthday was ${daysLate} ${daysLate === 1 ? "day" : "days"} ago, and the protagonist celebrates it late; ${name} takes that as ${name} would.`
+    : `today is ${name}'s birthday.`;
+  const given = gift
+    ? `THE GIFT: the protagonist gives ${name} ${GIFT_PROMPT_NAMES[gift]}. Write it as the scene's special moment: ${name}'s reaction in their own voice and a real exchange of dialogue between them.${gift === "aphrodisiac" ? " It is an aphrodisiac, and it works: desire builds between them from here, as far as the content contract allows." : ""}`
+    : `The protagonist brings no gift; remembering the day is the gift, and ${name} reacts to that in character.`;
+  const guide = `A BIRTHDAY SCENE between ${name} and the protagonist: ${day} The protagonist marks the day with ${name}: how ${name} feels about birthdays, in character, and what the day becomes between them. ${given} One complete scene, with its own small turn.`;
+  return {
+    key: birthdaySceneKey(unit.id, year),
+    kind: "story",
+    li: unit.id,
+    lead: unit.id,
+    title: `${name}'s Birthday`,
+    tags: [],
+    summary: "",
+    nodes: singleNode(unit.id, guide),
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "",
+    ...(gift ? { gift } : {}),
+  };
+}
+
+/**
+ * #2303: the one-node scene accepting his invitation to clear the air opens (S/phone/upset.ts), built with no model
+ * call: they meet somewhere he chooses, as the evening he asked her out on. Its title is English, as its guide is, and
+ * the player reads it in their language (C/screens/reader/ReaderControls.tsx chapterTitle).
+ */
+export function clearAirStoryChapter(unit: Pick<Unit, "id" | "name">, n: number, at: string): Chapter {
+  const { name } = unit;
+  const guide = `CLEARING THE AIR between ${name} and the protagonist: ${clearAirText(name)} They meet somewhere ${name} chooses, somewhere that says something true about ${name}. What hurt is said plainly, and what ${name} does about it is ${name}'s own; how it lands is up to the protagonist. One complete scene, with its own small turn.`;
+  return {
+    key: clearAirSceneKey(unit.id, n),
+    kind: "story",
+    li: unit.id,
+    lead: unit.id,
+    title: `Clearing the Air with ${name}`,
+    tags: [],
+    summary: "",
+    nodes: singleNode(unit.id, guide),
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "",
+  };
+}
+
 /** The his-look5 of `li` a her-look5 is a couple set with, or null when it is not stored as one. */
 async function readPair(deps: ChapterDeps, runId: string, id: string, li: LiId): Promise<Item | null> {
   const pair = await deps.store.readDoc(itemId(runId, id), normalizeItem);
@@ -217,7 +324,7 @@ export async function ensureItemStory(
     return stored;
   }
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth story");
   const unit = run.units.find((candidate) => candidate.id === li && candidate.bible);
   if (!unit) throw notFound("love interest");
   if (item.kind !== "memory5") {

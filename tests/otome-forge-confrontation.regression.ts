@@ -18,7 +18,10 @@ import {
   composureAfter,
   endingFor,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
-import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import {
+  LIMIT_DEFAULTS,
+  defaultContent,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
   beatId,
   runDocTarget,
@@ -219,7 +222,8 @@ test("P12's reply is normalized list by list with P6's rules", () => {
     String(
       normalize(
         withRound(2, (round) => {
-          round.options.press.segments = Array.from({ length: 4 }, () => ({ speaker: "Kai", text: "No." }));
+          // Four different lines: one repeated four times would be one line (#2306).
+          round.options.press.segments = Array.from({ length: 4 }, (_, n) => ({ speaker: "Kai", text: `No ${n}.` }));
           return round;
         }),
       ),
@@ -229,14 +233,26 @@ test("P12's reply is normalized list by list with P6's rules", () => {
   assert.match(String(normalize({ ...base, endings: { truth: base.endings.truth } })), /endings\.walkout/);
   assert.match(String(normalize({ ...base, grievance: {} })), /grievance\.text is required/);
   assert.match(String(normalize({ ...base, disclosure: "" })), /disclosure is required/);
+  // A love interest's thought before stage 2 is dropped here too: a list left with nothing gets the repair turn.
   assert.match(
     String(
       normalize(
         withRound(0, (round) => ({ ...round, lines: [{ speaker: "Kai", text: "...don't go.", thought: true }] })),
       ),
     ),
-    /still behind their mask/,
-    "a love interest's thought before stage 2 gets the repair turn here too",
+    /rounds\[0\]\.lines needs 1 to 4 segments/,
+  );
+  const kept = normalize(
+    withRound(0, (round) => ({
+      ...round,
+      lines: [...round.lines, { speaker: "Kai", text: "...don't go.", thought: true }],
+    })),
+  );
+  assert.ok(typeof kept === "object", String(kept));
+  assert.deepEqual(
+    kept.confrontation.rounds[0]!.his.map((segment) => segment.text),
+    base.rounds[0].lines.map((segment: { text: string }) => segment.text),
+    "only his thought line is gone",
   );
 });
 
@@ -388,6 +404,31 @@ test("a walkout opens a major grievance, or a rupture at low trust; a standoff c
   assert.equal((await top.state()).lis[KAI]!.trust, 3);
 });
 
+test("the chapter's Lead earns by its confrontation: 150 for the truth, 100 for a standoff or an Ease off, 50 for a walkout", async () => {
+  const cases = [
+    ["r-ldtr-aaaaaa", ["reveal", "yield", "yield"], 150],
+    ["r-ldst-aaaaaa", ["hold", "hold", "hold"], 100],
+    ["r-ldwk-aaaaaa", ["press", "press", "hold"], 50],
+    ["r-ldez-aaaaaa", ["hold"], 100],
+  ] as const;
+  for (const [runKey, stances, affection] of cases) {
+    const t = await fightWorld(runKey);
+    await play(t, [...stances]);
+    // The Confrontation (node 6 of 7) is read to its end, or eased off before it reaches one.
+    const ended = stances.length === 3;
+    const done = ended
+      ? await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(5))
+      : await t.call("POST", `${beatPath}/ease-off`, { segment: 3 }, node(5));
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    await t.settle();
+    assert.equal((await t.call("POST", beatPath, {}, node(6))).status, 200, runKey);
+    const last = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(6));
+    assert.equal(last.body.chapterDone, true, runKey);
+    const lead = last.body.grants.find((entry: { source: string }) => entry.source === "lead");
+    assert.deepEqual(lead, { source: "lead", li: KAI, affection }, runKey);
+  }
+});
+
 test("stances whose effects never landed land when the beat is read; an Ease off keeps what was played", async () => {
   const t = await fightWorld("r-lost-aaaaaa");
   await play(t, ["reveal", "yield"]);
@@ -427,6 +468,40 @@ test("in Dark romance her stances include refusing him", async () => {
   const t = await fightWorld("r-dark-aaaaaa", { content });
   const [fight] = t.calls.filter((call) => isConfrontationPrompt(call.messages));
   assert.match(system(fight!.messages), /at least one stance lets the protagonist refuse Kai outright/);
+  // SFW Heat holds both consent limits at Line: the refusal is honoured.
+  assert.match(system(fight!.messages), /refuse Kai outright, and the story honours it\./);
+  // #2279: with a consent limit open (Dark's default dubious-consent Veil under NSFW Heat), it binds only her choice.
+  const open = await fightWorld("r-dkop-aaaaaa", {
+    content: { ...defaultContent(), heat: "explicit", darkness: "dark", limits: { ...LIMIT_DEFAULTS.dark } },
+  });
+  const [openFight] = open.calls.filter((call) => isConfrontationPrompt(call.messages));
+  const line = system(openFight!.messages)
+    .split("\n")
+    .find((entry) => entry.includes("refuse Kai outright"))!;
+  assert.match(line, /the refusal is the protagonist's own, and whether Kai backs down follows who Kai is\./);
+  assert.doesNotMatch(line, /honours|\b(?:she|her|hers)\b/);
+});
+
+test("no stance gets through by default: each has its situation, and P12 shows no example disclosure", async () => {
+  // 0.38.3 (#2425): the maintainer's rule. A confrontation is the protagonist making a case for themselves, so press,
+  // yield, hold and reveal each get through in their own situation. Reveal had no such line, and the model scored the
+  // protagonist's own trauma, offered back against his, as the stance that wins.
+  const t = await fightWorld("r-rvel-aaaaaa");
+  const [fight] = t.calls.filter((call) => isConfrontationPrompt(call.messages));
+  const composure = system(fight!.messages)
+    .split("\n")
+    .find((line) => line.startsWith("- composure:"))!;
+  assert.match(composure, /no stance gets through by default/);
+  assert.match(
+    composure,
+    /press when Kai lied or is in the wrong, yield when Kai argues out of worry for the protagonist/,
+  );
+  assert.match(composure, /hold when .*reveal when /);
+  assert.match(composure, /A reveal that answers Kai's pain with the protagonist's own.*makes Kai close off\./);
+  const disclosure = system(fight!.messages)
+    .split("\n")
+    .find((line) => line.includes("disclosure: what the protagonist tells Kai in reveal"))!;
+  assert.doesNotMatch(disclosure, /\(".*"\)/, "no quoted example to copy");
 });
 
 test("a love interest thinks at most once on any path through a Confrontation", async () => {

@@ -21,6 +21,7 @@ import {
 import { slpStorylineEdges, slpStorylineNext } from "../../../../../shared/src/slp/slp-storyline.js";
 import { slurpProjectSync, slurpProjectView, slurpStageInsert, slurpStoryLine } from "./slp-project-storyline.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 const PACE_MULTIPLIER: Record<SlurpArcPace, number> = { slow: 1.5, normal: 1, fast: 0.5 };
 
 /**
@@ -458,7 +459,7 @@ export function slurpProjectChoose(
 export function slurpArcVoteClosed(
   projects: readonly Pick<SlurpProject, "pollPostId" | "pollClosesAt">[],
   postId: string,
-  now = Date.now(),
+  now = slurpWorldNowMs(),
 ): boolean {
   const arc = projects.find((project) => project.pollPostId === postId);
   return Boolean(arc?.pollClosesAt && Date.parse(arc.pollClosesAt) <= now);

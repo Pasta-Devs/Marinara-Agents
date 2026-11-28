@@ -8,7 +8,7 @@ import type {
 import { createHash } from "node:crypto";
 import { slpCreatorReservePolicyFingerprint } from "../../modules/records/slp-storage-model.js";
 import type { DB } from "../../../db/connection.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { parseRecord } from "../../modules/creators/slp-public-support.js";
 import { slpCreatorCharacterCanonText } from "../../base/prompting/slp-prompt-safety.js";
 import { slpCardImageAppearance } from "../../modules/creators/slp-appearance-profile.js";

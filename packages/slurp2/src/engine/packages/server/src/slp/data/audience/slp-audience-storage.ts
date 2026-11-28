@@ -13,6 +13,7 @@ import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { mapAccount, sourceAccountFromEntity } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createAudienceStorage1(context: SlurpStorageContext) {
   const {
     db,
@@ -46,7 +47,7 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
       id: string,
       targetAccountId: string,
       followed: boolean,
-      followedAt = new Date().toISOString(),
+      followedAt = slurpWorldNow().toISOString(),
     ): Promise<{ account: SlpAccount; changed: boolean } | null> {
       return db.transaction(async (tx) => {
         const rows = await tx

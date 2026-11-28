@@ -11,12 +11,24 @@ declare module "@forge-kit/time-zone-server.mjs" {
    * as now: pass Date.parse(iso). The same holds for forgeWallDate and forgeWeekday.
    */
   export function forgeDayKey(value?: number | Date): string;
+  /** The local week's Monday, "YYYY-MM-DD", in the request's time zone (as forgeDayKey reads its value). */
+  export function forgeWeekKey(value?: number | Date): string;
   /** The instant's wall-clock time in the request's zone, as a Date whose UTC fields read that local time. */
   export function forgeWallDate(value?: number | Date, timeZone?: string): Date;
   /** Monday 0 … Sunday 6, in the request's time zone. */
   export function forgeWeekday(value?: number | Date): number;
   /** Milliseconds from the instant to the next local midnight (or week, or month) in the request's time zone. */
   export function forgeResetIn(value?: number, period?: "day" | "week" | "month"): number;
+}
+
+declare module "@forge-kit/engine-local-auth.mjs" {
+  /** `headers` plus the Android local secret when `url` is this device's Engine and a secret is set; else `headers`. */
+  export function forgeEngineLocalHeaders<H extends Record<string, string> | undefined>(
+    url: string | URL,
+    headers?: H,
+  ): H | Record<string, string>;
+  /** The Android local secret header for an app.inject, or none. */
+  export function forgeEngineInjectHeaders(): Record<string, string>;
 }
 
 declare module "@forge-kit/character-card-context.mjs" {
@@ -31,6 +43,7 @@ declare module "@forge-kit/character-card-context.mjs" {
     units: U[],
     readCard: (cardId: string) => Promise<unknown>,
     logger?: { warn?(message: string, ...args: unknown[]): void },
+    options?: { logPrefix?: string },
   ): Promise<Array<U & { forgeCardCanon?: ForgeCardCanon }>>;
   /** "CANONICAL CHARACTER CARD — …" with the card's authored fields, or "" without a card. */
   export function forgeFormatCharacterCardReference(card: unknown, name?: string): string;
@@ -190,7 +203,8 @@ declare module "@forge-kit/player-choices-server.mjs" {
   /**
    * Validates the reply's `choices` around `normalizeBeat` (called for the mainline and again for each branch, with
    * `{...options, start, cgOpen: false}`); ids are `choice-<n>`/`option-<n>` from their places in the reply, and unknown
-   * option fields are dropped. Null when anything is invalid.
+   * option fields are dropped. Null when anything is invalid; `reject`, when given, hears why first, in words a repair
+   * turn can send back to the model.
    */
   export function forgeNormalizeChoiceBeat<
     O extends object,
@@ -199,7 +213,12 @@ declare module "@forge-kit/player-choices-server.mjs" {
     raw: unknown,
     options: O,
     normalizeBeat: (raw: unknown, options: O) => B | null,
-    settings: { enabled: boolean; terminal: boolean; label?: (text: string) => string },
+    settings: {
+      enabled: boolean;
+      terminal: boolean;
+      label?: (text: string) => string;
+      reject?: (why: string) => void;
+    },
   ): (B & { choices?: KitChoice[] }) | null;
   /** Writes each speaker's `gender` from the reply's `voices` onto the segments (in place) and returns them. */
   export function forgeSpeakerGenders<S extends KitSegment>(raw: unknown, segments: S[]): S[];
@@ -460,7 +479,14 @@ declare module "@forge-kit/story-expressions-server.mjs" {
       prompts?: Record<string, unknown>,
     ): Promise<{ state: "ready" | "failed" | "stopped"; at: string; error?: string } | undefined> | null;
     /** Called with the cast a scene is served or written with; queues the faces in the background, returns the cast. */
-    queue<C extends { name?: string; prota?: boolean }>(runId: string, run: unknown, cast: C[], beat: unknown): C[];
+    queue<C extends { name?: string; prota?: boolean }>(
+      runId: string,
+      run: unknown,
+      cast: C[],
+      beat: unknown,
+      /** Otome Hearth #2509: unit document id → the look a scene stands it in, painted instead of its current base. */
+      sceneBases?: Record<string, string>,
+    ): C[];
     /** Package teardown: queued faces of this instance stop before their paid call. */
     dispose(): void;
   }

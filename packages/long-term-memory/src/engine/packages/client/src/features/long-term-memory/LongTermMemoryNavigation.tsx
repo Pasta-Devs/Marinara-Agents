@@ -1,13 +1,24 @@
-import { Check, CircleAlert, Database, FileInput, ListChecks, Loader2, Settings2, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Check,
+  CircleAlert,
+  Database,
+  FileInput,
+  ListChecks,
+  Settings2,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { LongTermMemoryDestination } from "./types";
 import { selectLtmPluralForm, useLtmTranslation } from "./localization";
+import { Spinner } from "./shared-controls";
 import { getLtmSourceTaskSnapshot, subscribeLtmSourceTask } from "./source-task";
 
 const destinations: Array<{
   id: LongTermMemoryDestination;
   labelKey: string;
   shortLabelKey: string;
+  hintKey: string;
   icon: LucideIcon;
   badge?: keyof LongTermMemoryNavigationBadges;
 }> = [
@@ -15,6 +26,7 @@ const destinations: Array<{
     id: "vault",
     labelKey: "ui.longTermMemory.longtermmemorynavigation.memoryVault",
     shortLabelKey: "ui.longTermMemory.longtermmemorynavigation.memories",
+    hintKey: "ui.longTermMemory.longtermmemorynavigation.memoriesHint",
     icon: Database,
     badge: "memories",
   },
@@ -22,6 +34,7 @@ const destinations: Array<{
     id: "review",
     labelKey: "ui.longTermMemory.longtermmemorynavigation.reviewQueue",
     shortLabelKey: "ui.longTermMemory.longtermmemorynavigation.review",
+    hintKey: "ui.longTermMemory.longtermmemorynavigation.reviewHint",
     icon: ListChecks,
     badge: "review",
   },
@@ -29,12 +42,21 @@ const destinations: Array<{
     id: "sources",
     labelKey: "ui.longTermMemory.longtermmemorynavigation.sources",
     shortLabelKey: "ui.longTermMemory.longtermmemorynavigation.sources",
+    hintKey: "ui.longTermMemory.longtermmemorynavigation.sourcesHint",
     icon: FileInput,
+  },
+  {
+    id: "activity",
+    labelKey: "ui.longTermMemory.longtermmemorynavigation.activity",
+    shortLabelKey: "ui.longTermMemory.longtermmemorynavigation.activity",
+    hintKey: "ui.longTermMemory.longtermmemorynavigation.activityHint",
+    icon: Activity,
   },
   {
     id: "settings",
     labelKey: "ui.longTermMemory.longtermmemorynavigation.memorySettings",
     shortLabelKey: "ui.longTermMemory.longtermmemorynavigation.settings",
+    hintKey: "ui.longTermMemory.longtermmemorynavigation.settingsHint",
     icon: Settings2,
   },
 ];
@@ -111,13 +133,11 @@ export function LongTermMemoryNavigation({
     const badge = item.badge ? badges?.[item.badge] : undefined;
     const label = localizeUi(mobile ? item.shortLabelKey : item.labelKey);
     const Icon =
-      item.id === "sources" && activeSourceTask
-        ? Loader2
-        : item.id === "sources" && unreadFailure
-          ? CircleAlert
-          : item.id === "sources" && recentCompletion
-            ? Check
-            : item.icon;
+      item.id === "sources" && unreadFailure
+        ? CircleAlert
+        : item.id === "sources" && recentCompletion
+          ? Check
+          : item.icon;
     return (
       <button
         key={item.id}
@@ -126,7 +146,7 @@ export function LongTermMemoryNavigation({
         data-ltm-destination={item.id}
         aria-current={active ? "page" : undefined}
         aria-label={item.id === "sources" ? label : undefined}
-        title={item.id === "sources" && sourceTaskLabel ? sourceTaskLabel : undefined}
+        title={localizeUi(item.hintKey)}
         onClick={() => onDestinationChange(item.id)}
         data-active={active}
         data-ltm-tab-focus
@@ -136,11 +156,11 @@ export function LongTermMemoryNavigation({
             : "min-h-11 shrink-0 justify-start whitespace-nowrap px-3 text-left"
         }`}
       >
-        <Icon
-          aria-hidden="true"
-          size={mobile ? "1.125rem" : "0.875rem"}
-          className={item.id === "sources" && activeSourceTask ? "animate-spin motion-reduce:animate-none" : undefined}
-        />
+        {item.id === "sources" && activeSourceTask ? (
+          <Spinner size={mobile ? "1.125rem" : "0.875rem"} />
+        ) : (
+          <Icon aria-hidden="true" size={mobile ? "1.125rem" : "0.875rem"} />
+        )}
         <span className="min-w-0 truncate" aria-hidden={item.id === "sources" ? true : undefined}>
           {label}
         </span>
@@ -168,12 +188,22 @@ export function LongTermMemoryNavigation({
       className={mobile ? "w-full" : "min-w-0 flex-1"}
       style={{ containerName: "ltm-navigation", containerType: "inline-size" }}
     >
+      {sourceTaskLabel && mobile ? (
+        // The icon alone says too little on a phone; the bar's own line names the task.
+        <span
+          data-ltm-source-task-status-visual
+          aria-hidden="true"
+          className="block truncate px-3 pt-1 text-center text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]"
+        >
+          {sourceTaskLabel}
+        </span>
+      ) : null}
       <nav
         aria-label={localizeUi("ui.longTermMemory.longtermmemorynavigation.longTermMemorySections")}
         data-ltm-navigation={mobile ? "mobile" : "desktop"}
         className={
           mobile
-            ? "mari-editor-tab-rail grid w-full shrink-0 grid-cols-4"
+            ? "mari-editor-tab-rail grid w-full shrink-0"
             : "mari-editor-tab-rail min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border p-1"
         }
         style={mobile ? undefined : { overflowX: "auto" }}

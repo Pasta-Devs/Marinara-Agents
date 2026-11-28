@@ -1,6 +1,6 @@
 // Otome Hearth's Closer (#1938), the warm climax beside the Confrontation, on the same machinery:
-// - a main chapter has exactly one climax node, a Confrontation or a Closer (the Lead in it), and after two main
-//   chapters in a row ended alike the next must end with the other (requiredClimax); route, repair and Character
+// - a main chapter has at most one climax node, a Confrontation or a Closer (the Lead in it), and after two climaxes
+//   alike the next one must be the other (requiredClimax, skipping chapters without one); route, repair and Character
 //   Story plans never take a Closer;
 // - P12c's reply is normalized as P12's, with the Closer's answers (reassure, tease, mirror, ask), endings (opened,
 //   almost, shut), its `guard` and a minor grievance; it is stored in the same slot with `kind: "closer"`, and a game
@@ -155,7 +155,7 @@ test("the guard runs on the composure line: 0 opens up, 4 shuts out, anything el
   assert.equal(closerEndingFor(composureAfter([-1, 0, 1])), "almost");
 });
 
-test("a main chapter has one climax; two alike in a row force the other; only main chapters take a Closer", () => {
+test("a main chapter has at most one climax; two alike in a row force the other; only main chapters take a Closer", () => {
   // The streak: two in a row of one kind forces the other; anything else leaves it to the planner.
   assert.equal(requiredClimax([]), null);
   assert.equal(requiredClimax([withClimax("confrontation")]), null);
@@ -167,16 +167,31 @@ test("a main chapter has one climax; two alike in a row force the other; only ma
     "closer",
     "only the last two count",
   );
+  const none = { nodes: [{ i: 5, kind: "beat", guide: "", cast: [KAI] }] } as unknown as Chapter;
+  assert.equal(
+    requiredClimax([withClimax("closer"), none, withClimax("closer"), none]),
+    "confrontation",
+    "chapters without a climax are skipped",
+  );
+  assert.equal(requiredClimax([none, withClimax("closer")]), null);
 
   const plan = closerPlanReply() as never;
   const ok = normalizeChapterPlan(plan, planContext());
   assert.ok(typeof ok === "object", String(ok));
   assert.equal(ok.nodes[5]!.kind, "closer");
   assert.ok(typeof normalizeChapterPlan(planReply() as never, planContext()) === "object", "a Confrontation still");
-  // Exactly one climax, of either kind, near the end.
+  // At most one climax, of either kind, near the end; a chapter may have none (0.19.1), even when a kind is forced.
   const both = closerPlanReply();
   both.nodes[4] = { ...both.nodes[4], kind: "confrontation" };
-  assert.match(String(normalizeChapterPlan(both as never, planContext())), /exactly one climax node/);
+  assert.match(String(normalizeChapterPlan(both as never, planContext())), /at most one climax node/);
+  const calm = closerPlanReply();
+  calm.nodes[5] = { ...calm.nodes[5], kind: "beat" };
+  const noClimax = normalizeChapterPlan(calm as never, planContext({ number: 3, climax: "confrontation" }));
+  assert.ok(typeof noClimax === "object", String(noClimax));
+  assert.equal(
+    noClimax.nodes.some((node) => node.kind === "closer" || node.kind === "confrontation"),
+    false,
+  );
   const early = closerPlanReply();
   [early.nodes[1], early.nodes[5]] = [early.nodes[5], early.nodes[1]];
   assert.match(
@@ -420,6 +435,25 @@ test("Shut out costs trust and leaves a minor grievance they hold; Almost change
     { trust: still.trust, tension: still.tension, grievances: still.grievances, firsts: still.firsts },
     { trust: start.trust, tension: start.tension, grievances: start.grievances, firsts: start.firsts },
   );
+});
+
+test("the chapter's Lead earns by its Closer: 150 opened up, 100 almost, 50 shut out", async () => {
+  const cases = [
+    ["r-ldopen-aaaaaa", ["mirror", "reassure", "reassure"], 150],
+    ["r-ldalmost-aaaaaa", ["tease", "tease", "tease"], 100],
+    ["r-ldshut-aaaaaa", ["ask", "ask", "ask"], 50],
+  ] as const;
+  for (const [runKey, answers, affection] of cases) {
+    const t = await closerWorld(runKey);
+    await play(t, [...answers]);
+    assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(5))).status, 200, runKey);
+    await t.settle();
+    assert.equal((await t.call("POST", beatPath, {}, node(6))).status, 200, runKey);
+    const last = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(6));
+    assert.equal(last.body.chapterDone, true, runKey);
+    const lead = last.body.grants.find((entry: { source: string }) => entry.source === "lead");
+    assert.deepEqual(lead, { source: "lead", li: KAI, affection }, runKey);
+  }
 });
 
 test("a Closer's answer sent to a Confrontation is a 400 that saves nothing", async () => {

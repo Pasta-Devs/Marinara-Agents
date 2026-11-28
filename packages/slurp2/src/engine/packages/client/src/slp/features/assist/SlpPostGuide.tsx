@@ -7,7 +7,7 @@
  */
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, Handshake, ImagePlus, Lightbulb, Loader2, Megaphone, Shirt } from "lucide-react";
+import { BookOpen, Handshake, ImagePlus, Lightbulb, Megaphone, Shirt } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import type { SlurpContentDelivery, SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
@@ -21,6 +21,7 @@ import { useSlurpProjects, useSlurpTies } from "../projects/slp-projects-contrac
 import { runSlpAction } from "./slp-assist-hooks";
 import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
+import { Spinner } from "../../../components/ui/Spinner";
 
 export type SlpPostGuideDraft = {
   title: string;
@@ -298,11 +299,7 @@ export function SlpPostGuide({
             </SlpChip>
           )}
           <SlpPrimaryButton type="submit" disabled={busy || !idea.trim()} className="min-w-40 flex-1 px-4">
-            {pending ? (
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <SlpSparkleGlyph size={16} aria-hidden="true" />
-            )}
+            {pending ? <Spinner size="md" /> : <SlpSparkleGlyph size={16} aria-hidden="true" />}
             {pending ? t("ui.slurp.postGuide.writing") : t("ui.slurp.postGuide.write")}
             <SlpUsesAiMark />
           </SlpPrimaryButton>

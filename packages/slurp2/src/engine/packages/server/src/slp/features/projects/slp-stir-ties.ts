@@ -53,6 +53,7 @@ import {
   type SlurpBondError,
 } from "../../modules/projects/slp-creator-bonds.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Failure = { ok: false; status: 400 | 404 | 409; error: string };
 type Done = { ok: true; value: Record<string, unknown>; undo: SlurpTieUndo | null };
 
@@ -112,7 +113,7 @@ export async function previewSlurpTieLever(
   db: DB,
   name: SlurpTieLever,
   input: unknown,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpTiePreview> {
   return slurpPreviewTieLever(await readWorld(db), name, input, at);
 }
@@ -122,7 +123,7 @@ export async function runSlurpTieLever(
   db: DB,
   name: SlurpTieLever,
   input: unknown,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<Done | Failure> {
   const creators = await loadSlurpTieCreators(db, at);
   const find = (id: string) => creators.find((entry) => entry.id === id);

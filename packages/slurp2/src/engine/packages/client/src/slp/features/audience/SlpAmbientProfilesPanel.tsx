@@ -13,6 +13,7 @@ import {
   useUpdateAmbientProfile,
 } from "./slp-ambient-profile-hooks";
 import { toast } from "sonner";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
 
 export function AmbientProfilesPanel({
   allowRandomUsers,
@@ -149,8 +150,16 @@ export function AmbientProfilesPanel({
                     aria-label={t("ui.slurp.settings.ambient.delete")}
                     title={t("ui.slurp.settings.ambient.delete")}
                     disabled={remove.isPending}
-                    onClick={() => {
-                      if (!window.confirm(t("ui.slurp.settings.ambient.deleteConfirm", { name: profile.displayName })))
+                    onClick={async () => {
+                      if (
+                        !(await showConfirmDialog({
+                          title: t("ui.slurp.settings.ambient.delete"),
+                          message: t("ui.slurp.settings.ambient.deleteConfirm", { name: profile.displayName }),
+                          confirmLabel: t("ui.slurp.settings.ambient.delete"),
+                          cancelLabel: t("ui.slurp.actions.cancel"),
+                          tone: "destructive",
+                        }))
+                      )
                         return;
                       remove.mutate(profile.id, {
                         onSuccess: () => void profilesQuery.refetch(),

@@ -1,11 +1,24 @@
 // Otome Forge M2b: painted places and story CGs (S/art/{places,cg}.ts, S/routes/art.ts). Paints run against a fake
 // image client that counts paid calls; the CG's loopback request is checked against the real client.
 import assert from "node:assert/strict";
+import { FACES } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import test from "node:test";
 import { queueScenePaints } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
+import { createCutoutClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
-import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import {
+  NOVELAI_NEGATIVE,
+  NOVELAI_QUALITY,
+  createImageClient,
+  paintsWithNovelAi,
+  worldStyle,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
+import {
+  cgPrompt,
+  placePrompt,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
+  paintSettled,
   paintSlot,
   startPaint,
   withDeadline,
@@ -13,6 +26,7 @@ import {
 import { placeKey } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/places.ts";
 import {
   beatId,
+  chapterId,
   playerId,
   runDocTarget,
   stateId,
@@ -24,7 +38,10 @@ import { registerSetupRoutes } from "../packages/otome-forge/src/engine/packages
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
-import { normalizeBeat } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import {
+  normalizeBeat,
+  normalizeChapter,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
@@ -44,6 +61,7 @@ import { normalizeBeatBody } from "../packages/otome-forge/src/engine/packages/s
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import { KAI, MIR, SOL, beatReply, bible, json, storyRoutes } from "./fixtures/otome-forge-story.ts";
 
+const CG_AT = "2026-10-28T10:00:00.000Z";
 const CG = { at: 1, brief: "Rain on the lamp room glass; she catches his sleeve.", cast: ["Kai", "Ines"] };
 
 async function sceneWorld(runKey: string, options: Parameters<typeof artWorld>[0] = { runKey }) {
@@ -438,14 +456,23 @@ test("Ask before painting holds every scene paint until its tap, and a tap never
   assert.deepEqual(second.body.art, first.body.art);
   assert.equal(t.paid.length, 1);
   assert.equal(t.paid[0]!.method, "generateBannerArt");
-  // Tapping a ready CG again changes nothing.
-  assert.deepEqual((await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 })).body.art, first.body.art);
-  assert.equal(t.paid.length, 1);
+  // 0.24.0: tapping a ready CG again repaints it (one more image), and the picture it painted over is deleted.
+  const repainted = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(repainted.body.art.state, "ready");
+  assert.notEqual(repainted.body.art.ref, first.body.art.ref);
+  assert.equal(t.paid.length, 2);
+  assert.deepEqual(t.deleted, ["img1"]);
 
   const placed = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
   assert.equal(placed.body.place.art.state, "ready");
   assert.equal(placed.body.world.places[placeKey("The Lamp Room")].art.state, "ready");
-  assert.equal(t.paid.length, 2);
+  assert.equal(t.paid.length, 3);
+
+  // A painted place is repainted by its tap too; the picture it painted over leaves the gallery.
+  const placeAgain = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
+  assert.notEqual(placeAgain.body.place.art.ref, placed.body.place.art.ref);
+  assert.equal(t.paid.length, 4);
+  assert.deepEqual(t.deleted, ["img1", "img3"]);
 
   // The review dialog gets the prompt; an edited one keeps its rating and adult tags.
   const prompt = await t.call("POST", "/runs/:run/art/cg/prompt", { key: KEY, i: 1 });
@@ -453,6 +480,54 @@ test("Ask before painting holds every scene paint until its tap, and a tap never
   await t
     .call("POST", "/runs/:run/art/place", { place: "Unknown Pier" })
     .then(({ status }) => assert.equal(status, 404));
+});
+
+test("#2509: a scene's key image dresses each of them in the look the scene puts them in, never their Home look", async () => {
+  const t = await sceneWorld("r-cglooks-aaaaaa");
+  const home = {
+    id: "coat",
+    name: "Coat",
+    outfitLine: "HOME-COAT: grey wool coat",
+    url: "/api/global-gallery/file/kai-coat.png",
+    at: CG_AT,
+  };
+  const scene = {
+    id: "suit",
+    name: "Suit",
+    outfitLine: "SCENE-SUIT: black three-piece suit",
+    url: "/api/global-gallery/file/kai-suit.png",
+    at: CG_AT,
+  };
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    outfits: [home, scene],
+    wornOutfit: home.id,
+  }));
+  await t.store.updateDoc(runDocTarget("chapter", chapterId(t.runId, KEY)), normalizeChapter, (chapter) =>
+    chapter
+      ? {
+          ...chapter,
+          wardrobe: {
+            offered: { me: ["base"], [KAI]: ["base", home.id, scene.id] },
+            start: { me: "base", [KAI]: "base" },
+          },
+        }
+      : chapter,
+  );
+  await saveBeat(t.store, t.runId, beat(0, { wear: { [KAI]: scene.id } }));
+  await t.write(1, { cg: CG }, true);
+  const prompt = (await t.call("POST", "/runs/:run/art/cg/prompt", { key: KEY, i: 1 })).body.prompt as string;
+  assert.doesNotMatch(prompt, /HOME-COAT/, "never the look he wears on Home");
+  const painted = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(painted.body.art.state, "ready");
+  const request = t.paid.find((call) => call.method === "generateBannerArt")!.request as {
+    prompt: string;
+    units?: Array<{ avatarPath?: string; who?: string }>;
+  };
+  // His reference is the scene's look, cut out, and the prompt dresses him in it.
+  assert.equal(request.units?.find((unit) => unit.who === "Kai")?.avatarPath, `${scene.url}.cut.png`);
+  assert.match(request.prompt, /Kai: SCENE-SUIT: black three-piece suit/);
+  assert.doesNotMatch(request.prompt, /HOME-COAT/);
 });
 
 test("reviewing image prompts holds automatic paints too; without an image connection nothing is painted", async () => {
@@ -506,6 +581,89 @@ test("a CG unlocks only once it is ready and shown, exactly once", async () => {
   assert.equal((await u.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 409);
   assert.equal(waiting.cg?.art, undefined);
   assert.equal((await u.state()).album.cgs.length, 0);
+});
+
+test("a picture kept through a failed repaint is the one unlocked: the Album takes what was on screen", async () => {
+  // 0.24.0 (Dottore, #2255): a repaint keeps the old picture on screen while it paints, and keeps it if it fails, so the
+  // picture the reader saw is the one that enters the Album — not a 409 because the record's state moved on.
+  const t = await sceneWorld("r-m2bart09-iiiiii");
+  await t.write(1, { cg: CG });
+  const stored = (await readStoredBeat(t.store, t.runId, 1))!;
+  const kept = stored.cg!.art!;
+  await saveBeat(t.store, t.runId, {
+    ...stored,
+    readThrough: CG.at,
+    cg: { ...stored.cg!, art: { ...kept, state: "failed", error: "provider down" } },
+  });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  const seen = await t.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 });
+  assert.equal(seen.status, 200, "the picture was seen, whatever its repaint did");
+  assert.equal(seen.body.unlocked, true);
+  assert.equal(seen.body.album[0].ref, kept.ref, "the Album takes the picture that stayed on screen");
+
+  // A record with no picture at all still refuses: nothing was shown, so nothing is unlocked.
+  const bare = await sceneWorld("r-m2bart10-jjjjjj");
+  await setImages(bare.store, bare.runId, { ask: true });
+  await bare.write(1, { cg: CG });
+  await saveBeat(bare.store, bare.runId, { ...(await readStoredBeat(bare.store, bare.runId, 1))!, readThrough: 2 });
+  await bare.store.updateDoc(runDocTarget("state", stateId(bare.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  assert.equal((await bare.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 409);
+});
+
+test("a repaint that saves while its key image unlocks leaves the Album on the picture the record shows", async () => {
+  // 0.24.0 (Dottore, #2255): the unlock reads the beat, then writes the Album some awaits later. A repaint saving in
+  // that gap moves an entry that does not exist yet and releases the picture the unlock is about to file, so the entry
+  // is read back and followed to the record's picture.
+  const t = await sceneWorld("r-m2bart11-kkkkkk");
+  await t.write(1, { cg: CG });
+  const stored = (await readStoredBeat(t.store, t.runId, 1))!;
+  const kept = stored.cg!.art!;
+  await saveBeat(t.store, t.runId, { ...stored, readThrough: CG.at });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  const repainted = {
+    state: "ready" as const,
+    at: "2026-10-28T12:00:00.000Z",
+    url: "/api/global-gallery/file/img9.png",
+    ref: "global-gallery:img9",
+  };
+  let saved = false;
+  const store = {
+    ...t.store,
+    async updateDoc(...args: Parameters<typeof t.store.updateDoc>) {
+      // The repaint's save lands just before the unlock's own Album write.
+      if (!saved && args[0].id === stateId(t.runId)) {
+        saved = true;
+        await saveBeat(t.store, t.runId, {
+          ...(await readStoredBeat(t.store, t.runId, 1))!,
+          cg: { ...stored.cg!, art: repainted },
+        });
+      }
+      return t.store.updateDoc(...args);
+    },
+  } as typeof t.store;
+  const call = routesOf(
+    registerArtRoutes,
+    { ...t.deps, store, art: createOtomeArt({ ...t.deps, store }) },
+    "r-m2bart11-kkkkkk",
+  );
+  const seen = await call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 });
+  assert.equal(seen.status, 200);
+  assert.equal(seen.body.unlocked, true);
+  assert.equal(saved, true, "the repaint saved in the gap");
+  const entry = (await t.state()).album.cgs.find((cg) => cg.key === `${KEY}/1`)!;
+  assert.equal(entry.ref, repainted.ref, "the Album ends on the picture the record shows");
+  assert.equal(entry.url, repainted.url);
+  assert.equal(seen.body.album.find((cg: { key: string }) => cg.key === `${KEY}/1`).ref, repainted.ref);
+  assert.notEqual(entry.ref, kept.ref, "never the picture the repaint replaced");
 });
 
 test("a failed paint waits for a tap; a rewrite while a CG paints gets nothing, and its image is deleted", async () => {
@@ -632,15 +790,16 @@ test("a CG's loopback request carries the override and at most four references, 
   const { prompt, negativePrompt } = body.promptOverrides[0];
   assert.match(prompt, /^All of them at the lamp\. Kai: tall man, grey eyes; keeper's coat\./);
   assert.doesNotMatch(prompt, /Ines|Harbour Master/, "three people at most");
-  // Which picture is whose, and how many people to draw, so nobody is drawn twice or merged (2026-11-03).
+  // Which picture is whose, and how many people to draw, so nobody is drawn twice or merged (2026-11-03). Kai and
+  // Mireille have no outfit picture, so their card avatars give their faces; Sol's painted look dresses him (0.36.5).
   assert.match(
     prompt,
-    /Reference images, in order: Kai; Mireille; Sol\. Use them only for each person's face, hair, build and clothing, never for the pose, framing or background\./,
+    /Reference images, in order: Kai; Mireille; Sol\. Use them only for each person's face, hair and build, and for the clothing of Sol, never for the pose, framing or background\./,
   );
-  assert.match(
-    prompt,
-    /Draw exactly three people, each appearing once, with two arms, two legs and five fingers on each visible hand\./,
-  );
+  // 0.36.5: the count, with no limbs or fingers counted (they pulled legs into waist-up shots); the negative names them.
+  assert.match(prompt, /Draw exactly three people, each appearing once\./);
+  assert.doesNotMatch(prompt, /two arms|five fingers/);
+  assert.match(negativePrompt, /bad anatomy, deformed body, merged bodies, fused limbs, extra limbs/);
   assert.doesNotMatch(negativePrompt, /extra people/);
   assert.match(negativePrompt, /child, childlike/);
 });
@@ -856,12 +1015,92 @@ test("Settings → Images lists the Engine's image style profiles, and the one p
   // Unpicked, the Engine's default writes tags; picking Auto makes the story's prompts sentences.
   assert.equal((await images.styleProfile(undefined)).tagged, true);
   assert.equal((await images.styleProfile("auto")).tagged, false);
+  // #2467: a tag profile's style text describes it, so only its tags reach the prompts; a sentence profile keeps it.
+  assert.equal((await images.styleProfile("anime")).styleText, "");
+  assert.equal((await images.styleProfile("anime")).positiveTags, "anime");
+  const prose = createImageClient({
+    baseUrl: "http://127.0.0.1:7860",
+    fetch: (async () =>
+      Response.json({
+        value: JSON.stringify({
+          imageStyleProfiles: {
+            defaultProfileId: "paint",
+            profiles: [{ id: "paint", baseStyle: "painterly", promptMode: "hybrid", styleText: "Soft brushwork." }],
+          },
+        }),
+      })) as typeof globalThis.fetch,
+  });
+  assert.equal((await prose.styleProfile("paint")).styleText, "Soft brushwork.");
   // A list the Engine cannot give reads as empty, never as an error.
   const broken = createImageClient({
     baseUrl: "http://127.0.0.1:7860",
     fetch: (async () => new Response("{}", { status: 500 })) as typeof globalThis.fetch,
   });
   assert.deepEqual(await broken.styleProfiles!(), { defaultProfileId: "", profiles: [] });
+});
+
+test("on an Android app install every loopback request to the Engine carries its local secret (#2357)", async () => {
+  // The Engine there refuses the device's own requests without it, so style profiles and portraits failed with 401.
+  const secret = "c3".repeat(32);
+  const saved = process.env.MARINARA_ANDROID_SECRET;
+  process.env.MARINARA_ANDROID_SECRET = secret;
+  try {
+    const seen: Array<{ path: string; headers: Record<string, string>; body: unknown }> = [];
+    const fetch = (async (url: string | URL, init?: RequestInit) => {
+      const path = String(url).replace("http://127.0.0.1:7860", "");
+      seen.push({ path, headers: { ...(init?.headers as Record<string, string>) }, body: init?.body });
+      if (path === "/api/app-settings/ui") return Response.json({ value: {} });
+      if (path === "/api/characters/avatar-generation")
+        return Response.json({ image: `data:image/png;base64,${PNG}`, prompt: "portrait" });
+      if (path === "/api/global-gallery/upload") return Response.json({ id: "g1", url: "/api/global-gallery/file/g1" });
+      if (path === "/api/sprites/cleanup/status") return Response.json({ cleanupRevision: 2 });
+      if (path === "/original.png")
+        return new Response(Buffer.from(PNG, "base64"), { headers: { "content-type": "image/png" } });
+      if (path === "/api/sprites/cleanup") return Response.json({ cells: [{ base64: PNG }] });
+      return Response.json({}, { status: path.startsWith("/api/global-gallery/") ? 200 : 404 });
+    }) as typeof globalThis.fetch;
+    const images = createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+    await images.styleProfiles!();
+    await images.generatePortrait({ connectionId: "c1", name: "Kai", prompt: "portrait", width: 832, height: 1216 });
+    await images.deleteGalleryImage("g1");
+    const cutouts = createCutoutClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+    await cutouts.cutOut("/original.png");
+    await cutouts.deleteGalleryImage("g2");
+    assert.deepEqual(
+      seen.map(({ path }) => path),
+      [
+        "/api/app-settings/ui",
+        "/api/characters/avatar-generation",
+        "/api/global-gallery/upload",
+        "/api/global-gallery/g1",
+        "/api/sprites/cleanup/status",
+        "/original.png",
+        "/api/sprites/cleanup",
+        "/api/global-gallery/upload",
+        "/api/global-gallery/g2",
+      ],
+    );
+    for (const { path, headers } of seen) assert.equal(headers["x-marinara-android-secret"], secret, path);
+    // The caller's own headers stay, and an upload sets no content type, so fetch still writes the multipart boundary.
+    assert.equal(seen[1]!.headers["Content-Type"], "application/json");
+    for (const upload of seen.filter(({ path }) => path === "/api/global-gallery/upload")) {
+      assert.ok(upload.body instanceof FormData);
+      assert.deepEqual(Object.keys(upload.headers), ["x-marinara-android-secret"]);
+    }
+    // Another address never gets it.
+    const elsewhere: unknown[] = [];
+    await createImageClient({
+      baseUrl: "http://192.168.1.20:7860",
+      fetch: (async (_url: string | URL, init?: RequestInit) => {
+        elsewhere.push(init?.headers);
+        return Response.json({ value: {} });
+      }) as typeof globalThis.fetch,
+    }).styleProfiles!();
+    assert.deepEqual(elsewhere, [undefined]);
+  } finally {
+    if (saved === undefined) delete process.env.MARINARA_ANDROID_SECRET;
+    else process.env.MARINARA_ANDROID_SECRET = saved;
+  }
 });
 
 test("a paid image that never answers ends at its deadline, frees its connection's queue, and its late image is deleted", async () => {
@@ -894,4 +1133,451 @@ test("a paid image that never answers ends at its deadline, frees its connection
     ),
     "ok",
   );
+});
+
+test("a repaint keeps the picture it paints over on screen, keeps it again if it fails, and moves the Album with it", async () => {
+  let fail = false;
+  let held: Promise<void> = Promise.resolve();
+  const t = await sceneWorld("r-m2bart10-jjjjjj", {
+    runKey: "r-m2bart10-jjjjjj",
+    before: async (call) => {
+      if (fail && call.method === "generateBannerArt") throw new Error("provider down");
+      if (call.method === "generateBannerArt") await held;
+    },
+    // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+    engineDeletes: true,
+  });
+  await t.write(1, { cg: CG });
+  const painted = (await readStoredBeat(t.store, t.runId, 1))!;
+  const first = painted.cg!.art!;
+  assert.equal(first.state, "ready");
+  // Shown and read through, so the Album keeps it: a repaint must move the entry, not orphan it.
+  await saveBeat(t.store, t.runId, { ...painted, readThrough: CG.at });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
+  assert.equal((await t.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 200);
+  assert.deepEqual(
+    (await t.state()).album.cgs.map(({ url, ref }) => ({ url, ref })),
+    [{ url: first.url, ref: first.ref }],
+  );
+
+  // While the repaint runs, the record still shows the picture it painted over, so nothing goes blank.
+  let release: () => void = () => undefined;
+  held = new Promise<void>((resolve) => (release = resolve));
+  const repaint = t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  await until(
+    async () => (await readStoredBeat(t.store, t.runId, 1))?.cg?.art?.state === "pending",
+    "the repaint marks its record pending",
+  );
+  const during = (await readStoredBeat(t.store, t.runId, 1))!.cg!.art!;
+  assert.deepEqual([during.state, during.url, during.ref], ["pending", first.url, first.ref], "the old picture stays");
+  release();
+  const done = await repaint;
+  held = Promise.resolve();
+  assert.equal(done.body.art.state, "ready");
+  assert.notEqual(done.body.art.ref, first.ref);
+  assert.deepEqual(t.deleted, [first.ref!.slice("global-gallery:".length)], "the replaced image leaves the gallery");
+  // The Album follows the beat to the new picture rather than holding the one it replaced.
+  assert.deepEqual(
+    (await t.state()).album.cgs.map(({ url, ref }) => ({ url, ref })),
+    [{ url: done.body.art.url, ref: done.body.art.ref }],
+  );
+
+  // A repaint that fails keeps the picture it painted over, beside its error; the record reads failed, never blank.
+  fail = true;
+  const failed = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(failed.body.art.state, "failed");
+  assert.match(failed.body.art.error ?? "", /provider down/);
+  assert.deepEqual([failed.body.art.url, failed.body.art.ref], [done.body.art.url, done.body.art.ref]);
+  assert.equal(t.paid.length, 4, "the failed repaint was paid for once and is not retried by itself");
+});
+
+test("backgrounds and scene art paint on their own connections when chosen; Settings sets and clears them", async () => {
+  const runKey = "r-imgkinds-aaaaaa";
+  const t = await sceneWorld(runKey, {
+    runKey,
+    images: { backgroundConnectionId: "conn-bg", sceneConnectionId: "conn-scene" },
+  });
+  await t.write(1, { cg: CG });
+  await until(() => t.paid.length === 2, "the place and the CG painted");
+  const cg = t.paid.find((paid) => paid.method === "generateBannerArt");
+  const place = t.paid.find((paid) => paid.method !== "generateBannerArt");
+  assert.equal(place?.request.connectionId, "conn-bg");
+  assert.equal(cg?.request.connectionId, "conn-scene");
+
+  // A repaint tap follows the choice made now; "" goes back to the image connection.
+  const settings = routesOf(registerRunRoutes, t.deps, runKey);
+  const saved = await settings("POST", "/runs/:run/settings", { images: { sceneConnectionId: "" } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const images = (await t.world()).images;
+  assert.equal(images.sceneConnectionId, undefined);
+  assert.equal(images.backgroundConnectionId, "conn-bg", "the other choice stays");
+  const repaint = await t.call("POST", "/runs/:run/art/cg", { key: KEY, i: 1 });
+  assert.equal(repaint.status, 200, JSON.stringify(repaint.body));
+  assert.equal(t.paid.at(-1)?.request.connectionId, "conn-image");
+  // Without the image connection nothing is painted, whatever the other two say.
+  await setImages(t.store, t.runId, { connectionId: null });
+  const none = await t.call("POST", "/runs/:run/art/place", { place: "The Lamp Room" });
+  assert.equal(none.status, 503, JSON.stringify(none.body));
+});
+
+test("a NovelAI connection paints in NovelAI's style, with one reference that the prompt dresses (#2465)", async () => {
+  // The Engine's rule: a named service decides, else a NovelAI model or address.
+  assert.equal(paintsWithNovelAi({ imageService: "novelai", model: "nai-diffusion-5-full" }), true);
+  assert.equal(paintsWithNovelAi({ model: "nai-diffusion-5", baseUrl: "" }), true);
+  assert.equal(paintsWithNovelAi({ model: "custom", baseUrl: "https://image.novelai.net" }), true);
+  assert.equal(paintsWithNovelAi({ imageService: "openai", model: "nai-diffusion-5" }), false);
+  assert.equal(paintsWithNovelAi({ model: "gpt-image-1", baseUrl: "https://api.openai.com/v1" }), false);
+
+  const connections = [
+    { id: "conn-gpt", provider: "image_generation", model: "gpt-image-1", baseUrl: "https://api.openai.com/v1" },
+    { id: "conn-nai", provider: "image_generation", model: "nai-diffusion-5-full", imageService: "novelai" },
+  ];
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetch = (async (url: string | URL, init?: RequestInit) => {
+    const path = String(url).replace("http://127.0.0.1:7860", "");
+    if (path === "/api/connections") return Response.json(connections);
+    if (path === "/api/app-settings/ui") return Response.json({ value: {} });
+    if (path === "/api/characters/avatar-generation") {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ image: "data:image/png;base64,iVBORw0KGgo=", prompt: "p" });
+    }
+    return new Response("{}", { status: 404 });
+  }) as typeof globalThis.fetch;
+  const images = createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+  const settings = { connectionId: "conn-gpt", sceneConnectionId: "conn-nai" };
+
+  const background = await worldStyle(images, settings, "background");
+  assert.equal(background.novelai, undefined, "GPT paints the places as the profile says");
+  const scene = await worldStyle(images, settings, "scene");
+  assert.equal(scene.tagged, true);
+  assert.equal(scene.novelai, true);
+  assert.match(scene.positiveTags, new RegExp(`${NOVELAI_QUALITY}$`, "u"));
+  assert.ok(scene.negativeTags.startsWith(NOVELAI_NEGATIVE) && scene.negativeTags.includes("mismatched pupils"));
+
+  const world = normalizeWorld({ images: { connectionId: "conn-gpt", rating: "sfw" } });
+  const people = [
+    { name: "Kai", identityLine: "tall", outfitLine: "coat", presentation: "man" as const },
+    { name: "Ines", identityLine: "short", outfitLine: "oilskin", presentation: "woman" as const },
+  ];
+  const cg = cgPrompt({ brief: "They share an umbrella.", people, world, style: scene, use: "cg" });
+  assert.ok(cg.prompt.startsWith("1girl, 1boy, "), cg.prompt);
+  assert.ok(cg.prompt.endsWith(NOVELAI_QUALITY), cg.prompt);
+  // An explicit key image is drawn uncensored.
+  const adult = normalizeWorld({
+    content: { heat: "explicit" },
+    images: { connectionId: "conn-gpt", rating: "explicit" },
+  });
+  const sex = cgPrompt({
+    brief: "Naked in the lamp room.",
+    people,
+    world: adult,
+    style: scene,
+    use: "cg",
+    explicit: true,
+  });
+  assert.match(sex.prompt, /nsfw, explicit, uncensored/u, sex.prompt);
+  assert.match(sex.negativePrompt, /mosaic censoring, bar censor/u);
+  const place = placePrompt({ name: "Pier", tags: "harbour pier, night", world, style: scene });
+  // #2467: no "background dataset", which would replace the player's Image style with NovelAI's scenery style.
+  assert.ok(!place.prompt.includes("background dataset"), place.prompt);
+
+  const request = { name: "Kai", prompt: "p", negativePrompt: "n", width: 1216, height: 832, debugMode: false };
+  const refs = ["/a.png", "/b.png", "/c.png"];
+  await images.generateImage({ ...request, connectionId: "conn-nai", referenceImages: refs });
+  await images.generateImage({ ...request, connectionId: "conn-gpt", referenceImages: refs });
+  assert.deepEqual(bodies[0]!.referenceImages, ["/a.png"], "NovelAI gets the focus alone");
+  assert.equal(bodies[0]!.preferReferenceOutfit, false, "and the prompt dresses them");
+  assert.deepEqual(bodies[1]!.referenceImages, refs);
+  assert.equal("preferReferenceOutfit" in bodies[1]!, false);
+});
+
+test("0.47.2: on NovelAI a key image of two people sends both their references, and a clothed one names nudity as tags", async () => {
+  const t = await sceneWorld("r-naitwins-aaaaaa");
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-kai",
+    identityLine: "tall man, grey hair",
+    outfitLine: "keeper's coat",
+    bible: bible({ look: { identityLine: "", outfitLine: "", presentation: "man" } }),
+  }));
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    look: { identityLine: "short dark hair", outfitLine: "oilskin", presentation: "woman" },
+  }));
+  // Explicit Heat and the Explicit rating: a key image may be explicit, but this supper's brief is not.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    content: { ...world.content, heat: "explicit" },
+    images: { ...world.images, rating: "explicit" },
+  }));
+  const bodies: Array<Record<string, any>> = [];
+  const json = (value: unknown) =>
+    new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+  const fetch = (async (url: string | URL, init?: RequestInit) => {
+    const path = String(url).replace("http://127.0.0.1:7860", "");
+    if (path === "/api/connections") {
+      return json([{ id: "conn-image", provider: "image_generation", model: "nai-diffusion-5-full" }]);
+    }
+    if (path === "/api/characters/card-kai") return json({ avatarPath: "/api/avatars/file/kai.png" });
+    if (path === "/api/characters/personas/persona-ines") return json({ avatarPath: "/api/avatars/file/ines.png" });
+    if (path.startsWith("/api/avatars/file/") || path.startsWith("/api/global-gallery/file/")) {
+      return new Response(Buffer.from(path), { headers: { "content-type": "image/png" } });
+    }
+    if (path === "/api/app-settings/ui") return json({ value: {} });
+    if (path === "/api/characters/avatar-generation") {
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
+      return json({ image: `data:image/png;base64,${PNG}`, prompt: body.promptOverrides[0].prompt });
+    }
+    if (path === "/api/global-gallery/upload") return json({ id: "cg1", url: "/api/global-gallery/file/cg1.png" });
+    return new Response(JSON.stringify({ error: "no" }), { status: 404 });
+  }) as typeof globalThis.fetch;
+  const deps = { ...t.deps, images: createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch }) };
+  const paint = async (i: number, cast: string[]) => {
+    const written = await saveBeat(
+      t.store,
+      t.runId,
+      beat(i, { cg: { at: 0, brief: "Supper at his table.", cast }, places: [] }),
+    );
+    await queueScenePaints(deps, t.runId, written, { debugMode: false });
+    assert.equal((await readStoredBeat(t.store, t.runId, i))?.cg?.art?.state, "ready");
+    return bodies.at(-1)!;
+  };
+
+  // With his reference alone, NovelAI drew both with his face and hair (2026-11-26); V5 tells several apart.
+  const both = await paint(1, ["Kai", "Ines"]);
+  assert.equal(both.referenceImages.length, 2, "two people: a reference each");
+  assert.deepEqual(
+    both.referenceImages.map((image: string) => Buffer.from(image.split(",")[1]!, "base64").toString()),
+    ["/api/avatars/file/kai.png", "/api/avatars/file/ines.png"],
+  );
+  assert.equal(both.preferReferenceOutfit, false, "the prompt dresses them");
+  const { prompt, negativePrompt } = both.promptOverrides[0];
+  assert.ok(prompt.startsWith("1girl, 1boy, "), prompt);
+  assert.match(prompt, /Kai: tall man, grey hair; keeper's coat\./);
+  assert.match(prompt, /Ines: short dark hair; oilskin\./);
+  assert.doesNotMatch(prompt, /nsfw|explicit|uncensored/u, "a clothed brief asks for nothing explicit");
+  // Tag models skip "nudity"; the tags reach them (a NovelAI supper came out topless, 2026-11-26).
+  assert.match(negativePrompt, /nudity, explicit sexual activity, nude, topless, nipples, sex/u);
+
+  // One person: their reference alone, which the prompt dresses.
+  const alone = await paint(2, ["Kai"]);
+  assert.equal(alone.referenceImages.length, 1);
+  assert.equal(alone.preferReferenceOutfit, false);
+
+  // Only the people's pictures go: a worn outfit or a place after them would be read as someone else.
+  const request = { name: "Kai", prompt: "p", negativePrompt: "n", width: 1216, height: 832, debugMode: false };
+  await deps.images.generateImage({
+    ...request,
+    connectionId: "conn-image",
+    referenceImages: ["/kai.png", "/ines.png", "/place.png"],
+    characters: 2,
+  });
+  assert.deepEqual(bodies.at(-1)!.referenceImages, ["/kai.png", "/ines.png"]);
+  // Nobody pictured (a photo of two with no picture of either): the place is never sent as a person.
+  await deps.images.generateImage({
+    ...request,
+    connectionId: "conn-image",
+    referenceImages: ["/place.png"],
+    characters: 0,
+  });
+  assert.equal(bodies.at(-1)!.referenceImages, undefined);
+  assert.equal("preferReferenceOutfit" in bodies.at(-1)!, false);
+
+  // Someone with no picture at all counts as nobody, so the worn outfit added after Kai's face never takes their slot.
+  await deps.images.generateBannerArt({
+    ...request,
+    connectionId: "conn-image",
+    units: [
+      {
+        kind: "character",
+        cardId: "card-kai",
+        outfits: [{ id: "coat", url: "/api/global-gallery/file/kai-coat.png" }],
+        wornOutfit: "coat",
+        who: "Kai",
+      },
+      { kind: "character", personaId: "persona-nobody", who: "Ines" },
+    ] as never,
+  });
+  const sent = bodies
+    .at(-1)!
+    .referenceImages.map((image: string) => Buffer.from(image.split(",")[1]!, "base64").toString());
+  assert.deepEqual(sent, ["/api/avatars/file/kai.png"]);
+});
+
+// ── 0.47.1: Your cast's paints go on in the background ──
+
+/** A cast whose looks wait for the tap, with Kai painted on a gallery look and Expressions on; `n` gates paid call n. */
+async function castWorld(runKey: string, gated: number) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let failNext = false;
+  const t = await artWorld({
+    runKey,
+    // Ask before painting: a read of the run paints nothing by itself.
+    images: { ask: true, expressions: true },
+    before: async (_call, n) => {
+      if (n === gated) await gate;
+      if (failNext) throw new Error("the image service refused it");
+    },
+  });
+  const art = createOtomeArt(t.deps);
+  const deps = { ...t.deps, art };
+  const look = "/api/global-gallery/file/kai-look.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: look,
+    portraitRef: "global-gallery:kai-look",
+    art: { state: "ready", at: "2026-10-28T09:00:00.000Z", url: look, ref: "global-gallery:kai-look" },
+  }));
+  const kai = async () => (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  const viewOf = async () =>
+    (await routesOf(registerRunRoutes, deps, runKey)("GET", "/runs/:run")).body.view.lis.find(
+      (li: { id: string }) => li.id === KAI,
+    );
+  return {
+    ...t,
+    art,
+    deps,
+    look,
+    kai,
+    viewOf,
+    setup: routesOf(registerSetupRoutes, deps, runKey),
+    release: () => release(),
+    failNext: () => (failNext = true),
+  };
+}
+
+test("Repaint answers with its pending record and paints on without the request; a second tap never pays twice", async (context) => {
+  const t = await castWorld("r-bgpaint1-aaaaaa", 1);
+  context.after(() => (t.release(), t.art.dispose()));
+  const target = { kind: "look", owner: `li:${KAI}` };
+  const started = await t.setup("POST", "/runs/:run/art/paint", { target });
+  assert.deepEqual([started.status, started.body.paint.state], [200, "pending"], JSON.stringify(started.body));
+  await until(() => t.paid.length === 1, "the paid portrait");
+  // The request has answered; the run view shows the paint going on, and his old look stays meanwhile.
+  const painting = await t.viewOf();
+  assert.deepEqual([painting.art.state, painting.portrait], ["pending", t.look]);
+  const again = await t.setup("POST", "/runs/:run/art/paint", { target });
+  assert.deepEqual([again.status, again.body.code], [409, "busy"]);
+  assert.equal(t.paid.length, 1, "a second tap while it paints never pays");
+  t.release();
+  await paintSettled(t.runId, `li:${KAI}`);
+  const unit = await t.kai();
+  assert.equal(unit.art?.state, "ready");
+  assert.equal(unit.portrait, unit.art?.url, "the new picture is in");
+  const landed = await t.viewOf();
+  assert.deepEqual([landed.art.state, landed.portrait], ["ready", unit.portrait]);
+  assert.equal(t.paid.length, 1);
+});
+
+test("Repaint expressions answers pending and its faces paint on; the run view says painting, then failed or nothing", async (context) => {
+  const t = await castWorld("r-bgpaint2-aaaaaa", 1);
+  context.after(() => (t.release(), t.art.dispose()));
+  const started = await t.setup("POST", "/runs/:run/art/expressions", { li: KAI });
+  assert.deepEqual([started.status, started.body.paint.state], [200, "pending"], JSON.stringify(started.body));
+  assert.deepEqual((await t.viewOf()).facesPaint?.state, "pending", "painting, from before the first face");
+  await until(() => t.paid.length === 1, "the first paid face");
+  // The same set asked for again joins the one painting: nothing more is paid for.
+  const again = await t.setup("POST", "/runs/:run/art/expressions", { li: KAI, base: t.look });
+  assert.deepEqual([again.status, again.body.paint.state], [200, "pending"]);
+  t.release();
+  await paintSettled(t.runId, `faces:${KAI}`);
+  assert.equal(t.paid.length, FACES.length, "five faces, once");
+  const landed = await t.viewOf();
+  assert.equal(landed.facesPaint, undefined, "landed: nothing more to say");
+  assert.deepEqual(Object.keys(landed.expressions ?? {}).sort(), [...FACES].sort());
+
+  // A set that fails says so with its reason, and Repaint expressions paints it again.
+  t.failNext();
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const failed = await t.viewOf();
+  assert.equal(failed.facesPaint?.state, "failed");
+  assert.match(failed.facesPaint?.error ?? "", /refused/);
+  assert.deepEqual(Object.keys(failed.expressions ?? {}).sort(), [...FACES].sort(), "the old faces stay");
+
+  // A set a restart left pending reads as stopped.
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => {
+    const record = unit.expressions[t.look] as Record<string, unknown>;
+    const replacement = { state: "pending", at: "2026-10-28T09:00:00.000Z", images: {} };
+    return { ...unit, expressions: { ...unit.expressions, [t.look]: { ...record, replacement } } };
+  });
+  assert.equal((await t.viewOf()).facesPaint?.state, "stopped");
+});
+
+test("a Repaint expressions that lands while the run is read reads pending beside the faces from before it, never stopped", async (context) => {
+  const t = await castWorld("r-bgpaint4-aaaaaa", 1);
+  context.after(() => (t.release(), t.art.dispose()));
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await until(() => t.paid.length === 1, "the first paid face");
+  // The read's cut-out check (after its documents were read) waits until the set has landed.
+  const cutouts = t.deps.cutouts!;
+  let landDuringRead = true;
+  cutouts.cleanupRevision = async () => {
+    if (landDuringRead) {
+      landDuringRead = false;
+      t.release();
+      await paintSettled(t.runId, `faces:${KAI}`);
+    }
+    return undefined;
+  };
+  const read = await t.viewOf();
+  assert.equal(landDuringRead, false, "the set landed during the read");
+  assert.deepEqual([read.facesPaint?.state, read.expressions ?? {}], ["pending", {}], "so the client reads again");
+  const next = await t.viewOf();
+  assert.equal(next.facesPaint, undefined);
+  assert.deepEqual(Object.keys(next.expressions ?? {}).sort(), [...FACES].sort());
+});
+
+test("a Repaint expressions that lands while the run's units are read reads pending, never stopped", async (context) => {
+  const t = await castWorld("r-bgpaint5-aaaaaa", 1);
+  const readDoc = t.store.readDoc;
+  context.after(() => ((t.store.readDoc = readDoc), t.release(), t.art.dispose()));
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await until(() => t.paid.length === 1, "the first paid face");
+  // Kai's unit is read with his replacement still pending; the set lands before Mireille's read (beside it) returns.
+  let kaiRead: Promise<unknown> | null = null;
+  let landDuringRead = true;
+  t.store.readDoc = (async (id: string, normalize: Parameters<typeof readDoc>[1]) => {
+    const read = readDoc(id, normalize);
+    if (id === unitId(t.runId, KAI)) kaiRead ??= read;
+    if (id === unitId(t.runId, MIR) && kaiRead && landDuringRead) {
+      landDuringRead = false;
+      await kaiRead;
+      t.release();
+      await paintSettled(t.runId, `faces:${KAI}`);
+    }
+    return read;
+  }) as typeof readDoc;
+  const read = await t.viewOf();
+  t.store.readDoc = readDoc;
+  assert.equal(landDuringRead, false, "the set landed during the read");
+  assert.deepEqual([read.facesPaint?.state, read.expressions ?? {}], ["pending", {}], "so the client reads again");
+  const next = await t.viewOf();
+  assert.equal(next.facesPaint, undefined);
+  assert.deepEqual(Object.keys(next.expressions ?? {}).sort(), [...FACES].sort());
+});
+
+test("Repaint expressions the kit ends before it starts (the look cannot be read) reads stopped, and the next one paints", async (context) => {
+  const t = await castWorld("r-bgpaint3-aaaaaa", 0);
+  context.after(() => t.art.dispose());
+  const read = t.images.cardAvatarImage;
+  t.images.cardAvatarImage = async () => null;
+  const started = await t.setup("POST", "/runs/:run/art/expressions", { li: KAI });
+  assert.deepEqual([started.status, started.body.paint.state], [200, "pending"], JSON.stringify(started.body));
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const ended = await t.viewOf();
+  assert.equal(ended.facesPaint?.state, "stopped", "Your cast says it did not finish, with Repaint expressions");
+  assert.deepEqual([t.paid.length, ended.expressions ?? {}], [0, {}], "nothing was paid for or filed");
+
+  // Repaint expressions again paints the set, and the run view has nothing more to say once it lands.
+  t.images.cardAvatarImage = read;
+  assert.equal((await t.setup("POST", "/runs/:run/art/expressions", { li: KAI })).status, 200);
+  await paintSettled(t.runId, `faces:${KAI}`);
+  const landed = await t.viewOf();
+  assert.deepEqual([landed.facesPaint, t.paid.length], [undefined, FACES.length]);
 });

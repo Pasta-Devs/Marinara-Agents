@@ -77,6 +77,15 @@ export const ltmInteropPreviewSampleSchema = z.discriminatedUnion("status", [
       existingNoteTitle: z.string().min(1).max(240),
     })
     .strict(),
+  // A branch summary whose messages another chat of its conversation already saved. `coveredBy` is that chat's
+  // source note: the row links to it read only, and no row action acts on it.
+  ltmInteropPreviewSampleBaseSchema
+    .extend({
+      status: z.literal("covered"),
+      freshness: z.literal("current"),
+      coveredBy: z.object({ noteId: ltmNoteIdSchema, title: z.string().min(1).max(240) }).strict(),
+    })
+    .strict(),
 ]);
 
 // A source note whose source no preview candidate matches any more. Only reported by an unfiltered first page.

@@ -25,6 +25,11 @@ export interface PickerItem {
   /** The crop chosen for the avatar in the Engine, when it has one. */
   avatarCrop: AvatarCrop | null;
   detail: string;
+  /**
+   * The card's or persona's title / comment in the Engine ("Modern AU version"), "" without one (#2365): it tells
+   * apart two cards with the same name.
+   */
+  title: string;
 }
 
 type Row = Record<string, unknown>;
@@ -43,6 +48,7 @@ export const engineResourceKeys = {
   musicFolders: ["otome-forge", "engine", "music-folders"] as const,
   characters: ["otome-forge", "engine", "characters"] as const,
   personas: ["otome-forge", "engine", "personas"] as const,
+  backgrounds: ["otome-forge", "engine", "backgrounds"] as const,
 };
 
 function isRecord(value: unknown): value is Row {
@@ -77,8 +83,14 @@ function toItem(row: Row): PickerItem[] {
       avatarUrl: text(row.avatarPath).trim() || null,
       avatarCrop: avatarCropOf(row.avatarCrop),
       detail: detailOf(row.summary, row.description),
+      title: text(row.comment).replace(/\s+/g, " ").trim(),
     },
   ];
+}
+
+/** Whether a picker item's name or title contains `query` (already lower-cased). */
+export function pickerMatches(item: Pick<PickerItem, "name" | "title">, query: string): boolean {
+  return item.name.toLocaleLowerCase().includes(query) || item.title.toLocaleLowerCase().includes(query);
 }
 
 /**
@@ -110,6 +122,50 @@ export function useMusicFolders() {
   return { folders: query.data ?? [], ...loadState(query) };
 }
 
+// ── Backgrounds (#2147) ──
+
+export interface BackgroundOption {
+  url: string;
+  /** The file's name without its extension. */
+  name: string;
+  tags: string[];
+}
+
+/** The library's raster backgrounds (the player's and Game Assets'), favourites first; S/art/image-client.ts's rule. */
+function toBackgrounds(rows: Row[]): BackgroundOption[] {
+  const listed = rows.flatMap((row) => {
+    const url = text(row.url);
+    if (!/^\/api\/(?:backgrounds|game-assets)\/file\/[^?#\\]+\.(?:png|jpe?g|webp|gif|avif)$/iu.test(url)) return [];
+    const name = (text(row.filename) || safeDecode(url.split("/").pop() ?? "")).replace(/\.[^.]+$/u, "");
+    const tags = Array.isArray(row.tags) ? row.tags.map(text).filter(Boolean) : [];
+    return [{ url, name, tags, favorite: row.favorite === true || row.favorite === "true" }];
+  });
+  return listed
+    .sort((a, b) => Number(b.favorite) - Number(a.favorite))
+    .map(({ favorite: _favorite, ...background }) => background);
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+const NO_BACKGROUNDS: BackgroundOption[] = [];
+
+/** The Engine's background library, for choosing a place's picture without painting it. */
+export function useEngineBackgrounds() {
+  const query = useQuery({
+    queryKey: engineResourceKeys.backgrounds,
+    queryFn: async () => rowsOf(await api.get<unknown>("/backgrounds")),
+    staleTime: STALE_TIME,
+    select: toBackgrounds,
+  });
+  return { backgrounds: query.data ?? NO_BACKGROUNDS, ...loadState(query) };
+}
+
 // ── Connections ──
 
 export interface ConnectionLists {
@@ -117,12 +173,21 @@ export interface ConnectionLists {
   image: ConnectionOption[];
   /** Audio connections that make music (`provider === "audio_generation"`, music on). */
   music: ConnectionOption[];
+  /**
+   * Text connections with an embedding model of their own (Memory recall embeddings): an Embedding model set, or an
+   * Embedding Connection that has one (or the Local Model sidecar). The server checks the choice when it is saved.
+   */
+  embeddings: ConnectionOption[];
 }
 
-const NO_CONNECTIONS: ConnectionLists = { text: [], image: [], music: [] };
+const NO_CONNECTIONS: ConnectionLists = { text: [], image: [], music: [], embeddings: [] };
+/** The Engine's Local Model sidecar as an Embedding Connection (shared LOCAL_SIDECAR_CONNECTION_ID). */
+const LOCAL_SIDECAR_ID = "__local_sidecar__";
 
 function toConnectionLists(rows: Row[]): ConnectionLists {
-  const lists: ConnectionLists = { text: [], image: [], music: [] };
+  const lists: ConnectionLists = { text: [], image: [], music: [], embeddings: [] };
+  const withModel = new Set(rows.filter((row) => text(row.embeddingModel).trim()).map((row) => text(row.id)));
+  withModel.add(LOCAL_SIDECAR_ID);
   for (const row of rows) {
     const id = text(row.id);
     const provider = text(row.provider);
@@ -138,9 +203,13 @@ function toConnectionLists(rows: Row[]): ConnectionLists {
     if (provider === IMAGE_PROVIDER) lists.image.push(option);
     else if (provider === AUDIO_PROVIDER) {
       if (row.audioMusic === "true" || row.audioMusic === true) lists.music.push(option);
-    } else if (!NON_TEXT_PROVIDERS.has(provider)) lists.text.push(option);
+    } else if (!NON_TEXT_PROVIDERS.has(provider)) {
+      lists.text.push(option);
+      if (withModel.has(id) || withModel.has(text(row.embeddingConnectionId))) lists.embeddings.push(option);
+    }
   }
   lists.text.sort(byName);
+  lists.embeddings.sort(byName);
   lists.image.sort(byName);
   lists.music.sort(byName);
   return lists;

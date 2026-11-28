@@ -1,6 +1,7 @@
 import { slurpPpvPrice } from "../economy/slp-media-offer.js";
 import { SLURP_RAPPORT_CUSTOM_DISCOUNT, slurpRapportOpens, type SlurpRapport } from "./slp-rapport.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Paid sexting sessions (docs/SPICY.md, item 2): the fan buys 20 minutes of her, the heat rises in three
  * phases, she answers fast, and once she offers a PPV picture of what she is doing right now.
@@ -30,7 +31,7 @@ export function slurpSextingStart(at: Date): SlurpSexting {
 /** The phase now, or null when no session runs: the first 30% warm up, the last 20% finish. */
 export function slurpSextingPhase(
   session: SlurpSexting | null | undefined,
-  now = Date.now(),
+  now = slurpWorldNowMs(),
 ): SlurpSextingPhase | null {
   if (!session) return null;
   const start = Date.parse(session.startedAt);

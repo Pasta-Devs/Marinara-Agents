@@ -46,7 +46,7 @@ import {
 import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
 import { createChatsStorage } from "../../../services/storage/chats.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { SLURP_PLATFORM_CONTEXT } from "../../modules/prompting/slp-prompt.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { resolveSlurpCreatorFlavour } from "../../data/creators/slp-flavour-source.js";
@@ -55,6 +55,7 @@ import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /**
@@ -240,7 +241,7 @@ export async function generateCreatorReply(input: {
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
   const characterCanon = await resolveCreatorCharacterCanon(input.db, source, disclosureMode);
   const scheduleContext = source
-    ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source, undefined, new Date())
+    ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source, undefined, slurpWorldNow())
     : undefined;
   // Who this commenter is to this Creator. Read from the funnel and from whether they subscribe,
   // both of which were already recorded and never reached this prompt.
@@ -283,7 +284,7 @@ export async function generateCreatorReply(input: {
     creatorCondition,
     imageContext: imageContexts.get(input.post.id),
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
-    platformEvents: await resolveSlurpEventInstruction(input.db, input.creator.id, new Date()),
+    platformEvents: await resolveSlurpEventInstruction(input.db, input.creator.id, slurpWorldNow()),
     promptBlocks: prompts.blocks,
     promptInstructions: prompts.instructions,
   });
@@ -361,7 +362,7 @@ async function describeCommenterRelationship(
       const arc = slurpAudienceArcDescription(tie.audienceArc);
       if (arc) parts.push(arc);
       if (tie.spent > 0) parts.push(`has spent ${tie.spent} coins on you`);
-      const days = Math.round((Date.now() - Date.parse(tie.firstSeenAt)) / 86_400_000);
+      const days = Math.round((slurpWorldNowMs() - Date.parse(tie.firstSeenAt)) / 86_400_000);
       if (Number.isFinite(days) && days >= 14)
         parts.push(`around for ${days >= 90 ? `${Math.round(days / 30)} months` : `${Math.round(days / 7)} weeks`}`);
     }

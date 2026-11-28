@@ -23,6 +23,7 @@ import {
 import { mapMessage, now } from "./slp-messages-storage-helpers.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { int } from "./slp-messages-storage-helpers.js";
+import { slurpInEngineRoleplay } from "./slp-engine-roleplay-storage.js";
 import { isUnsolicitedCreatorMessage, slurpAllowsUnsolicitedText } from "../../modules/messages/slp-follow-up.js";
 import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
 import type { SlurpMessage } from "./slp-messages-storage-types.js";
@@ -101,9 +102,15 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
       // every send path shares — including the ones that call `sendCreatorMessage` directly and
       // never pass through the follow-up scheduler's own, earlier, AI-spend-saving check.
       const checkUnsolicitedGate = isUnsolicitedCreatorMessage({ role: input.role, kind, metadata: input.metadata });
-      const pauseUntilReply = checkUnsolicitedGate
-        ? (await slurp.getSettings()).messagesPauseFollowUpsUntilReply
-        : false;
+      const gateSettings = checkUnsolicitedGate ? await slurp.getSettings() : null;
+      // "Pause Creator DMs", or the Creator is in an Engine roleplay: an unasked text is dropped, never held.
+      if (
+        gateSettings?.messagesCreatorDmsPaused ||
+        (checkUnsolicitedGate && slurpInEngineRoleplay(thread.creatorAccountId))
+      ) {
+        return null;
+      }
+      const pauseUntilReply = gateSettings?.messagesPauseFollowUpsUntilReply ?? false;
       let stored = false;
       try {
         await db.transaction(async (tx) => {
@@ -446,6 +453,10 @@ export function createMessagesStorageConversation(context: SlurpMessagesContext)
         Boolean(await slurp.getNoodlerAccountById(viewerAccountId)) ||
         Boolean(await createSlurpPopulationStorage(db).get(viewerAccountId));
       if (!counterpartExists) return null;
+      // "Pause Creator DMs": an unasked text must not even open an empty chat before the gate drops it.
+      const unasked = isUnsolicitedCreatorMessage({ role: "creator", kind: input.kind, metadata: input.metadata });
+      const busy = slurpInEngineRoleplay(creatorAccountId);
+      if (unasked && (busy || (await slurp.getSettings()).messagesCreatorDmsPaused)) return null;
       const opened = await context.storage.openThread(viewerAccountId, creatorAccountId, "creator");
       if (opened.status !== "ok") return null;
       return context.storage.appendMessage(opened.thread.id, {

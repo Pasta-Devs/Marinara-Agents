@@ -22,6 +22,7 @@ import { slpWalletRoutes } from "./features/economy/slp-wallet-routes.js";
 import { slpFeedPostRoutes } from "./features/feed/slp-feed-post-routes.js";
 import { slpFeedPublishingRoutes } from "./features/feed/slp-feed-publishing-routes.js";
 import { slpFeedViewerRoutes } from "./features/feed/slp-feed-viewer-routes.js";
+import { loadSlurpWorldClock } from "./data/settings/slp-world-clock-storage.js";
 import { slpBackupRoutes } from "./features/maintenance/slp-backup-routes.js";
 import { slpMaintenanceRoutes } from "./features/maintenance/slp-maintenance-routes.js";
 import { slpMessagesRoutes } from "./features/messages/slp-messages-routes.js";
@@ -61,6 +62,7 @@ const lifecycle = createSlurpActivationLifecycle();
 
 /** Every Slurp HTTP route. Shared handles and mutable route state are created once, here. */
 export async function mountSlpRoutes(app: FastifyInstance) {
+  await loadSlurpWorldClock(app.db);
   const noodle = createSlurpStorage(app.db);
   const population = createSlurpPopulationStorage(app.db);
   const messages = createSlurpMessagesStorage(app.db);

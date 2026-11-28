@@ -2,8 +2,10 @@
 // from the committed payloads, write a reproducible artifact zip, and update the
 // catalog family. The client.js and server.mjs payloads are contributed as pre-built
 // esbuild bundles from the package's own source tree, which lives outside this
-// repository; this builder never regenerates them — it only re-derives everything
-// the catalog checks from the committed bytes.
+// repository. The builder replays the hand edits recorded in the package's
+// bundle-patches.json (Gacha Forge's replay, which reads any package's ledger), then
+// re-derives everything the catalog checks from the committed bytes.
+import { rebuildGachaBundles } from "./gacha-forge-bundle-patches.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
@@ -19,6 +21,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/modern-life-sim");
 const artifactsDir = join(repoRoot, "artifacts");
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+await rebuildGachaBundles(new URL("../packages/modern-life-sim/", import.meta.url));
 
 const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
 manifest.description = withPackageActivationGuidance(manifest.id, manifest.description);

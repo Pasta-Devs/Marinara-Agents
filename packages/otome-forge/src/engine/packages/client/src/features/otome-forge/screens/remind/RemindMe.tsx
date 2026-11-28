@@ -8,9 +8,11 @@
 // GET /runs/:run/calendar → CalendarView, read defensively. Tracker data is read here and never sent anywhere: this
 // screen makes no request with it. It follows changes made in another tab (C/screens/home/HomeScreen.tsx useCycle).
 // Days follow the conversation's time zone.
+// #2153: while a love interest's birthday can be celebrated (the day and the 7 after it, the calendar's `celebrate`),
+// Celebrate tops the screen: Celebrate opens BirthdaySheet, and a scene already made but not read offers Play the scene.
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Cake,
   CalendarHeart,
@@ -43,9 +45,11 @@ import { isMonthDay, readProfile, writeProfile } from "../../lib/cycle-storage";
 import { localDay } from "../../lib/tap-mood";
 import { useOtomeProps } from "../../props";
 import type { CalendarView, LiId, RunLiView, RunView } from "../../shared/api-types";
+import { BIRTHDAY_LATE_DAYS, birthdayIn, birthdaySceneKey } from "../../shared/birthdays";
 import { PALETTE } from "../../theme/tokens";
 import { useCycle, useMinute } from "../home/HomeScreen";
 import { Section } from "../setup/parts";
+import { BirthdaySheet } from "./BirthdaySheet";
 
 export const calendarQueryKey = (runKey: string) => ["otome-forge", "calendar", runKey] as const;
 
@@ -84,20 +88,24 @@ export function readCalendar(value: unknown): CalendarView {
     bannerEnds: rows(answer.bannerEnds).flatMap((row) =>
       isDayKey(row.day) && text(row.banner) ? [{ day: row.day, banner: text(row.banner) }] : [],
     ),
+    // #2153: the birthdays to celebrate now (absent from an older server, and when there are none).
+    celebrate: rows(answer.celebrate).flatMap((row) => {
+      const late = Number.isInteger(row.daysLate) ? (row.daysLate as number) : -1;
+      return text(row.li) && isDayKey(row.day) && late >= 0 && late <= BIRTHDAY_LATE_DAYS
+        ? [{ li: text(row.li), day: row.day, daysLate: late, started: row.started === true }]
+        : [];
+    }),
   };
 }
 
 // ── Days ──
 
-const leap = (year: number) => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 const yearOf = (dayKey: string) => Number(dayKey.slice(0, 4));
 const monthKeyOf = (dayKey: string) => dayKey.slice(0, 7);
 const daysIn = (monthKey: string) =>
   new Date(Date.UTC(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)), 0)).getUTCDate();
 /** 0 = Sunday … 6 = Saturday (1970-01-01 was a Thursday). */
 const weekdayOf = (dayKey: string) => (((dayNumber(dayKey) + 4) % 7) + 7) % 7;
-/** A yearly "MM-DD" in `year`; 02-29 falls on 02-28 when the year has none. */
-const inYear = (md: string, year: number) => `${year}-${md === "02-29" && !leap(year) ? "02-28" : md}`;
 const utc = (dayKey: string) => new Date(dayNumber(dayKey) * 86_400_000);
 
 /** The same day of the month `delta` months on, cut to that month's length. */
@@ -152,11 +160,11 @@ function eventsBetween(from: string, to: string, sources: DaySources): Map<strin
   for (let year = yearOf(from); year <= yearOf(to); year += 1) {
     for (const { li, md } of sources.calendar.birthdays) {
       const person = liOf(li);
-      if (person) add(inYear(md, year), { kind: "birthday", li: person });
+      if (person) add(birthdayIn(md, year), { kind: "birthday", li: person });
     }
-    if (sources.birthday) add(inYear(sources.birthday, year), { kind: "mine" });
+    if (sources.birthday) add(birthdayIn(sources.birthday, year), { kind: "mine" });
     for (const { md, label, li, year: since } of sources.calendar.anniversaries) {
-      if (since === undefined || year >= since) add(inYear(md, year), { kind: "anniversary", label, li: liOf(li) });
+      if (since === undefined || year >= since) add(birthdayIn(md, year), { kind: "anniversary", label, li: liOf(li) });
     }
   }
   for (const { day, banner } of sources.calendar.bannerEnds) add(day, { kind: "banner", banner });
@@ -211,9 +219,11 @@ interface RemindMeProps {
   runKey: string;
   view: RunView;
   onOpenTracker: () => void;
+  /** #2153: opens a birthday scene in the reader, coming back here. */
+  onOpenStory: (key: string) => void;
 }
 
-export function RemindMe({ runKey, view, onOpenTracker }: RemindMeProps) {
+export function RemindMe({ runKey, view, onOpenTracker, onOpenStory }: RemindMeProps) {
   const { t, i18n } = useTranslation();
   const otome = useOtomeApi();
   const { timeZone, localization } = useOtomeProps();
@@ -224,6 +234,10 @@ export function RemindMe({ runKey, view, onOpenTracker }: RemindMeProps) {
   const [selected, setSelected] = useState(today);
   // 0, or a count of the changes this browser didn't keep: each one is announced afresh.
   const [notKept, setNotKept] = useState(0);
+  // #2153: the love interest whose birthday the sheet is celebrating.
+  const [celebrating, setCelebrating] = useState<RunLiView | null>(null);
+  const wasCelebrating = useRef(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const focusDay = useRef(false);
   const gridRef = useRef<HTMLTableElement>(null);
   const monthTitleId = useId();
@@ -232,8 +246,15 @@ export function RemindMe({ runKey, view, onOpenTracker }: RemindMeProps) {
     queryKey: calendarQueryKey(runKey),
     queryFn: async () => readCalendar(await otome.get<unknown>(`${runPath(runKey)}/calendar`)),
   });
+  const queryClient = useQueryClient();
+  const refreshCalendar = () => queryClient.invalidateQueries({ queryKey: calendarQueryKey(runKey) });
   const days = calendar.data ?? { birthdays: [], anniversaries: [], bannerEnds: [] };
   const sources: DaySources = { calendar: days, lis: view.lis, birthday, cycle, today };
+  // #2153: the birthdays to celebrate, for love interests still in the cast.
+  const celebrate = (days.celebrate ?? []).flatMap((offer) => {
+    const li = view.lis.find((entry) => entry.id === offer.li);
+    return li ? [{ offer, li }] : [];
+  });
 
   const month = monthKeyOf(selected);
   const first = `${month}-01`;
@@ -248,6 +269,7 @@ export function RemindMe({ runKey, view, onOpenTracker }: RemindMeProps) {
       month: make({ month: "long", year: "numeric" }),
       full: make({ weekday: "long", month: "long", day: "numeric", year: "numeric" }),
       short: make({ month: "short", day: "numeric" }),
+      until: make({ weekday: "long", month: "long", day: "numeric" }),
       weekdayShort: make({ weekday: "narrow" }),
       weekdayLong: make({ weekday: "long" }),
       relative: new Intl.RelativeTimeFormat(language, { numeric: "auto" }),
@@ -284,6 +306,14 @@ export function RemindMe({ runKey, view, onOpenTracker }: RemindMeProps) {
     focusDay.current = focus;
     setSelected(day);
   };
+  // #2153: a sheet whose birthday left the calendar (a 404) has no Celebrate to give focus back to: the title takes it.
+  useEffect(() => {
+    if (wasCelebrating.current === !!celebrating) return;
+    wasCelebrating.current = !!celebrating;
+    if (!celebrating && (document.activeElement === document.body || !document.activeElement?.isConnected)) {
+      titleRef.current?.focus({ preventScroll: true });
+    }
+  }, [celebrating]);
   useEffect(() => {
     if (!focusDay.current) return;
     focusDay.current = false;
@@ -358,11 +388,65 @@ export function RemindMe({ runKey, view, onOpenTracker }: RemindMeProps) {
   return (
     <div className="of-page of-remind">
       <div className="of-page-head of-page-head--compact">
-        <h1 className="of-title of-title--page" tabIndex={-1}>
+        <h1 ref={titleRef} className="of-title of-title--page" tabIndex={-1}>
           {t("ui.otomeForge.common.screenRemind")}
         </h1>
         <p className="of-hint">{t("ui.otomeForge.remind.intro")}</p>
       </div>
+
+      {celebrate.length ? (
+        <Section title={t("ui.otomeForge.remind.celebrateTitle")}>
+          <ul className="of-celebrate">
+            {celebrate.map(({ offer, li }) => (
+              <li key={offer.li}>
+                <EventIcon event={{ kind: "birthday", li }} size={18} />
+                <span className="of-celebrate-text">
+                  {offer.daysLate
+                    ? t("ui.otomeForge.remind.birthdayLate", {
+                        name: li.name,
+                        count: offer.daysLate,
+                        date: formats.until.format(utc(addDays(offer.day, BIRTHDAY_LATE_DAYS))),
+                      })
+                    : t("ui.otomeForge.remind.birthdayToday", { name: li.name })}
+                </span>
+                {offer.started ? (
+                  <button
+                    type="button"
+                    className="of-button of-button--quiet of-button--small of-glass"
+                    aria-label={t("ui.otomeForge.shop.playSceneLabel", { name: li.name })}
+                    onClick={() => onOpenStory(birthdaySceneKey(li.id, yearOf(offer.day)))}
+                  >
+                    {t("ui.otomeForge.shop.playScene")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="of-button of-button--primary of-button--small"
+                    aria-label={t("ui.otomeForge.birthday.celebrateName", { name: li.name })}
+                    onClick={() => setCelebrating(li)}
+                  >
+                    <Cake size={14} strokeWidth={2} aria-hidden="true" />
+                    {t("ui.otomeForge.birthday.celebrate")}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+      {celebrating ? (
+        <BirthdaySheet
+          runKey={runKey}
+          view={view}
+          li={celebrating}
+          onClose={() => setCelebrating(null)}
+          onCelebrated={(key) => {
+            void refreshCalendar();
+            onOpenStory(key);
+          }}
+          onStale={refreshCalendar}
+        />
+      ) : null}
 
       <section className="of-month of-glass" aria-labelledby={monthTitleId}>
         <div className="of-month-head">

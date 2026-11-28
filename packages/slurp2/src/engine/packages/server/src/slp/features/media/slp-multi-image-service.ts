@@ -46,7 +46,7 @@ export async function generateSlurpSecondaryImages(
         visualBrief: shot.visualBrief,
         previewOnly: false,
       });
-      // Stored as what the provider drew from, like the first picture's `imageProviderPrompt`.
+      // Store the reusable prompt, like the first picture's `imageProviderPrompt`.
       if (generated.stagedMedia) images.push({ ...generated, imagePrompt: generated.providerPrompt, position });
     } catch (error) {
       logger.warn(error, "[slurp] Secondary image %d failed for %s", position, input.account.id);

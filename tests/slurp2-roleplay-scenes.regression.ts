@@ -19,6 +19,10 @@ import { slurp2Source } from "./slurp2-source";
 import { resolveSlurpTextConnection } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-connection";
 import { slurpDmTranscript } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-dm-roles";
 
+const worldClockStubs = { slurpWorldNow: () => new Date(), slurpWorldNowMs: () => Date.now() };
+const runInNewContextWithClock = (code: string, context: Record<string, unknown>, ...rest: unknown[]) =>
+  (runInNewContext as (...args: unknown[]) => unknown)(code, { ...worldClockStubs, ...context }, ...rest);
+
 // ── What the scene reads: paid content is named, never quoted; scene lines are not conversation ──
 const message = (role: "viewer" | "creator", kind: string, content: string, extra: object = {}) => ({
   role,
@@ -182,7 +186,7 @@ const source = slurp2Source(
     import.meta.url,
   ),
 );
-const origin = runInNewContext(
+const origin = runInNewContextWithClock(
   `${stripTypeScriptTypes(source.replace(/^import[\s\S]*?;\n/gm, "").replace(/^\s*export /gm, ""))}
   ({ createSlpSceneOriginProvider });`,
   {

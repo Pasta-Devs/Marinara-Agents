@@ -15,6 +15,7 @@ import {
   type SlurpDayVibe,
 } from "../../modules/world/slp-day-vibe.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Where the cached vibe lives. One entry per creator per day, like `slurp-studio-snapshot.ts`. */
 const key = (creatorAccountId: string) => `slurp2.creator.${creatorAccountId}.dayvibe`;
 
@@ -31,7 +32,11 @@ const dayKey = (at: Date) => `${at.toISOString().slice(0, 10)}#${Math.floor(at.g
  * answered from the same morning. Recomputing per reply would let the creator's mood flicker
  * mid-sentence when a tip landed.
  */
-export async function describeSlurpDayVibe(db: DB, creatorAccountId: string, at = new Date()): Promise<string | null> {
+export async function describeSlurpDayVibe(
+  db: DB,
+  creatorAccountId: string,
+  at = slurpWorldNow(),
+): Promise<string | null> {
   try {
     const settingsStore = createAppSettingsStorage(db);
     const cached = await settingsStore.get(key(creatorAccountId));

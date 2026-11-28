@@ -1,32 +1,51 @@
 // ──────────────────────────────────────────────
-// Otome Forge Settings → Images: the story's image connection (or none: the game is fully playable without one), its
-// rating (above SFW needs the 18+ confirmation), its image style and image prompt style (the Engine profile), "Ask
-// before painting" and expressions.
+// Otome Forge Settings → Images: the story's image connection (or none: the game is fully playable without one), the
+// backgrounds' and scene art's own connections (each the image connection unless chosen), its rating (above SFW needs
+// the 18+ confirmation), its image style and image prompt style (the Engine profile), "Ask before painting",
+// expressions and (0.20.0) side character sprites, off by default, with what they cost.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgeGate } from "../../components/AgeGateDialog";
+import { CostHint } from "../../components/CostHint";
 import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { ImageSettings, RunView } from "../../shared/api-types";
 import { ImageControls } from "../setup/ConnectionsStep";
 import { ImageRatingControl } from "../setup/ContentStep";
-import { Section } from "../setup/parts";
+import { ConnectionSelect, Section, Switch } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 
 type ImageForm = Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions"> & {
   style: string;
   styleProfileId: string;
+  sideSprites: boolean;
+  /** "" for the image connection. */
+  backgroundConnectionId: string;
+  sceneConnectionId: string;
 };
 
-const toForm = ({ connectionId, rating, ask, expressions, style, styleProfileId }: ImageSettings): ImageForm => ({
+const toForm = ({
+  connectionId,
+  rating,
+  ask,
+  expressions,
+  style,
+  styleProfileId,
+  sideSprites,
+  backgroundConnectionId,
+  sceneConnectionId,
+}: ImageSettings): ImageForm => ({
   connectionId,
   rating,
   ask,
   expressions,
   style: style ?? "",
   styleProfileId: styleProfileId ?? "",
+  sideSprites: sideSprites === true,
+  backgroundConnectionId: backgroundConnectionId ?? "",
+  sceneConnectionId: sceneConnectionId ?? "",
 });
 
 function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }) {
@@ -56,6 +75,39 @@ function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }
             onChange={(value) => setForm((current) => ({ ...current, ...value }))}
           />
         )}
+        {form.connectionId && connections.image.length ? (
+          <>
+            <ConnectionSelect
+              label={t("ui.otomeForge.settings.backgroundConnection")}
+              hint={t("ui.otomeForge.settings.backgroundConnectionHint")}
+              value={form.backgroundConnectionId}
+              connections={connections.image}
+              emptyLabel={t("ui.otomeForge.settings.sameImageConnection")}
+              onChange={(backgroundConnectionId) => setForm((current) => ({ ...current, backgroundConnectionId }))}
+            />
+            <ConnectionSelect
+              label={t("ui.otomeForge.settings.sceneConnection")}
+              hint={t("ui.otomeForge.settings.sceneConnectionHint")}
+              value={form.sceneConnectionId}
+              connections={connections.image}
+              emptyLabel={t("ui.otomeForge.settings.sameImageConnection")}
+              onChange={(sceneConnectionId) => setForm((current) => ({ ...current, sceneConnectionId }))}
+            />
+          </>
+        ) : null}
+        {form.connectionId ? (
+          <Switch
+            label={t("ui.otomeForge.settings.sideSprites")}
+            hint={
+              <>
+                {t("ui.otomeForge.settings.sideSpritesHint")}
+                <CostHint images={1} note={t("ui.otomeForge.settings.sideSpritesCostNote")} />
+              </>
+            }
+            checked={form.sideSprites}
+            onChange={(sideSprites) => setForm((current) => ({ ...current, sideSprites }))}
+          />
+        ) : null}
       </Section>
       <ImageRatingControl
         rating={form.rating}

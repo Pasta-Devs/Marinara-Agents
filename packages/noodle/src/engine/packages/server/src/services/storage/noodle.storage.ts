@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, lt, or } from "../../db/file-query.js";
+import { and, desc, eq, gt, inArray, isNull, like, lt, or } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import {
@@ -637,8 +637,16 @@ export function createNoodleStorage(db: DB) {
         .limit(Math.max(1, Math.min(300, Math.floor(options.limit ?? 120))));
       return rows.map(mapPost);
     },
-    async listPostPage(options: { limit?: number; cursorAt?: string; cursorId?: string } = {}) {
-      const ids = await publicIds();
+    async listPostPage(
+      options: {
+        limit?: number;
+        cursorAt?: string;
+        cursorId?: string;
+        authorAccountId?: string;
+        likedByAccountId?: string;
+      } = {},
+    ) {
+      const ids = (await publicIds()).filter((id) => !options.authorAccountId || id === options.authorAccountId);
       if (!ids.length) return { items: [], interactions: [], nextCursor: null };
       const limit = Math.max(1, Math.min(100, Math.floor(options.limit ?? 20)));
       const cursor =
@@ -648,12 +656,44 @@ export function createNoodleStorage(db: DB) {
               and(eq(noodlePosts.createdAt, options.cursorAt), lt(noodlePosts.id, options.cursorId)),
             )
           : null;
+      // Likes page by the like itself, newest like first (top-level likes only); the public-author filter applies before the limit.
+      if (options.likedByAccountId) {
+        const likeCursor =
+          options.cursorAt && options.cursorId
+            ? or(
+                lt(noodleInteractions.createdAt, options.cursorAt),
+                and(eq(noodleInteractions.createdAt, options.cursorAt), lt(noodleInteractions.id, options.cursorId)),
+              )
+            : undefined;
+        const likeRows = await db
+          .select({ post: noodlePosts, likedAt: noodleInteractions.createdAt, likeId: noodleInteractions.id })
+          .from(noodleInteractions)
+          .innerJoin(noodlePosts, eq(noodlePosts.id, noodleInteractions.postId))
+          .where(
+            and(
+              eq(noodleInteractions.actorAccountId, options.likedByAccountId),
+              eq(noodleInteractions.type, "like"),
+              isNull(noodleInteractions.parentInteractionId),
+              inArray(noodlePosts.authorAccountId, ids),
+              likeCursor,
+            ),
+          )
+          .orderBy(desc(noodleInteractions.createdAt), desc(noodleInteractions.id))
+          .limit(limit + 1);
+        const likePage = likeRows.slice(0, limit);
+        const likedPosts = likePage.map((row) => mapPost(row.post));
+        const lastLike = likePage.at(-1);
+        return {
+          items: likedPosts,
+          interactions: await this.listInteractions(likedPosts.map((post) => post.id)),
+          nextCursor: likeRows.length > limit && lastLike ? { createdAt: lastLike.likedAt, id: lastLike.likeId } : null,
+        };
+      }
+
       const rows = await db
         .select()
         .from(noodlePosts)
-        .where(
-          cursor ? and(inArray(noodlePosts.authorAccountId, ids), cursor) : inArray(noodlePosts.authorAccountId, ids),
-        )
+        .where(and(inArray(noodlePosts.authorAccountId, ids), cursor))
         .orderBy(desc(noodlePosts.createdAt), desc(noodlePosts.id))
         .limit(limit + 1);
       const items = rows.slice(0, limit).map(mapPost);
@@ -664,8 +704,43 @@ export function createNoodleStorage(db: DB) {
         nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
       };
     },
-    async listNotificationData() {
+    async listNotificationData(handle?: string) {
       const posts = await this.listPosts({ limit: 300 });
+      // Also include older posts that got the latest 300 interactions, so activity on them is not lost.
+      const seen = new Set(posts.map((post: any) => post.id));
+      const ids = await publicIds();
+      const recent = await db
+        .select({ postId: noodleInteractions.postId })
+        .from(noodleInteractions)
+        .orderBy(desc(noodleInteractions.createdAt))
+        .limit(300);
+      const extraIds = [...new Set(recent.map((row) => row.postId))].filter((id) => !seen.has(id));
+      if (extraIds.length && ids.length) {
+        const extra = await db
+          .select()
+          .from(noodlePosts)
+          .where(and(inArray(noodlePosts.authorAccountId, ids), inArray(noodlePosts.id, extraIds)))
+          .orderBy(desc(noodlePosts.createdAt));
+        for (const row of extra) {
+          posts.push(mapPost(row));
+          seen.add(row.id);
+        }
+      }
+      // Mentions of the viewer's handle in older posts: bounded text pre-filter; the client does the exact match.
+      if (handle && /^@?[A-Za-z0-9_]{1,40}$/u.test(handle) && ids.length) {
+        const mentions = await db
+          .select()
+          .from(noodlePosts)
+          .where(
+            and(
+              inArray(noodlePosts.authorAccountId, ids),
+              like(noodlePosts.content, `%@${handle.replace(/^@/u, "")}%`),
+            ),
+          )
+          .orderBy(desc(noodlePosts.createdAt))
+          .limit(100);
+        posts.push(...mentions.filter((row) => !seen.has(row.id)).map(mapPost));
+      }
       return { posts, interactions: await this.listInteractions(posts.map((post: any) => post.id)) };
     },
     async listPostsBefore(before: string) {

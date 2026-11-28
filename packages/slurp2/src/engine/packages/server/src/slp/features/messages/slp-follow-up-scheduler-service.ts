@@ -1,3 +1,4 @@
+import { parseRecord } from "../../modules/creators/slp-public-support.js";
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
@@ -19,16 +20,18 @@ import { newId, now } from "../../../utils/id-generator.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 import { activeSlurpStrikes, type SlurpStanceLatitude } from "../../modules/world/slp-stance.js";
 import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { isCreatorNightQuietTime } from "../feed/slp-feed-contract.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { incrementFollowUpCount } from "../../modules/messages/slp-thread-notes.js";
+import { slurpInEngineRoleplay } from "../../data/messages/slp-engine-roleplay-storage.js";
 import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
 import { slurpSextingPhase } from "../../modules/messages/slp-sexting.js";
 import { slurpRapportDoorTier } from "../../modules/messages/slp-rapport.js";
 import { saveSlurpMessageDeepDetails } from "../../data/messages/slp-message-deep-details-storage.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const INITIAL_DELAY_MS = 60_000; // Start after 1 minute
 const POLL_MS = 120_000; // Check every 2 minutes
 
@@ -118,21 +121,36 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               await messages.postponeScheduledFollowUp(
                 threadRow.id,
                 followUp.id,
-                new Date(Date.now() + 10 * 60_000).toISOString(),
+                new Date(slurpWorldNowMs() + 10 * 60_000).toISOString(),
               );
               continue;
             }
 
             // A scheduled follow-up is still the Creator speaking, so it obeys the same silences the
             // reply path obeys: a cool-off she started, night quiet, and her own offline schedule.
-            const coolingOff = Boolean(thread.coolUntil && thread.coolUntil > new Date().toISOString());
+            const coolingOff = Boolean(thread.coolUntil && thread.coolUntil > slurpWorldNow().toISOString());
+            // Settings › Messaging "Pause Creator DMs": nothing that was never asked for piles up for
+            // later, so an opener, check-in or recurring update is cancelled; an owed promise, reminder
+            // or task update waits a quarter hour at a time and arrives once the pause is off.
+            if (settings.messagesCreatorDmsPaused || slurpInEngineRoleplay(threadRow.creatorAccountId)) {
+              if (followUp.type === "opener" || followUp.type === "check_in" || followUp.type === "recurring") {
+                await messages.cancelScheduledFollowUp(threadRow.id, followUp.id);
+              } else {
+                await messages.postponeScheduledFollowUp(
+                  threadRow.id,
+                  followUp.id,
+                  new Date(slurpWorldNowMs() + 15 * 60_000).toISOString(),
+                );
+              }
+              continue;
+            }
             // In a roleplay scene: the follow-up waits a quarter hour at a time until it ends.
             // A paid sexting session waits the same way: nothing else interrupts it.
             if (slurpSextingPhase(thread.sexting) || (await slurpCreatorInScene(app.db, creator.id))) {
               await messages.postponeScheduledFollowUp(
                 threadRow.id,
                 followUp.id,
-                new Date(Date.now() + 15 * 60_000).toISOString(),
+                new Date(slurpWorldNowMs() + 15 * 60_000).toISOString(),
               );
               continue;
             }
@@ -144,7 +162,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                   createCharactersStorage(app.db),
                   source,
                   undefined,
-                  new Date(),
+                  slurpWorldNow(),
                   latestPost?.createdAt ?? null,
                   settings,
                 )
@@ -155,15 +173,15 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               // Twelve hours past its first due time it no longer waits for the Creator to be free.
               ...(isFollowUpPastAwayLimit(followUp.firstDueAt ?? followUp.scheduledAt) ? { online: true } : {}),
             };
-            const quiet = settings.nightQuiet && isCreatorNightQuietTime(new Date());
+            const quiet = settings.nightQuiet && isCreatorNightQuietTime(slurpWorldNow());
             if (coolingOff || quiet || (!availability.online && availability.minutesUntilOnline !== null)) {
               const delayMinutes = coolingOff
-                ? Math.max(1, Math.ceil((Date.parse(thread.coolUntil as string) - Date.now()) / 60_000))
+                ? Math.max(1, Math.ceil((Date.parse(thread.coolUntil as string) - slurpWorldNowMs()) / 60_000))
                 : Math.max(15, availability.minutesUntilOnline || 60);
               await messages.postponeScheduledFollowUp(
                 threadRow.id,
                 followUp.id,
-                new Date(Date.now() + delayMinutes * 60_000).toISOString(),
+                new Date(slurpWorldNowMs() + delayMinutes * 60_000).toISOString(),
               );
               logger.info(
                 "[slurp-follow-up] Postponed follow-up %s for %d minute(s) (%s)",
@@ -267,7 +285,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                 createdAt: message.createdAt,
                 preserveReplyObligation: true,
                 scheduledFollowUpId: followUp.id,
-                metadata: JSON.parse(message.metadata),
+                metadata: parseRecord(message.metadata),
               });
               // The thread closed or the follow-up was cancelled while the model wrote. Nothing failed.
               if (!stored) {
@@ -321,7 +339,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               await messages.postponeScheduledFollowUp(
                 threadRow.id,
                 followUp.id,
-                new Date(Date.now() + 2 * 60_000).toISOString(),
+                new Date(slurpWorldNowMs() + 2 * 60_000).toISOString(),
               );
               continue;
             }
@@ -339,7 +357,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                 .postponeScheduledFollowUp(
                   threadRow.id,
                   threadRow.dueFollowUp.id,
-                  error.retryAt ?? new Date(Date.now() + 60 * 60_000).toISOString(),
+                  error.retryAt ?? new Date(slurpWorldNowMs() + 60 * 60_000).toISOString(),
                 )
                 .catch(() => {});
               continue;

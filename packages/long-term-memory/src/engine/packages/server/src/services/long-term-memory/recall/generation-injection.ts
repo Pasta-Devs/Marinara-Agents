@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import type {
-  LtmMode,
-  LtmRecallAttempt,
-  LtmRecallAttemptOutcome,
+import {
+  DEFAULT_LTM_GLOBAL_SETTINGS,
+  type LtmMode,
+  type LtmRecallAttempt,
+  type LtmRecallAttemptOutcome,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   resolveLongTermMemoryRecallSettings,
@@ -11,8 +12,10 @@ import {
 import {
   inheritedBranchLtmNoteIds,
   ltmModeForChatMode,
+  ltmSourceLastMessageNumber,
   parseLtmChatMetadata,
   resolveChatLtmScope,
+  sharedLtmMessageCounts,
 } from "../identity/chat-scope.js";
 import { readJsonFile, writeJsonAtomic } from "../persistence/atomic-json.js";
 import {
@@ -28,7 +31,8 @@ import { uniqueStrings } from "../ltm-utils.js";
 import { recordLongTermMemoryAttempt, recordLongTermMemoryInjection, recordLongTermMemoryZeroMatch } from "./usage.js";
 import { recordLtmDebugEvent } from "../maintenance/debug-log.js";
 import { getPackagePersistence, logger, withKeyedLock } from "../package-runtime.js";
-import { summaries } from "../sources/interop.js";
+import { hideBranchCopiesOnce, summaries } from "../sources/interop.js";
+import { outsideLtmVaultLock } from "../persistence/vault-lock.js";
 import { armLtmAutoImport } from "../sources/auto-import-job.js";
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
@@ -63,11 +67,12 @@ function metadataRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-// Issue #1433: the memories a branch shares with the other branches of its conversation through
-// copied summary entries. Day, week and game-session ids are date or sequence keys that two branches
-// can each write after the split, so only rolling summary entries, which Engine copies by id, count.
-// Unbranched chats and chats without such summaries do no extra work. A failed lookup (#1442) falls
-// back to the branch's own memories instead of failing the recall, unless the request was aborted.
+// Issue #1433: the memories a branch shares with the other branches of its conversation, through
+// copied summary entries and through the messages the two chats share from the start. Day, week and
+// game-session ids are date or sequence keys that two branches can each write after the split, so only
+// rolling summary entries, which Engine copies by id, count by id. Unbranched chats do no extra work.
+// A failed lookup (#1442) falls back to the branch's own memories instead of failing the recall,
+// unless the request was aborted.
 export async function branchInheritedNoteIds(
   root: string,
   chat: { id: string; groupId: string | null; metadata: unknown },
@@ -80,21 +85,63 @@ export async function branchInheritedNoteIds(
       .filter((entry) => entry.origin !== "conversation_summary" && entry.origin !== "game_session")
       .map((entry) => entry.id),
   );
-  if (!summaryEntryIds.size) return undefined;
   try {
-    // ponytail: every reply in a branched chat with summaries lists all chats and reads every note.
-    // Upgrade path: an Engine lookup of one group's chats, and reusing the cached vault notes snapshot.
-    const branchChatIds = (await getPackagePersistence().listChats())
-      .filter((other) => other.groupId === chat.groupId && other.id !== chat.id)
-      .map((other) => other.id);
+    // ponytail: every reply in a grouped chat lists all chats and reads every note, and lists the
+    // messages of the chats whose numbered sources it must place. Upgrade path: an Engine lookup of one
+    // group's chats, reusing the cached vault notes snapshot, and caching fork positions per branch.
+    const persistence = getPackagePersistence();
+    const groupChats = (await persistence.listChats()).filter(
+      (other) => other.groupId === chat.groupId && other.id !== chat.id,
+    );
+    const branchChatIds = groupChats.map((other) => other.id);
     if (!branchChatIds.length) return undefined;
     const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
-    return inheritedBranchLtmNoteIds({ chatId: chat.id, branchChatIds, summaryEntryIds, notes });
+    const numberedSourceChatIds = notes.flatMap((note) =>
+      note.provenance && branchChatIds.includes(note.provenance.sourceId) && ltmSourceLastMessageNumber(note)
+        ? [note.provenance.sourceId]
+        : [],
+    );
+    // A failed message lookup still shares the summaries (#1433), with a warning.
+    const sharedMessageCounts = numberedSourceChatIds.length
+      ? await sharedLtmMessageCounts({
+          chatId: chat.id,
+          chats: [chat, ...groupChats],
+          otherChatIds: numberedSourceChatIds,
+          listMessages: (chatId) => persistence.listMessages(chatId),
+        }).catch((error) => {
+          if (signal?.aborted) throw error;
+          logger.warn(error, "[ltm] Shared-message lookup failed for chat %s; sharing summaries only", chat.id);
+          return undefined;
+        })
+      : undefined;
+    return inheritedBranchLtmNoteIds({ chatId: chat.id, branchChatIds, summaryEntryIds, notes, sharedMessageCounts });
   } catch (error) {
     if (signal?.aborted) throw error;
     logger.warn(error, "[ltm] Shared-history lookup failed for chat %s; recalling its own memories", chat.id);
     return undefined;
   }
+}
+
+// The meaning search embeds the newest messages, not the whole window: the local embedder cuts its input
+// at 512 tokens, so a ten-message window would be read as its oldest one to three messages. Whole messages
+// are kept, newest first, while the text fits; the newest message is always kept, cut from its end
+// backwards when it alone is longer. The result is in chat order.
+// ponytail: the budget is a character estimate for a 512-token local model. Upgrade path: ask the
+// embedding adapter for its input limit.
+const LTM_VECTOR_QUERY_CHAR_BUDGET = 1600;
+
+export function newestMessagesVectorQuery(contents: readonly string[], budget = LTM_VECTOR_QUERY_CHAR_BUDGET) {
+  const kept: string[] = [];
+  let length = 0;
+  for (let index = contents.length - 1; index >= 0; index -= 1) {
+    if (!contents[index]!.trim()) continue;
+    const next = length + contents[index]!.length + (kept.length ? 1 : 0);
+    if (kept.length && next > budget) break;
+    kept.unshift(contents[index]!);
+    length = next;
+  }
+  const text = kept.join("\n");
+  return { text: text.length > budget ? text.slice(-budget) : text, messages: kept.length };
 }
 
 // Invocation-order timestamps, strictly increasing per chat, so two recalls
@@ -169,10 +216,8 @@ export async function prepareGenerationLongTermMemory(input: {
   }
   const debugEnabled = recall.debugEnabled;
   const recent = input.messages.slice(-recall.contextMessages);
-  const queryText = recent
-    .map((message) => message.content)
-    .filter(Boolean)
-    .join("\n");
+  const recentContents = recent.map((message) => message.content).filter(Boolean);
+  const queryText = recentContents.join("\n");
   if (!queryText.trim()) {
     await recordAttempt("skipped", { reason: "empty_query", debugEnabled });
     return null;
@@ -195,10 +240,11 @@ export async function prepareGenerationLongTermMemory(input: {
   // Reserve that fixed overhead in the retrieval budget so its refill can consider the
   // chunks that still fit. When the overhead alone fills the budget, keep the raw budget
   // so the serializer still reports a prompt-budget skip instead of an empty no-match.
-  const budgetTokens = recall.budgetTokens ?? 4096;
+  const budgetTokens = recall.budgetTokens ?? DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryBudgetTokens;
   const promptOverheadTokens = estimateLongTermMemoryPromptOverhead(recall.recallPreamble);
   const retrievalBudgetTokens =
     budgetTokens > promptOverheadTokens ? budgetTokens - promptOverheadTokens : budgetTokens;
+  const vectorQuery = newestMessagesVectorQuery(recentContents);
   let retrieval;
   try {
     const inheritedNoteIds = await branchInheritedNoteIds(input.root, chat, mode, input.signal);
@@ -206,11 +252,11 @@ export async function prepareGenerationLongTermMemory(input: {
       root: input.root,
       mode,
       queryText,
+      vectorQueryText: vectorQuery.text,
       scope,
       characterIds: chat.characterIds,
       exclusiveCharacterIds,
       includeResolved: recall.includeResolved,
-      maxChunks: recall.maxChunks,
       maxTokens: retrievalBudgetTokens,
       promptNormalizedEstimate: true,
       minScore: recall.scoreThreshold,
@@ -234,6 +280,9 @@ export async function prepareGenerationLongTermMemory(input: {
         armLtmAutoImport(input.root, input.chatId, mode);
     })
     .catch((error) => logger.warn(error, "[ltm] Could not schedule background import for chat %s", input.chatId));
+  void outsideLtmVaultLock(() => hideBranchCopiesOnce(input.root, chat)).catch((error) =>
+    logger.warn(error, "[ltm] Could not hide branch messages from the AI for chat %s", input.chatId),
+  );
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
     preamble: recall.recallPreamble,
     maxTokens: budgetTokens,
@@ -262,7 +311,9 @@ export async function prepareGenerationLongTermMemory(input: {
       phase: "retrieval",
       action: "recall_explanation",
       status: "ok",
-      uiSummary: `${selected.length} memories selected; ${rejected.length} candidates rejected.`,
+      uiSummary: retrieval.skippedUnrelated
+        ? "No memories selected: none is close enough to the latest messages."
+        : `${selected.length} memories selected; ${rejected.length} candidates rejected.`,
       counts: {
         selected: selected.length,
         rejected: rejected.length,
@@ -272,6 +323,8 @@ export async function prepareGenerationLongTermMemory(input: {
         chatId: input.chatId,
         embeddingsAvailable: retrieval.embeddingsAvailable,
         semanticOutcome: retrieval.semanticOutcome,
+        // Set when the whole recall was skipped as unrelated, so an empty recall is explainable.
+        skipReason: retrieval.skippedUnrelated ? "unrelated_to_latest_messages" : undefined,
         // Effective recall parameters: what the chat/host actually asked for, so a
         // missing candidate can be explained by scope or mode rather than left invisible.
         mode,
@@ -279,6 +332,8 @@ export async function prepareGenerationLongTermMemory(input: {
         exclusiveCharacterTargeting: Boolean(exclusiveCharacterIds),
         contextMessages: recall.contextMessages,
         contextMessagesUsed: recent.length,
+        // The meaning search reads only the newest of those messages, so say how many.
+        vectorQueryMessages: vectorQuery.messages,
         // The recall-time index snapshot, not a later re-read of the index.
         indexLoadOutcome: retrieval.indexSnapshot.loadOutcome,
         indexGeneratedAt: retrieval.indexSnapshot.generatedAt,
@@ -286,7 +341,6 @@ export async function prepareGenerationLongTermMemory(input: {
         eligibleChunks: retrieval.indexSnapshot.eligibleChunks,
         embeddedChunks: retrieval.indexSnapshot.embeddedChunks,
         rejectedLimit,
-        maxChunks: recall.maxChunks,
         maxTokens: recall.budgetTokens,
         scoreThreshold,
         weights: recall.weights,

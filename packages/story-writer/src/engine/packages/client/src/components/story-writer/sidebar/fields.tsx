@@ -7,8 +7,9 @@ import { ChevronDown, Search } from "lucide-react";
 
 /**
  * Local text over a cached value. The cache notifies React asynchronously, so a field controlled by it straight away
- * would drop keystrokes; an outside change (another story, a cleared note) still replaces the draft. `normalize` is
- * what the store does to a value (e.g. trimming), so the stored form of the draft does not count as an outside change.
+ * would drop keystrokes; an outside change (another story, a cleared note, a note Redo puts back) still replaces the
+ * draft. `normalize` is what the store does to a value (e.g. trimming), so the stored form of the draft does not count
+ * as an outside change.
  */
 export function useDraftText(
   value: string,
@@ -20,7 +21,11 @@ export function useDraftText(
   const [emitted, setEmitted] = useState(value);
   if (value !== seen) {
     setSeen(value);
-    if (value !== emitted && value !== normalize(emitted)) setDraft(value);
+    if (value !== emitted && value !== normalize(emitted)) {
+      setDraft(value);
+      // The draft follows the outside value now, so that value coming back later is not taken for our own echo.
+      setEmitted(value);
+    }
   }
   const update = (next: string) => {
     setDraft(next);
@@ -28,6 +33,45 @@ export function useDraftText(
     onChange(next);
   };
   return [draft, update];
+}
+
+/**
+ * The text of a list entry the store trims (a timeline event, a quick reply), so a trailing space being typed is not
+ * an outside change. Unless `optional`, the stored text is never empty: clearing the field keeps the old text (delete
+ * has its own button) instead of dropping the entry while it is retyped.
+ */
+export function EntryText(props: {
+  value: string;
+  label: string;
+  maxLength: number;
+  optional?: boolean;
+  multiline?: boolean;
+  placeholder?: string;
+  onChange(text: string): void;
+}) {
+  const { value, optional, onChange } = props;
+  const [draft, update] = useDraftText(
+    value,
+    (text) => {
+      const kept = text.trim();
+      if ((optional || kept) && kept !== value) onChange(text);
+    },
+    (text) => text.trim().slice(0, props.maxLength),
+  );
+  const shared = {
+    value: draft,
+    maxLength: props.maxLength,
+    placeholder: props.placeholder,
+    "aria-label": props.label,
+    onBlur: () => {
+      if (!optional && !draft.trim()) update(value);
+    },
+  };
+  return props.multiline ? (
+    <textarea {...shared} className="sw-textarea" rows={2} onChange={(event) => update(event.target.value)} />
+  ) : (
+    <input {...shared} type="text" className="sw-input" onChange={(event) => update(event.target.value)} />
+  );
 }
 
 export function useNumberFormat(): (value: number) => string {

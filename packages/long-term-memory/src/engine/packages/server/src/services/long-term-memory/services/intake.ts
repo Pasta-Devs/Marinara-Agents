@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import {
+  LTM_INTAKE_CALLERS,
+  packageAccess,
   type LtmDraftMutation,
   type LtmNote,
   type LtmSubject,
@@ -17,11 +19,7 @@ import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { getLtmGlobalSettings } from "../settings.js";
 import { recordLtmPackageAdd } from "./storage-read.js";
 
-// ponytail: the Engine does not tell a service who calls it, so `caller` is self-reported and any package
-// can name itself "slurp2". The list only keeps unknown names out; a package that lies still needs the user's
-// "Other Agents can add memories" switch on. Upgrade path: the Engine passes the caller's id
-// (`registerService(key, service, { forCaller })`).
-export const LTM_INTAKE_CALLERS = ["slurp2"] as const;
+export { LTM_INTAKE_CALLERS };
 export type LtmIntakeCaller = (typeof LTM_INTAKE_CALLERS)[number];
 
 const hashShort = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16);
@@ -105,7 +103,7 @@ function withoutSource(note: LtmNote, sourceNoteId: string): LtmNote | null {
 }
 
 export function createLtmIntakeService(storage: LongTermMemoryStorage, root = storage.root) {
-  const enabled = async () => (await getLtmGlobalSettings(root)).longTermMemoryAcceptFromPackages;
+  const enabled = async (caller: LtmIntakeCaller) => packageAccess(await getLtmGlobalSettings(root), caller).add;
 
   // Callers hold the vault lock.
   // `optedOutNoteIds` (a replace only): memories the user archived or narrowed are excluded from the delete, so they
@@ -283,7 +281,7 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
     version: 1 as const,
     /**
      * Adds one line a package knows about one or two characters to each one's character memory. Returns `null` for
-     * invalid input, an unknown caller or character, an aborted call, while "Other Agents can add memories" is off, or when
+     * invalid input, an unknown caller or character, an aborted call, while that Agent may not add memories, or when
      * every named character's memory from an earlier record was archived or narrowed by the user.
      */
     async submit(input: unknown): Promise<{ version: 1; status: "applied" | "unchanged" } | null> {
@@ -291,7 +289,7 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
       const parsed = submitSchema.safeParse(input);
       if (!parsed.success) return null;
       const result = await withLtmVaultLock(root, async () =>
-        signal?.aborted || !(await enabled()) ? null : submitUnlocked(parsed.data),
+        signal?.aborted || !(await enabled(parsed.data.caller)) ? null : submitUnlocked(parsed.data),
       );
       if (!result) return null;
       if (typeof result === "object") {
@@ -308,7 +306,7 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
       if (!parsed.success) return null;
       const sourceNoteId = ltmPackageSourceNoteId(parsed.data.caller, parsed.data.recordId);
       const removed = await withLtmVaultLock(root, async () =>
-        signal?.aborted || !(await enabled()) ? null : retractUnlocked(sourceNoteId),
+        signal?.aborted || !(await enabled(parsed.data.caller)) ? null : retractUnlocked(sourceNoteId),
       );
       return removed === null ? null : { version: 1, status: removed ? "retracted" : "missing" };
     },

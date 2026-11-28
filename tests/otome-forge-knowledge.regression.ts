@@ -47,6 +47,7 @@ import {
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { CAST, HE, KAI, MIR, SHE, at, bible } from "./fixtures/otome-forge-story.ts";
+import { levelFloor } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 
 const text = (messages: Array<{ content: string }>) => messages.map((message) => message.content).join("\n");
 
@@ -54,7 +55,11 @@ const KNOWS = "The protagonist knows only what the story has shown them and what
 const CARD = "A card or bible is for writing a character, never what the protagonist knows:";
 const UNTIL = "Until then the protagonist does not understand them, and nobody talks to the protagonist as if they do.";
 const CANON = "When the story is set in an existing world from a game, book, film or show, keep to its canon:";
-const OTHERS = "- The world has other people: give named minor characters";
+const OTHERS =
+  "- The world has other people, important ones too: give named characters (friends, family, rivals, superiors, officials, locals) real parts";
+/** The planners introduce major characters, canon ones in an existing world, as future love interests or antagonists. */
+const MAJOR =
+  "Introduce major characters with depth, so they can become love interests or antagonists later; in an existing world, its canon characters tied to the love interests.";
 const ALONE = "a node may be theirs alone or with others (cast [])";
 const TIME =
   "- Time passes as in a life: the protagonist is human, resting, sleeping, washing and seeing to the small needs of a day or night in passing.";
@@ -191,13 +196,19 @@ test("the world plan names an existing world as it is; the Surprise me premise s
     plan,
     /- In an existing world, the mystery, the pieces and the web fit its canon: [^\n]*never contradict it\./,
   );
-  // The premise writer invents one, so it keeps away from existing media.
+  // 0.38.2 (the maintainer's ask): the truth a story is built on makes sense once told, in its field, not a new rule.
+  assert.match(
+    plan,
+    /mystery\.truth: the full hidden answer, 2 to 4 sentences, in plain cause and effect that makes sense once told\./,
+  );
+  // The premise writer keeps real people out, and no longer bans existing media (the maintainer's, 2026-11-08).
   const premise = text(premiseMessages("English"));
-  assert.match(premise, /No real people, and no names, places or characters from existing books, films, games/);
+  assert.match(premise, /- No real people\./);
+  assert.ok(!/existing books, films, games/.test(premise), "existing media is no longer banned");
   assert.ok(!premise.includes(CANON));
 });
 
-test("P5 gives minor characters parts and nodes without a love interest; P5, P10 and P11 let the protagonist rest", () => {
+test("P5 gives other characters, major ones too, real parts and nodes without a love interest; P5, P10 and P11 let the protagonist rest", () => {
   const input = inputs();
   const arc = { ...input, li: KAI, memory: "" };
   const chapter = text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" }));
@@ -206,6 +217,7 @@ test("P5 gives minor characters parts and nodes without a love interest; P5, P10
     repairPlanMessages({ ...arc, grievance: { id: "g1", text: "The lamp was left dark.", by: "li" } }),
   );
   assert.ok(chapter.includes(OTHERS) && chapter.includes(ALONE), "a main chapter");
+  assert.ok(chapter.includes(MAJOR), "a main chapter introduces major characters");
   for (const [kind, prompt] of Object.entries({ chapter, route, repair })) {
     assert.ok(prompt.includes(TIME), `${kind} lets time pass`);
     assert.match(prompt, /give a node, or part of one, to rest: settling down, sleep, waking up\./, kind);
@@ -245,17 +257,32 @@ test("every scene writer asks the protagonist to sit with what matters to them, 
 test("a slow burn through stage 4, a confession when earned in stage 5, and in stage 6 if not yet (#1960, 0.7.5)", () => {
   const kai = { name: "Kai" };
   const at = (stage: number) => betweenYou(kai, { ...defaultLiState(), stage });
-  const SLOW = /Slow burn: Kai never says what they feel for the protagonist, and neither does the protagonist\./;
+  const SLOW = /Slow burn: Kai does not confess what they feel for the protagonist, and neither does the protagonist/;
   // Desire is not feeling: the burn holds back the words, never what the content contract allows.
   const DESIRE = /Desire is not feeling: they may still act on desire, out of lust or to get what they want/;
-  const MAY = /The slow burn may break: when a scene has earned it, Kai may confess what they feel/;
+  // It holds back love, not attraction (2026-11-10): flirting and wanting them out loud are open, a kiss waits for stage 5.
+  const ATTRACTION =
+    /holds back love, not attraction: Kai may flirt, tease, and say outright that they find the protagonist attractive/;
+  const KISS_LATER = /A kiss given out of feeling waits for stage 5\./;
+  const MAY =
+    /The slow burn may break: Kai may kiss the protagonist, and when a scene has earned it, Kai may confess what they feel/;
   for (const stage of [1, 2, 3, 4]) {
     assert.match(at(stage), SLOW, `stage ${stage}`);
+    assert.match(at(stage), ATTRACTION, `stage ${stage}`);
+    assert.match(at(stage), KISS_LATER, `stage ${stage}`);
     assert.match(at(stage), DESIRE, `stage ${stage}`);
     assert.doesNotMatch(at(stage), MAY);
   }
   assert.match(at(5), MAY);
   assert.doesNotMatch(at(5), SLOW);
+  assert.doesNotMatch(at(5), KISS_LATER);
+  // The affection level the player sees reaches the prompt, read from the points as the client shows it.
+  assert.match(at(1), /Affection level 1 of 20: how drawn Kai is to the protagonist\./);
+  assert.match(
+    betweenYou(kai, { ...defaultLiState(), points: levelFloor(9) }),
+    /Affection level 9 of 20: how drawn Kai is to the protagonist\. The higher it is, the more it shows/,
+  );
+  assert.match(betweenYou(kai, { ...defaultLiState(), points: 1_000_000 }), /Affection level 10 of 20/);
   // Stage 6: if not said yet, it must be; Ease off can end the finale before the words, so it never claims they were.
   assert.match(
     at(6),
@@ -276,7 +303,7 @@ test("a slow burn through stage 4, a confession when earned in stage 5, and in s
   assert.match(text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })), SLOW);
 });
 
-test("the story describes a love interest from their current Image appearance and worn look (#1965)", () => {
+test("the story describes a love interest from their current Image appearance and the look the scene dresses them in (#1965, #2509)", () => {
   const input = inputs();
   const kai = input.units.find((unit) => unit.id === KAI)!;
   // The bible's look says one mask; the player fixed it in Image appearance. A Wardrobe look is worn.
@@ -288,6 +315,7 @@ test("the story describes a love interest from their current Image appearance an
   kai.wornOutfit = "his-wardrobe-0-a1";
   const node = { i: 0, kind: "beat" as const, guide: "Kai turns to face you.", cast: [KAI] };
   const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+  // The scene writer is handed him dressed in the scene's look (S/story/scene-looks.ts dressed), here the worn one.
   const scene = text(beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" }));
   const plan = text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" }));
   for (const [kind, prompt] of Object.entries({ scene, plan })) {
@@ -296,8 +324,15 @@ test("the story describes a love interest from their current Image appearance an
       /How Kai looks now \(English image tags; describe them from this[^)]*\): NEW-MASK: a crow-beaked/,
       kind,
     );
-    assert.match(prompt, /NEW-MASK[^\n]*; wearing WORN: navy greatcoat\./, kind);
     assert.doesNotMatch(prompt, /OLD-MASK/, `${kind}: the bible's old look never reaches the story`);
+  }
+  assert.match(scene, /NEW-MASK[^\n]*; wearing WORN: navy greatcoat\./);
+  // #2509: the planners see his everyday look, his own route's (bibleBlock) and another's (othersBlock) alike; what he
+  // wears at home never reaches them.
+  const others = text(routePlanMessages({ ...input, li: MIR, memory: "", stage: 2 }));
+  for (const [kind, prompt] of Object.entries({ plan, others })) {
+    assert.match(prompt, new RegExp(`NEW-MASK[^\\n]*; wearing ${kai.bible!.look.outfitLine}\\.`), kind);
+    assert.doesNotMatch(prompt, /WORN/, kind);
   }
   // With no edit, the bible's look is used, in their everyday clothes.
   const plain = { ...kai, identityLine: "", outfitLine: "", wornOutfit: undefined };
@@ -307,7 +342,7 @@ test("the story describes a love interest from their current Image appearance an
   );
 });
 
-test("the story knows what the protagonist wears now, as it does a love interest, without their appearance twice", () => {
+test("a scene knows what the protagonist wears in it, as it does a love interest, without their appearance twice (#2509)", () => {
   const input = inputs();
   // The persona's Appearance rides in its story fields; the image identity line is that same text.
   const appearance = "PERSONA-LOOK: short black hair, freckles";
@@ -325,21 +360,38 @@ test("the story knows what the protagonist wears now, as it does a love interest
     plan: text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })),
   });
   const count = (prompt: string, part: string) => prompt.split(part).length - 1;
-  for (const [kind, prompt] of Object.entries(prompts())) {
-    assert.match(
-      prompt,
-      /\nHow Ines looks now \(English image tags; describe them from this[^)]*\): wearing WORN: red qipao\.\n/,
-      kind,
-    );
-    assert.doesNotMatch(prompt, /EVERYDAY/, `${kind}: the worn look replaces the everyday outfit`);
+  // The scene writer is handed her dressed in the scene's look; it goes after the cached story context, which a scene
+  // that changes her look must not change, so the plan (sharing that context) has none.
+  let { scene, plan } = prompts();
+  assert.match(
+    scene,
+    /\nWHAT THEY WEAR\nHow Ines looks now \(English image tags; describe them from this[^)]*\): wearing WORN: red qipao\.\n/,
+  );
+  assert.doesNotMatch(scene, /EVERYDAY/, "the look she wears replaces the everyday outfit");
+  assert.doesNotMatch(plan, /How Ines looks now|WORN|EVERYDAY/, "the plan never gets her look");
+  for (const [kind, prompt] of Object.entries({ scene, plan })) {
     assert.equal(count(prompt, appearance), 1, `${kind}: the persona's appearance is sent once`);
   }
+  const cached = (prompt: ReturnType<typeof beatMessages>) => prompt[0]!.content;
+  assert.equal(
+    cached(beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" })),
+    cached(
+      beatMessages({
+        ...input,
+        player: { ...input.player, wornOutfit: undefined },
+        chapter,
+        node,
+        storySoFar: [],
+        memory: "",
+      }),
+    ),
+    "her look never changes the cached story context",
+  );
   // In their base look, the everyday outfit.
   input.player = { ...input.player, wornOutfit: undefined };
-  for (const [kind, prompt] of Object.entries(prompts())) {
-    assert.match(prompt, /\nHow Ines looks now \([^)]*\): wearing EVERYDAY: grey apprentice smock\.\n/, kind);
-    assert.equal(count(prompt, appearance), 1, `${kind}: the persona's appearance is sent once`);
-  }
+  ({ scene, plan } = prompts());
+  assert.match(scene, /\nHow Ines looks now \([^)]*\): wearing EVERYDAY: grey apprentice smock\.\n/);
+  assert.equal(count(scene, appearance), 1, "the persona's appearance is sent once");
   // P19 is about the look itself: it is named once, as THE LOOK.
   input.player = { ...input.player, wornOutfit: "my-wardrobe-0-a1" };
   const kai = input.units.find((unit) => unit.id === KAI)!;
@@ -352,18 +404,52 @@ test("the story knows what the protagonist wears now, as it does a love interest
 // What every prompt but the planners and the world plan sent on staging (e01922d19), for build() below with the premise:
 // sha256 of the messages as JSON. A change to one of them is a change to a prompt the world limits keep as it was; a
 // release that changes one on purpose (0.8.7 moves the date plan's WHAT THEY WEAR into protagonistBlock) retakes it.
+// 0.18.1: the canon writing rule now names an existing world's characters, so these prompts' bytes moved.
+// 2026-11-10: betweenYou's slow burn holds back love, not attraction, and carries the affection level, so every prompt
+// with a love interest's card moved (the bible, which has none, did not).
+// 2026-11-11: a chapter's last scene hands an open decision to the player, and no scene assumes a choice never made.
+// 0.23.0: betweenYou's affection line reads "of 20" (the bond ranks), so every prompt with a love interest's card moved
+// again; the bible has no card and kept its bytes.
+// 0.33.3: the writing rules add the maintainer's lines on narration, spoken dialogue and echoing, so every prompt
+// that carries them moved.
+// 0.36.3: the writing rules no longer ask for what the protagonist feels in their body, so every prompt that carries
+// them moved.
+// 0.36.4 (#2384): the writing rules drop the dialogue rule (fragments, dodged questions), and scenes, Confrontations
+// and Closers ask for spoken lines in its place, so every prompt that carries them moved.
+// 0.36.9: the writing rules ask not to fall into patterns, so every prompt that carries them moved.
+// 0.38.2: the writing rules, the spoken-line rule and the pacing line are reworded for plainer speech, narration and
+// plot, so every prompt that carries them moved.
+// 0.38.3 (#2425): P12's composure line gives each stance its situation, and its disclosure field loses its example.
+// 2026-11-23: the story context names the central mystery, and the affection line asks for tension, then smaller
+// intimate scenes past level 10, so every prompt with a love interest's card moved (the bible, which has none, did not).
+// 2026-11-23 (dialogue): spoken lines run like real conversation, narration goes in whole sentences in order, the
+// protagonist may be silly or wrong, faces contradict words only now and then, and the built-in sentence patterns are
+// banned in narration only, so every prompt with them moved.
+// 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two stiff patterns are banned
+// everywhere and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
+// 2026-11-28 (#2521): the writing rules' voice line is the maintainer's paragraph on distinct, natural voices, and the
+// spoken-line rule loses the clause it covers, so every prompt with the writing rules or the spoken-line rule moved. The bible's voice
+// field also asks for small tics and samples said on the spot.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "a9f81dc2b4e41db4",
-  callScene: "082f4a96e3320b99",
-  confrontation: "646929977ecd71b2",
-  closer: "07ddfbafd6578c00",
-  bible: "0e8da543f0ac13bf",
-  chat: "737cde4c51f826e8",
-  daily: "c25471977dd29aa5",
-  note: "77c2dd85e08f8023",
+  scene: "dabd410468be0055",
+  callScene: "78227962f044f165",
+  confrontation: "3f6725a48c3ad87f",
+  closer: "eee6a4448dad7553",
+  bible: "5017d1b302086cd2",
+  // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
+  // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
+  // 2026-11-14 (0.29.0): P17's HARD RULES gained the no-echo line and the plain-texting line, so both moved again.
+  // 0.36.8 (#2394): P17's HARD RULES gained the chat-habits line (capitals, emoji and so on), so both moved again.
+  // 0.39.0 (#2424): P17 gained the hurt field (beside "messages"), its no-story-effect line names the hurt, and its one
+  // exception names his date invitations too, so both moved again.
+  // 2026-11-27 (#2504): P17 in his own thread gained the [note: …] line (and [selfie: …] with scene art), so both moved
+  // again.
+  chat: "de8dc83fa6e70ce4",
+  daily: "921c9bbd71686aef",
+  note: "c2982d86d1652c73",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "26811b6da118503b",
+  datePlan: "25dce7a9b6c156e3",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {
@@ -461,11 +547,13 @@ test("only the arc and chapter planners read the premise, for its world alone; t
     assert.equal(prompt.split(PREMISE).length - 1, 1, `${kind}: in that line alone`);
     assert.ok(prompt.includes(SETTING), `${kind} keeps the setting`);
     const bare = text(without.planners[kind as keyof typeof withPremise.planners]);
-    // P5 opens its own part with the line and a blank; the others put it on the line after the setting.
+    // P5 opens its own part with the line and a blank, P10 and P11 (0.20.2, the same cached layout) with the line;
+    // the others put it on the line after the setting.
+    const own = kind === "chapterPlan" || kind === "routePlan" || kind === "repairPlan";
     const added = kind === "chapterPlan" ? `${line}\n\n` : `${line}\n`;
     assert.equal(prompt.replace(added, ""), bare, `${kind}: only the line is new`);
-    if (kind !== "chapterPlan")
-      assert.ok(prompt.includes(`WORLD\n${SETTING}\n${line}\n`), `${kind}: after the setting`);
+    if (own) assert.ok(messages.at(-1)!.content.startsWith(added), `${kind}: its own part opens with it`);
+    else assert.ok(prompt.includes(`WORLD\n${SETTING}\n${line}\n`), `${kind}: after the setting`);
   }
   // The extra story still offers its au, and P21 and the extra story plan a call as P5, P10 and P11 do.
   assert.ok(text(withPremise.planners.extraStoryPlan).includes("- au: a mini alternate universe they imagine"));
@@ -502,7 +590,7 @@ test("only the arc and chapter planners read the premise, for its world alone; t
   const plan = text(withPremise.worldPlan);
   assert.ok(
     plan.includes(
-      "- setting: 2 to 4 sentences: the place, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous.",
+      "- setting: 2 to 4 sentences: the world and where in it the story starts, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous.",
     ),
   );
   assert.ok(

@@ -1,18 +1,20 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Date Night (plan M5 "Date Night", design: Mini-games). A place, two looks, three scenes of scored
-// choices, an outcome that always pays, Make it right during a rupture, and a keepsake painted only when asked for
+// Otome Forge: dates (plan M5 "Date Night", design: Mini-games; #2303, won from Wish). A date's place and premise,
+// whoever the player takes, her look, scenes of scored choices, an outcome that always pays its first-timers, and a
+// keepsake painted only when asked for
 // ──────────────────────────────────────────────
-// - Start (POST /dates): P26 plans the date as a chapter `date-<n>` of kind "date" with three beat nodes and the
-//   date's own plan (`chapter.date`: place, looks, goesWrong, Make it right, the keepsake brief). One open date per
-//   love interest: asking again while it is unfinished returns it (a double tap, a retry, a reopened screen), and the
-//   check runs again inside the run's foreground queue, so two requests never plan two dates. While a rupture stands
-//   between them the date is "Make it right": the plan targets the rupture's grievance, and P26 and the scenes are told
-//   who holds it (the love interest's hurt, or the protagonist's). One already open when a rupture starts stays an
-//   ordinary date (it was planned as one), and the Dates hub labels Date Night by the open date (makeItRightView), so
-//   the next one is Make it right. A Make it right date stays one only while its rupture stands (SH/dates.ts
-//   stillToMend): mended or moved on elsewhere meanwhile, its later scenes, the hub and its finish are an ordinary
-//   date's. The place is one of the picker's, the love interest's own pick, or one the story has painted (M2b's
-//   world.places): the date then goes there under the name the story gave it, so its scenes open on that place's art.
+// - Start (POST /dates/pulled, #2303): a date won on Wish's Dates banner (an owned date5 or date4 item), taken with
+//   one love interest or several. P26 plans it from the item's premise, place and scenes as a chapter `date-<n>` of kind
+//   "date" with the item's number of beat nodes, everyone in each, and the date's own plan (`chapter.date`: the item,
+//   its cast, its newcomers, goesWrong, the keepsake brief; a 5★'s `grand` and its key image node, keyImageScene). A
+//   date is written once per love interest: a company with nobody new to it is refused (409 `conflict`: it replays
+//   from the Album), one with the same company still open is returned (a double tap, a retry, a reopened screen), and
+//   the check runs again inside the run's foreground queue, so two requests never plan two dates. A pulled date is
+//   never Make it right.
+// - Date Night is no longer started. Its evenings already saved (`date-<n>` with no item) are listed, read, finished
+//   and kept as before: one planned as Make it right stays one only while its rupture stands (SH/dates.ts
+//   stillToMend), and its scenes and finish follow that, as do a double date's (#2283 `second`) and an evening to
+//   clear the air (#2156 `clearAir`).
 // - P26 and the date's scenes see the state as the date's love interest may know it (S/prompts.ts ownView, M3's
 //   rule): no grievance, disclosure or ledger line another love interest's own chapter left behind reaches them. Both
 //   carry that love interest's own notebook beside their bible or card (knowsAboutYou, Read Me #1945), so the evening
@@ -20,19 +22,38 @@
 // - The scenes are written and read through the story routes (S/story/beats.ts): each date beat has one choice whose
 //   options carry hidden scores, and the client never sees them before the date ends. A date's beats pay nothing on
 //   their own; its chapter still counts as read once its last scene is.
+// - A gift (#2128): the protagonist may bring one gift bought in the Shop (SH/shop.ts) that she still owns, the
+//   aphrodisiac only under NSFW Heat. It is refused before anything is worn or planned (checkPulledDate: 409
+//   `conflict` with none left, 409 `locked` for the aphrodisiac under SFW), so a refusal costs nothing, and spent by the same write
+//   that registers the new date (giveGift): a resumed date spends nothing, and a refusal there removes the plan just
+//   saved. The plan keeps it (`chapter.date.gift`): P26 gives one scene (SH/dates.ts GIFT_BEAT) the giving, the
+//   scenes' tasks say it is given now or was given earlier tonight (S/prompts.ts dateFramingText). Memory keeps it as
+//   the date's played text does (a date is its love interest's own memory source); it writes no ledger line, which as
+//   their newest one would reach surfaces kept SFW (the Home note, Read Him, Read Me).
 // - Finish (POST /dates/:key/finish): once the last scene is read, the total over the first-play picks gives the
 //   outcome (SH/dates.ts dateOutcome). One revision-checked write of `${R}:state` counts it exactly once: 120 Starlight
 //   and 100 affection within the day's activity caps, whatever the outcome (failure pays; caps limit rewards, never
-//   play), the "first date" timeline entry, and on a Make it right date whose rupture still stands, whose every scene
-//   had its choice made and whose outcome is good or great, the rupture's grievance addressed (whether it mends is the
-//   player's choices: a scene eased off before its choice decides nothing). The rupture then clears, or stands on the
-//   next rupture-severity grievance still owed, as a scene's resolve moves it, and the date mended it only when none is
-//   left. The once-only mark is the finish's own entry in `chapters[key].applied` (`${nodes}/finish`, applied through
-//   applyChoiceEffects); a Make it right finish leaves what it found beside it (`${nodes}/make-it-right-mended` or
-//   `-standing`). A replay answers with the same outcome, the same mend and no grants.
+//   play), the affection split evenly among those it pays (SH/dates.ts datePayees: a pulled date's first-timers,
+//   Date Night's love interest or two), a gift's own affection (SH/shop.ts GIFT_AFFECTION) beside it, split among
+//   everyone on the date and never capped as it was paid for in Starlight (its own `gift` grant), the "first date"
+//   timeline entry for each it pays, and on a Make it right date whose rupture still
+//   stands, whose every scene had its choice made and whose outcome is good or great, the rupture's grievance addressed
+//   (whether it mends is the player's choices: a scene eased off before its choice decides nothing). The rupture then
+//   clears, or stands on the next rupture-severity grievance still owed, as a scene's resolve moves it, and the date
+//   mended it only when none is left. The once-only mark is the finish's own entry in `chapters[key].applied`
+//   (`${nodes}/finish`, applied through applyChoiceEffects); a Make it right finish leaves what it found beside it
+//   (`${nodes}/make-it-right-mended` or `-standing`). A replay answers with the same outcome, the same mend and no
+//   grants.
+// - #2156: while his grievance with her stands (SH/dates.ts heldAgainst) every date with him waits: the Dates hub opens
+//   none, and starting (or resuming) a date with him in it and finishing one, starting, answering or finishing Read
+//   Them, Read Me or Tarot night, finishing a Claw round or a Kitty Cards game, and the Photo Shoot are a 409 `locked`
+//   before anything is worn, spent, planned, painted, saved or paid (assertFreeToDate, checkPulledDate, or
+//   assertNotHeld inside the write that pays). Nothing is lost: an open one goes on once his repair has cleared it.
+//   #2303: accepting his invitation to clear the air opens a scene of its own (S/phone/upset.ts), no longer a date.
 // - Privacy: a completed date is a `character-story` memory source with `audience: [li]` (S/story/canon.ts
-//   readStorySources), as GF's bond chapter: summarized and folded into the shared overview, titled private, while only
-//   that love interest's own readers and scenes he is in recall it in detail. It is never an Engine Scene.
+//   readStorySources), and (#2303) everyone else taken on it too, as GF's bond chapter: summarized and folded into the
+//   shared overview, titled private, while only their own readers and scenes they are in recall it in detail. It is
+//   never an Engine Scene.
 // - Keepsake (POST /art/keepsake): painted only on the player's tap, through the M1 image client, once the date is
 //   finished; the client asks first when Ask before painting is on, and shows the prompt when the Engine reviews image
 //   prompts. Its record follows the paid-work rules (art/paint.ts): pending before the paid call, a failure saved and
@@ -52,29 +73,44 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
+  LIMIT_IDS,
+  type ContentSettings,
+  type LimitId,
+} from "../../../../../client/src/features/otome-forge/shared/content.js";
+import {
+  BASE_LOOK,
   DATE_BEATS,
-  STORY_PLACE,
+  PARTNER_CHOICE,
+  PULLED_PLACE,
+  dateCast,
   dateOutcome,
-  standingRupture,
+  datePayees,
+  heldAgainst,
+  keyImageScene,
+  newcomersOf,
   stillToMend,
   type DateEntry,
   type DateFinishResult,
   type DateOutcome,
   type DatePick,
   type DatePlan,
-  type DateStartInput,
   type DatesView,
+  type PulledDate,
+  type PulledDateInput,
 } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { isDateKind, type Item } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import {
   AFFECTION_EARNINGS,
   STARLIGHT_EARNINGS,
+  splitEvenly,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { cgReferences, cgSubjects } from "../art/cg.js";
-import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
-import { imagesOf, type ArtDeps } from "../art/paint.js";
+import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
+import { cgReferences, cgSubjects, outfitCutouts } from "../art/cg.js";
+import { galleryRef, imageConnectionFor, worldStyle, type ImageClient } from "../art/image-client.js";
+import { imagesOf, updateIfChanged, type ArtDeps } from "../art/paint.js";
+import { placeKey } from "../art/places.js";
 import {
   type ImagePrompt,
   type KeepsakePerson,
@@ -85,7 +121,8 @@ import {
 } from "../prompts.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { chapterId, runDocTarget, stateId } from "../ids.js";
+import { chapterId, runDocTarget, stateId, worldId } from "../ids.js";
+import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
 import { defaultLiState, keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
@@ -93,7 +130,9 @@ import { applyChoiceEffects } from "../state/relationship.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { canonPicks, type BeatDeps } from "../story/beats.js";
+import { itemView, readItem } from "../items/open.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
+import { ME, chapterEndLooks, dressed, lookOf } from "../story/scene-looks.js";
 import { ANGST_TYPES, CHAPTER_TAGS } from "../story/replies.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 
@@ -107,17 +146,34 @@ export type DateDeps = BeatDeps & {
 const FINISH_CHOICE = "finish";
 /** Beside it, what a Make it right finish found: it mended the rupture, or a rupture still stands with them. */
 const MEND_MARKS = { mended: "make-it-right-mended", standing: "make-it-right-standing" } as const;
-/** Finished dates GET /dates lists (each reads its beats for its outcome). */
+/**
+ * Finished dates GET /dates lists of each kind, won dates' playthroughs and Date Night's evenings (each reads its beats
+ * for its outcome). Apart, so won dates finished later never push the earlier evenings out of the Album (#2303).
+ */
 const DATES_LISTED = 24;
 const DATE_KEY = /^date-([1-9]\d{0,5})$/;
 const TEXT_MAX = 4000;
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const dateNotFound = () => new OtomeForgeError(404, "No such date.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");
+const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
 
 const clean = (value: unknown, max = TEXT_MAX) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+/** #2156: 409 `locked` while his grievance with her stands: every date with him waits until his repair clears it. */
+export function assertNotHeld(state: Pick<RunState, "lis">, li: LiId): void {
+  if (heldAgainst(state.lis[li])) {
+    throw new OtomeForgeError(409, "They need space: your dates wait until you make it right in Routes.", "locked");
+  }
+}
+
+/** #2156: assertNotHeld on the run's state as it is now, the first thing a date route does (nothing else is read). */
+export async function assertFreeToDate(store: Pick<OtomeStore, "readDoc">, runId: string, li: LiId): Promise<void> {
+  const state = await store.readDoc(stateId(runId), normalizeState);
+  if (state) assertNotHeld(state, li);
+}
 
 export const isDateKey = (value: unknown): value is string => typeof value === "string" && DATE_KEY.test(value);
 
@@ -185,11 +241,14 @@ export function normalizeDatePlanReply(
     liState: Pick<LiState, "angst">;
     /** A story place's own name, which the date keeps whatever the reply calls it. */
     placeName?: string;
+    /** #2303: how many beats the date has (a pulled date's item's scenes); Date Night's three by default. */
+    beats?: number;
   },
 ): PlannedDate | string {
+  const count = context.beats ?? DATE_BEATS;
   const guides = reply.beats.map((beat) => clean(beat.guide)).filter(Boolean);
-  if (guides.length !== DATE_BEATS || reply.beats.length !== DATE_BEATS) {
-    return `the date needs exactly ${DATE_BEATS} beats, each with a guide`;
+  if (guides.length !== count || reply.beats.length !== count) {
+    return `the date needs exactly ${count} beats, each with a guide`;
   }
   const tags = [
     ...new Set((reply.tags ?? []).map((tag) => tag.trim().toLowerCase()).filter((tag) => CHAPTER_TAGS.includes(tag))),
@@ -222,15 +281,11 @@ export function normalizeDatePlanReply(
 // ── Reading the run's dates ──
 
 /** A love interest the run has, with a bible (a date needs one), or a 404. */
-function partnerOf(run: RunDocuments, li: LiId): Unit {
+export function partnerOf(run: RunDocuments, li: LiId): Unit {
   const unit = run.units.find((item) => item.id === li);
   if (!run.state.lis[li] || !unit?.bible) throw liNotFound();
   return unit;
 }
-
-/** The love interests a date can be with, in cast order. */
-const castOf = (run: RunDocuments) =>
-  Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
 
 /** Every date of the run (a chapter of kind "date" with its plan), newest first. */
 async function dateChapters(store: Pick<OtomeStore, "listRun">, runId: string): Promise<Chapter[]> {
@@ -239,21 +294,6 @@ async function dateChapters(store: Pick<OtomeStore, "listRun">, runId: string): 
     .map((record) => normalizeChapter(record.data))
     .filter((chapter): chapter is Chapter => !!chapter && chapter.kind === "date" && !!chapter.date)
     .sort((a, b) => number(b) - number(a));
-}
-
-/** The newest unfinished date with `li` and the state it was read with, or null. */
-async function openDateWith(
-  store: OtomeStore,
-  runId: string,
-  li: LiId,
-): Promise<{ chapter: Chapter; state: RunState } | null> {
-  const [chapters, stored] = await Promise.all([
-    dateChapters(store, runId),
-    store.readDoc(stateId(runId), normalizeState),
-  ]);
-  const state = stored ?? normalizeState(undefined);
-  const chapter = chapters.find((item) => item.date!.li === li && !isFinished(state, item));
-  return chapter ? { chapter, state } : null;
 }
 
 // ponytail: one process's set of keepsakes being painted (as art/paint.ts keeps for looks); the upgrade path is M2b's
@@ -279,8 +319,12 @@ export function datePicks(beats: ReadonlyArray<Beat | null>): DatePick[] {
   );
 }
 
-const outcomeOf = (picks: readonly DatePick[]): DateOutcome =>
-  dateOutcome(picks.reduce((total, pick) => total + pick.score, 0));
+/** A date's outcome by its picks, against the number of its scenes. */
+const outcomeOf = (chapter: Pick<Chapter, "nodes">, picks: readonly DatePick[]): DateOutcome =>
+  dateOutcome(
+    picks.reduce((total, pick) => total + pick.score, 0),
+    chapter.nodes.length,
+  );
 
 /** Every scene of the date had its first-play choice made (a scene eased off before its choice has none). */
 const everyChoiceMade = (chapter: Pick<Chapter, "nodes">, beats: ReadonlyArray<Beat | null>) =>
@@ -290,13 +334,15 @@ const readBeats = (store: Pick<OtomeStore, "readDoc">, runId: string, chapter: C
   Promise.all(chapter.nodes.map((node: ChapterNode) => readBeat(store, runId, chapter.key, node.i)));
 
 /** One date as the client sees it. `outcome` is given for a finished date. */
-function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: DateOutcome | null): DateEntry {
+export function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: DateOutcome | null): DateEntry {
   const date = chapter.date!;
   const progress = state.chapters[chapter.key];
   const finished = isFinished(state, chapter);
   return {
     key: chapter.key,
     li: date.li,
+    ...(date.second ? { second: date.second } : {}),
+    ...(date.item ? { item: date.item, cast: dateCast(date) } : {}),
     title: chapter.title,
     place: date.place,
     placeName: date.placeName,
@@ -306,193 +352,355 @@ function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: Date
     plannedAt: chapter.plannedAt,
     completedAt: progress?.completed ?? null,
     keepsake: keepsakeView(runId, chapter.key, date.keepsake.art),
-  };
-}
-
-/** GET /runs/:run/dates: each love interest (a rupture, an open date), and the finished dates, newest first. */
-export async function datesView(deps: Pick<DateDeps, "store">, runId: string): Promise<DatesView> {
-  const run = await readRun(deps.store, runId);
-  if (!run) throw runNotFound();
-  const chapters = await dateChapters(deps.store, runId);
-  const finished = chapters.filter((chapter) => isFinished(run.state, chapter)).slice(0, DATES_LISTED);
-  // ponytail: reads each listed date's beats for its outcome; the ceiling is DATES_LISTED × 3 reads per visit, and
-  // the upgrade path is the outcome kept on the chapter when the date is finished.
-  const dates = await Promise.all(
-    finished.map(async (chapter) =>
-      entryOf(runId, chapter, run.state, outcomeOf(datePicks(await readBeats(deps.store, runId, chapter)))),
-    ),
-  );
-  const open = (li: LiId) => {
-    const chapter = chapters.find((item) => item.date!.li === li && !isFinished(run.state, item));
-    return chapter ? entryOf(runId, chapter, run.state, null) : null;
-  };
-  return {
-    lis: castOf(run).map((li) => ({ li, rupture: !!run.state.lis[li]?.rupture, open: open(li) })),
-    dates,
+    ...(date.gift ? { gift: date.gift } : {}),
   };
 }
 
 /**
- * Whether Date Night with each love interest is Make it right now (GET /play, the Dates hub's label): the open date's
- * own plan while its rupture stands (stillToMend) when one is open, else whether a rupture stands that a new date
- * would try to mend.
+ * GET /runs/:run/dates: each love interest (a rupture, an open date), the finished dates and (#2303) the open ones,
+ * newest first, and each date won from Wish with its playthroughs.
  */
-export async function makeItRightView(
-  store: Pick<OtomeStore, "listRun">,
-  runId: string,
-  state: RunState,
-): Promise<Record<LiId, boolean>> {
-  const chapters = await dateChapters(store, runId);
-  const view: Record<LiId, boolean> = {};
-  for (const [li, liState] of Object.entries(state.lis)) {
-    const open = chapters.find((item) => item.date!.li === li && !isFinished(state, item));
-    view[li] = !!(open ? stillToMend(open.date!, state.lis) : standingRupture(liState));
-  }
-  return view;
+export async function datesView(deps: Pick<DateDeps, "store">, runId: string): Promise<DatesView> {
+  const run = await readRun(deps.store, runId);
+  if (!run) throw runNotFound();
+  const chapters = await dateChapters(deps.store, runId);
+  const owned = new Set(run.state.owned.items);
+  // Won dates, newest banner first (owned ids are kept in the order they were won).
+  const items = (
+    await Promise.all([...run.state.owned.items].reverse().map((id) => readItem(deps.store, runId, id)))
+  ).filter((item): item is Item => !!item && isDateKind(item.kind));
+  const done = chapters.filter((chapter) => isFinished(run.state, chapter));
+  const won = done.filter((chapter) => chapter.date!.item).slice(0, DATES_LISTED);
+  const evenings = done.filter((chapter) => !chapter.date!.item).slice(0, DATES_LISTED);
+  const finished = done.filter((chapter) => won.includes(chapter) || evenings.includes(chapter));
+  // ponytail: reads each listed date's beats for its outcome; the ceiling is 2 × DATES_LISTED dates of up to 6 scenes
+  // per visit, and the upgrade path is the outcome kept on the chapter when the date is finished.
+  const dates = await Promise.all(
+    finished.map(async (chapter) =>
+      entryOf(runId, chapter, run.state, outcomeOf(chapter, datePicks(await readBeats(deps.store, runId, chapter)))),
+    ),
+  );
+  const pulled = items.map((item): PulledDate => {
+    const plays = chapters.filter((chapter) => chapter.date!.item === item.id);
+    return {
+      item: itemView(runId, item, owned.has(item.id)),
+      plays: plays.map((chapter) => entryOf(runId, chapter, run.state, null)),
+      playedBy: [...new Set(plays.flatMap((chapter) => dateCast(chapter.date!)))],
+      ...(run.state.owned.unseen.includes(item.id) ? { new: true as const } : {}),
+    };
+  });
+  return {
+    dates,
+    open: chapters
+      .filter((chapter) => !isFinished(run.state, chapter))
+      .map((chapter) => entryOf(runId, chapter, run.state, null)),
+    pulled,
+  };
 }
 
 // ── Start ──
 
-/** The painted place a "story" date goes to, or null for any other place; 400 for a place the story does not have. */
-function storyPlaceOf(world: Pick<World, "places">, input: Pick<DateStartInput, "place" | "storyPlace">) {
-  if (input.place !== STORY_PLACE) return null;
-  const key = input.storyPlace;
-  const place = key && Object.hasOwn(world.places, key) ? world.places[key] : undefined;
-  if (!place?.name.trim()) throw new OtomeForgeError(400, "No such place in this story.", "bad-request");
-  return place;
+/**
+ * `state` with one `gift` given (#2128), or the refusal: 409 `locked` for one the story's Heat does not offer (the
+ * aphrodisiac under SFW), 409 `conflict` for one she has none of. Pure, so a revision-checked write may run it again; a
+ * count left at 0 is dropped when the state is read. A birthday's gift is given the same way (#2153, S/home/birthday.ts).
+ */
+export function giveGift(state: RunState, content: Pick<ContentSettings, "heat">, gift: GiftId): RunState {
+  if (!giftsFor(content).includes(gift)) {
+    throw new OtomeForgeError(409, "That gift is given only under NSFW Heat.", "locked");
+  }
+  const owned = state.owned.gifts[gift] ?? 0;
+  if (owned < 1) throw conflict("The protagonist has none of that gift left.");
+  return { ...state, owned: { ...state.owned, gifts: { ...state.owned.gifts, [gift]: owned - 1 } } };
 }
 
 /** The next free `date-<n>`. */
 const nextDateKey = (chapters: readonly Chapter[]) =>
   `date-${chapters.reduce((max, chapter) => Math.max(max, Number(DATE_KEY.exec(chapter.key)?.[1] ?? 0)), 0) + 1}`;
 
+/** #2303: what a pulled date is, as the run has it now: its item, whom it is taken with, and what that makes it. */
+interface PulledCheck {
+  item: Item;
+  units: Unit[];
+  /** The playthrough of this date with exactly this company that is not counted yet, to go on with; or null. */
+  open: Chapter | null;
+  /** Those on it for the first time: a new playthrough is planned for them (none: the date only replays). */
+  newcomers: LiId[];
+}
+
 /**
- * POST /runs/:run/dates: plans a date (P26) and saves it as chapter `date-<n>`, or returns the date with that love
- * interest that is still open (`resumed`). The route wears the picked looks first (S/routes/wardrobe.ts wearLook), so
- * the plan and everything painted afterwards dress them in what they wear now.
+ * #2303: checks a pulled date before anything is worn, given or planned, and again inside the run's queue: a company of
+ * love interests the story has (404), each once (400), none holding a grievance of their own with her (409 `locked`,
+ * first, as every date route), and a date she has won (404). With an open playthrough of this company it goes on;
+ * otherwise someone in it must be new to the date (409 `conflict`: it only replays for them), and a gift must be hers
+ * to give (giveGift).
  */
-export async function startDate(
+async function checkPulled(deps: Pick<DateDeps, "store">, run: RunDocuments, runId: string, input: PulledDateInput) {
+  if (!input.cast.length || new Set(input.cast).size !== input.cast.length) {
+    throw badRequest("Take one love interest or more, each once.");
+  }
+  const units = input.cast.map((li) => partnerOf(run, li));
+  for (const li of input.cast) assertNotHeld(run.state, li);
+  const item = await readItem(deps.store, runId, input.item);
+  if (!item || !isDateKind(item.kind) || !run.state.owned.items.includes(item.id)) throw dateNotFound();
+  const plays = (await dateChapters(deps.store, runId)).filter((chapter) => chapter.date!.item === item.id);
+  const same = (chapter: Chapter) => {
+    const cast = dateCast(chapter.date!);
+    return cast.length === input.cast.length && cast.every((li) => input.cast.includes(li));
+  };
+  const open = plays.find((chapter) => same(chapter) && !isFinished(run.state, chapter)) ?? null;
+  const newcomers = newcomersOf(
+    input.cast,
+    plays.flatMap((chapter) => dateCast(chapter.date!)),
+  );
+  if (!open && !newcomers.length) {
+    throw conflict("Everyone you chose has been on this date: read it again from the Album.");
+  }
+  if (!open && input.gift) giveGift(run.state, run.world.content, input.gift);
+  return { item, units, open, newcomers } satisfies PulledCheck;
+}
+
+/** POST /dates/pulled's first check (#2303): a refusal before the route wears her look or anything is planned. */
+export async function checkPulledDate(
+  deps: Pick<DateDeps, "store">,
+  runId: string,
+  input: PulledDateInput,
+): Promise<void> {
+  const run = await readRun(deps.store, runId);
+  if (!run) throw runNotFound();
+  await checkPulled(deps, run, runId, input);
+}
+
+/**
+ * POST /runs/:run/dates/pulled (#2303): plans a date won from Wish with whoever the player takes (P26, from the item's
+ * premise, place and scenes) and saves it as chapter `date-<n>`, or returns the open playthrough with the same company
+ * (`resumed`). The route wears her picked look first; the love interests come as they are dressed now. A 5★ date's
+ * scene keyImageScene paints its key image (its node's `cg`). The gift is spent by the write that registers the date.
+ */
+export async function startPulledDate(
   deps: DateDeps,
   runId: string,
-  input: DateStartInput,
+  input: PulledDateInput,
   { debugMode, signal }: { debugMode: boolean; signal?: AbortSignal },
 ): Promise<{ chapter: Chapter; date: DateEntry; resumed: boolean }> {
   const first = await readRun(deps.store, runId);
   if (!first) throw runNotFound();
   if (first.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
-  partnerOf(first, input.li);
-  storyPlaceOf(first.world, input);
-  const resume = (open: { chapter: Chapter; state: RunState }) => ({
-    chapter: open.chapter,
-    date: entryOf(runId, open.chapter, open.state, null),
-    resumed: true,
-  });
-  const open = await openDateWith(deps.store, runId, input.li);
-  if (open) return resume(open);
+  const resume = async (chapter: Chapter) => {
+    const state = (await deps.store.readDoc(stateId(runId), normalizeState)) ?? normalizeState(undefined);
+    return { chapter, date: entryOf(runId, chapter, state, null), resumed: true };
+  };
+  const checked = await checkPulled(deps, first, runId, input);
+  if (checked.open) return resume(checked.open);
   return runForeground(runId, async () => {
     signal?.throwIfAborted();
-    // Read again inside the queue: a request queued behind the one that planned it returns that date.
-    const again = await openDateWith(deps.store, runId, input.li);
-    if (again) return resume(again);
+    // Read again inside the queue: a request queued behind the one that planned it goes on with that date.
     const run = await readRun(deps.store, runId);
     if (!run) throw runNotFound();
-    const unit = partnerOf(run, input.li);
-    const storyPlace = storyPlaceOf(run.world, input);
-    const liState = run.state.lis[input.li] ?? defaultLiState();
-    const makeItRight = standingRupture(liState);
-    const key = nextDateKey(await dateChapters(deps.store, runId));
-    const job: ForgeMemoryJob = "narration";
-    const memory = await recallText(deps, runId, {
-      job,
-      cast: [input.li],
-      query: {
-        cues: [makeItRight?.text ?? "", unit.bible?.want ?? ""].filter(Boolean),
-        plan: unit.bible?.want ?? "",
-        speakers: [run.player.name, unit.name].filter(Boolean),
-      },
-      signal,
-      debugMode,
-    });
-    const context = { world: run.world, liState, ...(storyPlace ? { placeName: clean(storyPlace.name, 120) } : {}) };
-    const { value, connectionId } = await generateJson(deps, {
+    const { item, units, open, newcomers } = await checkPulled(deps, run, runId, input);
+    if (open) return resume(open);
+    const planned = await planDate(
+      deps,
       runId,
-      job,
-      label: `date-plan/${key}`,
-      messages: datePlanMessages({
-        world: run.world,
-        player: await withPersonaStoryAbout(deps.runtime, run.player),
-        unit,
-        state: run.state,
-        place: input.place,
-        storyPlace,
-        makeItRight,
-        memory: memory.text,
-      }),
-      memory,
-      schema: DatePlanReplySchema,
-      normalize: (reply) => {
-        const plan = normalizeDatePlanReply(reply, context);
-        return typeof plan === "string" ? plan : reply;
-      },
-      maxTokens: 2000,
-      debugMode,
-      lane: "foreground",
-      signal,
-    });
-    signal?.throwIfAborted();
-    const plan = normalizeDatePlanReply(value, context) as PlannedDate;
-    const date: DatePlan = {
-      li: input.li,
-      place: input.place,
-      placeName: plan.placeName,
-      herLook: input.herLook,
-      hisLook: input.hisLook,
-      goesWrong: plan.goesWrong,
-      makeItRight: makeItRight?.id ?? null,
-      keepsake: { brief: plan.brief },
-    };
-    const chapter: Chapter = {
-      key,
-      kind: "date",
-      li: input.li,
-      lead: input.li,
-      title: plan.title,
-      tags: plan.tags,
-      summary: "",
-      nodes: plan.guides.map((guide, i) => ({
-        i,
-        kind: "beat",
-        guide,
-        cast: [input.li],
-        ...(i === 0 && plan.placeName ? { place: plan.placeName } : {}),
-      })),
-      // A stumble's seed is planted for him when the date's last scene is read (S/state/rewards.ts saveLedger).
-      ledger: {
-        relationship: [],
-        conflict: plan.seed ? [{ id: `c-${key}-1`, li: input.li, type: plan.seed.type, action: "plant" }] : [],
-        offscreen: [],
-      },
-      plannedAt: new Date().toISOString(),
-      connectionId,
-      date,
-    };
-    const saved = await deps.store.mutateDoc(
-      runDocTarget("chapter", chapterId(runId, key)),
-      normalizeChapter,
-      (current) => current ?? chapter,
+      run,
+      { units, cast: input.cast, herLook: input.herLook, gift: input.gift, pulled: { item, newcomers } },
+      { debugMode, signal },
     );
-    const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
+    await keepDatePlace(deps, runId, item);
+    return { chapter: planned.chapter, date: entryOf(runId, planned.chapter, planned.state, null), resumed: false };
+  });
+}
+
+/**
+ * What a date is planned from (planDate): everyone on it (the lead first, in `cast` order), her look (worn by the
+ * route first), a gift she owns, and either a pulled date's item and its newcomers (#2303) or the message he asked her
+ * on it with (#2424, `invited`: he chooses the place, DATE_BEATS scenes).
+ */
+export interface DateToPlan {
+  units: Unit[];
+  cast: LiId[];
+  herLook: string;
+  gift?: GiftId;
+  pulled?: { item: Item; newcomers: LiId[] };
+  /** #2424: his invitation: its message's id, and what he wrote to ask. */
+  invited?: { message: string; text: string };
+}
+
+/**
+ * Plans a date (P26) and saves it as the next `date-<n>`, in the caller's run queue, from the run as read there: the
+ * chapter first (one already saved under its key wins), then the state that registers it and spends the gift in the
+ * same write. A refused write, or a run deleted meanwhile, takes the chapter back out.
+ */
+export async function planDate(
+  deps: DateDeps,
+  runId: string,
+  run: RunDocuments,
+  input: DateToPlan,
+  { debugMode, signal }: { debugMode: boolean; signal?: AbortSignal },
+): Promise<{ chapter: Chapter; state: RunState }> {
+  const { units, gift, pulled, invited } = input;
+  const [lead] = units as [Unit, ...Unit[]];
+  const item = pulled?.item;
+  const liState = run.state.lis[lead.id] ?? defaultLiState();
+  const scenes = item?.scenes ?? (item ? 1 : DATE_BEATS);
+  const grand = item?.kind === "date5";
+  const placeName = clean(item?.place?.name ?? "", 120);
+  const key = nextDateKey(await dateChapters(deps.store, runId));
+  const job: ForgeMemoryJob = "narration";
+  const names = units.map((unit) => unit.name);
+  const memory = await recallText(deps, runId, {
+    job,
+    cast: input.cast,
+    query: {
+      cues: [item?.premise ?? "", ...units.map((unit) => unit.bible?.want ?? "")].filter(Boolean),
+      plan: item ? [item.title, item.premise ?? ""].filter(Boolean).join(" ") : `A date ${lead.name} asked for.`,
+      speakers: [run.player.name, ...names].filter(Boolean),
+    },
+    signal,
+    debugMode,
+  });
+  const context = { world: run.world, liState, beats: scenes, ...(placeName ? { placeName } : {}) };
+  const place = item ? PULLED_PLACE : PARTNER_CHOICE;
+  const { value, connectionId } = await generateJson(deps, {
+    runId,
+    job,
+    label: `date-plan/${key}`,
+    messages: datePlanMessages({
+      world: run.world,
+      // #2509: dressed in the look picked for the date (never worn at home); the love interests in their everyday looks.
+      player: dressed(await withPersonaStoryAbout(deps.runtime, run.player), input.herLook),
+      unit: lead,
+      others: units.slice(1),
+      state: run.state,
+      place,
+      ...(item
+        ? {
+            pulled: {
+              title: item.title,
+              premise: item.premise ?? "",
+              placeName,
+              placeTags: item.place?.tags ?? "",
+              scenes,
+              ...(grand ? { keyImage: keyImageScene(scenes) } : {}),
+            },
+          }
+        : {}),
+      makeItRight: null,
+      memory: memory.text,
+      gift: gift ?? null,
+      ...(invited?.text ? { invitation: invited.text } : {}),
+    }),
+    memory,
+    schema: DatePlanReplySchema,
+    normalize: (reply) => {
+      const plan = normalizeDatePlanReply(reply, context);
+      return typeof plan === "string" ? plan : reply;
+    },
+    maxTokens: 2000 + 500 * Math.max(0, scenes - DATE_BEATS),
+    debugMode,
+    lane: "foreground",
+    signal,
+  });
+  signal?.throwIfAborted();
+  const plan = normalizeDatePlanReply(value, context) as PlannedDate;
+  const date: DatePlan = {
+    li: lead.id,
+    place,
+    placeName: plan.placeName,
+    herLook: input.herLook,
+    hisLook: BASE_LOOK,
+    goesWrong: plan.goesWrong,
+    makeItRight: null,
+    keepsake: { brief: plan.brief },
+    ...(gift ? { gift } : {}),
+    ...(item ? { item: item.id, cast: input.cast, newcomers: pulled!.newcomers } : {}),
+    ...(grand ? { grand: true as const } : {}),
+    ...(invited ? { invited: invited.message } : {}),
+  };
+  const chapter: Chapter = {
+    key,
+    kind: "date",
+    li: lead.id,
+    lead: lead.id,
+    // A pulled date's own name, whatever the plan calls it.
+    title: item?.title || plan.title,
+    tags: plan.tags,
+    summary: "",
+    nodes: plan.guides.map((guide, i) => ({
+      i,
+      kind: "beat",
+      guide,
+      // Everyone the protagonist took is in every scene.
+      cast: input.cast,
+      ...(i === 0 && plan.placeName ? { place: plan.placeName } : {}),
+      // A 5★ date's key image (#2303), painted as a chapter's key moment is.
+      ...(grand && i === keyImageScene(scenes) ? { cg: true } : {}),
+    })),
+    // A stumble's seed is planted for the date's first love interest when its last scene is read.
+    ledger: {
+      relationship: [],
+      conflict: plan.seed ? [{ id: `c-${key}-1`, li: lead.id, type: plan.seed.type, action: "plant" }] : [],
+      offscreen: [],
+    },
+    plannedAt: new Date().toISOString(),
+    connectionId,
+    date,
+  };
+  const saved = await deps.store.mutateDoc(
+    runDocTarget("chapter", chapterId(runId, key)),
+    normalizeChapter,
+    (current) => current ?? chapter,
+  );
+  // The gift is spent by the write that registers the date, so a date is never saved without it, nor it given twice.
+  let state: RunState | null;
+  try {
+    state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
       current.chapters[key]
         ? current
-        : { ...current, chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } } },
+        : {
+            ...(gift ? giveGift(current, run.world.content, gift) : current),
+            chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } },
+          },
     );
-    if (!state) {
-      // The run was deleted while the date was planned: its plan goes too, rather than outlive the run.
-      await deps.store.removeDoc(chapterId(runId, key));
-      throw runNotFound();
-    }
-    const planned = saved ?? chapter;
-    return { chapter: planned, date: entryOf(runId, planned, state, null), resumed: false };
+  } catch (error) {
+    // The gift was given elsewhere while the date was planned: the plan goes, as it would with the run.
+    if (gift) await deps.store.removeDoc(chapterId(runId, key));
+    throw error;
+  }
+  if (!state) {
+    // The run was deleted while the date was planned: its plan goes too, rather than outlive the run.
+    await deps.store.removeDoc(chapterId(runId, key));
+    throw runNotFound();
+  }
+  return { chapter: saved ?? chapter, state };
+}
+
+/**
+ * #2303: a 5★ date's picture is its place with nobody in it (the Dates banner's art), so the story takes it as that
+ * place's picture once the date is planned: the date's first scene opens on it and pays nothing more. A place the story
+ * has a ready picture for already keeps its own. Never thrown: the date is saved, and a failure only paints the place.
+ * The gallery image stays while the place holds it, even after a banner or item repaint (the Engine keeps an image a
+ * document refers to).
+ */
+async function keepDatePlace(deps: DateDeps, runId: string, item: Item): Promise<void> {
+  const place = item.place;
+  const art = item.art;
+  if (!place || art?.state !== "ready" || !art.url) return;
+  await updateIfChanged(deps.store, runDocTarget("world", worldId(runId)), normalizeWorld, (world) => {
+    const key = placeKey(place.name);
+    const current = world.places[key];
+    if (current?.art?.state === "ready") return undefined;
+    if (!current && Object.keys(world.places).length >= PLACES_MAX) return undefined;
+    const record = current
+      ? { ...current, tags: current.tags.trim() ? current.tags : place.tags }
+      : { name: place.name, tags: place.tags };
+    return { ...world, places: { ...world.places, [key]: { ...record, art } } };
+  }).catch((error: unknown) => {
+    deps.runtime.logger.warn(
+      "[otome-forge] keeping date %s's place failed: %s",
+      item.id,
+      error instanceof Error ? error.message : String(error),
+    );
   });
 }
 
@@ -528,6 +736,26 @@ function withFirstDate(state: RunState, li: LiId, chapter: Chapter, at: string):
   };
 }
 
+/**
+ * `state` with the affection of the date's gift (#2128) added to its love interest, uncapped (paid for in Starlight,
+ * so the day's activity cap never eats it, as a story's earnings are never capped), and pushed onto `grants`.
+ */
+function withGiftAffection(state: RunState, plan: DatePlan, grants: ActivityGrant[]): RunState {
+  if (!plan.gift) return state;
+  // #2283: a double date's gift is part of the evening's affection, so it is shared with the invited love interest;
+  // #2303: a pulled date's with everyone on it.
+  const payees = dateCast(plan).filter((li) => state.lis[li]);
+  if (!payees.length) return state;
+  const shares = splitEvenly(GIFT_AFFECTION[plan.gift], payees.length);
+  const lis = { ...state.lis };
+  payees.forEach((li, index) => {
+    const affection = shares[index] ?? 0;
+    lis[li] = { ...lis[li]!, points: lis[li]!.points + affection };
+    if (affection) grants.push({ source: "gift", li, affection });
+  });
+  return { ...state, lis };
+}
+
 /** POST /runs/:run/dates/:key/finish: the outcome, counted exactly once (see the header). */
 export async function finishDate(deps: DateDeps, runId: string, key: string): Promise<DateFinishResult> {
   const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
@@ -539,7 +767,7 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
   // The canon is settled: a completed chapter's beats never change again.
   const beats = await readBeats(deps.store, runId, chapter);
   const picks = datePicks(beats);
-  const outcome = outcomeOf(picks);
+  const outcome = outcomeOf(chapter, picks);
   // The player's whole evening, well spent: what mends a rupture that still stands when the date is counted.
   const earned = !!plan.makeItRight && everyChoiceMade(chapter, beats) && outcome !== "awkward";
   const at = new Date().toISOString();
@@ -560,23 +788,38 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
       mend ? [{ li: plan.li, resolve: { id: mend, status: "addressed" } }] : [],
       { key, i: chapter.nodes.length, choice: FINISH_CHOICE, resolves: mend ? [mend] : [], at },
     );
+    // A date already counted is returned as it stands, whatever came between (#2156): only a first counting waits
+    // out a grievance that stands, of anyone on it.
     if (applied.replay) return current;
+    for (const li of dateCast(plan)) assertNotHeld(current, li);
     const after = mend ? applied.state.lis[plan.li] : undefined;
     // Mended as M2b's repair reports it (S/state/stages.ts healRupture): only when no rupture is left with them.
     repaired = !!after && !after.rupture && after.grievances.find((item) => item.id === mend)?.status === "addressed";
     const next = standing
       ? withMark(applied.state, key, mendMark(chapter, repaired ? "mended" : "standing"))
       : applied.state;
-    const paid = grant(next, {
-      source: "date",
-      starlight: STARLIGHT_EARNINGS.date,
-      li: plan.li,
-      affection: AFFECTION_EARNINGS.date,
+    // #2283: a double date's affection is split evenly between the two love interests, each paid on its own so the
+    // day's cap applies to each; Starlight is the evening's, paid once. #2303: a pulled date's goes to those on it for
+    // the first time (its newcomers).
+    const payees = datePayees(plan);
+    const shares = splitEvenly(AFFECTION_EARNINGS.date, payees.length);
+    let paying: RunState = next;
+    let starlightPaid = 0;
+    payees.forEach((li, index) => {
+      const paid = grant(paying, {
+        source: "date",
+        starlight: index === 0 ? STARLIGHT_EARNINGS.date : 0,
+        li,
+        affection: shares[index] ?? 0,
+      });
+      paying = paid.state;
+      if (paid.granted.starlight) starlightPaid += paid.granted.starlight;
+      if (paid.granted.affection) grants.push({ source: "date", li, affection: paid.granted.affection });
     });
-    if (paid.granted.starlight) grants.push({ source: "date", starlight: paid.granted.starlight });
-    if (paid.granted.affection) grants.push({ source: "date", li: plan.li, affection: paid.granted.affection });
+    if (starlightPaid) grants.unshift({ source: "date", starlight: starlightPaid });
     counted = true;
-    return withFirstDate(paid.state, plan.li, chapter, at);
+    const withFirsts = payees.reduce((state, li) => withFirstDate(state, li, chapter, at), paying);
+    return withGiftAffection(withFirsts, plan, grants);
   });
   if (!state) throw runNotFound();
   return {
@@ -602,26 +845,57 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   if (!isFinished(run.state, chapter)) throw conflict("A keepsake is painted once the date is over.");
+  // #2509: everyone in the look the date ended in (S/story/scene-looks.ts), its picture their reference.
+  const ended = await chapterEndLooks(deps.store, runId, chapter);
+  if (ended) {
+    run.player = dressed(run.player, lookOf(ended, ME));
+    run.units = run.units.map((member) => dressed(member, lookOf(ended, member.id)));
+  }
   const unit = partnerOf(run, chapter.date.li);
+  // #2303: on a won date with several, the first two of them with her (a picture holds three people at most). An
+  // earlier Date Night double date's brief was written for two, so it keeps drawing its first love interest with her.
+  const company = [
+    unit,
+    ...(chapter.date.cast ?? [])
+      .slice(1, 2)
+      .flatMap((li) => run.units.filter((candidate) => candidate.id === li && candidate.bible)),
+  ];
   const people: KeepsakePerson[] = [
-    {
-      name: unit.name,
-      identityLine: unit.identityLine || unit.bible!.look.identityLine,
-      outfitLine: wornOutfitLine(unit) || unit.outfitLine || unit.bible!.look.outfitLine,
-      presentation: unit.bible!.look.presentation,
-    },
+    ...company.map((member) => ({
+      name: member.name,
+      identityLine: member.identityLine || member.bible!.look.identityLine,
+      outfitLine: wornOutfitLine(member) || member.outfitLine || member.bible!.look.outfitLine,
+      presentation: member.bible!.look.presentation,
+    })),
     {
       name: run.player.name || "Protagonist",
       identityLine: run.player.look.identityLine,
       outfitLine: wornOutfitLine(run.player) || run.player.look.outfitLine,
-      presentation: "person",
+      presentation: run.player.look.presentation,
     },
   ];
-  // Both of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model
-  // drew him twice or gave her his body (the maintainer's report, 2026-11-03).
-  const subjects = cgSubjects([unit.name, run.player.name], [unit], run.player);
+  // Each of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model
+  // drew him twice or gave her his body (the maintainer's report, 2026-11-03). By id and role, so a namesake or a
+  // protagonist without a name is still each of them.
+  // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+  const subjects = await outfitCutouts(
+    deps,
+    runId,
+    cgSubjects([...company.map((member) => member.id), "protagonist"], company, run.player),
+  );
   const { units, labels } = cgReferences(subjects);
-  return { run, chapter, plan: chapter.date, unit, people, units, references: labels };
+  return {
+    run,
+    chapter,
+    plan: chapter.date,
+    unit,
+    // The subjects are the people in the same order; whoever's reference is their outfit is dressed by it (cgPrompt).
+    people: people.map((person, index) =>
+      subjects[index]?.person.outfitPictured ? { ...person, outfitPictured: true } : person,
+    ),
+    units,
+    references: labels,
+  };
 }
 
 /** POST /runs/:run/art/keepsake/prompt: the prompt the paint would send (the review dialog shows it). */
@@ -632,7 +906,7 @@ export async function keepsakePromptFor(
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
   const { run, plan, people, references } = await keepsakeSubject(deps, runId, key);
-  const style = await worldStyle(imagesOf(deps), run.world.images);
+  const style = await worldStyle(imagesOf(deps), run.world.images, "scene");
   return keepsakePrompt({ brief: plan.keepsake.brief, people, world: run.world, style, references }, edited);
 }
 
@@ -656,7 +930,7 @@ export async function paintKeepsake(
 ): Promise<Paint> {
   const { run, plan, unit, people, units, references } = await keepsakeSubject(deps, runId, key);
   if (plan.keepsake.art?.state === "ready") return plan.keepsake.art;
-  const connectionId = run.world.images.connectionId;
+  const connectionId = imageConnectionFor(run.world.images, "scene");
   if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
   const claim = paintKey(runId, key);
   if (painting.has(claim)) throw new OtomeForgeError(409, "This keepsake is already being painted.", "busy");
@@ -666,7 +940,7 @@ export async function paintKeepsake(
     const latest = (await readChapter(deps.store, runId, key))?.date?.keepsake.art;
     if (latest?.state === "ready") return latest;
     const images = imagesOf(deps);
-    const style = await worldStyle(images, run.world.images);
+    const style = await worldStyle(images, run.world.images, "scene");
     const built = keepsakePrompt(
       { brief: plan.keepsake.brief, people, world: run.world, style, references },
       { prompt, negativePrompt },

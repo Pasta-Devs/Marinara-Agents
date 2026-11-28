@@ -7,7 +7,7 @@
 // prompts; then it waits for the tap, as a failed or stopped one does. Serving the beat paints it when it has no record
 // yet. A beat an Ease off or a Rewrite drops lets its CG go: a paint still waiting stops, a painted one is deleted. The
 // prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
-// person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
+// person, sent as the prompt override, with each person's worn outfit as their reference (at most 4; cgSubjects). A brief
 // that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
 // without the outfit lines (S/prompts.ts cgPrompt).
 // The paint belongs to the beat as it was written (`written.at`): a rewrite while it paints gets nothing, and the
@@ -19,31 +19,41 @@
 import type {
   AlbumCg,
   Beat,
+  Cutout,
+  LiId,
   Paint,
   Player,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { OtomeForgeError } from "../http.js";
 import { beatId, runDocTarget, stateId } from "../ids.js";
-import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/state.js";
+import { STATE_LIMITS, keepNewest, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
+import type { OtomeStore } from "../store.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import { readBeat, readChapter } from "../story/canon.js";
-import { GALLERY_REF_PREFIX, worldStyle, type ImageSubject } from "./image-client.js";
+import { beatLooks, dressRun } from "../story/scene-looks.js";
+import { GALLERY_REF_PREFIX, imageConnectionFor, worldStyle, type ImageSubject } from "./image-client.js";
+import { cutoutsFor, queueCutouts, type CutoutDeps } from "./cutout.js";
 import {
   imagesOf,
   paintRecord,
   paintView,
+  releaseReplacedImage,
+  repainting,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
 } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
 import { CG_PEOPLE_MAX, imageNames, type CgPerson, type ImagePrompt, SCENE_SIZE, cgPrompt } from "../prompts.js";
+import { coreOf, fold, nameWords } from "../names.js";
 
 type BeatCg = NonNullable<Beat["cg"]>;
 
@@ -54,7 +64,7 @@ export const albumKey = (key: string, i: number) => `${key}/${i}`;
 
 const beatNotFound = () => new OtomeForgeError(404, "No such beat.", "not-found");
 const noCg = () => new OtomeForgeError(404, "This beat has no key image.", "not-found");
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 
 /** The beat's CG as the client should see it: a pending paint this process is not painting reads as stopped. */
 export function cgView(runId: string, beat: Pick<Beat, "key" | "i" | "cg" | "written">): BeatCg | null {
@@ -96,47 +106,250 @@ async function updateCg(
 
 // ── Who is in the frame ──
 
+/** Whom a cast entry names: a love interest, the protagonist, or someone only named (`ambiguous`: by several). */
+export type CastMember = { li: Unit } | { player: true } | { name: string; ambiguous?: true };
+
+/** Words a writer calls the protagonist by instead of her name. */
+const PROTAGONIST_WORDS = new Set([
+  "you",
+  "yourself",
+  "protagonist",
+  "the protagonist",
+  "heroine",
+  "the heroine",
+  "player",
+  "the player",
+  "mc",
+  "main character",
+  "the main character",
+]);
+/** Titles that never name someone of this subject pronoun ("Mrs. Ren" is not Kai Ren, who is "he"). */
+const TITLES_NOT_FOR: Partial<Record<string, ReadonlySet<string>>> = {
+  he: new Set("mrs ms miss lady dame mistress princess queen".split(" ")),
+  she: new Set("mr lord sir master prince king".split(" ")),
+};
+
+const within = (words: readonly string[], of: readonly string[]) => words.every((word) => of.includes(word));
+/** Running text's words, split on anything that is not a letter or digit, so "Kai's hand" says Kai. */
+const textWords = (text: string) =>
+  fold(text)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
+/**
+ * Whom each entry of a cast names, in order, each person once. By id (`<id>` or `li:<id>`), a word for the protagonist
+ * ("you", "the heroine"), or a name: an exact match of the core words (no titles, articles, honorifics or accents)
+ * wins over a partial one (every core word is a word of the stored name, or the stored core is among the entry's
+ * words; whole words only, so "Ann" never names Anna). A title of the other gender is someone else ("Mrs. Ren" is not
+ * Kai Ren), and an entry with no letters ("???") names nobody known. Ids, role words and exact names are settled
+ * first, so the cast's order never decides whom a partial name means. Someone already in the frame answers again only
+ * to their exact core or their own words ("Ren" beside Kai Ren is him again). Several left: those `present` (the
+ * node's love interest ids) and the protagonist; one love interest and the protagonist sharing a name are him first,
+ * then her. Still several: only named, and `ambiguous`.
+ */
+export function resolveCast(
+  cast: readonly string[],
+  units: readonly Unit[],
+  player: Player,
+  present?: readonly string[],
+): CastMember[] {
+  const people = [
+    ...units.map((unit) => ({ unit, name: unit.name, pronoun: unit.pronouns?.subject })),
+    { unit: null, name: player.name, pronoun: player.pronouns?.subject },
+  ]
+    .map((person) => ({
+      ...person,
+      words: nameWords(person.name),
+      notFor: TITLES_NOT_FOR[fold(person.pronoun ?? "").trim()],
+    }))
+    .map((person) => ({ ...person, core: coreOf(person.words) }))
+    .filter((person) => person.words.length);
+  const entries = cast.flatMap((entry, at) => {
+    const text = entry.trim();
+    if (!text) return [];
+    const id = text.toLowerCase().replace(/^li:/u, "");
+    const words = nameWords(text);
+    // A love interest by id, the protagonist by a role word (null), else undefined: matched by name.
+    const direct =
+      units.find((unit) => unit.id.toLowerCase() === id) ?? (PROTAGONIST_WORDS.has(words.join(" ")) ? null : undefined);
+    const core = coreOf(words);
+    const matches =
+      direct !== undefined || !words.length
+        ? []
+        : people.flatMap((person) => {
+            if (words.some((word) => person.notFor?.has(word) && !person.words.includes(word))) return [];
+            const exact = core.join(" ") === person.core.join(" ");
+            return exact || within(core, person.words) || within(person.core, words) ? [{ ...person, exact }] : [];
+          });
+    return [{ at, text, words, direct, matches }];
+  });
+  type Entry = (typeof entries)[number];
+  const firm = (entry: Entry) => entry.direct !== undefined || entry.matches.some((match) => match.exact);
+  // Each entry's member (or none), in cast order. Who is in the frame already: a love interest, null for the
+  // protagonist, or the words of someone only named.
+  const slots: CastMember[][] = cast.map(() => []);
+  const taken = new Set<Unit | null | string>();
+  for (const { at, text, words, direct, matches } of [
+    ...entries.filter(firm),
+    ...entries.filter((entry) => !firm(entry)),
+  ]) {
+    const slot = slots[at]!;
+    const add = (unit: Unit | null) => {
+      if (taken.has(unit)) return;
+      taken.add(unit);
+      slot.push(unit ? { li: unit } : { player: true });
+    };
+    const named = (ambiguous?: true) => {
+      const key = words.join(" ") || fold(text);
+      if (taken.has(key)) return;
+      taken.add(key);
+      slot.push({ name: text, ...(ambiguous ? { ambiguous } : {}) });
+    };
+    if (direct !== undefined) {
+      add(direct);
+      continue;
+    }
+    const exact = matches.filter((match) => match.exact);
+    let best = exact.length ? exact : matches;
+    // The protagonist's own name that a love interest of this node starts with ("Kai" for her and Kai Ren): both
+    // stay, so the namesake rule below gives him first, then her (Dottore, #2148).
+    const nodeLis = present
+      ? matches.filter((match) => !match.exact && match.unit && present.includes(match.unit.id))
+      : [];
+    if (exact.length && exact.every((match) => !match.unit) && nodeLis.length) best = [...exact, ...nodeLis];
+    let fresh = best.filter((match) => !taken.has(match.unit));
+    if (!fresh.length) {
+      // Only people already in the frame: them again, or someone else who shares a word of their name.
+      if (!best.some((match) => match.exact || within(words, match.words))) named();
+      continue;
+    }
+    if (fresh.length > 1 && present) {
+      const near = fresh.filter((match) => !match.unit || present.includes(match.unit.id));
+      if (near.length) fresh = near;
+    }
+    const namesake = fresh.length === 2 && fresh.some((match) => !match.unit);
+    if (fresh.length === 1 || namesake) add(fresh.find((match) => match.unit)?.unit ?? null);
+    else named(true);
+  }
+  return slots.flat();
+}
+
+/**
+ * A key image whose cast names nobody: the love interests of its node (one or two) whose name the brief says, and the
+ * protagonist when it says "you", "your", "protagonist", "heroine" or her name, or someone's own pronoun no one else
+ * here uses. Nobody pointed at is nobody: a picture of a letter stays empty.
+ */
+function briefCast(brief: string, units: readonly Unit[], player: Player, present: readonly string[]): CastMember[] {
+  const lis = present.flatMap((id) => units.filter((unit) => unit.id === id));
+  if (lis.length < 1 || lis.length > 2) return [];
+  const said = new Set(textWords(brief));
+  const forms = (pronouns: Partial<Unit["pronouns"]> | undefined) =>
+    [pronouns?.subject, pronouns?.object, pronouns?.possessive].flatMap((form) => textWords(form ?? ""));
+  const people = [
+    ...lis.map((unit) => ({
+      member: { li: unit } as CastMember,
+      words: coreOf(textWords(unit.name)),
+      pronouns: forms(unit.pronouns),
+    })),
+    {
+      member: { player: true } as CastMember,
+      words: [...coreOf(textWords(player.name)), "you", "your", "protagonist", "heroine"],
+      pronouns: forms(player.pronouns),
+    },
+  ];
+  const unshared = (form: string) => people.filter((person) => person.pronouns.includes(form)).length === 1;
+  return people
+    .filter(
+      (person) =>
+        person.words.some((word) => said.has(word)) || person.pronouns.some((form) => said.has(form) && unshared(form)),
+    )
+    .map((person) => person.member);
+}
+
 export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
-  /** The painted look they wear, if any: their one reference beside others (cgSubjects). */
-  wornUrl?: string;
+  /** Whose documents keep their pictures and cut-outs: a love interest's id, or "player". */
+  owner?: LiId | "player";
+  /**
+   * The picture of the outfit they wear in the picture, as painted (the look put on with Wear, else their painted base
+   * look); its cut-out is what is sent. None while that look has no picture, or while an Engine sprite or avatar stands
+   * in for it.
+   */
+  outfit?: string;
+  /** Who they are when their outfit cannot be sent: their card or persona, whose avatar then stands in. */
+  likeness?: { cardId?: string; personaId?: string; who: string };
+  /** Only named, by a name several people share (resolveCast). */
+  ambiguous?: true;
 }
 
 /**
  * The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most
- * CG_PEOPLE_MAX). Alone, a person is sent as who they are and the look they wear (two references). With others, each
- * person is ONE reference, their worn look when they have one: two full-body pictures of each person in the same
- * standing pose made the model merge bodies and draw extra limbs (the maintainer's report, 2026-11-03).
+ * CG_PEOPLE_MAX), each matched by resolveCast. A story key image (`scene`) whose cast names nobody takes them from its
+ * brief (briefCast). Story CGs, date keepsakes, Wish art, banner art and tarot cards all draw their people from here.
+ * 0.36.5 (the maintainer's call): each person is ONE reference, the outfit they wear, cut out of its backdrop, so the
+ * picture shows them in the clothes the prompt names and brings no background (`outfitPictured`). Only while that
+ * outfit has no picture or no cut-out do they send their card or persona avatar instead (never a card's full-body
+ * sprite, whose clothes would contradict the outfit), and the prompt dresses them in words. This reads the cut-outs
+ * as saved; a paint and its prompt review go through outfitCutouts, which cuts what is missing and checks each picture
+ * loads. One picture each, as since 2026-11-03: two full-body pictures of one person made the model merge bodies and
+ * draw extra limbs.
  */
-export function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
-  const subjects = castSubjects(cast, units, player);
-  if (subjects.length < 2) return subjects;
-  return subjects.map((subject) =>
-    subject.image && subject.wornUrl
-      ? {
-          ...subject,
-          // Their setup portrait stands behind the look, should its file be gone.
-          image: {
-            kind: "character",
-            portrait: subject.wornUrl,
-            ...(subject.image.portrait ? { avatarPath: subject.image.portrait } : {}),
-          },
-        }
-      : subject,
+export function cgSubjects(
+  cast: readonly string[],
+  units: readonly Unit[],
+  player: Player,
+  scene?: { present: readonly string[]; brief: string },
+): CgSubject[] {
+  const cutoutsOf = (owner: CgSubject["owner"]) =>
+    owner === "player" ? player.cutouts : units.find((unit) => unit.id === owner)?.cutouts;
+  return castSubjects(cast, units, player, scene).map((subject) =>
+    dressedIn(subject, readyCutout(cutoutsOf(subject.owner), subject.outfit)),
   );
+}
+
+/**
+ * Whom a subject's reference shows: their outfit's cut-out when there is one to send, else their card or persona
+ * avatar (outfit in words). With neither, the uncut outfit, so they are still drawn as themselves (#2145).
+ */
+function dressedIn(subject: CgSubject, cutout: string | undefined): CgSubject {
+  if (!subject.likeness) return subject;
+  const { cardId, personaId, who } = subject.likeness;
+  const { outfitPictured: _pictured, ...person } = subject.person;
+  if (cutout) {
+    return {
+      ...subject,
+      person: { ...person, outfitPictured: true },
+      image: { kind: "character", avatarPath: cutout, who },
+    };
+  }
+  if (cardId || personaId) {
+    const avatar = {
+      kind: "character" as const,
+      ...(cardId ? { cardId } : { personaId }),
+      avatarOnly: true as const,
+      who,
+    };
+    return { ...subject, person, image: avatar };
+  }
+  if (!subject.outfit) return { ...subject, person, image: { kind: "character", who } };
+  return {
+    ...subject,
+    person: { ...person, outfitPictured: true },
+    image: { kind: "character", avatarPath: subject.outfit, who },
+  };
 }
 
 /** Whether the kit can find a picture of this subject for sure (a card, a portrait or a look), or only maybe. */
 const likenessOf = (image: ImageSubject): "sure" | "maybe" | "none" =>
-  image.cardId || image.portrait ? "sure" : image.personaId ? "maybe" : "none";
+  image.cardId || image.portrait || image.avatarPath ? "sure" : image.personaId || image.wornOutfit ? "maybe" : "none";
 
 /**
  * The references a CG of these subjects sends (`units`, for generateBannerArt) and whom each one shows (`labels`, for
- * cgPrompt), from one list so the two always agree: every person's likeness in turn, then a lone person's worn look,
- * as the kit sends them. Someone with nothing to send is neither sent nor named, and a protagonist known only by a
- * persona (whose avatar may be empty) goes last, so a missing picture of her never moves anyone else's label.
+ * cgPrompt), from one list so the two always agree: one picture per person, as the kit sends them. Someone with
+ * nothing to send is neither sent nor named, and a protagonist known only by a persona (whose avatar may be empty)
+ * goes last, so a missing picture of her never moves anyone else's label.
  * ponytail: a file that fails to load (a deleted card image) still shifts the labels after it; the kit logs it. The
  * upgrade path is the kit returning which references it sent.
  */
@@ -150,36 +363,128 @@ export function cgReferences(subjects: readonly CgSubject[]): { units: ImageSubj
   const ordered = [...shown].sort(
     (a, b) => Number(likenessOf(a.image!) === "maybe") - Number(likenessOf(b.image!) === "maybe"),
   );
-  const labels = ordered.map(first);
-  const alone = ordered.length === 1 ? ordered[0]! : undefined;
-  // A lone person's look follows their likeness; when that likeness may be missing, the look is named as them.
-  if (alone?.image?.wornOutfit && likenessOf(alone.image) === "sure") labels.push(`${first(alone)}'s outfit`);
-  return { units: ordered.map((subject) => subject.image!), labels };
+  return { units: ordered.map((subject) => subject.image!), labels: ordered.map(first) };
+}
+
+/** Logs, at a paid paint, each person the brief names whom no love interest or the protagonist answers to. */
+export function warnUnmatched(
+  logger: Pick<ArtDeps["runtime"]["logger"], "warn">,
+  label: string,
+  subjects: readonly CgSubject[],
+): void {
+  for (const { image, ambiguous, person } of subjects) {
+    if (image) continue;
+    logger.warn(
+      ambiguous
+        ? '[otome-forge] %s: "%s" could be more than one person; painted without a reference'
+        : '[otome-forge] %s: "%s" is no love interest or protagonist; painted without a reference',
+      label,
+      person.name,
+    );
+  }
+}
+
+/**
+ * The picture of the outfit someone wears: the worn look's, else (no look worn) their base look when Otome painted it.
+ * An Engine sprite or avatar standing in for the base look (art/engine-art.ts) shows other clothes, so it is none.
+ */
+function outfitPicture(worn: { url?: string } | undefined, portrait: string | undefined): string | undefined {
+  if (worn) return worn.url || undefined;
+  return portrait && !isEngineArt(portrait) ? portrait : undefined;
+}
+
+/** The outfit picture's cut-out, ready (art/cutout.ts): an uncut look would send its chroma backdrop along. */
+const readyCutout = (cutouts: Record<string, Cutout> | undefined, url: string | undefined) => {
+  const record = url ? cutouts?.[url] : undefined;
+  return record?.state === "ready" && record.url ? record.url : undefined;
+};
+
+/** What outfitCutouts needs: the cut-outs' documents and client, and the image client to check a picture loads. */
+export type OutfitDeps = CutoutDeps &
+  Pick<ArtDeps, "runtime" | "images"> & { store: Pick<OtomeStore, "readDoc" | "updateDoc"> };
+
+/** Whose document keeps a picture's cut-out (art/cutout.ts): a love interest's id, or "player". */
+export type CutoutOwner = LiId | "player";
+
+/**
+ * The cut-outs of these pictures, each kept by its owner, for a paint and its prompt review: it cuts each one with no
+ * cut-out yet (free, art/cutout.ts) and waits for those cut-outs alone, then answers a picture's cut-out only when its
+ * file loads. A cut that failed, or a cut-out whose file is gone, answers nothing, and the caller sends what it would
+ * have without one. Scene art (outfitCutouts), the pair portrait and the Photo Shoot share it.
+ */
+export async function loadedCutouts(
+  deps: OutfitDeps,
+  runId: string,
+  wanted: ReadonlyArray<{ owner: CutoutOwner; url: string }>,
+): Promise<(owner: CutoutOwner, url: string) => string | undefined> {
+  const loaded = new Map<string, string>();
+  const cutoutOf = (owner: CutoutOwner, url: string) => loaded.get(`${owner}|${url}`);
+  const byOwner = new Map<CutoutOwner, string[]>();
+  for (const { owner, url } of wanted) byOwner.set(owner, [...(byOwner.get(owner) ?? []), url]);
+  if (!byOwner.size) return cutoutOf;
+  const ownerDoc = (run: RunDocuments, owner: CutoutOwner) =>
+    owner === "player"
+      ? { id: "player", cutouts: run.player.cutouts ?? {} }
+      : run.units.find((unit) => unit.id === owner);
+  const run = await readRun(deps.store, runId);
+  if (!run) return cutoutOf;
+  // A cut-out already saved, failed or on its way is not cut again (queueCutouts claims each in its document).
+  for (const [owner, urls] of byOwner) {
+    const doc = ownerDoc(run, owner);
+    if (doc) await queueCutouts(deps, runId, doc as Pick<Unit, "id" | "cutouts">, urls);
+  }
+  await Promise.all([...byOwner].map(([owner, urls]) => cutoutsFor(runId, owner, urls)));
+  const fresh = (await readRun(deps.store, runId)) ?? run;
+  const images = imagesOf(deps as ArtDeps);
+  await Promise.all(
+    wanted.map(async ({ owner, url }) => {
+      const cutout = readyCutout(ownerDoc(fresh, owner)?.cutouts, url);
+      // A ready record whose file is gone (deleted, unreadable) is no picture to send.
+      if (cutout && (await images.cardAvatarImage(cutout).catch(() => null))) loaded.set(`${owner}|${url}`, cutout);
+    }),
+  );
+  return cutoutOf;
+}
+
+/**
+ * A paint's and its prompt review's people, with their outfits cut out (loadedCutouts): each person's cut-out when its
+ * file loads. One that failed, or whose file is gone, leaves them on their avatar and the outfit line (dressedIn).
+ */
+export async function outfitCutouts(deps: OutfitDeps, runId: string, subjects: CgSubject[]): Promise<CgSubject[]> {
+  const wanted = subjects.flatMap(({ owner, outfit, likeness }) =>
+    owner && outfit && likeness ? [{ owner, url: outfit }] : [],
+  );
+  if (!wanted.length) return subjects;
+  const cutoutOf = await loadedCutouts(deps, runId, wanted);
+  return subjects.map((subject) =>
+    subject.owner && subject.likeness
+      ? dressedIn(subject, subject.outfit ? cutoutOf(subject.owner, subject.outfit) : undefined)
+      : subject,
+  );
 }
 
 /** The CG's people as the brief names them, each with their likeness and the look they wear. */
-function castSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
-  const subjects: CgSubject[] = [];
-  const seen = new Set<string>();
-  for (const name of cast) {
-    if (subjects.length >= CG_PEOPLE_MAX) break;
-    // A name a love interest already took that is also the protagonist's is her (a keepsake with a namesake persona).
-    const named = units.find((candidate) => sameName(name, candidate.name));
-    const playerToo = !!player.name && sameName(name, player.name);
-    const unit = named && !(playerToo && seen.has(`li:${named.id}`)) ? named : undefined;
-    const isPlayer = !unit && playerToo;
-    const id = unit ? `li:${unit.id}` : isPlayer ? "player" : `name:${name.trim().toLowerCase()}`;
-    if (!name.trim() || seen.has(id)) continue;
-    seen.add(id);
-    if (unit) {
-      // The look worn now dresses them in the CG: its outfit line in the prompt, its image after the faces.
+function castSubjects(
+  cast: readonly string[],
+  units: readonly Unit[],
+  player: Player,
+  scene?: { present: readonly string[]; brief: string },
+): CgSubject[] {
+  const resolved = resolveCast(cast, units, player, scene?.present);
+  const members = resolved.length || !scene ? resolved : briefCast(scene.brief, units, player, scene.present);
+  return members.slice(0, CG_PEOPLE_MAX).map((member): CgSubject => {
+    if ("li" in member) {
+      const unit = member.li;
+      // The look worn now dresses them in the CG: its outfit line in the prompt, its picture as their reference.
       const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
-      subjects.push({
+      const outfit = outfitPicture(worn, unit.portrait);
+      return {
         person: {
           name: unit.name,
-          identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
-          outfitLine: worn?.outfitLine || unit.outfitLine || unit.bible?.look.outfitLine || "",
-          presentation: unit.bible?.look.presentation ?? "person",
+          // #2458: a friend's look is in their friend bible, as a love interest's is in his.
+          identityLine: unit.identityLine || (unit.bible ?? unit.friend)?.look.identityLine || "",
+          outfitLine: worn?.outfitLine || unit.outfitLine || (unit.bible ?? unit.friend)?.look.outfitLine || "",
+          presentation: (unit.bible ?? unit.friend)?.look.presentation ?? "person",
         },
         image: {
           kind: "character",
@@ -187,17 +492,22 @@ function castSubjects(cast: readonly string[], units: readonly Unit[], player: P
           ...(unit.portrait ? { portrait: unit.portrait } : {}),
           outfits: unit.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
+          who: unit.name,
         },
-        ...(worn?.url ? { wornUrl: worn.url } : {}),
-      });
-    } else if (isPlayer) {
+        owner: unit.id,
+        ...(outfit ? { outfit } : {}),
+        likeness: { ...(unit.cardId ? { cardId: unit.cardId } : {}), who: unit.name },
+      };
+    }
+    if ("player" in member) {
       const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
-      subjects.push({
+      const outfit = outfitPicture(worn, player.portrait);
+      const name = player.name || "Protagonist";
+      return {
         person: {
-          name: player.name,
+          name,
           ...player.look,
           ...(worn?.outfitLine ? { outfitLine: worn.outfitLine } : {}),
-          presentation: "person",
         },
         image: {
           kind: "character",
@@ -205,14 +515,18 @@ function castSubjects(cast: readonly string[], units: readonly Unit[], player: P
           ...(player.portrait ? { portrait: player.portrait } : {}),
           outfits: player.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
+          who: name,
         },
-        ...(worn?.url ? { wornUrl: worn.url } : {}),
-      });
-    } else {
-      subjects.push({ person: { name: name.trim(), identityLine: "", outfitLine: "", presentation: "person" } });
+        owner: "player",
+        ...(outfit ? { outfit } : {}),
+        likeness: { ...(player.personaId ? { personaId: player.personaId } : {}), who: name },
+      };
     }
-  }
-  return subjects;
+    return {
+      person: { name: member.name, identityLine: "", outfitLine: "", presentation: "person" },
+      ...(member.ambiguous ? { ambiguous: true as const } : {}),
+    };
+  });
 }
 
 /** The CG prompt for the stored beat, and who is in it. */
@@ -222,8 +536,19 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const cg = beat.cg;
   if (!cg) throw noCg();
-  const subjects = cgSubjects(cg.cast, run.units, run.player);
-  const style = await worldStyle(imagesOf(deps), run.world.images);
+  // The node's love interests settle a name several share, and stand in for a cast that names nobody.
+  const chapter = await readChapter(deps.store, runId, beat.key);
+  const present = chapter?.nodes[beat.i]?.cast ?? [];
+  // #2509: each of them in the look this scene dresses them in (S/story/scene-looks.ts): its picture is their reference.
+  const dressedRun = dressRun(run, chapter ? await beatLooks(deps.store, runId, chapter, beat.i) : null);
+  // 0.36.5: each person's outfit goes cut out, so what is not cut yet is cut first (free), for the paint and for the
+  // prompt review alike, so both name the same pictures.
+  const subjects = await outfitCutouts(
+    deps,
+    runId,
+    cgSubjects(cg.cast, dressedRun.units, dressedRun.player, { present, brief: cg.brief }),
+  );
+  const style = await worldStyle(imagesOf(deps), run.world.images, "scene");
   const prompt = cgPrompt(
     {
       brief: cg.brief,
@@ -278,13 +603,14 @@ async function paintCg(
       if (!run || !paintsFor(current, writtenAt, at)) return "gone";
       // Eased off before its line: it can never be shown or unlocked, so nothing is paid for it.
       if (current!.easedOff && current!.easedOff.at < current!.cg!.at) return "stopped";
-      if (run.world.images.connectionId !== connectionId) return "stopped";
+      if (imageConnectionFor(run.world.images, "scene") !== connectionId) return "stopped";
       if (!options.consent && run.world.images.ask) return "waiting-consent";
       return "paint";
     },
     async paint() {
       // Built now, so the rating, the 18+ gate and everyone's looks are the ones in force at the paid call.
       const built = await buildCg(deps, runId, beat, options.edited);
+      warnUnmatched(deps.runtime.logger, `cg ${albumKey(beat.key, beat.i)}`, built.subjects);
       return images.generateBannerArt({
         connectionId,
         // The Engine matches the override as `avatar:<slug of the first person's first name>`.
@@ -297,12 +623,44 @@ async function paintCg(
       });
     },
     async save(art) {
-      const saved = await updateCg(deps, runId, beat, writtenAt, (cg) =>
-        cg.art?.state === "pending" && cg.art.at === at ? { ...cg, art } : null,
-      );
-      return !!saved?.changed;
+      let replaced: Paint | undefined;
+      const saved = await updateCg(deps, runId, beat, writtenAt, (cg) => {
+        if (cg.art?.state !== "pending" || cg.art.at !== at) return null;
+        replaced = cg.art;
+        return { ...cg, art: withKeptPicture(art, replaced) };
+      });
+      if (!saved?.changed) return false;
+      const now = saved.beat.cg?.art;
+      // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted, and only once
+      // the Album shows the new picture too.
+      if (now?.state === "ready") {
+        await updateAlbumPicture(deps, runId, albumKey(beat.key, beat.i), now);
+        await releaseReplacedImage(deps, replaced, now);
+      }
+      return true;
     },
   });
+}
+
+/**
+ * Points the Album's CG entry for `key` at the picture its record now shows (0.24.0: a repaint of an unlocked CG), so
+ * the keepsake follows the beat instead of holding the image the repaint replaced. Never throws: the CG is painted.
+ */
+async function updateAlbumPicture(deps: ArtDeps, runId: string, key: string, art: Paint): Promise<void> {
+  if (!art.url || !art.ref) return;
+  await updateIfChanged(deps.store, runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+    const at = current.album.cgs.findIndex((entry) => entry.key === key);
+    if (at < 0 || current.album.cgs[at].ref === art.ref) return undefined;
+    const cgs = [...current.album.cgs];
+    cgs[at] = { ...cgs[at], url: art.url!, ref: art.ref! };
+    return { ...current, album: { ...current.album, cgs } };
+  }).catch((error: unknown) =>
+    deps.runtime.logger.warn(
+      "[otome-forge] moving the album's key image %s to its new picture failed: %s",
+      key,
+      error instanceof Error ? error.message : String(error),
+    ),
+  );
 }
 
 /** Each CG whose record a start is writing, by run and owner (see startBeatCg). */
@@ -343,7 +701,7 @@ export async function startBeatCg(
   let painting: Promise<void> | null = null;
   try {
     const run = await readRun(deps.store, runId);
-    const connectionId = run?.world.images.connectionId;
+    const connectionId = run ? imageConnectionFor(run.world.images, "scene") : null;
     if (!run || !connectionId) return idle;
     const wait = run.world.images.ask || options.review === true;
     const at = new Date().toISOString();
@@ -372,8 +730,9 @@ export async function paintBeatCg(deps: ArtDeps, runId: string, written: Beat, o
 }
 
 /**
- * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, or Retry). Waits for the paint and resolves
- * the CG's record as left; a ready one is returned as it is, and a tap while it is painting waits for that paint.
+ * POST /runs/:run/art/cg: the tap that paints a beat's CG now (its consent, Retry, or 0.24.0 a repaint of a ready one).
+ * Waits for the paint and resolves the CG's record as left; a tap while it is painting waits for that paint, so no tap
+ * pays twice.
  */
 export async function paintCgNow(
   deps: ArtDeps,
@@ -397,15 +756,15 @@ export async function paintCgNow(
       return { value: art, art };
     },
     async () => {
-      if (beat.cg!.art?.state === "ready") return beat.cg!.art;
       const run = await readRun(deps.store, runId);
       if (!run) throw runNotFound();
-      const connectionId = run.world.images.connectionId;
+      const connectionId = imageConnectionFor(run.world.images, "scene");
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
-      const saved = await updateCg(deps, runId, beat, beat.written.at, (cg) =>
-        cg.art?.state === "ready" ? null : { ...cg, art: { state: "pending", at } },
-      );
+      const saved = await updateCg(deps, runId, beat, beat.written.at, (cg) => ({
+        ...cg,
+        art: repainting(cg.art, at),
+      }));
       if (!saved) throw new OtomeForgeError(409, "This scene changed. Open it again.", "conflict");
       if (saved.changed) {
         await paintCg(deps, runId, saved.beat, at, connectionId, { debugMode, consent: true, edited, active });
@@ -430,8 +789,10 @@ export function queueScenePaints(deps: ArtDeps, runId: string, beat: Beat, optio
 // ── Unlocking ──
 
 /**
- * POST /runs/:run/art/cg/seen: adds the beat's CG to the album once it is ready and the beat has been read to the
- * segment it opens on (POST .../read reports how far). `unlocked` is true only on the request that added it.
+ * POST /runs/:run/art/cg/seen: adds the beat's CG to the album once it has a picture and the beat has been read to the
+ * segment it opens on (POST .../read reports how far). `unlocked` is true only on the request that added it. The picture
+ * counts whatever its state: a repaint in flight, failed or stopped keeps the old one on screen, so it is the one seen
+ * (0.24.0); updateAlbumPicture moves the entry when the new picture lands.
  */
 export async function markCgSeen(
   deps: ArtDeps,
@@ -444,7 +805,7 @@ export async function markCgSeen(
   const cg = beat.cg;
   if (!cg) throw noCg();
   const art = cg.art;
-  if (art?.state !== "ready" || !art.url || !art.ref) {
+  if (!art?.url || !art.ref) {
     throw new OtomeForgeError(409, "This key image is not painted yet.", "conflict");
   }
   // An Ease off before the CG's segment keeps readThrough below it, and a beat written ahead (its CG painted with it,
@@ -472,6 +833,17 @@ export async function markCgSeen(
       : { ...current, album: { ...current.album, cgs: keepNewest([...current.album.cgs, entry], STATE_LIMITS.album) } },
   );
   if (!result) throw runNotFound();
+  // A repaint that saved between the read above and this write already moved its entry, and found none: the Album now
+  // holds the picture the repaint replaced, which it released. Read the beat again and follow it when it moved on
+  // (Dottore, #2255); one that lands later moves the entry itself through updateAlbumPicture.
+  const now = await readBeat(deps.store, runId, key, i);
+  const current = now?.cg?.art;
+  if (result.changed && current?.url && current.ref && current.ref !== entry.ref) {
+    await updateAlbumPicture(deps, runId, entry.key, current);
+    // The response answers with what the Album holds now, not with the picture the repaint already replaced.
+    const moved = await deps.store.readDoc(stateId(runId), normalizeState);
+    if (moved) return { unlocked: true, album: moved.album.cgs };
+  }
   return { unlocked: result.changed, album: result.value.album.cgs };
 }
 

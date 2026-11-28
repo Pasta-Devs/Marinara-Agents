@@ -10,13 +10,18 @@
 // retry runs: the banner comes back only when it fails again. The request is a mutation under memoryRetryKey, so
 // `busy` is every instance's at once: a Retry pressed in Settings hides the banner shown beside it at once too, and
 // neither sends a second one.
+// Long-term recall's index (GET .../memory/recall, POST .../memory/recall/retry, 0.19.0) is read beside it: polled
+// only while it indexes, and its Retry indexing answers with the status it starts.
 import { useState } from "react";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../api";
 import { memoryNotice, memoryPollMs, nextMemoryView, type MemoryView } from "../lib/memory-notice";
-import type { MemoryStatus } from "../shared/api-types";
+import type { MemoryStatus, RecallIndexStatus } from "../shared/api-types";
 
 export const memoryQueryKey = (runKey: string) => ["otome-forge", "memory", runKey] as const;
+export const recallQueryKey = (runKey: string) => ["otome-forge", "recall", runKey] as const;
+/** How often the recall index's status is read again while it indexes. */
+const RECALL_POLL_MS = 3000;
 const memoryRetryKey = (runKey: string) => ["otome-forge", "memory-retry", runKey] as const;
 
 export function useMemoryStatus(runKey: string, { watching = false }: { watching?: boolean } = {}) {
@@ -67,4 +72,23 @@ export function useMemoryStatus(runKey: string, { watching = false }: { watching
   const error = failure && failure.on === query.data ? failure.message : null;
 
   return { query, status: query.data, notice: memoryNotice(query.data, busy), retry, busy, error };
+}
+
+/** Long-term recall's index (see the header): its status, and Retry indexing for one that failed. */
+export function useRecallIndex(runKey: string) {
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const path = `/runs/${encodeURIComponent(runKey)}/memory/recall`;
+  const queryKey = recallQueryKey(runKey);
+  const query = useQuery({
+    queryKey,
+    queryFn: async () => (await otome.get<{ status: RecallIndexStatus }>(path)).status,
+    refetchInterval: (current) => (current.state.data?.phase === "indexing" ? RECALL_POLL_MS : false),
+  });
+  const retry = useMutation({
+    networkMode: "always",
+    mutationFn: async () => (await otome.post<{ status: RecallIndexStatus }>(`${path}/retry`)).status,
+    onSuccess: (status) => queryClient.setQueryData(queryKey, status),
+  });
+  return { query, status: query.data, retry, error: retry.isError ? otome.errorMessage(retry.error) : null };
 }

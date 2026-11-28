@@ -6,6 +6,7 @@ import type { Unit } from "../packages/otome-forge/src/engine/packages/client/sr
 import { FACES } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { expressionPrompt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import {
   runDocTarget,
   unitId,
@@ -165,6 +166,32 @@ test("a speaking love interest gets his five faces once, nonsexual adult edits o
   t.art.dispose();
 });
 
+test("#2448: the forge's faces (lane high) paint before scene art queued after them; a beat's wait behind it", async () => {
+  for (const lane of ["high", "low"] as const) {
+    const order: string[] = [];
+    const t = await facesWorld(
+      lane === "high" ? "r-m2bexprhi-aaaaaa" : "r-m2bexprlo-aaaaaa",
+      () => void order.push("face"),
+    );
+    // A paint holds the connection, so what is queued next waits in its lane.
+    let release = () => {};
+    const held = paintSlot("conn-image", () => new Promise<void>((resolve) => (release = resolve)));
+    t.art.queueExpressions(t.runId, beat(0), { debugMode: false, ...(lane === "high" ? { lane } : {}) });
+    await until(async () => (await t.set())?.state === "pending", "the set to start");
+    const scene = paintSlot("conn-image", async () => void order.push("scene"));
+    release();
+    await Promise.all([held, scene]);
+    await until(async () => settled(await t.set()), "Kai's faces");
+    assert.equal(order.length, 6);
+    assert.deepEqual(
+      order.slice(0, 2),
+      lane === "high" ? ["face", "scene"] : ["scene", "face"],
+      lane === "high" ? "his first face goes before the scene art" : "a beat's faces wait for the scene art",
+    );
+    t.art.dispose();
+  }
+});
+
 test("a newcomer kept out of the cast never makes a cast member's first name ambiguous to the faces", async () => {
   const t = await facesWorld("r-m2bexpr0-aaaaaa");
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
@@ -287,5 +314,51 @@ test("a repainted look leaves its old faces unused: the next scene prunes them a
   assert.deepEqual(Object.keys(unit.expressions), ["/api/global-gallery/file/kai-look-2.png"]);
   assert.equal(t.deleted.length, 5, "the old look's five faces leave the gallery");
   assert.equal(t.paid.length, 10);
+  t.art.dispose();
+});
+
+test("#2509: a scene's look gets its own five faces, his Home look keeps its set, and only a look of his own is painted", async () => {
+  const t = await facesWorld("r-scenefaces-aaaaaa");
+  const SUIT = "/api/global-gallery/file/kai-suit.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    outfits: [{ id: "suit", name: "Suit", outfitLine: "black suit", url: SUIT, at: "2026-10-28T10:00:00.000Z" }],
+  }));
+  // A base that is none of his pictures paints nothing.
+  t.art.queueExpressions(t.runId, beat(0), {
+    debugMode: false,
+    bases: { [KAI]: "/api/global-gallery/file/other.png" },
+  });
+  await until(async () => settled(await t.set()), "his portrait's faces, painted instead");
+  assert.equal(t.paid.length, 5, "only his own look's faces");
+  assert.equal((await t.unit()).expressions["/api/global-gallery/file/other.png"], undefined);
+  // The scene stands him in his suit, which he does not wear at home: the suit gets its set, and the portrait's stays.
+  t.art.queueExpressions(t.runId, beat(0), { debugMode: false, bases: { [KAI]: SUIT } });
+  await until(async () => settled((await t.unit()).expressions[SUIT] as SetRecord | undefined), "the suit's faces");
+  const suit = (await t.unit()).expressions[SUIT] as SetRecord;
+  assert.equal(suit.state, "ready");
+  assert.deepEqual(Object.keys(suit.images ?? {}).sort(), [...FACES].sort());
+  assert.equal(t.paid.length, 10);
+  assert.equal((await t.set())!.state, "ready", "the Home look's set is untouched");
+  assert.equal((await t.unit()).wornOutfit, undefined, "nothing is worn");
+  // Served again: both sets are ready, nothing more is paid.
+  t.art.queueExpressions(t.runId, beat(0), { debugMode: false, bases: { [KAI]: SUIT } });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(t.paid.length, 10);
+  // He now wears a coat at home whose set was never painted (a Wear dropped while a scene's set painted): with the
+  // scene's suit ready, the next scene paints the coat's set, as every scene did before.
+  const COAT = "/api/global-gallery/file/kai-coat.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    outfits: [
+      ...unit.outfits,
+      { id: "coat", name: "Coat", outfitLine: "grey coat", url: COAT, at: "2026-10-28T10:00:00.000Z" },
+    ],
+    wornOutfit: "coat",
+  }));
+  t.art.queueExpressions(t.runId, beat(0), { debugMode: false, bases: { [KAI]: SUIT } });
+  await until(async () => settled((await t.unit()).expressions[COAT] as SetRecord | undefined), "the coat's faces");
+  assert.equal(((await t.unit()).expressions[COAT] as SetRecord).state, "ready");
+  assert.equal(t.paid.length, 15);
   t.art.dispose();
 });

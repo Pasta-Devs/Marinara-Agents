@@ -37,6 +37,8 @@ export const ltmMemoryChunkSchema = z
     dimensions: ltmRelationshipDimensionsSchema.optional(),
     dimensionChanges: ltmRelationshipDimensionChangesSchema.optional(),
     updatedAt: ltmIsoTimestampSchema,
+    // Timeline events: the story date their recall bullet starts with.
+    storyDate: z.string().min(1).max(600).optional(),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strict();
@@ -284,6 +286,8 @@ export const ltmStatusResponseSchema = z
           .nullable(),
         noteCount: z.number().int().min(0).nullable(),
         chunkCount: z.number().int().min(0).nullable(),
+        /** Average prompt tokens of one indexed memory; null without an index or memories. */
+        averageMemoryTokens: z.number().int().min(1).nullable().optional(),
         chunkFormatVersion: z.number().int().min(1).nullable(),
         embeddingsAvailable: z.boolean(),
         embeddedChunkCount: z.number().int().min(0),

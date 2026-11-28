@@ -23,6 +23,7 @@ import type { SlpMessagesContext } from "./slp-messages-context.js";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
 import { SLURP_SUPPORT_NAME } from "../../modules/messages/slp-dm-roles.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
 class SlurpMessageMediaRequestError extends Error {
@@ -178,7 +179,7 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
       !(await ownsCreator(parsed.data.personaId, thread.creatorAccountId))
     )
       return reply.code(404).send({ error: "Thread not found" });
-    if (thread.coolUntil && thread.coolUntil > new Date().toISOString()) {
+    if (thread.coolUntil && thread.coolUntil > slurpWorldNow().toISOString()) {
       return reply.code(409).send({ error: "This conversation is cooling off." });
     }
     const subscribed = (await slurp.listSubscriptionsForViewer(thread.viewerAccountId)).some(
@@ -201,7 +202,7 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
         content: parsed.data.content,
         kind: offer.visibility === "locked" ? "ppv" : "text",
         price: offer.price,
-        unlockedAt: offer.visibility === "free" ? new Date().toISOString() : null,
+        unlockedAt: offer.visibility === "free" ? slurpWorldNow().toISOString() : null,
         imageUrl: slurpMessageMediaUrl("pending"),
         metadata: {
           noodlerMediaPath: drawn.mediaPath,
@@ -293,7 +294,7 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
     if (!thread || !sender) return reply.code(404).send({ error: "Thread not found" });
     // `/messages/send` refuses a closed thread through `openThread`; these routes append directly.
     if (thread.state === "declined") return reply.code(403).send({ error: "This conversation is closed." });
-    if (thread.coolUntil && thread.coolUntil > new Date().toISOString())
+    if (thread.coolUntil && thread.coolUntil > slurpWorldNow().toISOString())
       return reply.code(409).send({ error: "This conversation is cooling off." });
     // The wait between two drawn pictures is the player's setting (minutes, 0 = off).
     // The whole thread, not the newest 120 messages: a long chat forgot the last picture (R1-015).
@@ -322,7 +323,7 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
         role: "viewer",
         content: parsed.data.content,
         imageUrl: slurpMessageMediaUrl("pending"),
-        unlockedAt: new Date().toISOString(),
+        unlockedAt: slurpWorldNow().toISOString(),
         metadata: {
           ...sender.metadata,
           noodlerMediaPath: drawn.mediaPath,

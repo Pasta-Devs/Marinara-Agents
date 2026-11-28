@@ -43,13 +43,21 @@ export function slpStorylineDraftFromArc(arc: SlpArcBlueprint): Draft {
     const key = `c${index + 1}`;
     const after = index + 1 < arc.chapters.length ? `c${index + 2}` : END.key;
     const { mood, effects, profile, storyTags } = chapter;
+    // Only the condition axes that are set are written: zod 4 keeps no key whose value is undefined, and a JSON round
+    // trip drops one, so naming them all would make a pack differ from itself on the second read.
+    const condition = {
+      ...(mood === undefined ? {} : { mood }),
+      ...(effects === undefined ? {} : { effects }),
+      ...(profile === undefined ? {} : { profile }),
+      ...(storyTags === undefined ? {} : { storyTags }),
+    };
     const branches = chapter.choice?.options ?? [];
     stages.push({
       key,
       label: chapter.label,
       // v1 reads a reversed pair as its low end (slp-arc-progress).
       days: [chapter.minDays, Math.max(chapter.minDays, chapter.maxDays)],
-      ...(mood || effects || profile || storyTags ? { condition: { mood, effects, profile, storyTags } } : {}),
+      ...(mood || effects || profile || storyTags ? { condition } : {}),
       influences: chapter.influences,
       enter: [...chapter.outcomes, ...chapter.opportunities.map(boost)],
       ...(chapter.choice
@@ -92,7 +100,7 @@ export function slpStorylineDraftFromArc(arc: SlpArcBlueprint): Draft {
     description: arc.description,
     tone: arc.tone,
     tags: arc.tags,
-    storyTags: arc.storyTags,
+    ...(arc.storyTags?.length ? { storyTags: arc.storyTags } : {}),
     cast: SOLO,
     start: { mode: arc.automation, once: arc.once ?? false },
     maxDays: capDays(Math.max(arc.durationDays, longest)),
@@ -118,7 +126,7 @@ export function slpStorylineDraftFromEvent(event: SlpEventBlueprint): Draft {
     id: `event:${event.id}`,
     contentId: event.contentId,
     name: event.name,
-    storyTags: event.storyTags,
+    ...(event.storyTags?.length ? { storyTags: event.storyTags } : {}),
     cast: SOLO,
     start: { mode: event.automation, activation: event.activation, target: event.target },
     maxDays: days,

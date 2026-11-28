@@ -1,3 +1,4 @@
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Which "not now" the away card shows. Everything comes from what the server already knows: the
  * reply status of the last send, the Creator's schedule block (`availability.activity`, the same text
@@ -22,7 +23,7 @@ const ACTIVITY_KINDS: Array<[SlurpAwayKind, RegExp]> = [
 
 /** The kind, and when they are back (epoch ms) if the server said so. */
 export function slurpAwayKind(input: SlurpAwayInput): { kind: SlurpAwayKind; backAt: number | null } {
-  const now = input.now ?? Date.now();
+  const now = input.now ?? slurpWorldNowMs();
   const coolUntil = input.coolUntil ? Date.parse(input.coolUntil) : Number.NaN;
   // In a roleplay scene with someone: busy, back when the scene ends.
   if (input.status === "in_scene") return { kind: "busy", backAt: null };

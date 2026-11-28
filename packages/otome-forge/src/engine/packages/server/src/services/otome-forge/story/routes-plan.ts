@@ -12,7 +12,8 @@
 // or moments, him in every one, its last node resolving the rupture's grievance.
 // Both are idempotent: the chapter a key already has is returned as it is, and planning runs in the run's foreground
 // queue, which reads again first, so two taps plan once. Both are private to him (memory audience [li]), pay as their
-// kind (route 300 Starlight and 150 affection; repair as a main chapter) and have no Foil.
+// kind (route 300 Starlight; repair as a main chapter; the Lead's affection by the chapter's climax, as in a main
+// chapter: S/state/rewards.ts) and have no Foil.
 import type {
   ArcStageKey,
   Chapter,
@@ -29,14 +30,15 @@ import {
   routeStatus,
   stageRow,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
-import { generateJson, readOrGenerate } from "../generation.js";
+import { generateJson, readOrGenerate, resolveConnectionId } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
-import { repairOffers } from "../state/stages.js";
+import { needsSpace, repairOffers } from "../state/stages.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { recallText } from "./canon.js";
+import { friendCards } from "./friends.js";
 import {
   clean,
   planLedger,
@@ -50,6 +52,12 @@ import { repairPlanMessages, routePlanMessages } from "../prompts.js";
 import { ChapterPlanSchema, type ChapterPlanReply } from "./replies.js";
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");
+
+/** #2458: the name of the friend who talked to `li` for her (his rupture's `helper`), or "". */
+const helperName = (run: RunDocuments, li: LiId) => {
+  const helper = run.state.lis[li]?.rupture?.helper;
+  return helper ? (run.friends?.find((friend) => friend.id === helper)?.name ?? "") : "";
+};
 const locked = (message: string) => new OtomeForgeError(409, message, "locked");
 
 /** The newest main chapter number the state has finished (route and repair conflicts are dated by it), or 0. */
@@ -154,14 +162,18 @@ export function normalizeRepairPlan(
 
 // ── Planning ──
 
-/** The run's love interests that have a bible, in cast order. */
+/** The chapter's scenes read the story context its plan caches only on the same connection (#2091, 0.20.2). */
+const sharesScenesCache = (world: RunDocuments["world"]) =>
+  resolveConnectionId(world, "structured") === resolveConnectionId(world, "narration");
+
+/** The run's love interests that have a bible, in cast order (the scenes' cast order too). */
 function castOf(run: RunDocuments): Unit[] {
   return Object.keys(run.state.lis).flatMap((li) => run.units.filter((unit) => unit.id === li && unit.bible));
 }
 
 async function readyRun(deps: ChapterDeps, runId: string, li: LiId) {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth story");
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
   const units = castOf(run);
   const unit = units.find((item) => item.id === li);
@@ -218,6 +230,10 @@ export async function planRouteChapter(
       job: "structured",
       cast: [li],
       continues: li,
+      // 0.20.2: the story context the route chapter's scenes cache, so the first reads what this plan wrote.
+      cached: { li },
+      // The last Character Story, whoever's it is, as the route chapter's scenes are given it (#2126).
+      lastStory: true,
       query: {
         plan: unit.bible?.arc[String(next.stage) as ArcStageKey]?.seed ?? unit.bible?.want ?? "",
         speakers: [unit.name],
@@ -246,6 +262,9 @@ export async function planRouteChapter(
         li,
         stage: next.stage,
         memory: memory.text,
+        recalls: memory.recalls?.text ?? "",
+        sharesCache: sharesScenesCache(run.world),
+        friends: friendCards(run, "route"),
       }),
       memory,
       schema: ChapterPlanSchema,
@@ -283,7 +302,8 @@ async function repairChapters(deps: Pick<ChapterDeps, "store">, runId: string): 
 
 /**
  * POST /runs/:run/repairs/:li ("Make it right"): the repair for the rupture with him. The unfinished one already
- * planned for that grievance is returned as it is; 409 `conflict` when no rupture stands.
+ * planned for that grievance is returned as it is; 409 `conflict` when no rupture stands, and 409 `locked` while his
+ * grievance with her still needs its space (#2156, S/state/stages.ts needsSpace).
  */
 export async function planRepairChapter(
   deps: ChapterDeps,
@@ -298,6 +318,7 @@ export async function planRepairChapter(
   const read = () => deps.store.readDoc(chapterId(runId, offer.key), normalizeChapter);
   const stored = await read();
   if (stored) return stored;
+  if (needsSpace(run.state.lis[li])) throw new OtomeForgeError(409, `${unit.name} needs space first.`, "locked");
   return readOrGenerate(runId, read, async () => {
     signal?.throwIfAborted();
     const state = (await deps.store.readDoc(stateId(runId), normalizeState)) ?? run.state;
@@ -311,6 +332,10 @@ export async function planRepairChapter(
       job: "structured",
       cast: [li],
       continues: li,
+      // 0.20.2: the story context the repair chapter's scenes cache, so the first reads what this plan wrote.
+      cached: { li },
+      // The last Character Story, whoever's it is, as the repair chapter's scenes are given it (#2126).
+      lastStory: true,
       query: { plan: grievance.text, speakers: [unit.name] },
       signal,
       debugMode,
@@ -336,6 +361,10 @@ export async function planRepairChapter(
         li,
         grievance,
         memory: memory.text,
+        recalls: memory.recalls?.text ?? "",
+        sharesCache: sharesScenesCache(run.world),
+        friends: friendCards(run, "repair"),
+        ...(helperName(run, li) ? { helper: helperName(run, li) } : {}),
       }),
       memory,
       schema: ChapterPlanSchema,

@@ -29,6 +29,7 @@ import { SLURP_DRAMATIC, SLURP_NEVER_PATTERN } from "../feed/slp-life-moments.js
 import { DAY_MS, clampText, hash } from "./slp-project.js";
 import { readSlurpTieStamp, slurpClampShare, SLURP_COLLAB_DEFAULT_SHARE } from "./slp-tie-stamp.js";
 import { SLURP_COLLAB_INTERESTS } from "./slp-collab-work.js";
+import { slpRecord as record, slpDate as date } from "../../../../../shared/src/slp/slp-coerce.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 /** The world looks at ties at most this often; everything below is per look. */
@@ -212,9 +213,6 @@ export function slurpCollabIncomeParts(amount: number, hostShare: number): { hos
 const COLLAB_STATUSES: readonly SlurpCollabStatus[] = ["asked", "agreed", "planned", "posted", "declined", "blocked"];
 const DECLINES: readonly SlurpCollabDecline[] = ["busy", "offBrand", "noCollabs", "noAnswer", "player"];
 const STAGES: readonly SlurpRivalryStage[] = ["shade", "feud", "cooling", "over"];
-const record = (value: unknown) =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 
 export function readSlurpCreatorTies(raw: unknown): SlurpCreatorTies {
   const value = record(raw);

@@ -27,7 +27,10 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { sendMessage } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
-import { closeAndRemember } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
+import {
+  closeAndRemember,
+  closeJobKey,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
   normalizeBeat,
@@ -76,7 +79,7 @@ function reply(messages: Messages): string {
       });
     case "pack":
       return json({
-        tap: { head: times("Head"), hand: times("Hand"), heart: times("Heart") },
+        tap: { head: times("Head"), cheek: times("Cheek"), hand: times("Hand"), heart: times("Heart") },
         annoyed: many("Enough", 4),
         cold: many("Cold", 6),
         comfort: many("Rest", 8),
@@ -86,6 +89,14 @@ function reply(messages: Messages): string {
           win: many("Won", 3),
           miss: many("Missed", 3),
           plush: many("Plush", 3),
+        },
+        kitty: {
+          start: many("Deal", 2),
+          good: many("Match", 3),
+          cheat: many("Swap", 3),
+          caught: many("Caught", 2),
+          win: many("Yours", 3),
+          lose: many("Mine", 3),
         },
       });
     case "chat":
@@ -313,13 +324,10 @@ test("another love interest's route or repair chapter never reaches a note, a li
       note.includes("KAI-MAIN-GRIEVANCE") && note.includes("KAI-MAIN-DISCLOSURE"),
       "his own grievance and disclosure",
     );
-    const noteRecall = t.recalls[0] as { reader?: string; query?: { cues?: string[] } };
+    const noteRecall = t.recalls[0] as { reader?: string; query?: unknown };
     assert.equal(noteRecall.reader, KAI, "the note recalls as Kai's own reader");
-    assert.deepEqual(
-      noteRecall.query?.cues,
-      ["MAIN-RELATIONSHIP-KAI: he let her hold the lamp.", "MAIN-OFFSCREEN-KAI: Kai rewired the bell."],
-      "recall is cued by the rows his own reader may know",
-    );
+    // #2430: it reads only the newest memory he holds, so nothing cues it: no row of anyone's goes to an embedder.
+    assert.equal(noteRecall.query, undefined, "recall is cued by nothing");
 
     // P15: Kai's line pack reads only his card and stage.
     assert.deepEqual(await ensureLinePacks(t.deps, t.runId, [KAI], { debugMode: false }), [KAI]);
@@ -339,7 +347,7 @@ test("another love interest's route or repair chapter never reaches a note, a li
     assert.match(overviewOf(kaiChat!), /Mireille's Ledger[^]*PRIVATE-LEDGER/u, "hers, titled private");
     assert.ok(kaiChat!.includes("SHARED-QUAY") && kaiChat!.includes("KAI-OWN-ROUTE"), "the shared story and his own");
     assert.ok(
-      kaiChat!.includes('# Previous chapter in full: Kai\'s own route chapter "The Bell Tower"') &&
+      kaiChat!.includes('# Previous chapter in full: [After chapter 1] Kai\'s own route chapter "The Bell Tower"') &&
         kaiChat!.includes("KAI-ROUTE-OPENING") &&
         kaiChat!.includes("tower210"),
       "his route in full",
@@ -367,6 +375,10 @@ test("another love interest's route or repair chapter never reaches a note, a li
 
     // Kai's closed conversation is a `chat` source for him alone, and never reaches Mireille's next reply.
     await closeAndRemember(t.deps, t.runId, KAI, { debugMode: false });
+    // 0.47.1: the memory is written by the background lane's job.
+    for (let turn = 0; turn < 400 && t.background.has(closeJobKey(t.runId, KAI)); turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
     await t.ready();
     const phone = (await readMemorySources(t.store, t.runId)).filter((source) => source.id.startsWith("phone-"));
     assert.deepEqual(

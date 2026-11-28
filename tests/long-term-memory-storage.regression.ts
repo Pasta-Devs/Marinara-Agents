@@ -40,6 +40,7 @@ async function main() {
     ltmSettingsPath,
     readLtmSettingsFile,
     splitUnknownLtmSettings,
+    migrateLtmPackageAccess,
     updateLtmGlobalSettings,
   } = await import(`${source}/settings.ts`);
   const { DEFAULT_LTM_EXTRACTION_CONFIG, getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig } =
@@ -82,7 +83,7 @@ async function main() {
     deleteRejectedSuggestionsForSource,
     listRejectedSuggestions,
   } = await import(`${source}/drafts/rejected-suggestions.ts`);
-  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmAgentSettingsSchema, ltmGlobalSettingsSchema } =
+  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmAgentSettingsSchema, ltmGlobalSettingsSchema, ltmNoteSchema, packageAccess } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
@@ -195,6 +196,98 @@ async function main() {
         provenance: transcriptProvenance,
         sections: { source: { text: "User: Hello.", updatedAt: timestamp } },
       });
+      {
+        // Story dates: a chat piece stores its date and scan; a memory stores only a date the user typed.
+        const { textHashForLtmSourceMaterial } = await import(`${source}/extraction/source-hash.ts`);
+        const pieceHash = textHashForLtmSourceMaterial({ sourceText: "User: Hello." });
+        const pieceTime = {
+          start: { date: "Thursday", time: "morning" },
+          origin: "stated" as const,
+          evidence: "Thursday morning",
+          sourceHash: pieceHash,
+        };
+        const pieceScan = {
+          sourceHash: pieceHash,
+          jumps: [{ quote: "The next morning", amount: 1, unit: "day" as const, implied: true as const }],
+        };
+        const before = await first.storage.getNote("source_transcript_import");
+        const datedPiece = await first.storage.updateNote("source_transcript_import", {
+          storyTime: pieceTime,
+          storyTimeScan: pieceScan,
+        });
+        assert.deepEqual(datedPiece.storyTime, pieceTime);
+        assert.deepEqual(datedPiece.storyTimeScan, pieceScan);
+        assert.deepEqual(datedPiece.sections, before?.sections, "dating a piece leaves its text alone");
+        assert.equal(
+          sourceHashForLtmSourceNote(datedPiece),
+          sourceHashForLtmSourceNote(before),
+          "dating a piece keeps its source hash",
+        );
+        const manualTime = { start: { date: "First of Frostmonth" }, end: { time: "dusk" }, origin: "manual" as const };
+        const datedMemory = await first.storage.updateNote(noteInput.id, { storyTime: manualTime });
+        assert.deepEqual(datedMemory.storyTime, manualTime);
+        assert.equal(datedMemory.sections.facts?.text, "This note survives runtime restart.");
+        assert.deepEqual((await first.storage.getNote(noteInput.id))?.storyTime, manualTime, "a typed date is stored");
+        const undated = await first.storage.updateNote(noteInput.id, { storyTime: undefined });
+        assert.equal(undated.storyTime, undefined);
+        assert.equal(
+          Object.hasOwn((await first.storage.getNote(noteInput.id)) ?? {}, "storyTime"),
+          false,
+          "clearing a date removes it",
+        );
+        await assert.rejects(
+          first.storage.updateNote(noteInput.id, { storyTime: { ...pieceTime } }),
+          /A memory can store only a story date the user typed/,
+        );
+        await assert.rejects(
+          first.storage.updateNote(noteInput.id, { storyTimeScan: pieceScan }),
+          /Only source notes can store a story date scan/,
+        );
+        const stored = { ...datedPiece };
+        const rejects = (patch: object, message: RegExp, label: string) =>
+          assert.throws(() => ltmNoteSchema.parse({ ...stored, ...patch }), message, label);
+        assert.equal(ltmNoteSchema.parse(stored).storyTime?.origin, "stated");
+        rejects(
+          { storyTime: { ...pieceTime, evidence: undefined } },
+          /must keep its quote/,
+          "stated date without its quote",
+        );
+        rejects(
+          { storyTime: { ...pieceTime, sourceHash: undefined } },
+          /must keep its quote/,
+          "stated date without its hash",
+        );
+        rejects({ storyTime: { start: {}, origin: "manual" } }, /needs a date or a time/, "empty point");
+        rejects(
+          { storyTime: { start: { date: " Thursday" }, origin: "manual" } },
+          /cannot start or end with spaces/,
+          "padded date",
+        );
+        rejects(
+          { storyTime: { start: { date: "Thursday\nFriday" }, origin: "manual" } },
+          /cannot start or end with spaces/,
+          "multi-line date",
+        );
+        rejects({ storyTime: { start: { date: "Thursday" }, origin: "guessed" } }, /origin/, "unknown origin");
+        rejects(
+          { storyTime: { start: { date: "Thursday" }, origin: "manual", note: "x" } },
+          /Unrecognized key/,
+          "extra key",
+        );
+        const jump = (patch: object) => ({
+          storyTimeScan: { ...pieceScan, jumps: [{ ...pieceScan.jumps[0], ...patch }] },
+        });
+        rejects(jump({ amount: 2 }), /implied jump is always one day/, "implied jump of two days");
+        rejects(jump({ implied: undefined, amount: 3, unit: null }), /./, "amount without a unit");
+        rejects(jump({ amount: 0 }), /./, "zero jump");
+        rejects({ storyTimeScan: { ...pieceScan, sourceHash: "abc" } }, /./, "short scan hash");
+        assert.equal(
+          ltmNoteSchema.parse({ ...stored, ...jump({ implied: undefined, amount: null, unit: null }) }).storyTimeScan
+            ?.jumps[0]?.unit,
+          null,
+          "a jump with no length is kept",
+        );
+      }
       await first.cleanup();
       first = null;
       restarted = await activateLongTermMemoryStorage(root);
@@ -712,6 +805,154 @@ async function main() {
           `Delete all must leave the newer ${name} values on disk`,
         );
       }
+      // Package sharing moves from the two global switches to one row per Agent, once, and never widens access.
+      for (const share of [false, true]) {
+        for (const accept of [false, true]) {
+          const legacy = {
+            version: 1,
+            longTermMemoryShareWithPackages: share,
+            longTermMemoryAcceptFromPackages: accept,
+          };
+          await writeFile(ltmSettingsPath(root), `${JSON.stringify({ ...legacy, someNewSetting: "newer-value" })}\n`);
+          const before = await getLtmGlobalSettings(root);
+          const label = `share ${share}, accept ${accept}`;
+          for (const agent of ["slurp2", "noodle", "tally", "", null]) {
+            assert.deepEqual(
+              packageAccess(before, agent),
+              { read: share && agent !== "tally" && !!agent, add: accept && agent === "slurp2" },
+              `${label}: before the migration a listed Agent gets what the switches say (${agent})`,
+            );
+          }
+          assert.equal(await migrateLtmPackageAccess(root), true, `${label}: the migration runs once`);
+          const saved = JSON.parse(await readFile(ltmSettingsPath(root), "utf8"));
+          assert.deepEqual(
+            saved,
+            {
+              ...legacy,
+              someNewSetting: "newer-value",
+              longTermMemoryPackageAccess: {
+                slurp2: { read: share, add: accept },
+                noodle: { read: share, add: false },
+              },
+            },
+            `${label}: each known Agent keeps exactly what the switches gave it, and older versions read the same switches`,
+          );
+          const after = await getLtmGlobalSettings(root);
+          for (const agent of ["slurp2", "noodle", "tally", "", null]) {
+            assert.deepEqual(packageAccess(after, agent), packageAccess(before, agent), `${label}: ${agent} unchanged`);
+          }
+          await updateLtmGlobalSettings({ longTermMemoryPackageAccess: { noodle: null } }, root);
+          assert.equal(await migrateLtmPackageAccess(root), false, `${label}: the migration does not run again`);
+          assert.deepEqual(
+            (await getLtmGlobalSettings(root)).longTermMemoryPackageAccess,
+            { slurp2: { read: share, add: accept } },
+            `${label}: a later start keeps the user's per-Agent choices`,
+          );
+          assert.equal(packageAccess(await getLtmGlobalSettings(root), "noodle").read, false, `${label}: removed`);
+          assert.deepEqual(
+            [
+              JSON.parse(await readFile(ltmSettingsPath(root), "utf8")).longTermMemoryShareWithPackages,
+              JSON.parse(await readFile(ltmSettingsPath(root), "utf8")).longTermMemoryAcceptFromPackages,
+            ],
+            [false, accept],
+            `${label}: with Noodle removed an older version, which can't tell Agents apart, must not let anyone read`,
+          );
+        }
+      }
+      // A start after the migration ran rewrites nothing: the next start's settings rewrite keeps the same bytes.
+      const startRoot = join(dataDir, "long-term-memory-second-start");
+      await (await activateLongTermMemoryStorage(startRoot)).cleanup();
+      assert.equal(await migrateLtmPackageAccess(startRoot), true);
+      const migratedBytes = await readFile(ltmSettingsPath(startRoot), "utf8");
+      await (await activateLongTermMemoryStorage(startRoot)).cleanup();
+      assert.equal(await migrateLtmPackageAccess(startRoot), false);
+      assert.equal(
+        await readFile(ltmSettingsPath(startRoot), "utf8"),
+        migratedBytes,
+        "a start after the migration leaves settings.json byte-identical",
+      );
+      const mapAllOn = {
+        slurp2: { read: true, add: true },
+        noodle: { read: true, add: false },
+      };
+      await writeFile(
+        ltmSettingsPath(root),
+        `${JSON.stringify({ version: 1, longTermMemoryShareWithPackages: false, longTermMemoryAcceptFromPackages: true, longTermMemoryPackageAccess: mapAllOn })}\n`,
+      );
+      assert.deepEqual(
+        (await getLtmGlobalSettings(root)).longTermMemoryPackageAccess,
+        { slurp2: { read: false, add: true }, noodle: { read: false, add: false } },
+        "reading turned off in an older version stays off for every Agent after upgrading",
+      );
+      assert.equal(
+        packageAccess(
+          await updateLtmGlobalSettings(
+            { longTermMemoryShareWithPackages: false, longTermMemoryPackageAccess: { slurp2: { read: true } } },
+            root,
+          ),
+          "slurp2",
+        ).read,
+        true,
+        "a whole-form save with the summary switch still off can turn one Agent's reading on",
+      );
+      await writeFile(
+        ltmSettingsPath(root),
+        `${JSON.stringify({ version: 1, longTermMemoryPackageAccess: { ...mapAllOn, slurp2: { read: true, add: true, someNewAccess: 1 } } })}\n`,
+      );
+      await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: false }, root);
+      assert.deepEqual(
+        JSON.parse(await readFile(ltmSettingsPath(root), "utf8")).longTermMemoryPackageAccess.slurp2,
+        { read: false, add: true, someNewAccess: 1 },
+        "a switch turned off is saved even when an Agent's row holds a newer field, which is kept",
+      );
+      await writeFile(
+        ltmSettingsPath(root),
+        `${JSON.stringify({ version: 1, longTermMemoryBudgetTokens: "x", longTermMemoryPackageAccess: mapAllOn })}\n`,
+      );
+      await updateLtmGlobalSettings({ longTermMemoryBudgetTokens: 1_000 }, root);
+      assert.deepEqual(
+        (await getLtmGlobalSettings(root)).longTermMemoryPackageAccess,
+        mapAllOn,
+        "a save that repairs another field keeps the stored per-Agent choices",
+      );
+      await resetLongTermMemorySettings(root);
+      assert.deepEqual(
+        JSON.parse(await readFile(ltmSettingsPath(root), "utf8")).longTermMemoryPackageAccess,
+        { slurp2: { read: true, add: false }, noodle: { read: true, add: false } },
+        "Reset settings writes the default per-Agent map, so the migration stays done",
+      );
+      assert.equal(await migrateLtmPackageAccess(root), false);
+      // Recall is limited by its token budget alone: a stored legacy memory count only caps the budget it came with.
+      const storedLegacySettings = async (stored: Record<string, unknown>) => {
+        await writeFile(ltmSettingsPath(root), `${JSON.stringify({ version: 1, ...stored })}\n`);
+        return getLtmGlobalSettings(root);
+      };
+      for (const [stored, budget, label] of [
+        [{}, 1024, "a fresh install resolves the new default budget"],
+        [{ longTermMemoryMaxChunks: 12 }, 1024, "a count of 12 with no budget caps the old 4096 default at 1024"],
+        [{ longTermMemoryMaxChunks: 100, longTermMemoryBudgetTokens: 4096 }, 4096, "a roomy count keeps the budget"],
+        [{ longTermMemoryMaxChunks: 1, longTermMemoryBudgetTokens: 512 }, 256, "a count of 1 caps the budget at 256"],
+      ] as const) {
+        const resolved = await storedLegacySettings(stored);
+        assert.equal(resolved.longTermMemoryBudgetTokens, budget, label);
+        assert.equal("longTermMemoryMaxChunks" in resolved, false, `${label}: no count is resolved`);
+      }
+      await storedLegacySettings({ longTermMemoryMaxChunks: 12 });
+      await updateLtmGlobalSettings({ longTermMemoryStopWordsFilterGenerated: true }, root);
+      assert.equal(
+        JSON.parse(await readFile(ltmSettingsPath(root), "utf8")).longTermMemoryMaxChunks,
+        12,
+        "a save that does not name the budget keeps the stored count",
+      );
+      assert.equal((await getLtmGlobalSettings(root)).longTermMemoryBudgetTokens, 1024, "and its cap");
+      const budgetSaved = await updateLtmGlobalSettings({ longTermMemoryBudgetTokens: 2048 }, root);
+      assert.equal(budgetSaved.longTermMemoryBudgetTokens, 2048);
+      assert.equal(
+        "longTermMemoryMaxChunks" in JSON.parse(await readFile(ltmSettingsPath(root), "utf8")),
+        false,
+        "saving a budget removes the stored count",
+      );
+      assert.equal((await getLtmGlobalSettings(root)).longTermMemoryBudgetTokens, 2048);
       await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":"newer-value"}\n');
       const stopWordSettings = await updateLtmGlobalSettings({ longTermMemoryStopWords: ["Cobalt-Moon"] }, root);
       assert.deepEqual(
@@ -1141,6 +1382,66 @@ async function main() {
       await writeFile(ltmRejectedSuggestionsPath(root), JSON.stringify([{ malformed: true }]));
       await assert.rejects(() => listRejectedSuggestions({}, root), /invalid|expected|required|malformed/i);
       await rm(ltmRejectedSuggestionsPath(root), { force: true });
+
+      // A re-read of the same text replaces the last read's unresolved rejections (a repeat keeps its record), a
+      // resolved identity rejection survives, and a draft superseded by changed text takes its rejections with it.
+      const rereadRoot = join(dataDir, "rejected-reread");
+      await new LongTermMemoryStorage(rereadRoot).initializeLtmStore();
+      const rereadStore = new LongTermMemoryDraftStore(rereadRoot);
+      const reread = (sourceHash: string, messages: string[]) =>
+        rereadStore.createDraft({
+          scope: { chatId: "chat-reread" },
+          modes: ["roleplay"],
+          source: { sourceNoteId: "source_reread", chatId: "chat-reread", sourceHash },
+          response: { summary: "", mutations: [] },
+          outcome: {
+            state: "no_suggestions_created",
+            incomplete: false,
+            totalCandidates: messages.length,
+            keptUnits: 0,
+            droppedUnits: messages.length,
+            droppedCandidates: messages.map((message, index) => ({
+              index,
+              reason: "invalid_format",
+              message,
+              snippet: message,
+            })),
+            droppedCandidateDetailsTruncated: false,
+          },
+          afterWrite: (draft: any, superseded: any) => addRejectedSuggestions(draft, rereadRoot, superseded),
+        } as any);
+      const rereadMessages = async (includeResolved = false) =>
+        (await listRejectedSuggestions({ chatId: "chat-reread", includeResolved }, rereadRoot))
+          .map((suggestion) => suggestion.candidate.message)
+          .sort();
+      await reread("a".repeat(64), ["Ilsa guards the gate.", "The lantern is lit.", "Ovid owns the boat."]);
+      const firstReread = await listRejectedSuggestions({ chatId: "chat-reread" }, rereadRoot);
+      const resolvedLedger = JSON.parse(await readFile(ltmRejectedSuggestionsPath(rereadRoot), "utf8"));
+      for (const item of resolvedLedger)
+        if (item.candidate.message === "Ovid owns the boat.")
+          item.identityResolution = { choices: [{ name: "Ovid", action: "skip" }], resolvedAt: timestamp };
+      await writeFile(ltmRejectedSuggestionsPath(rereadRoot), JSON.stringify(resolvedLedger));
+      await reread("a".repeat(64), ["Ilsa keeps watch at the gate.", "The lantern is lit."]);
+      assert.deepEqual(
+        await rereadMessages(),
+        ["Ilsa keeps watch at the gate.", "The lantern is lit."],
+        "a re-read of the same text must replace the last read's rejections, not add to them",
+      );
+      const lantern = (suggestions: Array<{ id: string; candidate: { message: string } }>) =>
+        suggestions.find((suggestion) => suggestion.candidate.message === "The lantern is lit.")?.id;
+      assert.equal(
+        lantern(await listRejectedSuggestions({ chatId: "chat-reread" }, rereadRoot)),
+        lantern(firstReread),
+        "a repeated rejection keeps its record",
+      );
+      assert.ok((await rereadMessages(true)).includes("Ovid owns the boat."), "a resolved rejection must survive");
+      await reread("b".repeat(64), []);
+      assert.deepEqual(
+        await rereadMessages(true),
+        ["Ovid owns the boat."],
+        "a superseded draft's unresolved rejections must go with it",
+      );
+
       const legacyBackup = parseLongTermMemoryBackup({
         ...exported,
         settings: {
@@ -1711,9 +2012,15 @@ async function main() {
           skipStructuredBackfill: true,
         });
       };
+      // A relationship change without its cause is now kept as a static state, so the relationship rows
+      // drop as a static claim that still carries a dimension change.
+      const droppedRelationshipUnit = (source = legacySource) => ({
+        ...digitRelationshipUnit("static", source),
+        dimensionChanges: { trust: -10 },
+      });
       for (const [source, unit, noteId] of [
-        [legacySource, digitRelationshipUnit("change"), "rel_96dfe1cd8f75"],
-        [structuredDigitSource, digitRelationshipUnit("change", structuredDigitSource), "rel_96dfe1cd8f75"],
+        [legacySource, droppedRelationshipUnit(), "rel_96dfe1cd8f75"],
+        [structuredDigitSource, droppedRelationshipUnit(structuredDigitSource), "rel_96dfe1cd8f75"],
         [legacySource, digitCharacterUnit(legacySource), "char_2_b"],
         [structuredDigitSource, digitCharacterUnit(structuredDigitSource), "char_2_b"],
       ] as const) {
@@ -2778,30 +3085,16 @@ async function main() {
         new Set(destructivePreflight.autoIncludedMutationIds),
         new Set([destructiveEventId, destructiveLinkId]),
       );
+      // Resolving a thread keeps its text and can be undone, so a bulk accept adds it with the rest.
       const combinedDestructivePreflight = await preflightLongTermMemoryDraft(destructiveDraft.id, {
         root,
         mutationIds: [destructiveMutationId, destructiveLinkId],
+        bulk: true,
       });
-      const destructiveBlocker = combinedDestructivePreflight.rows
-        .find((row) => row.mutationId === destructiveMutationId)
-        ?.blockers.find((blocker) => blocker.code === "destructive_disposition_requires_explicit_review");
-      assert.equal(
-        destructiveBlocker?.message,
-        "Rewrite and other destructive changes must be reviewed and applied one at a time.",
-      );
-      await assert.rejects(
-        applyLongTermMemoryDraft(destructiveDraft.id, {
-          root,
-          mutationIds: [destructiveMutationId, destructiveLinkId],
-          rebuildIndexes: false,
-        }),
-        (error: unknown) =>
-          error instanceof Error &&
-          error.message === "Rewrite and other destructive changes must be reviewed and applied one at a time.",
-      );
+      assert.deepEqual(combinedDestructivePreflight.blockedMutationIds, []);
       const destructiveApplied = await applyLongTermMemoryDraft(destructiveDraft.id, {
         root,
-        mutationIds: [destructiveMutationId],
+        mutationIds: [destructiveMutationId, destructiveLinkId],
         rebuildIndexes: false,
       });
       assert.deepEqual(
@@ -2809,6 +3102,65 @@ async function main() {
         new Set([destructiveEventId, destructiveLinkId, destructiveMutationId]),
       );
       assert.equal((await storage.getNote(destructiveTarget.id))?.status, "resolved");
+
+      // Archiving still goes one at a time.
+      const archiveId = randomUUID();
+      const archiveLinkId = randomUUID();
+      const archiveDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: destructiveTarget.scope,
+        modes: destructiveTarget.modes,
+        response: {
+          summary: "Archive the gate thread.",
+          mutations: [
+            {
+              id: archiveId,
+              claimKind: "change",
+              kind: "set_status",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Archive the gate thread",
+              evidence: [`source_note:${canonicalSourceId}`],
+              noteId: destructiveTarget.id,
+              status: "archived",
+            },
+            {
+              id: archiveLinkId,
+              kind: "add_link",
+              risk: "low",
+              confidence: 0.9,
+              summary: "Link the thread to its source",
+              evidence: [`source_note:${canonicalSourceId}`],
+              noteId: destructiveTarget.id,
+              link: { target: canonicalSourceId, relation: "extracted_from" },
+            },
+          ],
+        },
+      });
+      const archiveBlocker = (
+        await preflightLongTermMemoryDraft(archiveDraft.id, {
+          root,
+          mutationIds: [archiveId, archiveLinkId],
+          bulk: true,
+        })
+      ).rows
+        .find((row) => row.mutationId === archiveId)
+        ?.blockers.find((blocker) => blocker.code === "destructive_disposition_requires_explicit_review");
+      assert.equal(
+        archiveBlocker?.message,
+        "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
+      await assert.rejects(
+        applyLongTermMemoryDraft(archiveDraft.id, {
+          root,
+          mutationIds: [archiveId, archiveLinkId],
+          rebuildIndexes: false,
+        }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
+      await draftStore.deleteDraft(archiveDraft.id);
 
       // A section the compiler replaces on purpose (a thread's status) applies beside other rows; an anchor's does not.
       const sectionUpdateDraft = async (noteId: string) => {
@@ -4194,6 +4546,33 @@ async function main() {
       );
       await writeFile(ltmRejectedSuggestionsPath(capRoot), JSON.stringify(capSuggestions(() => true)));
       await assert.rejects(addRejectedSuggestions(capDraft, capRoot), /rejected-suggestion limit reached/u);
+      // A full ledger re-reading the same text, with a new rejection listed before a repeat, stays within the cap.
+      const rereadCapDraft = (messages: string[]) =>
+        ({
+          ...rejectionDraft,
+          source: { sourceNoteId: "source_cap_reread", chatId: "chat-a", sourceHash: "c".repeat(64) },
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: messages.map((message, index) => ({
+              index,
+              reason: "invalid_format",
+              message,
+              snippet: message,
+            })),
+          },
+        }) as any;
+      await writeFile(ltmRejectedSuggestionsPath(capRoot), JSON.stringify(capSuggestions(() => false).slice(0, 9_999)));
+      await addRejectedSuggestions(rereadCapDraft(["The bell rang twice."]), capRoot);
+      await addRejectedSuggestions(rereadCapDraft(["The ferry left early.", "The bell rang twice."]), capRoot);
+      const rereadCapped = await listRejectedSuggestions({ includeResolved: true }, capRoot);
+      assert.equal(rereadCapped.length, 10_000, "a re-read at the cap must not overflow the ledger");
+      assert.deepEqual(
+        rereadCapped
+          .filter((item) => item.source.sourceNoteId === "source_cap_reread")
+          .map((item) => item.candidate.message)
+          .sort(),
+        ["The bell rang twice.", "The ferry left early."],
+      );
 
       // Issue #1328: a malformed usage file or injection receipt must not stop activation, and
       // the malformed usage file is set aside so statistics restart instead of failing every read.

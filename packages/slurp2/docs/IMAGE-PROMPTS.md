@@ -13,7 +13,8 @@ One picture, from post to image model. Code: `server/src/slp/features/media/slp-
 2. **Code orders the scene** into a short draft (`modules/feed/slp-image-brief.ts`): action,
    expression, outfit, place, the visual detail, the camera, the spice level, and "the only person".
 3. **The look** is the Creator's stored appearance (Stage appearance, else the card's Appearance
-   field, else the reference block). Card clothes are removed; the scene decides the outfit.
+   field, else the reference block). Clothes are removed from every source, Stage appearance too;
+   the wardrobe and the scene decide the outfit.
 4. **The name** (0.3.5): with "The image model knows this character" on (Creator settings › Images,
    on by default for a linked character or persona) and an open identity, the name goes in front of
    the look, behind the style profile's own tags (0.3.23: a name ahead of the style tags read as

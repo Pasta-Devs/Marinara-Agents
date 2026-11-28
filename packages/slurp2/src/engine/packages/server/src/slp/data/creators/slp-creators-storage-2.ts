@@ -60,6 +60,7 @@ import type { SlurpSettings, SlurpSettingsUpdateInput } from "../../modules/sett
 import { mapAccount } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createCreatorsStorage2(context: SlurpStorageContext) {
   const {
     db,
@@ -288,7 +289,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
       await settingsStore.set(SLP_REFRESH_SCHEDULE_KEY, JSON.stringify(schedule));
     },
     async ensureRefreshSchedule(
-      at = new Date(),
+      at = slurpWorldNow(),
       settingsOverride?: SlurpSettings,
     ): Promise<PersistedSlpRefreshSchedule> {
       const settings = settingsOverride ?? (await this.getSettings());

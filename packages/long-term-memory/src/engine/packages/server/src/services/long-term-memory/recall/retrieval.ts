@@ -1,4 +1,8 @@
-import { LTM_LINKED_RECALL_MIN_RELEVANCE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
+import {
+  LTM_LINKED_RECALL_MIN_RELEVANCE,
+  LTM_UNRELATED_RECALL_MIN_COSINE,
+  LTM_UNRELATED_RECALL_SPACE_PREFIX,
+} from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { matchesLtmScope, isGlobalLtmScope } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import type {
   LtmIndexLoadOutcome,
@@ -20,10 +24,20 @@ import { reciprocalRankFuse, type LtmRankedCandidate, type LtmRankLane } from ".
 import { getLtmGlobalSettings, ltmGeneratedStopWords } from "../settings.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 
+// ponytail: measured on one vault (a vector rank weight of 1.0 at the default 0.7 semantic weight lifted useful
+// meaning-only matches past lexical-only ones); the relevance gate keeps the plain weight. Upgrade: re-measure on a
+// second vault.
+const VECTOR_RANK_WEIGHT_SCALE = 10 / 7;
+
 export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   root: string;
   mode?: LtmMode;
   queryText?: string;
+  /**
+   * What the vector lane embeds instead of `queryText`. A local embedder reads only its first few hundred
+   * tokens, so a caller whose query is long sends the part that matters here. The other lanes keep `queryText`.
+   */
+  vectorQueryText?: string;
   scope?: LtmScope;
   characterIds?: string[];
   /**
@@ -55,6 +69,11 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   inheritedNoteIds?: ReadonlySet<string>;
   /** Chunks never recalled here, judged before ranking so they cannot take a budget slot from a chunk that is returned. */
   excludedChunk?: (chunk: { noteId: string; sectionKey: string }) => boolean;
+  /**
+   * A recalled character brings its critical section (a death, a lasting status) along. On by default; callers that
+   * pick notes rather than build a prompt turn it off so the extra section cannot change which notes they get.
+   */
+  statusCompanions?: boolean;
 };
 
 function cosine(a: number[], b: number[]) {
@@ -75,6 +94,19 @@ function hasUsableVectorIndex(
   spaceId: string,
 ) {
   return Boolean(embeddings.spaceId === spaceId && embeddings.dimension && embeddings.embeddedChunkCount > 0);
+}
+
+/** Whether a note falls inside the place a recall draws on. Recall and the "available" count share this rule. */
+export function ltmRecallScopeMatches(
+  note: { id: string; type: string; scope: LtmScope },
+  scope: LtmScope | undefined,
+  characterIds: readonly string[],
+) {
+  const hasScope = !isGlobalLtmScope(scope) || characterIds.length > 0;
+  return matchesLtmScope(
+    note,
+    hasScope ? { scope, characterIds: [...characterIds], includeGlobal: true } : { scope: {}, includeGlobal: true },
+  );
 }
 
 export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput) {
@@ -122,11 +154,11 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
           const noteCharacterIds = chunk.scope?.characterIds ?? [];
           return noteCharacterIds.length > 0 && noteCharacterIds.every((id) => exclusiveCharacterIds.includes(id));
         }
-        const hasScope = !isGlobalLtmScope(input.scope) || characterIds.length > 0;
         return (
-          matchesLtmScope(
+          ltmRecallScopeMatches(
             { id: chunk.noteId, type: chunk.noteType, scope: chunk.scope },
-            hasScope ? { scope: input.scope, characterIds, includeGlobal: true } : { scope: {}, includeGlobal: true },
+            input.scope,
+            characterIds,
           ) || input.inheritedNoteIds?.has(chunk.noteId)
         );
       })
@@ -206,6 +238,8 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     });
   }
   let embeddingsAvailable = false;
+  // The meaning search found nothing close to the latest messages, so only explicit id/tag hits may pass.
+  let unrelated = false;
   let semanticOutcome: LtmSemanticOutcome;
   if ((input.semanticWeight ?? 0) <= 0) {
     semanticOutcome = "disabled";
@@ -217,36 +251,76 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     semanticOutcome = "incompatible";
   } else {
     const queryVector = (
-      await embedLongTermMemoryTexts([query], { ...input, embeddingAdapter, inputType: "query" })
+      await embedLongTermMemoryTexts([input.vectorQueryText?.trim() || query], {
+        ...input,
+        embeddingAdapter,
+        inputType: "query",
+      })
     )?.[0];
     if (!queryVector) {
       semanticOutcome = "unavailable";
     } else if (queryVector.length !== index.embeddings.dimension) {
       semanticOutcome = "incompatible";
     } else {
+      // The gate reads the best cosine of every scored chunk, so a query far from all of them (<= 0) still counts.
+      let bestCosine = Number.NEGATIVE_INFINITY;
       const vectors = index.embeddings.chunks
         .flatMap((entry) => {
           if (!entry.vector || entry.vector.length !== index.embeddings.dimension || !allowed.has(entry.chunkId))
             return [];
           const score = cosine(queryVector, entry.vector);
+          bestCosine = Math.max(bestCosine, score);
           return score > 0 ? [{ chunkId: entry.chunkId, rawScore: score, reason: "vector" }] : [];
         })
         .sort((left, right) => right.rawScore - left.rawScore);
       embeddingsAvailable = vectors.length > 0;
-      if (vectors.length) lanes.push({ name: "vector", weight: input.semanticWeight ?? 0, items: vectors });
+      unrelated =
+        bestCosine > Number.NEGATIVE_INFINITY &&
+        embeddingAdapter.spaceId.startsWith(LTM_UNRELATED_RECALL_SPACE_PREFIX) &&
+        bestCosine < LTM_UNRELATED_RECALL_MIN_COSINE;
+      // A short reply ("ok", "go on") leaves the newest-messages query with no scene in it, so before skipping the
+      // recall the joined window gets a say: skip only when it is under the cut too. Most turns pay no second embed;
+      // if the window embeds to nothing usable the first answer stands.
+      const windowText = input.vectorQueryText?.trim();
+      if (unrelated && windowText && windowText !== query) {
+        const windowVector = (
+          await embedLongTermMemoryTexts([query], { ...input, embeddingAdapter, inputType: "query" })
+        )?.[0];
+        if (windowVector?.length === index.embeddings.dimension) {
+          unrelated = !index.embeddings.chunks.some(
+            (entry) =>
+              entry.vector?.length === index.embeddings.dimension &&
+              allowed.has(entry.chunkId) &&
+              cosine(windowVector, entry.vector) >= LTM_UNRELATED_RECALL_MIN_COSINE,
+          );
+        }
+      }
+      if (vectors.length) {
+        const weight = input.semanticWeight ?? 0;
+        lanes.push({ name: "vector", weight, rankWeight: weight * VECTOR_RANK_WEIGHT_SCALE, items: vectors });
+      }
       semanticOutcome = vectors.length > 0 ? "contributed" : "no_matches";
     }
   }
   const chunksById = new Map(Object.values(index.metadata.chunks).map((chunk) => [chunk.id, chunk]));
-  const ranked = reciprocalRankFuse(lanes);
+  const fused = reciprocalRankFuse(lanes);
+  const ranked = unrelated ? fused.filter((candidate) => candidate.lanes.includes("direct")) : fused;
   const budgetOptions = {
-    maxChunks: input.maxChunks ?? 20,
+    maxChunks: input.maxChunks,
     maxTokens: input.maxTokens ?? 4096,
     relevanceScoreThreshold: input.minScore,
     explain: input.explain,
     rejectedLimit: input.rejectedLimit,
     dedupeExactText: input.dedupeExactText ?? true,
     promptNormalizedEstimate: input.promptNormalizedEstimate,
+    // Drawn from the chunks the ranking could use, so scope, mode, branch and exclusions apply to companions too.
+    companionChunks:
+      input.statusCompanions === false
+        ? undefined
+        : Array.from(allowed, (id) => chunksById.get(id)).filter(
+            (chunk): chunk is NonNullable<typeof chunk> =>
+              chunk?.noteType === "character" && chunk.importance === "critical",
+          ),
   };
   let budgeted = applyLtmBudget(ranked, chunksById, budgetOptions);
   if ((input.graphWeight ?? 1) > 0 && (input.minScore ?? 0) > LTM_LINKED_RECALL_MIN_RELEVANCE) {
@@ -255,7 +329,8 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     // At a threshold at or below the floor, the first pass already admitted every candidate it could.
     const noteTypes = new Map(Array.from(chunksById.values(), (chunk) => [chunk.noteId, chunk.noteType]));
     const rankedById = new Map(ranked.map((candidate) => [candidate.chunkId, candidate]));
-    const seedChunkIds = new Set(budgeted.chunks.map((item) => item.chunk.id));
+    // A companion is not a seed: the second pass picks it again, with its reason, next to its own section.
+    const seedChunkIds = new Set(budgeted.chunks.filter((item) => !item.companion).map((item) => item.chunk.id));
     const linkedCandidates: LtmRankedCandidate[] = [];
     for (const link of findLtmLinkedNotes(
       index.graph,
@@ -283,7 +358,10 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
           ...ranked.filter((candidate) => !seedChunkIds.has(candidate.chunkId) && !linkedIds.has(candidate.chunkId)),
         ],
         chunksById,
-        budgetOptions,
+        {
+          ...budgetOptions,
+          eventSlotFloor: budgeted.chunks.filter((item) => item.chunk.noteType === "timeline_event").length,
+        },
       );
     }
   }
@@ -294,6 +372,8 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
     ...budgeted,
     embeddingsAvailable,
     semanticOutcome,
+    // True when nothing is close to the latest messages in meaning; an explicit id or tag hit that survives the gate means no skip.
+    skippedUnrelated: unrelated && ranked.length === 0,
     indexSnapshot: {
       loadOutcome: indexLoadOutcome,
       generatedAt: index.generatedAt,

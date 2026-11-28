@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Blackjack",
-    "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Characters cannot start a game on their own yet."
+    "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on."
   },
   "agents": {
     "blackjack": {
       "name": "Blackjack",
-      "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Characters cannot start a game on their own yet."
+      "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on."
     }
   }
 }

@@ -13,11 +13,12 @@ import {
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { chapterTitle, type StoryChapter, type StoryTheme } from "../../lib/story-writer/model";
-import { ChapterBlock } from "./ChapterBlock";
+import { chapterTitle, type StoryChapter, type StoryIllustration, type StoryTheme } from "../../lib/story-writer/model";
+import { ChapterBlock, type PictureAction, type PictureLabels, type PicturePage } from "./ChapterBlock";
 import {
   clonePageText,
   createPageBack,
@@ -55,22 +56,35 @@ export interface StoryReaderProps {
   ghostChapterId: string;
   /** False while any generation is running. */
   editable: boolean;
+  /** Chapter length "Off": the empty pages point to Generate, and the ghost page is only for the author to start. */
+  writerDecides?: boolean;
   mariImageUrl: string;
+  /** Where the chapter bar goes: the shell's band above the book. */
+  chapterBarHost: HTMLElement | null;
   onChapterChange(chapterId: string, markdown: string): void;
   onStartChapter(chapterId: string, markdown: string): void;
+  /** A picture's own button: Illustrate again, or remove it. */
+  onPictureAction?(chapterId: string, illustrationId: string, action: PictureAction): void;
+  /**
+   * The author moved to another chapter (turned pages, swiped, used the chapter bar or jumped to it): the chapter the
+   * chapter bar names, or null on the title page and the blank next page. Opening the story, following a chapter being
+   * written and the caret turning pages while the author types report nothing.
+   */
+  onShownChapterChange?(chapterId: string | null): void;
 }
 
 // Underscores are not allowed in chapter ids (CLIENT_ID_PATTERN), so this never collides with a chapter.
-const TITLE_KEY = "__title";
+export const TITLE_KEY = "__title";
 const FONT_PROBE_TEXT = "Hamburgefonstiv 0123";
 
-interface ReaderBlock {
+export interface ReaderBlock {
   key: string;
   kind: "title" | "chapter" | "ghost";
   number: number;
   markdown: string;
   /** The chapter's own "# Title", for the running header. */
   title: string;
+  illustrations: StoryIllustration[];
   /** First page in the track, and how many pages the block spans. */
   start: number;
   pages: number;
@@ -110,6 +124,14 @@ function pageDecor(blocks: ReaderBlock[], page: number, storyTitle: string, chap
   return { header, number: String(page) };
 }
 
+const NO_PICTURES: StoryIllustration[] = [];
+
+/** The labels of a picture's own buttons. */
+export function usePictureLabels(): PictureLabels {
+  const { t } = useTranslation();
+  return useMemo(() => ({ again: t("illustrate.again"), remove: t("illustrate.remove") }), [t]);
+}
+
 function isTypingTarget(target: Element): boolean {
   if (target instanceof HTMLElement && target.isContentEditable) return true;
   return !!target.closest(
@@ -117,7 +139,107 @@ function isTypingTarget(target: Element): boolean {
   );
 }
 
-const TitlePage = memo(function TitlePage({
+/**
+ * The reader's blocks in order (the title page, the chapters, a chapter just started on the ghost page, the ghost page)
+ * and the handler for edits in them. Without page counts (the Document theme) every block counts as one page.
+ */
+export function useReaderBlocks(
+  props: Pick<StoryReaderProps, "chapters" | "ghostChapterId" | "onChapterChange" | "onStartChapter">,
+  pageCounts: Record<string, number>,
+) {
+  const { chapters, ghostChapterId } = props;
+  const latest = useRef(props);
+  useLayoutEffect(() => {
+    latest.current = props;
+  });
+  // The chapter the author just started on the ghost page, until the shell's chapter list has it.
+  const [pendingStart, setPendingStart] = useState<{ id: string; markdown: string } | null>(null);
+
+  const { blocks, totalPages } = useMemo(() => {
+    const list: ReaderBlock[] = [];
+    let start = 0;
+    const push = (block: Omit<ReaderBlock, "start" | "pages">) => {
+      const pages = block.kind === "title" ? 1 : Math.max(1, pageCounts[block.key] ?? 1);
+      list.push({ ...block, start, pages });
+      start += pages;
+    };
+    push({ key: TITLE_KEY, kind: "title", number: 0, markdown: "", title: "", illustrations: NO_PICTURES });
+    chapters.forEach((chapter, index) =>
+      push({
+        key: chapter.id,
+        kind: "chapter",
+        number: index + 1,
+        markdown: chapter.text,
+        title: chapterTitle(chapter.text),
+        illustrations: chapter.illustrations ?? NO_PICTURES,
+      }),
+    );
+    // The shell may send the new ghost id a render before its chapter list has the started chapter (a query cache
+    // notifies later): keep that block, with the same key, so the author's caret survives.
+    const started = pendingStart?.id;
+    if (pendingStart && started !== ghostChapterId && !chapters.some((chapter) => chapter.id === started)) {
+      push({
+        key: pendingStart.id,
+        kind: "chapter",
+        number: list.length,
+        markdown: pendingStart.markdown,
+        title: "",
+        illustrations: NO_PICTURES,
+      });
+    }
+    // Right after the author starts the ghost page, its id is already a chapter; the shell sends a new ghost id.
+    if (!chapters.some((chapter) => chapter.id === ghostChapterId)) {
+      push({
+        key: ghostChapterId,
+        kind: "ghost",
+        number: list.length,
+        markdown: "",
+        title: "",
+        illustrations: NO_PICTURES,
+      });
+    }
+    return { blocks: list, totalPages: start };
+  }, [chapters, ghostChapterId, pageCounts, pendingStart]);
+
+  const handleEdit = useCallback((key: string, markdown: string, start: boolean) => {
+    if (start) {
+      setPendingStart({ id: key, markdown });
+      latest.current.onStartChapter(key, markdown);
+    } else {
+      latest.current.onChapterChange(key, markdown);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!pendingStart) return;
+    if (chapters.some((chapter) => chapter.id === pendingStart.id)) {
+      setPendingStart(null);
+      return;
+    }
+    // The shell never added it (the start failed): stop holding the block.
+    const timer = window.setTimeout(() => setPendingStart(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [chapters, pendingStart]);
+
+  return { blocks, totalPages, handleEdit };
+}
+
+/** The hint an empty chapter body shows. */
+export function blockPlaceholder(
+  t: TFunction,
+  block: ReaderBlock,
+  generatingChapterId: string | null,
+  editable: boolean,
+  writerDecides = false,
+): string {
+  if (block.key === generatingChapterId) return t("reader.generatingPlaceholder");
+  if (block.kind !== "ghost")
+    return t(writerDecides ? "reader.emptyChapterGenerate" : "reader.emptyChapterPlaceholder");
+  if (!editable) return t("reader.ghostWaiting");
+  return t(writerDecides ? "reader.ghostStartChapter" : "reader.ghostPlaceholder");
+}
+
+export const TitlePage = memo(function TitlePage({
   width,
   title,
   details,
@@ -128,7 +250,8 @@ const TitlePage = memo(function TitlePage({
   startWriting,
   onStart,
 }: {
-  width: number;
+  /** The page's text width; none in the Document theme. */
+  width?: number;
   title: string;
   details: string;
   showStart: boolean;
@@ -169,7 +292,7 @@ const TitlePage = memo(function TitlePage({
  */
 export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(function StoryReader(props, ref) {
   // pageAnimation is read at navigation time through `live`.
-  const { theme, storyTitle, storyDetails, chapters, generatingChapterId, ghostChapterId, editable, mariImageUrl } =
+  const { theme, storyTitle, storyDetails, chapters, generatingChapterId, editable, mariImageUrl, chapterBarHost } =
     props;
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -179,10 +302,10 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
   const flipLayerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [fontSignature, setFontSignature] = useState("");
+  const [fontSize, setFontSize] = useState(18);
+  const pictureLabels = usePictureLabels();
   const [pageCounts, setPageCounts] = useState<Record<string, number>>({});
   const [spread, setSpread] = useState(0);
-  // The chapter the author just started on the ghost page, until the shell's chapter list has it.
-  const [pendingStart, setPendingStart] = useState<{ id: string; markdown: string } | null>(null);
 
   const layout = useMemo(
     () => (size.width > 0 && size.height > 0 ? computeReaderLayout({ theme, ...size }) : null),
@@ -190,37 +313,14 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
   );
   const pps = layout?.pagesPerSpread ?? 1;
   const chapterLabel = useCallback((number: number) => t("reader.chapterLabel", { number }), [t]);
+  const textWidth = layout?.textWidth ?? 0;
+  const textHeight = layout?.textHeight ?? 0;
+  const picturePage = useMemo<PicturePage>(
+    () => ({ textWidth, textHeight, fontSize }),
+    [textWidth, textHeight, fontSize],
+  );
 
-  const { blocks, totalPages } = useMemo(() => {
-    const list: ReaderBlock[] = [];
-    let start = 0;
-    const push = (block: Omit<ReaderBlock, "start" | "pages">) => {
-      const pages = block.kind === "title" ? 1 : Math.max(1, pageCounts[block.key] ?? 1);
-      list.push({ ...block, start, pages });
-      start += pages;
-    };
-    push({ key: TITLE_KEY, kind: "title", number: 0, markdown: "", title: "" });
-    chapters.forEach((chapter, index) =>
-      push({
-        key: chapter.id,
-        kind: "chapter",
-        number: index + 1,
-        markdown: chapter.text,
-        title: chapterTitle(chapter.text),
-      }),
-    );
-    // The shell may send the new ghost id a render before its chapter list has the started chapter (a query cache
-    // notifies later): keep that block, with the same key, so the author's caret survives.
-    const started = pendingStart?.id;
-    if (pendingStart && started !== ghostChapterId && !chapters.some((chapter) => chapter.id === started)) {
-      push({ key: pendingStart.id, kind: "chapter", number: list.length, markdown: pendingStart.markdown, title: "" });
-    }
-    // Right after the author starts the ghost page, its id is already a chapter; the shell sends a new ghost id.
-    if (!chapters.some((chapter) => chapter.id === ghostChapterId)) {
-      push({ key: ghostChapterId, kind: "ghost", number: list.length, markdown: "", title: "" });
-    }
-    return { blocks: list, totalPages: start };
-  }, [chapters, ghostChapterId, pageCounts, pendingStart]);
+  const { blocks, totalPages, handleEdit } = useReaderBlocks(props, pageCounts);
 
   const totalSpreads = Math.max(1, Math.ceil(totalPages / pps));
   const current = Math.min(spread, totalSpreads - 1);
@@ -344,6 +444,14 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
       flipRef.current?.finish();
       flipRef.current = null;
       if (options.user && state.props.generatingChapterId) followRef.current.userNavigated = true;
+      if (options.user && !isEditingHere()) {
+        // The first chapter on the spread, as the chapter bar names it.
+        const pages = state.layout.pagesPerSpread;
+        const shown = Array.from({ length: pages }, (_, index) => blockAtPage(state.blocks, to * pages + index)).find(
+          (block) => block?.kind === "chapter",
+        );
+        state.props.onShownChapterChange?.(shown?.key ?? null);
+      }
       anchorRef.current = anchorFor(to);
       if (to === state.current) return;
       const animate = options.animate !== false && !prefersReducedMotion();
@@ -357,7 +465,7 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
       state.current = to;
       setSpread(to);
     },
-    [anchorFor, startFlip],
+    [anchorFor, startFlip, isEditingHere],
   );
 
   // ── Measuring ──
@@ -404,27 +512,6 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
     [applyCounts, measureBlocks],
   );
 
-  const handleEdit = useCallback((key: string, markdown: string, start: boolean) => {
-    const { props: latest } = live.current;
-    if (start) {
-      setPendingStart({ id: key, markdown });
-      latest.onStartChapter(key, markdown);
-    } else {
-      latest.onChapterChange(key, markdown);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!pendingStart) return;
-    if (chapters.some((chapter) => chapter.id === pendingStart.id)) {
-      setPendingStart(null);
-      return;
-    }
-    // The shell never added it (the start failed): stop holding the block.
-    const timer = window.setTimeout(() => setPendingStart(null), 3000);
-    return () => window.clearTimeout(timer);
-  }, [chapters, pendingStart]);
-
   useLayoutEffect(() => {
     const root = rootRef.current;
     const probe = probeRef.current;
@@ -439,6 +526,7 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
     const readFont = () => {
       const box = probe.getBoundingClientRect();
       setFontSignature(`${box.width.toFixed(1)}x${box.height.toFixed(1)}`);
+      setFontSize(Number.parseFloat(getComputedStyle(probe).fontSize) || 18);
     };
     readSize();
     readFont();
@@ -753,11 +841,13 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
     const visible = sides.map((_, index) => blockAtPage(blocks, first + index));
     const shownChapterIndex = visible.findIndex((block) => block?.kind === "chapter");
     const shownChapter = shownChapterIndex >= 0 ? visible[shownChapterIndex] : null;
-    const indicator = shownChapter
-      ? t("reader.indicator", { chapter: shownChapter.number, page: first + shownChapterIndex, total: numberedPages })
+    const pageInfo = { chapter: shownChapter?.number, page: first + shownChapterIndex, total: numberedPages };
+    const nextInfo = { chapter: chapters.length + 1 };
+    const [indicator, indicatorShort] = shownChapter
+      ? [t("reader.indicator", pageInfo), t("reader.indicatorShort", pageInfo)]
       : visible[0]?.kind === "ghost"
-        ? t("reader.indicatorNext", { chapter: chapters.length + 1 })
-        : t("reader.indicatorTitle");
+        ? [t("reader.indicatorNext", nextInfo), t("reader.indicatorNextShort", nextInfo)]
+        : [t("reader.indicatorTitle"), t("reader.indicatorTitle")];
     let previousChapterSpread: number | null = null;
     let nextChapterSpread: number | null = null;
     for (const block of blocks) {
@@ -881,19 +971,15 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
                       kind={block.kind}
                       label={chapterLabel(block.number)}
                       bodyLabel={t("reader.chapterBody", { number: block.number })}
-                      placeholder={
-                        block.key === generatingChapterId
-                          ? t("reader.generatingPlaceholder")
-                          : block.kind === "ghost"
-                            ? editable
-                              ? t("reader.ghostPlaceholder")
-                              : t("reader.ghostWaiting")
-                            : t("reader.emptyChapterPlaceholder")
-                      }
+                      placeholder={blockPlaceholder(t, block, generatingChapterId, editable, props.writerDecides)}
                       markdown={block.markdown}
                       width={blockWidth(block.pages, layout.textWidth, layout.gap)}
                       editable={editable}
                       generating={block.key === generatingChapterId}
+                      illustrations={block.illustrations}
+                      picturePage={picturePage}
+                      pictureLabels={pictureLabels}
+                      onPictureAction={props.onPictureAction}
                       onEdit={handleEdit}
                       onContentChange={handleContentChange}
                     />
@@ -931,31 +1017,38 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
         >
           <ChevronRight aria-hidden="true" size={24} strokeWidth={1.75} />
         </button>
-        <div className="sw-reader-footer" style={{ top: layout.footerTop, height: layout.footerHeight }}>
-          <div className="sw-reader-footer-bar">
-            <button
-              type="button"
-              disabled={previousChapterSpread === null}
-              aria-label={t("reader.previousChapter")}
-              title={t("reader.previousChapter")}
-              onClick={() => previousChapterSpread !== null && navigate(previousChapterSpread, { user: true })}
-            >
-              <ChevronsLeft aria-hidden="true" size={18} />
-            </button>
-            <span className="sw-indicator" aria-live="polite">
-              {indicator}
-            </span>
-            <button
-              type="button"
-              disabled={nextChapterSpread === null}
-              aria-label={t("reader.nextChapter")}
-              title={t("reader.nextChapter")}
-              onClick={() => nextChapterSpread !== null && navigate(nextChapterSpread, { user: true })}
-            >
-              <ChevronsRight aria-hidden="true" size={18} />
-            </button>
-          </div>
-        </div>
+        {chapterBarHost
+          ? // Above the book, in the shell's top band: the reader keeps its whole height for the pages.
+            createPortal(
+              <nav className="sw-chapterbar-pill" aria-label={t("tools.chapters")}>
+                <button
+                  type="button"
+                  disabled={previousChapterSpread === null}
+                  aria-label={t("reader.previousChapter")}
+                  title={t("reader.previousChapter")}
+                  onClick={() => previousChapterSpread !== null && navigate(previousChapterSpread, { user: true })}
+                >
+                  <ChevronsLeft aria-hidden="true" size={18} />
+                </button>
+                <span className="sw-indicator" aria-live="polite">
+                  <span className="sw-indicator-long">{indicator}</span>
+                  <span className="sw-indicator-short" aria-hidden="true">
+                    {indicatorShort}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  disabled={nextChapterSpread === null}
+                  aria-label={t("reader.nextChapter")}
+                  title={t("reader.nextChapter")}
+                  onClick={() => nextChapterSpread !== null && navigate(nextChapterSpread, { user: true })}
+                >
+                  <ChevronsRight aria-hidden="true" size={18} />
+                </button>
+              </nav>,
+              chapterBarHost,
+            )
+          : null}
       </>
     );
   }

@@ -42,7 +42,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: engine/package.json
           run_install: false
@@ -53,6 +53,10 @@ jobs:
           node-version: 24
 
       - name: Install Engine dependencies
+        env:
+          # onnxruntime-node's postinstall downloads a CUDA add-on from api.nuget.org, and a NuGet timeout fails the
+          # install; the browser suites need only the bundled CPU binding, as the Engine's own CI has decided.
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: pnpm --dir engine install --frozen-lockfile
 
       # The browser regression loads Playwright from the Engine checkout, so install that version's Chromium.
@@ -97,16 +101,22 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      # artifacts/ holds 2.5 GB of package zips that these regressions never read. A sparse checkout fetches with
+      # --filter=blob:none, so the zips are never transferred (the codeql.yml pattern, #1578). Non-cone mode is needed
+      # because cone mode can only include directories, not exclude one.
       - name: Checkout Marinara Agents
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/artifacts/
+          sparse-checkout-cone-mode: false
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: npm
 
       - name: Install locked Agents dependencies
         run: npm ci
@@ -115,7 +125,7 @@ jobs:
       # Pull Request Checks through npm run test:security.
       - name: Run Engine-free Long-Term Memory regressions
         run: |
-          for test in candidate-reconciliation chat-transcript-import conversation-summary-import debug-log \
-            delta-review extraction-graph extraction-reliability hide-imported-messages intake local-characters rebuild-job runtime; do
+          for test in tidy links people candidate-reconciliation chat-transcript-import conversation-summary-import debug-log \
+            delta-review extraction-graph extraction-reliability hide-imported-messages intake local-characters rebuild-job runtime story-dates; do
             npx tsx "tests/long-term-memory-$test.regression.ts"
           done

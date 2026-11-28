@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   type LtmImportSourceNotesRequest,
@@ -15,6 +16,8 @@ import {
   type LtmNote,
   type LtmScope,
   type LtmSourceProvenance,
+  type LtmStoryTime,
+  type LtmStoryTimePoint,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
@@ -30,24 +33,42 @@ import {
   resolveChatLtmScope,
   resolveChatLtmWriteScope,
   getLtmChatDisplayName,
+  isLtmSourceSharedWithChat,
+  ltmSourceLastMessageNumber,
+  ltmSourceMessageRange,
   parseLtmChatMetadata,
+  sharedLtmMessageCounts,
 } from "../identity/chat-scope.js";
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { resolveLtmChatMemories } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { nowIso } from "../ltm-utils.js";
-import { getPackagePersistence, getPackageResources, logger, resolvePackageLanguageModel } from "../package-runtime.js";
+import {
+  getPackagePersistence,
+  getPackageResources,
+  logger,
+  resolvePackageLanguageModel,
+  type PackageGameState,
+} from "../package-runtime.js";
 import { processLongTermMemorySourceBatch, type ImportedSourceItem } from "../extraction/source-processing.js";
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
-import { extractionFingerprintForLtmSourceMaterial } from "../extraction/source-hash.js";
+import {
+  extractionFingerprintForLtmSourceMaterial,
+  extractionFingerprintForLtmSourceNote,
+  extractionFingerprintsMatchSourceText,
+  isLtmSourceExtractionFingerprintCurrent,
+  textHashForLtmSourceMaterial,
+} from "../extraction/source-hash.js";
 import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-identity.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
+import { mergeStoryTime } from "../persistence/story-time.js";
 import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
 import {
   ltmSetMessagesHiddenFromAI,
   readLtmHiddenMessages,
   writeLtmHiddenMessages,
+  type LtmHiddenMessages,
 } from "../persistence/hidden-messages.js";
-import { withLtmVaultLock } from "../persistence/vault-lock.js";
+import { outsideLtmVaultLock, withLtmVaultLock } from "../persistence/vault-lock.js";
 import { getLtmGlobalSettings } from "../settings.js";
 import { LtmServiceError } from "../service-error.js";
 
@@ -63,10 +84,15 @@ type Candidate = {
   // Chats whose history holds this chat_transcript piece, set when identical branch pieces merge.
   branchChatIds?: string[];
   title: string;
-  // Chat Messages pieces only; the title string stays the source note title.
+  // Chat Messages pieces and numbered chat summaries; the title string stays the source note title.
   messageRange?: { chatName: string; first: number; last: number };
   // Chat Messages pieces only: the ids of the messages the piece reads.
   messageIds?: string[];
+  // Chat Messages pieces and numbered chat summaries: the chat and its messages, for the story date at import. A
+  // summary reads the messages only if it is imported, so it carries a loader.
+  storyTimeChat?: { chat: StoryTimeChat; messages: TranscriptMessage[] | (() => Promise<TranscriptMessage[]>) };
+  // Chat summaries: the entry the story date comes from.
+  summaryEntry?: ReturnType<typeof summaries>[number];
   // Chat Summaries without a numbered range: the label is the range text from the title.
   summaryRange?: { chatName: string; label: string };
   sourceText: string;
@@ -178,7 +204,30 @@ function chunks(value: string, cap = 24_000) {
   return result;
 }
 type TranscriptMessage = Awaited<ReturnType<ReturnType<typeof getPackagePersistence>["listMessages"]>>[number];
-type TranscriptPiece = { entryId: string; first: number; last: number; content: string; messageIds: string[] };
+type TranscriptPiece = {
+  entryId: string;
+  first: number;
+  last: number;
+  /** The runs of message numbers the piece holds, first to last. */
+  ranges: Array<[number, number]>;
+  content: string;
+  messageIds: string[];
+};
+// Names only the message numbers the piece holds. A list too long for a title ends at a whole range, never inside a number.
+export function pieceTitle(
+  chatName: string,
+  { first, last, ranges }: Pick<TranscriptPiece, "first" | "last" | "ranges">,
+) {
+  const held = ranges.map(([from, to]) => (from === to ? `${from}` : `${from}-${to}`)).join(", "),
+    title = `${chatName}, ${first === last ? "message" : "messages"} ${held}`;
+  // One range keeps the plain cut it always had, so a saved title does not change.
+  if (title.length <= 240 || ranges.length === 1) return title.slice(0, 240);
+  const cut = title.slice(0, 238),
+    end = cut.lastIndexOf(", ");
+  if (end > chatName.length) return `${cut.slice(0, end)}, …`;
+  const space = title.lastIndexOf(" ", 240);
+  return title.slice(0, space > chatName.length ? space : 240);
+}
 // A piece is named by its first message, so new messages only grow or follow the last piece and earlier pieces keep
 // their ids and text. Numbers count every message, hidden ones too, so they match the chat's message numbers. Memories
 // reach every character, so like the Engine's own memory this reads the public content, never agentContent with its
@@ -211,6 +260,9 @@ export function transcriptPieces(
       line = `${speaker(message)}: ${body}`;
     if (!start && current && current.content.length + 2 + line.length <= cap) {
       current.content += `\n\n${line}`;
+      const run = current.ranges.at(-1)!;
+      if (run[1] === number - 1) run[1] = number;
+      else current.ranges.push([number, number]);
       current.last = number;
       current.messageIds.push(message.id);
       continue;
@@ -219,13 +271,22 @@ export function transcriptPieces(
     current = undefined;
     const entryId = start ?? message.id;
     start = undefined;
-    if (line.length <= cap) current = { entryId, first: number, last: number, content: line, messageIds: [message.id] };
+    if (line.length <= cap)
+      current = {
+        entryId,
+        first: number,
+        last: number,
+        ranges: [[number, number]],
+        content: line,
+        messageIds: [message.id],
+      };
     else
       for (const [part, content] of chunks(line, cap).entries())
         pieces.push({
           entryId: part ? `${entryId}:part:${part + 1}` : entryId,
           first: number,
           last: number,
+          ranges: [[number, number]],
           content,
           messageIds: [message.id],
         });
@@ -233,8 +294,130 @@ export function transcriptPieces(
   if (current) pieces.push(current);
   return pieces;
 }
+
+type StoryTimeChat = { id: string; mode: string; metadata: unknown };
+/** What the Engine saved about time in one chat, read once per chat for stampPieceStoryTime. */
+export type LtmChatStoryTimeSources = {
+  mode: LtmMode;
+  // The chat's messages in order, the newest last.
+  messages: readonly TranscriptMessage[];
+  // World State snapshots in message order; without listGameStates, only the newest one.
+  gameStates: readonly PackageGameState[];
+  // The Game mode clock, which stands at the chat's newest message.
+  gameTime?: { day: number; hour: number; minute: number };
+};
+
+export async function loadChatStoryTimeSources(
+  chat: StoryTimeChat,
+  messages: readonly TranscriptMessage[],
+): Promise<LtmChatStoryTimeSources> {
+  const mode = ltmModeForChatMode(chat.mode);
+  if (mode === "conversation") return { mode, messages, gameStates: [] };
+  let rows: unknown = [];
+  try {
+    const persistence = getPackagePersistence();
+    rows = persistence.listGameStates
+      ? await persistence.listGameStates(chat.id)
+      : [await persistence.getGameState?.(chat.id)];
+  } catch (error) {
+    // A story date is extra: the piece still imports, undated.
+    logger.warn("[ltm] Could not read the World State of chat %s: %s", chat.id, String(error));
+  }
+  // A snapshot counts only for the swipe its message shows now (the newest one can belong to a swiped-away reply),
+  // and a malformed row is skipped rather than failing the piece's write.
+  const activeSwipes = new Map(messages.map((message) => [message.id, message.activeSwipeIndex])),
+    gameStates = (Array.isArray(rows) ? rows : []).filter((row): row is PackageGameState => {
+      const { messageId, swipeIndex, date, time } = object(row);
+      return (
+        typeof messageId === "string" &&
+        activeSwipes.get(messageId) === swipeIndex &&
+        [date, time].every((value) => value === null || typeof value === "string")
+      );
+    });
+  const clock = object(parseLtmChatMetadata(chat.metadata).gameTime),
+    { day, hour, minute } = clock,
+    whole = (value: unknown, min: number, max: number): value is number =>
+      Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+  return {
+    mode,
+    messages,
+    gameStates,
+    ...(mode === "game" && whole(day, 0, 1_000_000) && whole(hour, 0, 23) && whole(minute, 0, 59)
+      ? { gameTime: { day, hour, minute } }
+      : {}),
+  };
+}
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
+function storyTimeText(value: string | null | undefined, max: number) {
+  const clean = value?.replace(/\s+/gu, " ").trim().slice(0, max).trimEnd();
+  return clean || undefined;
+}
+function storyTimePoint(
+  date: string | null | undefined,
+  time: string | null | undefined,
+): LtmStoryTimePoint | undefined {
+  const point = { date: storyTimeText(date, 120), time: storyTimeText(time, 80) };
+  return point.date || point.time
+    ? { ...(point.date ? { date: point.date } : {}), ...(point.time ? { time: point.time } : {}) }
+    : undefined;
+}
+// ponytail: real dates use the server's clock zone, which is the user's own on a local install. Upgrade path: the
+// user's zone from the client.
+function realTimePoint(createdAt: string) {
+  const at = new Date(createdAt);
+  if (Number.isNaN(at.getTime())) return undefined;
+  return {
+    date: `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())}`,
+    time: `${pad2(at.getHours())}:${pad2(at.getMinutes())}`,
+  };
+}
+
+/**
+ * A chat piece's story date from what the Engine saved for the piece's own messages, with no model call. Conversation:
+ * the real date of its first message (and of its last when the day differs). Roleplay and Game: the first and last
+ * World State date or time saved on its messages. Game without those: the game clock, only for the piece holding the
+ * chat's newest message, since the clock stands there. Otherwise undefined: a piece is never dated from another one.
+ */
+export function stampPieceStoryTime(
+  piece: { messageIds: readonly string[]; sourceText: string },
+  sources: LtmChatStoryTimeSources,
+): LtmStoryTime | undefined {
+  const ids = new Set(piece.messageIds),
+    sourceHash = textHashForLtmSourceMaterial({ sourceText: piece.sourceText }),
+    dated = (
+      points: LtmStoryTimePoint[],
+      origin: LtmStoryTime["origin"],
+      sameEnd: (end: LtmStoryTimePoint) => boolean,
+    ) => {
+      const start = points[0],
+        end = points.at(-1);
+      return start && end ? { start, ...(sameEnd(end) ? {} : { end }), origin, sourceHash } : undefined;
+    };
+  if (sources.mode === "conversation") {
+    const points = sources.messages.flatMap((message) =>
+      ids.has(message.id) ? (realTimePoint(message.createdAt) ?? []) : [],
+    );
+    return dated(points, "message_time", (end) => end.date === points[0]?.date);
+  }
+  const points = sources.gameStates.flatMap((row) =>
+    ids.has(row.messageId) ? (storyTimePoint(row.date, row.time) ?? []) : [],
+  );
+  if (points.length) return dated(points, "world_state", (end) => isDeepStrictEqual(end, points[0]));
+  const newest = sources.messages.at(-1),
+    clock = sources.gameTime;
+  if (!clock || !newest || !ids.has(newest.id)) return undefined;
+  return {
+    start: { date: `Day ${clock.day}`, time: `${pad2(clock.hour)}:${pad2(clock.minute)}` },
+    origin: "game_clock",
+    sourceHash,
+  };
+}
 function boundedId(value: string, prefix: string) {
   return value.length <= 120 ? value : `${prefix}_${hash(value, 32)}`;
+}
+function isoDay(date: Date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 function conversationDate(value: string) {
   const match = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/u);
@@ -244,6 +427,21 @@ function conversationDate(value: string) {
   return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
     ? date
     : null;
+}
+/** A Conversation day summary's own day; a week summary's seven days, from the Monday its key names. */
+function conversationSummaryStoryTime(
+  entry: { id: string; range: string },
+  sourceText: string,
+): LtmStoryTime | undefined {
+  const first = conversationDate(entry.range);
+  if (!first) return undefined;
+  const last = new Date(first.getFullYear(), first.getMonth(), first.getDate() + 6);
+  return {
+    start: { date: isoDay(first) },
+    ...(entry.id.startsWith("week:") ? { end: { date: isoDay(last) } } : {}),
+    origin: "message_time",
+    sourceHash: textHashForLtmSourceMaterial({ sourceText }),
+  };
 }
 function conversationSummaryEntries(raw: unknown, kind: "day" | "week") {
   return Object.entries(object(raw))
@@ -377,6 +575,22 @@ export function summaries(
       : [];
   return [...ordinary, ...sessions];
 }
+/**
+ * The Engine's story date for a chat summary entry, or undefined: a Conversation day or week summary takes its own days,
+ * a numbered summary takes the date of the messages it covers, and a summary with no range stays undated.
+ */
+export function stampSummaryStoryTime(
+  entry: ReturnType<typeof summaries>[number],
+  sourceText: string,
+  sources: LtmChatStoryTimeSources | undefined,
+): LtmStoryTime | undefined {
+  if (entry.origin === "conversation_summary") return conversationSummaryStoryTime(entry, sourceText);
+  if (!sources || entry.first === undefined || entry.last === undefined) return undefined;
+  const messages = sources.messages.slice(entry.first - 1, entry.last);
+  return messages.length === entry.last - entry.first + 1
+    ? stampPieceStoryTime({ messageIds: messages.map((message) => message.id), sourceText }, sources)
+    : undefined;
+}
 function mode(candidate: Candidate, value?: LtmMode, availabilityModes?: LtmMode[]) {
   const modes =
     availabilityModes && availabilityModes.length > 0 ? availabilityModes : value ? [value] : candidate.modes;
@@ -428,7 +642,15 @@ function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefin
   return matchesScope(candidate, scope);
 }
 
-function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candidate) => LtmNote | undefined) {
+function resolvePreviewCandidates(
+  rows: Candidate[],
+  matchExisting: (row: Candidate) => LtmNote | undefined,
+  inherited: ReadonlySet<string>,
+) {
+  const rank = (row: Candidate) => {
+    const note = matchExisting(row);
+    return note ? (inherited.has(note.id) ? 2 : 1) : 0;
+  };
   const resolved = new Map<string, Candidate>();
   const branchChatIds = new Map<string, Set<string>>();
   for (const row of rows) {
@@ -436,7 +658,8 @@ function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candid
     // distinct chat ids; keep the first identical chat-summary candidate so
     // shared branch summaries do not repeat in the Sources preview, preferring
     // an already-imported sibling so the row reflects imported state instead of
-    // offering a duplicate import. A branch copies messages under new ids, so
+    // offering a duplicate import, and over that the sibling whose note the
+    // picked branch records. A branch copies messages under new ids, so
     // identical message pieces match by the chat group instead.
     const key =
       row.provenance.kind === "chat_summary"
@@ -445,7 +668,7 @@ function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candid
           ? `chat_transcript\0${getLtmScopeGroupIds(row.scope)[0] ?? row.provenance.sourceId}\0${row.sourceText}`
           : row.sourceId;
     const previous = resolved.get(key);
-    if (!previous || (!matchExisting(previous) && matchExisting(row))) resolved.set(key, row);
+    if (!previous || rank(row) > rank(previous)) resolved.set(key, row);
     if (row.provenance.kind === "chat_transcript")
       branchChatIds.set(key, (branchChatIds.get(key) ?? new Set()).add(row.provenance.sourceId));
   }
@@ -664,6 +887,16 @@ async function candidates(
           ...(entry.first !== undefined && entry.last !== undefined
             ? { messageRange: { chatName: chatDisplayName.slice(0, 240), first: entry.first, last: entry.last } }
             : { summaryRange: { chatName: chatDisplayName.slice(0, 240), label: entry.range.slice(0, 80) } }),
+          summaryEntry: entry,
+          // A numbered summary is dated from the Engine's data for its messages, read once per chat if imported.
+          ...(entry.first !== undefined
+            ? {
+                storyTimeChat: {
+                  chat,
+                  messages: () => getPackagePersistence().listMessages(chat.id),
+                },
+              }
+            : {}),
           sourceText: entry.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: legacy,
@@ -712,8 +945,9 @@ async function candidates(
       const starts = pieces?.starts.get(chat.id),
         cap = pieces?.sizes.get(chat.id) ?? pieces?.size ?? CHAT_PIECE_CHARS.standard;
       let previousPiece: Candidate["previousPiece"];
+      const storyTimeChat = { chat, messages: await getPackagePersistence().listMessages(chat.id) };
       for (const piece of transcriptPieces(
-        await getPackagePersistence().listMessages(chat.id),
+        storyTimeChat.messages,
         speaker,
         (messageId) => starts?.has(boundedId(messageId, "message")) === true,
         cap,
@@ -722,13 +956,14 @@ async function candidates(
         const entryId = boundedId(piece.entryId, "message"),
           provenance = { kind: "chat_transcript" as const, sourceId: chat.id, entryId },
           range = piece.first === piece.last ? `${piece.first}` : `${piece.first}-${piece.last}`,
-          title = `${chatDisplayName}, ${piece.first === piece.last ? "message" : "messages"} ${range}`.slice(0, 240);
+          title = pieceTitle(chatDisplayName, piece);
         result.push({
           sourceId: boundedId(`${chat.id}:messages:${entryId}`, `${chat.id.slice(0, 60)}:messages`),
           previewOrder: `${chat.id}\0${String(piece.first).padStart(8, "0")}\0${entryId}`,
           title,
           messageRange: { chatName: chatDisplayName.slice(0, 240), first: piece.first, last: piece.last },
           messageIds: piece.messageIds,
+          storyTimeChat,
           sourceText: piece.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: [],
@@ -822,7 +1057,8 @@ async function existingMatcher(storage: LongTermMemoryStorage) {
 // Each chat's piece starts and size. A chat with imported pieces keeps their size. A branch copies its parent's messages
 // under new ids, so one never imported takes its chat group's size and its shared pieces still match the parent's.
 // Other chats cut at the Chat import detail setting's size. Only a messages source reads chats or the setting. owned
-// holds each chat's messages this package hid, which still count toward their pieces.
+// holds each chat's messages this package hid for its own pieces, which still count toward them; a branch's copies
+// recorded under its parent's piece stay out of the branch's pieces, as when the copy was not recorded.
 async function chatPieces(
   source: LtmInteropPreviewRequest["source"],
   matchExisting: Awaited<ReturnType<typeof existingMatcher>>,
@@ -842,6 +1078,7 @@ async function chatPieces(
       if (chat.groupId && !sizes.has(chat.id) && groupSizes.has(chat.groupId))
         sizes.set(chat.id, groupSizes.get(chat.groupId)!);
   }
+  const sourceChatOf = new Map(matchExisting.sourceNotes.map(({ note, provenance }) => [note.id, provenance.sourceId]));
   return {
     starts: matchExisting.pieceStarts,
     sizes,
@@ -849,36 +1086,222 @@ async function chatPieces(
     owned: new Map(
       Object.entries(await readLtmHiddenMessages(root)).map(([chatId, notes]) => [
         chatId,
-        new Set(Object.values(notes).flat()),
+        new Set(
+          Object.entries(notes).flatMap(([noteId, ids]) =>
+            (sourceChatOf.get(noteId) ?? chatId) === chatId ? ids : [],
+          ),
+        ),
       ]),
     ),
   };
 }
 
-// Mirrors the Engine's normalizeSummaryTailMessages: unset keeps 10, and anything invalid or negative keeps none.
-function summaryTailMessages(value: unknown) {
-  if (value === undefined || value === null) return 10;
+// Mirrors the Engine's normalizeSummaryTailMessages, except that unset keeps the Memory Settings tail (10 by default),
+// and anything invalid or negative keeps none.
+function summaryTailMessages(value: unknown, fallback: number) {
+  if (value === undefined || value === null) return fallback;
   const parsed = Math.floor(Number(value));
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+/** `chat` followed by its parents, nearest first, up to the first deleted or repeated one. */
+async function branchChain(chat: { id: string; metadata: unknown }) {
+  const persistence = getPackagePersistence(),
+    chain: Array<{ id: string; metadata: unknown }> = [chat];
+  for (
+    let id: unknown = parseLtmChatMetadata(chat.metadata).branchParentChatId;
+    typeof id === "string" && !chain.some((link) => link.id === id);
+  ) {
+    const next = await persistence.getChat(id);
+    if (!next) break;
+    chain.push(next);
+    id = parseLtmChatMetadata(next.metadata).branchParentChatId;
+  }
+  return chain;
+}
+
+/**
+ * A branch copies its parent's messages under new ids with their hidden state, and a record lists only its own chat's
+ * ids. This maps the recorded ids of the nearest ancestor with a record (parent, grandparent, ...) to the branch's
+ * copies by position, up to the messages the branch shares with that ancestor, where `createdAt` still matches. A copy
+ * whose ancestor id is not in that record is left alone (a hidden one, someone else hid it), unless the walk below finds it.
+ * A copy hidden for a source the branch shares (the rule recall uses, `isLtmSourceSharedWithChat`) is adopted under
+ * that source note, so turning the setting off, archiving and deleting the source treat it as in the ancestor. One
+ * hidden for a piece that crosses the fork is to be shown again, since the branch keeps no memory of it until it
+ * imports it itself. A visible copy of a shared source is offered to hide like the branch's own pieces, so one its
+ * tail showed hides again once newer messages push it out. A copy set by hand or already recorded stays as it is.
+ * A hidden or visible, unrecorded copy that the nearest record does not list may be one that ancestor showed itself
+ * (its tail released it, or a crossing piece was shown), or one it has not hidden yet while a farther record lists it.
+ * The walk then goes on to the farther ancestors with a record, nearest first, but only past an ancestor whose
+ * own copy is visible and not set by hand: a hidden or hand-set copy there means someone else hid it again, so it
+ * stays. The first record listing the position decides it by the rule above (a visible copy is offered, or left alone
+ * when the source is not shared).
+ */
+async function ancestorHiddenCopies(
+  chat: { id: string; metadata: unknown },
+  messages: ReadonlyArray<{ id: string; createdAt: string }>,
+  extras: ReadonlyMap<string, Record<string, unknown>>,
+  owned: LtmHiddenMessages,
+  sourceNotes: ReadonlyMap<string, LtmNote>,
+) {
+  const adopt = new Map<string, string[]>(),
+    show: string[] = [],
+    offer = new Map<string, string>();
+  const parentId = parseLtmChatMetadata(chat.metadata).branchParentChatId;
+  if (typeof parentId !== "string" || parentId === chat.id) return { adopt, show, offer };
+  const chain = await branchChain(chat);
+  // A deleted parent took its messages, and with them the positions to map.
+  if (chain[1]?.id !== parentId) return { adopt, show, offer };
+  // The nearest ancestor with a record has had its own pass, which took over what is recorded farther up: a position
+  // missing from it was decided there (someone else hid the message again), unless that ancestor's copy is visible and
+  // not set by hand, which is how it left the record (it showed the copy itself); the walk below then reads farther
+  // records. A branch's recall pass runs the passes of its ancestors with a record first, oldest first, so this holds
+  // for records an older build wrote too; but that pass re-adopts a position the ancestor's record lacks while a farther
+  // record lists it, so "decided there" holds as stated only for a pass for the branch alone (an import into it).
+  // ponytail: an ancestor whose pass left an empty record has none on file, so it reads as not yet run. Upgrade: keep
+  // a per-chat "passed" marker in the record.
+  const withRecord = chain.slice(1).filter((ancestor) => Object.keys(owned[ancestor.id] ?? {}).length),
+    link = withRecord[0];
+  if (!link) return { adopt, show, offer };
+  const persistence = getPackagePersistence(),
+    listed = new Map<string, Promise<ReadonlyArray<{ id: string; createdAt: string; extra?: unknown }>>>([
+      [chat.id, Promise.resolve(messages)],
+    ]);
+  const listMessages = (id: string) => {
+    if (!listed.has(id)) listed.set(id, persistence.listMessages(id));
+    return listed.get(id)!;
+  };
+  const chainIds = new Set(chain.map((link) => link.id));
+  const sharedMessageCounts = await sharedLtmMessageCounts({
+    chatId: chat.id,
+    chats: chain,
+    otherChatIds: withRecord.flatMap((ancestor) => [
+      ancestor.id,
+      ...Object.keys(owned[ancestor.id]!).flatMap((noteId) => {
+        const sourceId = sourceNotes.get(noteId)?.provenance?.sourceId;
+        return sourceId && chainIds.has(sourceId) ? [sourceId] : [];
+      }),
+    ]),
+    listMessages,
+  });
+  const recorded = new Set(Object.values(owned[chat.id] ?? {}).flat()),
+    linkMessages = await listMessages(link.id),
+    copied = Math.min(sharedMessageCounts.get(link.id) ?? 0, messages.length, linkMessages.length),
+    copyOf = new Map<string, string>(),
+    decided = new Set<string>();
+  for (let index = 0; index < copied; index++)
+    if (linkMessages[index]!.createdAt === messages[index]!.createdAt)
+      copyOf.set(linkMessages[index]!.id, messages[index]!.id);
+  for (const [noteId, ids] of Object.entries(owned[link.id]!)) {
+    const shared = isLtmSourceSharedWithChat(sourceNotes.get(noteId), { chatId: chat.id, sharedMessageCounts });
+    for (const id of ids) {
+      const copy = copyOf.get(id),
+        extra = copy ? extras.get(copy) : undefined;
+      if (copy) decided.add(copy);
+      if (!copy || !extra || extra.visibilityManual === true || recorded.has(copy)) continue;
+      if (extra.hiddenFromAI !== true) {
+        if (shared) offer.set(copy, noteId);
+      } else if (shared) adopt.set(noteId, [...(adopt.get(noteId) ?? []), copy]);
+      else show.push(copy);
+    }
+  }
+  const undecided = messages.flatMap((message, index) => {
+    const extra = extras.get(message.id);
+    if (!extra || extra.visibilityManual === true || recorded.has(message.id) || decided.has(message.id)) return [];
+    // The walk's first step reads the nearest record's ancestor: past the fork, with another timestamp, or with a hidden
+    // or hand-set copy there, it stops at once, so the farther ancestors are not listed for it.
+    const source = index < copied ? linkMessages[index] : undefined,
+      sourceExtra = object(source?.extra);
+    return source?.createdAt === message.createdAt &&
+      sourceExtra.hiddenFromAI !== true &&
+      sourceExtra.visibilityManual !== true
+      ? [index]
+      : [];
+  });
+  if (!undecided.length) return { adopt, show, offer };
+  const ancestors = await Promise.all(
+    withRecord.map(async (ancestor) => {
+      const list = await listMessages(ancestor.id),
+        owner = new Map<string, string>();
+      for (const [noteId, ids] of Object.entries(owned[ancestor.id]!)) for (const id of ids) owner.set(id, noteId);
+      return { owner, list, copied: Math.min(sharedMessageCounts.get(ancestor.id) ?? 0, messages.length, list.length) };
+    }),
+  );
+  for (const index of undecided) {
+    const copy = messages[index]!.id;
+    for (const ancestor of ancestors) {
+      const source = ancestor.list[index];
+      if (index >= ancestor.copied || !source || source.createdAt !== messages[index]!.createdAt) break;
+      const noteId = ancestor.owner.get(source.id);
+      if (noteId) {
+        const shared = isLtmSourceSharedWithChat(sourceNotes.get(noteId), { chatId: chat.id, sharedMessageCounts });
+        if (extras.get(copy)!.hiddenFromAI !== true) {
+          if (shared) offer.set(copy, noteId);
+        } else if (shared) adopt.set(noteId, [...(adopt.get(noteId) ?? []), copy]);
+        else show.push(copy);
+        break;
+      }
+      const sourceExtra = object(source.extra);
+      if (sourceExtra.hiddenFromAI === true || sourceExtra.visibilityManual === true) break;
+    }
+  }
+  return { adopt, show, offer };
+}
+
+/**
+ * The latest messages an import hid in each chat, for the chat card's "saved as memories and hidden" line.
+ * ponytail: in memory, one entry per chat; a restart forgets it, a deleted chat's pass drops it, and the client shows
+ * the line only while `at` is newer than the last reply. Upgrade path: record the positions on the import event.
+ */
+const justHidden = new Map<string, { from: number; to: number; at: string }>();
+const justHiddenKey = (root: string, chatId: string) => `${resolve(root)}\u0000${chatId}`;
+
+function noteLtmMessagesJustHidden(root: string, chatId: string, messages: Array<{ id: string }>, ids: string[]) {
+  const hidden = new Set(ids);
+  if (!hidden.size) return;
+  // 1-based positions in the chat's message order; ids that are not one run report the lowest and highest.
+  const positions = messages.flatMap((message, index) => (hidden.has(message.id) ? [index + 1] : []));
+  if (positions.length)
+    justHidden.set(justHiddenKey(root, chatId), {
+      from: positions[0]!,
+      to: positions[positions.length - 1]!,
+      at: new Date().toISOString(),
+    });
+}
+
+/** The latest messages an import hid in this chat since the server started, or null. */
+export function readLtmMessagesJustHidden(root: string, chatId: string) {
+  return justHidden.get(justHiddenKey(root, chatId)) ?? null;
+}
+
 /**
  * "Hide imported messages from the AI": hides the messages of each Chat Messages piece whose source note is active,
- * extracted from its current text and has no suggestions still waiting in review, except the chat's last summaryTailMessages visible messages, the tail the Engine's
- * summary hiding keeps. Records under the source note only the ids the host changed, so a message hidden by someone
+ * extracted from its current text and has no suggestions still waiting in review, except the chat's latest visible
+ * messages: its own summaryTailMessages (the tail the Engine's summary hiding keeps) or else the Memory Settings tail. Records under the source note only the ids the host changed, so a message hidden by someone
  * else is never shown by this package. A message the user hid or showed by hand leaves the record and stays theirs.
- * Runs for the given chats, or every chat with imported pieces.
+ * A branch also takes over its copies of the messages its ancestors hid (`ancestorHiddenCopies`).
+ * Runs for the given chats in the order given, or every chat with imported pieces or a record and their branches,
+ * ancestors first: a branch reads the record its parent's pass has just completed, and the pass mutates it in place.
+ * Pass a branch with its ancestors, oldest first, to heal records an older build wrote (`hideBranchCopiesOnce`).
+ * ponytail: a branch takes over its copies only in a pass for it (a full pass, its first recall in this process,
+ * or an import of its own), from its ancestors' current records. Until then its copies stay hidden unrecorded:
+ * turning the setting off, deleting the source note or deleting the parent before that pass leaves them hidden. A
+ * deleted ancestor between the branch and a recorded one breaks the chain, so the records beyond it are not read.
+ * The Engine reads the history before recall, so a new branch's first reply still sees them hidden. Upgrade: an
+ * Engine branch event, mapping branch copies in those paths.
  */
 export async function hideImportedChatMessages(root: string, chatIds?: Iterable<string>) {
   const setHidden = ltmSetMessagesHiddenFromAI();
   if (!setHidden || !(await getLtmGlobalSettings(root)).longTermMemoryHideImportedMessages) return;
   await withLtmVaultLock(root, async () => {
     // A save that turned the setting off while this waited for the lock already showed everything.
-    if (!(await getLtmGlobalSettings(root)).longTermMemoryHideImportedMessages) return;
+    const settings = await getLtmGlobalSettings(root);
+    if (!settings.longTermMemoryHideImportedMessages) return;
     const persistence = getPackagePersistence(),
       matchExisting = await existingMatcher(new LongTermMemoryStorage(root)),
       pieces = await chatPieces("messages", matchExisting, root),
       noteIds = new Set(matchExisting.sourceNotes.map(({ note }) => note.id)),
+      sourceNoteById = new Map(matchExisting.sourceNotes.map(({ note }) => [note.id, note])),
       // A piece whose memories wait in review is not saved yet, so the AI still reads its messages.
       reviewing = new Set(
         (await new LongTermMemoryDraftStore(root).listDrafts({ status: "pending" }))
@@ -888,13 +1311,42 @@ export async function hideImportedChatMessages(root: string, chatIds?: Iterable<
       owned = await readLtmHiddenMessages(root),
       before = JSON.stringify(owned),
       wanted = new Set(chatIds ?? [...matchExisting.pieceStarts.keys(), ...Object.keys(owned)]);
+    let order = [...wanted];
+    // Every chat also brings its branches, which take over their copies of what it hides.
+    if (!chatIds) {
+      const chats = await persistence.listChats();
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const chat of chats) {
+          const parentId = parseLtmChatMetadata(chat.metadata).branchParentChatId;
+          if (typeof parentId === "string" && wanted.has(parentId) && !wanted.has(chat.id)) {
+            wanted.add(chat.id);
+            grew = true;
+          }
+        }
+      }
+      // Ancestors first, so each branch reads its parent's finished record whatever order the chats were listed in.
+      const parentOf = new Map(chats.map((chat) => [chat.id, parseLtmChatMetadata(chat.metadata).branchParentChatId]));
+      const depth = (id: string) => {
+        const seen = new Set([id]);
+        for (
+          let parent = parentOf.get(id);
+          typeof parent === "string" && !seen.has(parent);
+          parent = parentOf.get(parent)
+        )
+          seen.add(parent);
+        return seen.size;
+      };
+      order = [...wanted].sort((a, b) => depth(a) - depth(b));
+    }
     // Written even when a later chat fails, so every message the host already hid stays recorded.
     try {
-      for (const chatId of wanted) {
+      for (const chatId of order) {
         const chat = await persistence.getChat(chatId);
         // A deleted chat took its messages with it.
         if (!chat) {
           delete owned[chatId];
+          justHidden.delete(justHiddenKey(root, chatId));
           continue;
         }
         const messages = await persistence.listMessages(chatId),
@@ -912,37 +1364,161 @@ export async function hideImportedChatMessages(root: string, chatIds?: Iterable<
           for (const id of await setHidden(chatId, orphaned, false))
             extras.set(id, { ...extras.get(id)!, hiddenFromAI: false });
         for (const noteId of Object.keys(record)) if (!noteIds.has(noteId)) delete record[noteId];
-        const tail = summaryTailMessages(parseLtmChatMetadata(chat.metadata).summaryTailMessages),
-          visible = messages.filter((message) => extras.get(message.id)!.hiddenFromAI !== true),
-          tailIds = new Set(tail ? visible.slice(-tail).map((message) => message.id) : []),
+        const branch = await ancestorHiddenCopies(chat, messages, extras, owned, sourceNoteById);
+        for (const [noteId, ids] of branch.adopt) (record[noteId] ??= []).push(...ids);
+        if (branch.show.length)
+          for (const id of await setHidden(chatId, branch.show, false))
+            extras.set(id, { ...extras.get(id)!, hiddenFromAI: false });
+        // The tail counts the messages only this package hid, so a branch whose copies all came hidden keeps its last
+        // ones visible, and a recorded message back inside the tail (a raised setting, deleted later messages) shows.
+        const tail = summaryTailMessages(
+            parseLtmChatMetadata(chat.metadata).summaryTailMessages,
+            settings.longTermMemoryHideTailMessages,
+          ),
+          ownIds = new Set(Object.values(record).flat()),
+          counted = messages.filter(
+            (message) => extras.get(message.id)!.hiddenFromAI !== true || ownIds.has(message.id),
+          ),
+          tailIds = new Set(tail ? counted.slice(-tail).map((message) => message.id) : []),
           noteFor = new Map<string, string>(),
           // A long message split over several pieces hides only once every one of them is extracted.
           pending = new Set<string>();
+        const showTail = [...ownIds].filter((id) => tailIds.has(id));
+        for (const id of showTail.length ? await setHidden(chatId, showTail, false) : []) {
+          extras.set(id, { ...extras.get(id)!, hiddenFromAI: false });
+          for (const [noteId, ids] of Object.entries(record))
+            if (ids.includes(id)) {
+              const kept = ids.filter((other) => other !== id);
+              if (kept.length) record[noteId] = kept;
+              else delete record[noteId];
+            }
+        }
+        for (const [id, noteId] of branch.offer) noteFor.set(id, noteId);
         for (const row of await candidates({ source: "messages", chatId }, undefined, pieces)) {
           if (row.provenance.sourceId !== chatId) continue;
           const note = matchExisting(row),
-            current =
-              note?.status === "active" &&
-              !reviewing.has(note.id) &&
-              note.extractionFingerprint?.sourceHash === candidateFingerprintForNote(row, note).sourceHash;
+            current = note?.status === "active" && !reviewing.has(note.id) && sourceFingerprintCurrent(note, row);
           for (const id of row.messageIds ?? [])
             if (!current) pending.add(id);
             else if (!noteFor.has(id)) noteFor.set(id, note.id);
         }
         const hide = [...noteFor.keys()].filter((id) => {
           const extra = extras.get(id)!;
-          return !pending.has(id) && !tailIds.has(id) && extra.hiddenFromAI !== true && extra.visibilityManual !== true;
+          // A copy the branch shares is extracted in its parent's piece, whatever the branch's own row covering it says.
+          return (
+            (branch.offer.has(id) || !pending.has(id)) &&
+            !tailIds.has(id) &&
+            extra.hiddenFromAI !== true &&
+            extra.visibilityManual !== true
+          );
         });
-        for (const id of hide.length ? await setHidden(chatId, hide, true) : []) {
+        const newlyHidden = hide.length ? await setHidden(chatId, hide, true) : [];
+        for (const id of newlyHidden) {
           const noteId = noteFor.get(id);
           if (noteId && !record[noteId]?.includes(id)) (record[noteId] ??= []).push(id);
         }
+        noteLtmMessagesJustHidden(root, chatId, messages, newlyHidden);
         if (!Object.keys(record).length) delete owned[chatId];
       }
     } finally {
       if (JSON.stringify(owned) !== before) await writeLtmHiddenMessages(owned, root);
     }
   });
+}
+
+const branchesPassed = new Set<string>();
+
+/**
+ * A branch's pass runs when it or any ancestor hid messages, so a new branch shows the tail its copies arrived
+ * without. Later passes come with its own imports and full passes. It runs with the passes of its ancestors that
+ * have a record first, oldest first (idempotent; they also hide an ancestor's newly current pieces, as an import there
+ * would): an ancestor made by an older build recorded only its own pieces, and each takes over from the one above
+ * before the next reads it. An ancestor with no record is read through, as `ancestorHiddenCopies` does, not passed:
+ * its first pass would show its tail before its branches read which copies it hid.
+ * ponytail: once per branch per process. Engines with the `chatBranched` hook run it as the branch is made; older
+ * ones run it at the branch's first recall. A restart repeats it once. A deleted ancestor ends the chain walked.
+ */
+export async function hideBranchCopiesOnce(root: string, chat: { id: string; metadata: unknown }) {
+  const parentId = parseLtmChatMetadata(chat.metadata).branchParentChatId;
+  if (typeof parentId !== "string" || branchesPassed.has(chat.id) || !ltmSetMessagesHiddenFromAI()) return;
+  branchesPassed.add(chat.id);
+  const hidden = await readLtmHiddenMessages(root),
+    chain = await branchChain(chat);
+  if (chain.some((link) => hidden[link.id]))
+    await hideImportedChatMessages(
+      root,
+      chain
+        .filter((link, index) => !index || hidden[link.id])
+        .map((link) => link.id)
+        .reverse(),
+    );
+}
+
+/** The Engine made `chatId` a branch: run its pass now. An unknown chat or a chat that is no branch does nothing. */
+export async function hideBranchCopiesWhenBranched(root: string, chatId: string) {
+  const chat = await getPackagePersistence().getChat(chatId);
+  if (chat) await outsideLtmVaultLock(() => hideBranchCopiesOnce(root, chat));
+}
+
+/**
+ * The branch's latest messages (its summary tail, hidden or not) that it copied hidden by hand from its parent and no
+ * memory it shares covers yet: past the last active Chat Messages piece of its own or of an ancestor that ends within
+ * what it copied (`isLtmSourceSharedWithChat`). The branch pass leaves a hand-set copy alone and a piece crossing the
+ * fork stays in the parent, so the AI reads neither these nor their memories until the user shows them. A pop-up on
+ * opening the branch and Chat Settings offer that; the offer ends once the branch's own messages fill the tail or its own pieces cover them.
+ */
+export async function branchHandHiddenTail(root: string, chat: { id: string; metadata: unknown }) {
+  const metadata = parseLtmChatMetadata(chat.metadata),
+    parentId = metadata.branchParentChatId,
+    tail = summaryTailMessages(
+      metadata.summaryTailMessages,
+      (await getLtmGlobalSettings(root)).longTermMemoryHideTailMessages,
+    );
+  if (typeof parentId !== "string" || parentId === chat.id || !tail) return [];
+  const persistence = getPackagePersistence(),
+    chain: Array<{ id: string; metadata: unknown }> = [chat];
+  for (let id: unknown = parentId; typeof id === "string" && !chain.some((link) => link.id === id);) {
+    const next = await persistence.getChat(id);
+    if (!next) break;
+    chain.push(next);
+    id = parseLtmChatMetadata(next.metadata).branchParentChatId;
+  }
+  // A deleted parent took its messages, and with them the hand marks to compare.
+  if (chain[1]?.id !== parentId) return [];
+  const listed = new Map<string, ReturnType<typeof persistence.listMessages>>();
+  const listMessages = (id: string) => {
+    if (!listed.has(id)) listed.set(id, persistence.listMessages(id));
+    return listed.get(id)!;
+  };
+  const chainIds = chain.map((link) => link.id),
+    [messages, parentMessages, sharedMessageCounts, notes] = await Promise.all([
+      listMessages(chat.id),
+      listMessages(parentId),
+      sharedLtmMessageCounts({ chatId: chat.id, chats: chain, otherChatIds: chainIds.slice(1), listMessages }),
+      new LongTermMemoryStorage(root).listNotes(),
+    ]);
+  let covered = 0;
+  for (const note of notes) {
+    const sourceId = note.type === "source" && note.status === "active" ? note.provenance?.sourceId : undefined;
+    if (
+      sourceId &&
+      chainIds.includes(sourceId) &&
+      isLtmSourceSharedWithChat(note, { chatId: chat.id, sharedMessageCounts })
+    )
+      covered = Math.max(covered, ltmSourceLastMessageNumber(note) ?? 0);
+  }
+  const byHand = (extra: unknown) => {
+    const value = object(extra);
+    return value.hiddenFromAI === true && value.visibilityManual === true;
+  };
+  return messages
+    .map((message, index) => ({ message, number: index + 1, parent: parentMessages[index] }))
+    .slice(-tail)
+    .filter(
+      ({ message, number, parent }) =>
+        number > covered && parent?.createdAt === message.createdAt && byHand(message.extra) && byHand(parent.extra),
+    )
+    .map(({ message }) => message.id);
 }
 
 /**
@@ -1005,16 +1581,106 @@ function outdatedSourceNotes(
     .slice(0, OUTDATED_NOTE_LIMIT);
 }
 
-function previewFreshness(
-  note: LtmNote,
-  candidateFingerprint: ReturnType<typeof candidateFingerprintForNote>,
-): Exclude<LtmInteropPreviewFreshness, "new"> {
+// The same source text under a new title or message range is still read: only its labels moved.
+function sourceFingerprintCurrent(note: LtmNote, candidate: Candidate) {
+  const existing = note.extractionFingerprint,
+    fresh = candidateFingerprintForNote(candidate, note);
+  return (
+    existing?.sourceHash === fresh.sourceHash ||
+    extractionFingerprintsMatchSourceText(existing, fresh) ||
+    // A chat piece read before 1.6.0 has no text hash, so compare it under the title it was saved with.
+    (candidate.provenance.kind === "chat_transcript" &&
+      existing?.sourceHash ===
+        candidateFingerprintForNote({ ...candidate, title: note.title ?? candidate.title }, note).sourceHash)
+  );
+}
+
+function previewFreshness(note: LtmNote, candidate: Candidate): Exclude<LtmInteropPreviewFreshness, "new"> {
   const existingFingerprint = note.extractionFingerprint;
   if (!existingFingerprint) return "extraction_incomplete";
-  if (existingFingerprint.sourceHash !== candidateFingerprint.sourceHash) return "source_updated";
-  const { sourceHash: _existingSourceHash, ...existingContext } = existingFingerprint,
-    { sourceHash: _candidateSourceHash, ...candidateContext } = candidateFingerprint;
+  if (!sourceFingerprintCurrent(note, candidate)) return "source_updated";
+  const candidateFingerprint = candidateFingerprintForNote(candidate, note);
+  // The text hash only exists on newer fingerprints, so it is not part of the context.
+  const { sourceHash: _existingSourceHash, textHash: _existingTextHash, ...existingContext } = existingFingerprint,
+    { sourceHash: _candidateSourceHash, textHash: _candidateTextHash, ...candidateContext } = candidateFingerprint;
   return JSON.stringify(existingContext) === JSON.stringify(candidateContext) ? "current" : "context_updated";
+}
+
+/**
+ * Issue #2498: a branch copies its parent's first messages, and another chat of its conversation may already hold them
+ * as source notes. A chat summary row with a message range and no note of its own is covered when the active, extracted
+ * source notes of one other chat of its group, all within the messages the two chats share, hold every message of its
+ * range. Gives the covering note that holds the range's first message, by row source id.
+ */
+async function coveredSummaries(rows: Candidate[], matchExisting: Awaited<ReturnType<typeof existingMatcher>>) {
+  const covered = new Map<string, LtmNote>();
+  const open = rows.filter(
+    (row) => row.provenance.kind === "chat_summary" && row.messageRange && row.scope.groupId && !matchExisting(row),
+  );
+  if (!open.length) return covered;
+  const notesByChat = new Map<string, LtmNote[]>();
+  // A fingerprint left from an earlier text or range does not count: those messages may never have been extracted.
+  for (const { note, provenance } of matchExisting.sourceNotes)
+    if (
+      note.status === "active" &&
+      note.extractionFingerprint &&
+      isLtmSourceExtractionFingerprintCurrent(note, note.extractionFingerprint) &&
+      ltmSourceMessageRange(note)
+    )
+      notesByChat.set(provenance.sourceId, [...(notesByChat.get(provenance.sourceId) ?? []), note]);
+  if (!notesByChat.size) return covered;
+  const persistence = getPackagePersistence(),
+    chats = await persistence.listChats(),
+    listed = new Map<string, ReturnType<typeof persistence.listMessages>>(),
+    listMessages = (id: string) => {
+      if (!listed.has(id)) listed.set(id, persistence.listMessages(id));
+      return listed.get(id)!;
+    },
+    countsByChat = new Map<string, ReturnType<typeof sharedLtmMessageCounts>>();
+  for (const row of open) {
+    const chatId = row.provenance.sourceId,
+      chat = chats.find((candidate) => candidate.id === chatId);
+    if (!chat?.groupId) continue;
+    const group = chats.filter((other) => other.groupId === chat.groupId && other.id !== chatId),
+      related = group.filter((other) => notesByChat.has(other.id));
+    if (!related.length) continue;
+    if (!countsByChat.has(chatId))
+      countsByChat.set(
+        chatId,
+        sharedLtmMessageCounts({
+          chatId,
+          chats: [chat, ...group],
+          otherChatIds: related.map((other) => other.id),
+          listMessages,
+        }),
+      );
+    // A chat whose messages cannot be read leaves its summaries to import instead of failing the preview.
+    const sharedMessageCounts = await countsByChat.get(chatId)!.catch(() => undefined);
+    if (!sharedMessageCounts) continue;
+    const { first, last } = row.messageRange!;
+    for (const other of related) {
+      if (last > (sharedMessageCounts.get(other.id) ?? 0)) continue;
+      const ranges = notesByChat
+        .get(other.id)!
+        .filter((note) => isLtmSourceSharedWithChat(note, { chatId, sharedMessageCounts }))
+        .map((note) => ({ note, ...ltmSourceMessageRange(note)! }))
+        .sort((left, right) => left.first - right.first);
+      let next = first,
+        start: LtmNote | undefined;
+      for (const range of ranges) {
+        if (range.first > next) break;
+        if (range.last < next) continue;
+        start ??= range.note;
+        next = range.last + 1;
+        if (next > last) break;
+      }
+      if (start && next > last) {
+        covered.set(row.sourceId, start);
+        break;
+      }
+    }
+  }
+  return covered;
 }
 
 function previewSample(row: Candidate, note: LtmNote | undefined) {
@@ -1032,11 +1698,20 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
     ? {
         ...base,
         status: "imported" as const,
-        freshness: previewFreshness(note, candidateFingerprintForNote(row, note)),
+        freshness: previewFreshness(note, row),
         existingNoteId: note.id,
         existingNoteTitle: note.title || row.title,
       }
     : { ...base, status: "pending" as const, freshness: "new" as const };
+}
+/** A summary row whose messages a source note of a related chat already holds (#2498). */
+function coveredSample(row: Candidate, covered: LtmNote) {
+  return {
+    ...previewSample(row, undefined),
+    status: "covered" as const,
+    freshness: "current" as const,
+    coveredBy: { noteId: covered.id, title: (covered.title || covered.id).slice(0, 240) },
+  };
 }
 function previewPage<T>(
   rows: T[],
@@ -1083,22 +1758,37 @@ function previewPage<T>(
 export async function previewPackageInterop(
   request: LtmInteropPreviewRequest,
   root: string,
+  /** `ownPiecesOnly` leaves a parent's rows out of `branchChatId`'s list: background import reads only its own chat. */
+  { ownPiecesOnly = false }: { ownPiecesOnly?: boolean } = {},
 ): Promise<LtmInteropPreviewResponse> {
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
   const pieces = await chatPieces(request.source, matchExisting, root);
+  const { branchChatId } = request;
+  // The imported sources whose messages the picked branch records as hidden.
+  const inherited = new Set(
+    request.source === "messages" && branchChatId && !ownPiecesOnly
+      ? Object.keys((await readLtmHiddenMessages(root))[branchChatId] ?? {})
+      : [],
+  );
   const candidateRequest = { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
     found = await candidates(candidateRequest, undefined, pieces),
     resolved = resolvePreviewCandidates(
       found.filter((row) => candidateVisibleInScope(row, sourceScope)),
       matchExisting,
+      inherited,
     );
-  // Identical branch pieces are already merged, so a branch keeps the pieces its chat contributed to.
-  const { branchChatId } = request;
-  const rows =
-    request.source === "messages" && branchChatId
-      ? resolved.filter((row) => row.branchChatIds?.includes(branchChatId))
-      : resolved;
+  // Identical branch pieces are already merged, so a branch keeps the pieces its chat contributed to. It also keeps
+  // a parent's imported pieces whose copies it records as hidden: it produces no piece of its own for those messages.
+  let rows = resolved;
+  if (request.source === "messages" && branchChatId) {
+    const groupId = inherited.size ? (await getPackagePersistence().getChat(branchChatId))?.groupId : undefined;
+    rows = resolved.filter(
+      (row) =>
+        row.branchChatIds?.includes(branchChatId) ||
+        (groupId && getLtmScopeGroupIds(row.scope).includes(groupId) && inherited.has(matchExisting(row)?.id ?? "")),
+    );
+  }
   // Only an unfiltered first page has seen the whole source, so only it can say which notes lost theirs.
   const outdated =
     request.cursor || request.query
@@ -1114,13 +1804,18 @@ export async function previewPackageInterop(
   const page = previewPage(rows, request, request.source, (row) => row.previewOrder ?? row.sourceId);
   // ponytail: host resource APIs list complete source records; only this page gets
   // rendered previews and freshness hashes. Host-side cursors can replace the scan later.
-  const samples = page.items.map((row) => previewSample(row, matchExisting(row)));
-  const imported = rows.filter((row) => matchExisting(row)).length;
+  const covered = request.source === "chats" ? await coveredSummaries(rows, matchExisting) : new Map<string, LtmNote>();
+  const samples = page.items.map((row) => {
+    const note = matchExisting(row),
+      by = covered.get(row.sourceId);
+    return !note && by ? coveredSample(row, by) : previewSample(row, note);
+  });
+  const imported = rows.filter((row) => matchExisting(row) ?? covered.has(row.sourceId)).length;
   return {
     source: request.source,
     scanned: samples.length,
     draftable: samples.filter((item) => item.status === "pending").length,
-    importedCount: samples.filter((item) => item.status === "imported").length,
+    importedCount: samples.filter((item) => item.status !== "pending").length,
     samples,
     totals: { matches: rows.length, ready: rows.length - imported, imported },
     ...(outdated?.length ? { outdated } : {}),
@@ -1288,10 +1983,51 @@ export async function sourcePackageDetails(
   };
 }
 
+/** A written source that this import does not extract. */
+function notExtracted(item: ImportedSourceItem): LtmImportSourceNotesResponse["imported"][number] {
+  return {
+    sourceId: item.sourceId,
+    title: item.title,
+    note: item.note,
+    created: item.created,
+    sourceWriteStatus: item.created ? "created" : "refreshed",
+    extractionMode: item.extractionMode,
+    extractionStatus: "not_started",
+    extractionMethod: "none",
+    retryable: false,
+    draft: null,
+    diagnostics: [],
+    outcome: {
+      state: "no_suggestions_created",
+      incomplete: false,
+      totalCandidates: 0,
+      keptUnits: 0,
+      droppedUnits: 0,
+      droppedCandidates: [],
+      droppedCandidateDetailsTruncated: false,
+    },
+    accounting: {
+      providerCandidates: 0,
+      normalizedAdditions: 0,
+      parserRejections: 0,
+      validationRejections: 0,
+      deduplications: 0,
+      keptUnits: 0,
+    },
+    appliedMutationIds: [],
+    skippedMutationIds: [],
+  };
+}
+
 export async function importPackageInterop(
   request: LtmImportSourceNotesRequest,
   root: string,
   signal: AbortSignal,
+  /**
+   * keepPendingDrafts (background import): skip a source whose draft from the same text still waits in Review, and
+   * send a read that keeps far fewer memories than the last read of the same text to Review.
+   */
+  options: { keepPendingDrafts?: boolean } = {},
 ): Promise<LtmImportSourceNotesResponse> {
   const chat = request.chatId ? await getPackagePersistence().getChat(request.chatId) : null;
   if (request.chatId && !chat) throw new LtmServiceError("Chat not found", 404, "ltm_chat_not_found");
@@ -1366,6 +2102,12 @@ export async function importPackageInterop(
   }
   throwIfAborted(signal);
   const written: ImportedSourceItem[] = [];
+  // Sources whose text and context did not change, only their title or message range: not read again.
+  const relabelled = new Set<string>();
+  const relabelCandidates = new Map<
+    string,
+    { noteId: string; fingerprint: NonNullable<LtmNote["extractionFingerprint"]> }
+  >();
   for (const row of rows) {
     const existing = destinationScope ? matchExisting(row) : undefined;
     if (!destinationScope || !existing) continue;
@@ -1386,6 +2128,31 @@ export async function importPackageInterop(
       });
     }
   }
+  // Each chat's World State is read once per import.
+  const chatStoryTimeSources = new Map<string, Promise<LtmChatStoryTimeSources>>();
+  const storyTimeSources = ({ chat, messages }: NonNullable<Candidate["storyTimeChat"]>) => {
+    let sources = chatStoryTimeSources.get(chat.id);
+    if (!sources)
+      chatStoryTimeSources.set(
+        chat.id,
+        (sources = (async () =>
+          loadChatStoryTimeSources(chat, typeof messages === "function" ? await messages() : messages))()),
+      );
+    return sources;
+  };
+  // A summary's date is extra: a chat that cannot be read leaves the summary undated, and it still imports.
+  const summaryStoryTime = async (row: Candidate) => {
+    try {
+      return stampSummaryStoryTime(
+        row.summaryEntry!,
+        row.sourceText,
+        row.storyTimeChat ? await storyTimeSources(row.storyTimeChat) : undefined,
+      );
+    } catch (error) {
+      logger.warn("[ltm] Could not read the messages of %s for its story date: %s", row.sourceId, String(error));
+      return undefined;
+    }
+  };
   for (const row of rows) {
     if (conflictingSourceIds.has(row.sourceId)) continue;
     try {
@@ -1412,21 +2179,53 @@ export async function importPackageInterop(
             },
           },
         },
+        stamp = row.summaryEntry
+          ? await summaryStoryTime(row)
+          : row.messageIds && row.storyTimeChat
+            ? stampPieceStoryTime(
+                { messageIds: row.messageIds, sourceText: row.sourceText },
+                await storyTimeSources(row.storyTimeChat),
+              )
+            : undefined,
         found = matchExisting(row),
         existing =
           found && found.id !== row.sourceNoteId ? await storage.renameNoteId(found.id, row.sourceNoteId) : found,
+        // A date the user typed is never replaced (mergeStoryTime), so the merge reads the note under the vault lock
+        // (updateNote joins it) and not as the import's start found it.
         note = existing
-          ? await storage.updateNote(existing.id, {
-              title: row.title,
-              status: "active",
-              modes: request.modes ?? (request.mode ? [request.mode] : undefined) ?? existing.modes ?? row.modes,
-              scope,
-              ...(destinationScope ? { destinationScope } : {}),
-              tags: Array.from(new Set([...existing.tags, ...input.tags])),
-              provenance: row.provenance,
-              sections: { ...existing.sections, source: input.sections.source },
+          ? await withLtmVaultLock(root, async () => {
+              const storyTime = mergeStoryTime(((await storage.getNote(existing.id)) ?? existing).storyTime, stamp);
+              return storage.updateNote(existing.id, {
+                title: row.title,
+                status: "active",
+                modes: request.modes ?? (request.mode ? [request.mode] : undefined) ?? existing.modes ?? row.modes,
+                scope,
+                ...(destinationScope ? { destinationScope } : {}),
+                tags: Array.from(new Set([...existing.tags, ...input.tags])),
+                provenance: row.provenance,
+                sections: { ...existing.sections, source: input.sections.source },
+                ...(storyTime ? { storyTime } : {}),
+              });
             })
-          : await storage.createNote(input);
+          : // ponytail: createNote's draft schema drops storyTime, so a new dated note takes a second write; if that
+            // write fails, the note stays undated and the row reports failed for a retry. Upgrade path: let the draft
+            // schema carry storyTime.
+            await storage
+              .createNote(input)
+              .then((created) => (stamp ? storage.updateNote(created.id, { storyTime: stamp }) : created));
+      const previousFingerprint = existing?.extractionFingerprint;
+      // Only a background import skips; a manual import is an explicit read and always extracts.
+      if (request.extract && options.keepPendingDrafts && previousFingerprint) {
+        const refreshed = extractionFingerprintForLtmSourceNote(note, {
+          extractionMode: previousFingerprint.extractionMode,
+        });
+        if (
+          refreshed.sourceHash !== previousFingerprint.sourceHash &&
+          extractionFingerprintsMatchSourceText(previousFingerprint, refreshed)
+        ) {
+          relabelCandidates.set(row.sourceId, { noteId: note.id, fingerprint: refreshed });
+        }
+      }
       written.push({
         sourceId: row.sourceId,
         title: row.title,
@@ -1456,59 +2255,66 @@ export async function importPackageInterop(
       });
     }
   }
-  const results = request.extract
-      ? await processLongTermMemorySourceBatch({
-          items: written,
-          languageModel,
-          mode: request.mode,
-          modes: request.modes,
-          instruction: request.instruction,
-          operationId,
-          chatId: request.chatId,
-          signal,
-          // An import of only the open chat follows that chat's "Memories from this chat" choice when it has one.
-          applyLowRisk:
-            request.applyLowRisk ??
-            (chat &&
-            rows.length > 0 &&
-            rows.every((row) => isChatSource(row.provenance.kind) && row.provenance.sourceId === chat.id)
-              ? resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), extractionConfig).autoAccept
-              : extractionConfig.autoAcceptSafeChanges),
-          concurrency: request.importConcurrency ?? 3,
-          root,
-        })
-      : written.map((item) => ({
-          sourceId: item.sourceId,
-          title: item.title,
-          note: item.note,
-          created: item.created,
-          sourceWriteStatus: item.created ? ("created" as const) : ("refreshed" as const),
-          extractionMode: item.extractionMode,
-          extractionStatus: "not_started" as const,
-          extractionMethod: "none" as const,
-          retryable: false as const,
-          draft: null,
-          diagnostics: [],
-          outcome: {
-            state: "no_suggestions_created" as const,
-            incomplete: false,
-            totalCandidates: 0,
-            keptUnits: 0,
-            droppedUnits: 0,
-            droppedCandidates: [],
-            droppedCandidateDetailsTruncated: false,
-          },
-          accounting: {
-            providerCandidates: 0,
-            normalizedAdditions: 0,
-            parserRejections: 0,
-            validationRejections: 0,
-            deduplications: 0,
-            keptUnits: 0,
-          },
-          appliedMutationIds: [],
-          skippedMutationIds: [],
-        })),
+  // A background import leaves a source alone while a draft read from the same text and context waits in Review:
+  // extracting it again would supersede that draft with a second attempt. Changed text or context makes the draft
+  // stale, so the source is extracted.
+  const waiting =
+      request.extract && options.keepPendingDrafts && written.length
+        ? (await new LongTermMemoryDraftStore(root).listDrafts({ status: "pending" })).filter(
+            (draft) => draft.mutations.length && draft.source.extractionFingerprint,
+          )
+        : [],
+    // A pending draft is bound to the old fingerprint; refreshing it would leave that draft stale, so those sources are read.
+    refreshed = await Promise.all(
+      [...relabelCandidates].map(async ([sourceId, { noteId, fingerprint }]) => {
+        if (waiting.some((draft) => draft.source.sourceNoteId === noteId)) return;
+        await storage.updateNote(noteId, { extractionFingerprint: fingerprint });
+        relabelled.add(sourceId);
+      }),
+    ),
+    toExtract = request.extract
+      ? written.filter(
+          (item) =>
+            !relabelled.has(item.sourceId) &&
+            !waiting.some(
+              (draft) =>
+                draft.source.sourceNoteId === item.note.id &&
+                isLtmSourceExtractionFingerprintCurrent(item.note, draft.source.extractionFingerprint!),
+            ),
+        )
+      : [],
+    extracted = new Map(
+      (toExtract.length
+        ? await processLongTermMemorySourceBatch({
+            items: toExtract,
+            languageModel,
+            mode: request.mode,
+            modes: request.modes,
+            instruction: request.instruction,
+            operationId,
+            chatId: request.chatId,
+            signal,
+            // An import of only the open chat follows that chat's "Memories from this chat" choice when it has one.
+            applyLowRisk:
+              request.applyLowRisk ??
+              (chat &&
+              rows.length > 0 &&
+              rows.every((row) => isChatSource(row.provenance.kind) && row.provenance.sourceId === chat.id)
+                ? resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), extractionConfig).autoAccept
+                : extractionConfig.autoAcceptSafeChanges),
+            keepPendingDrafts: options.keepPendingDrafts,
+            concurrency: request.importConcurrency ?? 3,
+            root,
+          })
+        : []
+      ).map((result) => [result.sourceId, result]),
+    ),
+    // A background import does not report a piece its batch stopped before starting, so the job does not hold it back.
+    results = written.flatMap((item) => {
+      const result = extracted.get(item.sourceId);
+      if (result) return [result];
+      return options.keepPendingDrafts && toExtract.includes(item) ? [] : [notExtracted(item)];
+    }),
     cancelled = results.filter((item) => item.extractionStatus === "cancelled").length,
     failed = results.filter((item) => item.extractionStatus === "failed").length,
     succeeded = results.filter((item) => item.extractionStatus === "succeeded").length,

@@ -7,6 +7,7 @@
 import { readSlurpRapportWeights, type SlurpRapport, type SlurpRapportWeights } from "./slp-rapport.js";
 import { slurpRotationHash } from "../feed/slp-post-variation.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Storage key for the per-creator messaging settings blob. Mirrors the creator-prices key. */
 export const SLURP_CREATOR_MESSAGING_KEY = "slurp2.creator.messaging";
 
@@ -26,7 +27,7 @@ export type SlurpDmPolicy =
  * bubble must not hold "already writing back" forever.
  */
 export const SLURP_REPLY_BUBBLE_STALE_MS = 2 * 60_000;
-export function slurpReplyBubbleStale(deliverAt: string, now = Date.now()): boolean {
+export function slurpReplyBubbleStale(deliverAt: string, now = slurpWorldNowMs()): boolean {
   const due = Date.parse(deliverAt);
   return !Number.isFinite(due) || due < now - SLURP_REPLY_BUBBLE_STALE_MS;
 }
@@ -223,7 +224,7 @@ export const SLURP_DEFAULT_REPLY_DELAYS: SlurpReplyDelays = {
 export function slurpViewerImageOnCooldown(
   messages: readonly { role: string; createdAt: string; metadata: { generatedContext?: unknown } }[],
   cooldownMinutes: number,
-  now = Date.now(),
+  now = slurpWorldNowMs(),
 ): boolean {
   return slurpViewerImageReadyAt(messages, cooldownMinutes, now) !== null;
 }
@@ -265,7 +266,7 @@ export function slurpUploadedMessageMediaPaths(
 export function slurpViewerImageReadyAt(
   messages: readonly { role: string; createdAt: string; metadata: { generatedContext?: unknown } }[],
   cooldownMinutes: number,
-  now = Date.now(),
+  now = slurpWorldNowMs(),
 ): string | null {
   if (cooldownMinutes <= 0) return null;
   let latest = -Infinity;

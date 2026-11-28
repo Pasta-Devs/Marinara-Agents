@@ -1,18 +1,14 @@
 {
   "schemaVersion": 1,
   "packages": {
-    "blackjack": {
-      "versions": [
-        {
-          "version": "1.0.0",
-          "date": "2026-10-22",
-          "notes": "- New Conversation game: play Blackjack against the house with up to six characters, from /blackjack or the games picker.\n- Pick a character to deal and call each round in their own voice, or let the house deal silently.\n- Hit, stand, double down, and split a pair once. Blackjack pays 3 to 2, and the dealer can hit or stand on soft 17.\n- Set the starting chips, minimum bet, decks in the shoe, and an optional round limit.",
-          "highlight": false
-        }
-      ]
-    },
     "modern-life-sim": {
       "versions": [
+        {
+          "version": "0.3.3",
+          "date": "2026-11-17",
+          "notes": "- If you installed Marinara with its Android app, pictures paint and your personas, cards and connections load again. The Engine there refused Modern Life Sim's requests with \"401: Android local authentication required\". They now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.",
+          "highlight": false
+        },
         {
           "version": "0.3.2",
           "date": "2026-10-02",

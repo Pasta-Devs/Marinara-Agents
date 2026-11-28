@@ -7,7 +7,9 @@
 // rupture that opens or is repaired later the same day replaces the day's note once; the note's recall is framed as
 // what he may know; the small hours are late night and the note's day is the request's own instant; P15 keeps no
 // question and its comfort lines are warmth only; a debug request folds into a line-pack job that waits; his face on
-// Home follows a tap, then his note, then a rupture, and a tap line is voiced under a ref of its own words.
+// Home follows a tap, then his note, then a rupture, and a tap line is voiced under a ref of its own words. Your
+// thoughts… (#2127) are saved trimmed with no model call, cleared by empty text, refused over THOUGHTS_MAX and for a
+// run that does not exist, and read back on Home.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -20,6 +22,7 @@ import type {
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
   LINE_COUNTS,
+  THOUGHTS_MAX,
   sentenceCount,
   timeOfDayOf,
   wordCount,
@@ -30,6 +33,7 @@ import {
   isAnnoyed,
   pickLine,
   recordTap,
+  tapFace,
   tapMode,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/tap-mood.ts";
 import { typingDelay } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/typing-delay.ts";
@@ -66,6 +70,7 @@ import {
   noteId,
   playerId,
   runDocTarget,
+  runIdOf,
   stateId,
   unitId,
   worldId,
@@ -106,7 +111,12 @@ const times = (zone: string) => ({
 });
 function packReply(name = "Kai") {
   return {
-    tap: { head: times(`${name} head`), hand: times(`${name} hand`), heart: times(`${name} heart`) },
+    tap: {
+      head: times(`${name} head`),
+      cheek: times(`${name} cheek`),
+      hand: times(`${name} hand`),
+      heart: times(`${name} heart`),
+    },
     annoyed: lines(`${name} annoyed`, 4),
     cold: lines(`${name} cold`, 6),
     comfort: lines(`${name} comfort`, 8),
@@ -116,6 +126,14 @@ function packReply(name = "Kai") {
       win: lines(`${name} win`, 3),
       miss: lines(`${name} miss`, 3),
       plush: lines(`${name} plush`, 3),
+    },
+    kitty: {
+      start: lines(`${name} kitty start`, 2),
+      good: lines(`${name} kitty good`, 3),
+      cheat: lines(`${name} kitty cheat`, 3),
+      caught: lines(`${name} kitty caught`, 2),
+      win: lines(`${name} kitty win`, 3),
+      lose: lines(`${name} kitty lose`, 3),
     },
   };
 }
@@ -484,7 +502,8 @@ test("the small hours are late night, and the note's day is the instant the requ
 
 test("P15: the line-pack schema, the comfort rule and the counts", async () => {
   const at = "2026-10-28T10:00:00.000Z";
-  const ok = normalizeLinePack(packReply(), { stage: 2, withFixed: true, at });
+  const content = defaultContent();
+  const ok = normalizeLinePack(packReply(), { stage: 2, withFixed: true, at, content });
   assert.ok(typeof ok !== "string", String(ok));
   assert.equal(ok.stage.stage, 2);
   assert.equal(ok.stage.tap.heart.night.length, LINE_COUNTS.tap);
@@ -493,36 +512,39 @@ test("P15: the line-pack schema, the comfort rule and the counts", async () => {
   assert.equal(ok.fixed!.claw.cheat.length, LINE_COUNTS.claw.cheat);
   const stageOnly = normalizeLinePack(
     { ...packReply(), comfort: null, claw: null },
-    { stage: 3, withFixed: false, at },
+    { stage: 3, withFixed: false, at, content },
   );
   assert.ok(typeof stageOnly !== "string" && stageOnly.fixed === null, "a later stage writes no fixed lines");
 
   const tooLong = packReply();
   tooLong.cold[0] = "This line keeps going on and on far past the fourteen word limit that every line keeps.";
-  assert.match(String(normalizeLinePack(tooLong, { stage: 1, withFixed: true, at })), /cold needs 6 distinct lines/);
+  assert.match(
+    String(normalizeLinePack(tooLong, { stage: 1, withFixed: true, at, content })),
+    /cold needs 6 distinct lines/,
+  );
   const repeated = packReply();
   repeated.annoyed = ["Enough.", "enough.", "Enough", "Stop."];
-  assert.match(String(normalizeLinePack(repeated, { stage: 1, withFixed: true, at })), /annoyed needs 4/);
+  assert.match(String(normalizeLinePack(repeated, { stage: 1, withFixed: true, at, content })), /annoyed needs 4/);
   const away = packReply();
   away.tap.hand.day[1] = "Welcome back, finally.";
-  assert.match(String(normalizeLinePack(away, { stage: 1, withFixed: true, at })), /tap\.hand\.day/);
+  assert.match(String(normalizeLinePack(away, { stage: 1, withFixed: true, at, content })), /tap\.hand\.day/);
   assert.match(
-    String(normalizeLinePack({ ...packReply(), comfort: [] }, { stage: 1, withFixed: true, at })),
+    String(normalizeLinePack({ ...packReply(), comfort: [] }, { stage: 1, withFixed: true, at, content })),
     /comfort needs 8/,
   );
   // A stored line is replayed on every tap or Rough day?, with no way to answer it: no question, in any script.
   const asks = packReply();
   asks.tap.head.morning[0] = "Have you eaten today?";
   assert.match(
-    String(normalizeLinePack(asks, { stage: 1, withFixed: true, at })),
+    String(normalizeLinePack(asks, { stage: 1, withFixed: true, at, content })),
     /tap\.head\.morning needs 3 distinct lines .* never ask a question \(got 2\)/,
   );
   const comfortAsks = packReply();
   comfortAsks.comfort[0] = "¿Comiste algo hoy";
-  assert.match(String(normalizeLinePack(comfortAsks, { stage: 1, withFixed: true, at })), /comfort needs 8/);
+  assert.match(String(normalizeLinePack(comfortAsks, { stage: 1, withFixed: true, at, content })), /comfort needs 8/);
   const rhetorical = packReply();
   rhetorical.annoyed[0] = "Again?";
-  const kept = normalizeLinePack(rhetorical, { stage: 1, withFixed: true, at });
+  const kept = normalizeLinePack(rhetorical, { stage: 1, withFixed: true, at, content });
   assert.ok(typeof kept !== "string" && kept.stage.annoyed[0] === "Again?", "an annoyed line may be rhetorical");
 });
 
@@ -1204,6 +1226,49 @@ test("Home shows the chosen love interest or the protagonist, and counts unread 
   assert.equal((await t.call("POST", "/runs/:run/home/note", note("li-nobody-zz99", "UTC"))).status, 404);
 });
 
+test("Your thoughts… (#2127): saved trimmed with no model call, cleared by empty text, refused over the limit", async () => {
+  const t = await homeWorld("r-thought-aaaaaa");
+  const path = "/runs/:run/home/thoughts";
+  const state = async () => (await t.store.readDoc(stateId(t.runId), normalizeState))!;
+  const home = async () => (await t.call("GET", "/runs/:run/home")).body;
+  assert.equal((await home()).thoughts, null, "none wait at first");
+
+  const saved = await t.call("POST", path, { body: { text: "  I want to look into the north light.\n\n " } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.thoughts.text, "I want to look into the north light.");
+  assert.ok(!Number.isNaN(Date.parse(saved.body.thoughts.at)), "with when they were sent");
+  assert.deepEqual((await state()).thoughts, saved.body.thoughts, "kept in the run's state");
+  assert.deepEqual((await home()).thoughts, saved.body.thoughts, "and shown on Home");
+  const same = await t.call("POST", path, { body: { text: "I want to look into the north light." } });
+  assert.deepEqual(same.body.thoughts, saved.body.thoughts, "the same words again keep their time");
+
+  const longest = "x".repeat(THOUGHTS_MAX);
+  assert.equal((await t.call("POST", path, { body: { text: longest } })).body.thoughts.text, longest);
+  const over = await t.call("POST", path, { body: { text: `${longest}x` } });
+  assert.equal(over.status, 400);
+  assert.equal(over.body.code, "bad-request");
+  assert.equal((await t.call("POST", path, { body: {} })).status, 400, "text is required");
+  assert.equal((await state()).thoughts?.text, longest, "a refused request changes nothing");
+
+  const cleared = await t.call("POST", path, { body: { text: " \n " } });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.thoughts, null, "empty text lets them go");
+  assert.equal((await state()).thoughts, null);
+  assert.equal((await home()).thoughts, null);
+  assert.deepEqual(
+    t.calls.filter((entry) => !isPack(entry.messages)),
+    [],
+    "only Home's own line packs ask the model, never the thoughts",
+  );
+
+  // A run that does not exist (or a malformed key) is a 404, and creates nothing.
+  for (const runKey of ["r-nobody-aaaaaa", "not-a-run"]) {
+    const missing = await homeRoutes(t.deps, runKey)("POST", path, { body: { text: "Hello." } });
+    assert.equal(missing.status, 404, runKey);
+  }
+  assert.equal(await t.store.readDoc(stateId(runIdOf("r-nobody-aaaaaa")), normalizeState), null);
+});
+
 // ── Pure ──
 
 test("tap annoyance, time of day, the word counts, line picks and the typing delay (pure)", () => {
@@ -1262,9 +1327,9 @@ test("tap annoyance, time of day, the word counts, line picks and the typing del
 
 test("his face on Home and the ref a tap line is voiced under (pure)", () => {
   // A tap's face while its line shows, else the note's, else cold during a rupture, else his plain look.
-  assert.equal(homeFace("hurt", "fond", false), "tender");
-  assert.equal(homeFace("hurt", "annoyed", false), "flustered");
-  assert.equal(homeFace("tender", "cold", true), "cold");
+  assert.equal(homeFace("hurt", tapFace(null, "head", "fond"), false), "tender");
+  assert.equal(homeFace("hurt", tapFace(null, "head", "annoyed"), false), "flustered");
+  assert.equal(homeFace("tender", tapFace(null, "head", "cold"), true), "cold");
   assert.equal(homeFace("hurt", null, true), "hurt", "the note's face outlasts the rupture's default");
   assert.equal(homeFace("", null, true), "cold");
   assert.equal(homeFace("", null, false), "");

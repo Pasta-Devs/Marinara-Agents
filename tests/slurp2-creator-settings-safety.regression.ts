@@ -64,7 +64,7 @@ assert.match(overview, /useSlpCreatorSettingsStore\.getState\(\)\.setTab\(block\
 for (const block of ["automation", "storylines", "continuity", "audience"]) {
   assert.match(overview, new RegExp(`block="${block}"`, "u"), `a status tile opens ${block}`);
 }
-assert.match(overview, /role="switch"[\s\S]*updateAuto\.mutate/u, "auto-post is switchable from the overview");
+assert.match(overview, /<Switch[\s\S]*updateAuto\.mutate/u, "auto-post is switchable from the overview");
 assert.match(
   overview,
   /useSlurpContinuity\(active \? creator\.id : null\)/u,

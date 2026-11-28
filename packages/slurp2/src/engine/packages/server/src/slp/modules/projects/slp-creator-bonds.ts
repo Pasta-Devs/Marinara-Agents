@@ -24,6 +24,7 @@
 import { DAY_MS, clampText, hash } from "./slp-project.js";
 import { slurpPairKey, slurpSharedNiche, type SlurpTieCreator } from "./slp-creator-ties.js";
 import { slurpCoupleOf, type SlurpCouple } from "./slp-creator-couples.js";
+import { slpRecord as record, slpDate as date } from "../../../../../shared/src/slp/slp-coerce.js";
 
 export const SLURP_BOND_KINDS = ["friend", "roommate", "coworker", "ex", "family"] as const;
 export type SlurpBondKind = (typeof SLURP_BOND_KINDS)[number];
@@ -102,16 +103,28 @@ const COWORKER = /\b(co-?workers?|colleagues?|works? with|boss|employee|kolleg(e
 const FAMILY =
   /\b(mother|mom|mum|father|dad|daughter|son|sister|brother|sibling|twin|aunt|uncle|niece|nephew|cousin|grand(mother|father|ma|pa|daughter|son)|step-?\w+|(?<!co-)parent|child|mutter|vater|tochter|sohn|schwester|bruder)\b(?!['’]s\b| ?friend| ?flame)/iu;
 const FRIEND = /\b(friends?|buddy|pal|kumpel|childhood friend)\b/iu;
+// "not established friends", "aren't friends yet", "never roommates": a negation up to two words before the relation
+// word denies that kind only, and a comma or stop ends the window. A negation elsewhere ("best friend, never apart") keeps the bond.
+const denies = (...patterns: RegExp[]) =>
+  new RegExp(
+    String.raw`(?:\b(?:not|never|no longer|nicht|kein\w*|nie)|n['’]t)\s+(?:[^\s,;.!?]+\s+){0,2}?(?:${patterns.map((pattern) => pattern.source).join("|")})`,
+    "iu",
+  );
+const NOT_FRIEND = denies(BEST, FRIEND);
+const NOT_ROOMMATE = denies(ROOMMATE);
+const NOT_COWORKER = denies(COWORKER);
 
 /** What a card relation line means as a bond, or null (a partner is a couple, not a bond). */
 export function slurpBondFromRelation(relation: string): { kind: SlurpBondKind; level: number; detail: string } | null {
   const detail = clampText(relation, 60);
   if (FAMILY.test(relation)) return { kind: "family", level: 1, detail };
   if (EX.test(relation)) return { kind: "ex", level: 1, detail };
-  if (BEST.test(relation)) return { kind: "friend", level: 3, detail };
-  if (ROOMMATE.test(relation)) return { kind: "roommate", level: 1, detail };
-  if (COWORKER.test(relation)) return { kind: "coworker", level: 1, detail };
-  if (FRIEND.test(relation)) return { kind: "friend", level: 1, detail };
+  for (const clause of relation.split(/[,;.!?]+/u)) {
+    if (BEST.test(clause) && !NOT_FRIEND.test(clause)) return { kind: "friend", level: 3, detail };
+    if (ROOMMATE.test(clause) && !NOT_ROOMMATE.test(clause)) return { kind: "roommate", level: 1, detail };
+    if (COWORKER.test(clause) && !NOT_COWORKER.test(clause)) return { kind: "coworker", level: 1, detail };
+    if (FRIEND.test(clause) && !NOT_FRIEND.test(clause)) return { kind: "friend", level: 1, detail };
+  }
   return null;
 }
 
@@ -132,9 +145,6 @@ export function slurpCreatorNamed(
 
 // ─── Storage shape ──────────────────────────────────────────────────────────────────────────────
 
-const record = (value: unknown) =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 const pick = <T extends string>(list: readonly T[], value: unknown, fallback: T): T =>
   list.find((entry) => entry === value) ?? fallback;
 

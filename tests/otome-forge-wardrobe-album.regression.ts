@@ -6,7 +6,10 @@ import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
 import type { PortraitRequest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import type { Item } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
+import {
+  datePlacePaintable,
+  type Item,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import type { OtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { paintPairNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
 import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
@@ -44,7 +47,7 @@ import {
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { artWorld, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
+import { artWorld, engineDeletes, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
 import { KAI, MIR, SOL, at, beatReply, json } from "./fixtures/otome-forge-story.ts";
 
 const item = (id: string, changes: Partial<Item>): Item => ({
@@ -236,8 +239,9 @@ async function itemsWorld(
   const player = async () => (await t.store.readDoc(playerId(t.runId), normalizePlayer))!;
   const unit = async (li: string) => (await t.store.readDoc(unitId(t.runId, li), normalizeUnit))!;
   const open = (id: string, body: object = {}) => call("POST", "/runs/:run/items/:item/open", body, { item: id });
+  const tapOne = (id: string, body: object = {}) => call("POST", "/runs/:run/items/:item/art", body, { item: id });
   const painted = (id: string) => until(async () => (await stored(id)).art?.state === "ready", `the art of ${id}`);
-  return { ...t, deps, art, call, outfitCalls, faces, stored, player, unit, open, painted };
+  return { ...t, deps, art, call, outfitCalls, faces, stored, player, unit, open, tapOne, painted };
 }
 
 test("imageless Wardrobe describes owned looks without reading stories, secrets or paying for images", async () => {
@@ -334,10 +338,10 @@ test("an existing owned Snapshot paints its saved vignette once without rewritin
   assert.equal(t.paid[0]!.method, "generateBannerArt");
   assert.ok(t.paid[0]!.request.prompt.includes(original.text!), "the legacy vignette remains the scene context");
   // Only its love interest and protagonist, and only who has a picture to send: this world's love interest has no
-  // card, portrait or look, so only her persona goes (2026-11-03).
+  // card, portrait or look, so only her persona goes (2026-11-03), as its avatar: she has no outfit picture (0.36.5).
   assert.deepEqual(
     t.paid[0]!.request.units,
-    [{ kind: "character", personaId: "persona-ines", outfits: [] }],
+    [{ kind: "character", personaId: "persona-ines", avatarOnly: true, who: "Ines" }],
     "only its love interest and protagonist are references",
   );
   const saved = await t.stored(original.id);
@@ -353,6 +357,52 @@ test("an existing owned Snapshot paints its saved vignette once without rewritin
   await t.call("GET", "/runs/:run/album");
   await t.call("GET", "/runs/:run/wardrobe");
   assert.equal(t.paid.length, 1, "repeat opens and list reads reuse the saved picture");
+});
+
+test("#2303: a 4★ date's first open paints its place once, with nobody in it, and a 5★ date paints nothing", async () => {
+  const t = await itemsWorld("r-date4art-aaaaaa");
+  const date4 = item("dates-0-a1", {
+    kind: "date4",
+    li: null,
+    title: "What the Frost Left",
+    place: { name: "Larch Wood, Far Bank", tags: "larch wood, first frost, mushrooms, no people" },
+    scenes: 2,
+  });
+  const date5 = item("dates-0-f", {
+    kind: "date5",
+    li: null,
+    title: "Lantern Regatta",
+    place: { name: "The Regatta Pier", tags: "harbour pier, lanterns, dusk, no people" },
+    scenes: 5,
+  });
+  for (const value of [date4, date5])
+    await t.store.mutateDoc(runDocTarget("item", itemId(t.runId, value.id)), normalizeItem, () => value);
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: { ...state.owned, items: [...state.owned.items, date4.id, date5.id] },
+  }));
+  const [first, second] = await Promise.all([t.open(date4.id), t.open(date4.id)]);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  await t.painted(date4.id);
+  assert.equal(t.paid.length, 1, "concurrent opens share one paid picture");
+  assert.equal(t.paid[0]!.method, "generateImage");
+  assert.match(t.paid[0]!.request.prompt, /larch wood, first frost, mushrooms, no people/);
+  assert.equal(t.paid[0]!.request.units, undefined, "a place has no likeness to send");
+  assert.deepEqual(t.calls, [], "a date's open writes nothing: its scenes come when it is planned");
+  // The 5★'s picture is its banner's art (S/wish/banners.ts), so its own open pays for nothing.
+  assert.equal((await t.open(date5.id)).status, 200);
+  assert.equal(t.paid.length, 1);
+  // The client offers Paint it on the same terms the server paints: a 4★ with a named place, never a 5★ (Dottore).
+  assert.deepEqual(
+    [
+      datePlacePaintable(date4),
+      datePlacePaintable(date5),
+      datePlacePaintable({ kind: "date4" }),
+      datePlacePaintable({ kind: "date4", place: { name: "  " } }),
+    ],
+    [true, false, false, false],
+  );
 });
 
 test("new Snapshot artwork uses its English brief and only the reward's own characters", async () => {
@@ -399,7 +449,11 @@ test("new Snapshot artwork uses its English brief and only the reward's own char
   assert.ok(request.negativePrompt.includes(negative), "reviewed Snapshot negatives are not shortened either");
   assert.ok(!request.prompt.includes("SNAP-KAI"), "new artwork uses its planned English brief");
   assert.equal(request.units?.length, 2);
-  assert.ok(request.units?.some((unit) => unit.portrait === "/kai.png"));
+  // 0.36.5: each person's one picture is the outfit they wear, here his painted base look.
+  assert.ok(
+    request.units?.some((unit) => unit.avatarPath === "/kai.png.cut.png"),
+    "cut out of its backdrop",
+  );
   assert.ok(
     request.units?.some((unit) => unit.personaId === "persona-ines"),
     "the protagonist keeps their selected persona even when another LI shares their name",
@@ -491,8 +545,8 @@ test("a four-star Moment paints once on concurrent first opens and remains a pla
   assert.ok(request.prompt.includes(original.premise!));
   assert.equal(request.units?.length, 2, "only the item's love interest and protagonist are references");
   assert.ok(request.units?.some((subject) => subject.personaId === "persona-ines"));
-  assert.ok(request.units?.some((subject) => subject.portrait === `/${MIR}.png`));
-  assert.ok(!request.units?.some((subject) => subject.portrait === `/${KAI}.png`));
+  assert.ok(request.units?.some((subject) => subject.avatarPath === `/${MIR}.png.cut.png`));
+  assert.ok(!request.units?.some((subject) => subject.avatarPath?.startsWith(`/${KAI}.png`)));
   assert.ok(request.prompt.includes(`VISUAL-${MIR}`) && !request.prompt.includes(`VISUAL-${KAI}`));
   assert.ok(
     !request.prompt.includes("MYSTERY-TRUTH") && !request.prompt.includes("HIDDEN-TRUTH"),
@@ -528,9 +582,12 @@ test("a four-star Moment paints once on concurrent first opens and remains a pla
   assert.equal(memory.read, "unread");
   assert.equal(memory.cg, undefined, "no private art brief leaks to the client");
   assert.equal((await t.open(original.id)).body.art.url, saved.art!.url);
+  // 0.24.0: a tap on the painted illustration repaints it (one more image), and the picture it painted over goes.
   const tap = await t.call("POST", "/runs/:run/items/:item/art", {}, { item: original.id });
-  assert.equal(tap.body.art.url, saved.art!.url);
-  assert.equal(t.paid.length, 1, "reopening and paint taps reuse the saved picture");
+  assert.equal(tap.body.art.state, "ready");
+  assert.notEqual(tap.body.art.url, saved.art!.url);
+  assert.equal(t.paid.length, 2, "reopening paints nothing; a repaint costs one image");
+  assert.deepEqual(t.deleted, [saved.art!.ref!.slice("global-gallery:".length)]);
 });
 
 test("four-star Moment art respects consent, prompt review and explicit failed-paint retry", async () => {
@@ -706,6 +763,62 @@ test("Ask before painting and prompt review hold a first open's paint for the ta
   assert.ok(sent.prompt.startsWith("MY OWN WORDS") && sent.prompt.includes("safe for work"));
   assert.ok(sent.negativePrompt.includes("child"), "the adult negatives stay");
   assert.equal(sent.unit.personaId, "persona-ines", "her persona keeps her likeness");
+
+  // 0.24.0: repainting a painted look costs one more image, and the wardrobe's entry follows the new picture, so
+  // wearing it never shows the one the repaint replaced.
+  // Deleting answers as the Engine does: a picture a stored document still holds is refused (409), as on a real run.
+  t.deps.images = {
+    ...t.deps.images!,
+    deleteGalleryImage: engineDeletes(t.fake.rows, t.deleted),
+  };
+  const looksPaid = t.outfitCalls.length;
+  const hisLook = (await t.unit(KAI)).outfits[0]!;
+  const repainted = await t.tapOne(ITEMS.hisLook.id);
+  assert.equal(repainted.status, 200, JSON.stringify(repainted.body));
+  assert.equal(repainted.body.art.state, "ready");
+  assert.notEqual(repainted.body.art.url, hisLook.url);
+  assert.equal(t.outfitCalls.length, looksPaid + 1, "a repainted look is one more paid image");
+  const afterRepaint = await t.unit(KAI);
+  assert.deepEqual(
+    afterRepaint.outfits.map((outfit) => [outfit.id, outfit.url, outfit.ref]),
+    [[ITEMS.hisLook.id, repainted.body.art.url, repainted.body.art.ref]],
+    "the wardrobe's one entry shows the new picture",
+  );
+  assert.deepEqual(
+    t.deleted,
+    [hisLook.ref!.slice("global-gallery:".length)],
+    "the replaced image leaves the gallery once the wearer shows the new one",
+  );
+});
+
+test("a look whose repaint fails keeps the picture it wears and stays in the wardrobe", async () => {
+  let fails = false;
+  const t = await itemsWorld("r-m4bfail-aaaaaa", {
+    before: () => {
+      if (fails) throw new Error("provider down");
+    },
+  });
+  const first = await t.tapOne(ITEMS.hisLook.id);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.art.state, "ready");
+  const before = (await t.unit(KAI)).outfits[0]!;
+  assert.deepEqual([before.id, before.ref], [ITEMS.hisLook.id, first.body.art.ref]);
+
+  fails = true;
+  const failed = await t.tapOne(ITEMS.hisLook.id);
+  assert.equal(failed.status, 200, JSON.stringify(failed.body));
+  assert.equal(failed.body.art.state, "failed");
+  assert.deepEqual(
+    [failed.body.art.url, failed.body.art.ref],
+    [first.body.art.url, first.body.art.ref],
+    "the picture it painted over stays on screen",
+  );
+  const wardrobe = (await t.call("GET", "/runs/:run/wardrobe")).body;
+  const card = wardrobe.him[KAI].find((look: { id: string }) => look.id === ITEMS.hisLook.id);
+  assert.deepEqual([card.wearable, card.url], [true, first.body.art.url], "the look is what it still shows");
+  const wear = await t.call("POST", "/runs/:run/wardrobe/wear", { owner: KAI, look: ITEMS.hisLook.id });
+  assert.equal(wear.status, 200, JSON.stringify(wear.body));
+  assert.deepEqual(t.deleted, [], "a failed repaint deletes nothing");
 });
 
 test("her 5★ look gets a first-wear scene with the love interest of its couple set, once, also when opened before", async () => {
@@ -980,8 +1093,11 @@ test("a couple set completes once on the Love Timeline, and its pair portrait pa
   assert.equal(request.units?.length, 2);
   assert.deepEqual(
     request.units?.map((unit) => unit.portrait),
-    [(await t.stored(ITEMS.hisLook.id)).art!.url, (await t.stored(ITEMS.herLook.id)).art!.url],
-    "each painted look is its wearer's reference",
+    [
+      `${(await t.stored(ITEMS.hisLook.id)).art!.url}.cut.png`,
+      `${(await t.stored(ITEMS.herLook.id)).art!.url}.cut.png`,
+    ],
+    "each painted look, cut out of its backdrop, is its wearer's reference (0.36.7)",
   );
   assert.ok(request.prompt.includes("navy greatcoat") && request.prompt.includes("amber silk dress"));
   state = await t.state();
@@ -1048,6 +1164,140 @@ test("the pair portrait is built at its paid call: a rating lowered while it wai
   const switched = await waitingTap({ connectionId: "conn-other" });
   assert.deepEqual([switched.error?.statusCode, switched.error?.code], [409, "conflict"]);
   assert.equal(t.paid.length, paidBefore + 1, "nothing is paid on the old connection");
+});
+
+test("#2299: a pair portrait repaints with a tap: one more image, in its place in the Album, the old image gone", async () => {
+  let fails = false;
+  const t = await itemsWorld("r-pairrepaint-aaaaaa", {
+    before: () => {
+      if (fails) throw new Error("provider down");
+    },
+  });
+  await t.open(ITEMS.herLook.id);
+  await t.open(ITEMS.hisLook.id);
+  await Promise.all([t.painted(ITEMS.hisLook.id), t.painted(ITEMS.herLook.id)]);
+  // Deleting answers as the Engine does: a picture a stored document still holds is refused.
+  t.deps.images = { ...t.deps.images!, deleteGalleryImage: engineDeletes(t.fake.rows, t.deleted) };
+  const pair = () => t.call("POST", "/runs/:run/wardrobe/pair", { hers: ITEMS.herLook.id });
+  const first = (await pair()).body.art;
+  assert.equal(first.state, "ready", JSON.stringify(first));
+  const keptAt = (await t.state()).album.cgs[0]!.at;
+  const paid = t.paid.length;
+
+  const [one, two] = await Promise.all([pair(), pair()]);
+  assert.deepEqual([one.body.art.state, two.body.art.state], ["ready", "ready"], JSON.stringify(one.body));
+  assert.equal(two.body.art.url, one.body.art.url, "the second tap answers with the first one's portrait");
+  assert.notEqual(one.body.art.url, first.url);
+  assert.equal(t.paid.length, paid + 1, "a repaint is one more image, however many taps");
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => [entry.key, entry.url, entry.at]),
+    [[`pair:${ITEMS.herLook.id}`, one.body.art.url, keptAt]],
+    "the new portrait takes the old one's place and date in the Album",
+  );
+  assert.deepEqual(t.deleted, [first.ref.slice("global-gallery:".length)], "the old image leaves the gallery");
+  let couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url, couple.canPaintPair], ["ready", one.body.art.url, true]);
+
+  // A failed repaint keeps the portrait it painted over, offers Try again, and deletes nothing.
+  fails = true;
+  assert.equal((await pair()).body.art.state, "failed");
+  couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url], ["failed", one.body.art.url]);
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => entry.url),
+    [one.body.art.url],
+  );
+  assert.equal(t.deleted.length, 1);
+  fails = false;
+  const retried = (await pair()).body.art;
+  assert.equal(retried.state, "ready");
+  couple = (await t.call("GET", "/runs/:run/wardrobe")).body.couples[0];
+  assert.deepEqual([couple.pair.state, couple.pair.url], ["ready", retried.url], "a success clears the failure");
+});
+
+test("#2299: a repaint tap that waited on a refused one paints itself, never answering with the old portrait", async () => {
+  const t = await itemsWorld("r-pairrefused-aaaaaa");
+  await t.open(ITEMS.herLook.id);
+  await t.open(ITEMS.hisLook.id);
+  await Promise.all([t.painted(ITEMS.hisLook.id), t.painted(ITEMS.herLook.id)]);
+  const old = (await t.call("POST", "/runs/:run/wardrobe/pair", { hers: ITEMS.herLook.id })).body.art;
+  assert.equal(old.state, "ready");
+  const paid = t.paid.length;
+  /** A store that counts reads of `id`, so a test knows how far a tap has gone. */
+  const counting = (id: string) => {
+    const counted = { reads: 0, store: Object.create(t.store) as typeof t.store };
+    counted.store.readDoc = async (doc, normalize) => {
+      if (doc === id) counted.reads += 1;
+      return t.store.readDoc(doc, normalize);
+    };
+    return counted;
+  };
+  const settle = (tap: Promise<unknown>) =>
+    tap.then(
+      (art) => ({ art: art as { state: string; url?: string } }),
+      (error: { statusCode?: number; code?: string }) => ({ error }),
+    );
+  // Tap A waits in the lane; tap B, from another tab, waits on A; the connection changes before A's paid call.
+  let release = () => {};
+  const held = paintSlot("conn-image", () => new Promise<void>((resolve) => (release = resolve)));
+  const a = counting(itemId(t.runId, ITEMS.hisLook.id));
+  const tapA = settle(paintPairNow({ ...t.deps, store: a.store }, t.runId, ITEMS.herLook.id, { debugMode: false }));
+  await until(() => a.reads > 0, "tap A read its couple set");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const b = counting(stateId(t.runId));
+  const tapB = settle(paintPairNow({ ...t.deps, store: b.store }, t.runId, ITEMS.herLook.id, { debugMode: false }));
+  await until(() => b.reads > 0, "tap B read the kept portrait");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await setImages(t.store, t.runId, { connectionId: "conn-other" });
+  release();
+  await held;
+  const [refused, waited] = await Promise.all([tapA, tapB]);
+  assert.deepEqual([refused.error?.statusCode, refused.error?.code], [409, "conflict"]);
+  assert.equal(waited.art?.state, "ready", JSON.stringify(waited));
+  assert.notEqual(waited.art?.url, old.url, "the waiting tap is no answer from the portrait it came to repaint");
+  assert.equal(t.paid.length, paid + 1, "it painted once itself, on the connection now in force");
+  assert.deepEqual(
+    (await t.state()).album.cgs.map((entry) => entry.url),
+    [waited.art?.url],
+  );
+});
+
+test("#2299: a repaint whose portrait was saved is the answer to a tap that waited on it, even if its read-back failed", async () => {
+  const t = await itemsWorld("r-pairsaved-aaaaaa");
+  await t.open(ITEMS.herLook.id);
+  await t.open(ITEMS.hisLook.id);
+  await Promise.all([t.painted(ITEMS.hisLook.id), t.painted(ITEMS.herLook.id)]);
+  assert.equal((await t.call("POST", "/runs/:run/wardrobe/pair", { hers: ITEMS.herLook.id })).body.art.state, "ready");
+  const paid = t.paid.length;
+  // Tap A saves its new portrait, then its read of the state fails once (held until tap B waits on it).
+  let saved = false;
+  let blocked = false;
+  let open = () => {};
+  const gate = new Promise<void>((resolve) => (open = resolve));
+  const store = Object.create(t.store) as typeof t.store;
+  store.updateDoc = async (...args: Parameters<typeof t.store.updateDoc>) => {
+    const result = await t.store.updateDoc(...args);
+    if (args[0].id === stateId(t.runId)) saved = true;
+    return result;
+  };
+  store.readDoc = async (doc, normalize) => {
+    if (saved && doc === stateId(t.runId) && !blocked) {
+      blocked = true;
+      await gate;
+      throw new Error("store read failed");
+    }
+    return t.store.readDoc(doc, normalize);
+  };
+  const tapA = paintPairNow({ ...t.deps, store }, t.runId, ITEMS.herLook.id, { debugMode: false });
+  await until(() => blocked, "tap A saved its portrait and is reading it back");
+  const kept = (await t.state()).album.cgs[0]!;
+  const tapB = paintPairNow(t.deps, t.runId, ITEMS.herLook.id, { debugMode: false });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  open();
+  const [a, b] = await Promise.all([tapA, tapB]);
+  assert.deepEqual([a.state, a.url], ["ready", kept.url], "the tap that painted answers with what it saved");
+  assert.deepEqual([b.state, b.url], ["ready", kept.url], "the waiting tap takes it");
+  assert.equal(t.paid.length, paid + 1, "one image for both taps");
 });
 
 test("a Memory whose item link was lost after its chapter was saved gets its voiced line on the next open", async () => {

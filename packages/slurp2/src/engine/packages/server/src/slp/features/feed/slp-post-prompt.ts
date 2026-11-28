@@ -22,7 +22,7 @@ import {
   type SlurpClaimCheck,
 } from "../../modules/feed/slp-post-brief.js";
 import type { SlurpBeat, SlurpDayMoment } from "../../modules/feed/slp-post-beat.js";
-import { parseGameJsonish } from "../../../services/game/jsonish.js";
+import { jsonishLooksTruncated, parseGameJsonish } from "../../../services/game/jsonish.js";
 import { logDebugOverride } from "../../../lib/logger.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
@@ -47,6 +47,7 @@ import {
   slpCreatorIdentityInstruction,
 } from "./slp-public-identity.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type FormattedCreatorGenerationRequest = SlpCreatorGenerationRequest & {
   /** The composer asked for an image on this post, whatever the scheduler's image setting is. */
   generateImage?: boolean;
@@ -366,7 +367,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
     protect(input.scheduleContext ?? "") || "No active Conversation Schedule is available for this Creator today.",
     "",
     "# Publication timing",
-    buildSlurpPostTimingContext(input.generatedAt ?? new Date(), input.publicationTime),
+    buildSlurpPostTimingContext(input.generatedAt ?? slurpWorldNow(), input.publicationTime),
     "",
     "# Recent Slurp posts",
     formatSlurpPostHistory(input.recentPosts, protect, input.otherCreatorSubjects, !input.beat),
@@ -377,7 +378,7 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
           "",
           slurpPostBriefSection(
             input.beat,
-            input.publicationTime ?? input.generatedAt ?? new Date(),
+            input.publicationTime ?? input.generatedAt ?? slurpWorldNow(),
             protect,
             input.beatCompany,
             input.beatDay,
@@ -458,8 +459,58 @@ export function slurpSceneShotsInstruction(count: number): string {
   ].join(" ");
 }
 
+const SLURP_POST_CUT_OFF = "The creator post answer was cut off before its JSON closed.";
+
 export function parseCreatorPost(content: string) {
-  const parsed = parseGameJsonish(requireModelAnswer(content, "a creator post"));
+  let answer = requireModelAnswer(content, "a creator post");
+  // The tolerant parser closes a JSON string the model ran out of tokens in, which published posts cut mid-sentence.
+  // Failing here sends the answer through the one correction turn instead. Ignore embedded, unescaped quotes
+  // such as `6" heels` when looking for the root closer; brackets inside content cannot finish the answer.
+  if (jsonishLooksTruncated(answer)) {
+    // Prefer a root array when one is present so its closing `]` is part of the scan. The object
+    // inside an array can close while the root value is still cut off.
+    // Skip prose asides before the object that holds the post title. Keep an
+    // array wrapper so closing only its object cannot finish the answer.
+    const start = answer.search(/(?:\[\s*)?\{(?=[^{}]*"title"\s*:)/u);
+    const closers: string[] = [];
+    let inString = false;
+    let escaped = false;
+    let closed = false;
+    let repaired = "";
+    let copiedThrough = Math.max(0, start);
+    for (let index = start; index >= 0 && index < answer.length; index++) {
+      const char = answer[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (inString && char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        if (!inString || /^\s*(?:[:,}\]]|$)/u.test(answer.slice(index + 1))) inString = !inString;
+        else {
+          repaired += answer.slice(copiedThrough, index) + '\\"';
+          copiedThrough = index + 1;
+        }
+        continue;
+      }
+      if (inString) continue;
+      if (char === "{") closers.push("}");
+      else if (char === "[") closers.push("]");
+      else if (char === "}" || char === "]") {
+        if (closers.pop() !== char) break;
+        if (closers.length === 0) {
+          closed = true;
+          break;
+        }
+      }
+    }
+    if (!closed) throw new Error(SLURP_POST_CUT_OFF);
+    answer = repaired + answer.slice(copiedThrough);
+  }
+  const parsed = parseGameJsonish(requireModelAnswer(answer, "a creator post"));
   // Many LLMs (especially local models via Ollama/KoboldCPP) wrap the expected object
   // in an array ([{"title":...}]) regardless of the prompt instructing "one JSON object".
   // Unwrap the common single-item array response while preserving validation for other shapes.
@@ -501,7 +552,12 @@ export async function completeSlurpCreatorPost(
   let generated: ReturnType<typeof parseCreatorPost>;
   try {
     generated = parseCreatorPost(content);
-  } catch {
+  } catch (error) {
+    // Same limit, same long post: without this the retry runs out of tokens at the same place.
+    const shorter =
+      error instanceof Error && error.message === SLURP_POST_CUT_OFF
+        ? "Your answer was cut off before it ended. Write a shorter post and close the JSON object. "
+        : "";
     // Automatic posts used to get one attempt where a foreground post got two, so a scheduled post
     // failed outright on malformed output that a manual post recovered from — and the slot was lost
     // with the first call already paid for. The correction turn reuses the admission this run was
@@ -511,11 +567,13 @@ export async function completeSlurpCreatorPost(
       { role: "assistant", content },
       {
         role: "user",
-        content: askModelForScene
-          ? `The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, ${sceneShots ? "scene, and shots" : "and scene"}. scene must contain wardrobeId, setting, action, expression, visualDirection, outfit, and subject (a known character's name and series, or null), written in English.${sceneShots ? ` shots is a list of exactly ${sceneShots} objects with setting, action, expression, visualDirection, and outfit.` : ""} Do not include imagePrompt or a poll. Return JSON only.`
-          : askModelForImagePrompt
-            ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
-            : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
+        content:
+          shorter +
+          (askModelForScene
+            ? `The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, ${sceneShots ? "scene, and shots" : "and scene"}. scene must contain wardrobeId, setting, action, expression, visualDirection, outfit, and subject (a known character's name and series, or null), written in English.${sceneShots ? ` shots is a list of exactly ${sceneShots} objects with setting, action, expression, visualDirection, and outfit.` : ""} Do not include imagePrompt or a poll. Return JSON only.`
+            : askModelForImagePrompt
+              ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
+              : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only."),
       },
     ];
     logDebugOverride(

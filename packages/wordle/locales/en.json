@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Wordle",
+    "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on."
+  },
+  "agents": {
+    "wordle": {
+      "name": "Wordle",
+      "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on."
+    }
+  }
+}

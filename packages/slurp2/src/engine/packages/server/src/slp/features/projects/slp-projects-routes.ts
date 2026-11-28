@@ -34,6 +34,7 @@ import { SLP_STORYLINES_OFF, slpExtensionOn } from "../../../../../shared/src/sl
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;
   // Storylines off: nothing new starts or moves on; ending, editing and deleting still work.
@@ -435,9 +436,9 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         return reply.code(502).send({ error: error.message, debug: { rawResponse: error.rawResponse } });
       throw error;
     }
-    const draftId = `draft-${Date.now().toString(36)}`;
+    const draftId = `draft-${slurpWorldNowMs().toString(36)}`;
     const project = raw
-      ? slurpGeneratedArcProject(draftId, raw, new Date(), { origin: "manual", status: "suggested" })
+      ? slurpGeneratedArcProject(draftId, raw, slurpWorldNow(), { origin: "manual", status: "suggested" })
       : null;
     if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
     return { type: slurpArcTypeFromProject(project, draftId) };

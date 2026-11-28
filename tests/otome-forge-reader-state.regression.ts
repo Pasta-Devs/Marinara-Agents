@@ -4,12 +4,13 @@
 // server's canon does), and who is on stage with which face.
 // M2b: a Confrontation played as a beat of stances (its mainline indexes what the server counts), each line's ref (the
 // favourite and the voice cache key, new for every rewrite), a place's picture found by its name, and a route chapter
-// held by a rupture.
+// held by a rupture. 0.21.1: a key image is on screen from its line until the scene moves to another place.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { voiceCacheKey } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
 import {
   buildTimeline,
+  cgOnLine,
   confrontationBeat,
   initialPicks,
   lineRef,
@@ -21,6 +22,7 @@ import {
   openingLine,
   openingNode,
   skipTarget,
+  stageLooks,
   sumGrants,
   voiceOf,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/reader-state.ts";
@@ -425,4 +427,97 @@ test("a place's picture is found by its name, and only a ready paint has one", (
   assert.equal(readyUrl(placeEntry(places, "The Lab")?.art), null);
   assert.equal(placeEntry(places, "Elsewhere"), null);
   assert.equal(placeEntry(null, "The Lab"), null);
+});
+
+test("a key image shows from its line until the scene moves to another place, and again on going back (0.21.1)", () => {
+  const scene = beat({
+    choices: [],
+    segments: [
+      { speaker: "", text: "Rain on the dome.", place: "The Observation Room" },
+      { speaker: "Ilvar Thorne", text: "You came back.", expression: "cold" },
+      { speaker: "Ilvar", text: "Stay.", expression: "tender" },
+      { speaker: "", text: "The lens hums.", place: "the observation room" },
+      { speaker: "Mira", text: "And then I ran." },
+      { speaker: "", text: "The corridor is cold.", place: "The Lower Corridor" },
+      { speaker: "Ilvar", text: "Wait." },
+    ],
+  });
+  const timeline = buildTimeline(scene, {}, "Mira");
+  const shown = (cg: { at: number } | null) => timeline.lines.map((_, index) => cgOnLine(timeline, cg, index));
+  assert.deepEqual(
+    shown({ at: 1 }),
+    [false, true, true, true, true, false, false],
+    "from its line; the same room named again keeps it; another place ends it, for the rest of the scene",
+  );
+  assert.deepEqual(shown({ at: 5 }), [false, false, false, false, false, true, true], "it may open on the new place");
+  assert.deepEqual(shown(null), [false, false, false, false, false, false, false]);
+  assert.equal(cgOnLine(timeline, { at: 1 }, 2), true, "going back to its lines shows it again");
+  assert.equal(cgOnLine(null, { at: 1 }, 2), false);
+  assert.equal(cgOnLine(timeline, { at: 1 }, 99), false);
+
+  // A scene with no place before its key image: the first place named after it is a change of background.
+  const unplaced = beat({
+    choices: [],
+    segments: [
+      { speaker: "", text: "Dark." },
+      { speaker: "Ilvar", text: "Here." },
+      { speaker: "", text: "Lights.", place: "The Lab" },
+    ],
+  });
+  const plain = buildTimeline(unplaced, {}, "Mira");
+  assert.deepEqual(
+    plain.lines.map((_, index) => cgOnLine(plain, { at: 1 }, index)),
+    [false, true, false],
+  );
+
+  // A picked option's lines carry the key image's place on: only a line that names another place ends it.
+  const branched = beat({
+    segments: [
+      { speaker: "", text: "Rain on the dome.", place: "The Observation Room" },
+      { speaker: "Ilvar Thorne", text: "You came back." },
+      { speaker: "", text: "Later, the docks.", place: "The Docks" },
+    ],
+    choices: [
+      {
+        id: "choice-1",
+        kind: "small",
+        at: 1,
+        options: [
+          {
+            id: "option-1",
+            text: "Follow him.",
+            selection: { kind: "action", text: "You follow him." },
+            segments: [{ speaker: "", text: "Down the stairs.", place: "The Stairwell" }],
+          },
+        ],
+      },
+    ],
+  });
+  const picked = buildTimeline(branched, { "choice-1": "option-1" }, "Mira");
+  assert.deepEqual(texts(picked), [
+    "Rain on the dome.",
+    "You came back.",
+    "You follow him.",
+    "Down the stairs.",
+    "Later, the docks.",
+  ]);
+  assert.deepEqual(
+    picked.lines.map((_, index) => cgOnLine(picked, { at: 1 }, index)),
+    [false, true, true, false, false],
+    "the branch's new place ends it too",
+  );
+});
+
+test("#2509: the stage keeps the chapter's last scene looks until this scene's art answers, never another chapter's", () => {
+  const suit = { worn: { id: "suit", url: "/suit.cut.png" }, expressions: {}, cut: ["/suit.cut.png"] };
+  const prefix = "run-a:main-1/";
+  const answered = (id: string, looks?: Record<string, typeof suit>) => ({ id, art: looks ? { looks } : {} });
+  // This scene's read answered: its looks, or none (everyone in their Home look).
+  assert.deepEqual(stageLooks(answered("run-a:main-1/2r0", { kai: suit }), "run-a:main-1/2r0", prefix), { kai: suit });
+  assert.equal(stageLooks(answered("run-a:main-1/2r0"), "run-a:main-1/2r0", prefix), undefined);
+  // The next scene of the chapter, still loading: he stays in the suit, never back in his Home look.
+  assert.deepEqual(stageLooks(answered("run-a:main-1/2r0", { kai: suit }), "run-a:main-1/3r0", prefix), { kai: suit });
+  // Another chapter's (main-10 is not main-1), or no read yet: Home looks.
+  assert.equal(stageLooks(answered("run-a:main-10/0r0", { kai: suit }), "run-a:main-1/0r0", prefix), undefined);
+  assert.equal(stageLooks(null, "run-a:main-1/0r0", prefix), undefined);
 });

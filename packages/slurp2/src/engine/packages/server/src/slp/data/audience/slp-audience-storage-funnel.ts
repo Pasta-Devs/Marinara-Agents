@@ -24,6 +24,7 @@ import {
 import type { SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
 import { slurpAudienceWeeklySpend } from "../../../../../shared/src/slp/slp-audience-subscription.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT, type SlurpFunnelStage };
 
 export type SlurpAudienceTie = {
@@ -109,7 +110,11 @@ export function createSlurpPopulationStorage(db: DB) {
      * The seed is the identity. Two calls with the same seed return the same person whether or not
      * a row existed, so nothing has to be materialised before it is interesting.
      */
-    async ensure(seed: string, at = new Date(), fanTypes?: readonly SlurpFanType[]): Promise<SlurpPopulationMember> {
+    async ensure(
+      seed: string,
+      at = slurpWorldNow(),
+      fanTypes?: readonly SlurpFanType[],
+    ): Promise<SlurpPopulationMember> {
       const generated = generateSlurpPopulationMember(seed, at, fanTypes);
       const existing = await db.select().from(slurpPopulation).where(eq(slurpPopulation.id, generated.id));
       if (existing[0]) return mapMember(existing[0] as Record<string, unknown>);
@@ -291,7 +296,7 @@ export function createSlurpPopulationStorage(db: DB) {
       creatorAccountId: string,
       amount: number,
       budget: number,
-      at = new Date(),
+      at = slurpWorldNow(),
     ): Promise<boolean> {
       if (!Number.isInteger(amount) || amount <= 0 || !Number.isFinite(budget) || amount > budget) return false;
       await storage.ensureTie(memberId, creatorAccountId);
@@ -326,7 +331,7 @@ export function createSlurpPopulationStorage(db: DB) {
       memberId: string,
       creatorAccountId: string,
       amount: number,
-      at = new Date(),
+      at = slurpWorldNow(),
     ): Promise<void> {
       if (!Number.isInteger(amount) || amount <= 0) return;
       const tie = await storage.ensureTie(memberId, creatorAccountId);
@@ -425,7 +430,7 @@ export function createSlurpPopulationStorage(db: DB) {
   // An Engine without `registerTables` rejects every package-owned table, and the funnel is read
   // by surfaces that predate it. Behave as an empty audience there rather than failing the page.
   return tolerateMissingTables(storage, {
-    ensure: (seed: string, at = new Date(), fanTypes?: readonly SlurpFanType[]) =>
+    ensure: (seed: string, at = slurpWorldNow(), fanTypes?: readonly SlurpFanType[]) =>
       generateSlurpPopulationMember(seed, at, fanTypes),
     get: () => null,
     listAll: () => [],

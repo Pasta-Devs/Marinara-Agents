@@ -57,6 +57,7 @@ import type {
   SlpStirView,
 } from "../../../../../shared/src/slp/slp-stir.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type Account = {
   id: string;
   displayName: string;
@@ -275,7 +276,7 @@ export async function planSlpStir(
 export async function playSlpStir(
   db: DB,
   input: { steps: readonly SlpStirStep[]; origin: SlpStirOrigin; personaId?: string },
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{ play: SlpStirPlay; results: { ok: boolean; value: unknown; error: string | null }[] }> {
   const { steps, results, undo } = await slpRunStirSteps<SlpActionUndo>(input.steps, (action, stepInput) =>
     runSlpActionWithUndo(db, action, stepInput),
@@ -311,8 +312,7 @@ export async function undoSlpStirPlay(
 ): Promise<SlpAssistOutcome<{ play: SlpStirPlay; kept: number }>> {
   const claimed = await mutateSlurpStirPlays<SlurpStoredStirPlay | "gone" | "cant">(db, (plays) => {
     const play = plays.find((entry) => entry.id === id);
-    if (!play || (personaId && play.personaId && play.personaId !== personaId))
-      return { plays, result: "gone" as const };
+    if (!play || (play.personaId && play.personaId !== personaId)) return { plays, result: "gone" as const };
     if (play.undone || !play.undoable) return { plays, result: "cant" as const };
     return {
       plays: plays.map((entry) => (entry.id === id ? { ...entry, undone: true, undo: [] } : entry)),
@@ -348,7 +348,7 @@ export async function undoSlpStirPlay(
 export async function readSlpStirView(
   db: DB,
   own: (account: Account) => boolean,
-  at = new Date(),
+  at = slurpWorldNow(),
   personaId?: string,
 ): Promise<SlpStirView> {
   const storage = createSlurpStorage(db);
@@ -370,7 +370,10 @@ export async function readSlpStirView(
   const seen = (...ids: (string | undefined)[]) => !ids.some((id) => id && hidden.has(id));
   const accounts = allAccounts.filter((account) => seen(account.id));
   const tieCreators = allTieCreators.filter((creator) => seen(creator.id));
-  const plays = allPlays.filter((play) => !personaId || !play.personaId || play.personaId === personaId);
+  const plays = allPlays
+    .filter((play) => !personaId || !play.personaId || play.personaId === personaId)
+    // Only the persona that made a play can take it back (same rule as `undoSlpStirPlay`).
+    .map((play) => (play.personaId && play.personaId !== personaId ? { ...play, undoable: false } : play));
   const world = {
     ...fullWorld,
     couples: fullWorld.couples.filter((couple) => seen(couple.aId, couple.bId, ...(couple.moreIds ?? []))),

@@ -23,7 +23,10 @@ export interface LtmRankLaneItem {
 
 export interface LtmRankLane {
   name: string;
+  /** Scales the lane's score (and so the relevance threshold). */
   weight: number;
+  /** Scales only the lane's reciprocal-rank contribution to the fused order; defaults to `weight`. */
+  rankWeight?: number;
   items: LtmRankLaneItem[];
 }
 
@@ -34,6 +37,7 @@ export function reciprocalRankFuse(lanes: LtmRankLane[]) {
 
   for (const lane of lanes) {
     if (lane.weight <= 0) continue;
+    const rankWeight = lane.rankWeight ?? lane.weight;
 
     lane.items.forEach((item, index) => {
       const rank = index + 1;
@@ -45,7 +49,7 @@ export function reciprocalRankFuse(lanes: LtmRankLane[]) {
       const normalizedRawScore =
         explicitNormalized ?? (lane.name === "bm25" ? rawScore / (rawScore + 1) : Math.max(0, Math.min(1, rawScore)));
       const rawFactor = typeof item.rawScore === "number" ? normalizedRawScore : 1;
-      const score = lane.weight * (1 / (RRF_K + rank)) * rawFactor;
+      const score = rankWeight * (1 / (RRF_K + rank)) * rawFactor;
       const candidate =
         candidates.get(item.chunkId) ??
         ({

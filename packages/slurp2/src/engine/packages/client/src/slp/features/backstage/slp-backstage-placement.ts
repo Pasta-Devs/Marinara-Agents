@@ -42,6 +42,7 @@ const maintenance = (...terms: string[]) => place("autopurge", "all-slurp", ...t
  */
 export const SLP_BACKSTAGE_PAGE_PLACEMENT: Record<string, SlpBackstagePlacement> = {
   spice: slurp("spice", "spice", "spicy", "adult", "heat", "level", "tastes", "language"),
+  clock: slurp("clock", "world clock", "world date", "skip days", "checkpoints", "restore"),
 };
 
 /** One searchable, canonical Backstage home for every persisted setting. */
@@ -125,6 +126,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   imagePromptConnectionId: slurp("images", "prompt model", "enhance image prompts"),
   imageGenerationUseAvatarReferences: slurp("images", "avatar references"),
   imageKeepOriginalFiles: slurp("images", "original files"),
+  imageOnePerson: slurp("images", "one person", "solo", "group pictures", "collab pictures"),
   appearanceProfileMode: slurp("images", "appearance profiles", "auto accept appearance"),
   imageGenerationIncludeDescriptions: slurp("images", "image descriptions"),
   imageAppearanceMode: slurp("images", "look in prompts", "appearance twice", "insert appearance"),
@@ -193,6 +195,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
     "opener",
     "follow-up",
   ),
+  messagesCreatorDmsPaused: slurp("messaging", "pause creator DMs", "pause DMs", "do not disturb", "roleplay"),
   messagesReplyBubbleLimit: slurp("messaging", "reply bubbles", "message length"),
   messagesDefaultDmPolicy: slurp("messaging", "DM policy", "message access"),
   messagesDefaultRequestFee: slurp("messaging", "message request fee"),

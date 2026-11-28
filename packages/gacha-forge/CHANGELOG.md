@@ -1,3 +1,11 @@
+## 1.27.7 — 2026-11-17
+
+- Pictures paint, and the Engine's connections, characters and lorebooks load, when Marinara was installed with its Android app. The Engine there refused Gacha Forge's own requests with "401: Android local authentication required". They now carry the app's local secret, as the `mari` command's do, and only to the Engine on the same device.
+
+## 1.27.6 — 2026-11-16
+
+- Maintenance rebuild for the shared choice-check helper. Gacha Forge's player choices work exactly as before.
+
 ## 1.27.5 — 2026-10-29
 
 - Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * Creator-initiated follow-up messages with promise tracking.
  *
@@ -168,7 +169,7 @@ export function parseRecurringInterval(pattern: string): number | null {
  */
 export function createScheduledFollowUps(
   intent: FollowUpIntent,
-  currentTime: Date = new Date(),
+  currentTime: Date = slurpWorldNow(),
   relatedNoteId?: string,
 ): ScheduledFollowUp[] {
   const followUps: ScheduledFollowUp[] = [];
@@ -210,7 +211,7 @@ export function createScheduledFollowUps(
 /**
  * Check if a follow-up is due to be sent.
  */
-export function isFollowUpDue(followUp: ScheduledFollowUp, now: Date = new Date()): boolean {
+export function isFollowUpDue(followUp: ScheduledFollowUp, now: Date = slurpWorldNow()): boolean {
   return new Date(followUp.scheduledAt) <= now;
 }
 
@@ -222,18 +223,21 @@ export function isFollowUpDue(followUp: ScheduledFollowUp, now: Date = new Date(
  */
 export const SLURP_FOLLOW_UP_OVERDUE_MS = 2 * 24 * 60 * 60_000;
 /** `createdAt`: when it was planned (the follow-up row's creation). */
-export function isFollowUpOverdue(followUp: { createdAt?: string }, now: Date = new Date()): boolean {
+export function isFollowUpOverdue(followUp: { createdAt?: string }, now: Date = slurpWorldNow()): boolean {
   const promised = Date.parse(followUp.createdAt ?? "");
   return Number.isFinite(promised) && now.getTime() - promised > SLURP_FOLLOW_UP_OVERDUE_MS;
 }
 /** Whether a wait may end this follow-up: an old opener only. */
-export function slurpFollowUpExpires(followUp: { type: string; createdAt?: string }, now: Date = new Date()): boolean {
+export function slurpFollowUpExpires(
+  followUp: { type: string; createdAt?: string },
+  now: Date = slurpWorldNow(),
+): boolean {
   return followUp.type === "opener" && isFollowUpOverdue(followUp, now);
 }
 
 /** More than this past its first due time, the Creator says sorry for the wait. */
 export const SLURP_FOLLOW_UP_LATE_MS = 2 * 60 * 60_000;
-export function isFollowUpLate(firstDueAt: string | undefined, now: Date = new Date()): boolean {
+export function isFollowUpLate(firstDueAt: string | undefined, now: Date = slurpWorldNow()): boolean {
   const due = Date.parse(firstDueAt ?? "");
   return Number.isFinite(due) && now.getTime() - due > SLURP_FOLLOW_UP_LATE_MS;
 }
@@ -245,7 +249,7 @@ export function isFollowUpLate(firstDueAt: string | undefined, now: Date = new D
  * quiet and an unanswered fan still hold it.
  */
 export const SLURP_FOLLOW_UP_AWAY_LIMIT_MS = 12 * 60 * 60_000;
-export function isFollowUpPastAwayLimit(firstDueAt: string | undefined, now: Date = new Date()): boolean {
+export function isFollowUpPastAwayLimit(firstDueAt: string | undefined, now: Date = slurpWorldNow()): boolean {
   const due = Date.parse(firstDueAt ?? "");
   return Number.isFinite(due) && now.getTime() - due > SLURP_FOLLOW_UP_AWAY_LIMIT_MS;
 }
@@ -255,7 +259,7 @@ export function isFollowUpPastAwayLimit(firstDueAt: string | undefined, now: Dat
  * minutes and 12 hours. A failure right after it came due retries soon; a promise failing for days
  * costs two model calls a day at most. No attempt count is stored: the lateness is the count.
  */
-export function slurpFollowUpRetryAt(firstDueAt: string | undefined, now: Date = new Date()): string {
+export function slurpFollowUpRetryAt(firstDueAt: string | undefined, now: Date = slurpWorldNow()): string {
   const due = Date.parse(firstDueAt ?? "");
   const late = Number.isFinite(due) ? Math.max(0, now.getTime() - due) : 0;
   const delay = Math.min(12 * 60 * 60_000, Math.max(15 * 60_000, late / 2));
@@ -269,7 +273,7 @@ export function slurpFollowUpRetryAt(firstDueAt: string | undefined, now: Date =
  */
 export function slurpFailedFollowUpPatch(
   row: { type?: unknown; scheduledAt?: unknown; firstDueAt?: unknown } | undefined,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
 ): { status: "failed" | "pending"; scheduledAt: string; firstDueAt: string } {
   const firstDueAt = String(row?.firstDueAt ?? row?.scheduledAt ?? now.toISOString());
   return row?.type === "opener"

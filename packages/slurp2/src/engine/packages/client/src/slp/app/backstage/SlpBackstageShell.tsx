@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronLeft, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, RefreshCw } from "lucide-react";
 import { SLP_PAGE_SCROLL_CLASS } from "../../base/chrome/SlpChrome";
 import { cn } from "../../../lib/utils";
 
@@ -35,6 +35,7 @@ import {
 import { SlpBackstageHome } from "../../features/backstage/SlpBackstageSidebar";
 import { SlpCreatorRefreshModal } from "../../features/creators/SlpCreatorRefreshModal";
 import { SlpPromptEditors } from "../../features/settings/SlpPromptEditors";
+import { Spinner } from "../../../components/ui/Spinner";
 
 /**
  * The Backstage host. It owns the frame, the area header, search, the staged-change bar and the
@@ -115,7 +116,7 @@ export function SlpBackstageShell({
   if (settingsQuery.isLoading || !settings)
     return (
       <main className="flex min-h-0 flex-1 items-center justify-center gap-2 p-6 text-sm text-[var(--muted-foreground)]">
-        <Loader2 size={18} className="animate-spin" />
+        <Spinner size="md" />
         {t("ui.slurp.studio.loading")}
       </main>
     );
@@ -188,7 +189,7 @@ export function SlpBackstageShell({
                   aria-live="polite"
                 >
                   {saveState === "saving" ? (
-                    <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    <Spinner size="sm" />
                   ) : saveState === "error" ? (
                     <AlertTriangle size={13} aria-hidden="true" />
                   ) : saveState === "saved" ? (

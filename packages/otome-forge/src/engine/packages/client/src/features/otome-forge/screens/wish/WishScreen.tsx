@@ -3,7 +3,9 @@
 // Echoes, each with the exact pity count; Starlight is the only currency, earned in play. A wish never calls a model:
 // the server charges and rolls in one write and answers with what arrived, which comes in a sealed letter, a 5★ reveal
 // for each 5★, and the results. Skip always goes straight to the results. A month's seasonal banners (SH/wish.ts
-// rotationSeason) wear a badge naming the month and its theme, here and in Echoes.
+// rotationSeason) wear a badge naming the month and its theme, here and in Echoes. The Shop tab (#2128, ShopPanel.tsx)
+// spends Starlight on gifts and figurines instead: it runs no banner logic (no banner, pity or "write the new banners"),
+// and under it stay only what every tab shares, the Memory Selectors and the footer hint.
 // ──────────────────────────────────────────────
 // Routes (S/routes/wish.ts): GET /runs/:run/wish → WishView; POST .../wish/open → WishOpenResult (writes the banners
 // this fortnight is missing: one model call, and their art unless Ask before painting holds it); POST .../wish/pull
@@ -24,8 +26,9 @@ import {
   focusLost,
   imagesOn,
   invalidateCollection,
+  newRequestId,
   paintWaits,
-  readyArt,
+  readyPicture,
   useItemActions,
   useRefocus,
   wishQueryKey,
@@ -45,6 +48,7 @@ import {
   FOUR_STAR_RATE,
   HARD_PITY,
   SOFT_PITY_FROM,
+  isLookKind,
   wishCost,
   type BannerView,
   type ItemView,
@@ -58,6 +62,7 @@ import {
   type WishView,
 } from "../../shared/wish";
 import { BannerTabs, tabLabel, type WishTab } from "./BannerTabs";
+import { ShopPanel, type UnansweredPurchase } from "./ShopPanel";
 import { PityCounter } from "./PityCounter";
 import { Reveal5 } from "./Reveal5";
 import { RARITY_NAMES, SealedLetter } from "./SealedLetter";
@@ -113,15 +118,6 @@ function SeasonBadge({ season }: { season: Season | undefined }) {
   return season ? <span className="of-badge of-banner-season">{t(SEASON_KEYS[season])}</span> : null;
 }
 
-/** A pull's id: kept until the pull is answered, so a retry is the same pull. */
-function newRequestId(): string {
-  const random =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
-      : Math.random().toString(36).slice(2, 14);
-  return `w-${Date.now().toString(36)}-${random}`;
-}
-
 interface PullError {
   banner: string;
   count: PullCount;
@@ -139,6 +135,8 @@ interface WishScreenProps {
   /** Opens a Character Story, a Moment or a first-wear beat in the reader. */
   onOpenStory: (key: string) => void;
   onOpenWardrobe: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
 }
 
 interface Sequence {
@@ -148,7 +146,7 @@ interface Sequence {
   phase: { at: "letter" } | { at: "reveal"; index: number } | { at: "results" };
 }
 
-export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishScreenProps) {
+export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe, onOpenDate }: WishScreenProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -173,6 +171,8 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
   // The pull still waiting for an answer: the same wish again (Try again, or the button) sends it as it was, so one
   // that landed while its answer was lost is shown, not charged twice.
   const unanswered = useRef<{ banner: string; count: PullCount; requestId: string } | null>(null);
+  // The same for a Shop purchase (ShopPanel.tsx), across tab changes.
+  const unansweredPurchase: UnansweredPurchase = useRef(null);
 
   const head = (
     <div className="of-page-head of-page-head--tight">
@@ -248,7 +248,7 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
   };
 
   const shownEcho = tab === "echoes" && echo ? (data.echoes.find((banner) => banner.key === echo) ?? null) : null;
-  const panelBanner = tab === "echoes" ? shownEcho : (byKind.get(tab) ?? null);
+  const panelBanner = tab === "echoes" ? shownEcho : tab === "shop" ? null : (byKind.get(tab) ?? null);
 
   return (
     <div className="of-page of-wishes" onFocus={onFocus}>
@@ -272,25 +272,38 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
         aria-labelledby={`${id}-${tab}-tab`}
         tabIndex={0}
       >
-        {tab !== "echoes" && (data.missing.length > 0 || data.creating) ? (
-          <NewBanners view={view} wish={data} opening={opening} />
-        ) : null}
-        {panelBanner ? (
-          <BannerPanel
+        {tab === "shop" ? (
+          <ShopPanel
+            runKey={runKey}
             view={view}
-            banner={panelBanner}
-            wish={data}
+            headingId={`${id}-shop-title`}
+            unanswered={unansweredPurchase}
+            onOpenStory={onOpenStory}
             actions={actions}
-            pulling={pulling}
-            error={pullError?.banner === panelBanner.key ? pullError : null}
-            onPull={(count) => void pull(panelBanner, count)}
-            onBack={shownEcho ? () => setEcho(null) : undefined}
           />
-        ) : tab === "echoes" ? (
-          <EchoList view={view} wish={data} onOpen={setEcho} />
-        ) : !data.missing.includes(tab) && !data.creating ? (
-          <p className="of-empty of-glass">{t("ui.otomeForge.wish.noBanner")}</p>
-        ) : null}
+        ) : (
+          <>
+            {tab !== "echoes" && (data.missing.length > 0 || data.creating) ? (
+              <NewBanners view={view} wish={data} opening={opening} />
+            ) : null}
+            {panelBanner ? (
+              <BannerPanel
+                view={view}
+                banner={panelBanner}
+                wish={data}
+                actions={actions}
+                pulling={pulling}
+                error={pullError?.banner === panelBanner.key ? pullError : null}
+                onPull={(count) => void pull(panelBanner, count)}
+                onBack={shownEcho ? () => setEcho(null) : undefined}
+              />
+            ) : tab === "echoes" ? (
+              <EchoList view={view} wish={data} onOpen={setEcho} />
+            ) : !data.missing.includes(tab) && !data.creating ? (
+              <p className="of-empty of-glass">{t("ui.otomeForge.wish.noBanner")}</p>
+            ) : null}
+          </>
+        )}
       </div>
       <Selectors runKey={runKey} view={view} selectors={Array.isArray(data.selectors) ? data.selectors : []} />
       <p className="of-hint of-wishes-foot">{t("ui.otomeForge.wish.neverExpires")}</p>
@@ -306,6 +319,7 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
           onClose={() => setSequence(null)}
           onOpenStory={onOpenStory}
           onOpenWardrobe={onOpenWardrobe}
+          onOpenDate={onOpenDate}
         />
       ) : null}
     </div>
@@ -476,13 +490,17 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
   const number = new Intl.NumberFormat(locale);
   const li = view.lis.find((item) => item.id === banner.featuredLi) ?? null;
   const bannerTitle = banner.title || banner.five.title;
-  const look = banner.kind !== "memories";
-  const art = useSpriteDisplay(readyArt(banner.art) ?? readyArt(banner.five.art), look);
+  // A wardrobe banner's art is a look on its wearer; a Memory's is a key image and (#2303) a date's its place.
+  const look = isLookKind(banner.five.kind);
+  const picture = readyPicture(banner) ?? readyPicture(banner.five);
+  const art = useSpriteDisplay(picture?.url ?? null, look && !picture?.cut);
   const [expanded, setExpanded] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const viewerBlocked = actions.busy.size > 0 || !!actions.review;
   useEffect(() => setExpanded(false), [art, viewerBlocked]);
   const held = paintWaits(banner.art) ? banner.art : null;
+  // 0.24.0: a painted banner can be painted again; its picture stays on the hero until the new one is saved.
+  const repaint = !held && banner.art?.state === "ready" && imagesOn(view);
   const heldId = `banner:${banner.key}`;
   const pity = wish.pity[banner.kind];
   const busy = pulling?.banner === banner.key;
@@ -583,7 +601,14 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
               </span>
             ) : null}
           </p>
-          {li ? <p className="of-banner-who">{t("ui.otomeForge.wish.with", { name: li.name })}</p> : null}
+          {li && banner.kind !== "dates" ? (
+            <p className="of-banner-who">{t("ui.otomeForge.wish.with", { name: li.name })}</p>
+          ) : null}
+          {banner.five.place ? (
+            <p className="of-banner-who">
+              {t("ui.otomeForge.wish.datePlace", { place: banner.five.place.name, count: banner.five.scenes ?? 1 })}
+            </p>
+          ) : null}
         </div>
       </div>
       {banner.art?.state === "pending" ? (
@@ -591,27 +616,30 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
           {t("ui.otomeForge.wish.paintingBanner")}
         </p>
       ) : null}
-      {held ? (
+      {held || repaint ? (
         <div className="of-inline-actions">
           <button
             type="button"
             className="of-button of-button--quiet of-glass of-button--small"
+            aria-label={repaint ? t("ui.otomeForge.wish.repaintBanner") : undefined}
             aria-disabled={actions.busy.has(heldId)}
             onClick={() => {
               if (!actions.busy.has(heldId)) void actions.paintBanner(banner);
             }}
           >
-            {held.state === "waiting-consent" ? (
-              <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
-            ) : (
+            {held && held.state !== "waiting-consent" ? (
               <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
+            ) : (
+              <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
             )}
-            {held.state === "waiting-consent"
-              ? t("ui.otomeForge.wish.paintBanner")
-              : t("ui.otomeForge.wish.paintRetry")}
+            {!held
+              ? t("ui.otomeForge.wish.repaintBanner")
+              : held.state === "waiting-consent"
+                ? t("ui.otomeForge.wish.paintBanner")
+                : t("ui.otomeForge.wish.paintRetry")}
           </button>
           <CostHint images={1} />
-          {held.state === "failed" ? <span className="of-hint">{t("ui.otomeForge.wish.paintFailed")}</span> : null}
+          {held?.state === "failed" ? <span className="of-hint">{t("ui.otomeForge.wish.paintFailed")}</span> : null}
         </div>
       ) : null}
       {actions.errors[heldId] ? (
@@ -704,7 +732,7 @@ function BannerContents({ view, banner }: { view: RunView; banner: BannerView })
                 <li key={item.id} className="of-banner-item">
                   <ItemArt item={item} view={view} />
                   <span className="of-banner-item-name">
-                    {rarity === 3
+                    {rarity === 3 && !item.look
                       ? (view.lis.find((li) => li.id === item.li)?.name ?? item.title)
                       : item.look?.name || item.title}
                   </span>
@@ -760,7 +788,7 @@ function EchoList({ view, wish, onOpen }: { view: RunView; wish: WishView; onOpe
                 style={li ? ({ "--of-li-accent": accentOf(li) } as CSSProperties) : undefined}
                 onClick={() => onOpen(banner.key)}
               >
-                <ItemArt item={banner.five} view={view} fallbackUrl={readyArt(banner.art)} />
+                <ItemArt item={banner.five} view={view} fallbackArt={readyPicture(banner)} />
                 <span className="of-echo-text">
                   <span className="of-echo-kind">{tabLabel(t, banner.kind, li?.name ?? null)}</span>
                   <span className="of-echo-title">{name}</span>
@@ -927,6 +955,8 @@ interface PullSequenceProps {
   onClose: () => void;
   onOpenStory: (key: string) => void;
   onOpenWardrobe: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
 }
 
 function PullSequence({
@@ -939,12 +969,13 @@ function PullSequence({
   onClose,
   onOpenStory,
   onOpenWardrobe,
+  onOpenDate,
 }: PullSequenceProps) {
   const { t } = useTranslation();
   const audio = useOtomeAudio();
   const { results, phase, banner } = sequence;
   const fives = results.flatMap((result, index) => (result.rarity === 5 ? [index] : []));
-  const bannerArt = readyArt(banner.art) ?? readyArt(resolve(banner.five).art);
+  const bannerArt = readyPicture(banner) ?? readyPicture(resolve(banner.five));
   const toResults = () => onPhase({ at: "results" });
   const afterReveal = (index: number) => {
     const next = fives.indexOf(index) + 1;
@@ -972,7 +1003,7 @@ function PullSequence({
         view={view}
         item={resolve(result.item)}
         isNew={result.isNew}
-        fallbackUrl={bannerArt}
+        fallbackArt={bannerArt}
         position={fives.length > 1 ? { index: fives.indexOf(phase.index) + 1, total: fives.length } : null}
         actions={actions}
         reducedMotion={reducedMotion}
@@ -992,6 +1023,7 @@ function PullSequence({
         onDone={onClose}
         onOpenStory={onOpenStory}
         onOpenWardrobe={onOpenWardrobe}
+        onOpenDate={onOpenDate}
       />
     );
   }

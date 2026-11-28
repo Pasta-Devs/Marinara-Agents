@@ -25,7 +25,7 @@ assert.match(
 // R1-100: only preferences wait for the opt-in; data keys (wallets, earnings, storylines) come back with the tables.
 assert.match(
   importBody,
-  /const restoresKey = \(key: string\) => replaceSettings \|\| !isSlurpPreferenceSettingKey\(key\);/u,
+  /const restoresKey = \(key: string\) =>\s*!isSlurpSpendLedgerKey\(key\) && \(replaceSettings \|\| !isSlurpPreferenceSettingKey\(key\)\);/u,
 );
 const guard = importBody.indexOf("if (carriesKeys) {");
 assert.ok(

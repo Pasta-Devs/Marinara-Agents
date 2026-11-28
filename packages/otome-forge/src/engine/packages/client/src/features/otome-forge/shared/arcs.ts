@@ -15,6 +15,9 @@ export const FIRST_STAGE = 1;
 export const LAST_STAGE = 6;
 
 export const STAGE_NAMES = ["mask", "crack", "pull", "wound", "reckoning", "bond"] as const;
+
+/** #2155: his side opens once he reaches Wound (stage 4): a moment counts, and Routes offers its side, from then on. */
+export const HIS_SIDE_MIN_STAGE = 4;
 export type StageName = (typeof STAGE_NAMES)[number];
 
 /** What a route chapter's gate must hold before it may move him to that stage. */
@@ -70,6 +73,8 @@ export interface RouteEntry {
   li: LiId;
   stage: number;
   next: RouteNext | null;
+  /** #2156: the protagonist has told him she is upset with him (LiState.upset), at any stage. */
+  upset: boolean;
 }
 
 /** `route-<li>-<stage>`: the route chapter that opens `stage` for him. */
@@ -81,9 +86,13 @@ export const repairChapterKey = (li: LiId, n: number) => `repair-${li}-${n}`;
  * Where his arc stands (plan M2b "Stage logic"): his stage, and the route chapter for the next one, unlocked once his
  * affection level reaches the stage's level and no rupture stands.
  */
-export function routeStatus(li: LiId, liState: { stage: number; points: number; rupture: unknown | null }): RouteEntry {
+export function routeStatus(
+  li: LiId,
+  liState: { stage: number; points: number; rupture: unknown | null; upset?: unknown | null },
+): RouteEntry {
   const stage = stageRow(liState.stage).stage;
-  if (stage >= LAST_STAGE) return { li, stage, next: null };
+  const upset = !!liState.upset;
+  if (stage >= LAST_STAGE) return { li, stage, next: null, upset };
   const row = stageRow(stage + 1);
   const level = row.unlockLevel ?? 1;
   const blockedBy: RouteBlock | null = liState.rupture ? "rupture" : null;
@@ -97,7 +106,36 @@ export function routeStatus(li: LiId, liState: { stage: number; points: number; 
       requires: { level },
       blockedBy,
     },
+    upset,
   };
+}
+
+// ── His side (#2155): one big moment retold from the love interest's point of view, once per story arc each ──
+
+/**
+ * The big moments a love interest's side may retell (S/story/his-side.ts): a route gate that moved his stage, a climax
+ * ending in the truth, a walkout, Opened up or Shut out, and a rift a repair chapter mended.
+ */
+export const HIS_SIDE_MOMENTS = ["stage", "truth", "walkout", "opened", "shut", "repair"] as const;
+export type HisSideMoment = (typeof HIS_SIDE_MOMENTS)[number];
+
+/** `side-<li>-<arc>`: his side for story arc `arc` (0 before the story's first arc). Its chapter spends the arc. */
+export const hisSideKey = (li: LiId, arc: number) => `side-${li}-${arc}`;
+/** The love interest whose side a chapter key is, or null for any other chapter. */
+export const hisSideLiOf = (key: string): LiId | null => /^side-(li-[a-z0-9-]+)-\d+$/u.exec(key)?.[1] ?? null;
+
+/** His side on offer in Routes (GET /runs/:run/story `hisSides`): waiting to be read, or being read. */
+export interface HisSideEntry {
+  li: LiId;
+  arc: number;
+  key: string;
+  moment: HisSideMoment;
+  /** His stage at the moment. */
+  stage: number;
+  /** The title of the chapter the moment happened in. */
+  title: string;
+  /** True once its chapter is written and not finished. */
+  reading: boolean;
 }
 
 // ── The Confrontation (a story node): three rounds of Press, Hold, Yield or Reveal ──
@@ -129,8 +167,13 @@ export function endingFor(composure: number): ConfrontationEnding {
   return composure <= COMPOSURE_MIN ? "truth" : composure >= COMPOSURE_MAX ? "walkout" : "standoff";
 }
 
-/** A walkout opens a rupture instead of a major grievance when trust is at or below this. */
+/**
+ * A walkout opens a rupture instead of a major grievance when trust is at or below this. #2156: so does a scene's
+ * rupture only when his trust after that pick is at or below it (S/state/relationship.ts), at most once a story arc.
+ */
 export const WALKOUT_RUPTURE_TRUST = -2;
+/** #2156: the main chapters read to the end, after his grievance began, before his repair opens. */
+export const GRIEVANCE_SPACE_CHAPTERS = 2;
 
 // ── The Closer (#1938, a story node): the warm climax, three rounds of Reassure, Tease, Mirror or Ask ──
 
@@ -168,3 +211,27 @@ export const ALL_CLIMAX_MOVES = [...STANCES, ...CLOSER_MOVES] as const;
 
 /** A stored game's climax: a game stored before the Closer has no `kind` and is a Confrontation. */
 export const climaxOf = (game: { kind?: "closer" }): ClimaxKind => game.kind ?? "confrontation";
+
+/**
+ * #2146: the option a chapter's closing decision (its one big choice, after which nothing is written) saves when the
+ * player answers it in their own words instead (S/story/beats.ts chooseOption), and how long those words may be (the
+ * kit's cap on a selection).
+ */
+export const OWN_OPTION = "own";
+export const OWN_ANSWER_MAX = 280;
+
+/**
+ * The arc's riddle (S/story/chapters.ts riddleChapter): a big choice with no offered options, answered in one word
+ * through Write your own…, its id, and how long that word and the question may be.
+ */
+export const RIDDLE_CHOICE = "riddle";
+export const RIDDLE_ANSWER_MAX = 40;
+export const RIDDLE_QUESTION_MAX = 200;
+
+/**
+ * #2503: a main chapter's plan may ask the player this many questions about the protagonist (Chapter.questions), each
+ * this long at most, answered in at most QUESTION_ANSWER_MAX characters before its first scene is written.
+ */
+export const QUESTIONS_MAX = 2;
+export const QUESTION_MAX = 300;
+export const QUESTION_ANSWER_MAX = 1000;

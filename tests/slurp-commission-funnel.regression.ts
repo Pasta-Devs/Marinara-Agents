@@ -61,7 +61,7 @@ for (const copy of [storage]) {
   );
   assert.match(
     deliverySection,
-    /previousClaim[\s\S]*?deliveryClaimToken, deliveryClaimedAt: now\(\)[\s\S]*?previousClaim[\s\S]*?owned\?\.deliveryClaimToken === deliveryClaimToken/u,
+    /previousClaim[\s\S]*?deliveryClaimToken, deliveryClaimedAt: realNow\(\)[\s\S]*?previousClaim[\s\S]*?owned\?\.deliveryClaimToken === deliveryClaimToken/u,
     "a stale delivery lease must be reclaimed conditionally by one owner",
   );
   assert.match(claimRecovery, /return (?:context\.)?storage\.getCommission\(id\);/u);

@@ -59,6 +59,13 @@ export class LtmDraftApplyError extends LtmServiceError {
 const DESTRUCTIVE_DISPOSITION_MESSAGE =
   "Rewrite and other destructive changes must be reviewed and applied one at a time.";
 
+// Marking a thread resolved, or reopening it, keeps its text and can be switched back, so it is added with the rest
+// of a bulk accept; archiving and an anchor note's status still go one at a time. "Save them for me" still skips it.
+function blocksBulkAccept(...[note, mutation, disposition]: Parameters<typeof isDestructiveLtmRewrite>) {
+  if (mutation.kind === "set_status" && mutation.status !== "archived" && !note?.tags.includes("anchor")) return false;
+  return isDestructiveLtmRewrite(note, mutation, disposition);
+}
+
 function applyEdits(mutations: LtmDraftMutation[], edits: NonNullable<ApplyLtmDraftOptions["editedMutations"]>) {
   const originals = new Map(mutations.map((mutation) => [mutation.id, mutation]));
   const edited = new Map<string, LtmDraftMutation>();
@@ -610,7 +617,7 @@ export async function preflightLongTermMemoryDraft(
     const projectedRow = projectionRows.get(mutation.id);
     const disposition = projectedRow?.disposition ?? fallbackDisposition(mutation, existing);
     const mutationBlockers = [...(blockers.get(mutation.id) ?? [])];
-    if (bulkApply && isDestructiveLtmRewrite(existing.get(mutationTargetId(mutation)) ?? null, mutation, disposition))
+    if (bulkApply && blocksBulkAccept(existing.get(mutationTargetId(mutation)) ?? null, mutation, disposition))
       mutationBlockers.push({
         code: "destructive_disposition_requires_explicit_review",
         message: DESTRUCTIVE_DISPOSITION_MESSAGE,
@@ -977,7 +984,7 @@ async function applyInner(
       userSelectedCount > 1 &&
       projection.projections.some((group) =>
         group.mutations.some((row) =>
-          isDestructiveLtmRewrite(group.before, selectedById.get(row.mutationId)!, row.disposition),
+          blocksBulkAccept(group.before, selectedById.get(row.mutationId)!, row.disposition),
         ),
       )
     )

@@ -50,8 +50,6 @@ export interface ReaderLayout {
   spreadStride: number;
   /** False on narrow screens: the arrows sit over the page edges instead of beside the book. */
   arrowsOutside: boolean;
-  footerTop: number;
-  footerHeight: number;
 }
 
 const MARGIN = 8;
@@ -137,9 +135,8 @@ export function computeReaderLayout({ theme, width, height }: ReaderLayoutInput)
   const areaWidth = Math.max(0, Math.round(width));
   const areaHeight = Math.max(0, Math.round(height));
   const arrowsOutside = areaWidth >= 640;
-  const footerHeight = areaHeight < 460 ? 44 : 48;
   const availW = Math.max(1, areaWidth - 2 * ((arrowsOutside ? ARROW_SPACE : 0) + MARGIN));
-  const availH = Math.max(1, areaHeight - footerHeight - 2 * MARGIN);
+  const availH = Math.max(1, areaHeight - 2 * MARGIN);
   const pagesPerSpread = choosePagesPerSpread(theme, availW, availH);
   const geometry =
     theme === "book" ? bookGeometry(pagesPerSpread, availW, availH) : deviceGeometry(pagesPerSpread, availW, availH);
@@ -150,12 +147,11 @@ export function computeReaderLayout({ theme, width, height }: ReaderLayoutInput)
   const textHeight = pageHeight - padTop - padBottom;
   // The paper between two text columns of a spread: both inner margins and the spine.
   const gap = 2 * padX + spine;
-  const frameTop = Math.max(0, Math.round((areaHeight - geometry.frameHeight - footerHeight) / 2));
   return {
     theme,
     pagesPerSpread,
     frameLeft: Math.round((areaWidth - geometry.frameWidth) / 2),
-    frameTop,
+    frameTop: Math.max(0, Math.round((areaHeight - geometry.frameHeight) / 2)),
     frameWidth: geometry.frameWidth,
     frameHeight: geometry.frameHeight,
     pagesLeft: geometry.pagesLeft,
@@ -175,8 +171,6 @@ export function computeReaderLayout({ theme, width, height }: ReaderLayoutInput)
     spreadWidth: pagesPerSpread * textWidth + (pagesPerSpread - 1) * gap,
     spreadStride: pagesPerSpread * (textWidth + gap),
     arrowsOutside,
-    footerTop: frameTop + geometry.frameHeight,
-    footerHeight,
   };
 }
 
@@ -203,4 +197,45 @@ export function spreadOfPage(page: number, pagesPerSpread: number): number {
 /** The page under track x; the gap belongs half to each neighbour. */
 export function pageAtTrackX(x: number, textWidth: number, gap: number): number {
   return Math.max(0, Math.floor((x + gap / 2) / (textWidth + gap)));
+}
+
+// ── Pictures in a page ──
+
+/** How a picture sits on a page: beside the text with the text wrapping around it, or alone between paragraphs. */
+export interface IllustrationBox {
+  width: number;
+  height: number;
+  float: boolean;
+}
+
+/** At most this share of a page's height, so a picture always fits on a page with the chapter heading above it. */
+const PICTURE_MAX_HEIGHT = 0.6;
+/** Beside the text it takes this share of the text width... */
+const PICTURE_FLOAT_WIDTH = 0.42;
+/**
+ * ...on a page at least this many ems wide (a laptop's book page is about 20, a large phone's about 16); a narrower
+ * page shows it full width between paragraphs.
+ */
+const PICTURE_FLOAT_MIN_EMS = 18;
+
+/**
+ * A picture's box in whole pixels, set on it before it loads, so a page is laid out once and never shifts. It is never
+ * taller than PICTURE_MAX_HEIGHT of the text column: with break-inside: avoid it moves to the next page whole rather
+ * than overflow or be cut.
+ */
+export function illustrationBox(
+  layout: Pick<ReaderLayout, "textWidth" | "textHeight">,
+  fontSize: number,
+  picture: { width: number; height: number },
+): IllustrationBox {
+  const ratio = picture.width > 0 && picture.height > 0 ? picture.width / picture.height : 1;
+  const float = layout.textWidth >= PICTURE_FLOAT_MIN_EMS * fontSize;
+  const maxHeight = Math.max(1, Math.floor(layout.textHeight * PICTURE_MAX_HEIGHT));
+  let width = Math.max(1, Math.floor(layout.textWidth * (float ? PICTURE_FLOAT_WIDTH : 1)));
+  let height = Math.max(1, Math.round(width / ratio));
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = Math.max(1, Math.min(width, Math.floor(height * ratio)));
+  }
+  return { width, height, float };
 }

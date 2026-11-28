@@ -1,3 +1,4 @@
+import { assertSlurpWorldEpoch, slurpWorldEpoch } from "../../../../../shared/src/slp/slp-world-clock.js";
 import { assertSlurpNotPaused } from "./slp-pause.js";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -181,7 +182,11 @@ export function slpWithProviderRetry<P extends { chatComplete: (...args: never[]
     // Async, so a paused call rejects like any failed call and a `.catch()` on it still catches it.
     value: async (...args: Parameters<P["chatComplete"]>) => {
       assertSlurpNotPaused();
-      return slpRetryProviderCall(() => provider.chatComplete(...args), options);
+      // A timeline restore during the call makes its answer stale: refuse it so no caller writes it.
+      const epoch = slurpWorldEpoch();
+      const answer = await slpRetryProviderCall(() => provider.chatComplete(...args), options);
+      assertSlurpWorldEpoch(epoch);
+      return answer;
     },
     writable: true,
     configurable: true,

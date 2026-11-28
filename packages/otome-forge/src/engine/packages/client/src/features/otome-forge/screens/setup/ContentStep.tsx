@@ -8,12 +8,15 @@ import { useTranslation } from "react-i18next";
 import { CloudMoon, Eclipse, Flame, HeartCrack, Lock, Moon, Plus, Sun, Trash } from "lucide-react";
 import { useAgeGate } from "../../components/AgeGateDialog";
 import {
+  consentOpen,
   contentNeedsAgeGate,
+  contentWithHeat,
   CUSTOM_LIMIT_TEXT_MAX,
   CUSTOM_LIMITS_MAX,
   imageRatingNeedsAgeGate,
   intimacyOpen,
   LIMIT_IDS,
+  LIMIT_LEVELS,
   limitIsFixed,
   limitsForDarkness,
   playerLimits,
@@ -129,14 +132,8 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
     onChange(holdFixed(next, true));
   };
 
-  const levels = (["allow", "veil", "line"] as const).map((level) => ({
-    value: level,
-    label: t(LEVEL_LABEL_KEYS[level]),
-  }));
-  const customLevels = (["veil", "line"] as const).map((level) => ({
-    value: level,
-    label: t(LEVEL_LABEL_KEYS[level]),
-  }));
+  // The built-in limits and the player's own take the same three levels.
+  const levels = LIMIT_LEVELS.map((level) => ({ value: level, label: t(LEVEL_LABEL_KEYS[level]) }));
   const setCustom = (index: number, patch: Partial<ContentSettings["custom"][number]>) =>
     onChange({
       ...content,
@@ -149,7 +146,7 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
         legend={t("ui.otomeForge.setup.heatLegend")}
         value={content.heat}
         choices={heats}
-        onChange={(heat) => void change(heat === "sfw" ? { ...withoutRole(content), heat } : { ...content, heat })}
+        onChange={(heat) => void change(contentWithHeat(content, heat, picks))}
       />
       <ChoiceCards
         legend={t("ui.otomeForge.setup.darknessLegend")}
@@ -157,7 +154,11 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
         choices={darknesses}
         onChange={(darkness) => void change({ ...content, darkness, limits: limitsForDarkness(darkness, picks) })}
       />
-      {content.darkness === "dark" ? <p className="of-notice">{t("ui.otomeForge.setup.darkPromise")}</p> : null}
+      {content.darkness === "dark" ? (
+        <p className="of-notice">
+          {t(consentOpen(content) ? "ui.otomeForge.setup.darkPromiseConsentOpen" : "ui.otomeForge.setup.darkPromise")}
+        </p>
+      ) : null}
       {intimacyOpen(content) ? (
         <>
           <Pills<McRole | "none">
@@ -216,27 +217,29 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
                 className="of-input"
                 value={limit.text}
                 maxLength={CUSTOM_LIMIT_TEXT_MAX}
-                placeholder={t("ui.otomeForge.setup.customPlaceholder")}
+                placeholder={t("ui.otomeForge.setup.customOwnPlaceholder")}
                 aria-label={t("ui.otomeForge.setup.customText", { number: index + 1 })}
                 onChange={(event) => setCustom(index, { text: event.target.value })}
               />
-              <Pills
-                legend={t("ui.otomeForge.setup.customLevel", { number: index + 1 })}
-                hideLegend
-                small
-                value={limit.level}
-                options={customLevels}
-                onChange={(level) => setCustom(index, { level })}
-              />
-              <button
-                type="button"
-                className="of-icon-button of-glass"
-                aria-label={t("ui.otomeForge.setup.customRemove", { number: index + 1 })}
-                title={t("ui.otomeForge.setup.customRemove", { number: index + 1 })}
-                onClick={() => onChange({ ...content, custom: content.custom.filter((_, at) => at !== index) })}
-              >
-                <Trash size={15} strokeWidth={2} aria-hidden="true" />
-              </button>
+              <div className="of-custom-limit-level">
+                <Pills
+                  legend={t("ui.otomeForge.setup.customLevel", { number: index + 1 })}
+                  hideLegend
+                  small
+                  value={limit.level}
+                  options={levels}
+                  onChange={(level) => setCustom(index, { level })}
+                />
+                <button
+                  type="button"
+                  className="of-icon-button of-glass"
+                  aria-label={t("ui.otomeForge.setup.customRemove", { number: index + 1 })}
+                  title={t("ui.otomeForge.setup.customRemove", { number: index + 1 })}
+                  onClick={() => onChange({ ...content, custom: content.custom.filter((_, at) => at !== index) })}
+                >
+                  <Trash size={13} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
             </div>
           ))}
           {content.custom.length < CUSTOM_LIMITS_MAX ? (

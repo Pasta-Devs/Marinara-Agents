@@ -10,7 +10,13 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/index.js";
 import { isLocalCharacterSubject } from "./chat-scope.js";
 import { uniqueStrings, normalizeSubjectName } from "../ltm-utils.js";
-import { damerauLevenshtein, isHangulParticle, nameTokensRelated, partialNameTokensMatch } from "./subject-names.js";
+import {
+  damerauLevenshtein,
+  isHangulParticle,
+  nameTokensRelated,
+  stripTrailingPossessive,
+  trustedNameRelated,
+} from "./subject-names.js";
 
 export type TrustedLtmSubjectCatalogEntry = {
   subject: LtmSubject;
@@ -123,7 +129,7 @@ export function partialNameCandidateEntries(index: CatalogIndex, name: string, f
       isTrustedCharacterOrPersonaSubject(entry.subject) &&
       normalizeSubjectName(entry.name) !== token &&
       !entry.aliases.some((alias) => normalizeSubjectName(alias) === token) &&
-      partialNameTokensMatch(name, entry.name),
+      trustedNameRelated(name, entry.name),
   );
 }
 
@@ -132,6 +138,12 @@ export function partialNameCandidateEntries(index: CatalogIndex, name: string, f
 export function matchDirectName(index: CatalogIndex, name: string): SubjectMatch {
   const direct = matchDirect(index, normalizeSubjectName(name));
   if (direct.status !== "untrusted") return direct;
+  // An English possessive ("Corwin's") binds to the known bare name; it never creates a character.
+  const bare = stripTrailingPossessive(name);
+  if (bare !== name) {
+    const bareToken = normalizeSubjectName(bare);
+    if (index.exact.has(bareToken) || index.aliases.has(bareToken)) return matchDirect(index, bareToken);
+  }
   const value = name.trim().normalize("NFC");
   for (let length = 1; length <= 4 && value.length - length >= 2; length += 1) {
     if (!isHangulParticle(value.slice(0, -length), value.slice(-length))) continue;
@@ -143,9 +155,9 @@ export function matchDirectName(index: CatalogIndex, name: string): SubjectMatch
 
 // Canonicalize a surface name against trusted catalog entries related by the
 // conservative shorter/longer name heuristic before any provisional local
-// character is created. Exact names and explicit aliases bind; a short or partial
+// character is created. Exact names and explicit aliases bind; a shorter or longer
 // form of one trusted character/persona is routed to review instead of binding by
-// first name alone, and an ambiguous relation fails closed with the competing
+// one name part alone, and an ambiguous relation fails closed with the competing
 // identities. Without a trusted relation, a name sharing whole name parts with exactly one of
 // LTM's own characters in the same chat binds to it; several go to review.
 export function matchTrustedNameRelation(
@@ -162,7 +174,7 @@ export function matchTrustedNameRelation(
     (entry) =>
       (!entry.familyId || entry.familyId === familyId) &&
       (isExactOrAlias(entry) ||
-        (isTrustedCharacterOrPersonaSubject(entry.subject) && partialNameTokensMatch(name, entry.name))),
+        (isTrustedCharacterOrPersonaSubject(entry.subject) && trustedNameRelated(name, entry.name))),
   );
   const uniqueSubjects = new Map(related.map((entry) => [entry.subject.key, entry]));
   const allowDifferent = familyId !== null;

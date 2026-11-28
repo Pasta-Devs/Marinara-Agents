@@ -13,7 +13,7 @@
 // screen, and no rail button covers the note, the nameplate, the top bar, the dock or his tap zones. Over his painted
 // look, in Midnight and Pearl, any label they show keeps 4.5:1 and each icon 3:1.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-remind.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -871,7 +871,8 @@ test("Otome Forge Caring message that goes while it holds focus, the dialog clos
     data: tracker([yesterday]),
   });
   await expect(caring).toBeVisible();
-  await remind.focus();
+  // Your thoughts… (#2127) stands between Remind Me and Caring message.
+  await root.getByRole("button", { name: "Your thoughts…" }).focus();
   await page.keyboard.press("Tab");
   await expect(caring).toBeFocused();
   await other.evaluate((keys) => keys.forEach((key) => localStorage.removeItem(key)), [CYCLE_KEY, CARE_KEY]);
@@ -915,7 +916,7 @@ function lowestContrast(page: Page, png: string, color: string) {
 
 // Over his painted look, a mid-tone outfit and a pale one, in both moods: any label the rail's round buttons show
 // keeps 4.5:1 against what is behind it, and each icon, which alone carries the meaning of a round button, 3:1 (WCAG
-// 1.4.3 and 1.4.11), Caring message's rose wash included.
+// 1.4.3 and 1.4.11), Caring message's rose wash and Your thoughts…' drawn bubble (#2127) included.
 for (const scheme of ["dark", "light"] as const) {
   for (const lookFill of [LOOK_FILL, "#d9d3e6"]) {
     test(`Otome Forge Caring message and Remind Me over his painted look (${lookFill}) in ${scheme === "dark" ? "Midnight" : "Pearl"}: labels keep 4.5:1 and icons 3:1`, async ({
@@ -942,7 +943,7 @@ for (const scheme of ["dark", "light"] as const) {
         await part.evaluate((element, hide) => ((element as HTMLElement).style[hide] = ""), hide);
         return lowestContrast(page, png, color);
       };
-      for (const name of ["Caring message", "Remind Me"]) {
+      for (const name of ["Caring message", "Remind Me", "Your thoughts…"]) {
         const button = root.getByRole("button", { name });
         await expect(button).toBeVisible();
         for (const label of await button.locator("span:not(.of-visually-hidden)").all()) {
@@ -1034,10 +1035,12 @@ for (const layout of LAYOUTS) {
     // dock. Remind Me and Caring message sit side by side.
     const rail = root.locator(".of-home-rail");
     const items = rail.locator(":scope > :not(.of-home-rail-row), .of-home-rail-row > *");
-    await expect(items).toHaveCount(6);
+    await expect(items).toHaveCount(7);
     const remind = root.getByRole("button", { name: "Remind Me" });
     await expect(items.nth(4)).toHaveAccessibleName("Remind Me");
-    await expect(items.nth(5)).toHaveAccessibleName("Caring message");
+    // #2127: Your thoughts… stands between them.
+    await expect(items.nth(5)).toHaveAccessibleName("Your thoughts…");
+    await expect(items.nth(6)).toHaveAccessibleName("Caring message");
     const covers = await root.evaluate((element) =>
       [...element.querySelectorAll(".of-note, .of-home-plate, .of-topbar, .of-dock, .of-dock-item")].map((node) => {
         const rect = node.getBoundingClientRect();
@@ -1062,7 +1065,8 @@ for (const layout of LAYOUTS) {
     // His tap zones: no tap meant for one ever lands on the rail (every point of each zone's own rounded shape, every
     // 3 px, is checked by hit testing), M6's buttons included, whatever his name.
     const zones = root.getByRole("group", { name: `Touch ${name}` }).getByRole("button");
-    await expect(zones).toHaveCount(3);
+    // #2152: head, cheek, chest and hand (an SFW story has no fifth).
+    await expect(zones).toHaveCount(4);
     const taken = await root.evaluate((element) => {
       const scope = element.getRootNode() as Document | ShadowRoot;
       const found: string[] = [];

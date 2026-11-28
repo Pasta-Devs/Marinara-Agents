@@ -5,14 +5,21 @@
 // Retry, Ease off with "Veil this from now on" (neither closes while its request runs), a big choice, Ease off gone
 // once the scene's end is saved, the chapter's Starlight and affection with focus on its heading; then a replay at
 // reduced motion that changes nothing, whose Ease off on a branch puts no line it skips in the backlog, and a chapter
-// with no title in the reader and on the Story screen; and the waits (#2040, #2041): "What happened so far…" while a
-// chapter is planned, and Who said what? while a scene is written, on a phone and a desktop; and a side-with choice
-// (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest.
+// with no title in the reader and on the Story screen; and the waits (#2040, #2041, #2174): "What happened so far…"
+// while an arc is planned, the personality quiz while a chapter inside an arc is, and Who said what? while a scene is
+// written, on a phone and a desktop; and a side-with choice
+// (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest; and
+// Write your own… (#2146) at a chapter's closing decision only, its draft kept until sent, on a phone and a desktop;
+// and a recurring side character (0.20.0) standing in their own sprite while they speak, painted on a tap under Ask;
+// and Before this chapter (#2503): the plan's questions about the protagonist before the first scene, on a phone and a
+// desktop, again when a chapter planned ahead has its first scene refused for them, and closed when they were answered
+// in another tab.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
+import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -200,6 +207,14 @@ function createStoryStub({
   storyBeats = BEATS,
   waits = false,
   memory = null as Json | null,
+  /** The chapter opened and read up to this node (its first unread one), as when the player comes back to it. */
+  startAt = 0,
+  /** #2503: the plan's questions about the protagonist; no beat is written until they are answered. */
+  questions = null as Json[] | null,
+  /** #2503: the chapter read first shows none of them, as one planned ahead: the first beat refused brings them. */
+  askLate = false,
+  /** #2503: they were answered meanwhile in another tab: Continue's answers are refused as `conflict`. */
+  answeredElsewhere = false,
 } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
@@ -282,14 +297,15 @@ function createStoryStub({
     ageGate: null,
     lastOpenedAt: null,
   };
-  let chapter: Json | null = done ? { ...structuredClone(CHAPTER), title } : null;
+  let chapter: Json | null = done || startAt ? { ...structuredClone(CHAPTER), title } : null;
   const beats = new Map<number, Json>();
-  const progress = { beatsRead: done ? 3 : 0, completed: done ? now() : (null as string | null) };
-  let declined = done;
+  const progress = { beatsRead: done ? 3 : startAt, completed: done ? now() : (null as string | null) };
+  let declined = done || startAt > 1;
   // The first report of beat 0's end fails, as when the Engine restarts.
   let endFails = !done;
   let favorites: Json[] = [];
   let memoryStatus = memory;
+  let questionsShown = !askLate;
   if (done) {
     for (const stored of storyBeats) {
       const copy = structuredClone(stored);
@@ -356,14 +372,30 @@ function createStoryStub({
       };
     }
     if (path === `${base}/chapters/next`) {
-      chapter = { ...structuredClone(CHAPTER), title, lead: call.body!.lead };
+      chapter = {
+        ...structuredClone(CHAPTER),
+        title,
+        lead: call.body!.lead,
+        ...(questions ? { questions: structuredClone(questions) } : {}),
+      };
+      return { status: 200, json: { chapter: questionsShown ? chapter : { ...chapter, questions: undefined } } };
+    }
+    if (path === `${base}/chapters/main-1/answers`) {
+      chapter!.questions = chapter!.questions.map((entry: Json, n: number) => ({
+        ...entry,
+        answer: answeredElsewhere ? "Answered in another tab." : call.body!.answers[n],
+        answeredAt: now(),
+      }));
+      if (answeredElsewhere) {
+        return { status: 409, json: { error: "This chapter has no questions waiting.", code: "conflict" } };
+      }
       return { status: 200, json: { chapter } };
     }
     if (path === `${base}/chapters/main-1`) {
       return {
         status: 200,
         json: {
-          chapter,
+          chapter: questionsShown || !chapter ? chapter : { ...chapter, questions: undefined },
           beats: CHAPTER.nodes.map(({ i }) => ({
             i,
             state: i < progress.beatsRead ? "read" : beats.has(i) ? "ready" : "unwritten",
@@ -405,6 +437,11 @@ function createStoryStub({
     if (match) {
       const i = Number(match[1]);
       if (!match[2]) {
+        // #2503: S/story/beats.ts serveBeat refuses every beat while a question waits.
+        if (!beats.has(i) && chapter?.questions?.some((entry: Json) => !entry.answer)) {
+          questionsShown = true;
+          return { status: 409, json: { error: "Answer this chapter's questions first.", code: "needs-answer" } };
+        }
         if (!beats.has(i)) {
           if (i === 1 && !declined) {
             declined = true;
@@ -416,7 +453,13 @@ function createStoryStub({
       }
       const beat = beats.get(i)!;
       if (match[2] === "choose") {
-        const remembered = !beat.choiceCanon[call.body!.choice];
+        // #2146: the player's own words become the closing decision's own option, with no effects.
+        const own = call.body!.own;
+        const remembered = !beat.choiceCanon[call.body!.choice] && !own;
+        if (own && !beat.choiceCanon[call.body!.choice]) {
+          const choice = beat.choices.find((item: Json) => item.id === call.body!.choice);
+          choice.options.push({ id: "own", text: "Answered in their own words.", selection: own, segments: [] });
+        }
         beat.choiceCanon[call.body!.choice] ??= call.body!.option;
         // #2046: a side-with pick moves affection (S/state/relationship.ts): +30 for the one backed, −10 for the others.
         const side = remembered && beat.sideWith?.choice === call.body!.choice ? beat.sideWith : null;
@@ -730,6 +773,67 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   expect(pageErrors).toEqual([]);
 });
 
+for (const unrecorded of [false, true]) {
+  test(`Otome Hearth 0.38.0: Rewrite stays after a pick${unrecorded ? ", greyed with its reason when the pick can't be taken back" : ""}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const stub = createStoryStub({ memory: MEMORY_READY });
+    await stubRoutes(page, stub);
+    // As the server answers a pick from before 0.38.0, which has no record a Rewrite could take back.
+    await page.route("**/api/otome-forge/**/beats/*/choose", async (route) => {
+      const request = route.request();
+      const { status, json } = stub.answer({
+        method: "POST",
+        path: new URL(request.url()).pathname,
+        body: request.postDataJSON(),
+      });
+      const answer = json as { beat?: Record<string, unknown> };
+      await route.fulfill({
+        status,
+        json: unrecorded && answer.beat ? { ...answer, beat: { ...answer.beat, rewritable: false } } : json,
+      });
+    });
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Choose who leads" }).click();
+    await page
+      .getByRole("dialog", { name: "Who walks with you this chapter?" })
+      .getByRole("button", { name: /Ilvar Thorne/ })
+      .click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    const choice = root.getByRole("group", { name: "What do you do?" });
+    for (let step = 0; step < 8 && !(await choice.isVisible()); step += 1) {
+      await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+      await root.locator(".of-next").click();
+    }
+    await expect(choice).toBeVisible();
+    const rewrite = root.getByRole("button", { name: /^Rewrite this scene|played before Rewrite/u });
+    await setReaderControlsExpanded(root);
+    await expect(rewrite).toBeVisible();
+    await expect(rewrite).toHaveAccessibleName(/^Rewrite this scene and take back your choices in it/u);
+    await setReaderControlsExpanded(root, false);
+    await choice.getByRole("button", { name: "Tell him the truth." }).click();
+    await expect(line(root)).toContainText("I came because you were alone up here.");
+    await setReaderControlsExpanded(root);
+    await expect(rewrite, "a pick no longer hides Rewrite").toBeVisible();
+    if (unrecorded) {
+      await expect(rewrite).toHaveAttribute("aria-disabled", "true");
+      await expect(rewrite).toHaveAccessibleName(
+        "This scene was played before Rewrite could take its choices back, so it can't be rewritten.",
+      );
+      const before = posts(stub, "/beats/0").filter((call) => call.body?.rewrite).length;
+      // Playwright will not press an aria-disabled button by itself; a player's tap still reaches it.
+      await rewrite.click({ force: true });
+      await page.waitForTimeout(200);
+      expect(posts(stub, "/beats/0").filter((call) => call.body?.rewrite)).toHaveLength(before);
+    } else {
+      await expect(rewrite).not.toHaveAttribute("aria-disabled", "true");
+      await expect(rewrite).toHaveAccessibleName(/^Rewrite this scene and take back your choices in it/u);
+    }
+  });
+}
+
 test("Otome Hearth waits: What happened so far… while a chapter is planned, Who said what? while a scene is written", async ({
   page,
 }, testInfo) => {
@@ -761,11 +865,20 @@ test("Otome Hearth waits: What happened so far… while a chapter is planned, Wh
   await expect(soFar.locator("p")).toHaveCount(SO_FAR.length);
   await expect(lead.getByRole("heading", { name: "What happened so far…" })).toBeVisible();
   await expect(status, "the summary is never announced as status").not.toContainText("SO-FAR");
+  if (test.info().project.name.includes("chromium")) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 8 });
+  }
   // By keyboard: it is the stop before Cancel, and End scrolls it.
   await page.keyboard.press("Shift+Tab");
   await expect(soFar).toBeFocused();
   await page.keyboard.press("End");
-  await expect.poll(() => soFar.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  // Wait until End has reached the bottom, not merely started: Home pressed while End is still scrolling can leave the
+  // box at the bottom (CI mobile-chromium, #2223's run: scrollTop 2328).
+  await expect
+    .poll(() => soFar.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1);
+  expect(await soFar.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.keyboard.press("Home");
   await expect.poll(() => soFar.evaluate((element) => element.scrollTop)).toBe(0);
   if (!mobile) {
@@ -860,6 +973,262 @@ test("Otome Hearth waits: What happened so far… while a chapter is planned, Wh
   await expect(root.locator(".of-next")).toBeFocused();
   expect(stub.calls.filter((call) => call.path.endsWith("/who-said-what"))).toHaveLength(1);
   expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth waits: the personality quiz while a chapter inside an arc is planned, the story so far while an arc is", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "light" : "dark", reducedMotion: "reduce" });
+  const stub = createStoryStub({ waits: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  const tall = async (target: Locator) => expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  let ended = false;
+  let newcomer = false;
+  const arc = { number: 1, kind: "story", label: "The drowned bell", from: 1, endsAt: 10, read: 0, done: false };
+  await page.route(
+    (url) => url.pathname.endsWith(`/runs/${RUN}/story`),
+    (route) =>
+      route.fulfill({
+        json: {
+          chapters: [],
+          routes: [],
+          repairs: [],
+          arc: ended ? { ...arc, read: 10, done: true } : arc,
+          next: ended
+            ? null
+            : {
+                kind: "main",
+                number: 1,
+                candidates: [
+                  { li: CASSIAN, reason: "least-recent" },
+                  { li: ILVAR, reason: "ripe-conflict" },
+                ],
+              },
+          arcChoice: ended
+            ? { options: newcomer ? ["breathe", "continue", "newcomer"] : ["breathe", "continue"], castFull: false }
+            : null,
+        },
+      }),
+  );
+  // The quiz: two statements open, the second with no love interest's answer yet; the answer moves one to answered.
+  // The first read fails; later reads answer in turn (the last again): the second's answers, then new statements.
+  const open = [
+    { id: "p01", text: "I recharge by being around people.", scores: { [ILVAR]: 5, [CASSIAN]: 2 } },
+    { id: "l01", text: "Hearing “I love you” means more to me than any gift.", scores: {} },
+  ];
+  const fresh = [
+    { id: "w1", text: "I would rather plan a date than improvise one.", scores: { [ILVAR]: 2, [CASSIAN]: 5 } },
+    { id: "w2", text: "I keep every letter I am sent.", scores: { [ILVAR]: 4, [CASSIAN]: 3 } },
+  ];
+  const quizCalls: Array<{ method: string; body?: Json }> = [];
+  let answered: Json[] = [];
+  /** What an answer's reply says of new statements: none while the refill cools down, then being written. */
+  let refilling = false;
+  const reads: Array<() => Json | null> = [
+    () => null,
+    () => ({ open, answered: [], refilling: false, scoring: false }),
+  ];
+  await page.route(
+    (url) => url.pathname.includes(`/runs/${RUN}/quiz`),
+    (route) => {
+      const request = route.request();
+      const body = request.method() === "POST" ? (request.postDataJSON() as Json) : undefined;
+      quizCalls.push({ method: request.method(), body });
+      if (request.method() === "GET") {
+        const view = (reads.length > 1 ? reads.shift()! : reads[0]!)();
+        return view
+          ? route.fulfill({ json: view })
+          : route.fulfill({ status: 500, json: { error: "The quiz could not be read." } });
+      }
+      const all = [...open, ...fresh];
+      answered = [...answered, { ...all.find((entry) => entry.id === body!.statement)!, answer: body!.answer }];
+      return route.fulfill({
+        json: {
+          open: all.filter((entry) => !answered.some((done) => done.id === entry.id) && !fresh.includes(entry)),
+          answered,
+          refilling,
+          scoring: false,
+        },
+      });
+    },
+  );
+  // The page's clock runs as usual, and jumps ahead to the quiz's next read.
+  await page.clock.install();
+  const root = await openStory(page);
+
+  // A chapter inside the arc: the quiz waits under the status, and takes no focus.
+  await hold(page, "**/chapters/next");
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  const lead = page.getByRole("dialog", { name: "Who walks with you this chapter?" });
+  await lead.getByRole("button", { name: /Ilvar Thorne/ }).click();
+  await expect(lead.getByRole("status").first()).toContainText("Planning chapter 1 with Ilvar Thorne…");
+  const cancel = lead.getByRole("button", { name: "Cancel" });
+  await expect(cancel).toBeFocused();
+  await expect(lead.getByRole("region", { name: "What happened so far…" })).toHaveCount(0);
+  const play = lead.getByRole("button", { name: "Play the personality quiz" });
+  await expect(play).toBeVisible();
+  await expect(play).not.toBeFocused();
+  await tall(play);
+  expect(quizCalls, "nothing is read before Play").toHaveLength(0);
+
+  // Play: the first read fails, and Play stays the same button, focused, as Try again; the next read shows the quiz.
+  const playButton = await play.elementHandle();
+  await press(play);
+  await expect(lead.getByRole("alert")).toBeVisible();
+  const retry = lead.getByRole("button", { name: "Try again" });
+  await expect(retry).toBeFocused();
+  expect(await playButton!.evaluate((button) => button.isConnected && button === document.activeElement)).toBe(true);
+  // Then the statement takes focus, the scale names each point, and the answer reveals theirs.
+  await press(retry);
+  const quiz = lead.getByRole("region", { name: "Personality quiz" });
+  const statement = quiz.locator(".of-quiz-statement");
+  await expect(statement).toBeFocused();
+  await expect(statement).toHaveText(open[0]!.text);
+  const scale = quiz.getByRole("group", { name: open[0]!.text });
+  await expect(scale.getByRole("button")).toHaveCount(5);
+  for (const point of await scale.getByRole("button").all()) await tall(point);
+  await expect(quiz.getByText("Strongly disagree", { exact: true })).toBeVisible();
+  await expect(quiz.getByText("Strongly agree", { exact: true })).toBeVisible();
+  await press(scale.getByRole("button", { name: "4: Agree" }));
+  const revealed = quiz.getByRole("status");
+  await expect(revealed).toContainText("You: Agree");
+  await expect(revealed).toContainText("Ilvar Thorne: Strongly agree");
+  await expect(revealed).toContainText("Cassian: Disagree");
+  await expect(revealed.getByRole("listitem").filter({ hasText: "Ilvar Thorne" })).toContainText("75% alike");
+  await expect(revealed.getByRole("listitem").filter({ hasText: "Cassian" })).toContainText("50% alike");
+  await expect(scale.getByRole("button", { name: "4: Agree" })).toHaveAttribute("aria-pressed", "true");
+  expect(quizCalls.filter((call) => call.method === "POST").map((call) => call.body)).toEqual([
+    expect.objectContaining({ statement: "p01", answer: 4 }),
+  ]);
+  const next = quiz.getByRole("button", { name: "Next statement" });
+  await expect(next).toBeFocused();
+  await tall(next);
+  await expect(quiz).toContainText("1 answered");
+  await page.screenshot({ path: testInfo.outputPath("quiz-answered.png") });
+  // A narrow phone: nothing scrolls sideways, and Cancel stays on screen.
+  const size = page.viewportSize()!;
+  await page.setViewportSize({ width: 320, height: 568 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await expect(cancel).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: testInfo.outputPath("quiz-320.png") });
+  await page.setViewportSize(size);
+  await page.keyboard.press("Enter");
+  await expect(statement).toBeFocused();
+  await expect(statement).toHaveText(open[1]!.text);
+  await expect(revealed).toHaveText("");
+
+  // No one has answered the second yet and nothing is being written (a call that failed waits out its cool-down): it
+  // says so, and the quiz is read again a minute later, when their answers have come.
+  reads.splice(0, reads.length, () => ({
+    open: [],
+    answered: answered.map((entry) =>
+      entry.id === "l01" ? { ...entry, scores: { [ILVAR]: 1, [CASSIAN]: 4 } } : entry,
+    ),
+    refilling: true,
+    scoring: false,
+  }));
+  await press(quiz.getByRole("button", { name: "2: Disagree" }));
+  await expect(revealed).toContainText("They haven’t answered this one yet.");
+  await expect(revealed).not.toContainText("still being written");
+  await page.clock.fastForward(60_000);
+  await expect(revealed).toContainText("Ilvar Thorne: Strongly disagree");
+  await expect(revealed).toContainText("Cassian: Agree");
+
+  // Every statement answered: Next waits on the new ones, which take focus from the waiting message when they come.
+  reads.splice(0, reads.length, () => ({ open: [fresh[0]], answered, refilling: false, scoring: false }));
+  await press(next);
+  const waiting = quiz.getByText("New statements are being written…");
+  await expect(waiting).toBeFocused();
+  await page.clock.fastForward(15_000);
+  await expect(statement).toHaveText(fresh[0]!.text);
+  await expect(statement).toBeFocused();
+  await expect(revealed).toHaveText("");
+
+  // Waiting again with focus moved away (Cancel): it stays there, and the live region says the new ones are ready.
+  refilling = true;
+  await press(quiz.getByRole("button", { name: "5: Strongly agree" }));
+  await expect(next).toBeFocused();
+  reads.splice(0, reads.length, () => ({ open: [fresh[1]], answered, refilling: false, scoring: false }));
+  await press(next);
+  await expect(waiting).toBeFocused();
+  await cancel.focus();
+  await page.clock.fastForward(15_000);
+  await expect(statement).toHaveText(fresh[1]!.text);
+  await expect(revealed).toHaveText("New statements are ready.");
+  await expect(cancel).toBeFocused();
+  expect(pageErrors).toEqual([]);
+
+  // The arc ends: planning the next arc shows the story so far, and no quiz.
+  ended = true;
+  await page.goto("about:blank");
+  const again = await openStory(page);
+  await hold(page, "**/arcs");
+  await again.getByRole("button", { name: /Go on with the story/ }).click();
+  const choice = again.getByRole("region", { name: "How does the story go on?" });
+  await expect(choice).toContainText("Planning the next arc…");
+  const soFar = choice.getByRole("region", { name: "What happened so far…" });
+  await expect(soFar).toContainText(SO_FAR[0]!);
+  await expect(again.getByRole("button", { name: "Play the personality quiz" })).toHaveCount(0);
+
+  // Meeting someone new: the dialog itself shows the planning status and the story so far, with no copy behind it.
+  newcomer = true;
+  // #2475: a card someone in the cast already has (Ilvar's, linked in Your cast) is not offered.
+  await page.route(
+    (url) => url.pathname === `/api/otome-forge/runs/${RUN}`,
+    (route) => {
+      const reply = stub.answer({ method: "GET", path: `/api/otome-forge/runs/${RUN}` });
+      (reply.json as Json).view.lis[0].cardId = "card-ilvar";
+      return route.fulfill(reply);
+    },
+  );
+  await page.goto("about:blank");
+  const third = await openStory(page);
+  // Someone from your cards (the maintainer, 2026-11-10): the cards lay out as setup's tiles, and a tap shows a check
+  // and readies Bring them in. The classes this used had no styles, so the list fell apart and a tap showed nothing.
+  const cardNames = ["Albedo", "Alhaitham", "Arlecchino", "Bob", "Capitano", "Columbina"];
+  await page.route("**/api/characters/catalog?**", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          ...cardNames.map((name) => ({ id: `card-${name.toLowerCase()}`, name })),
+          { id: "card-ilvar", name: "Ilvar card" },
+        ],
+        hasMore: false,
+      },
+    }),
+  );
+  await third.getByRole("button", { name: /Meet someone new/ }).click();
+  const arrives = page.getByRole("dialog", { name: "Who arrives?" });
+  const tiles = arrives.getByRole("list", { name: "Someone from your cards" }).getByRole("button");
+  await expect(tiles).toHaveCount(cardNames.length);
+  await expect(tiles.filter({ hasText: "Ilvar card" })).toHaveCount(0);
+  const [first, second] = await Promise.all([tiles.nth(0).boundingBox(), tiles.nth(1).boundingBox()]);
+  expect(Math.abs(first!.y - second!.y), "two cards share a row").toBeLessThan(2);
+  const arlecchino = tiles.filter({ hasText: "Arlecchino" });
+  await expect(arlecchino).toHaveAttribute("aria-pressed", "false");
+  await arlecchino.click();
+  await expect(arlecchino).toHaveAttribute("aria-pressed", "true");
+  await expect(arlecchino.locator(".of-tile-check")).toBeVisible();
+  await expect(arrives.getByText("he/him", { exact: true })).toBeVisible();
+  await arrives.getByText("he/him", { exact: true }).click();
+  await expect(arrives.getByRole("button", { name: "Bring them in" })).toBeEnabled();
+  await arrives.getByLabel("Someone new, invented for this story").check();
+  await arrives.getByLabel("Their name").fill("Noor");
+  await arrives.getByText("he/him", { exact: true }).click();
+  await arrives.getByRole("button", { name: "Bring them in" }).click();
+  await expect(arrives.getByRole("status")).toContainText("Planning the next arc…");
+  await expect(arrives.getByRole("region", { name: "What happened so far…" })).toContainText(SO_FAR[0]!);
+  await expect(page.locator(".of-so-far")).toHaveCount(1);
+  await expect(third.getByRole("region", { name: "How does the story go on?" })).not.toContainText(
+    "Planning the next arc…",
+  );
+  // openStory's init scripts also run on about:blank, where localStorage is denied; the app itself throws nothing.
+  expect(pageErrors.filter((message) => !message.includes("'localStorage' property"))).toEqual([]);
 });
 
 // Meaningful alpha silhouettes replace the old 2x2 any-transparent-pixel fixture.
@@ -1232,6 +1601,89 @@ test("Otome Hearth a line under a story CG types only after the art has loaded a
   await root.locator(".of-next").click();
   await expect(typed).toHaveAttribute("data-done", "true");
   await expect(line(root)).toContainText("sentence 12.");
+});
+
+test("Otome Hearth a story CG gives way to the next place's background, not the end of the scene (0.21.1)", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const cgUrl = "/__otome-test/cg-ends.png";
+  const roomUrl = "/__otome-test/room.png";
+  const corridorUrl = "/__otome-test/corridor.png";
+  const ready = (url: string) => ({ state: "ready", at: written.at, url });
+  const segments = [
+    seg("", "Rain on the dome.", { place: "The Observation Room" }),
+    seg("Ilvar Thorne", "Stay.", { expression: "tender" }),
+    seg("", "The lens hums.", { place: "The Observation Room" }),
+    seg("Ilvar", "Just a moment longer."),
+    seg("", "The corridor below is cold.", { place: "The Lower Corridor" }),
+    seg("Ilvar", "Wait for me."),
+  ];
+  const fixture = createStoryStub({
+    done: true,
+    storyBeats: [
+      {
+        ...BEATS[0],
+        places: [
+          { name: "The Observation Room", tags: "glass dome, night" },
+          { name: "The Lower Corridor", tags: "stone corridor, lamps" },
+        ],
+        segments,
+        choices: [],
+        cg: { at: 1, brief: "Two figures under the glass dome.", cast: ["Ilvar Thorne"], art: ready(cgUrl) },
+      },
+      ...BEATS.slice(1),
+    ],
+  });
+  await stubRoutes(page, {
+    ...fixture,
+    answer(call: Call) {
+      const reply = fixture.answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        (reply.json as Json).view.world.places = {
+          "the-observation-room": { name: "The Observation Room", tags: "glass dome, night", art: ready(roomUrl) },
+          "the-lower-corridor": { name: "The Lower Corridor", tags: "stone corridor, lamps", art: ready(corridorUrl) },
+        };
+      }
+      return reply;
+    },
+  });
+  await page.route(`**/api/otome-forge/runs/${RUN}/art/cg/seen`, (route) => route.fulfill({ json: { ok: true } }));
+  for (const url of [cgUrl, roomUrl, corridorUrl]) {
+    await page.route(`**${url}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }),
+    );
+  }
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const reader = root.locator(".of-reader");
+  const place = root.locator('.of-place[data-on="true"]');
+  await expect(line(root)).toContainText("Rain on the dome.");
+  await expect(reader).not.toHaveAttribute("data-cg");
+  await expect(place).toHaveAttribute("style", /room\.png/u);
+
+  // Its line brings the key image; the same room named again keeps it.
+  await next(root);
+  await expect(line(root)).toContainText("Stay.");
+  await expect(reader).toHaveAttribute("data-cg", /intro|shown/u);
+  if ((await reader.getAttribute("data-cg")) === "intro") await root.locator(".of-reader-stage").click();
+  await expect(reader).toHaveAttribute("data-cg", "shown");
+  for (const text of ["The lens hums.", "Just a moment longer."]) {
+    await next(root);
+    await expect(line(root)).toContainText(text);
+    await expect(reader).toHaveAttribute("data-cg", "shown");
+  }
+  // Another place: its background takes over, for the rest of the scene.
+  await next(root);
+  await expect(line(root)).toContainText("The corridor below is cold.");
+  await expect(reader).not.toHaveAttribute("data-cg");
+  await expect(root.locator(".of-cg")).toHaveCount(0);
+  await expect(place).toHaveAttribute("style", /corridor\.png/u);
+  await page.screenshot({ path: testInfo.outputPath("cg-gives-way.png") });
+  await next(root);
+  await expect(line(root)).toContainText("Wait for me.");
+  await expect(reader).not.toHaveAttribute("data-cg");
 });
 
 test("Otome Hearth a story CG whose picture fails ends its pan at once and the line types (#2051)", async ({
@@ -2121,7 +2573,15 @@ test("Otome Hearth polls a free cut-out replacement while keeping its previous i
   const completed = reads();
   await page.clock.runFor(10_000);
   expect(reads(), "ready cleanup stops polling without a model or paid image request").toBe(completed);
-  expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+  expect(
+    stub.calls.filter(
+      (call) =>
+        call.method === "POST" &&
+        !call.path.endsWith("/index/opened") &&
+        // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+        !call.path.endsWith("/accent"),
+    ),
+  ).toHaveLength(0);
 });
 
 for (const outcome of ["ready", "uncut"] as const) {
@@ -2185,7 +2645,13 @@ for (const outcome of ["ready", "uncut"] as const) {
     await page.screenshot({ path: testInfo.outputPath("expression-pending-neutral.png") });
     // Replay opens its stored beat with the normal POST; cleanup must add no mutation or regeneration request.
     const packagePosts = () =>
-      stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"));
+      stub.calls.filter(
+        (call) =>
+          call.method === "POST" &&
+          !call.path.endsWith("/index/opened") &&
+          // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+          !call.path.endsWith("/accent"),
+      );
     const opened = packagePosts();
     expect(opened).toHaveLength(1);
     expect(opened[0]!.path).toBe(`/api/otome-forge/runs/${RUN}/chapters/main-1/beats/0`);
@@ -2291,7 +2757,15 @@ test("Otome Hearth stands him in a first-wear scene's look, not the look he wear
   const front = root.locator('.of-face-img[data-front="true"]');
   await expect(front).toHaveAttribute("src", suitCold);
   await expect(front).toHaveAttribute("data-cut", "true");
-  expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(1);
+  expect(
+    stub.calls.filter(
+      (call) =>
+        call.method === "POST" &&
+        !call.path.endsWith("/index/opened") &&
+        // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+        !call.path.endsWith("/accent"),
+    ),
+  ).toHaveLength(1);
 });
 
 test("Otome Hearth waits for a first-wear scene's look while it paints, with expressions off, then stands him in it", async ({
@@ -2376,6 +2850,202 @@ test("Otome Hearth waits for a first-wear scene's look while it paints, with exp
   const settled = sceneReads();
   await page.clock.runFor(10_000);
   expect(sceneReads(), "the look in place, the scene's art is not read again").toBe(settled);
+});
+
+/** 0.20.0: a scene where a recurring side character speaks between Ilvar's lines, and the scene art that carries them. */
+function sideCharacterStub(side: () => Json, { sideSprites = true } = {}) {
+  const stub = createStoryStub({
+    done: true,
+    storyBeats: [
+      {
+        ...BEATS[0],
+        segments: [
+          seg("Ilvar Thorne", "You came to see it.", { expression: "cold" }),
+          seg("Arin Vale", "I keep turning up, don't I?"),
+          seg("", "The clocks tick on."),
+          seg("Arin Vale", "Still here."),
+        ],
+        choices: [],
+      },
+      ...BEATS.slice(1),
+    ],
+  });
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    const response = answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}`) {
+      const view = (response.json as Json).view;
+      view.world.images.connectionId = "conn-image";
+      view.world.images.sideSprites = sideSprites;
+      view.lis[0].portrait = LI_SPEAKER_PORTRAIT;
+      view.lis[0].cut = [LI_SPEAKER_PORTRAIT];
+    }
+    if (call.path.endsWith("/art/scene")) {
+      // S/routes/art.ts with S/story/side-cast.ts sceneSides: the speaker as the beat names them, and their sprite.
+      return {
+        status: 200,
+        json: { places: [], cg: null, faces: {}, facesComing: [], sides: { "Arin Vale": side() } },
+      };
+    }
+    return response;
+  };
+  return stub;
+}
+
+const SIDE_SPRITE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="320"><circle cx="80" cy="40" r="26" fill="#c9a96e"/><path d="M52 72H108L120 190H100V310H85V190H75V310H60V190H40Z" fill="#c9a96e"/></svg>',
+)}`;
+const SIDE_PAINTED = { state: "ready", at: "2026-11-08T10:00:00.000Z", url: "/api/global-gallery/file/arin.png" };
+
+test("Otome Hearth a recurring side character stands in their own sprite while they speak (0.20.0)", async ({
+  page,
+}) => {
+  const catalog: string[] = [];
+  page.on("request", (request) => {
+    // The reader's own card lookup by name (C/lib/speaker-sprites.ts), not the Engine's character list.
+    const url = new URL(request.url());
+    if (url.pathname === "/api/characters/catalog" && url.searchParams.get("limit") === "200") catalog.push(url.href);
+  });
+  const stub = sideCharacterStub(() => ({ key: "arin vale", art: SIDE_PAINTED, url: SIDE_SPRITE, cut: true }));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await root.getByRole("button", { name: "Begin" }).click();
+  await (await scene).finished();
+  const front = root.locator('.of-reader-stage .of-face-img[data-front="true"]');
+  await expect(front).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  await next(root);
+  await expect(line(root)).toContainText("I keep turning up, don't I?");
+  // The speaker's figure slot, as a love interest's: one neutral sprite, cut out, with no face chip.
+  await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+  await expect(front).toHaveAttribute("src", SIDE_SPRITE);
+  await expect(front).toHaveAttribute("data-cut", "true");
+  await expect(root.locator(".of-face-chip")).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("The clocks tick on.");
+  await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("Still here.");
+  await expect(front).toHaveAttribute("src", SIDE_SPRITE);
+  expect(catalog, "their own sprite: no Engine card is looked up for them").toEqual([]);
+  expect(posts(stub, "/art/side")).toEqual([]);
+});
+
+test("Otome Hearth a side character's sprite held by Ask before painting is painted from the reader on a tap (0.20.0)", async ({
+  page,
+}) => {
+  let painted = false;
+  const stub = sideCharacterStub(() =>
+    painted
+      ? { key: "arin vale", art: SIDE_PAINTED, url: SIDE_SPRITE, cut: true }
+      : { key: "arin vale", art: { state: "waiting-consent", at: "2026-11-08T10:00:00.000Z" } },
+  );
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path.endsWith("/art/side")) {
+      stub.calls.push(call);
+      painted = true;
+      return { status: 200, json: { art: SIDE_PAINTED } };
+    }
+    return answer(call);
+  };
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await root.getByRole("button", { name: "Begin" }).click();
+  await (await scene).finished();
+  const paint = root.getByRole("button", { name: "Paint a sprite of Arin Vale (1 image)" });
+  await expect(paint).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("I keep turning up, don't I?");
+  await expect(paint).toContainText("Paint Arin Vale · 1 image");
+  const again = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await paint.click();
+  await (await again).finished();
+  expect(posts(stub, "/art/side").map((call) => call.body?.key)).toEqual(["arin vale"]);
+  await expect(root.locator('.of-reader-stage .of-face-img[data-front="true"]')).toHaveAttribute("src", SIDE_SPRITE);
+  await expect(paint).toHaveCount(0);
+});
+
+test("Otome Hearth a side character's painted sprite on screen can be repainted, named on its chip", async ({
+  page,
+}) => {
+  const stub = sideCharacterStub(() => ({ key: "arin vale", art: SIDE_PAINTED, url: SIDE_SPRITE, cut: true }));
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path.endsWith("/art/side")) {
+      stub.calls.push(call);
+      return { status: 200, json: { art: { ...SIDE_PAINTED, url: "/api/global-gallery/file/arin-2.png" } } };
+    }
+    return answer(call);
+  };
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await root.getByRole("button", { name: "Begin" }).click();
+  await (await scene).finished();
+  const repaint = root.getByRole("button", { name: "Paint Arin Vale again (1 image)" });
+  // Only while their sprite is on screen: not on Ilvar's line before them, nor on the narration after.
+  await expect(repaint).toHaveCount(0);
+  await next(root);
+  await expect(line(root)).toContainText("I keep turning up, don't I?");
+  await expect(repaint).toHaveText("Repaint Arin Vale · 1 image");
+  await repaint.click();
+  await expect
+    .poll(() => posts(stub, "/art/side").map((call) => call.body))
+    .toMatchObject([{ key: "arin vale", repaint: true }]);
+  await next(root);
+  await expect(line(root)).toContainText("The clocks tick on.");
+  await expect(repaint).toHaveCount(0);
+});
+
+test("Otome Hearth Settings → Images offers Side character sprites, off, with its cost, and saves it (0.20.0)", async ({
+  page,
+}) => {
+  const stub = sideCharacterStub(() => ({ key: "arin vale", art: null }), { sideSprites: false });
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path.endsWith("/settings")) {
+      stub.calls.push(call);
+      const world = (answer({ method: "GET", path: `/api/otome-forge/runs/${RUN}`, body: undefined }).json as Json).view
+        .world;
+      return { status: 200, json: { world: { ...world, images: { ...world.images, ...call.body!.images } } } };
+    }
+    return answer(call);
+  };
+  await stubRoutes(page, stub);
+  await page.route("**/api/connections", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: [
+            { id: "conn-text", name: "Story fixture", provider: "custom", model: "fixture", isDefault: "true" },
+            { id: "conn-image", name: "Image fixture", provider: "image_generation", model: "fixture-image" },
+          ],
+        })
+      : route.continue(),
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("tab", { name: "Images" }).click();
+  const toggle = root.getByRole("switch", { name: "Side character sprites" });
+  await expect(toggle).not.toBeChecked();
+  const row = root
+    .locator(".of-switch-row")
+    .filter({ has: page.getByRole("switch", { name: "Side character sprites" }) });
+  await expect(row).toContainText("speaks in two different chapters");
+  await expect(row).toContainText(
+    "Paints 1 image · per recurring side character, plus 1 call on your Messages connection to write their look (none for a character card)",
+  );
+  await toggle.check();
+  await root.getByRole("button", { name: "Save changes" }).click();
+  await expect(root.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+  expect(posts(stub, "/settings").map((call) => call.body?.images?.sideSprites)).toEqual([true]);
 });
 
 /** #2046: the first beat as a side-with scene: Ilvar and Cassian disagree, and one small choice backs each. */
@@ -2536,6 +3206,312 @@ test("Otome Hearth Side with on a replay: the first pick's label keeps its room 
   }
 });
 
+/**
+ * #2146: the closing scene (node 2): a small choice on its first line, then the chapter's closing decision, a big
+ * choice with `count` offered options, on its last.
+ */
+function closingBeat(count = 2): Json {
+  const offered: Array<[string, "dialogue" | "action", string]> = [
+    ["Stay with him.", "dialogue", "I’m still here."],
+    ["Walk away.", "action", "You leave the key."],
+    ["Ask him why he never told you.", "dialogue", "Why didn’t you tell me?"],
+    ["Wait for him to speak first.", "action", "You hold his gaze and wait."],
+  ];
+  const small = (id: string, text: string, did: string, answer: string) => ({
+    id,
+    text,
+    selection: { kind: "action", text: did },
+    segments: [seg("Ilvar", answer, { expression: "tender" })],
+  });
+  return {
+    ...BEATS[2],
+    choices: [
+      {
+        id: "choice-1",
+        kind: "small",
+        at: 0,
+        options: [
+          small("option-1", "Sit beside him.", "You sit on the cold step beside him.", "You’re letting the cold in."),
+          small("option-2", "Stay by the door.", "You keep your back to the door.", "Afraid I’ll keep you?"),
+        ],
+      },
+      {
+        id: "choice-2",
+        kind: "big",
+        at: 1,
+        options: offered.slice(0, count).map(([text, kind, said], index) => ({
+          id: `option-${index + 1}`,
+          text,
+          selection: { kind, text: said },
+          segments: [],
+        })),
+      },
+    ],
+  };
+}
+
+/** Opens the chapter at its closing scene and plays its small choice (by touch on a phone), up to the decision. */
+async function toClosingDecision(page: Page, stub: ReturnType<typeof createStoryStub>, mobile: boolean) {
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(line(root)).toContainText("The dome again.");
+  // A small choice keeps to its offered options.
+  const small = root.getByRole("group", { name: "What do you do?" });
+  await expect(small.getByRole("button")).toHaveText(["Sit beside him.", "Stay by the door."]);
+  await expect(root.getByRole("button", { name: "Write your own…" })).toHaveCount(0);
+  const sit = small.getByRole("button", { name: "Sit beside him." });
+  if (mobile) await sit.tap();
+  else await sit.click();
+  await expect(line(root)).toContainText("You sit on the cold step beside him.");
+  await next(root);
+  await expect(line(root)).toContainText("You’re letting the cold in.");
+  await next(root);
+  await expect(line(root)).toContainText("I would rather hear it from you than guess.");
+  return root;
+}
+
+test("Otome Hearth Write your own… (#2146): a chapter's closing decision takes the player's own words", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const stub = createStoryStub({ startAt: 2, storyBeats: [...BEATS.slice(0, 2), closingBeat()] });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const root = await toClosingDecision(page, stub, mobile);
+
+  // The closing decision ends on Write your own…, which opens its dialog with focus in the words, said by default.
+  const big = root.getByRole("group", { name: "A choice that lasts" });
+  const write = big.getByRole("button", { name: "Write your own…" });
+  await expect(big.getByRole("button")).toHaveText(["Stay with him.", "Walk away.", "Write your own…"]);
+  await expect(write).toHaveAttribute("aria-haspopup", "dialog");
+  await write.click();
+  const dialog = page.getByRole("dialog", { name: "In your own words" });
+  const words = dialog.getByRole("textbox", { name: "What do you say or do?" });
+  await expect(words).toBeFocused();
+  await expect(dialog.getByRole("radio", { name: "Something you say" })).toBeChecked();
+  await expect(dialog).toContainText("Like any lasting choice, it can’t be undone.");
+  const send = dialog.getByRole("button", { name: "Choose this" });
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  await words.fill("I’ll stay");
+  await expect(send).toHaveAttribute("aria-disabled", "false");
+  // Escape closes it with no pick, and the words wait for it to open again.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/choose"), "only the small choice was sent").toHaveLength(1);
+  await write.click();
+  await expect(words).toHaveValue("I’ll stay");
+  await expect(words).toBeFocused();
+  // Something done instead; Space in the words types a space and never goes on with the story.
+  await dialog.getByText("Something you do").click();
+  await expect(dialog.getByRole("radio", { name: "Something you do" })).toBeChecked();
+  const reads = posts(stub, "/read").length;
+  await words.focus();
+  await words.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(field.value.length, field.value.length));
+  await page.keyboard.press("Space");
+  await expect(words).toHaveValue("I’ll stay ");
+  await expect(dialog).toBeVisible();
+  await expect(line(root)).toContainText("I would rather hear it from you than guess.");
+  expect(posts(stub, "/read").length).toBe(reads);
+  const text = "You take his hand and don’t let go.";
+  await words.fill(text);
+  await page.screenshot({ path: testInfo.outputPath("own-answer-dialog.png") });
+  await send.click();
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/choose").at(-1)!.body).toMatchObject({
+    choice: "choice-2",
+    option: "own",
+    own: { kind: "action", text },
+  });
+  // Something done is narration, with no nameplate; Next then ends the chapter.
+  await expect(line(root)).toContainText(text);
+  await expect(root.locator(".of-nameplate")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("own-answer-line.png") });
+  await next(root);
+  await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeFocused();
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Before this chapter (#2503): the plan's question comes before the first scene; answering goes on to it", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const question = "What did Mira promise her sister before she left?";
+  const stub = createStoryStub({ questions: [{ node: 0, question }] });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  // The dark chapter's tags first, then its question, with focus in its answer; nothing is written before it is sent.
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const dialog = page.getByRole("dialog", { name: "Before this chapter" });
+  await expect(dialog).toContainText("Each answer shapes the scene it was asked for.");
+  const field = dialog.getByRole("textbox", { name: question });
+  await expect(field).toBeFocused();
+  const send = dialog.getByRole("button", { name: "Continue" });
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  await expect(send).toBeInViewport();
+  // It must be answered: Escape leaves it open, and a blank answer sends nothing.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await field.fill("   ");
+  await send.click({ force: true });
+  await expect(dialog).toBeVisible();
+  expect(posts(stub, "/answers")).toHaveLength(0);
+  expect(posts(stub, "/beats/0")).toHaveLength(0);
+  await field.fill("To write to her every week.");
+  await expect(send).toHaveAttribute("aria-disabled", "false");
+  await page.screenshot({ path: testInfo.outputPath("questions-dialog.png") });
+  await send.click();
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/answers")[0]!.body).toMatchObject({ answers: ["To write to her every week."] });
+  // The first scene is written now, once.
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(posts(stub, "/beats/0")).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Before this chapter (#2503): a first scene refused for its questions asks them, by keyboard too", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const questions = [
+    { node: 0, question: "What did Mira promise her sister before she left?" },
+    { node: 2, question: "How does Mira act when she is cornered?" },
+  ];
+  const stub = createStoryStub({ questions, askLate: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  // The chapter read first had none: the refused scene reads it again, and its questions open.
+  const dialog = page.getByRole("dialog", { name: "Before this chapter" });
+  await expect(dialog).toBeVisible();
+  expect(posts(stub, "/beats/0")).toHaveLength(1);
+  const first = dialog.getByRole("textbox", { name: questions[0]!.question });
+  const second = dialog.getByRole("textbox", { name: questions[1]!.question });
+  const send = dialog.getByRole("button", { name: "Continue" });
+  await expect(first).toBeFocused();
+  await page.keyboard.type("To write to her every week.");
+  // One answer is not enough: every question needs its own.
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  await page.keyboard.press("Tab");
+  await expect(second).toBeFocused();
+  // Enter starts a new line in an answer; only Continue sends.
+  await page.keyboard.type("She bites.");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Then she runs.");
+  await expect(dialog).toBeVisible();
+  expect(posts(stub, "/answers")).toHaveLength(0);
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(send).toBeFocused();
+  await expect(send).toHaveAttribute("aria-disabled", "false");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/answers")[0]!.body).toMatchObject({
+    answers: ["To write to her every week.", "She bites.\nThen she runs."],
+  });
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(posts(stub, "/beats/0")).toHaveLength(2);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Before this chapter (#2503): questions answered in another tab close it and go on to the first scene", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const question = "What did Mira promise her sister before she left?";
+  const stub = createStoryStub({ questions: [{ node: 0, question }], answeredElsewhere: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const dialog = page.getByRole("dialog", { name: "Before this chapter" });
+  await dialog.getByRole("textbox", { name: question }).fill("To write to her every week.");
+  await dialog.getByRole("button", { name: "Continue" }).click();
+  // Refused as answered already: the chapter is read again, which closes it, and the first scene is written once.
+  await expect(dialog).toBeHidden();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(posts(stub, "/answers")).toHaveLength(1);
+  expect(posts(stub, "/beats/0")).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Write your own… (#2146) on a 375 × 667 phone: four options, it and Next stay in reach", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("mobile"), "a small phone's screen");
+  test.setTimeout(120_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 375, height: 667 });
+  const stub = createStoryStub({ startAt: 2, storyBeats: [...BEATS.slice(0, 2), closingBeat(4)] });
+  const root = await toClosingDecision(page, stub, true);
+  /** Wholly on screen, with nothing over it where a tap lands. */
+  const inReach = async (target: Locator, what: string) => {
+    const box = (await target.boundingBox())!;
+    expect(box.y, `${what}: its top`).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height, `${what}: its bottom`).toBeLessThanOrEqual(667);
+    expect(box.x, `${what}: its start`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${what}: its end`).toBeLessThanOrEqual(375);
+    await target.tap({ trial: true });
+  };
+  const noSideways = async () =>
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  const pills = root.getByRole("group", { name: "A choice that lasts" }).getByRole("button");
+  await expect(pills).toHaveCount(5);
+  for (const [index, pill] of (await pills.all()).entries()) await inReach(pill, `pill ${index + 1}`);
+  // The decision's heading stays clear of the reader's header (its title and the chapter's tags).
+  const [head, heading] = await Promise.all(
+    [root.locator(".of-reader-head"), root.locator(".of-choices-heading")].map((box) => box.boundingBox()),
+  );
+  // ponytail: logs the room left, so a font that renders taller in CI shows how close it came; remove once stable.
+  console.info(
+    "own-answer 375x667: heading clears the header by %spx",
+    (heading!.y - head!.y - head!.height).toFixed(1),
+  );
+  expect(heading!.y, "the heading starts below the header").toBeGreaterThanOrEqual(head!.y + head!.height);
+  await noSideways();
+  await page.screenshot({ path: testInfo.outputPath("own-answer-375.png") });
+  await pills.last().tap();
+  const dialog = page.getByRole("dialog", { name: "In your own words" });
+  await dialog.getByRole("textbox", { name: "What do you say or do?" }).fill("I’ll stay. Whatever it costs.");
+  const send = dialog.getByRole("button", { name: "Choose this" });
+  await inReach(send, "Choose this");
+  await noSideways();
+  await page.screenshot({ path: testInfo.outputPath("own-answer-dialog-375.png") });
+  await send.tap();
+  await expect(dialog).toBeHidden();
+  // Something said is the protagonist's line.
+  await expect(line(root)).toContainText("I’ll stay. Whatever it costs.");
+  await expect(root.locator(".of-nameplate")).toContainText("Mira Vale");
+  await setReaderControlsExpanded(root, false);
+  await inReach(root.locator(".of-next"), "Next");
+  await noSideways();
+  await next(root);
+  await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeVisible();
+});
+
 test("Otome Hearth a failed summary is never silent: every screen of the story shows it, with Retry and the Memory connection", async ({
   page,
 }, testInfo) => {
@@ -2556,7 +3532,7 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
 
   // The same banner on Home and on each of the dock's screens.
   const dock = root.getByRole("navigation", { name: "Game menu" });
-  for (const name of ["Dates", "Wish", "Wardrobe", "Album"]) {
+  for (const name of ["Games", "Wish", "Wardrobe", "Album"]) {
     await dock.getByRole("button", { name, exact: true }).click();
     await expect(dock.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "page");
     await expect(banner.getByRole("alert")).toContainText(CONTEXT_ERROR);
@@ -2584,6 +3560,10 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   }
   // First on the full stage, the banner has taken the safe area: the reader's header does not take it again.
   await expect(root.locator(".of-reader-head")).toHaveCSS("padding-top", "6px");
+  // #2141: the stage's scene shows behind the banner's strip, so its glows and stars go on moving there.
+  const sceneLoops = root.locator(".of-scene :is(.of-scene-glow, .of-scene-stars)");
+  await expect(sceneLoops).toHaveCount(3);
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
   await page.screenshot({ path: testInfo.outputPath(`memory-banner-reader-${mobile ? "phone" : "desktop"}.png`) });
   await setReaderControlsExpanded(root, false);
 
@@ -2595,6 +3575,8 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   await expect(root.getByRole("status").filter({ hasText: "Trying the summary again…" })).toHaveCount(1);
   await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
   await expect(banner).toHaveCount(0);
+  // Without the banner the reader's scene covers the stage whole: the stage's own scene holds still under it.
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "paused");
 
   // It fails again: the banner comes back with the new error and its buttons.
   const again = "Upstream 413: the request is larger than this model's 8192-token context.";
@@ -2602,6 +3584,7 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   await expect(banner.getByRole("alert")).toHaveText(`${failed} The connection said: ${again}`);
   await expect(retry).toBeVisible();
   await expect(connection).toBeVisible();
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
 
   // The Memory connection: Settings → Connections with More connections open and Memory focused, and the provider's
   // whole message beside it; from Settings too.
@@ -2805,4 +3788,253 @@ test("Otome Hearth memory with no connection to write summaries asks for one, wi
   await expect(root.getByRole("heading", { name: "Your stories", level: 1 })).toBeVisible();
   await expect(banner).toHaveCount(0);
   expect(posts(stub, "/memory/retry")).toHaveLength(0);
+});
+
+// #2147: Background beside a place opens the Engine's backgrounds, with or without an image connection. Its chip is at
+// least 24px tall with a tap reaching about 44px; it never advances the line, traps focus, closes on Escape back to its
+// chip, and the one chosen stands behind the scene; on a phone the picker fits without scrolling sideways, with 44px
+// tiles and a 16px search field, and it keeps its width when a search matches nothing.
+test("Otome Hearth Background beside a place chooses one of the Engine's backgrounds, painting nothing (#2147)", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const stub = createStoryStub({ done: true });
+  const places: Json = { "the-observation-room": { name: "The Observation Room", tags: "glass dome, night" } };
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    if (call.method === "POST" && call.path === `/api/otome-forge/runs/${RUN}/art/place/background`) {
+      stub.calls.push(call);
+      const place = {
+        ...places["the-observation-room"],
+        art: { state: "ready", at: new Date().toISOString(), url: call.body!.url },
+      };
+      places["the-observation-room"] = place;
+      const view = (answer({ method: "GET", path: `/api/otome-forge/runs/${RUN}`, body: undefined }).json as Json).view;
+      return { status: 200, json: { place, world: { ...view.world, places } } };
+    }
+    const response = answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}`) (response.json as Json).view.world.places = places;
+    return response;
+  };
+  const backgrounds = ["harbour-night", "glass-dome", "rain-street", "library", "garden", "ballroom"].map(
+    (name, index) => ({
+      id: `user:${name}.png`,
+      filename: `${name}.png`,
+      url: `/api/backgrounds/file/${name}.png`,
+      tags: index === 1 ? ["observatory", "night"] : ["city"],
+      source: "user",
+      favorite: index === 1,
+    }),
+  );
+  await page.route("**/api/backgrounds", (route) => route.fulfill({ json: backgrounds }));
+  await page.route("**/api/backgrounds/file/**", (route) =>
+    route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }),
+  );
+  const paid: string[] = [];
+  page.on("request", (request) => {
+    if (/\/api\/(?:characters\/avatar-generation|otome-forge\/runs\/[^/]+\/art\/place$)/u.test(request.url()))
+      paid.push(request.url());
+  });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  const chip = root.getByRole("button", { name: "Choose a background for The Observation Room" });
+  expect((await chip.boundingBox())!.height).toBeGreaterThanOrEqual(24);
+  const reach = await chip.evaluate((button) => {
+    // In view first: on a phone the row scrolls sideways and the chip may start past its end.
+    button.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const box = button.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const row = button.closest("ul")!;
+    return [
+      ...[box.top - 9, box.bottom + 9].map((y) => document.elementFromPoint(x, y)?.closest("button") === button),
+      row.scrollHeight <= row.clientHeight,
+    ];
+  });
+  expect(reach, "a tap 9px past its edge lands on it, and the row never scrolls up and down").toEqual([
+    true,
+    true,
+    true,
+  ]);
+  await chip.click();
+  const dialog = page.getByRole("dialog", { name: "A background for The Observation Room" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Nothing is painted.");
+  const tiles = dialog.getByRole("list").getByRole("button");
+  await expect(tiles).toHaveCount(backgrounds.length);
+  await expect(tiles.first()).toHaveAccessibleName("glass-dome, observatory, night", { timeout: 1_000 });
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+
+  // Focus stays in the picker, Escape closes it and focus returns to the chip.
+  const search = dialog.getByRole("searchbox", { name: "Search by name or tag" });
+  await search.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(chip).toBeFocused();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+
+  await chip.click();
+  await expect(tiles).toHaveCount(backgrounds.length);
+  const fits = await dialog.evaluate((panel) => ({
+    page: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    panel: panel.scrollWidth <= panel.clientWidth,
+  }));
+  expect(fits).toEqual({ page: true, panel: true });
+  const tile = (await tiles.first().boundingBox())!;
+  expect(Math.min(tile.width, tile.height)).toBeGreaterThanOrEqual(44);
+  expect(await search.evaluate((input) => getComputedStyle(input).fontSize)).toBe("16px");
+  await page.screenshot({ path: testInfo.outputPath("background-picker.png") });
+  const width = (await dialog.boundingBox())!.width;
+  await search.fill("no such place");
+  await expect(dialog.getByText("No background matches your search.")).toBeVisible();
+  expect((await dialog.boundingBox())!.width, "the picker keeps its width with no match").toBe(width);
+  await search.fill("rain");
+  await expect(tiles).toHaveCount(1);
+  await tiles.first().click();
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/art/place/background").map((call) => call.body)).toMatchObject([
+    { place: "The Observation Room", url: "/api/backgrounds/file/rain-street.png" },
+  ]);
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveAttribute("style", /rain-street\.png/u);
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(paid).toEqual([]);
+});
+
+// #2147 on a real Engine: a story made without images stands a card's love interest in its Full Body sprite at once,
+// with no paint step and no paid image, so its portrait shows instead of initials.
+test("Otome Hearth real Engine card's sprite is a new story's portrait without an image connection (#2147)", async ({
+  page,
+  request,
+  baseURL,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const headers = { "x-marinara-csrf": "1", origin: new URL(baseURL!).origin };
+  const tag = `${testInfo.project.name} ${Date.now()}`;
+  const created = await request.post("/api/characters", {
+    data: { data: { name: `Engine Art Keeper ${tag}`, creator: "Otome package E2E" } },
+  });
+  await expect(created).toBeOK();
+  const card = await created.json();
+  const id = encodeURIComponent(card.id);
+  const personaCreated = await request.post("/api/characters/personas", {
+    headers,
+    data: { name: `Engine Art Me ${tag}` },
+  });
+  await expect(personaCreated).toBeOK();
+  const persona = await personaCreated.json();
+  const title = `Engine art ${tag}`;
+  let runKey = "";
+  const paid: string[] = [];
+  page.on("request", (call) => {
+    if (/\/api\/(?:characters\/avatar-generation|generate\/raw)/u.test(call.url())) paid.push(call.url());
+  });
+  try {
+    await expect(
+      await request.post(`/api/sprites/${id}`, {
+        data: { expression: "full_neutral", image: `data:image/png;base64,${SPEAKER_PNG}` },
+      }),
+    ).toBeOK();
+    const story = await request.post("/api/otome-forge/runs", {
+      headers,
+      data: {
+        setup: {
+          title,
+          premise: "A lighthouse keeper's last winter.",
+          language: "English",
+          protagonist: {
+            personaId: persona.id,
+            pronouns: { subject: "she", object: "her", possessive: "her" },
+            traits: [],
+            goal: "",
+          },
+          lis: [
+            { source: "card", cardId: card.id, pronouns: { subject: "he", object: "him", possessive: "his" } },
+            {
+              source: "archetype",
+              archetype: "loyal-blade",
+              name: "Rook",
+              pronouns: { subject: "he", object: "him", possessive: "his" },
+            },
+          ],
+          content: defaultContent(),
+          images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
+          connections: { narration: "no-such-connection" },
+        },
+      },
+    });
+    expect(story.ok(), await story.text()).toBe(true);
+    const made = await story.json();
+    runKey = made.run;
+    const sprite = `/api/sprites/${id}/file/full_neutral.png`;
+    const keeper = made.view.lis.find((li: Json) => li.cardId === card.id);
+    expect(keeper.portrait).toBe(sprite);
+    expect(made.view.lis.find((li: Json) => li.source === "archetype").portrait).toBeUndefined();
+    expect(made.view.forge.steps.filter((step: Json) => step.id.startsWith("paint:"))).toEqual([]);
+
+    // The forge cannot write without a connection: the story is shown as ready, so its cast is on screen.
+    await page.route(
+      (url) => url.pathname === `/api/otome-forge/runs/${runKey}`,
+      async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        if (body?.view) {
+          body.view.forge.phase = "ready";
+          body.view.world.forge.phase = "ready";
+        }
+        await route.fulfill({ response, json: body });
+      },
+    );
+    // Other tests on this server make stories too, and Otome opens the index's active one: keep it this story.
+    await page.route(
+      (url) => url.pathname === "/api/otome-forge/index" || url.pathname === "/api/otome-forge/index/opened",
+      async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        if (body?.index) body.index.activeRun = runKey;
+        await route.fulfill({ response, json: body });
+      },
+    );
+    await page.route("**/api/app-settings/ui", (route) =>
+      route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
+    );
+    await page.addInitScript((version) => {
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
+          version: 65,
+        }),
+      );
+    }, appVersion);
+    await page.goto("/");
+    await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
+    const root = page.locator("marinara-capability-otome-forge .of-root");
+    await expect(root).toBeVisible({ timeout: 60_000 });
+    // Home stands him there; Messages lists him with his avatar circle.
+    await expect(root.getByRole("img", { name: `Engine Art Keeper ${tag}`, exact: true })).toBeVisible();
+    await root.getByRole("button", { name: "Messages", exact: true }).click();
+    // His own sprite (or its free cut-out) in his avatar circle, never his initials.
+    const avatar = root
+      .getByRole("button", { name: new RegExp(`^Engine Art Keeper ${tag}`, "u") })
+      .locator(".of-avatar img");
+    await expect(avatar).toHaveAttribute(
+      "src",
+      new RegExp(`^(?:${sprite.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}|/api/global-gallery/file/)`, "u"),
+    );
+    await page.screenshot({ path: testInfo.outputPath("engine-art-portrait.png") });
+    expect(paid).toEqual([]);
+  } finally {
+    if (runKey)
+      await request.post(`/api/otome-forge/runs/${runKey}/delete`, { headers, data: { confirmTitle: title } });
+    await request.delete(`/api/sprites/${id}/full_neutral`);
+    await request.delete(`/api/characters/${id}`);
+    await request.delete(`/api/characters/personas/${encodeURIComponent(persona.id)}`, { headers });
+  }
 });

@@ -8,3 +8,4 @@ export {
   useSlurpImprovementJobs,
 } from "./slp-improvement-hooks.js";
 export type { SlurpImprovementJob, SlurpImprovementProposal } from "./slp-improvement-hooks.js";
+export { useSlpWorldClock } from "./slp-timeline.js";

@@ -1,4 +1,4 @@
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createCreatorSlpImagesService } from "../media/slp-media-contract.js";

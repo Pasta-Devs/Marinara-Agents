@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge setup, step 5: connections. One text connection for the story, optional ones for planning, the phone
-// and memory, and an optional image connection (the game is fully playable without one). "Edit" opens the Engine's
+// and memory, an optional image connection (the game is fully playable without one), and (#2448) Settings → Audio's
+// voices and music, so the prologue is written and played with them. "Edit" opens the Engine's
 // own connection editor. The same controls serve Settings → Connections and Settings → Images. A text connection set
 // to a context window under STORY_CONTEXT_MIN gets a warning (#2066): a story prompt carries the story's timeline and
 // the previous chapter in full, so a smaller one soon runs out of room. It is never refused. The memory banner's way
@@ -14,8 +15,17 @@ import { CheckAgain, RetryNotice } from "../../components/RetryNotice";
 import { useConnections, type ConnectionOption } from "../../hooks/use-engine-resources";
 import { useImageStyleProfiles } from "../../hooks/use-image-style-profiles";
 import { IMAGE_STYLE_MAX } from "../../shared/content";
-import { FACES_PER_LOOK, type DraftConnections, type DraftImages, type SetupDraft } from "./draft";
+import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../shared/home";
+import {
+  FACES_PER_LOOK,
+  wholeOf,
+  type DraftConnections,
+  type DraftImages,
+  type DraftMessages,
+  type SetupDraft,
+} from "./draft";
 import { ConnectionSelect, Section, Switch, TextField } from "./parts";
+import { VoicesAndMusic } from "../settings/Audio";
 
 /** The context window, in tokens, a story's text connections should have (#2066). */
 const STORY_CONTEXT_MIN = 32_000;
@@ -192,7 +202,13 @@ export function ImageControls({ value, onChange, connections, lis }: ImageContro
         connections={connections}
         emptyLabel={t("ui.otomeForge.setup.noImages")}
         onChange={(connectionId) => onChange({ ...value, connectionId: connectionId || null })}
-        hint={connections.length === 0 ? t("ui.otomeForge.setup.noImageConnections") : undefined}
+        hint={
+          connections.length === 0
+            ? t("ui.otomeForge.setup.noImageConnections")
+            : value.connectionId
+              ? t("ui.otomeForge.setup.engineArtFirst")
+              : undefined
+        }
       />
       {value.connectionId ? (
         <>
@@ -245,6 +261,48 @@ interface ConnectionsStepProps {
   update: (change: (draft: SetupDraft) => SetupDraft) => void;
 }
 
+/**
+ * #2424: how often the love interests write on their own, as typed: who writes first each day (#2044), the group
+ * chat's squabbles each day (#2154) and date invitations each week. The same fields serve setup and Settings →
+ * Connections; a number outside its range shows its hint as the error.
+ */
+export function MessageNumbers({
+  value,
+  onChange,
+}: {
+  value: DraftMessages;
+  onChange: (value: DraftMessages) => void;
+}) {
+  const { t } = useTranslation();
+  const fields = [
+    { field: "daily", label: "dailyMessages", max: DAILY_MESSAGES_MAX },
+    { field: "squabbles", label: "groupSquabbles", max: DAILY_MESSAGES_MAX },
+    { field: "invites", label: "dateInvites", max: DATE_INVITES_MAX },
+  ] as const;
+  return (
+    <>
+      {fields.map(({ field, label, max }) => {
+        const invalid = wholeOf(value[field], max) === null;
+        return (
+          <TextField
+            key={field}
+            label={t(`ui.otomeForge.settings.${label}`)}
+            type="number"
+            min={0}
+            max={max}
+            value={value[field]}
+            onChange={(text) => onChange({ ...value, [field]: text })}
+            invalid={invalid}
+            hint={t(invalid ? "ui.otomeForge.settings.dailyMessagesInvalid" : `ui.otomeForge.settings.${label}Hint`, {
+              max,
+            })}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 export function ConnectionsStep({ draft, update }: ConnectionsStepProps) {
   const { t } = useTranslation();
   const connections = useConnections();
@@ -288,6 +346,12 @@ export function ConnectionsStep({ draft, update }: ConnectionsStepProps) {
           onCheckAgain={connections.isError ? undefined : connections.refetch}
         />
       </Section>
+      <Section title={t("ui.otomeForge.setup.messagesSection")} hint={t("ui.otomeForge.setup.messagesSectionHint")}>
+        <MessageNumbers
+          value={draft.messages}
+          onChange={(value) => update((current) => ({ ...current, messages: value }))}
+        />
+      </Section>
       <Section title={t("ui.otomeForge.setup.imageConnections")} hint={t("ui.otomeForge.setup.imagesOptional")}>
         <ImageControls
           value={draft.images}
@@ -296,6 +360,10 @@ export function ConnectionsStep({ draft, update }: ConnectionsStepProps) {
           onChange={(value) => update((current) => ({ ...current, images: { ...current.images, ...value } }))}
         />
       </Section>
+      <VoicesAndMusic
+        value={draft.audio}
+        onChange={(change) => update((current) => ({ ...current, audio: { ...current.audio, ...change } }))}
+      />
     </div>
   );
 }

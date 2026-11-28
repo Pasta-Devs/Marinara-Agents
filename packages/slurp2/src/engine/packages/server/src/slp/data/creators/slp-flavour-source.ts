@@ -8,7 +8,7 @@
 import type { SlpDeepDetailsFlavour } from "../../../../../shared/src/slp/slp-deep-details.js";
 import type { DB } from "../../../db/connection.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { logger } from "../../../lib/logger.js";
 import type { SlpAccount, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlpCreatorSteering } from "../../../../../shared/src/slp/slp-creator-steering.js";

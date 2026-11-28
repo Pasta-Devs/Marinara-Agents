@@ -27,6 +27,7 @@ import {
   type SlurpBrandInput,
   type SlurpProductInput,
 } from "./slp-brands-hooks";
+import { Switch } from "../../../components/ui/Switch";
 
 const INPUT =
   "min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm";
@@ -160,18 +161,7 @@ function BrandCard({ brand }: { brand: SlurpBrand }) {
         </button>
         <label className="relative flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
           <span className="sr-only">{t("ui.slurp.settings.brands.switch", { brand: brand.name })}</span>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={enabled}
-            disabled={update.isPending}
-            onChange={(event) => toggle(event.target.checked)}
-            className="peer sr-only"
-          />
-          <span
-            aria-hidden="true"
-            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-5 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
-          />
+          <Switch checked={enabled} disabled={update.isPending} onCheckedChange={(checked) => toggle(checked)} />
         </label>
       </div>
       {open && (

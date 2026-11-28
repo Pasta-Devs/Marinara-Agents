@@ -8,7 +8,7 @@
  * which the reply operation and `buildSlurpMessagePrompt` read too.
  */
 import type { DB } from "../../../db/connection.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createSlurpStorage, createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
@@ -29,6 +29,7 @@ import { SLURP_SUPPORT_NAME } from "../../modules/messages/slp-dm-roles.js";
 import { isSlurpSupportThread } from "../../modules/messages/slp-support.js";
 import { slpArcsLive, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 type SlurpThread = NonNullable<Awaited<ReturnType<ReturnType<typeof createSlurpMessagesStorage>["getThreadById"]>>>;
 export type SlurpThreadDetails = Awaited<
   ReturnType<ReturnType<typeof createSlurpMessagesStorage>["getDetailsOverrides"]>
@@ -54,7 +55,7 @@ export async function resolveSlurpReplyAvailability(db: DB, thread: SlurpThread,
               settingsForDelays.messagesMaxReplyDelayMinutes *
                 slurpInfluenceMultiplier(
                   slpLiveEvents(settingsForDelays),
-                  new Date(),
+                  slurpWorldNow(),
                   "messages.reply-delay",
                   await slurp.platformInfluenceStory(creator.id),
                 ),
@@ -68,7 +69,7 @@ export async function resolveSlurpReplyAvailability(db: DB, thread: SlurpThread,
         createCharactersStorage(db),
         source,
         undefined,
-        new Date(),
+        slurpWorldNow(),
         latestPost?.createdAt ?? null,
         replyDelays,
       )
@@ -76,7 +77,7 @@ export async function resolveSlurpReplyAvailability(db: DB, thread: SlurpThread,
   // An open conversation window keeps the Creator online; momentum alone never wakes her.
   const details = await createSlurpMessagesStorage(db).getDetailsOverrides(thread.id);
   const naturalAvailability =
-    thread.extendedOnlineUntil && thread.extendedOnlineUntil > new Date().toISOString()
+    thread.extendedOnlineUntil && thread.extendedOnlineUntil > slurpWorldNow().toISOString()
       ? { online: true, activity: "chatting", minutesUntilOnline: 0 }
       : scheduled;
   return {
@@ -133,7 +134,7 @@ export async function resolveSlurpThreadStance(
     moodTone: slurpMoodTone(
       recoverSlurpMood(
         input.mood ?? 0,
-        input.moodUpdatedAt ? Math.max(0, (Date.now() - Date.parse(input.moodUpdatedAt)) / 60_000) : 0,
+        input.moodUpdatedAt ? Math.max(0, (slurpWorldNowMs() - Date.parse(input.moodUpdatedAt)) / 60_000) : 0,
       ),
     ),
     audienceArc: tie ? slurpAudienceArcDescription(tie.audienceArc) : null,

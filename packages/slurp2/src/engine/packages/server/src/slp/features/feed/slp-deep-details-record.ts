@@ -6,6 +6,7 @@ import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 import type { SlurpWardrobeSelection } from "../../modules/feed/slp-wardrobe-selection.js";
 import type { SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const numberOrNull = (value: unknown) => (typeof value === "number" ? value : null);
 
 /** The generator's state at the moment a post was written, as the Deep details record. */
@@ -46,7 +47,7 @@ export function buildSlurpDeepDetailsRecord(ctx: {
 }): SlpDeepDetailsRecord {
   return {
     version: 1,
-    generatedAt: (ctx.input.generatedAt ?? new Date()).toISOString(),
+    generatedAt: (ctx.input.generatedAt ?? slurpWorldNow()).toISOString(),
     publicationTime: ctx.input.publicationTime?.toISOString() ?? null,
     sequence: ctx.sequence,
     direction: ctx.input.request.noodlerPostGuide?.trim() || null,

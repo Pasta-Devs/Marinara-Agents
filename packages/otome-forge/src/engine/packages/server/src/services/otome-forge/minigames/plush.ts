@@ -52,9 +52,9 @@ const debugWanted = new Set<string>();
 const jobKey = (runId: string, li: LiId) => `${unitId(runId, li)}#plush`;
 
 /**
- * Queues the drawing of each listed love interest's missing plush on the background lane; returns the ones queued. A
- * love interest with no bible, a plush already, no connection to draw with, a job already waiting or running, or a
- * failure within PLUSH_RETRY_MS is skipped.
+ * Queues the drawing of each listed love interest's missing plush on the background lane; returns the ones whose
+ * drawing now waits or runs. A love interest with no bible, a plush already, no connection to draw with, or a failure
+ * within PLUSH_RETRY_MS is skipped.
  */
 export async function ensurePlushArt(
   deps: PlushDeps,
@@ -65,9 +65,10 @@ export async function ensurePlushArt(
   const { background } = deps;
   if (!background || !lis.length) return [];
   const run = await readRun(deps.store, runId);
-  const connectionId = resolveConnectionId(run?.world ?? null, "structured");
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), not Planning.
+  const connectionId = resolveConnectionId(run?.world ?? null, "chat");
   if (!run || !connectionId) return [];
-  const queued: LiId[] = [];
+  const waiting: LiId[] = [];
   for (const li of lis) {
     const unit = run.units.find((entry) => entry.id === li);
     const key = jobKey(runId, li);
@@ -90,10 +91,10 @@ export async function ensurePlushArt(
         }
       },
     });
-    if (fresh) queued.push(li);
-    else if (debugMode) debugWanted.add(key);
+    waiting.push(li);
+    if (!fresh && debugMode) debugWanted.add(key);
   }
-  return queued;
+  return waiting;
 }
 
 /**
@@ -112,7 +113,7 @@ export async function writePlushArt(
   const at = new Date().toISOString();
   const { value } = await generateJson(deps, {
     runId,
-    job: "structured",
+    job: "chat",
     label: "plush",
     messages: plushMessages({ unit }),
     schema: PlushReplySchema,

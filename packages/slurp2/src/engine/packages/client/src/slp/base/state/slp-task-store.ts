@@ -106,7 +106,8 @@ export type SlpTaskStart<T> = {
   kind: string;
   label: string;
   accountIds?: string[];
-  run: () => Promise<T>;
+  /** `progress` shows a line ("1/2") on the running Pulse row. */
+  run: (progress: (line: string) => void) => Promise<T>;
   /** The result line and where a tap goes once it worked. */
   done?: (value: T) => Pick<SlpTask, "result" | "target" | "open" | "serverId"> | void;
   /** The started toast, or false for none (the caller already shows the start). */
@@ -136,36 +137,38 @@ export function startSlpTask<T>(input: SlpTaskStart<T>, retryOf?: string): Promi
       description: input.label,
       action: seeInPulse(input.t),
     });
-  return input.run().then(
-    (value) => {
-      const outcome = input.done?.(value) ?? {};
-      if (outcome.serverId) dismissSlpTask(id);
-      else put({ ...base, ...outcome, status: "done", finishedAt: Date.now() });
-      if (input.doneToast !== false) {
-        const open = outcome.open;
-        toast.success(
-          input.doneToast ??
-            input.t("ui.slurp.pulse.doneToast", { defaultValue: "{{label}}: done", label: input.label }),
+  return input
+    .run((line) => put({ ...base, result: line }))
+    .then(
+      (value) => {
+        const outcome = input.done?.(value) ?? {};
+        if (outcome.serverId) dismissSlpTask(id);
+        else put({ ...base, ...outcome, status: "done", finishedAt: Date.now() });
+        if (input.doneToast !== false) {
+          const open = outcome.open;
+          toast.success(
+            input.doneToast ??
+              input.t("ui.slurp.pulse.doneToast", { defaultValue: "{{label}}: done", label: input.label }),
+            {
+              description: outcome.result,
+              action: open ? { label: open.label, onClick: open.run } : seeInPulse(input.t),
+            },
+          );
+        }
+        return value;
+      },
+      (error: unknown) => {
+        put({ ...base, status: "failed", finishedAt: Date.now(), error: taskErrorText(error, input.t), retry });
+        toast.error(
+          input.t("ui.slurp.pulse.failedToast", { defaultValue: "{{label}}: it did not work", label: input.label }),
           {
-            description: outcome.result,
-            action: open ? { label: open.label, onClick: open.run } : seeInPulse(input.t),
+            description: taskErrorText(error, input.t),
+            action: seeInPulse(input.t),
           },
         );
-      }
-      return value;
-    },
-    (error: unknown) => {
-      put({ ...base, status: "failed", finishedAt: Date.now(), error: taskErrorText(error, input.t), retry });
-      toast.error(
-        input.t("ui.slurp.pulse.failedToast", { defaultValue: "{{label}}: it did not work", label: input.label }),
-        {
-          description: taskErrorText(error, input.t),
-          action: seeInPulse(input.t),
-        },
-      );
-      return undefined;
-    },
-  );
+        return undefined;
+      },
+    );
 }
 
 /** Forget a finished task (Pulse's ✕ on a failed one the player has seen). */

@@ -8,6 +8,9 @@
 // within the day's activity cap). A love interest may be any gender: the client names them or uses their pronouns.
 import type { Favorite, LiId, Noticed, Outfit, Paint, SoundtrackTrack, TimelineEntry } from "./api-types";
 import type { Face, MusicMood } from "./faces";
+import type { KittenView } from "./kitty";
+import type { GiftId, OwnedFigurineView } from "./shop";
+import type { Arcana } from "./tarot";
 import type { ItemKind, ItemView, Rarity } from "./wish";
 
 /** The look everyone starts in. A wardrobe look id is this, or the id of the look's item. */
@@ -22,6 +25,21 @@ export function wornLookUrl(person: { outfits: readonly Outfit[]; wornOutfit?: s
   const worn = person.wornOutfit ? person.outfits.find((outfit) => outfit.id === person.wornOutfit) : undefined;
   return worn?.url ?? person.portrait ?? "";
 }
+
+/**
+ * #2509: the looks a chapter's scenes may put each person in, picked by its first scene and kept for all of them (S/story/
+ * scene-looks.ts), keyed by WardrobeOwner ("me", or a love interest's id): each list starts with BASE_LOOK. `start` is
+ * what each of them wears as the chapter opens; a scene's `wear` changes it from that scene on.
+ */
+export interface ChapterWardrobe {
+  offered: Record<string, string[]>;
+  start: Record<string, string>;
+}
+
+/** #2509: beside the everyday look, at most this many of someone's owned looks of each rarity, chosen at random. */
+export const SCENE_LOOKS: Record<Rarity, number> = { 3: 3, 4: 2, 5: 1 };
+/** #2509: the most looks a chapter offers one person: the everyday look and SCENE_LOOKS. */
+export const SCENE_OFFERED_MAX = 1 + SCENE_LOOKS[3] + SCENE_LOOKS[4] + SCENE_LOOKS[5];
 
 /** P19: what a love interest says on noticing her new look, at most this many words. */
 export const NOTICED_WORDS_MAX = 20;
@@ -53,7 +71,7 @@ export interface LookView {
   description?: string;
   /** The item it was won as; absent for the base look. */
   item?: { kind: ItemKind; rarity: Rarity; title: string };
-  /** The painted full-body image, once there is one. */
+  /** The painted full-body image, once there is one: its saved cut-out once ready (`cut`). */
   url?: string;
   /** Its paint as the client should see it: the base look's setup portrait, or the item's first-open paint. */
   art: Paint | null;
@@ -63,22 +81,34 @@ export interface LookView {
   wearable: boolean;
   /** True while the item's first open has not happened (POST .../items/:item/open paints it). */
   unopened: boolean;
-  /** His ready faces on this look, while expressions are on. */
+  /** His ready faces on this look, while expressions are on; each its saved cut-out once ready (`cut`). */
   faces?: Partial<Record<Face, string>>;
+  /** All five of `faces` are painted, none of them his Engine sprites: the Wardrobe shows a check for them. */
+  facesPainted?: true;
+  /** Which of `url` and `faces` are saved cut-outs (no backdrop): shown as they are, never cleaned in the browser. */
+  cut?: string[];
   /** A 5★ look (his-look5, her-look5): the first-wear beat (a one-node Character Story), once its first open wrote it. */
   story?: { key: string } | null;
   /** Her looks: the love interests already shown it, whose first Show paid its affection. */
   shownTo?: LiId[];
+  /** 0.21.0: won from Wish and not looked at yet (a dot by it until it is clicked). */
+  new?: true;
 }
 
-/** A couple set: a her-look5 and the his-look5 it names. Shown once she owns either half. */
+/**
+ * A couple set: a her-look5 and the his-look5 it names. Shown once she owns either half. A half's `url` is its look's
+ * saved cut-out once ready, which its `cut` says (shown as it is, never cleaned in the browser).
+ */
 export interface CoupleSet {
-  his: { id: string; li: LiId | null; name: string; owned: boolean; url?: string };
-  hers: { id: string; name: string; owned: boolean; url?: string };
+  his: { id: string; li: LiId | null; name: string; owned: boolean; url?: string; cut?: true };
+  hers: { id: string; name: string; owned: boolean; url?: string; cut?: true };
   complete: boolean;
-  /** The pair portrait: ready once painted, pending while it paints, null until then. */
+  /**
+   * The pair portrait: ready once painted, pending while it paints, failed after a tap that failed, null until then. A
+   * painted one keeps its `url` while a repaint paints and after it failed (#2299).
+   */
   pair: Paint | null;
-  /** Complete and both looks painted: "Paint a pair portrait (1 image)" may be offered. */
+  /** Complete and both looks painted: "Paint a pair portrait (1 image)", or its Repaint, may be offered. */
   canPaintPair: boolean;
 }
 
@@ -91,6 +121,13 @@ export interface WardrobeView {
   noticed: Noticed | null;
   /** A love interest is noticing her new look right now (P19 is being written): read the wardrobe again shortly. */
   noticing: boolean;
+  /**
+   * #2128: the Shop's gifts she owns, gift id → how many: only those she has and the story's Heat offers (SH/shop.ts
+   * giftsFor). Date Night gives them from here.
+   */
+  gifts?: Partial<Record<GiftId, number>>;
+  /** #2128: the figurines she bought, in cast order, each with its scene. */
+  figurines?: OwnedFigurineView[];
 }
 
 /** POST /runs/:run/wardrobe/wear {owner: "me" | <li id>, look: BASE_LOOK | <item id>, li?: who notices her look}. */
@@ -113,8 +150,8 @@ export interface ShowResult {
 }
 
 /**
- * An image the Album keeps: a story CG once seen, a Memory's CG once painted, a couple set's pair portrait, a sticker or
- * (#2087) a Photo Shoot photo.
+ * An image the Album keeps: a story CG once seen, a Memory's CG once painted, a couple set's pair portrait, a sticker,
+ * (#2087) a Photo Shoot photo, (#2151) a Tarot card's painted picture or (0.36.0) a Kitty Cards kitten.
  */
 export interface AlbumImage {
   key: string;
@@ -122,7 +159,7 @@ export interface AlbumImage {
   ref?: string;
   at: string;
   li?: LiId;
-  source: "story" | "memory" | "pair" | "sticker" | "photo";
+  source: "story" | "memory" | "pair" | "sticker" | "photo" | "card" | "keepsake" | "kitten";
   /** A Memory's title, the couple set's look names, or a photo's place. */
   title?: string;
   /** A sticker's prompt name (mari_laugh), which its saved file is named after. */
@@ -145,9 +182,23 @@ export interface AlbumSticker {
   art?: Paint;
 }
 
+/**
+ * A card of the Tarot deck in the Album (#2151): one drawn and claimed for painting, by its deckKey (SH/tarot.ts). `li`
+ * is the love interest a card of them, or of the two of them, was cast for (none for the story's one set); `art` is its
+ * paint as the client should see it.
+ */
+export interface AlbumCard {
+  key: string;
+  card: Arcana;
+  li?: LiId;
+  art: Paint;
+}
+
 /** An owned Memory, Moment or Snapshot, with how far its story has been read (null: it has none, or not yet). */
 export interface AlbumMemory extends ItemView {
   read: "unread" | "in-progress" | "done" | null;
+  /** 0.21.0: won from Wish and not looked at yet (a dot by it until it is opened). */
+  new?: true;
 }
 
 /**
@@ -170,6 +221,13 @@ export interface AlbumView {
   stickers: AlbumSticker[];
   /** #2087: the Photo Shoot's photos once painted, newest first. Kept out of `cgs`, which Home's back layer reads. */
   photos: AlbumImage[];
+  /** #2151: the Tarot deck's drawn cards in Arcana order, then by love interest in cast order. */
+  cards: AlbumCard[];
+  /**
+   * 0.36.0: Kitty Cards' painted kittens, hers then the cast's, only those painted and cut out (GET /play's own, each
+   * with a `url`); `art` is `pending` while the Album's Repaint paints one again. None with images off.
+   */
+  kittens: KittenView[];
 }
 
 /** POST /runs/:run/items/:item/open */
@@ -178,4 +236,19 @@ export interface ItemOpenResult {
   /** The Character Story, Moment or first-wear beat to read (null for an item with none). */
   story: { key: string } | null;
   art: Paint | null;
+}
+
+/**
+ * Whether the wardrobe has something still on its way, so the client reads it again shortly: a look or a couple set
+ * painting, a love interest noticing her look, or a figurine painting or being cut out (#2138: a painted figurine is
+ * shown cut out, so the wardrobe keeps reading until its cut-out lands).
+ */
+export function wardrobeWorking(wardrobe: WardrobeView | undefined): boolean {
+  return (
+    !!wardrobe &&
+    (wardrobe.noticing ||
+      [...Object.values(wardrobe.him).flat(), ...wardrobe.me].some((look) => look.art?.state === "pending") ||
+      wardrobe.couples.some((couple) => couple.pair?.state === "pending") ||
+      !!wardrobe.figurines?.some((figurine) => figurine.art?.state === "pending" || figurine.cutting))
+  );
 }

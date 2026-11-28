@@ -219,7 +219,7 @@ export const SLP_CREATOR_SETTINGS_SECTIONS: readonly SlpCreatorSettingsSection[]
     id: "tools",
     icon: SlpSparkleGlyph,
     labelKey: "ui.slurp.settings.creators.tabs.tools",
-    defaultLabel: "Tools",
+    defaultLabel: "Tools & delete",
     blocks: blocks("improve", "danger"),
   },
 ];

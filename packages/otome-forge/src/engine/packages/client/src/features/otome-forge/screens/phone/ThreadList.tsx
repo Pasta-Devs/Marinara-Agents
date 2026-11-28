@@ -1,18 +1,24 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the phone's threads, one private thread per love interest in his accent colour, newest first, with
 // the last message (or "typing…" while his reply is being written) and how many are unread. Every love interest has
-// a row, written to or not.
+// a row, written to or not. #2154: once two love interests are met, the group chat, "Everyone", is pinned first, with
+// its members' portraits, the last message with who sent it, and its unread count.
+// 0.47.1: a row whose conversation is being remembered in the background says so (and the list polls until it lands);
+// one that failed shows why, with Try again. A close this page sent shows once, as it lands, what it earned.
 // ──────────────────────────────────────────────
-import { type CSSProperties, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Heart, MessageCircleHeart, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "../../api";
-import { Avatar } from "../../components/Avatar";
+import { Avatar, AvatarCluster } from "../../components/Avatar";
 import { accentOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
-import type { LiId, PhoneListView, PhoneMessage, RunView } from "../../shared/api-types";
-import { BUSY_POLL_MS, phonePath, phoneQueryKey } from "./PhoneScreen";
+import { runQueryKey } from "../../hooks/use-run";
+import type { LiId, PhoneCloseView, PhoneListView, PhoneMessage, RunView } from "../../shared/api-types";
+import { GROUP_THREAD } from "../../shared/home";
+import { CloseRetry, closeKey, sentCloses } from "./CloseAndRemember";
+import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 import { stickerLabel, useStickers } from "./StickerPicker";
 
 /** "14:05" for today, else a short date, in the player's zone. */
@@ -44,31 +50,124 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
   const otome = useOtomeApi();
   const { localization, timeZone } = useOtomeProps();
   const stickers = useStickers(view);
-  // Read again whenever the list opens, and while a reply is being written: one that lands after the player left its
-  // thread (that page wrote nothing then) moves the preview.
+  const queryClient = useQueryClient();
+  // Read again whenever the list opens, and while a reply is being written or a conversation remembered: one that
+  // lands after the player left its thread (that page wrote nothing then) moves the preview.
+  const working = (row: { busy: boolean } & PhoneCloseView) => row.busy || (!!row.closing && !row.closing.error);
   const threads = useQuery({
     queryKey: phoneQueryKey(runKey),
     queryFn: () => otome.get<PhoneListView>(phonePath(runKey)),
     refetchOnMount: "always",
-    refetchInterval: (query) => (query.state.data?.threads.some((thread) => thread.busy) ? BUSY_POLL_MS : false),
+    refetchInterval: (query) => {
+      const list = query.state.data;
+      return list && (list.threads.some(working) || (list.group && working(list.group))) ? BUSY_POLL_MS : false;
+    },
   });
+  /** Each row's button, so Try again under it can hand focus back to it. */
+  const rowButtons = useRef(new Map<LiId, HTMLButtonElement | null>());
+  const refOf = (id: LiId) => (element: HTMLButtonElement | null) => {
+    rowButtons.current.set(id, element);
+    rowRef(id, element);
+  };
+  // The closes this page sent that landed while the list showed: what each earned (0 for none), shown once.
+  const [landed, setLanded] = useState<Partial<Record<LiId, number>>>({});
+  const [announce, setAnnounce] = useState("");
+  useEffect(() => {
+    const list = threads.data;
+    if (!list) return;
+    const rows: Array<[LiId, PhoneCloseView]> = [
+      ...list.threads.map((row): [LiId, PhoneCloseView] => [row.li, row]),
+      ...(list.group ? [[GROUP_THREAD, list.group] as [LiId, PhoneCloseView]] : []),
+    ];
+    const now: Partial<Record<LiId, number>> = {};
+    for (const [id, row] of rows) {
+      const sent = sentCloses.get(closeKey(runKey, id));
+      if (sent === undefined || (row.closing && !row.closing.error)) continue;
+      sentCloses.delete(closeKey(runKey, id));
+      // A failure shows on its row; only a close that landed says what it earned.
+      if (!row.closing && row.remembered?.start === sent) now[id] = row.remembered.affection ?? 0;
+    }
+    const ids = Object.keys(now);
+    if (!ids.length) return;
+    setLanded((current) => ({ ...current, ...now }));
+    // Its affection shows in Routes and on Home, and its thread holds the new memory.
+    void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    for (const id of ids) void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, id) });
+    setAnnounce(
+      ids
+        .map((id) => {
+          const name =
+            id === GROUP_THREAD
+              ? t("ui.otomeForge.phone.groupName")
+              : ([...view.lis, ...(view.friends ?? [])].find((li) => li.id === id)?.name ?? "");
+          const amount = now[id] ?? 0;
+          return amount
+            ? t("ui.otomeForge.phone.landedAffectionOf", { name, amount })
+            : t("ui.otomeForge.phone.landedOf", { name });
+        })
+        .join(" "),
+    );
+    // Only when the list is read again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threads.data]);
+  // A server before #2154 sends no group.
+  const group = threads.data?.group ?? null;
   const byLi = new Map((threads.data?.threads ?? []).map((thread) => [thread.li, thread]));
-  const order = (id: LiId) => view.lis.findIndex((li) => li.id === id);
-  const rows = [...view.lis].sort((a, b) => {
+  // #2458: her friends' threads sit among the love interests', newest first.
+  const people = [...view.lis, ...(view.friends ?? [])];
+  const order = (id: LiId) => people.findIndex((li) => li.id === id);
+  const rows = [...people].sort((a, b) => {
     const last = (id: LiId) => byLi.get(id)?.last?.at ?? "";
     return last(b.id).localeCompare(last(a.id)) || order(a.id) - order(b.id);
   });
 
-  const preview = (name: string, last: PhoneMessage | null | undefined, busy: boolean) => {
+  const preview = (name: string, last: PhoneMessage | null | undefined, busy: boolean, row?: PhoneCloseView) => {
     if (busy) return t("ui.otomeForge.phone.typing", { name });
+    if (row?.closing && !row.closing.error) return t("ui.otomeForge.phone.closing");
     if (!last) return t("ui.otomeForge.phone.empty");
-    const said = last.text.trim()
+    const said = saidIn(last);
+    return last.who === "player" ? t("ui.otomeForge.phone.youSaid", { text: said }) : said;
+  };
+  const saidIn = (last: PhoneMessage) =>
+    last.text.trim()
       ? last.text
       : last.sticker
         ? t("ui.otomeForge.phone.sticker", { face: stickerLabel(t, stickers, last.sticker) })
-        : "";
-    return last.who === "player" ? t("ui.otomeForge.phone.youSaid", { text: said }) : said;
+        : last.selfie
+          ? t("ui.otomeForge.phone.selfie")
+          : "";
+  const groupPreview = (last: PhoneMessage | null, busy: boolean, row: PhoneCloseView) => {
+    if (busy) return t("ui.otomeForge.phone.groupTyping");
+    if (row.closing && !row.closing.error) return t("ui.otomeForge.phone.closing");
+    if (!last) return t("ui.otomeForge.phone.empty");
+    if (last.who === "player") return t("ui.otomeForge.phone.youSaid", { text: saidIn(last) });
+    const name = view.lis.find((li) => li.id === last.li)?.name ?? t("ui.otomeForge.phone.groupSomeone");
+    return t("ui.otomeForge.phone.said", { name, text: saidIn(last) });
   };
+  const members = (group?.members ?? []).flatMap((id) => view.lis.filter((li) => li.id === id));
+  /** What a close this page sent earned, once it landed (see the header). */
+  const landedBadge = (id: LiId) => {
+    const amount = landed[id];
+    if (amount === undefined) return null;
+    return (
+      <span className="of-badge of-badge--soft">
+        {amount ? t("ui.otomeForge.phone.affection", { amount }) : t("ui.otomeForge.phone.landed")}
+      </span>
+    );
+  };
+  /**
+   * A close that failed in the background: why, and Try again, under its row (never inside its button). Accepted, it
+   * goes, and focus goes back to the row.
+   */
+  const closeFailure = (id: LiId, row: PhoneCloseView | undefined) =>
+    row?.closing?.error && !view.ended ? (
+      <CloseRetry
+        runKey={runKey}
+        id={id}
+        error={row.closing.error}
+        onRetried={() => rowButtons.current.get(id)?.focus({ preventScroll: true })}
+      />
+    ) : null;
 
   return (
     <div className="of-page of-phone">
@@ -96,6 +195,44 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
         </div>
       ) : (
         <ul className="of-threads">
+          {group ? (
+            <li key={GROUP_THREAD}>
+              <button
+                ref={refOf(GROUP_THREAD)}
+                type="button"
+                className="of-thread-row of-glass"
+                data-unread={group.unread > 0 ? "true" : undefined}
+                style={{ "--of-li-accent": "var(--of-rose)" } as CSSProperties}
+                onClick={() => onOpen(GROUP_THREAD)}
+              >
+                <AvatarCluster
+                  people={members.map((li) => ({ name: li.name, url: li.portrait, accent: accentOf(li) }))}
+                  size={48}
+                />
+                <span className="of-thread-text">
+                  <span className="of-thread-name">{t("ui.otomeForge.phone.groupName")}</span>
+                  <span className="of-thread-last">{groupPreview(group.last, group.busy, group)}</span>
+                </span>
+                <span className="of-thread-meta">
+                  {landedBadge(GROUP_THREAD)}
+                  {group.last ? (
+                    <time className="of-thread-time" dateTime={group.last.at}>
+                      {messageTime(group.last.at, localization.locale, timeZone)}
+                    </time>
+                  ) : null}
+                  {group.unread > 0 ? (
+                    <span className="of-home-badge">
+                      <span aria-hidden="true">{group.unread}</span>
+                      <span className="of-visually-hidden">
+                        {t("ui.otomeForge.phone.unread", { count: group.unread })}
+                      </span>
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+              {closeFailure(GROUP_THREAD, group)}
+            </li>
+          ) : null}
           {rows.map((li) => {
             const thread = byLi.get(li.id);
             const unread = thread?.unread ?? 0;
@@ -103,7 +240,7 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
             return (
               <li key={li.id}>
                 <button
-                  ref={(element) => rowRef(li.id, element)}
+                  ref={refOf(li.id)}
                   type="button"
                   className="of-thread-row of-glass"
                   data-unread={unread > 0 ? "true" : undefined}
@@ -113,9 +250,10 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
                   <Avatar name={li.name} url={li.portrait} accent={accent} size={48} />
                   <span className="of-thread-text">
                     <span className="of-thread-name">{li.name}</span>
-                    <span className="of-thread-last">{preview(li.name, thread?.last, !!thread?.busy)}</span>
+                    <span className="of-thread-last">{preview(li.name, thread?.last, !!thread?.busy, thread)}</span>
                   </span>
                   <span className="of-thread-meta">
+                    {landedBadge(li.id)}
                     {thread?.last ? (
                       <time className="of-thread-time" dateTime={thread.last.at}>
                         {messageTime(thread.last.at, localization.locale, timeZone)}
@@ -129,11 +267,15 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
                     ) : null}
                   </span>
                 </button>
+                {closeFailure(li.id, thread)}
               </li>
             );
           })}
         </ul>
       )}
+      <p className="of-visually-hidden" aria-live="polite">
+        {announce}
+      </p>
     </div>
   );
 }

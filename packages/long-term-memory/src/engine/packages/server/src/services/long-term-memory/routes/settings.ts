@@ -10,10 +10,15 @@ import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { resetLongTermMemorySettings } from "../persistence/backup-restore.js";
 import { listLtmPackageReaders } from "../services/storage-read.js";
 import { ltmSetMessagesHiddenFromAI, showLtmHiddenMessages } from "../persistence/hidden-messages.js";
-import { hideImportedChatMessages } from "../sources/interop.js";
+import { hideImportedChatMessages, readLtmMessagesJustHidden } from "../sources/interop.js";
 import { getPackagePersistence, logger } from "../package-runtime.js";
-import { parseLtmChatMetadata } from "../identity/chat-scope.js";
-import { readLtmChatMemoriesMode } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import { ltmModeForChatMode, parseLtmChatMetadata } from "../identity/chat-scope.js";
+import { isLtmAutoImportReading, retryLtmAutoImport } from "../sources/auto-import-job.js";
+import {
+  readLtmChatMemoriesMode,
+  readLtmChatReadFrom,
+  resolveLtmChatMemories,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import type { FastifyInstance } from "fastify";
 import {
   MAINTENANCE_BODY_LIMIT_BYTES,
@@ -34,12 +39,20 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
     ...settings,
     hideImportedMessagesAvailable: ltmSetMessagesHiddenFromAI() !== null,
   });
-  // Turning it on hides imported pieces now. While it is off, a save shows whatever it hid, so a failed show can
-  // be retried by saving again. The setting is saved either way, so a failure is logged and the save goes on to its
-  // index rebuild; a failed hide leaves the rest visible until each chat's next import.
-  const applyHideImportedMessages = async (wasOn: boolean, settings: LtmResolvedGlobalSettings) => {
+  // Turning it on, or changing its tail while on, hides imported pieces now. While it is off, a save shows whatever
+  // it hid, so a failed show can be retried by saving again. The setting is saved either way, so a failure is logged
+  // and the save goes on to its index rebuild; a failed hide leaves the rest visible until each chat's next import.
+  const applyHideImportedMessages = async (
+    before: LtmResolvedGlobalSettings | null,
+    settings: LtmResolvedGlobalSettings,
+  ) => {
     const on = settings.longTermMemoryHideImportedMessages;
-    if (on && wasOn) return;
+    if (
+      on &&
+      before?.longTermMemoryHideImportedMessages &&
+      before.longTermMemoryHideTailMessages === settings.longTermMemoryHideTailMessages
+    )
+      return;
     await (on ? hideImportedChatMessages(root) : showLtmHiddenMessages(root)).catch((error) =>
       logger.warn(
         error,
@@ -59,7 +72,7 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
       const before = effectiveIndexStopWords(await getLtmGlobalSettings(root));
       const result = await resetLongTermMemorySettings(root);
       const reset = await getLtmGlobalSettings(root);
-      await applyHideImportedMessages(true, reset);
+      await applyHideImportedMessages(null, reset);
       const after = effectiveIndexStopWords(reset);
       return { ...result, rebuild: before === after ? null : await rebuildAfterMutation(root) };
     }),
@@ -70,7 +83,7 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
       const current = await getLtmGlobalSettings(root);
       const before = effectiveIndexStopWords(current);
       const saved = await updateLtmGlobalSettings(parsed, root);
-      await applyHideImportedMessages(current.longTermMemoryHideImportedMessages, saved);
+      await applyHideImportedMessages(current, saved);
       const after = effectiveIndexStopWords(saved);
       return { ...saved, rebuild: before === after ? null : await rebuildAfterMutation(root) };
     }),
@@ -82,9 +95,27 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
   app.get<{ Params: { chatId: string } }>("/chat-memories/:chatId", async (request, reply) => {
     const chat = await getPackagePersistence().getChat(request.params.chatId);
     if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    const metadata = parseLtmChatMetadata(chat.metadata);
+    const config = await getLtmExtractionConfig(root);
     return {
-      chatMemories: readLtmChatMemoriesMode(parseLtmChatMetadata(chat.metadata).longTermMemoryChatMemories) ?? null,
+      chatMemories: readLtmChatMemoriesMode(metadata.longTermMemoryChatMemories) ?? null,
+      // What background import reads in this chat: its own choice, else the global one (messages by default).
+      readFrom: resolveLtmChatMemories(metadata, config).readFrom,
+      readFromOverride: readLtmChatReadFrom(metadata.longTermMemoryChatReadFrom) ?? null,
+      // A background read of this chat's messages is running, and the latest messages an import hid in it.
+      reading: isLtmAutoImportReading(root, chat.id),
+      hidden: readLtmMessagesJustHidden(root, chat.id),
     };
+  });
+  // Retry on a failed background read: the chat's next import runs now instead of after a source changes.
+  app.post<{ Params: { chatId: string } }>("/chat-memories/:chatId/retry", async (request, reply) => {
+    const chat = await getPackagePersistence().getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    const config = await getLtmExtractionConfig(root);
+    if (!resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), config).autoImport)
+      return reply.status(409).send({ error: "This chat does not read its messages on its own." });
+    retryLtmAutoImport(root, chat.id, ltmModeForChatMode(chat.mode));
+    return reply.status(202).send({ scheduled: true });
   });
   app.put<{ Body: unknown }>(
     "/extraction-settings",

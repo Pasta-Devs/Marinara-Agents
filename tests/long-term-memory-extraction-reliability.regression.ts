@@ -594,8 +594,15 @@ async function main() {
       subjectId: "harbor_bell_rang",
       text: "The harbor bell rang twice.",
     };
+    const staleUnit = {
+      ...validUnit,
+      id: randomUUID(),
+      subjectId: "tide_turned",
+      text: "The tide turned at dusk.",
+      sourceHash: "stale-source-hash",
+    };
     const lexical = validateLtmEvidenceUnits({
-      units: [keptUnit, unknownLinkUnit, unrelatedUnit],
+      units: [keptUnit, unknownLinkUnit, unrelatedUnit, staleUnit],
       sourceText: longSourceText,
       sourceNote,
       existingNotes: [],
@@ -604,16 +611,28 @@ async function main() {
     });
     assert.deepEqual(
       lexical.keptUnits.map((unit: any) => unit.subjectId),
-      ["observatory_gate_sealed", "harbor_bell_rang"],
+      ["observatory_gate_sealed", "brass_lamp_lit", "harbor_bell_rang"],
+      "a link to an unknown memory removes only that link",
     );
-    assert.equal(lexical.droppedCandidates.length, 1);
-    assert.match(lexical.droppedCandidates[0]!.message, /linked to a memory this extraction could not find/u);
-    assert.doesNotMatch(lexical.droppedCandidates[0]!.message, /wrong memory stream|char_missing_ally/u);
+    assert.deepEqual(
+      lexical.keptUnits[1].links.map((link: any) => link.target),
+      validUnit.links.map((link: any) => link.target),
+    );
+    assert.deepEqual(
+      lexical.diagnostics
+        .filter((diagnostic: any) => diagnostic.code === "unknown_link_target")
+        .map((diagnostic: any) => [diagnostic.severity, diagnostic.candidateIndex]),
+      [["warning", 1]],
+    );
+    assert.deepEqual(
+      lexical.droppedCandidates.map((candidate: any) => candidate.validatorCode),
+      ["source_hash_mismatch"],
+    );
     assert.deepEqual(
       lexical.diagnostics
         .filter((diagnostic: any) => diagnostic.code === "low_lexical_evidence")
         .map((diagnostic: any) => diagnostic.candidateIndex),
-      [2],
+      [1, 2],
       "past the 500th source token still overlaps, and a dropped unit carries no warning",
     );
     const { processLongTermMemorySource, processLongTermMemorySourceBatch } = await import(
@@ -621,6 +640,7 @@ async function main() {
     );
     const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
     const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
+    const { applyLongTermMemoryDraft } = await import(`${source}/drafts/reconciliation.ts`);
     const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
     const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
     const commitRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-source-commit-"));
@@ -691,6 +711,100 @@ async function main() {
         });
         assert.equal(providerFailure[0]?.error?.code, failureCase.code);
         assert.equal(providerFailure[0]?.retryable, failureCase.retryable);
+      }
+
+      // A permanent failure fails every piece the same way, so the batch starts no further one (#2497). The second
+      // item is chained to the first, so a stop also has to end a chain.
+      const stopItems = await Promise.all(
+        [0, 1, 2].map(async (index) => {
+          const note = await storage.createNote({
+            id: `source_stop_${index}`,
+            title: `Stop piece ${index}`,
+            type: "source",
+            status: "active",
+            modes: ["roleplay"],
+            scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+            tags: ["source_summary"],
+            keywords: [],
+            links: [],
+            provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: `summary-stop-${index}` },
+            sections: { source: { text: `Mara checked gate ${index}.`, updatedAt: timestamp } },
+          });
+          return {
+            sourceId: note.id,
+            title: note.title!,
+            note,
+            created: false,
+            extractionMode: "roleplay" as const,
+            ...(index === 1 ? { previousPiece: { sourceNoteId: "source_stop_0", tail: "" } } : {}),
+          };
+        }),
+      );
+      const relayMessage = "No available channel for model x under group y";
+      const namedModelMessage =
+        'The connection does not serve the extraction model "fixture-model". Check the model name.';
+      const stopCases = [
+        { thrown: { status: 503, message: relayMessage }, calls: 1, code: "model_unavailable", retryable: false },
+        {
+          thrown: { status: 404, code: "model_not_found", message: "Not found" },
+          calls: 1,
+          code: "model_unavailable",
+          retryable: false,
+        },
+        {
+          // The Engine's provider errors carry a status and the provider's text, but no code.
+          thrown: { status: 404, message: "The model `x` does not exist or you do not have access to it." },
+          model: "",
+          message: "The connection does not serve the extraction model. Check the model name.",
+          calls: 1,
+          code: "model_unavailable",
+          retryable: false,
+        },
+        {
+          thrown: { status: 401, code: "authentication_error", message: "Bad key" },
+          calls: 1,
+          code: "authentication_error",
+          retryable: false,
+        },
+        { thrown: { status: 503, message: "Service unavailable" }, calls: 3, code: "extract_failed", retryable: true },
+        { thrown: { status: 404, message: "Not Found" }, calls: 3, code: "extract_failed", retryable: false },
+        // A cancelled import still reports every piece as cancelled, even when the error is a permanent one.
+        {
+          thrown: { status: 503, message: relayMessage },
+          cancel: true,
+          calls: 1,
+          code: "cancelled",
+          retryable: true,
+        },
+      ];
+      for (const stopCase of stopCases) {
+        const controller = new AbortController();
+        let calls = 0;
+        const results = await processLongTermMemorySourceBatch({
+          items: stopItems,
+          languageModel: {
+            ...options.languageModel,
+            model: stopCase.model ?? "fixture-model",
+            chatComplete: async () => {
+              calls += 1;
+              if (stopCase.cancel) controller.abort();
+              throw Object.assign(new Error(stopCase.thrown.message), stopCase.thrown);
+            },
+          },
+          operationId: randomUUID(),
+          signal: controller.signal,
+          concurrency: 1,
+          root: commitRoot,
+        });
+        const label = `${stopCase.code}: ${stopCase.thrown.message}`;
+        assert.equal(calls, stopCase.calls, label);
+        assert.equal(results.length, stopCase.cancel ? 3 : stopCase.calls, label);
+        for (const result of results) {
+          assert.equal(result.error?.code, stopCase.code, label);
+          assert.equal(result.retryable, stopCase.retryable, label);
+        }
+        if (stopCase.code === "model_unavailable")
+          assert.equal(results[0]?.error?.message, stopCase.message ?? namedModelMessage, label);
       }
 
       const deterministicSource = await storage.createNote({
@@ -1614,6 +1728,7 @@ async function main() {
       }
 
       // A failed preparation must leave the source note untouched even when a different context is requested.
+      const beforeFailedPreparation = await storage.getNote(committedSource.id);
       options.languageModel.chatComplete = async () => {
         throw new Error("provider down");
       };
@@ -1632,7 +1747,11 @@ async function main() {
       const untouched = await storage.getNote(committedSource.id);
       assert.deepEqual(untouched?.scope, committedSource.scope, "failed preparation must not rebind source scope");
       assert.equal(Object.hasOwn(untouched ?? {}, "destinationScope"), false);
-      assert.equal(untouched?.version, committedSource.version, "failed preparation must not write the source note");
+      assert.equal(
+        untouched?.version,
+        beforeFailedPreparation?.version,
+        "failed preparation must not write the source note",
+      );
 
       // A clean batch whose only non-kept unit was deduplicated must still be marked current.
       options.languageModel.chatComplete = async () => ({
@@ -1826,6 +1945,91 @@ async function main() {
         LongTermMemoryDraftStore.prototype.createDraft = originalCreateDraft;
         releaseWriter();
         await writer;
+      }
+
+      // Issue #2496: a second read of text whose earlier read was applied waits in Review when it creates a memory.
+      for (const path of ["batch", "single", "partial"] as const) {
+        const rereadSource = await storage.createNote({
+          id: `source_reread_applied_${path}`,
+          title: `Reread ${path} source`,
+          type: "source",
+          status: "active",
+          modes: ["roleplay"],
+          scope: { chatId: `chat-reread-${path}`, chatIds: [`chat-reread-${path}`] },
+          tags: ["source_summary"],
+          keywords: [],
+          links: [],
+          provenance: { kind: "chat_summary", sourceId: `chat-reread-${path}`, entryId: `summary-reread-${path}` },
+          sections: { source: { text: "Priya posted a video. Damo arrived for the pickup.", updatedAt: timestamp } },
+        });
+        const read = async (events: [subjectId: string, text: string][], applyLowRisk = true) => {
+          const note = (await storage.getNote(rereadSource.id))!;
+          const units = events.map(([subjectId, text]) => ({
+            ...validUnit,
+            subjectId: `${subjectId}_${path}`,
+            text,
+            evidence: [`source_note:${note.id}`],
+            links: [{ target: note.id, relation: "extracted_from" }],
+          }));
+          options.languageModel.chatComplete = async () => ({
+            content: JSON.stringify({ summary: "Durable events.", units }),
+            finishReason: "stop",
+          });
+          const shared = { languageModel: options.languageModel, operationId: randomUUID(), applyLowRisk };
+          if (path !== "batch")
+            return (await processLongTermMemorySource({ ...shared, sourceNote: note, root: commitRoot })).draft;
+          const [result] = await processLongTermMemorySourceBatch({
+            ...shared,
+            items: [
+              { sourceId: note.id, title: note.title!, note, created: false, extractionMode: "roleplay" as const },
+            ],
+            signal: new AbortController().signal,
+            concurrency: 1,
+            root: commitRoot,
+          });
+          return result!.draft!;
+        };
+        const held = (draft: any, message: string) => {
+          assert.ok(
+            draft.mutations.some((mutation: any) => mutation.kind === "create_note"),
+            message,
+          );
+          assert.deepEqual([draft.status, draft.reviewRequired], ["pending", true], message);
+        };
+
+        // Auto-apply leaves "auto_applied"; the single path accepts by hand to cover "accepted". Accepting one of
+        // two rows leaves the draft "pending" with a saved memory, and the next read supersedes it.
+        const first = await read(
+          [
+            ["audition_posted", "Priya posted the audition video."],
+            ...(path === "partial" ? [["gate_sealed", "Mara sealed the observatory gate."] as [string, string]] : []),
+          ],
+          path === "batch",
+        );
+        const applied =
+          path === "batch"
+            ? first
+            : (
+                await applyLongTermMemoryDraft(first.id, {
+                  root: commitRoot,
+                  ...(path === "partial" ? { mutationIds: [first.mutations[0]!.id] } : {}),
+                })
+              ).draft;
+        assert.equal(
+          applied.status,
+          { batch: "auto_applied", single: "accepted", partial: "pending" }[path],
+          `${path} first read`,
+        );
+
+        held(await read([["clip_shared", "A performance clip went online."]]), `${path} second read of applied text`);
+        // The newest draft of this text is now the held one, so the check must look past it.
+        held(await read([["pickup_arrival", "Damo arrived for the pickup."]]), `${path} third read of applied text`);
+
+        await storage.updateNote(rereadSource.id, {
+          sections: { source: { text: "Willow went home after the pickup.", updatedAt: timestamp } },
+        });
+        const changed = await read([["willow_home", "Willow went home after the pickup."]]);
+        assert.equal(changed.status, "auto_applied", `${path} read of changed text still auto-applies`);
       }
     } finally {
       await rm(commitRoot, { recursive: true, force: true });

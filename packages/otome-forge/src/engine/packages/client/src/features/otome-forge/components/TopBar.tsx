@@ -1,20 +1,18 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the top bar. Back, when the screen has one; inside a run, his chip (back to Home) and the Starlight
-// counter; always fullscreen; the settings gear everywhere but Settings. When a pressed button leaves with its screen,
-// OtomeForgeView moves focus to the new screen's heading.
+// Otome Forge: the top bar. Back, when the screen has one; inside a run, the Home chip (0.21.0: a house in the colour of
+// the love interest on Home, with their name) and the Starlight counter; always fullscreen; the settings gear everywhere
+// but Settings. When a pressed button leaves with its screen, OtomeForgeView moves focus to the new screen's heading.
 // ──────────────────────────────────────────────
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, Heart, Settings, Sparkle } from "lucide-react";
-import { initialsOf } from "../lib/accent";
+import { ChevronLeft, House, Settings, Sparkle } from "lucide-react";
 import { useOtomeProps } from "../props";
 import { FullscreenButton } from "./Stage";
 
 export interface TopBarLoveInterest {
   name: string;
-  /** His accent colour (sampled from his portrait from M1 on). */
+  /** Their accent colour (sampled from their portrait from M1 on): the house is drawn in it. */
   accent?: string | null;
-  portraitUrl?: string | null;
 }
 
 export interface TopBarRun {
@@ -39,15 +37,14 @@ function LoveInterestChip({ li, onHome }: { li: TopBarLoveInterest | null; onHom
   const avatarStyle = li?.accent ? ({ "--of-li-accent": li.accent } as CSSProperties) : undefined;
   return (
     <button type="button" className="of-chip of-glass" aria-label={label} title={label} onClick={onHome}>
-      {li ? (
-        <span className="of-avatar" style={avatarStyle} aria-hidden="true">
-          {li.portraitUrl ? <img src={li.portraitUrl} alt="" /> : initialsOf(li.name)}
-        </span>
-      ) : (
-        <span className="of-avatar of-avatar--empty" aria-hidden="true">
-          <Heart size={15} strokeWidth={2} />
-        </span>
-      )}
+      {/* A house, so the chip reads as the way Home; in the colour of whoever is there. */}
+      <span
+        className={li ? "of-avatar of-avatar--home" : "of-avatar of-avatar--empty"}
+        style={avatarStyle}
+        aria-hidden="true"
+      >
+        <House size={17} strokeWidth={2} />
+      </span>
       <span className={li ? "of-chip-name" : "of-chip-name of-chip-name--empty"} aria-hidden="true">
         {li ? li.name : t("ui.otomeForge.common.noLoveInterest")}
       </span>

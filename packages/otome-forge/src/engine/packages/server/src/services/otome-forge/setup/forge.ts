@@ -2,39 +2,65 @@
 // Otome Forge: the forge job that turns a new world's setup into a playable world (plan M1 "Forge job")
 // ──────────────────────────────────────────────
 // Steps: `world-plan`, then `bible:<li>` for each love interest, then (with an image connection) `paint:<li>` and
-// `paint:player`, which wait for the player's consent.
+// `paint:player`. A new world paints them by itself once the text steps are through, unless Ask before painting or
+// prompt review holds them for the player's consent; a world that gains its connection later always waits for it.
+// After a love interest's look is painted here, his faces are queued next, in the high lane (art/expressions.ts; only
+// while Expressions is on).
+// A love interest who arrives mid-story (S/story/introduce.ts) gets his steps on the next read (forgeCast).
 // - Text steps run on the foreground lane, in the run's serial queue (runForeground), while the player watches the
 //   progress screen. Each re-reads its step inside the queue and runs only while it is still `pending`.
 // - The phase is `ready` once the world plan and every bible are done; painting can still be running.
 // - A failed step waits for its Retry and is never retried by itself. A failed world plan holds the bibles back.
 // - Paints run one at a time in their own queue per run, so a slow image never holds up the story, and only once
-//   their love interest's bible (or, for the protagonist, the world plan) is done.
+//   their love interest's bible (or, for the protagonist, the world plan) is done. 0.47.1: the art route's tap
+//   (startPaintWithStep) answers once its record is pending and paints on in the background.
 // - A step that reads `running` with no live owner in this process (the server restarted), or `pending` with no job
 //   left to run it, is shown and stored as `failed` (error "stopped"), with Retry.
 // A step's `error` is an OtomeErrorCode when the failure has one, "stopped" after a restart, else "failed"; the
 // English detail goes to the logs, and a failed paint keeps it on its paint record.
+// Once every bible is done, the personality quiz's love-interest answers are queued as one background call (#2174,
+// S/minigames/quiz.ts); the story never waits for it, and the quiz asks again for whatever is still missing.
 import type {
   ForgeStatus,
   ForgeStep,
   LiId,
   Paint,
+  Player,
+  Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { forgePrerequisite } from "../../../../../client/src/features/otome-forge/shared/forge.js";
-import { claimPaint, paintClaimed, paintIsLive, type ArtDeps, type LookOwner } from "../art/paint.js";
-import { type ImagePrompt, bibleMessages, worldPlanMessages } from "../prompts.js";
+import {
+  answerOnceStarted,
+  claimPaint,
+  paintClaimed,
+  paintIsLive,
+  type ArtDeps,
+  type LookOwner,
+  type PaintClaimedOptions,
+} from "../art/paint.js";
+import type { OtomeArt } from "../art/expressions.js";
+import type { BackgroundQueue } from "../background-queue.js";
+import { ensureQuiz } from "../minigames/quiz.js";
+import { bibleMessages, worldPlanMessages } from "../prompts.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { ID_PREFIX, INDEX_ID, INDEX_TARGET, runDocTarget, unitId, worldId } from "../ids.js";
+import { ID_PREFIX, INDEX_ID, INDEX_TARGET, playerId, runDocTarget, unitId, worldId } from "../ids.js";
 import { normalizeIndex } from "../schemas/index.js";
 import { readRun } from "../schemas/state.js";
+import { normalizePlayer } from "../schemas/player.js";
 import { BibleSchema, normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { checkBible } from "./bible.js";
 import { castOf, normalizeWorldPlan, withPersonaStoryAbout, WorldPlanSchema, type WorldPlan } from "./cast.js";
 import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
-export type ForgeDeps = ArtDeps;
+/**
+ * The background lane, when there is one, takes the personality quiz's answers once every bible is written; the art
+ * service, when there is one, a painted love interest's faces.
+ */
+export type ForgeDeps = ArtDeps & { background?: BackgroundQueue; art?: Pick<OtomeArt, "queueExpressions"> };
 
 export const WORLD_PLAN_STEP = "world-plan";
 export const PLAYER_PAINT_STEP = "paint:player";
@@ -50,23 +76,26 @@ function paintOwner(stepId: string): LookOwner | null {
   return stepId.startsWith("paint:") ? (`li:${stepId.slice("paint:".length)}` as LookOwner) : null;
 }
 
-/** One paint step per love interest and the protagonist's, each waiting for the player's tap. */
-function paintSteps(liIds: readonly LiId[]): ForgeStep[] {
+/** One paint step per love interest and the protagonist's: pending when `auto`, else waiting for the player's tap. */
+function paintSteps(liIds: readonly LiId[], auto = false): ForgeStep[] {
   return [...liIds.map((li) => `li:${li}` as LookOwner), "player" as const].map((owner): ForgeStep => ({
     id: paintStepId(owner),
-    state: "waiting-consent",
+    state: auto ? "pending" : "waiting-consent",
     paid: true,
   }));
 }
 
-/** The steps a new world starts with; the paint steps only when it has an image connection. */
-export function initialForge(liIds: readonly LiId[], withImages: boolean): ForgeStatus {
+/**
+ * The steps a new world starts with; the paint steps only when it has an image connection, pending when `auto` (neither
+ * Ask before painting nor prompt review holds them), so the text job queues them once it is through.
+ */
+export function initialForge(liIds: readonly LiId[], withImages: boolean, auto = false): ForgeStatus {
   return {
     phase: "forging",
     steps: [
       { id: WORLD_PLAN_STEP, state: "pending" },
       ...liIds.map((li): ForgeStep => ({ id: bibleStepId(li), state: "pending" })),
-      ...(withImages ? paintSteps(liIds) : []),
+      ...(withImages ? paintSteps(liIds, auto) : []),
     ],
   };
 }
@@ -80,6 +109,32 @@ export function withPaintSteps(forge: ForgeStatus): ForgeStatus {
   const have = new Set(forge.steps.map((step) => step.id));
   const missing = paintSteps(liIds).filter((step) => !have.has(step.id));
   return missing.length ? { ...forge, steps: [...forge.steps, ...missing] } : forge;
+}
+
+/**
+ * #2147: the forge with each paint step done that waits for consent or failed while its owner already wears Engine art
+ * (S/art/engine-art.ts), so nothing offers to pay for it. A failed Repaint keeps its Engine portrait but leaves no url
+ * on the record, so it stays failed, with Retry.
+ */
+export function withEngineSteps(
+  forge: ForgeStatus,
+  { player, units }: { player: Pick<Player, "art">; units: ReadonlyArray<Pick<Unit, "id" | "art">> },
+): ForgeStatus {
+  const engine = new Set([
+    ...(isEngineArt(player.art?.url) ? [PLAYER_PAINT_STEP] : []),
+    ...units.filter((unit) => isEngineArt(unit.art?.url)).map((unit) => paintStepId(`li:${unit.id}`)),
+  ]);
+  const settles = (step: ForgeStep) =>
+    engine.has(step.id) && (step.state === "waiting-consent" || step.state === "failed");
+  if (!forge.steps.some(settles)) return forge;
+  return {
+    ...forge,
+    steps: forge.steps.map((step): ForgeStep => {
+      if (!settles(step)) return step;
+      const { error: _error, ...rest } = step;
+      return { ...rest, state: "done" };
+    }),
+  };
 }
 
 // ── Jobs and owners alive in this process ──
@@ -102,7 +157,7 @@ function schedule(
       // A run deleted mid-forge ends its job here: every write refuses to bring the run back.
       error instanceof OtomeForgeError && error.code === "not-found"
         ? deps.runtime.logger.info("[otome-forge] The forge job for %s ended: the run was deleted", runId)
-        : deps.runtime.logger.error(error, "Otome Forge: the forge job for %s stopped", runId),
+        : deps.runtime.logger.error(error, "Otome Hearth: the forge job for %s stopped", runId),
     )
     .finally(() => {
       const left = (jobs.get(runId) ?? 1) - 1;
@@ -154,7 +209,7 @@ function withStep(world: World, id: string, patch: Partial<ForgeStep>): World {
   };
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 
 /** Changes the run's world and recomputes the phase; a deleted world stays deleted (404). */
 async function updateWorld(deps: ForgeDeps, runId: string, change: (world: World) => World): Promise<World> {
@@ -223,7 +278,7 @@ async function runTextStep(deps: ForgeDeps, runId: string, stepId: string, write
       if (error instanceof OtomeForgeError) {
         deps.runtime.logger.warn("[otome-forge] forge step %s failed: %s", stepId, error.message);
       } else {
-        deps.runtime.logger.error(error, "Otome Forge: forge step %s failed", stepId);
+        deps.runtime.logger.error(error, "Otome Hearth: forge step %s failed", stepId);
       }
       await updateWorld(deps, runId, (world) => withStep(world, stepId, { state: "failed", error: errorCode(error) }));
     }
@@ -334,6 +389,15 @@ async function runTextSteps(deps: ForgeDeps, runId: string, debugMode: boolean):
   }
   // Paints the player consented to while the text was being written.
   const after = await readWorld(deps, runId);
+  const bibles = after?.forge.steps.filter((step) => step.id.startsWith("bible:")) ?? [];
+  if (bibles.length && bibles.every((step) => step.state === "done")) {
+    void ensureQuiz(deps, runId, { debugMode }).catch((error: unknown) =>
+      deps.runtime.logger.warn(
+        "[otome-forge] The quiz's answers were not queued: %s",
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
+  }
   if (after?.forge.steps.some((step) => step.state === "pending" && paintReady(after, step.id))) {
     schedulePaints(deps, runId, debugMode);
   }
@@ -358,7 +422,7 @@ export async function paintWithStep(
   deps: ForgeDeps,
   runId: string,
   owner: LookOwner,
-  options: Partial<ImagePrompt> & { debugMode: boolean },
+  options: PaintClaimedOptions,
 ): Promise<Paint> {
   const release = claimPaint(runId, owner);
   const stepId = paintStepId(owner);
@@ -383,6 +447,19 @@ export async function paintWithStep(
   }
 }
 
+/**
+ * 0.47.1: the art route's tap (Repaint, a reviewed Paint the cast): paintWithStep, answered with the record once it is
+ * pending, while the paid paint goes on in the background (answerOnceStarted). Another paint of that look (409 `busy`),
+ * no image connection or no bible yet is still the answer.
+ */
+export const startPaintWithStep = (
+  deps: ForgeDeps,
+  runId: string,
+  owner: LookOwner,
+  options: Omit<PaintClaimedOptions, "started">,
+): Promise<Paint> =>
+  answerOnceStarted(deps, owner, (started) => paintWithStep(deps, runId, owner, { ...options, started }));
+
 async function runPaintSteps(deps: ForgeDeps, runId: string, debugMode: boolean): Promise<void> {
   // Each step at most once per pass: one that could not even start stays pending for settleForge to fail.
   const tried = new Set<string>();
@@ -394,8 +471,26 @@ async function runPaintSteps(deps: ForgeDeps, runId: string, debugMode: boolean)
     const owner = next && paintOwner(next.id);
     if (!next || !owner) return;
     tried.add(next.id);
+    // #2147: an owner who took Engine art since the tap (S/art/engine-art.ts) is not painted by itself.
+    const unit = owner === "player" ? null : await deps.store.readDoc(unitId(runId, owner.slice(3)), normalizeUnit);
+    const art = owner === "player" ? (await deps.store.readDoc(playerId(runId), normalizePlayer))?.art : unit?.art;
+    if (isEngineArt(art?.url)) {
+      await updateWorld(deps, runId, (current) =>
+        stepOf(current, next.id)?.state === "pending" ? withStep(current, next.id, { state: "done" }) : current,
+      );
+      continue;
+    }
     try {
-      await paintWithStep(deps, runId, owner, { debugMode });
+      const paint = await paintWithStep(deps, runId, owner, { debugMode });
+      // His faces for the look just painted, as a change of look queues them (routes/wardrobe.ts), but in the high lane
+      // (#2448), so they come right after his portrait rather than behind the scene art painted meanwhile.
+      if (paint.state === "ready" && unit) {
+        deps.art?.queueExpressions(
+          runId,
+          { segments: [{ speaker: unit.name, text: "…" }], choices: [] },
+          { debugMode, lane: "high" },
+        );
+      }
     } catch (error) {
       // `busy`: a tap on the art route is painting this look already, and that paint owns the step.
       if (!(error instanceof OtomeForgeError && error.code === "busy")) {
@@ -468,6 +563,53 @@ export async function consentForge(
     }));
     schedulePaints(deps, runId, debugMode);
     return next.forge;
+  } finally {
+    release();
+  }
+}
+
+/**
+ * A love interest who joined mid-story (S/story/introduce.ts) gets the steps the cast was forged with, so Your cast can
+ * paint him: a done `bible:<li>` and, with an image connection, `paint:<li>`. That one is done when he already has a look,
+ * paints by itself unless Ask before painting or prompt review (`review`) holds it, and otherwise waits for the tap.
+ * GET /runs/:run calls this, so someone who arrived before it gets theirs the next time the story opens. A world never
+ * forged (no bible step) is left alone. Returns the world as saved.
+ */
+export async function forgeCast(
+  deps: ForgeDeps,
+  runId: string,
+  run: { world: World; units: ReadonlyArray<Pick<Unit, "id" | "art">> },
+  { debugMode, review }: { debugMode: boolean; review: boolean },
+): Promise<World> {
+  const newcomers = (world: World) =>
+    world.forge.steps.some((step) => step.id.startsWith("bible:"))
+      ? run.units.filter((unit) => !stepOf(world, bibleStepId(unit.id)))
+      : [];
+  if (!newcomers(run.world).length) return run.world;
+  const release = holdJob(paintJobs, runId);
+  try {
+    let queued = false;
+    const world = await updateWorld(deps, runId, (current) => {
+      const { connectionId, ask } = current.images;
+      const added = newcomers(current).flatMap((unit): ForgeStep[] => [
+        { id: bibleStepId(unit.id), state: "done" },
+        ...(connectionId
+          ? [
+              {
+                id: paintStepId(`li:${unit.id}`),
+                state: unit.art?.state === "ready" ? "done" : ask || review ? "waiting-consent" : "pending",
+                paid: true,
+              } satisfies ForgeStep,
+            ]
+          : []),
+      ]);
+      queued = added.some((step) => step.state === "pending");
+      return added.length
+        ? { ...current, forge: { ...current.forge, steps: [...current.forge.steps, ...added] } }
+        : current;
+    });
+    if (queued) schedulePaints(deps, runId, debugMode);
+    return world;
   } finally {
     release();
   }

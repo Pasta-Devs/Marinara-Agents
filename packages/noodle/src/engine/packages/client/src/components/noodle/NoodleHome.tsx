@@ -18,7 +18,6 @@ import {
   ListChecks,
   Menu,
   SlidersHorizontal,
-  Loader2,
   MessageCircle,
   Pencil,
   Plus,
@@ -109,6 +108,8 @@ import {
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { ExpandedTextarea } from "../ui/ExpandedTextarea";
 import { Modal } from "../ui/Modal";
+import { Checkbox } from "../ui/Checkbox";
+import { Switch } from "../ui/Switch";
 import { NoodleIntroDialog, useNoodleIntro } from "./NoodleIntroDialog";
 import {
   ImagePromptReviewModal,
@@ -183,6 +184,7 @@ import {
 } from "./NoodlePostCard";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { Spinner } from "../ui/Spinner";
 
 type RawCharacter = { id?: unknown; data?: unknown; avatarPath?: unknown };
 type RawCharacterGroup = {
@@ -580,31 +582,10 @@ function ToggleSetting({
         {help && <HelpTooltip text={help} side="top" wide />}
       </span>
       {asSwitch ? (
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          aria-label={label}
-          disabled={disabled}
-          onClick={() => onChange(!checked)}
-          className={cn(
-            "relative h-6 w-11 shrink-0 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-            checked
-              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]"
-              : "border-[var(--border)] bg-[var(--secondary)]/55",
-          )}
-        >
-          <span
-            className={cn(
-              "absolute top-0.5 left-0.5 h-4.5 w-4.5 rounded-full bg-[var(--background)] shadow transition-transform",
-              checked && "translate-x-5",
-            )}
-          />
-        </button>
+        <Switch aria-label={label} checked={checked} disabled={disabled} onCheckedChange={onChange} />
       ) : (
-        <input
+        <Checkbox
           className="shrink-0"
-          type="checkbox"
           checked={checked}
           disabled={disabled}
           onChange={(event) => onChange(event.target.checked)}
@@ -636,7 +617,6 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     refetch: refetchBootstrap,
   } = useNoodle();
   const feedQuery = useNoodleFeed();
-  const notificationDataQuery = useNoodleNotificationData(notificationViewActive);
   const isLoading = isBootstrapLoading || feedQuery.isLoading;
   const isError = isBootstrapError || feedQuery.isError;
   // From another device, every Noodle route fails until the Admin Secret is set (#1136).
@@ -782,6 +762,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     interactions: NoodleInteraction[];
   } | null>(null);
   const requestedPostIdRef = useRef<string | null>(null);
+  const notificationFetchRef = useRef<string | null>(null);
   const onFocusPostHandledRef = useRef(onFocusPostHandled);
   onFocusPostHandledRef.current = onFocusPostHandled;
   useEffect(() => {
@@ -949,24 +930,51 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     () => sortedPersonaAccounts.slice(0, personaAccountLimit),
     [personaAccountLimit, sortedPersonaAccounts],
   );
+  const personaAccount = useMemo(
+    () => personaAccounts.find((account) => account.entityId === selectedPersonaId) ?? sortedPersonaAccounts[0] ?? null,
+    [personaAccounts, selectedPersonaId, sortedPersonaAccounts],
+  );
+  const notificationDataQuery = useNoodleNotificationData(notificationViewActive, personaAccount?.handle);
   const posts = useMemo(() => {
     const available = notificationViewActive ? (notificationDataQuery.data?.posts ?? feedPosts) : feedPosts;
     return focusedPostResult && !available.some((post) => post.id === focusedPostResult.post.id)
       ? [focusedPostResult.post, ...available]
       : available;
   }, [feedPosts, focusedPostResult, notificationDataQuery.data?.posts, notificationViewActive]);
+  // The own profile has no accountId in navigation, so fall back to the persona account.
+  const profileQueryAccountId =
+    navigation.mode === "public" && navigation.view === "profile"
+      ? (viewedProfileAccountId ?? personaAccount?.id ?? null)
+      : null;
+  const profileFeedQuery = useNoodleFeed(Boolean(profileQueryAccountId), profileQueryAccountId, null, Infinity);
+  const profileLikesQuery = useNoodleFeed(
+    profileTab === "likes" && Boolean(profileQueryAccountId),
+    null,
+    profileQueryAccountId,
+    Infinity,
+  );
+  const profileListQuery = profileTab === "likes" ? profileLikesQuery : profileFeedQuery;
   const interactions = useMemo(() => {
     const unique = new Map<string, NoodleInteraction>();
     for (const item of [
       ...(data?.interactions ?? []),
       ...feedInteractions,
+      ...(profileFeedQuery.data?.pages.flatMap((page) => page.interactions) ?? []),
+      ...(profileLikesQuery.data?.pages.flatMap((page) => page.interactions) ?? []),
       ...(focusedPostResult?.interactions ?? []),
       ...(notificationDataQuery.data?.interactions ?? []),
     ]) {
       if (!unique.has(item.id)) unique.set(item.id, item);
     }
     return Array.from(unique.values());
-  }, [data?.interactions, feedInteractions, focusedPostResult, notificationDataQuery.data?.interactions]);
+  }, [
+    data?.interactions,
+    feedInteractions,
+    focusedPostResult,
+    notificationDataQuery.data?.interactions,
+    profileFeedQuery.data,
+    profileLikesQuery.data,
+  ]);
   const interactionsByPostId = useMemo(() => {
     const grouped = new Map<string, NoodleInteraction[]>();
     for (const interaction of interactions) {
@@ -998,10 +1006,6 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         .filter((account) => account.kind === "character" && account.invited)
         .map((account) => account.entityId),
     [data?.accounts],
-  );
-  const personaAccount = useMemo(
-    () => personaAccounts.find((account) => account.entityId === selectedPersonaId) ?? sortedPersonaAccounts[0] ?? null,
-    [personaAccounts, selectedPersonaId, sortedPersonaAccounts],
   );
   const viewedProfileAccount = useMemo(
     () => (viewedProfileAccountId ? (accountById.get(viewedProfileAccountId) ?? null) : personaAccount),
@@ -2072,29 +2076,13 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       .slice(0, 50);
   }, [accountSearchTerm, accounts, folderInvitedCharacterIds, isAccountSearch, settings?.allowRandomUsers]);
   const profilePosts = useMemo(
-    () => (viewedProfileAccount ? posts.filter((post) => post.authorAccountId === viewedProfileAccount.id) : []),
-    [posts, viewedProfileAccount],
+    () => (viewedProfileAccount ? (profileFeedQuery.data?.pages.flatMap((page) => page.items) ?? []) : []),
+    [profileFeedQuery.data, viewedProfileAccount],
   );
-  const profileLikedPosts = useMemo(() => {
-    if (!viewedProfileAccount) return [];
-    const likedAtByPostId = new Map<string, string>();
-    for (const interaction of interactions) {
-      if (
-        interaction.actorAccountId === viewedProfileAccount.id &&
-        interaction.type === "like" &&
-        !interaction.parentInteractionId
-      ) {
-        likedAtByPostId.set(interaction.postId, interaction.createdAt);
-      }
-    }
-    return posts
-      .filter((post) => likedAtByPostId.has(post.id))
-      .sort((a, b) => {
-        const aTime = new Date(likedAtByPostId.get(a.id) ?? a.createdAt).getTime();
-        const bTime = new Date(likedAtByPostId.get(b.id) ?? b.createdAt).getTime();
-        return bTime - aTime;
-      });
-  }, [interactions, posts, viewedProfileAccount]);
+  const profileLikedPosts = useMemo(
+    () => profileLikesQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [profileLikesQuery.data],
+  );
   const profileMediaPosts = useMemo(() => profilePosts.filter((post) => Boolean(post.imageUrl)), [profilePosts]);
   const profileVisiblePosts =
     profileTab === "likes" ? profileLikedPosts : profileTab === "media" ? profileMediaPosts : profilePosts;
@@ -2247,9 +2235,26 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         : null;
       const targetElement = interactionElement ?? postElement;
       if (!targetElement) {
-        setNotificationFocusTarget(null);
+        // Target not rendered: fetch it once and show it like the focusPostId path; on the second miss, give up.
+        const { postId } = notificationFocusTarget;
+        if (notificationFetchRef.current === postId) {
+          notificationFetchRef.current = null;
+          setNotificationFocusTarget(null);
+          toast.error(localizeUi("ui.noodle.noodlehome.postUnavailable"));
+        } else {
+          notificationFetchRef.current = postId;
+          void api
+            .get<{ post: NoodlePost; interactions: NoodleInteraction[] }>(`/noodle/posts/${encodeURIComponent(postId)}`)
+            .then(setFocusedPostResult)
+            .catch(() => {
+              notificationFetchRef.current = null;
+              setNotificationFocusTarget(null);
+              toast.error(localizeUi("ui.noodle.noodlehome.postUnavailable"));
+            });
+        }
         return;
       }
+      notificationFetchRef.current = null;
       targetElement.scrollIntoView({
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
@@ -2259,7 +2264,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
       setNotificationFocusTarget(null);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeNoodleView, isLoading, notificationFocusTarget, prefersReducedMotion]);
+  }, [activeNoodleView, focusedPostResult, isLoading, notificationFocusTarget, prefersReducedMotion]);
 
   useEffect(() => {
     if (!highlightedInteractionId) return;
@@ -3242,7 +3247,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         <div data-component="NoodleView.PromptSetting" className="space-y-3">
           <div className="flex items-start gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
-              {noodlePromptLoading ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+              {noodlePromptLoading ? <Spinner size="md" /> : <FileText size={16} />}
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -3269,7 +3274,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               disabled={!noodlePromptHasOverride || resetNoodlePrompt.isPending}
               className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {resetNoodlePrompt.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+              {resetNoodlePrompt.isPending ? <Spinner size="sm" /> : <RotateCcw size={13} />}
               {localizeUi("ui.noodle.noodlehome.restoreDefault")}
             </button>
             <button
@@ -3433,8 +3438,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                             key={id}
                             className="flex items-center gap-3 rounded-md p-2 text-xs hover:bg-foreground/5"
                           >
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={selected}
                               disabled={!settings || updateSettings.isPending}
                               onChange={() => toggleCharacterGroupInvite(id)}
@@ -3473,11 +3477,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                     }
                     className="flex min-h-10 w-full items-center justify-center gap-2 border-t border-[var(--marinara-chat-chrome-panel-border)] px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {inviteCharacters.isPending ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <UserPlus size={14} />
-                    )}
+                    {inviteCharacters.isPending ? <Spinner size="sm" /> : <UserPlus size={14} />}
                     {folderInviteButtonLabel}
                   </button>
                 </div>
@@ -3508,7 +3508,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                 }
                 className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--noodle-accent)]/35 px-3 text-[0.68rem] font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {clearInvites.isPending ? <Loader2 size={13} className="animate-spin" /> : <UserMinus size={13} />}
+                {clearInvites.isPending ? <Spinner size="sm" /> : <UserMinus size={13} />}
                 {localizeUi("ui.noodle.noodlehome.uninviteEverybody")}
               </button>
             </div>
@@ -3641,7 +3641,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               disabled={ambientProfiles.length === 0 || rerollAmbientProfiles.isPending}
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {rerollAmbientProfiles.isPending ? <Loader2 size={14} className="animate-spin" /> : <Dices size={14} />}
+              {rerollAmbientProfiles.isPending ? <Spinner size="sm" /> : <Dices size={14} />}
               {rerollAmbientProfiles.isPending
                 ? localizeUi("ui.noodle.ambientProfiles.rerolling")
                 : localizeUi("ui.noodle.ambientProfiles.rerollAll")}
@@ -3682,11 +3682,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                     aria-label={localizeUi("ui.noodle.ambientProfiles.rerollNamed", { name: profile.displayName })}
                     className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
                   >
-                    {rerollAmbientProfiles.isPending ? (
-                      <Loader2 size={15} className="animate-spin" />
-                    ) : (
-                      <Dices size={15} />
-                    )}
+                    {rerollAmbientProfiles.isPending ? <Spinner size="md" /> : <Dices size={15} />}
                   </button>
                 </div>
               </div>
@@ -4405,7 +4401,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                 className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {resetNoodleTimeline.isPending ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Spinner size="sm" />
                 ) : (
                   <Trash2 size={14} className="text-[var(--noodle-accent)]" />
                 )}
@@ -5154,7 +5150,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               >
                 <span className="relative inline-flex">
                   {refreshNoodle.isPending ? (
-                    <Loader2 size={17} className="!text-[var(--noodle-accent)] animate-spin" />
+                    <Spinner size="md" className="!text-[var(--noodle-accent)]" />
                   ) : (
                     <RefreshCw size={17} className="!text-[var(--noodle-accent)]" />
                   )}
@@ -5417,8 +5413,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                       footer: viewedCharacterId ? (
                         <div className="space-y-1.5 border-t border-[var(--noodle-divider)] pt-3">
                           <label className="flex items-start gap-2 text-xs">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={applyImageInstructions}
                               disabled={updateCharacter.isPending}
                               onChange={(event) =>
@@ -5437,7 +5432,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                           {openCharacter && (
                             <button
                               type="button"
-                              onClick={() => openCharacter(viewedCharacterId, { tab: "convo" })}
+                              onClick={() => openCharacter(viewedCharacterId, { tab: "image-instructions" })}
                               className="ml-5 text-xs font-semibold text-[var(--noodle-accent)] hover:underline"
                             >
                               {localizeUi("ui.noodle.noodlehome.editImageInstructions")}
@@ -5502,8 +5497,20 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               activeTab={profileTab}
               onTabChange={setProfileTab}
               postList={
-                profileVisiblePosts.length > 0 ? (
-                  profileVisiblePosts.map(renderPostArticle)
+                profileVisiblePosts.length > 0 || profileListQuery.hasNextPage ? (
+                  <>
+                    {profileVisiblePosts.map(renderPostArticle)}
+                    {profileListQuery.hasNextPage && (
+                      <button
+                        type="button"
+                        onClick={() => void profileListQuery.fetchNextPage()}
+                        disabled={profileListQuery.isFetchingNextPage}
+                        className="w-full px-3 py-2 text-xs font-semibold text-[var(--noodle-accent)]"
+                      >
+                        {localizeUi("ui.noodle.noodlehome.loadMorePosts")}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className="px-8 py-14 text-center">
                     <p className="text-sm font-semibold text-[var(--muted-foreground)]">
@@ -5597,7 +5604,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                     className="rounded-full bg-[var(--noodle-accent)] px-5 py-2 text-sm font-bold text-zinc-950 disabled:opacity-50"
                   >
                     {feedQuery.isFetchingNextPage ? (
-                      <Loader2 size={16} className="mx-auto animate-spin" />
+                      <Spinner size="md" className="mx-auto" />
                     ) : (
                       // The main feed is cursor-paged, so no total is known here.
                       localizeUi("ui.noodle.noodlehome.loadMorePosts")
@@ -5834,7 +5841,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
               }
               className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {resetNoodlePrompt.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+              {resetNoodlePrompt.isPending ? <Spinner size="sm" /> : <RotateCcw size={13} />}
               {localizeUi("ui.noodle.noodlehome.restoreDefault")}
             </button>
             <div className="flex gap-2">
@@ -5870,7 +5877,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                 }
                 className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 sm:flex-none"
               >
-                {saveNoodlePrompt.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                {saveNoodlePrompt.isPending ? <Spinner size="sm" /> : <Save size={13} />}
                 {localizeUi("ui.noodle.noodlehome.savePrompt")}
               </button>
             </div>
@@ -5926,7 +5933,7 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                     : "border border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 hover:bg-[var(--noodle-accent)]/85",
                 )}
               >
-                {confirmActionPending && <Loader2 size={14} className="animate-spin" />}
+                {confirmActionPending && <Spinner size="sm" />}
                 {confirmActionPending ? localizeUi("ui.noodle.noodlehome.working") : confirmAction.confirmLabel}
               </button>
             </div>

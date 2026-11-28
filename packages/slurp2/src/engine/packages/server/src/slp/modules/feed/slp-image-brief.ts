@@ -53,10 +53,13 @@ const TEXT_NEGATIVE = "text, watermark";
 
 /** A partner scene has two people on purpose; only the stray and doubled bodies stay out. */
 const SECOND_PERSON_NEGATIVE = "second person, extra people, ";
+/** The mirror's own people-count terms; a partner scene keeps none of them. */
+const MIRROR_COUNT_NEGATIVE = /multiple girls, multiple boys, two people,? ?/g;
 const PARTNER_NEGATIVE = SHARED_NEGATIVE.replace(SECOND_PERSON_NEGATIVE, "");
 
 /** A negative prompt that lets a second person in: for a picture whose final prompt names one (0.3.7). */
-export const slurpImageNegativeWithCompany = (negative: string): string => negative.replace(SECOND_PERSON_NEGATIVE, "");
+export const slurpImageNegativeWithCompany = (negative: string): string =>
+  negative.replace(SECOND_PERSON_NEGATIVE, "").replace(MIRROR_COUNT_NEGATIVE, "");
 
 /**
  * Without a level (a redraw or a scheduled picture that kept none), only the shared terms apply.
@@ -70,7 +73,11 @@ export function slurpImageNegativePrompt(
   return [
     level ? LEVEL_NEGATIVE[level] : "",
     partnered ? PARTNER_NEGATIVE : SHARED_NEGATIVE,
-    camera ? slurpCameraSourceNegative(camera) : DEVICE_NEGATIVE,
+    camera
+      ? partnered
+        ? slurpImageNegativeWithCompany(slurpCameraSourceNegative(camera))
+        : slurpCameraSourceNegative(camera)
+      : DEVICE_NEGATIVE,
     TEXT_NEGATIVE,
   ]
     .filter(Boolean)
@@ -111,8 +118,9 @@ export function slurpPostIsBare(input: {
   return slurpLevelIsBare(slurpPostSexualLevel(input));
 }
 
+/** An outfit that is no clothes, also with an intensifier in front ("completely naked", "fully nude"). */
 const NO_CLOTHES =
-  /^(?:nothing|nude|naked|unclothed|no clothes|completely bare)(?:[,.;!\s]+(?:bare skin|at all|completely|nude|naked))*[.!\s]*$/iu;
+  /^(?:(?:completely|fully|totally|entirely|stark|all|just|simply)\s+)?(?:nothing|nude|naked|unclothed|undressed|no clothes|bare)(?:[,.;!\s]+(?:bare skin|at all|completely|fully|nude|naked))*[.!\s]*$/iu;
 
 /**
  * The clothes a picture names. At a body-showing level the Creator's usual wardrobe (everyday
@@ -155,6 +163,8 @@ export function slurpShootContinuity(input: {
   return text || null;
 }
 
+const PEOPLE_COUNT: Record<number, string> = { 2: "Two", 3: "Three", 4: "Four", 5: "Five" };
+
 export function slurpImageBrief(input: {
   /** From `slurpCameraSourceShot`: framing and how the photo was taken, as a visual phrase. */
   cameraPhoto: string;
@@ -176,6 +186,8 @@ export function slurpImageBrief(input: {
   selectedWardrobe?: { name: string; description: string } | null;
   /** Who is in a partner scene with them ("Jonas, their boyfriend"). Absent: they are alone. */
   partner?: string | null;
+  /** How many people `partner` names ("Kai and Noor" is 2). Default 1. */
+  partnerCount?: number;
   /** Who else the post is about ("Kai"): in the picture only if the moment calls for them. */
   company?: string | null;
 }): string {
@@ -216,7 +228,7 @@ export function slurpImageBrief(input: {
         : LEVEL_PHOTO[input.sexualLevel],
     ),
     input.partner
-      ? `Two people: the Creator and ${input.partner}.`
+      ? `${PEOPLE_COUNT[(input.partnerCount ?? 1) + 1] ?? "Several"} people: the Creator and ${input.partner}.`
       : input.company
         ? `${input.company} may be in the photo too, if the moment calls for it.`
         : "The only person in the photo.",

@@ -1,4 +1,4 @@
-// Mount smoke for one installed turn game (MARINARA_PACKAGE_ID: blackjack, chess, eightball, poker,
+// Mount smoke for one installed turn game (MARINARA_PACKAGE_ID: blackjack, chess, eightball, poker, wordle,
 // rock-paper-scissors, tic-tac-toe or uno): its board renders in a Conversation with the Engine's React, and it locks while the Engine's
 // own chat store says the character is replying in that chat. The bundled store copy the games used to carry never
 // heard the Engine stream, so boards stayed playable mid-reply (Pasta-Devs/Marinara-Agents#1487).
@@ -20,6 +20,7 @@ const START_CONFIG: Record<string, Record<string, unknown>> = {
   "rock-paper-scissors": { roundsToWin: 1 },
   "tic-tac-toe": { humanMark: "X" },
   uno: {},
+  wordle: {},
 };
 
 test.skip(!(packageId in START_CONFIG), "runs with a turn game's package id");

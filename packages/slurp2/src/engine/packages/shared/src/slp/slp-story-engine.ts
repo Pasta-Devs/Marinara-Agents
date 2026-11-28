@@ -10,6 +10,11 @@ export const SLP_STORY_PACK_MAX_ENTRIES = 100;
 const id = (max = 128) => z.string().trim().min(1).max(max);
 const tag = z.string().trim().min(1).max(64);
 const tags = z.array(tag).max(50).default([]);
+/**
+ * Story tags stay absent when a story names none: zod 4 applies a field's own `.default` before
+ * `.optional()`, so `tags.optional()` would still write `[]` and a JSON round trip would differ.
+ */
+const storyTags = z.array(tag).max(50).optional();
 
 export const slpStoryAutomationSchema = z.enum(["inherit", "manual", "suggest", "auto"]);
 export type SlpStoryAutomation = z.infer<typeof slpStoryAutomationSchema>;
@@ -198,7 +203,7 @@ export const slpArcBlueprintSchema = z
               .object({ bio: z.string().trim().max(500).optional(), location: z.string().trim().max(120).optional() })
               .strict()
               .optional(),
-            storyTags: tags.optional(),
+            storyTags,
             influences: z.array(slpInfluenceDraftSchema).max(16).default([]),
             outcomes: z.array(slpStoryOutcomeSchema).max(16).default([]),
             opportunities: z.array(slpArcOpportunitySchema).max(8).default([]),
@@ -210,7 +215,8 @@ export const slpArcBlueprintSchema = z
     /** A life event a Creator has only once (moving, a new job): never started automatically again. */
     once: z.boolean().optional(),
     tags,
-    storyTags: tags,
+    // Absent when the pack names none: a default would give a round trip a key its source never had.
+    storyTags,
     tone: z.string().trim().max(80).default(""),
     durationDays: z.number().int().min(1).max(365).default(14),
     enabled: z.boolean().default(true),
@@ -303,7 +309,8 @@ export const slpEventBlueprintSchema = z
     name: id(60),
     enabled: z.boolean().default(true),
     guidance: z.string().trim().max(600).default(""),
-    storyTags: tags,
+    // Absent when the pack names none: a default would give a round trip a key its source never had.
+    storyTags,
     activation: slpEventActivationSchema,
     target: slpEventTargetSchema.default({ kind: "all" }),
     influences: z.array(slpInfluenceDraftSchema).max(16).default([]),

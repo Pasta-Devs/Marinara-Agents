@@ -5,11 +5,14 @@
 //   M2a  story chapters (S/story/canon.ts readStorySources): main, route and repair chapters (a Confrontation as the
 //        rounds played and its ending) are the kit's `chapter`; a date, and a Memory's Character Story or Moment (a
 //        `story-<itemId>` chapter), its `character-story`. Each is summarized and folded into the shared overview
-//   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [their id])
+//   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [their id]; the group chat's, #2154,
+//        audience [...its members, "group"])
 //   M4   owned Snapshots (S/wish/banners.ts itemMemorySources: `chat`, audience [their love interest])
 //   M5   Read Him sets (S/minigames/read-him.ts readHimMemorySources) and Claw Machine rounds (S/minigames/claw.ts
 //        clawMemorySources), each `chat` with audience [their id] and titled private, as a phone session is
-// Audience entries are plain LI ids. A `chat` is a short record kept as written, never in the shared overview; it and a
+//   #2151 Tarot night readings (S/minigames/tarot.ts tarotMemorySources: `chat`, audience [their id], titled private)
+//   0.35.0 Kitty Cards games (S/minigames/kitty.ts kittyMemorySources), each `chat` as a Claw round is
+// Audience entries are plain LI ids (and the group chat's "group"). A `chat` is a short record kept as written, never in the shared overview; it and a
 // love interest's own chapter reach a prompt beyond the overview only for that LI's own readers and scenes whose cast
 // includes them (S/memory/memory.ts). Read Me is never a source: its notebook joins the recall pool live on each recall
 // (S/memory/memory.ts recallPool), so a deleted entry never comes back. Care data is never a source.
@@ -17,7 +20,9 @@ import { orderForgeStorySources } from "@forge-kit/story-memory-integration.mjs"
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { playerId, stateId } from "../ids.js";
 import { clawMemorySources } from "../minigames/claw.js";
+import { kittyMemorySources } from "../minigames/kitty.js";
 import { readHimMemorySources } from "../minigames/read-him.js";
+import { tarotMemorySources } from "../minigames/tarot.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeState } from "../schemas/state.js";
 import { phoneMemorySources } from "../phone/memory.js";
@@ -36,12 +41,21 @@ export async function readMemorySources(
   ]);
   if (!state) return [];
   const protagonist = player?.name ?? "";
-  const [story, phone, items, readHim] = await Promise.all([
+  const [story, phone, items, readHim, tarot] = await Promise.all([
     readStorySources(store, runId, state, protagonist),
     phoneMemorySources(store, runId, state),
     itemMemorySources(store, runId, state),
     readHimMemorySources(store, runId, state),
+    tarotMemorySources(store, runId, state),
   ]);
-  const sources = [...story, ...phone, ...items, ...readHim, ...clawMemorySources(state, protagonist)];
+  const sources = [
+    ...story,
+    ...phone,
+    ...items,
+    ...readHim,
+    ...tarot,
+    ...clawMemorySources(state, protagonist),
+    ...kittyMemorySources(state, protagonist),
+  ];
   return orderForgeStorySources(sources.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)));
 }

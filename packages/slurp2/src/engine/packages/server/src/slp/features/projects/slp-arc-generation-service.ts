@@ -32,6 +32,7 @@ import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
 export class SlurpArcGenerationFailure extends Error {
   constructor(
     message: string,
@@ -204,7 +205,8 @@ export async function generateSlurpArc(
       storyHooks: [
         ...(await slurp.listArcOpportunities().catch(() => []))
           .filter(
-            (item) => item.creatorId === creator.id && (!item.expiresAt || Date.parse(item.expiresAt) > Date.now()),
+            (item) =>
+              item.creatorId === creator.id && (!item.expiresAt || Date.parse(item.expiresAt) > slurpWorldNowMs()),
           )
           .map((item) => `- Themes: ${item.storyTags.join(", ")}`),
         ...(await slurp.listStoryFacts().catch(() => []))
@@ -212,7 +214,7 @@ export async function generateSlurpArc(
             (fact) =>
               fact.creatorId === creator.id &&
               !fact.track &&
-              (!fact.expiresAt || Date.parse(fact.expiresAt) > Date.now()),
+              (!fact.expiresAt || Date.parse(fact.expiresAt) > slurpWorldNowMs()),
           )
           .map((fact) => `- Fact: ${fact.label}`),
       ].slice(0, 10),

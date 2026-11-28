@@ -8,7 +8,7 @@ import type { DB } from "../../../db/connection.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { readAvatarBase64 } from "../../../services/game/game-asset-generation.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
@@ -27,6 +27,7 @@ import {
 import type { SlpAppearanceProfileMode } from "../../../../../shared/src/slp/slp-social.types.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const MISSING_APPEARANCE = "Add an appearance to this Creator or its linked character before generating pictures.";
 const appearanceFlights = new Map<string, Promise<string>>();
 
@@ -101,7 +102,7 @@ async function resolveImageAppearanceOnce(input: Parameters<typeof resolveImageA
       sourceRevisionToken: evidence.sourceRevisionToken,
       confidence: candidate.confidence,
       accepted: shouldAutoAcceptSlpAppearance(input.mode, candidate.confidence),
-      now: new Date().toISOString(),
+      now: slurpWorldNow().toISOString(),
     });
     const saved = await storage.saveNoodlerAppearanceProfile(input.account.id, profile, input.regenerate);
     if (!saved) throw new Error("The character card changed while preparing its appearance. Try again.");
@@ -115,7 +116,7 @@ async function resolveImageAppearanceOnce(input: Parameters<typeof resolveImageA
   };
   const connection = await resolveSlurpTextConnection(createConnectionsStorage(input.db), input.connectionId);
   if (!connection) {
-    if (fallback) return fallback;
+    if (fallback && !input.regenerate) return fallback;
     throw new Error("Set up a Slurp text connection or add a written appearance before generating pictures.");
   }
   const provider = slpWithProviderRetry(

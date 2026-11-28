@@ -28,7 +28,7 @@ import { getPackagePersistence, getPackageResources } from "../package-runtime.j
 import { readSavedLtmSubjectIdentityChoices } from "../drafts/rejected-suggestions.js";
 import {
   nameTokensRelated,
-  partialNameTokensMatch,
+  trustedNameRelated,
   SOURCE_BACKED_NPC_NAME_PATTERN,
   sourceBackedNpcNames,
   stripNotePrefix,
@@ -562,13 +562,9 @@ function mutableHasRelatedIdentity(mutable: Map<string, MutableCatalogIdentity>,
     if (entry.familyId && entry.familyId !== familyId) return false;
     if ([...entry.aliases].some((alias) => normalizeSubjectName(alias) === slug)) return true;
     if (normalizeSubjectName(entry.name) === slug) return true;
-    // A short source form must not seed a local identity when a trusted character/persona
-    // with a longer name covers it. Resolution then routes the name to review instead.
-    if (
-      entry.subject &&
-      isTrustedCharacterOrPersonaSubject(entry.subject) &&
-      partialNameTokensMatch(name, entry.name)
-    ) {
+    // A shorter or longer source form must not seed a local identity when a trusted character/persona
+    // name relates to it. Resolution then routes the name to review instead.
+    if (entry.subject && isTrustedCharacterOrPersonaSubject(entry.subject) && trustedNameRelated(name, entry.name)) {
       return true;
     }
     // A saved note of LTM's own character in this chat relates the same way extracted names do.

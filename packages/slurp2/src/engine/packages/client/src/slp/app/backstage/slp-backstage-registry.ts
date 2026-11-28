@@ -9,6 +9,7 @@ import { SlpDiscoveryPanel } from "../../features/discovery/SlpDiscoveryPanel";
 import { SlpWalletPanel } from "../../features/economy/SlpWalletPanel";
 import { SlpPublishingPanel } from "../../features/feed/SlpPublishingPanel";
 import { SlpAutopurgePanel } from "../../features/maintenance/SlpAutopurgePanel";
+import { SlpWorldClockPanel } from "../../features/maintenance/SlpWorldClockPanel";
 import { SlpImagesPanel } from "../../features/media/SlpImagesPanel";
 import { SlpConnectionsPanel } from "../../features/settings/SlpConnectionsPanel";
 import { SlpEngineLinkPanel } from "../../features/settings/SlpEngineLinkPanel";
@@ -56,6 +57,7 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "spice", Component: SlpSpicePanel },
   { target: "prompts", Component: SlpPromptsPanel },
   { target: "autopurge", Component: SlpAutopurgePanel },
+  { target: "clock", Component: SlpWorldClockPanel },
   { target: "stir", Component: SlpStirSettingsPanel },
   { target: "live", Component: SlpLiveSettingsPanel },
 ];

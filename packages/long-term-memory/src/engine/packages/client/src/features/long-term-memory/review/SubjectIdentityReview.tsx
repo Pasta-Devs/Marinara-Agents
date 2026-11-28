@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type {
   LtmExtractionDraft,
   LtmSubjectIdentityReview,
   LtmSubjectIdentityDecision,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request } from "../api";
-import { Button, inputClass, lockedActionProps, StatusSurface } from "../shared-controls";
+import { Button, inputClass, lockedActionProps } from "../shared-controls";
 import { useLtmTranslation } from "../localization";
 
 type Candidate = LtmSubjectIdentityReview["candidates"][number];
@@ -41,8 +42,6 @@ export default function SubjectIdentityReview({
     });
   const [choices, setChoices] = useState<IdentityChoice[]>(initialChoices);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   const save = useCallback(async () => {
@@ -55,7 +54,6 @@ export default function SubjectIdentityReview({
     });
     if (busy || decisions.length !== choices.length) return false;
     setBusy(true);
-    setError("");
     try {
       await request<{ resolved: true; suggestionId: string; draft: LtmExtractionDraft | null }>(
         `/rejected-suggestions/${encodeURIComponent(suggestionId)}/resolve-identity`,
@@ -73,11 +71,11 @@ export default function SubjectIdentityReview({
       onDirtyChange(suggestionId, false);
       onRegisterSave(suggestionId, null);
       setDirty(false);
-      setSaved(true);
+      // The Review queue shows the saved-choices toast (it outlives this section, which the save removes).
       onResolved(decisions.some((choice) => choice.action === "skip"));
       return true;
     } catch (cause) {
-      setError(errorMessage(cause, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")));
+      toast.error(errorMessage(cause, localizeUi("ui.longTermMemory.reviewqueue.requestFailed")));
       return false;
     } finally {
       setBusy(false);
@@ -124,8 +122,6 @@ export default function SubjectIdentityReview({
         ? { name: participant.name, action: value }
         : { name: participant.name, action: "bind", subjectKey: value };
     setChoices((current) => current.map((choice, choiceIndex) => (choiceIndex === index ? nextChoice : choice)));
-    setSaved(false);
-    setError("");
     if (!dirty) {
       setDirty(true);
       onDirtyChange(suggestionId, true);
@@ -176,20 +172,6 @@ export default function SubjectIdentityReview({
           </div>
         );
       })}
-      {error ? (
-        <StatusSurface tone="danger" role="alert">
-          {error}
-        </StatusSurface>
-      ) : null}
-      {saved ? (
-        <StatusSurface tone="success" role="status">
-          {localizeUi(
-            choices.some((choice) => choice.action === "skip")
-              ? "ui.longTermMemory.reviewqueue.identitySkipSaved"
-              : "ui.longTermMemory.reviewqueue.identityChoicesSaved",
-          )}
-        </StatusSurface>
-      ) : null}
       <Button
         primary={!choices.some((choice) => choice.action === "skip")}
         disabled={choices.some((choice) => !choice.action || (choice.action === "bind" && !choice.subjectKey))}
@@ -211,7 +193,6 @@ export default function SubjectIdentityReview({
             if (busy) return;
             setChoices(initialChoices());
             setDirty(false);
-            setError("");
             onDirtyChange(suggestionId, false);
             onRegisterSave(suggestionId, null);
           }}

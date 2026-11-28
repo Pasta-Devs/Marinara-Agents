@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import type {
   LtmExtractionAccounting,
   LtmExtractionDiagnostic,
+  LtmExtractionDraft,
   LtmExtractionFingerprint,
   LtmExtractionOutcome,
   LtmExtractionResponse,
@@ -32,6 +33,7 @@ import { extractionFingerprintForLtmSourceNote } from "./source-hash.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { LtmServiceError } from "../service-error.js";
 import { addRejectedSuggestions } from "../drafts/rejected-suggestions.js";
+import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { watchLtmVaultWrites } from "../persistence/vault-snapshot.js";
 import { LTM_VAULT_DIR } from "../persistence/paths.js";
@@ -88,11 +90,24 @@ const PERMANENT_FAILURE_CODES = new Set([
   "authentication_error",
   "billing_hard_limit",
   "insufficient_quota",
+  "model_unavailable",
   "quota_exceeded",
 ]);
 const SAFE_ERROR_CODE = /^[a-z][a-z0-9_.-]{0,119}$/u;
 
+// Providers report a wrong model name by code or only in the message. A bare 404 can be a wrong base URL, so the
+// status alone does not count.
+function modelUnavailable(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return (
+    code === "model_not_found" ||
+    (typeof message === "string" && /no available channel for model|model .* (not found|does not exist)/i.test(message))
+  );
+}
+
 function failureCode(error: unknown, stage: "extract" | "finalize") {
+  if (modelUnavailable(error)) return "model_unavailable";
   const code =
     error instanceof LtmServiceError
       ? error.code
@@ -141,15 +156,21 @@ function reviewRequiredForExtraction(
 }
 function canMarkCurrent(prepared: PreparedSource) {
   if (prepared.outcome.incomplete) return false;
-  if (prepared.diagnostics.some((item) => item.severity === "error")) return false;
+  // An error with a candidate index is one dropped candidate, which Review lists; any other error fails the run.
+  if (prepared.diagnostics.some((item) => item.severity === "error" && item.candidateIndex === undefined)) return false;
   if (prepared.outcome.state === "success") return true;
-  if (prepared.outcome.state === "no_suggestions_created") return prepared.outcome.droppedUnits === 0;
-  if (prepared.outcome.state === "partial_success") {
-    // Deterministic compilation may drop malformed source blocks without invalidating the run. A provider batch
-    // whose only non-kept units were deduplicated is equally complete and must not churn on re-extraction.
-    return prepared.extractionMethod === "deterministic" || prepared.outcome.droppedUnits === 0;
-  }
-  return false;
+  // Nothing kept and something dropped: the run produced nothing to review, so a later pass tries again. Dropped
+  // placeholders are the model saying there is nothing to add, which is the same answer as an empty list.
+  if (prepared.outcome.state === "no_suggestions_created")
+    return (
+      prepared.outcome.droppedUnits === 0 ||
+      (!prepared.outcome.droppedCandidateDetailsTruncated &&
+        prepared.outcome.droppedCandidates.every((item) => item.validatorCode === "placeholder_text"))
+    );
+  // A finished run that kept some candidates is done: extracting the same text again only replaces its draft with
+  // another attempt. Its dropped candidates are stored as rejected suggestions, which Review lists and counts, while
+  // the draft with the kept ones may still apply on its own. Past the detail cap Review cannot list them all.
+  return prepared.outcome.state === "partial_success" && !prepared.outcome.droppedCandidateDetailsTruncated;
 }
 function deterministicUuid(seed: string) {
   const hex = createHash("sha256").update(seed).digest("hex");
@@ -400,6 +421,8 @@ async function commitPreparedLongTermMemorySource(
     overlay?: Map<string, LtmNote>;
     applyLowRisk?: boolean;
     committedNotes?: BatchCommittedNotes;
+    /** A background import's earlier drafts, newest first: a read that falls far short of the last one waits. */
+    earlierDrafts?: () => Promise<LtmExtractionDraft[]>;
   },
 ) {
   const storage = new LongTermMemoryStorage(options.root);
@@ -429,6 +452,37 @@ async function commitPreparedLongTermMemorySource(
         reviewRequiredForExtraction(prepared.sourceNote, {
           diagnostics,
         });
+    // A background read of unchanged text that keeps far fewer memories than the last read of it is more likely a
+    // model slip than a better reading: it waits in Review, and the last read's draft stays if it is still waiting.
+    const sourceHash = sourceHashForEvidenceUnitExtraction(prepared.sourceNote);
+    const readsThisText = (draft: LtmExtractionDraft) =>
+      draft.source.sourceNoteId === prepared.sourceNote.id && draft.source.sourceHash === sourceHash;
+    const passedDrafts = await options.earlierDrafts?.();
+    const lastRead = passedDrafts?.find(readsThisText);
+    // Units that match memories already saved are deduplicated, not kept, so a re-read of applied text counts them.
+    const found = (counts?: LtmExtractionAccounting) => (counts?.keptUnits ?? 0) + (counts?.deduplications ?? 0);
+    const lastFound = found(lastRead?.accounting);
+    const fallsShort = lastFound >= 6 && found(accounting) * 3 < lastFound;
+    if (fallsShort)
+      logger.info(
+        "[ltm] Source %s found %d memories where its last read found %d; the new draft waits in Review",
+        prepared.sourceNote.id,
+        found(accounting),
+        lastFound,
+      );
+    // A reworded memory passes the duplicate match, so once a read of this text was applied, a later read that creates
+    // notes waits in Review. Any applied read counts: the newest may itself still be waiting. Drafts are listed here
+    // when the caller passed none, which covers Re-extract.
+    // A partly applied draft stays pending, and a later read supersedes it, so its applied mutation ids count too.
+    // ponytail: finished drafts expire (persistence/retention.ts), after which a re-read applies again. To hold for
+    // longer, record on the source note which text was applied.
+    const rereadOfApplied =
+      response.mutations.some((mutation) => mutation.kind === "create_note") &&
+      (passedDrafts ?? (await new LongTermMemoryDraftStore(options.root).listDrafts())).some(
+        (draft) =>
+          readsThisText(draft) &&
+          (draft.status === "accepted" || draft.status === "auto_applied" || Boolean(draft.appliedMutationIds?.length)),
+      );
     const draft = await finalizeLongTermMemoryExtractionDraft(
       {
         sourceNote: prepared.sourceNote,
@@ -441,12 +495,10 @@ async function commitPreparedLongTermMemorySource(
         diagnostics,
         outcome,
         accounting,
-        reviewRequired,
+        reviewRequired: reviewRequired || fallsShort || rereadOfApplied,
+        ...(fallsShort && lastRead?.status === "pending" ? { keepPendingDraftId: lastRead.id } : {}),
         chatId: prepared.chatId,
-        afterWrite: (draft) =>
-          draft.extractionOutcome?.droppedCandidates.length
-            ? addRejectedSuggestions(draft, options.root)
-            : Promise.resolve(),
+        afterWrite: (draft, superseded) => addRejectedSuggestions(draft, options.root, superseded),
       },
       { root: options.root, overlay: options.overlay },
     );
@@ -463,7 +515,7 @@ async function commitPreparedLongTermMemorySource(
         : prepared.sourceNote;
     const fingerprintPersisted = markCurrent && Boolean(note.extractionFingerprint);
     const applyResult =
-      options.applyLowRisk && !reviewRequired && fingerprintPersisted && draft.mutations.length
+      options.applyLowRisk && !draft.reviewRequired && fingerprintPersisted && draft.mutations.length
         ? await applyLongTermMemoryDraft(draft.id, {
             root: options.root,
             actor: "maintenance_api",
@@ -493,7 +545,7 @@ async function commitPreparedLongTermMemorySource(
       diagnostics,
       outcome,
       accounting,
-      reviewRequired,
+      reviewRequired: draft.reviewRequired,
     };
   });
 }
@@ -524,15 +576,19 @@ function failed(
   error: unknown,
   isCancelled: boolean,
   prepared?: PreparedSource,
+  modelName?: string,
 ): LtmImportedSourceResult {
   // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.
   const unexpected = !isCancelled && !(error instanceof LtmServiceError);
   if (unexpected) logger.error(error, "[ltm] Failed to %s imported source %s", stage, item.sourceId);
-  const message = unexpected
-      ? `Failed to ${stage} imported source. Details are in the server log.`
-      : error instanceof Error
-        ? error.message
-        : `Failed to ${stage} imported source`,
+  const message =
+      !isCancelled && failureCode(error, stage) === "model_unavailable"
+        ? `The connection does not serve the extraction model${modelName ? ` "${modelName}"` : ""}. Check the model name.`
+        : unexpected
+          ? `Failed to ${stage} imported source. Details are in the server log.`
+          : error instanceof Error
+            ? error.message
+            : `Failed to ${stage} imported source`,
     base = {
       sourceId: item.sourceId,
       title: item.title,
@@ -592,6 +648,8 @@ export async function processLongTermMemorySourceBatch(options: {
   operationId: string;
   signal: AbortSignal;
   applyLowRisk?: boolean;
+  /** Background import: a read that keeps far fewer memories than the last read of the same text waits in Review. */
+  keepPendingDrafts?: boolean;
   concurrency: number;
   root: string;
   chatId?: string;
@@ -607,6 +665,8 @@ export async function processLongTermMemorySourceBatch(options: {
   const storage = new LongTermMemoryStorage(options.root);
   const committedNotes = batchCommittedNotes(storage);
   let deterministicSnapshot: Promise<LtmNote[]> | undefined;
+  // Listed once per batch: a batch reads each source once, so its own drafts never count as an earlier read.
+  let earlierDrafts: Promise<LtmExtractionDraft[]> | undefined;
   const commitItem = async (item: ImportedSourceItem, prepared: PreparedSource): Promise<LtmImportedSourceResult> => {
     try {
       throwIfAborted(options.signal);
@@ -615,6 +675,9 @@ export async function processLongTermMemorySourceBatch(options: {
         overlay,
         applyLowRisk: options.applyLowRisk,
         committedNotes,
+        ...(options.keepPendingDrafts
+          ? { earlierDrafts: () => (earlierDrafts ??= new LongTermMemoryDraftStore(options.root).listDrafts()) }
+          : {}),
       });
       hasAppliedMutations ||= (committed.applyResult?.appliedMutationIds.length ?? 0) > 0;
       // extractionStatus and retryable both follow outcome.incomplete, which the union type cannot see.
@@ -651,11 +714,18 @@ export async function processLongTermMemorySourceBatch(options: {
   const followerIndexes = new Set(followers.values());
   const heads = options.items.flatMap((_, index) => (followerIndexes.has(index) ? [] : [index]));
   let next = 0;
+  // A permanent failure fails every later model call the same way, so no new item starts, not even a deterministic one
+  // (#2497). Items already running finish; the rest get no result.
+  let stopped = false;
   try {
     await Promise.all(
       Array.from({ length: Math.min(Math.max(options.concurrency, 1), heads.length) }, async () => {
-        while (next < heads.length) {
-          for (let index: number | undefined = heads[next++]; index !== undefined; index = followers.get(index)) {
+        while (!stopped && next < heads.length) {
+          for (
+            let index: number | undefined = heads[next++];
+            index !== undefined && !stopped;
+            index = followers.get(index)
+          ) {
             const item = options.items[index]!,
               directGameMode = Boolean(item.deterministicSourceText);
             try {
@@ -687,6 +757,9 @@ export async function processLongTermMemorySourceBatch(options: {
               });
               outcomes[index] = { state: "prepared", item, prepared };
             } catch (error) {
+              const isCancelled = cancelled(error, options.signal);
+              // A cancelled import still runs every item, so each one reports as cancelled.
+              stopped ||= !isCancelled && PERMANENT_FAILURE_CODES.has(failureCode(error, "extract"));
               outcomes[index] = {
                 state: "failed",
                 result: failed(
@@ -694,7 +767,9 @@ export async function processLongTermMemorySourceBatch(options: {
                   directGameMode ? "deterministic" : "llm",
                   "extract",
                   error,
-                  cancelled(error, options.signal),
+                  isCancelled,
+                  undefined,
+                  options.languageModel?.model,
                 ),
               };
             }

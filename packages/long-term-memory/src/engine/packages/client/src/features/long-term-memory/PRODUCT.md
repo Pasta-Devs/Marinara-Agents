@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Primary: Marinara Engine end users — chat and roleplay users who curate durable memory for their conversations. They use the package per chat, from Chat Settings → Agents → Long-Term Memory (in Roleplay and Game also from Misc Agents), to import source material, review proposed memory changes, and manage the vault that feeds recall into generation.
+Primary: Marinara Engine end users — chat and roleplay users who curate durable memory for their conversations. They use the package per chat to import source material, review proposed memory changes, and manage the vault that feeds recall into generation.
 
 ## Product Purpose
 
@@ -20,9 +20,9 @@ Three durable mechanisms together: evidence-led human review of proposed memory 
 
 ## Operating Context
 
-- Users enable the package per chat in the Engine's panel (Chat Settings → Agents → Long-Term Memory); Roleplay and Game modes can also add it from Misc Agents. `enabledByDefault: false`, `runtimeDisabled: true` at the package level, modes conversation/roleplay/game (retired `visual_novel` folds into Roleplay).
-- The client is a responsive three-pane workstation inside the Engine chat surface: Memory Vault, Review Queue, Sources, and Memory Settings share the navigator/workbench/inspector pattern; Chat Settings exposes per-chat recall style, token budget, max chunks, and the last-injection summary pane.
-- Four destinations: Memory Vault (reviewed memories by scope), Review Queue (draft mutations awaiting accept/skip), Sources (characters, lorebooks, chats), Memory Settings (extraction prompts, retention, vault maintenance).
+- Users enable the package per chat in the Engine's Agents panel; Roleplay and Game modes can also add it from Misc Agents. `enabledByDefault: false`, `runtimeDisabled: true` at the package level, modes conversation/roleplay/game (retired `visual_novel` folds into Roleplay).
+- The client is a responsive three-pane workstation inside the Engine chat surface: Memories, Review, Sources, and Memory Settings share the navigator/workbench/inspector pattern; Chat Settings exposes per-chat recall style, token budget, max chunks, and the last-injection summary pane.
+- Four destinations: Memories (saved memories by scope), Review (suggestions awaiting add or discard), Sources (characters, lorebooks, chats), Memory Settings (extraction prompts, retention, vault maintenance).
 
 ## Capabilities and Constraints
 

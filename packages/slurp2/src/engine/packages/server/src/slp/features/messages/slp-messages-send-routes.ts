@@ -22,6 +22,7 @@ import { slurpSextingPrice, slurpSextingStart } from "../../modules/messages/slp
 import { isSlurpSupportThread } from "../../modules/messages/slp-support.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const sendSchema = z.object({
   personaId: z.string().trim().min(1),
   creatorAccountId: z.string().trim().min(1),
@@ -345,7 +346,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
           reason: directive.reason,
           context: "Development command test",
         },
-        new Date(),
+        slurpWorldNow(),
       );
       await messages.addScheduledFollowUps(thread.id, followUps);
       return { status: "accepted", kind: directive.kind, followUp: followUps[0] };
@@ -484,7 +485,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     if (creator.sourceKind === "persona" || isSlurpSupportThread(thread))
       return reply.code(400).send({ error: "This Creator does not offer sessions." });
     const price = slurpSextingPrice((await messages.getCreatorMessaging(creator.id)).ppvPrice, thread.rapport);
-    const session = slurpSextingStart(new Date());
+    const session = slurpSextingStart(slurpWorldNow());
     if (!(await messages.startSexting(thread.id, session)))
       return reply.code(409).send({ error: "A session is already running." });
     // The request id is scoped to this session: a stale id replayed later must not pay for a new one.

@@ -56,6 +56,8 @@ type Prepared = {
   excludedNoteIds: string[];
   patch: UpdateLtmNotePatch;
 };
+/** What the merge step reads from a note match; identity repair passes its subject matches, the people check plain notes. */
+type Mergeable = { note: LtmNote; exactFullName?: boolean };
 export type LtmIdentityRepairBackup = { id: string; createdAt: string; directory: string; snapshotRoot: string };
 const locks = new Map<string, Promise<void>>();
 export class LtmIdentityRepairError extends LtmServiceError {
@@ -105,19 +107,16 @@ export async function applyLtmIdentityRepairs(
       const groups = new Map(analyze(await options.loadCatalog()).groups.map((group) => [group.id, group])),
         prepared = parsed.repairs.map((selection) => prepare(groups, selection));
       assertDisjoint(prepared);
-      const backup = await createLtmIdentityRepairBackup(root);
-      try {
+      return withLtmIdentityRepairBackup(root, async (backup) => {
         const results: LtmIdentityRepairApplyResponse["repairs"] = [];
         for (const repair of prepared) {
-          await storage.updateNote(repair.canonical.note.id, repair.patch);
-          let rewrittenNoteCount = 0,
-            rewrittenDraftCount = 0;
-          for (const duplicate of repair.archived) {
-            const rewritten = await storage.redirectReferences(duplicate.note.id, repair.canonical.note.id);
-            rewrittenNoteCount += rewritten.rewrittenNoteCount;
-            rewrittenDraftCount += rewritten.rewrittenDraftCount;
-            await storage.updateNote(duplicate.note.id, { status: "archived", subjects: repair.group.subjects });
-          }
+          const { rewrittenNoteCount, rewrittenDraftCount } = await mergeNotes(
+            storage,
+            repair.canonical.note.id,
+            repair.patch,
+            repair.archived.map((match) => match.note.id),
+            { subjects: repair.group.subjects },
+          );
           results.push({
             candidateId: repair.group.id,
             canonicalNoteId: repair.canonical.note.id,
@@ -129,7 +128,7 @@ export async function applyLtmIdentityRepairs(
         }
         const rebuild = await rebuildLongTermMemoryIndexes({ root }),
           integrity = await checkLongTermMemoryIntegrity(root);
-        const response = ltmIdentityRepairApplyResponseSchema.parse({
+        return ltmIdentityRepairApplyResponseSchema.parse({
           repairedAt: nowIso(),
           backup: { id: backup.id, createdAt: backup.createdAt },
           repairs: results,
@@ -142,24 +141,95 @@ export async function applyLtmIdentityRepairs(
           },
           integrity,
         });
-        await pruneLtmRepairBackups(getLtmIdentityRepairBackupsRoot(root), { keepPath: backup.directory });
-        return response;
-      } catch (error) {
-        try {
-          await restoreLtmIdentityRepairBackup(root, backup);
-        } catch (restoreError) {
-          logger.error(error, "[ltm] Identity repair failed");
-          logger.error(restoreError, "[ltm] Failed to restore identity-repair backup %s", backup.id);
-          throw new LtmIdentityRepairError(
-            "Identity repair failed and its backup could not be restored. Details are in the server log.",
-            500,
-            "identity_repair_restore_failed",
-          );
-        }
-        throw error;
-      }
+      });
     }),
   );
+}
+
+/**
+ * Plans merging person memories the caller has already re-checked into `keep`, exactly as an identity repair merges a
+ * group, except that no note's subjects change. A section that only one value can win keeps the keep's text (or the
+ * first merged memory's when the keep has none). Returns the blocking reasons instead when the notes cannot merge.
+ */
+export function planLtmPersonMerge(
+  keep: LtmNote,
+  merge: LtmNote[],
+): { patch: UpdateLtmNotePatch; blockingReasons: [] } | { patch: null; blockingReasons: string[] } {
+  const matches: Mergeable[] = [{ note: keep }, ...merge.map((note) => ({ note }))],
+    blockingReasons = blockers(matches, keep.id);
+  if (blockingReasons.length) return { patch: null, blockingReasons };
+  const choices = previewSections(matches, keep.id).supersedingConflicts.map((conflict) => ({
+    sectionKey: conflict.sectionKey,
+    noteId: conflict.options[0]!.noteIds[0]!,
+  }));
+  try {
+    return { patch: projectRepair(matches, matches[0]!, undefined, choices), blockingReasons: [] };
+  } catch (error) {
+    return {
+      patch: null,
+      blockingReasons: [error instanceof Error ? error.message : "The memories cannot be merged."],
+    };
+  }
+}
+
+/**
+ * Applies planned person merges with identity repair's merge step and backup: one whole-vault backup first, then for
+ * each group the keep takes the merged content, references to each merged memory move to the keep, and the merged
+ * memory is archived (never deleted). Any failure restores the backup. The caller holds the vault lock and rebuilds.
+ */
+export async function applyLtmPersonMerges(
+  root: string,
+  storage: LongTermMemoryStorage,
+  merges: Array<{ keepId: string; mergeIds: string[]; patch: UpdateLtmNotePatch }>,
+) {
+  return withLtmIdentityRepairBackup(root, async (backup) => {
+    for (const merge of merges) await mergeNotes(storage, merge.keepId, merge.patch, merge.mergeIds, {});
+    return { backup: { id: backup.id, createdAt: backup.createdAt } };
+  });
+}
+
+async function mergeNotes(
+  storage: LongTermMemoryStorage,
+  canonicalId: string,
+  patch: UpdateLtmNotePatch,
+  archivedIds: string[],
+  archivedPatch: UpdateLtmNotePatch,
+) {
+  await storage.updateNote(canonicalId, patch);
+  let rewrittenNoteCount = 0,
+    rewrittenDraftCount = 0;
+  for (const id of archivedIds) {
+    const rewritten = await storage.redirectReferences(id, canonicalId);
+    rewrittenNoteCount += rewritten.rewrittenNoteCount;
+    rewrittenDraftCount += rewritten.rewrittenDraftCount;
+    await storage.updateNote(id, { status: "archived", ...archivedPatch });
+  }
+  return { rewrittenNoteCount, rewrittenDraftCount };
+}
+
+async function withLtmIdentityRepairBackup<T>(
+  root: string,
+  operation: (backup: LtmIdentityRepairBackup) => Promise<T>,
+) {
+  const backup = await createLtmIdentityRepairBackup(root);
+  try {
+    const result = await operation(backup);
+    await pruneLtmRepairBackups(getLtmIdentityRepairBackupsRoot(root), { keepPath: backup.directory });
+    return result;
+  } catch (error) {
+    try {
+      await restoreLtmIdentityRepairBackup(root, backup);
+    } catch (restoreError) {
+      logger.error(error, "[ltm] Identity repair failed");
+      logger.error(restoreError, "[ltm] Failed to restore identity-repair backup %s", backup.id);
+      throw new LtmIdentityRepairError(
+        "Identity repair failed and its backup could not be restored. Details are in the server log.",
+        500,
+        "identity_repair_restore_failed",
+      );
+    }
+    throw error;
+  }
 }
 
 export function getLtmIdentityRepairBackupsRoot(root = getLongTermMemoryRoot()) {
@@ -321,9 +391,9 @@ function prepare(groups: Map<string, Group>, selection: LtmIdentityRepairSelecti
   };
 }
 function projectRepair(
-  matches: TrustedLtmNoteSubjectMatch[],
-  canonical: TrustedLtmNoteSubjectMatch,
-  subjects: LtmSubject[],
+  matches: Mergeable[],
+  canonical: Mergeable,
+  subjects: LtmSubject[] | undefined,
   choices: LtmIdentityRepairSelection["sectionChoices"],
 ): UpdateLtmNotePatch {
   const patch = project(matches, canonical, subjects, choices),
@@ -341,9 +411,9 @@ function projectRepair(
   return { ...patch, scope: validated.scope };
 }
 function project(
-  matches: TrustedLtmNoteSubjectMatch[],
-  canonical: TrustedLtmNoteSubjectMatch,
-  subjects: LtmSubject[],
+  matches: Mergeable[],
+  canonical: Mergeable,
+  subjects: LtmSubject[] | undefined,
   choices: LtmIdentityRepairSelection["sectionChoices"],
 ): UpdateLtmNotePatch {
   const ordered = canonicalFirst(matches, canonical.note.id),
@@ -403,12 +473,13 @@ function project(
       links,
       sections,
       conflicts: conflicts.length ? conflicts : undefined,
-      subjects,
+      // Omitted, not undefined: the storage patch would clear the note's subjects.
+      ...(subjects ? { subjects } : {}),
     };
   ltmNoteSchema.parse({ ...canonical.note, ...patch, updatedAt: nowIso(), version: canonical.note.version + 1 });
   return patch;
 }
-function previewSections(matches: TrustedLtmNoteSubjectMatch[], canonicalId: string) {
+function previewSections(matches: Mergeable[], canonicalId: string) {
   const ordered = canonicalFirst(matches, canonicalId),
     canonical = ordered[0]!.note,
     additiveContent: LtmIdentityRepairCandidate["additiveContent"] = [],
@@ -437,7 +508,7 @@ function previewSections(matches: TrustedLtmNoteSubjectMatch[], canonicalId: str
   }
   return { additiveContent, supersedingConflicts };
 }
-function blockers(matches: TrustedLtmNoteSubjectMatch[], canonicalId: string) {
+function blockers(matches: Mergeable[], canonicalId: string) {
   const ordered = canonicalFirst(matches, canonicalId),
     result: string[] = [];
   if (uniqueStrings(ordered.map((m) => m.note.scope.groupId)).length > 1)
@@ -559,10 +630,10 @@ function uniqueBases(values: LtmIdentityMatchBasis[]) {
     set = new Set(values);
   return order.filter((value) => set.has(value));
 }
-function canonicalFirst(matches: TrustedLtmNoteSubjectMatch[], id: string) {
+function canonicalFirst<T extends Mergeable>(matches: T[], id: string) {
   return [...matches].sort((a, b) => (a.note.id === id ? 0 : 1) - (b.note.id === id ? 0 : 1) || compare(a, b));
 }
-function compare(a: TrustedLtmNoteSubjectMatch, b: TrustedLtmNoteSubjectMatch) {
+function compare(a: Mergeable, b: Mergeable) {
   return (
     (a.exactFullName ? 0 : 1) - (b.exactFullName ? 0 : 1) ||
     a.note.createdAt.localeCompare(b.note.createdAt) ||

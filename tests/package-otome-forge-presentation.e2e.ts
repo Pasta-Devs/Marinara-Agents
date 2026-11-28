@@ -11,7 +11,8 @@
 // only saved audio settings generate music (an unsaved Mute or music level never does), an unsaved Mute stays silent
 // when a cue's track lands, and a recorded track the Engine no longer lists is made again while stock music plays.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-presentation.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expectCustomLimitFits } from "./fixtures/otome-forge-limits.ts";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit";
@@ -364,11 +365,19 @@ const generatedCues = (calls: Call[]) =>
 const REPAINT_FACES = ["tender", "flustered", "cold", "hurt", "angry"];
 const REPAINT_ERROR = "The new expressions didn’t finish. Your current artwork stays. Try Repaint expressions again.";
 
+const LOOK_PROMPT = { prompt: "Ilvar Thorne, copper etching portrait.", negativePrompt: "lowres, child, underage" };
+
+/**
+ * 0.47.1: a repaint answers pending at once and paints on in the background: the run view says so until `land`
+ * resolves (at once without it), then has the new picture, or (`failFirst`'s first set, `failLookFirst`'s first look)
+ * says it failed.
+ */
 function expressionRepaintFixture({
   failFirst = false,
+  failLookFirst = false,
   conflictFirst = false,
-  wait,
-}: { failFirst?: boolean; conflictFirst?: boolean; wait?: Promise<void> } = {}) {
+  land,
+}: { failFirst?: boolean; failLookFirst?: boolean; conflictFirst?: boolean; land?: Promise<void> } = {}) {
   const fixture = createSceneStub({ audio: false });
   const { view } = fixture.stub;
   const forge = { phase: "ready", steps: [{ id: `paint:${ILVAR}`, state: "done" }] };
@@ -406,8 +415,10 @@ function expressionRepaintFixture({
     noticing: false,
   };
   let attempts = 0;
+  let looks = 0;
   const answer = (call: Call): Answer | undefined => {
     if (call.path.endsWith("/art/expressions/prompt")) return { status: 200, json: { base: FACE_COLD, prompts } };
+    if (call.path.endsWith("/art/prompt")) return { status: 200, json: LOOK_PROMPT };
     if (call.path.endsWith("/art/expressions")) {
       attempts += 1;
       if (conflictFirst && attempts === 1)
@@ -415,11 +426,31 @@ function expressionRepaintFixture({
           status: 409,
           json: { error: "This character's expressions are already being painted.", code: "conflict" },
         };
-      return {
-        status: 200,
-        json: { paint: { state: failFirst && attempts === 1 ? "failed" : "ready", at: now() } },
-        wait,
-      };
+      const failed = failFirst && attempts === 1;
+      view.lis[0].facesPaint = { state: "pending", at: now() };
+      void (land ?? Promise.resolve()).then(() => {
+        if (failed) view.lis[0].facesPaint = { state: "failed", at: now(), error: "the image service refused it" };
+        else delete view.lis[0].facesPaint;
+      });
+      return { status: 200, json: { paint: { state: "pending", at: now() } } };
+    }
+    if (call.path.endsWith("/art/paint")) {
+      // His look: its step paints, then the new portrait is in (or it failed, and the old one stays).
+      looks += 1;
+      const failed = failLookFirst && looks === 1;
+      const step = view.forge.steps[0];
+      step.state = "running";
+      view.lis[0].art = { state: "pending", at: now() };
+      void (land ?? Promise.resolve()).then(() => {
+        if (failed) {
+          Object.assign(step, { state: "failed", error: "failed" });
+          view.lis[0].art = { state: "failed", at: now(), error: "the image service refused it" };
+          return;
+        }
+        Object.assign(step, { state: "done", error: undefined });
+        Object.assign(view.lis[0], { portrait: FACE_TENDER, art: { state: "ready", at: now(), url: FACE_TENDER } });
+      });
+      return { status: 200, json: { paint: { state: "pending", at: now() } } };
     }
     if (call.path.endsWith("/home")) return { status: 200, json: home };
     if (call.path.endsWith(`/lis/${ILVAR}/lines`))
@@ -446,46 +477,59 @@ async function openRepaintCast(page: Page, reviewPrompts = false) {
   return root;
 }
 
-test("Otome Hearth expression repaint labels five images, shares busy controls and preserves the current look", async ({
+test("Otome Hearth repaints paint in the background: Your cast can be left and the new pictures land later", async ({
   page,
 }, testInfo) => {
-  let release!: () => void;
-  const wait = new Promise<void>((resolve) => (release = resolve));
-  const fixture = expressionRepaintFixture({ wait });
+  let land!: () => void;
+  const fixture = expressionRepaintFixture({ land: new Promise<void>((resolve) => (land = resolve)) });
   const calls: Call[] = [];
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
   await stubRoutes(page, fixture.answer, calls);
-  try {
-    const root = await openRepaintCast(page);
-    const button = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
-    const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
-    const actions = root.locator(".of-forge-retry--paints");
-    await expect(button).toBeVisible();
-    await expect(look).toBeVisible();
-    await expect(actions.getByText("Paints 1 image", { exact: true })).toBeVisible();
-    await expect(actions.getByText("Paints 5 images", { exact: true })).toBeVisible();
-    const original = await root.locator(".of-cast-card").first().locator("img").getAttribute("src");
-    const done = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/expressions"));
-    await button.click();
-    await expect(button).toBeDisabled();
-    await expect(look).toBeDisabled();
-    await expect.poll(() => posts(calls, "/art/expressions").length).toBe(1);
-    expect(posts(calls, "/art/expressions")[0]!.body).toMatchObject({ li: ILVAR });
-    expect(posts(calls, "/art/paint")).toEqual([]);
-    expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
-    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
-    await page.screenshot({ path: testInfo.outputPath("expression-repaint-busy-midnight.png") });
-    release();
-    await (await done).finished();
-    await expect(button).toBeEnabled();
-    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
-    expect(posts(calls, "/art/expressions")).toHaveLength(1);
-    expect(errors).toEqual([]);
-  } finally {
-    release();
-  }
+  const root = await openRepaintCast(page);
+  const button = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+  const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+  const actions = root.locator(".of-forge-retry--paints");
+  const card = root.locator(".of-cast-card").first();
+  await expect(button).toBeVisible();
+  await expect(look).toBeVisible();
+  await expect(actions.getByText("Paints 1 image", { exact: true })).toBeVisible();
+  await expect(actions.getByText("Paints 5 images", { exact: true })).toBeVisible();
+  const original = await card.locator("img").getAttribute("src");
+  await button.click();
+  await expect.poll(() => posts(calls, "/art/expressions").length).toBe(1);
+  expect(posts(calls, "/art/expressions")[0]!.body).toMatchObject({ li: ILVAR });
+  expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
+  // Answered as it starts: the faces paint on, the button says so and waits, and the current look stays.
+  await expect(button).toHaveText("Painting…");
+  await expect(button).toBeDisabled();
+  await expect(card.getByText("Painting in the background. You can leave this page meanwhile.")).toBeVisible();
+  await expect(card.locator("img")).toHaveAttribute("src", original!);
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-busy-midnight.png") });
+  // His look too: its step says it paints, and Repaint stays where it was, saying so and keeping focus.
+  await look.click();
+  await expect.poll(() => posts(calls, "/art/paint").length).toBe(1);
+  await expect(root.locator(".of-forge-step").first()).toContainText("Painting…");
+  await expect(look).toHaveText("Painting…");
+  await expect(look).toBeDisabled();
+  await expect(look).toBeFocused();
+  // Leave Your cast and come back: still painting, and nothing more was asked for.
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toHaveCount(0);
+  await openCast(root);
+  await expect(root.locator(".of-forge-step").first()).toContainText("Painting…");
+  await expect(card.getByText("Painting in the background. You can leave this page meanwhile.")).toBeVisible();
+  land();
+  // The run view is read again while anything paints: the faces land, and the new look takes the old one's place.
+  await expect(look).toHaveText("Repaint");
+  await expect(button).toHaveText("Repaint expressions");
+  await expect(button).toBeEnabled();
+  await expect(card.locator("img")).toHaveAttribute("src", FACE_TENDER);
+  await expect(card.getByText("Painting in the background. You can leave this page meanwhile.")).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toHaveLength(1);
+  expect(posts(calls, "/art/paint")).toHaveLength(1);
+  expect(errors).toEqual([]);
 });
 
 test("Otome Hearth expression repaint reviews five prompts before paying, cancels cleanly and retains edits after failure", async ({
@@ -519,21 +563,87 @@ test("Otome Hearth expression repaint reviews five prompts before paying, cancel
     if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
   }
   await page.screenshot({ path: testInfo.outputPath("expression-repaint-last-review-pearl.png") });
+  // 0.47.1: the reviewed set starts and the dialog closes; the faces paint in the background.
   await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
-  await expect(dialog.getByRole("alert")).toHaveText(REPAINT_ERROR);
+  await expect(dialog).toHaveCount(0);
   const first = posts(calls, "/art/expressions")[0]!.body!;
   expect(first).toMatchObject({ li: ILVAR, base: FACE_COLD });
   expect(Object.keys(first.prompts).sort()).toEqual([...REPAINT_FACES].sort());
   expect(first.prompts.tender).toEqual({ prompt: edited, negativePrompt: "Keep the edited negative whole." });
   expect(first.prompts.angry).toEqual(fixture.prompts.angry);
-  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(fixture.prompts.angry.prompt);
+  // The set failed at the provider: Your cast says so beside Repaint expressions, which opens the review again with the
+  // player's edits.
+  await expect(root.getByText(REPAINT_ERROR)).toBeVisible();
+  await expect(repaint).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("expression-repaint-failure-pearl.png") });
+  await repaint.click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(edited);
+  await expect(dialog.getByLabel("Negative prompt", { exact: true })).toHaveValue("Keep the edited negative whole.");
+  for (const index of REPAINT_FACES.keys()) {
+    if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
+  }
   await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(posts(calls, "/art/expressions")).toHaveLength(2);
   expect(posts(calls, "/art/expressions")[1]!.body).toEqual(first);
+  await expect(root.getByText(REPAINT_ERROR)).toHaveCount(0);
+  // Landed: the next review starts from the defaults again.
+  await repaint.click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(fixture.prompts.tender.prompt);
+  await dialog.getByRole("button", { name: "Cancel repaint", exact: true }).click();
   expect(posts(calls, "/art/paint")).toEqual([]);
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Otome Hearth a reviewed look that fails in the background opens its review again with the player's edits", async ({
+  page,
+}) => {
+  let land!: () => void;
+  const fixture = expressionRepaintFixture({
+    failLookFirst: true,
+    land: new Promise<void>((resolve) => (land = resolve)),
+  });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page, true);
+  const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+  await look.click();
+  let dialog = page.getByRole("dialog");
+  const edited = { prompt: "Ilvar Thorne in copper etching, his grey scarf kept.", negativePrompt: "No hat." };
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(LOOK_PROMPT.prompt);
+  await dialog.getByLabel("Prompt", { exact: true }).fill(edited.prompt);
+  await dialog.getByLabel("Negative prompt", { exact: true }).fill(edited.negativePrompt);
+  await dialog.getByRole("button", { name: "Paint", exact: true }).click();
+  // It paints in the background: the dialog closes, and Repaint says so and keeps focus.
+  await expect(dialog).toHaveCount(0);
+  await expect(look).toHaveText("Painting…");
+  await expect(look).toBeFocused();
+  const first = posts(calls, "/art/paint")[0]!.body!;
+  expect(first).toMatchObject(edited);
+  land();
+  // It failed at the provider: its step says so, and Try again opens the review with the player's edits.
+  const step = root.locator(".of-forge-step").first();
+  await expect(step).toContainText("The new look didn’t finish, so the old one stays. Try again.");
+  await root.getByRole("button", { name: "Try Ilvar Thorne’s look again", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(edited.prompt);
+  await expect(dialog.getByLabel("Negative prompt", { exact: true })).toHaveValue(edited.negativePrompt);
+  await dialog.getByRole("button", { name: "Paint", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => posts(calls, "/art/paint").length).toBe(2);
+  expect(posts(calls, "/art/paint")[1]!.body).toEqual(first);
+  // Landed: the next Repaint reviews the defaults again.
+  await expect(look).toHaveText("Repaint");
+  await look.click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(LOOK_PROMPT.prompt);
+  await dialog.getByRole("button", { name: "Skip", exact: true }).click();
+  expect(posts(calls, "/art/prompt")).toHaveLength(2);
   expect(errors).toEqual([]);
 });
 
@@ -666,6 +776,41 @@ for (const theme of ["dark", "light"] as const) {
     await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
     await expect(root.getByRole("button", { name: /intimacy preferences$/u })).toHaveCount(0);
     expect(posts(calls, "/intimacy")).toEqual([]);
+  });
+
+  test(`Otome Hearth Settings → Content: your own limits take Allow, Veil or Line on one row (${theme})`, async ({
+    page,
+  }, testInfo) => {
+    const fixture = intimacyFixture();
+    // A story saved by an earlier version: its own limit loads as it was.
+    fixture.view.world.content.custom = [{ text: "spiders", level: "veil" }];
+    const calls: Call[] = [];
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+    await stubRoutes(page, fixture.answer, calls);
+    const root = await openRepaintCast(page);
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tab", { name: "Content", exact: true }).click();
+    await expect(root).toHaveAttribute("data-look", theme === "dark" ? "midnight" : "pearl");
+    await expect(root.getByRole("textbox", { name: "Your limit 1", exact: true })).toHaveValue("spiders");
+    const first = root.getByRole("group", { name: "Level of your limit 1", exact: true });
+    await expect(first.locator(".of-pill")).toHaveText(["Allow", "Veil", "Line"]);
+    await expect(first.getByRole("radio", { name: "Veil", exact: true })).toBeChecked();
+    await root.getByRole("button", { name: "Add your own", exact: true }).click();
+    await root.getByRole("textbox", { name: "Your limit 2", exact: true }).fill("Infidelity");
+    const second = root.getByRole("group", { name: "Level of your limit 2", exact: true });
+    await expect(second.getByRole("radio", { name: "Line", exact: true })).toBeChecked();
+    await second.getByText("Allow", { exact: true }).click();
+    await expect(second.getByRole("radio", { name: "Allow", exact: true })).toBeChecked();
+    const save = root.getByRole("button", { name: "Save changes", exact: true });
+    await save.click();
+    await expect(save).toBeDisabled();
+    expect(posts(calls, "/settings").at(-1)!.body!.content.custom).toEqual([
+      { text: "spiders", level: "veil" },
+      { text: "Infidelity", level: "allow" },
+    ]);
+    await expectCustomLimitFits(page, root.locator(".of-custom-limit").nth(1), (name) =>
+      testInfo.outputPath(`settings-${theme}-${name}`),
+    );
   });
 
   test(`Otome Hearth intimacy: an older bible gains its block from the cast, retried after a failure (${theme})`, async ({
@@ -967,7 +1112,9 @@ test("Otome Forge arcs: a rupture's banner plans the repair, routes open, wait o
   const sora = routes.getByRole("listitem").filter({ hasText: "Sora" });
   await expect(sora).toContainText("Affection 3 · her next chapter");
   await expect(sora).toContainText("Opens at affection 3 · now 1");
-  await expect(sora.getByRole("button")).toHaveCount(0);
+  // A route that waits offers no chapter to open; its only button is "I'm upset with her" (#2156), beside every route.
+  await expect(sora.getByRole("button")).toHaveCount(1);
+  await expect(sora.getByRole("button", { name: "I’m upset with her" })).toBeVisible();
   const cassian = routes.getByRole("listitem").filter({ hasText: "Cassian" });
   await expect(cassian).toContainText("Stage 2 · Crack");
   await expect(cassian).toContainText("Next: Pull");
@@ -1628,6 +1775,19 @@ test("Otome Hearth imageless play: full visual descriptions keep reading control
   await expect(descriptionText).toBeFocused();
   await page.keyboard.press("PageDown");
   await expect.poll(() => descriptionText.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  // Let PageDown's smooth scroll settle first: an End pressed while it still runs is dropped on a slow runner (#2341,
+  // CI stopped 310 px short). The same frame's scrollTop twice in a row means it has.
+  await expect
+    .poll(() =>
+      descriptionText.evaluate(
+        (element) =>
+          new Promise<boolean>((resolve) => {
+            const before = element.scrollTop;
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve(element.scrollTop === before)));
+          }),
+      ),
+    )
+    .toBe(true);
   await page.keyboard.press("End");
   await expect
     .poll(() => descriptionText.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
@@ -1710,6 +1870,7 @@ test("Otome Hearth backgrounds: reading waits for the current place paint and im
     calls,
   );
   const root = await openStory(page);
+  await recordSpeech(page);
   await root.getByRole("button", { name: "Continue" }).first().click();
   const preparing = root.getByRole("status").filter({ hasText: "Preparing the background…" });
   await expect(preparing).toBeVisible();
@@ -1726,7 +1887,8 @@ test("Otome Hearth backgrounds: reading waits for the current place paint and im
   ).toHaveCount(0);
   await page.getByRole("dialog", { name: "Backlog" }).getByRole("button", { name: "Close" }).click();
   expect(posts(calls, "/read")).toHaveLength(0);
-  expect(posts(calls, "/api/tts/speak")).toHaveLength(0);
+  // 0.37.0: the held line's voice may be made ahead, but nothing is spoken before its place paints.
+  expect(await spoken(page)).toEqual([]);
   painted = true;
   await expect.poll(() => decodeRequested).toBe(true);
   await expect(preparing).toBeVisible();
@@ -1740,6 +1902,8 @@ test("Otome Hearth backgrounds: reading waits for the current place paint and im
     new RegExp("background-preparation\\.svg"),
   );
   await expect.poll(() => posts(calls, "/read").length).toBe(1);
+  // Spoken once it shows, with the clip made ahead: one request in all.
+  await expect.poll(async () => (await spoken(page)).length).toBe(1);
   await expect.poll(() => posts(calls, "/api/tts/speak").length).toBe(1);
   expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
     [],
@@ -2585,7 +2749,10 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
     characterId: "card-ilvar",
   });
   expect(first.cacheKey).toBe(`otome-forge:${RUN}:main-1/0r0/1`);
-  await expect.poll(() => posts(calls, "/api/tts/speak").length).toBe(1);
+  // 0.37.0: his later line is made ahead too; this one is asked for once, ahead and played alike.
+  await expect
+    .poll(() => posts(calls, "/api/tts/speak").filter((call) => call.body!.text === first.text).length)
+    .toBe(1);
 
   // Stock music plays for the beat's cue, and the cue is generated once on the audio connection.
   await expect
@@ -3678,6 +3845,358 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
   expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
 });
 
+test("#2458: Otome Hearth's Story lists her friends with stars, and Add a friend takes someone she has met with a card", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  const view = fixture.stub.view as Json;
+  view.friends = [];
+  let block: "arc" | null = null;
+  const kaveh = {
+    ...(view.lis as Json[])[0]!,
+    id: "li-kaveh-0009",
+    name: "Kaveh",
+    level: 2,
+    affectionProgress: { current: 50, required: 250 },
+    arc: 1,
+    source: "card",
+    cardId: "card-kaveh-alt",
+  };
+  // #2475: his friend bible, for Your cast.
+  let friendBible: Json = {
+    age: 24,
+    role: "Architect",
+    howWeMet: "Neighbours.",
+    publicFace: "Sharp-tongued.",
+    personality: "Proud, secretly soft.",
+    wound: "A failed bridge.",
+    want: "To build something that lasts.",
+    need: "To let someone help.",
+    fear: "Being ordinary.",
+    flaws: ["stubborn"],
+    virtues: ["loyal"],
+    voice: { register: "Precise.", tics: ["Honestly."], samples: { warm: "W", teasing: "T", worried: "R" } },
+    likes: ["blueprints"],
+    dislikes: ["mess"],
+    growth: { "1": "RANK-ONE", "2": "RANK-TWO", "3": "RANK-THREE", "4": "RANK-FOUR", "5": "RANK-FIVE" },
+    onLis: { [ILVAR]: { stance: "ships", why: "ILVAR-STANCE-WHY" } },
+    onHer: "Worried she works too hard.",
+    arcana: "star",
+    look: { identityLine: "tall, ash hair", outfitLine: "linen coat", presentation: "man" },
+  };
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    const path = call.path.replace(/^\/api\/otome-forge/u, "");
+    if (path === `/runs/${RUN}/friends/met`) {
+      return { status: 200, json: { met: [{ key: "kaveh", name: "Kaveh", cardId: "card-kaveh" }], block } };
+    }
+    if (path === `/runs/${RUN}/friends` && call.method === "POST") {
+      view.friends = [kaveh];
+      block = "arc";
+      return { status: 200, json: { friend: { id: kaveh.id, name: kaveh.name } } };
+    }
+    if (path === `/runs/${RUN}/friends/${kaveh.id}/bible`) {
+      if (call.method === "POST") friendBible = (call.body as Json).bible as Json;
+      return { status: 200, json: { bible: friendBible } };
+    }
+    const reply = fixture.answer(call);
+    if (path === `/runs/${RUN}/story` && reply?.json) return { ...reply, json: { ...reply.json, friendBlock: block } };
+    return reply;
+  };
+  await stubRoutes(page, answer, calls);
+  const cards = [
+    { id: "card-kaveh", name: "Kaveh", avatarPath: null },
+    { id: "card-kaveh-alt", name: "Kaveh the Architect", avatarPath: null },
+    { id: "card-kaveh-au", name: "Kaveh", comment: "Modern AU", avatarPath: null },
+    { id: "card-ilvar", name: "Ilvar card", avatarPath: null },
+  ];
+  await page.route("**/api/characters/catalog?*", (route) => route.fulfill({ json: { items: cards, hasMore: false } }));
+  const root = await openStory(page);
+  const section = root.getByRole("region", { name: "Friends", exact: true });
+  await expect(section.getByText("No friends yet.", { exact: true })).toBeVisible();
+  await section.getByRole("button", { name: "Add a friend", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add a friend" });
+  await expect(dialog.getByRole("radio", { name: "Someone you’ve met", exact: true })).toBeChecked();
+  const add = dialog.getByRole("button", { name: "Add them", exact: true });
+  await expect(add).toBeDisabled();
+  await dialog
+    .getByRole("list", { name: "Someone you’ve met", exact: true })
+    .getByRole("button", { name: "Kaveh", exact: true })
+    .click();
+  // #2475: his card comes picked (the one his name matches); another of hers may take its place, or none.
+  const cardList = dialog.getByRole("list", { name: "Their character card", exact: true });
+  await expect(cardList.getByRole("button", { name: "Kaveh", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(cardList.getByRole("button", { name: "No card", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(cardList.getByRole("button", { name: "Ilvar card", exact: true })).toHaveCount(0);
+  // Two of her cards named Kaveh: the second one's title tells them apart.
+  await expect(cardList.getByText("Modern AU", { exact: true })).toBeVisible();
+  await cardList.getByRole("button", { name: "Kaveh the Architect", exact: true }).click();
+  await expect(cardList.getByRole("button", { name: "Kaveh", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await dialog.getByText("he/him", { exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "he/him", exact: true })).toBeChecked();
+  await page.screenshot({ path: testInfo.outputPath("friends-add.png") });
+  await add.click();
+  await expect(dialog).toBeHidden();
+  expect(posts(calls, "/friends").map((call) => call.body)).toEqual([
+    expect.objectContaining({
+      source: "met",
+      key: "kaveh",
+      pronouns: { subject: "he", object: "him", possessive: "his" },
+      cardId: "card-kaveh-alt",
+    }),
+  ]);
+  const row = section.getByRole("listitem").filter({ hasText: "Kaveh" });
+  await expect(row.getByRole("img", { name: "Kaveh: friendship 2 of 5", exact: true })).toBeVisible();
+  await expect(row.getByRole("meter", { name: "Friendship with Kaveh", exact: true })).toHaveText("50 / 250");
+  await expect(section.getByRole("button", { name: "Add a friend", exact: true })).toBeDisabled();
+  await expect(
+    section.getByText("A friend has already joined in this story arc. Another can join in the next one.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await section.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("friends-list.png") });
+
+  // #2475: Your cast lists him under the love interests, marked as a friend, with his card and his bible.
+  await openCast(root);
+  await expect(root.getByRole("heading", { name: "Friends", exact: true })).toBeVisible();
+  const friends = root.getByRole("list", { name: "Friends", exact: true });
+  const card = friends.getByRole("listitem").filter({ hasText: "Kaveh" });
+  await expect(card.getByText("Friend · he/him", { exact: true })).toBeVisible();
+  await expect(card.getByRole("form", { name: "Image appearance for Kaveh", exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: /intimacy preferences$/u })).toHaveCount(0);
+  await card.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("friends-cast.png") });
+  await card.getByRole("button", { name: "Open Kaveh’s bible (spoilers)", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Kaveh’s bible", exact: true })).toBeVisible();
+  const link = root.getByRole("form", { name: "Character card", exact: true });
+  const select = link.getByRole("combobox", { name: "Character card", exact: true });
+  await expect(select).toHaveValue("card-kaveh-alt");
+  await expect(select.getByRole("option", { name: "Ilvar card", exact: true })).toBeDisabled();
+  expect(calls.some((call) => call.path.endsWith(`/friends/${kaveh.id}/bible`))).toBe(false);
+  // A friend's bible holds no secrets, and the gate says what it does hold.
+  await expect(
+    root.getByText(
+      "Their bible holds their wound, what they want and where your friendship is heading. Reading it spoils the surprises.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await root.getByRole("button", { name: "Show spoilers", exact: true }).click();
+  await expect(root.getByText("RANK-TWO", { exact: true })).toBeVisible();
+  await expect(root.getByText("Friendship 2 of 5", { exact: true })).toBeVisible();
+  await expect(root.getByText("ILVAR-STANCE-WHY", { exact: true })).toBeVisible();
+  await expect(root.getByText("Secrets", { exact: true })).toHaveCount(0);
+  await expect(root.getByText("Arc", { exact: true })).toHaveCount(0);
+  await root.getByRole("button", { name: "Edit", exact: true }).click();
+  // The server's rule, a whole number 18 or older, in a friend's own words; nothing is sent.
+  const age = root.getByRole("spinbutton", { name: "Age", exact: true });
+  await age.fill("18.5");
+  // Filling it scrolls the page, which leaves the pointer from Edit on Save's bottom edge, where its 1px hover lift
+  // never settles; the pointer moves off first.
+  await page.mouse.move(0, 0);
+  await root.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    root.getByText("Friends are always adults: the age must be a whole number, 18 or older.", { exact: true }),
+  ).toBeVisible();
+  expect(posts(calls, `/friends/${kaveh.id}/bible`)).toEqual([]);
+  await age.fill("24");
+  await root
+    .getByRole("textbox", { name: "How they see your love life", exact: true })
+    .fill("EDITED: cheering her on.");
+  await root.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(root.getByText("Saved. The story follows your edits from now on.", { exact: true })).toBeVisible();
+  expect(posts(calls, `/friends/${kaveh.id}/bible`).map((call) => (call.body as Json).bible)).toEqual([
+    expect.objectContaining({ onHer: "EDITED: cheering her on.", growth: friendBible.growth }),
+  ]);
+  await page.screenshot({ path: testInfo.outputPath("friends-bible.png") });
+});
+
+test("#2458, #2459: a friend's rank story and Wingman, a hangout planned from the Album, and End the Story", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  const view = fixture.stub.view as Json;
+  const lis = view.lis as Json[];
+  const kaveh = {
+    ...lis[0]!,
+    id: "li-kaveh-0009",
+    name: "Kaveh",
+    level: 5,
+    affectionProgress: { current: 350, required: 350 },
+    arc: 1,
+    // #2477: what a server before 0.47.0 sent; the row no longer shows it.
+    about: "Architect. Your neighbour.",
+  };
+  view.friends = [kaveh];
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    const path = call.path.replace(/^\/api\/otome-forge/u, "");
+    if (path === `/runs/${RUN}/hangouts` && call.method === "GET") {
+      const hangout = {
+        key: "story-hangout-1",
+        kind: "story",
+        title: "The lantern market",
+        state: "done",
+        memento: false,
+        friendStory: { kind: "hangout", friends: [kaveh.id] },
+      };
+      return { status: 200, json: { hangouts: [hangout], free: [kaveh.id] } };
+    }
+    if (path === `/runs/${RUN}/album`) {
+      return { status: 200, json: { cgs: [], memories: [], timeline: [], favorites: [], soundtrack: [], tells: {} } };
+    }
+    if (path === `/runs/${RUN}/hangouts` && call.method === "POST") {
+      // #2502: the first plan is still being written when Close stops it; the next is refused.
+      const first = posts(calls, "/hangouts").length === 1;
+      return {
+        status: 409,
+        json: { error: "Stop here.", code: "conflict" },
+        ...(first ? { wait: new Promise<void>(() => undefined) } : {}),
+      };
+    }
+    if (path === `/runs/${RUN}/cancel`) return { status: 200, json: { ok: true } };
+    if (path === `/runs/${RUN}/friends/${kaveh.id}/wingman`) {
+      return { status: 200, json: { li: lis[0]!.id, helper: kaveh.id } };
+    }
+    if (path === `/runs/${RUN}/ending` || path === `/runs/${RUN}/friends/${kaveh.id}/rank`) {
+      return { status: 409, json: { error: "Stop here.", code: "locked" } };
+    }
+    const reply = fixture.answer(call);
+    if (path === `/runs/${RUN}/story` && reply?.json) {
+      return {
+        ...reply,
+        json: {
+          ...reply.json,
+          // The chapter in progress is read, so End the Story can be pressed.
+          chapters: (reply.json.chapters as Json[]).map((chapter) => ({ ...chapter, state: "done" })),
+          friendBlock: "full",
+          friendStories: [
+            {
+              id: kaveh.id,
+              rank: { level: 5, key: `story-friend-${kaveh.id}-5` },
+              held: null,
+              upset: false,
+              finale: false,
+              wingman: [lis[0]!.id],
+            },
+          ],
+          ending: { offered: true },
+        },
+      };
+    }
+    return reply;
+  };
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const friends = root.getByRole("region", { name: "Friends", exact: true });
+  // #2477: the row is his name, stars and progress, with no line about him.
+  await expect(friends.getByRole("meter", { name: "Friendship with Kaveh", exact: true })).toBeVisible();
+  await expect(friends.getByText("Architect. Your neighbour.")).toHaveCount(0);
+  await friends.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("friends-actions.png") });
+  await friends.getByRole("button", { name: "Kaveh's finale", exact: true }).click();
+  await expect.poll(() => posts(calls, `/friends/${kaveh.id}/rank`).length).toBe(1);
+  await page.getByRole("dialog").getByRole("button", { name: "Not now", exact: true }).click();
+  await friends.getByRole("button", { name: `Ask Kaveh to talk to ${lis[0]!.name}`, exact: true }).click();
+  await expect
+    .poll(() => posts(calls, `/friends/${kaveh.id}/wingman`).map((call) => call.body))
+    .toEqual([expect.objectContaining({ li: lis[0]!.id })]);
+  // End the Story asks first, and says the game ends after the epilogue.
+  const ending = root.getByRole("region", { name: "Your ending", exact: true });
+  await ending.getByRole("button", { name: "End the Story", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "End the Story?" });
+  await expect(confirm.getByText(/the game is over/u)).toBeVisible();
+  await confirm.getByRole("button", { name: "End the Story", exact: true }).click();
+  await expect.poll(() => posts(calls, "/ending").length).toBe(1);
+  await page.getByRole("dialog").getByRole("button", { name: "Not now", exact: true }).click();
+  // A hangout: Kaveh, somewhere he chooses, in what she wears now.
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Album", exact: true }).click();
+  await root.getByRole("tab", { name: "Hangouts", exact: true }).click();
+  // #2477: Plan a hangout stands apart from the hangouts under it, as wide as its label, on the desktop and the phone.
+  const planButton = root.getByRole("button", { name: "Plan a hangout", exact: true });
+  const hangout = root.getByRole("listitem").filter({ hasText: "The lantern market" });
+  await expect(hangout).toBeVisible();
+  const hangoutList = hangout.locator("xpath=..");
+  const [planBox, listBox] = [(await planButton.boundingBox())!, (await hangoutList.boundingBox())!];
+  expect(listBox.y - (planBox.y + planBox.height), "a gap between the button and the hangouts").toBeGreaterThanOrEqual(
+    8,
+  );
+  expect(planBox.width).toBeLessThan(listBox.width);
+  // #2502: each hangout is a card as Album → Dates' are: rounded, with room around his avatar.
+  const corner = await hangout.evaluate((card) => Number.parseFloat(getComputedStyle(card).borderTopLeftRadius));
+  expect(corner, "rounded corners").toBeGreaterThanOrEqual(12);
+  const [cardBox, avatarBox] = [(await hangout.boundingBox())!, (await hangout.locator(".of-avatar").boundingBox())!];
+  expect(avatarBox.x - cardBox.x, "the avatar clear of the card's edge").toBeGreaterThanOrEqual(8);
+  expect(avatarBox.y - cardBox.y, "and of its top").toBeGreaterThanOrEqual(8);
+  await page.screenshot({ path: testInfo.outputPath("hangouts.png") });
+  await planButton.click();
+  const plan = page.getByRole("dialog", { name: "Plan a hangout" });
+  const go = plan.getByRole("button", { name: "Hang out", exact: true });
+  await expect(go).toBeDisabled();
+  await plan.getByRole("button", { name: "Kaveh", exact: true }).click();
+  await plan.getByText("Let Kaveh choose", { exact: true }).click();
+  // #2502: what she wants to talk about goes with the plan, trimmed; Close stops a plan being written.
+  await plan
+    .getByRole("textbox", { name: "What do you want to talk about? (optional)", exact: true })
+    .fill("  Whether he misses home.  ");
+  await go.click();
+  await expect(plan.getByText("Planning your hangout…", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => posts(calls, "/hangouts").map((call) => call.body))
+    .toEqual([
+      expect.objectContaining({
+        friends: [kaveh.id],
+        place: "partner-choice",
+        herLook: "base",
+        topic: "Whether he misses home.",
+      }),
+    ]);
+  const cancels = posts(calls, `/runs/${RUN}/cancel`).length;
+  await plan.getByRole("button", { name: "Close", exact: true }).click();
+  await expect.poll(() => posts(calls, `/runs/${RUN}/cancel`).length).toBe(cancels + 1);
+  await expect(plan).toBeHidden();
+  // Planned again with nothing to talk about: no topic is sent, and a refusal says why.
+  await planButton.click();
+  await plan.getByRole("button", { name: "Kaveh", exact: true }).click();
+  await plan.getByText("Let Kaveh choose", { exact: true }).click();
+  await go.click();
+  await expect(plan.getByRole("alert")).toBeVisible();
+  const sent = posts(calls, "/hangouts").map((call) => call.body as Json);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).not.toHaveProperty("topic");
+});
+
+test("#2459: an ended story keeps Story, Wardrobe and the Album, and its Messages can only be read", async ({
+  page,
+  isMobile,
+}) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  (fixture.stub.view as Json).ended = "2026-11-24T10:00:00.000Z";
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    const reply = fixture.answer(call);
+    if (call.path.endsWith("/story") && reply?.json) {
+      return { ...reply, json: { ...reply.json, ending: { offered: false, ended: "2026-11-24T10:00:00.000Z" } } };
+    }
+    return reply;
+  };
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  await expect(root.getByRole("region", { name: "The End", exact: true })).toBeVisible();
+  const menu = root.getByRole("navigation", { name: "Game menu" });
+  await expect(menu.getByRole("button", { name: "Wish", exact: true })).toHaveCount(0);
+  await expect(menu.getByRole("button", { name: "Games", exact: true })).toHaveCount(0);
+  await expect(menu.getByRole("button", { name: "Album", exact: true })).toBeVisible();
+});
+
 test("Otome Hearth affection shows per-level progress below Level beside its hearts", async ({
   page,
   isMobile,
@@ -3742,10 +4261,10 @@ test("Otome Hearth affection shows per-level progress below Level beside its hea
   ).toEqual([]);
 });
 
-/** The story so far (#2040), as GET /runs/:run/memory/overview serves it. */
+/** The story so far (#2040), as GET /runs/:run/memory/overview serves it: never shown here, where no arc is planned. */
 const SO_FAR = ["Marin taught you to read the tide tables.", "You kept the lighthouse key he left on the sill."];
 
-test("Otome Hearth shows prestige past level 10 and writes an unlocked extra story on its tap (#2025)", async ({
+test("Otome Hearth shows prestige at the last bond rank and writes an unlocked extra story on its tap (#2025)", async ({
   page,
   isMobile,
 }, testInfo) => {
@@ -3760,9 +4279,20 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
     ...lis[2]!,
     id: MARIN,
     name: "Marin",
-    level: 10,
-    affectionProgress: { current: 300, required: 300 },
+    // 0.23.0: prestige opens at the last bond rank (20), the ten bond stories played, never at level 10.
+    level: 20,
+    bond: { level: 20, name: "always", played: 10, next: null },
+    affectionProgress: { current: 1100, required: 1100 },
     prestige: { unlocked: 1, points: 2, current: 120, required: 300 },
+  });
+  // A love interest past his finale, at the first bond rank: the ladder is under way and no prestige row yet.
+  lis.push({
+    ...lis[2]!,
+    id: "li-mid-0006",
+    name: "Ren",
+    level: 11,
+    bond: { level: 11, name: "named", played: 0, next: 11 },
+    affectionProgress: { current: 0, required: 650 },
   });
   const key = `prestige-${MARIN}-1`;
   let release!: () => void;
@@ -3777,7 +4307,14 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
     }
     const reply = fixture.answer(call);
     if (call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}/story` && reply?.json) {
-      return { ...reply, json: { ...(reply.json as Json), prestige: [{ li: MARIN, key }] } };
+      return {
+        ...reply,
+        json: {
+          ...(reply.json as Json),
+          prestige: [{ li: MARIN, key }],
+          bond: [{ li: "li-mid-0006", key: "bond-li-mid-0006-11", rank: 11, name: "named" }],
+        },
+      };
     }
     return reply;
   };
@@ -3794,7 +4331,50 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
   await expect(row.getByRole("meter", { name: "Marin: affection progress", exact: true })).toHaveCount(0);
   await expect(row.getByRole("img", { name: "Marin: prestige 2 of 3", exact: true })).toBeVisible();
   await expect(
-    section.getByText("Past level 10, every 300 affection earns a prestige point.", { exact: false }),
+    row.getByRole("img", { name: "Marin: affection level 10 of 10, bond rank 10 of 10", exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByText("Past the last bond rank, every 300 affection earns a prestige point.", { exact: false }),
+  ).toBeVisible();
+  // The bond ladder is under way at rank 11: no prestige row yet, and the level text is his real level, not the ten
+  // outer hearts (2026-11-19: ranks 11 to 20 all read "Level 10 · <rank>").
+  const mid = section.getByRole("listitem").filter({ hasText: "Ren" });
+  await expect(mid.locator(".of-prestige")).toHaveCount(0);
+  await expect(mid.getByRole("meter", { name: "Ren: affection progress", exact: true })).toHaveText("0 / 650");
+  await expect(mid.locator(".of-affection-level")).toHaveText("Level 11");
+  await expect(row.locator(".of-affection-level")).toHaveText("Level 20");
+  // His "Open named" sits in a row of its own under his hearts and leaves the row lined up with the others: his name
+  // where theirs starts, his hearts as wide and as many lines as Marin's, who also has a counter and no button
+  // (2026-11-17: the button took the picture's column and squeezed the hearts into three rows).
+  const open = mid.getByRole("button", { name: "Open named", exact: true });
+  await expect(open).toBeVisible();
+  const [openBox, midHearts, midName, marinHearts, marinName] = await Promise.all([
+    open.boundingBox(),
+    mid.locator(".of-hearts").boundingBox(),
+    mid.locator(".of-affection-name").boundingBox(),
+    row.locator(".of-hearts").boundingBox(),
+    row.locator(".of-affection-name").boundingBox(),
+  ]);
+  expect(openBox!.y).toBeGreaterThanOrEqual(midHearts!.y + midHearts!.height);
+  expect(Math.abs(openBox!.x - midHearts!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(midName!.x - marinName!.x)).toBeLessThanOrEqual(1);
+  // One line each; a narrow column may draw them a little smaller than 16px, so the heights match within 2px.
+  expect(Math.abs(midHearts!.height - marinHearts!.height)).toBeLessThanOrEqual(2);
+  // Ten hearts stay on one line, at any text size and in a narrow column (2026-11-17: the last one wrapped).
+  const heartLines = (li: Locator) =>
+    li
+      .locator(".of-heart")
+      .evaluateAll((hearts) => new Set(hearts.map((heart) => Math.round(heart.getBoundingClientRect().top))).size);
+  for (const size of ["17px", "26px"]) {
+    await page.evaluate((px) => (document.documentElement.style.fontSize = px), size);
+    for (const li of [mid, row]) await expect.poll(() => heartLines(li)).toBe(1);
+  }
+  await mid.evaluate((li) => ((li as HTMLElement).style.width = "240px"));
+  await expect.poll(() => heartLines(mid)).toBe(1);
+  await mid.evaluate((li) => ((li as HTMLElement).style.width = ""));
+  await page.evaluate(() => (document.documentElement.style.fontSize = "17px"));
+  await expect(
+    mid.getByRole("img", { name: "Ren: affection level 10 of 10, bond rank 1 of 10", exact: true }),
   ).toBeVisible();
   const other = section.getByRole("listitem").filter({ hasText: lis[0]!.name });
   await expect(other.locator(".of-prestige")).toHaveCount(0);
@@ -3809,13 +4389,15 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
   await row.getByRole("button", { name: "A new story with Marin", exact: true }).click();
   const dialog = root.getByRole("dialog", { name: "A new story with Marin", exact: true });
   await expect(dialog.getByText("Imagining something new with Marin…", { exact: true })).toBeVisible();
-  // What happened so far… (#2040) in the planning dialog every route, repair and extra story shares; Cancel keeps focus.
-  const soFar = dialog.getByRole("region", { name: "What happened so far…", exact: true });
-  await expect(soFar.locator("p")).toHaveText(SO_FAR);
+  // The personality quiz (#2174) in the planning dialog every route, repair and extra story shares (the story so far
+  // waits for an arc); Cancel keeps focus.
+  const play = dialog.getByRole("button", { name: "Play the personality quiz", exact: true });
+  await expect(play).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "What happened so far…", exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   release();
   await expect(dialog.getByRole("alert")).toContainText("No new story with Marin is unlocked yet.");
-  await expect(soFar).toHaveCount(0);
+  await expect(play).toHaveCount(0);
   expect(posts(calls, `/prestige/${MARIN}`)).toHaveLength(1);
 });
 
@@ -3959,6 +4541,74 @@ test("Otome Hearth selects a saved music folder without generating music", async
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
   expect(posts(calls, "/audio/brief")).toEqual([]);
   expect(posts(calls, "/audio/track")).toEqual([]);
+});
+
+test("0.44.0: Otome Hearth plays a Soundtrack row chosen in the Album on Home, until it is pressed again", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = expressionRepaintFixture();
+  Object.assign(fixture.view.world.audio, { tts: false, generate: false, chapterThemes: false, musicFolder: "" });
+  fixture.view.world.images.connectionId = null;
+  const stock = "music:dialogue:slice_of_life:calm:morning-tea";
+  const theme = {
+    cue: "chapter-main-1",
+    connectionId: "audio-1",
+    tag: "music:contexts:otome-forge:masquerade",
+    path: "music/contexts/otome-forge/masquerade.mp3",
+  };
+  const assets = {
+    [stock]: { path: "music/dialogue/slice_of_life/calm/morning-tea.mp3" },
+    [theme.tag]: { path: theme.path },
+  };
+  const soundtrack = [
+    { cue: "home", track: null },
+    { cue: theme.cue, track: theme, chapter: { key: "main-1", title: "The Masquerade" } },
+  ];
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined =>
+    call.path === "/api/game-assets/manifest"
+      ? { status: 200, json: { scannedAt: now(), count: 2, assets, byCategory: {} } }
+      : call.path.endsWith("/album")
+        ? { status: 200, json: { cgs: [], memories: [], timeline: [], favorites: [], soundtrack, tells: {} } }
+        : fixture.answer(call);
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page, { recordMusic: true });
+  const lastPlayed = () => page.evaluate(() => ((globalThis as any).__otomeMusicEvents as string[]).at(-1));
+  await expect.poll(lastPlayed).toBe(stock);
+  const openSoundtrack = async () => {
+    await root
+      .getByRole("navigation", { name: "Game menu" })
+      .getByRole("button", { name: "Album", exact: true })
+      .click();
+    await root.getByRole("tab", { name: "Soundtrack", exact: true }).click();
+    return root.getByRole("button", { name: /The Masquerade on Home$/u });
+  };
+  let house = await openSoundtrack();
+  await expect(house).toHaveAttribute("aria-pressed", "false");
+  let saved = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/audio/settings"));
+  await house.click();
+  await (await saved).finished();
+  expect(posts(calls, "/audio/settings").map((call) => call.body!.audio)).toEqual([
+    { homeCue: theme.cue, homeTrack: theme },
+  ]);
+  await expect(house).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: testInfo.outputPath("soundtrack-home-chosen.png") });
+  await root.getByRole("button", { name: "Home with Ilvar Thorne", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Ilvar Thorne", exact: true, level: 1 })).toBeVisible();
+  await expect.poll(lastPlayed).toBe(theme.tag);
+  house = await openSoundtrack();
+  await expect(house).toHaveAttribute("aria-pressed", "true");
+  saved = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/audio/settings"));
+  await house.click();
+  await (await saved).finished();
+  expect(posts(calls, "/audio/settings").at(-1)!.body!.audio).toEqual({ homeCue: "", homeTrack: null });
+  await expect(house).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(lastPlayed).toBe(stock);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(posts(calls, "/audio/brief")).toEqual([]);
 });
 
 test("Otome Hearth retains an unavailable saved music folder and uses stock without paying", async ({
@@ -4155,7 +4805,7 @@ test("Otome Hearth fullscreen fills the whole mode across navigation and restore
     const look = index === 0 ? "midnight" : "pearl";
     await page.emulateMedia({ colorScheme: index === 0 ? "dark" : "light" });
     await expect(root).toHaveAttribute("data-look", look);
-    for (const screen of ["Wish", "Wardrobe", "Album", "Dates", "Story"]) {
+    for (const screen of ["Wish", "Wardrobe", "Album", "Games", "Story"]) {
       await root
         .getByRole("navigation", { name: "Game menu" })
         .getByRole("button", { name: screen, exact: true })

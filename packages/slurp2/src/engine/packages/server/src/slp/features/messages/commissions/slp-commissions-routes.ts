@@ -10,6 +10,7 @@ import type { FastifyInstance } from "fastify";
 import { personaQuerySchema } from "../../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "../slp-messages-context.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 const commissionBriefSchema = z.object({
   personaId: z.string().trim().min(1),
   creatorAccountId: z.string().trim().min(1),
@@ -145,7 +146,8 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
       // delivery is due — which may be after a restart, so the file cannot stay staged.
       drawn.promote();
       const deliverAt = new Date(
-        Date.now() + slurpCommissionDeliveryDelayMs({ price: accepted.price, briefLength: commission.brief.length }),
+        slurpWorldNowMs() +
+          slurpCommissionDeliveryDelayMs({ price: accepted.price, briefLength: commission.brief.length }),
       ).toISOString();
       const scheduled = await messages.scheduleCommissionDelivery(commission.id, {
         deliverAt,
@@ -189,7 +191,7 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
       (commission.state === "cancellation_pending" && isViewer) ||
       (commission.state === "accepted" &&
         isViewer &&
-        (!commission.deliverAt || commission.deliverAt <= new Date().toISOString()));
+        (!commission.deliverAt || commission.deliverAt <= slurpWorldNow().toISOString()));
     if (!canCancel) {
       return reply.code(409).send({ error: "This commission can no longer be called off." });
     }

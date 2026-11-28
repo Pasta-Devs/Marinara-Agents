@@ -360,6 +360,13 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
   .filter(Boolean);
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
 const addedCalls = [
+  // World clock (docs/WORLD-CLOCK.md), 0.4.20
+  "get /slurp2/world/clock",
+  "post /slurp2/world/clock/skip",
+  "post /slurp2/world/clock/checkpoints",
+  "post /slurp2/world/clock/checkpoints/${encodeURIComponent(input.id)}/restore",
+  "delete /slurp2/world/clock/checkpoints/${encodeURIComponent(id)}",
+  "put /slurp2/world/clock/settings",
   "get /slurp2/extras/offer",
   "post /slurp2/extras/offer/answer",
   "get /slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}",
@@ -578,16 +585,16 @@ assert.deepEqual(
     // refreshes the list when settled (a refused apply also means the list is stale).
     // 0.3.63: +1 (useStartSlurpSexting buys a sexting session).
     // 0.4.12: Live v3 hooks: +4 useMutation, +7 useQuery, +3 setQueryData (a tip, a beat or a private block returns the fresh show).
-    useMutation: 231,
+    useMutation: 237,
     // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
     // 0.3.44: +2 (the import and the trends row query).
     // 0.3.63: +1 (its useQueryClient). Long-Term Memory recall: +1 (useSlurpMemoryStatus).
-    useQuery: 310,
+    useQuery: 319,
     useInfiniteQuery: 9,
     // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
     // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).
     // Life panel: +3 useMutation, +4 useQuery, +1 invalidateQueries, +3 onError.
-    invalidateQueries: 159,
+    invalidateQueries: 166,
     setQueryData: 32,
     cancelQueries: 7,
     removeQueries: 1,
@@ -595,9 +602,9 @@ assert.deepEqual(
     onMutate: 2,
     // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
     // onError no longer counts as state-layer code. +1: SlpDeskQuickReplies (R2) toasts a failed save.
-    onError: 98,
+    onError: 101,
     // 0.3.63: +1 (the sexting buy refreshes the thread when settled).
-    onSettled: 41,
+    onSettled: 44,
   },
   "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
 );

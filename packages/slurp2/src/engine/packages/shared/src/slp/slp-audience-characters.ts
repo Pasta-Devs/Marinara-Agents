@@ -11,6 +11,7 @@
  * (`createNoodlerFanInteraction`, `applyPulse`), and without a `kind: "character"` row leaking into
  * the Creator listings the way the phantom-profile bug did.
  */
+import { slpHashMix as hash } from "./slp-hash.js";
 
 /** Marks an account row as a character standing in the audience. */
 export const SLURP_CHARACTER_FAN_PREFIX = "character-fan:";
@@ -203,19 +204,6 @@ export function slurpAudienceCharacterTraits(card: SlurpAudienceCharacterCard | 
     if (traits.length === 3) break;
   }
   return traits;
-}
-
-/** FNV-1a with the murmur3 finalizer, as the other Slurp rule modules use. */
-function hash(value: string): number {
-  let out = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 0x01000193);
-  }
-  out ^= out >>> 16;
-  out = Math.imul(out, 0x85ebca6b);
-  out ^= out >>> 13;
-  return out >>> 0;
 }
 
 /**

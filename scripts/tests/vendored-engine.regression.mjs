@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { inspectVendoredEngine, checkVendoredEngineBaseline } from "../validate-vendored-engine.mjs";
+import { inspectVendoredEngine, checkVendoredEngineBaseline, gitBlobId } from "../validate-vendored-engine.mjs";
 
 const root = await mkdtemp(join(tmpdir(), "marinara-vendored-"));
 const engine = join(root, "host");
@@ -39,32 +39,60 @@ try {
       .filter((row) => row.status !== "current")
       .map((row) => [row.path, `${row.status}:${row.hash}:${row.hostHash}`]),
   );
-  assert.deepEqual(checkVendoredEngineBaseline(rows, baseline), []);
-  assert.match(checkVendoredEngineBaseline(rows, {})[0], /Unbaselined drifted/);
-  assert.match(checkVendoredEngineBaseline(rows, baseline, {})[0], /Baseline may only shrink/);
+  const errors = (...args) => checkVendoredEngineBaseline(...args).errors;
+  assert.deepEqual(checkVendoredEngineBaseline(rows, baseline), { errors: [], warnings: [] });
+  assert.match(errors(rows, {})[0], /Unbaselined drifted/);
+  assert.match(errors(rows, baseline, {})[0], /Baseline may only shrink/);
   await writeFile(join(engine, "drift.ts"), "another host fix");
-  assert.match(
-    checkVendoredEngineBaseline(await inspectVendoredEngine(root, engine), baseline)[0],
-    /Unbaselined drifted/,
+  assert.match(errors(await inspectVendoredEngine(root, engine), baseline)[0], /Unbaselined drifted/);
+
+  // #2186: against the base ref's vendored copies, a change on the Engine side alone only warns.
+  const base = new Map(rows.map((row) => [row.path, row.blob]));
+  assert.equal(base.get("same.ts"), gitBlobId(Buffer.from("same")), "Git's own blob id");
+  const hostMoved = checkVendoredEngineBaseline(await inspectVendoredEngine(root, engine), baseline, baseline, {
+    baseBlobs: base,
+  });
+  assert.deepEqual(hostMoved, { errors: [], warnings: ["Unbaselined drifted: drift.ts"] }, "a changed host copy");
+  await writeFile(join(engine, "same.ts"), "the host moved on");
+  assert.deepEqual(
+    checkVendoredEngineBaseline(await inspectVendoredEngine(root, engine), baseline, baseline, { baseBlobs: base }),
+    { errors: [], warnings: ["Unbaselined drifted: drift.ts", "Unbaselined drifted: same.ts"] },
+    "a current copy the host changed",
   );
+  await writeFile(join(engine, "same.ts"), "same");
+  await writeFile(join(engine, "drift.ts"), "old");
+  assert.deepEqual(
+    checkVendoredEngineBaseline(await inspectVendoredEngine(root, engine), baseline, baseline, { baseBlobs: base }),
+    { errors: [], warnings: ["Remove resolved baseline entry: drift.ts"] },
+    "the host now matches the untouched copy",
+  );
+  // A copy the PR changed still fails, and so does a baseline that grows, whatever the base ref.
   await writeFile(join(engine, "drift.ts"), "updated");
   await writeFile(join(vendor, "drift.ts"), "a different stale implementation");
-  assert.match(
-    checkVendoredEngineBaseline(await inspectVendoredEngine(root, engine), baseline)[0],
-    /Unbaselined drifted/,
+  assert.deepEqual(
+    checkVendoredEngineBaseline(await inspectVendoredEngine(root, engine), baseline, baseline, { baseBlobs: base }),
+    { errors: ["Unbaselined drifted: drift.ts"], warnings: [] },
   );
+  assert.match(errors(await inspectVendoredEngine(root, engine), baseline)[0], /Unbaselined drifted/);
+  assert.match(errors(rows, baseline, {}, { baseBlobs: base })[0], /Baseline may only shrink/);
+
   await writeFile(join(vendor, "drift.ts"), "updated");
   const resolved = await inspectVendoredEngine(root, engine);
-  assert.match(checkVendoredEngineBaseline(resolved, baseline)[0], /Remove resolved baseline entry/);
+  assert.match(errors(resolved, baseline)[0], /Remove resolved baseline entry/);
+  assert.match(
+    errors(resolved, baseline, baseline, { baseBlobs: base })[0],
+    /Remove resolved baseline entry/,
+    "a copy the PR resynced must drop its entry",
+  );
   const smaller = { "package-owned.ts": baseline["package-owned.ts"] };
-  assert.deepEqual(checkVendoredEngineBaseline(resolved, smaller, baseline), []);
+  assert.deepEqual(errors(resolved, smaller, baseline), []);
   await rm(join(vendor, "package-owned.ts"));
-  assert.deepEqual(checkVendoredEngineBaseline(await inspectVendoredEngine(root, engine), {}, smaller), []);
+  assert.deepEqual(errors(await inspectVendoredEngine(root, engine), {}, smaller), []);
   await writeFile(join(engine, "package.json"), JSON.stringify({ name: "wrong-checkout" }));
   await assert.rejects(inspectVendoredEngine(root, engine), /not a Marinara Engine checkout/);
 } finally {
   await rm(root, { recursive: true, force: true });
 }
 console.log(
-  "Vendored Engine regression passed: classification, new drift, changed copies, baseline shrink, and invalid checkout.",
+  "Vendored Engine regression passed: classification, new drift, changed copies, Engine-side drift as warnings, baseline shrink, and invalid checkout.",
 );

@@ -3,30 +3,50 @@
 // ──────────────────────────────────────────────
 // POST /age-gate {confirm:true}            → {ageGate}
 // POST /age-gate/revoke                    → {ageGate:null}; every world drops to SFW Heat, Angst at most, SFW images
-// POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge
+// POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge (with
+//                                             an image connection, the cast's looks paint by themselves unless Ask
+//                                             before painting or prompt review holds them); #2424: `setup` may set
+//                                             Settings → Connections' dailyMessages, groupSquabbles and dateInvites,
+//                                             and #2448 Settings → Audio's voices and music (`audio`)
 // GET  /runs/:run                          → {view: RunView}; with the stickers the player has (#2044), whose owed
-//                                             sets and paints it queues in the background
+//                                             sets and paints it queues in the background, as it queues the love
+//                                             interests' missing personality quiz answers (#2174), long-term recall's
+//                                             indexing of chapter summaries not indexed yet (0.19.0), records the side
+//                                             characters of scenes read before 0.20.0 (once) and, with Side
+//                                             character sprites on, tends their looks and sprites (S/story/side-cast.ts);
+//                                             someone new mid-story gets his forge steps (setup/forge.ts forgeCast);
+//                                             the love interests', her friends' and the protagonist's looks and faces
+//                                             are cut out of their backdrops in the background (S/art/cutout.ts)
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
-// POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?} → {world: WorldView}; with an
-//      image connection, each paint step the world lacks is added, waiting for the tap. dailyMessages is 0–24
-//      (Settings → Connections, S/phone/daily.ts)
+// POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?, dateInvites?}
+//      → {world: WorldView}; with an image connection, each paint step the world lacks is added, waiting for the tap.
+//      dailyMessages and groupSquabbles are 0–24 and dateInvites 0–7 (Settings → Connections, S/phone/daily.ts,
+//      S/phone/group.ts, S/phone/invite.ts). A new
+//      `connections.embeddings` (Memory recall embeddings) must name a connection with an embedding model (400
+//      `no-embeddings`), and rebuilds long-term recall's index with it (S/memory/recall-index.ts). Turning
+//      images.sideSprites on starts the qualifying side characters' looks and sprites in the background.
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
 // POST /runs/:run/lis/:li/intimacy          → {intimacy: true}; writes his missing intimacy block only (1 call;
 //                                             adult NSFW stories, #1936), keeping the rest of the bible
 // POST /runs/:run/lis/:li/appearance {identityLine} → {identityLine}; image-only, never paints
 // POST /runs/:run/lis/:li/accent {accent}  → {accent}
-// POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest
+// POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest. 409 `conflict` for
+//                                             a card another love interest or friend has
+// #2475: appearance, accent and card take her friends (`state.friends`) as they take the love interests; a friend's
+// bible has its own routes (S/routes/friends.ts).
 //
 // The server never trusts the client with content. The gate is read from the index on each write: raising Heat or the
 // image rating, or picking Dark romance, needs it (403 `age-gate`), lowering never does, and every stored content goes
 // through enforceContent, so a limit that cannot apply is always a Line.
 import { z } from "zod";
+import type { Presentation, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { LIS_MAX, LIS_MIN } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/shared/archetypes.js";
 import { OWN_BANNED_PHRASES_MAX } from "../../../../../client/src/features/otome-forge/shared/banned-phrases.js";
-import { DAILY_MESSAGES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { DAILY_MESSAGES_MAX, DATE_INVITES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { normalizeOtomeAudio } from "../../../../../client/src/features/otome-forge/shared/audio.js";
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
@@ -38,9 +58,13 @@ import {
   raisesGatedSetting,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
-import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
+import { facesView } from "../art/expressions.js";
+import { imagesOf, livePaints, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { runForeground } from "../generation.js";
+import { ensureQuizScores } from "../minigames/quiz.js";
+import { ensureClearAirScenes } from "../phone/upset.js";
+import { embeddingHost } from "../memory/recall-index.js";
 import {
   OtomeForgeError,
   debugModeOf,
@@ -78,6 +102,7 @@ import {
   stageArtUrls,
 } from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
+import { ensureFinaleRewards } from "../story/friend-rewards.js";
 import {
   ConnectionsSchema,
   ContentSchema,
@@ -88,14 +113,17 @@ import {
   toWorldView,
 } from "../schemas/world.js";
 import { checkBible } from "../setup/bible.js";
-import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
+import { forgeCast, initialForge, settleForge, startForge, withEngineSteps, withPaintSteps } from "../setup/forge.js";
 import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
+import { ensureEngineLooks, forgetEngineLook } from "../art/engine-art.js";
 import { PLAYER_STICKER_OWNER } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { ensureStickerSets, stickerArtUrls, stickerBook, stickersComing } from "../art/stickers.js";
 import { fillIntimacy } from "../intimacy.js";
 import { cancellable } from "../story/beats.js";
+import { backfillSideCast, tendSideCast } from "../story/side-cast.js";
+import { runEnded } from "./ended.js";
 
 const NoFields = z.object({});
 const ID_MAX = 200;
@@ -138,6 +166,12 @@ const SetupBody = z.object({
       style: ImageStyleSchema.optional(),
     }),
     connections: ConnectionsSchema,
+    // #2424: Settings → Connections' numbers, asked at setup.
+    dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+    groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+    dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+    // #2448: Settings → Audio's voices and music; the kit bounds and defaults each field, as POST /runs/:run/audio/settings.
+    audio: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 const AgeGateBody = z.object({ confirm: z.literal(true) });
@@ -147,11 +181,15 @@ const SettingsBody = z.object({
   images: z
     .object({
       connectionId: z.string().min(1).max(200).nullable().optional(),
+      // The backgrounds' and scene art's own connections; "" goes back to the image connection.
+      backgroundConnectionId: z.string().max(200).optional(),
+      sceneConnectionId: z.string().max(200).optional(),
       rating: z.enum(IMAGE_RATINGS).optional(),
       ask: z.boolean().optional(),
       expressions: z.boolean().optional(),
       styleProfileId: z.string().max(200).optional(),
       style: ImageStyleSchema.optional(),
+      sideSprites: z.boolean().optional(),
     })
     .optional(),
   connections: ConnectionsSchema.optional(),
@@ -159,6 +197,10 @@ const SettingsBody = z.object({
   writingStyle: z.string().optional(),
   bannedPhrases: z.string().max(OWN_BANNED_PHRASES_MAX).optional(),
   dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+  groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+  dateInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+  friendMessages: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
+  friendInvites: z.number().int().min(0).max(DATE_INVITES_MAX).optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AppearanceBody = z.object({ identityLine: z.string() });
@@ -169,19 +211,42 @@ const AccentBody = z.object({
 });
 const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nullable() });
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
+/** A love interest or (#2475) one of her friends: who Your cast's card link and appearance take. */
+const castMember = (run: RunDocuments, id: string) =>
+  [...run.units, ...(run.friends ?? [])].find((unit) => unit.id === id);
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
 const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate before raising this setting.", "age-gate");
 
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
-function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
+/**
+ * 0.47.1: each love interest's and friend's Repaint expressions as facesView says it now, for `run`'s faces; `before`
+ * holds the paints that were live when they began to be read (livePaints).
+ */
+const castFaces = (
+  runId: string,
+  { units, friends = [] }: Pick<RunDocuments, "units" | "friends">,
+  before: ReadonlySet<string> = new Set(),
+) => new Map([...units, ...friends].map((unit) => [unit.id, facesView(runId, unit, before.has(`faces:${unit.id}`))]));
+
+/**
+ * The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. 0.47.1: each
+ * love interest and friend whose Repaint expressions paints, stopped or failed says so (`facesPaint`, facesView), as
+ * `faces` says it at the read the run's faces came from.
+ */
+function runView(runKey: string, runId: string, run: RunDocuments, faces = castFaces(runId, run)) {
+  const { world, player, units, state, friends = [] } = run;
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  const lis = units.map((unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit));
-  return toRunView(runKey, withPlaceViews(runId, world), shown, lis, state);
+  const viewed = (unit: Unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit);
+  const view = toRunView(runKey, withPlaceViews(runId, world), shown, units.map(viewed), state, friends.map(viewed));
+  const withFaces = <T extends { id: string }>(member: T): T => {
+    const facesPaint = faces.get(member.id);
+    return facesPaint ? { ...member, facesPaint } : member;
+  };
+  return { ...view, lis: view.lis.map(withFaces), ...(view.friends ? { friends: view.friends.map(withFaces) } : {}) };
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
@@ -198,6 +263,40 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       current.personaId === run.player.personaId ? { ...current, about } : current,
     );
     return player ? { ...run, player } : run;
+  };
+
+  /**
+   * #2147: in a story with no image connection, owners with no look yet take their Engine art; someone new mid-story gets
+   * his forge steps (forgeCast); and each paint step of an owner in Engine art is done (a connection added in Settings
+   * since, too). The forge is saved only when a step changed.
+   */
+  const withEngineLooks = async (
+    read: RunDocuments,
+    runId: string,
+    mode: { debugMode: boolean; review: boolean },
+  ): Promise<RunDocuments> => {
+    // #2458: her friends are painted, or wear their Engine art, as the love interests are; they stay in `friends`.
+    const castCount = read.units.length;
+    const everyone = await ensureEngineLooks(
+      deps,
+      runId,
+      { ...read, units: [...read.units, ...(read.friends ?? [])] },
+      read.world.images.ask,
+      !!read.world.images.connectionId,
+    );
+    const world = await forgeCast(deps, runId, everyone, mode);
+    const looks = {
+      ...everyone,
+      units: everyone.units.slice(0, castCount),
+      friends: everyone.units.slice(castCount),
+    };
+    const run = world === looks.world ? looks : { ...looks, world };
+    if (withEngineSteps(run.world.forge, everyone) === run.world.forge) return run;
+    const saved = await updateIfChanged(store, runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
+      const forge = withEngineSteps(current.forge, everyone);
+      return forge === current.forge ? undefined : { ...current, forge };
+    });
+    return saved ? { ...run, world: saved.value } : run;
   };
 
   router.post(
@@ -228,9 +327,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const liIds: string[] = [];
       for (const name of names) liIds.push(newLiId(name, liIds));
       // The world goes last: GET /runs/:run finds the run only once every other document exists.
+      const units: Unit[] = [];
       for (const [index, li] of setup.lis.entries()) {
         const id = liIds[index]!;
-        await store.mutateDoc(runDocTarget("unit", unitId(runId, id)), normalizeUnit, (unit) => ({
+        const created = await store.mutateDoc(runDocTarget("unit", unitId(runId, id)), normalizeUnit, (unit) => ({
           ...unit,
           id,
           name: names[index]!,
@@ -241,9 +341,12 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
             : { archetype: li.archetype, ...(li.notes?.trim() ? { notes: li.notes.trim() } : {}) }),
           createdAt: at,
         }));
+        units.push(created);
       }
       const { protagonist } = setup;
-      await store.mutateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (player) => ({
+      const presentation: Presentation =
+        protagonist.pronouns.subject === "he" ? "man" : protagonist.pronouns.subject === "she" ? "woman" : "person";
+      const player = await store.mutateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (player) => ({
         ...player,
         personaId: protagonist.personaId,
         name: persona.name,
@@ -251,7 +354,11 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         pronouns: protagonist.pronouns,
         traits: protagonist.traits.map((trait) => trait.trim()).filter(Boolean),
         goal: protagonist.goal.trim(),
+        look: { ...player.look, presentation },
       }));
+      // #2147: a story with no image connection shows the Engine's art; with one, everyone is painted.
+      const paints = setup.images.connectionId !== null;
+      await ensureEngineLooks(deps, runId, { player, units }, setup.images.ask, paints);
       await store.mutateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => ({
         ...state,
         lis: Object.fromEntries(liIds.map((id) => [id, defaultLiState()])),
@@ -267,7 +374,13 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         content: enforceContent(setup.content, ageGate),
         images: { ...current.images, ...setup.images },
         connections: normalizeConnections(setup.connections),
-        forge: initialForge(liIds, setup.images.connectionId !== null),
+        forge: initialForge(liIds, paints, paints && !setup.images.ask && !reviewModeOf(request)),
+        // Absent or 0 stays off, as a story set up before #2424 has them.
+        ...(setup.dailyMessages ? { dailyMessages: setup.dailyMessages } : {}),
+        ...(setup.groupSquabbles ? { groupSquabbles: setup.groupSquabbles } : {}),
+        ...(setup.dateInvites ? { dateInvites: setup.dateInvites } : {}),
+        // The prologue is written with the voices and cues chosen here.
+        ...(setup.audio ? { audio: { ...current.audio, ...normalizeOtomeAudio(setup.audio) } } : {}),
       }));
       await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
         ...index,
@@ -310,7 +423,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
             images: { ...world.images, rating: DEFAULT_IMAGE_RATING },
           }));
         } catch (error) {
-          runtime.logger.error(error, "Otome Forge could not lower %s after the 18+ gate was revoked", run.runKey);
+          runtime.logger.error(error, "Otome Hearth could not lower %s after the 18+ gate was revoked", run.runKey);
           failed.push(run.runKey);
         }
       }
@@ -327,13 +440,52 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const { runKey, runId } = runParam(request);
       // A forge step left running or pending by a restart reads as failed, with Retry.
       await settleForge(deps, runId);
+      // Repaint expressions as it stood while these faces were read: one that lands during the read or the awaits
+      // below is not `stopped` beside the faces from before it.
+      const liveBefore = livePaints(runId);
       const read = await readRun(store, runId);
       if (!read) throw runNotFound();
-      const run = await withPersonaAbout(read, runId);
+      const faces = castFaces(runId, read, liveBefore);
+      // #2303: an invitation to clear the air accepted before its scene existed gets that scene, once (no model call).
+      await ensureClearAirScenes(store, runId, read.state);
+      // #2459: an ended story starts no background work.
+      const ended = !!read.state.ended;
+      // #2174: the love interests' personality quiz answers, once, in the background (a story from before the quiz
+      // gets them here, by its first chapter-planning wait); nothing here waits for them.
+      if (!ended)
+        void ensureQuizScores(deps, runId, read, { debugMode: debugModeOf(request) }).catch((error: unknown) =>
+          deps.runtime.logger.warn(
+            "[otome-forge] The quiz's answers were not queued: %s",
+            error instanceof Error ? error.message : String(error),
+          ),
+        );
+      // Long-term recall: chapter summaries not indexed yet (a story from before it, too), in the background.
+      if (!ended)
+        void deps.recall
+          ?.ensure(runId, { open: true })
+          .catch((error: unknown) =>
+            deps.runtime.logger.warn(
+              "[otome-forge] The recall index was not queued: %s",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
+      // 0.20.0: the side characters of scenes read before they were recorded, once; then, with Side character
+      // sprites on, what the recurring ones are owed. Neither is waited for.
+      const sideMode = { debugMode: debugModeOf(request), review: reviewModeOf(request) };
+      if (!ended) void backfillSideCast(deps, runId).then(() => tendSideCast(deps, runId, sideMode));
+      // #2458: a friend's rank-5 finale gives her their look and their card, once (no model call; the card paints).
+      if (!ended) await ensureFinaleRewards(deps, runId, read, sideMode);
+      const run = await withPersonaAbout(await withEngineLooks(read, runId, sideMode), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.
       const units = await Promise.all(
         run.units.map((unit) =>
+          queueCutouts(deps, runId, unit, [...stageArtUrls(run.world, unit), ...stickerArtUrls(run, unit.id)]),
+        ),
+      );
+      // #2475: her friends' looks and faces too, so no view shows a friend on the painted matte; #2477: and stickers.
+      const friends = await Promise.all(
+        (run.friends ?? []).map((unit) =>
           queueCutouts(deps, runId, unit, [...stageArtUrls(run.world, unit), ...stickerArtUrls(run, unit.id)]),
         ),
       );
@@ -344,17 +496,17 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         ...stickerArtUrls(run, PLAYER_STICKER_OWNER),
       ]);
       const player = { ...run.player, cutouts: queuedPlayer.cutouts };
-      const shown = { ...run, units, player };
+      const shown = { ...run, units, player, friends };
       // #2044: every read designs the sets and paints the stickers owed so far (a level reached since, or the levels a
       // story in progress had already reached), in the background; nothing here waits for them.
       const debugMode = debugModeOf(request);
-      const designing = ensureStickerSets(deps, runId, shown, { debugMode });
-      const painting = !!deps.art?.queueStickers;
-      void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
+      const designing = !ended && ensureStickerSets(deps, runId, shown, { debugMode });
+      const painting = !ended && !!deps.art?.queueStickers;
+      if (!ended) void deps.art?.queueStickers?.(runId, { debugMode, review: reviewModeOf(request) });
       return {
         view: {
-          ...runView(runKey, runId, shown),
-          ...(cutoutsPending(runId, [...units, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
+          ...runView(runKey, runId, shown, faces),
+          ...(cutoutsPending(runId, [...units, ...friends, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
           stickers: stickerBook(runId, shown),
           ...(designing || (painting && stickersComing(runId, shown)) ? { stickersPending: true as const } : {}),
           prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed,
@@ -399,6 +551,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
       deps.cancellation?.cancel(runId);
       deps.memory?.invalidate(runId);
+      deps.recall?.invalidate(runId);
       // A document's images go as soon as it does (taken from the revision that went), so a sweep that stops part-way
       // (a storage error, a conflict, a restart) has already let go of the images of what it removed, and what stays
       // keeps its own for the next delete. The Engine refuses an image a document still refers to, so one shared with
@@ -439,13 +592,37 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const body = parseBody(SettingsBody, request.body);
       const { runId } = runParam(request);
+      // Memory recall embeddings: a connection chosen now must have an embedding model this Engine can use.
+      const embeddings = body.connections ? (normalizeConnections(body.connections).embeddings ?? null) : undefined;
+      const before = embeddings === undefined ? null : await store.readDoc(worldId(runId), normalizeWorld);
+      const newEmbeddings = !!before && embeddings !== (before.connections.embeddings ?? null);
+      if (newEmbeddings && embeddings && !(await embeddingHost(runtime, embeddings).catch(() => null))) {
+        throw new OtomeForgeError(
+          400,
+          "That connection has no embedding model Otome can use: choose one with an embedding model, or Built-in.",
+          "no-embeddings",
+        );
+      }
       const ageGate = (await readIndex(store)).ageGate !== null;
       const at = new Date().toISOString();
+      // #2147: whose look is Engine art, so the paint steps a connection adds are done for them (S/setup/forge.ts).
+      const cast = {
+        player: (await store.readDoc(playerId(runId), normalizePlayer)) ?? {},
+        units: await readCastUnits(store, runId),
+      };
+      let sideSpritesOn = false;
+      // The embedding choice this write replaced, read inside the write itself (it may run again on a newer revision),
+      // so a concurrent save between the check above and this write still rebuilds the index when it should.
+      let replaced: string | null = null;
       const world = await store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
+        replaced = current.connections.embeddings ?? null;
         const content = body.content ?? current.content;
         const images = { ...current.images, ...body.images };
+        if (!images.backgroundConnectionId) delete images.backgroundConnectionId;
+        if (!images.sceneConnectionId) delete images.sceneConnectionId;
         // Turning faces on again allows one more attempt at a set that failed or stopped before (the kit's rule).
         if (images.expressions && !current.images.expressions) images.expressionsSince = at;
+        sideSpritesOn = !!images.sideSprites && !current.images.sideSprites;
         const from = { ...current.content, imageRating: current.images.rating };
         if (!ageGate && raisesGatedSetting(from, { ...content, imageRating: images.rating })) throw ageGateNeeded();
         return {
@@ -454,14 +631,35 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           writingStyle: body.writingStyle !== undefined ? body.writingStyle.trim() : current.writingStyle,
           bannedPhrases: body.bannedPhrases !== undefined ? body.bannedPhrases.trim() : current.bannedPhrases,
           ...(body.dailyMessages !== undefined ? { dailyMessages: body.dailyMessages } : {}),
+          ...(body.groupSquabbles !== undefined ? { groupSquabbles: body.groupSquabbles } : {}),
+          ...(body.dateInvites !== undefined ? { dateInvites: body.dateInvites } : {}),
+          ...(body.friendMessages !== undefined ? { friendMessages: body.friendMessages } : {}),
+          ...(body.friendInvites !== undefined ? { friendInvites: body.friendInvites } : {}),
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },
           // A world made without images that gains a connection gets its paint steps, waiting for the tap.
-          forge: images.connectionId ? withPaintSteps(current.forge) : current.forge,
+          forge: images.connectionId ? withEngineSteps(withPaintSteps(current.forge), cast) : current.forge,
         };
       });
       if (!world) throw runNotFound();
+      // #2459: an ended story's settings are kept, but start no painting nor indexing.
+      const ended = await runEnded(store, runId);
+      // Side character sprites turned on: the recurring ones' looks and sprites start in the background.
+      if (sideSpritesOn && !ended) {
+        void tendSideCast(deps, runId, { debugMode: debugModeOf(request), review: reviewModeOf(request) });
+      }
+      // Another embedding model, as this write saved it: the recall index is built again with it, in the background.
+      if (!ended && embeddings !== undefined && (world.connections.embeddings ?? null) !== replaced) {
+        void deps.recall
+          ?.ensure(runId)
+          .catch((error: unknown) =>
+            runtime.logger.warn(
+              "[otome-forge] The recall index was not queued: %s",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
+      }
       return { world: toWorldView(withPlaceViews(runId, world)) };
     }),
   );
@@ -476,7 +674,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       return runForeground(runId, async () => {
         const run = await readRun(store, runId);
         if (!run) throw runNotFound();
-        if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+        if (!castMember(run, li)) throw liNotFound();
         if (cardId) {
           if (
             /[\\/\u0000-\u001f\u007f]/u.test(cardId) ||
@@ -485,8 +683,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           ) {
             throw badRequest("That character card is not available.");
           }
-          if (run.units.some((unit) => unit.id !== li && unit.cardId === cardId)) {
-            throw new OtomeForgeError(409, "That card is linked to another love interest.", "conflict");
+          if ([...run.units, ...(run.friends ?? [])].some((unit) => unit.id !== li && unit.cardId === cardId)) {
+            throw new OtomeForgeError(409, "That card is linked to another love interest or friend.", "conflict");
           }
         }
         const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
@@ -496,6 +694,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           return next;
         });
         if (!unit) throw liNotFound();
+        // #2147: a love interest or friend with no look yet takes the newly linked card's Engine art on the next read.
+        forgetEngineLook(runId, `li:${li}`);
         return { cardId: unit.cardId ?? null };
       });
     }),
@@ -509,13 +709,15 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const li = liParam(request);
       const run = await readRun(store, runId);
       if (!run) throw runNotFound();
-      if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+      if (!castMember(run, li)) throw liNotFound();
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => ({
         ...current,
         identityLine: identityLine.trim() ? identityLine : "",
       }));
       if (!unit) throw liNotFound();
-      return { identityLine: unit.identityLine || unit.bible?.look.identityLine || "" };
+      return {
+        identityLine: unit.identityLine || unit.bible?.look.identityLine || unit.friend?.look.identityLine || "",
+      };
     }),
   );
 

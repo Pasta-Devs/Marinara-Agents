@@ -1,5 +1,17 @@
 # Calls release notes
 
+## 1.1.10 — 2026-11-11
+
+- Changed: Calls reads characters through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. The `[memory]` command saves only the character's memories, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)
+
+## 1.1.9 — 2026-11-10 [highlight]
+
+- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Calls versions read every persona there as blank: no name, description, appearance or About Me in calls, call prompts and persona videos. Calls now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)
+
+## 1.1.8 — 2026-11-06
+
+- A call video that has just finished generating no longer shows as missing. Before, a call's video tile could show the clip as missing right after it finished, and keep showing that until the clips were checked again. (#2132)
+
 ## 1.1.7 — 2026-10-20
 
 - When a character changes their status or activity during a call, the change now goes on their character card, as it does after a chat reply, so it shows in every chat and lasts for the time they gave. Before, the call changed only this chat's copy of their schedule, and the change was soon lost. (#1498)

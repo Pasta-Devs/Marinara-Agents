@@ -42,6 +42,7 @@
 // never renamed (saved data stores them); only the display labels say
 // Inner/Mid/Outer. extra_wearable_1-3 hold worn items no other slot fits.
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 import { join, dirname, relative, sep } from "node:path";
 import { mkdir, writeFile, readFile, readdir, unlink, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -863,9 +864,45 @@ function engineLoopbackBaseUrl(env) {
   return `${scheme}://127.0.0.1:${Number.isFinite(port) ? port : 7860}`;
 }
 
+// An Android app install sets MARINARA_ANDROID_SECRET, and the Engine then
+// answers 401 to a request from the device itself (as these loopback calls
+// are) unless it carries that secret. It is read the way the Engine's `mari`
+// CLI reads it: the variable, else the first line of
+// MARINARA_ANDROID_SECRET_FILE or ~/.marinara-engine/android-secret, and only
+// 64 hex characters. Never logged. A file is read once per process.
+// ponytail: a copy of sources/forge-kit/engine-local-auth.mjs, because this
+// hand-authored server.mjs ships as written and bundles nothing; the upgrade
+// path is a build step that bundles the kit module instead.
+const QM_ANDROID_SECRET_HEX = /^[a-f0-9]{64}$/iu;
+const qmAndroidSecretFiles = new Map();
+function engineAndroidSecret() {
+  const configured = process.env.MARINARA_ANDROID_SECRET?.trim();
+  if (configured) return QM_ANDROID_SECRET_HEX.test(configured) ? configured : "";
+  const file =
+    process.env.MARINARA_ANDROID_SECRET_FILE?.trim() || join(homedir(), ".marinara-engine", "android-secret");
+  if (!qmAndroidSecretFiles.has(file)) {
+    qmAndroidSecretFiles.set(
+      file,
+      readFile(file, "utf8").then(
+        (text) => {
+          const stored = text.split(/\r?\n/u, 1)[0]?.trim() ?? "";
+          return QM_ANDROID_SECRET_HEX.test(stored) ? stored : "";
+        },
+        () => "",
+      ),
+    );
+  }
+  return qmAndroidSecretFiles.get(file);
+}
+
 async function engineApiFetch(path, options) {
   if (typeof fetch !== "function") throw new Error("engine-image: no fetch available");
-  const response = await fetch(`${engineLoopbackBaseUrl(process.env)}${path}`, options);
+  // The address is always this device's own (engineLoopbackBaseUrl), so the secret may go with it.
+  const secret = await engineAndroidSecret();
+  const init = secret
+    ? { ...options, headers: { ...options?.headers, "x-marinara-android-secret": secret } }
+    : options;
+  const response = await fetch(`${engineLoopbackBaseUrl(process.env)}${path}`, init);
   if (!response.ok) {
     let detail = "";
     try {

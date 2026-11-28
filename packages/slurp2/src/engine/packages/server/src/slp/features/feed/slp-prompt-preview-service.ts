@@ -23,6 +23,7 @@ import { slurpContentAxesInstruction, slurpPostAxes } from "../../modules/feed/s
 import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
 import type { SlurpPromptId } from "../../base/prompting/slp-prompt-blocks.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpPromptBlockPreview = {
   id: string;
   /** Empty when this block contributes nothing for the chosen Creator, which is itself worth seeing. */
@@ -115,7 +116,7 @@ export async function previewSlurpPromptBlocks(
     variationInstruction: slurpPostVariationInstruction(variation, slurpCameraSourceInstruction(camera)),
     contentTypeInstruction: slurpContentAxesInstruction(axes),
     continuityInstruction: slurpContinuityInstruction({
-      ...(await listSlurpContinuityFor(db, account.id, "public_post", { at: new Date(), limit: 20 }).catch(() => ({
+      ...(await listSlurpContinuityFor(db, account.id, "public_post", { at: slurpWorldNow(), limit: 20 }).catch(() => ({
         facts: [],
         events: [],
       }))),

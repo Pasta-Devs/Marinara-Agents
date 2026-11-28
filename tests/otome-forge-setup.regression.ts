@@ -1,7 +1,9 @@
 // Otome Forge's setup (M1): the forge job writes the world plan and one bible per love interest from the cards and
 // archetypes; a bible must be an adult's with no school role (one repair turn, then the step fails and waits for
-// Retry); paint steps wait for consent, paint once, and are never repainted after a failure; a step left running by a
-// restart is stored as failed; and every document the setup writes keeps the `otome-forge:` prefix.
+// Retry); paint steps wait for consent, paint once, and are never repainted after a failure; with neither Ask before
+// painting nor prompt review a new world paints each look by itself and queues his faces (0.22.0), and someone new
+// mid-story gets his paint step on the next read; a step left running by a restart is stored as failed; and every
+// document the setup writes keeps the `otome-forge:` prefix.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -24,15 +26,25 @@ import {
   emptyDraft,
   isBlankDraft,
   readDraft,
+  savedConnections,
+  setupAudioOf,
+  stepProblem,
   toSetupInput,
   type DraftLi,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/setup/draft.ts";
+import type {
+  ExpressionBeat,
+  OtomeArt,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import type {
   ImageClient,
   PortraitRequest,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import { paintView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
+import {
+  paintSettled,
+  paintView,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import {
   bannedPhrasesRule,
   lookPrompt,
@@ -46,6 +58,7 @@ import {
   INDEX_ID,
   INDEX_TARGET,
   playerId,
+  quizId,
   runDocTarget,
   runIdOf,
   stateId,
@@ -71,7 +84,10 @@ import {
   settleForge,
   startForge,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/forge.ts";
+import { removeLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
 import { createOtomeStore } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
+import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
+import { normalizeQuiz } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/quiz.ts";
 import { createFakeDocuments, createFakeRuntime, type FakeReply } from "./fixtures/otome-forge-fakes.ts";
 
 const at = "2026-10-28T10:00:00.000Z";
@@ -186,6 +202,8 @@ async function setup({
   cast = CAST,
   replies = [],
   imageConnection = null,
+  auto = false,
+  faces,
   failures = 0,
   persona = { name: "Ines", description: "A cartographer.", appearance: "" },
 }: {
@@ -193,6 +211,10 @@ async function setup({
   cast?: Seeded[];
   replies?: FakeReply[];
   imageConnection?: string | null;
+  /** The paint steps start pending, as a new world's do with nothing holding them (POST /runs). */
+  auto?: boolean;
+  /** Each love interest whose faces are queued, by name (the art service's queueExpressions). */
+  faces?: string[];
   failures?: number;
   persona?: { name: string; description: string; appearance: string };
 }) {
@@ -224,6 +246,7 @@ async function setup({
     forge: initialForge(
       cast.map((li) => li.id),
       imageConnection !== null,
+      auto,
     ),
   }));
   await store.mutateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (player) => ({
@@ -246,10 +269,17 @@ async function setup({
     lis: Object.fromEntries(cast.map((li) => [li.id, { points: 0, stage: 1 }])),
   }));
 
-  const deps = { runtime, store, handle: createHandle(runtime.logger), images };
+  // #2448: the forge asks for the high lane, so a love interest's faces paint right after his portrait.
+  const art = {
+    queueExpressions: (_runId: string, beat: ExpressionBeat, options: { lane?: string }) =>
+      void faces?.push(
+        ...beat.segments.map((segment) => `${(segment as { speaker: string }).speaker} (${options.lane ?? "low"})`),
+      ),
+  } as Pick<OtomeArt, "queueExpressions"> as OtomeArt;
+  const deps = { runtime, store, handle: createHandle(runtime.logger), images, art };
   const call = routeHarness(deps);
   const post = (path: string, body: unknown) => call("POST", path, body, runKey);
-  const get = (path: string) => call("GET", path, {}, runKey);
+  const get = (path: string, query: object = {}) => call("GET", path, query, runKey);
   const world = async () => (await store.readDoc(worldId(runId), normalizeWorld))!;
   const unit = async (li: string) => (await store.readDoc(unitId(runId, li), normalizeUnit))!;
   const player = async () => (await store.readDoc(playerId(runId), normalizePlayer))!;
@@ -425,6 +455,38 @@ test("the forge writes the world plan and every bible from the cards and archety
   }
 });
 
+test("once every bible is written, the personality quiz's answers are queued as one background call (#2174)", async () => {
+  const t = await setup({
+    runKey: "r-forgequiz-aaaaaa",
+    replies: [
+      JSON.stringify(plan),
+      JSON.stringify(bible()),
+      JSON.stringify(
+        bible({ pronouns: SHE, look: { identityLine: "red hair", outfitLine: "gown", presentation: "woman" } }),
+      ),
+      JSON.stringify(
+        bible({ pronouns: THEY, look: { identityLine: "freckles", outfitLine: "coat", presentation: "person" } }),
+      ),
+    ],
+  });
+  const background = createBackgroundQueue(t.runtime);
+  startForge({ ...t.deps, background }, t.runId, { debugMode: false });
+  await forgeSettled(t.runId);
+  assert.equal((await t.world()).forge.phase, "ready", "the story never waits for the quiz");
+  for (let round = 0; round < 200 && t.calls.length < 5; round += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  for (let round = 0; round < 50; round += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(t.calls.length, 5, "the world, three bibles, then the quiz's answers");
+  const quizCall = t.calls[4]!;
+  assert.match(quizCall.messages[0]!.content, /^You answer a personality quiz/u);
+  for (const name of ["Kai", "Mireille", "Sol"])
+    assert.match(quizCall.messages[1]!.content, new RegExp(`\n${name} \\(`, "u"));
+  const quiz = (await t.store.readDoc(quizId(t.runId), normalizeQuiz)) ?? normalizeQuiz(undefined);
+  assert.deepEqual(quiz.scores.p01, { [KAI]: 3, [MIR]: 3, [SOL]: 3 }, "the fake's answers (fakeQuizReply)");
+  assert.equal(Object.keys(quiz.scores).length, 68, "every statement an SFW story shows");
+});
+
 test("a bible under 18 or in a school role gets one repair turn, then fails its step until Retry", async () => {
   const t = await setup({
     runKey: "r-repair-bbbbbb",
@@ -571,7 +633,10 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
     prompt: "oil painting, red hair, ball gown",
     negativePrompt: "blurry",
   });
-  assert.equal((edited.body.paint as Paint).state, "ready");
+  // 0.47.1: answered once its record is pending; the paint goes on in the background.
+  assert.equal((edited.body.paint as Paint).state, "pending");
+  await paintSettled(t.runId, `li:${MIR}`);
+  assert.equal((await t.unit(MIR)).art?.state, "ready");
   assert.equal(t.paid[3].prompt, "oil painting, red hair, ball gown, safe for work, fully clothed, adult woman");
   assert.equal(
     t.paid[3].negativePrompt,
@@ -581,9 +646,129 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
 
   // A repaint keeps the old look until the new one is saved, then deletes the old gallery image.
   const repaint = await t.post("/runs/:run/art/paint", { target: { kind: "look", owner: `li:${KAI}` } });
-  assert.equal((repaint.body.paint as Paint).ref, "global-gallery:img5");
+  assert.equal((repaint.body.paint as Paint).state, "pending");
+  await paintSettled(t.runId, `li:${KAI}`);
+  assert.equal((await t.unit(KAI)).art?.ref, "global-gallery:img5");
   assert.deepEqual(t.deleted, ["img3"]);
   assert.equal((await t.post("/runs/:run/art/paint", { target: { kind: "look", owner: "li:bad id" } })).status, 400);
+});
+
+test("with neither Ask before painting nor prompt review, each look paints by itself once written, then his faces queue", async () => {
+  const faces: string[] = [];
+  const t = await setup({
+    runKey: "r-autopaint-aaaaaa",
+    cast: CAST.slice(0, 2),
+    imageConnection: "conn-image",
+    auto: true,
+    faces,
+    failures: 1,
+    replies: [
+      JSON.stringify(plan),
+      JSON.stringify(bible()),
+      JSON.stringify(
+        bible({ pronouns: SHE, look: { identityLine: "red hair", outfitLine: "gown", presentation: "woman" } }),
+      ),
+    ],
+  });
+  startForge(t.deps, t.runId, { debugMode: false });
+  await forgeSettled(t.runId);
+  const world = await t.world();
+  assert.equal(world.forge.phase, "ready");
+  assert.deepEqual(
+    world.forge.steps.filter((step) => step.id.startsWith("paint:")).map((step) => [step.id, step.state]),
+    [
+      [`paint:${KAI}`, "failed"],
+      [`paint:${MIR}`, "done"],
+      ["paint:player", "done"],
+    ],
+  );
+  assert.equal(t.paid.length, 3, "each look once; his failed one waits for Retry");
+  assert.deepEqual(
+    faces,
+    ["Mireille (high)"],
+    "faces for a love interest's painted look only, never the protagonist's, right after it (#2448)",
+  );
+  await settleForge(t.deps, t.runId);
+  assert.equal(t.paid.length, 3);
+});
+
+test("someone new mid-story gets his steps on the next read: painting by itself, held for the tap, or none", async () => {
+  const newcomer = {
+    ...CAST[2]!,
+    bible: normalizeBible(
+      bible({ look: { identityLine: "sun-dark skin", outfitLine: "patched coat", presentation: "man" } }),
+    ),
+  };
+  for (const [why, runKey, images, review, expected] of [
+    ["by itself", "r-newauto-aaaaaa", { connectionId: "conn-image", ask: false }, false, ["done", 1, ["Sol (high)"]]],
+    [
+      "Ask before painting",
+      "r-newask-aaaaaa",
+      { connectionId: "conn-image", ask: true },
+      false,
+      ["waiting-consent", 0, []],
+    ],
+    [
+      "prompt review",
+      "r-newreview-aaaaaa",
+      { connectionId: "conn-image", ask: false },
+      true,
+      ["waiting-consent", 0, []],
+    ],
+    ["no image connection", "r-newnoimg-aaaaaa", { connectionId: null, ask: false }, false, [undefined, 0, []]],
+  ] as const) {
+    const faces: string[] = [];
+    const t = await setup({
+      runKey,
+      cast: CAST.slice(0, 2),
+      imageConnection: images.connectionId,
+      faces,
+    });
+    // The cast was forged long ago; its looks still wait for the tap.
+    const cast = [
+      { id: "world-plan", state: "done" as const },
+      ...[KAI, MIR].map((li) => ({ id: `bible:${li}`, state: "done" as const })),
+      ...(images.connectionId
+        ? [`paint:${KAI}`, `paint:${MIR}`, "paint:player"].map((id) => ({
+            id,
+            state: "waiting-consent" as const,
+            paid: true,
+          }))
+        : []),
+    ];
+    await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      images: { ...world.images, ...images },
+      forge: { phase: "ready", steps: cast },
+    }));
+    await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, SOL)), normalizeUnit, (unit) => ({
+      ...unit,
+      ...newcomer,
+      createdAt: at,
+    }));
+    await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+      ...state,
+      lis: { ...state.lis, [SOL]: { points: 0, stage: 1 } },
+    }));
+    const read = await t.get("/runs/:run", review ? { reviewImagePrompts: true } : {});
+    assert.equal(read.status, 200, `${why}: ${JSON.stringify(read.body)}`);
+    await forgeSettled(t.runId);
+    await t.get("/runs/:run");
+    const [paint, paid, queued] = expected;
+    const steps = (await t.world()).forge.steps;
+    assert.deepEqual(steps.slice(0, cast.length), cast, `${why}: the cast's own steps are left as they were`);
+    assert.deepEqual(
+      steps.slice(cast.length).map((step) => [step.id, step.state]),
+      [[`bible:${SOL}`, "done"], ...(paint ? [[`paint:${SOL}`, paint]] : [])],
+      `${why}: his steps, once`,
+    );
+    assert.equal((await t.world()).forge.phase, "ready", why);
+    assert.equal(t.paid.length, paid, why);
+    assert.deepEqual(faces, queued, why);
+    // An arc plan that fails takes him back out of the cast, and Your cast with him.
+    await removeLoveInterest(t.deps, t.runId, SOL);
+    assert.deepEqual((await t.world()).forge.steps, cast, why);
+  }
 });
 
 test("without an image connection there are no paint steps, and consent is refused", async () => {
@@ -853,7 +1038,10 @@ test("POST /runs takes 2–5 love interests, enforces the 18+ gate, keeps the pl
   // The world plan and every bible avoid them, beside the built-in list.
   assert.equal(calls.length, 4);
   for (const forged of calls) assert.ok(text(forged.messages).includes(bannedPhrasesRule(banned)));
-  assert.match(bannedPhrasesRule(banned), /; "wet heat"; "slick folds"\.$/);
+  assert.match(
+    bannedPhrasesRule(banned),
+    /; "wet heat"; "slick folds"\. In narration, never use these sentence patterns/,
+  );
 
   // With the gate confirmed, the same NSFW setup is accepted.
   assert.equal((await call("POST", "/age-gate", { confirm: true })).status, 200);
@@ -866,6 +1054,27 @@ test("POST /runs takes 2–5 love interests, enforces the 18+ gate, keeps the pl
   assert.equal((nsfw.body.view as RunView).world.content.heat, "explicit");
   assert.equal(await stored(String(nsfw.body.run)), undefined, "none given, none stored");
   await forgeSettled(runIdOf(String(nsfw.body.run))).catch(() => undefined);
+
+  // #2448: the voices and music chosen at setup are the story's before its prologue is written.
+  const chosen = {
+    ...setupAudioOf(undefined),
+    tts: true,
+    emotionCues: true,
+    generate: true,
+    audioConnectionId: "conn-music",
+  };
+  const voiced = await call("POST", "/runs", setupInput({ audio: chosen }));
+  assert.equal(voiced.status, 200);
+  const audioOf = async (key: string) => (await store.readDoc(worldId(runIdOf(key)), normalizeWorld))!.audio;
+  const audio = await audioOf(String(voiced.body.run));
+  assert.deepEqual(setupAudioOf(audio), chosen);
+  assert.deepEqual(
+    [audio.dialogueVolume, audio.haptics, audio.tracks],
+    [1, false, []],
+    "the rest as Settings → Audio starts it",
+  );
+  assert.deepEqual(setupAudioOf(await audioOf(runKey)), setupAudioOf(undefined), "none given: all off, as before");
+  await forgeSettled(runIdOf(String(voiced.body.run))).catch(() => undefined);
 });
 
 test("the world plan keeps the world document's limits, so an over-long field gets the repair turn", () => {
@@ -1032,6 +1241,46 @@ test("a kept draft drops a persona or card the Engine no longer has, and keeps e
   assert.equal(kept, draft, "nothing missing returns the same draft, so the wizard does not re-render");
 });
 
+test("#2448: a job keeps the connection picked for it, even the story's own, when the story connection changes", () => {
+  const form = { narration: "conn-a", structured: "conn-b", chat: "conn-b", compress: "" };
+  const shown = (saved: ReturnType<typeof savedConnections>) => ({
+    narration: saved.narration,
+    structured: saved.structured ?? "",
+    chat: saved.chat ?? "",
+    compress: saved.compress ?? "",
+  });
+  // The story moves to the connection Planning and Messages use, then on to a third: they keep theirs throughout.
+  const moved = savedConnections({ ...form, narration: "conn-b" });
+  assert.deepEqual(moved, { narration: "conn-b", structured: "conn-b", chat: "conn-b" });
+  assert.deepEqual(savedConnections({ ...shown(moved), narration: "conn-c" }), {
+    narration: "conn-c",
+    structured: "conn-b",
+    chat: "conn-b",
+  });
+  assert.equal(savedConnections(form, "conn-embed").embeddings, "conn-embed");
+  const draft = { ...emptyDraft(), connections: { ...form, narration: "conn-b" } };
+  assert.deepEqual(toSetupInput(draft).connections, moved, "setup saves them the same way");
+});
+
+test("#2448: setup asks for the voices and music, all off by default, and sends them with the story", () => {
+  const draft = emptyDraft();
+  assert.deepEqual(draft.audio, {
+    tts: false,
+    otherVoices: false,
+    emotionCues: false,
+    generate: false,
+    chapterThemes: false,
+    musicFolder: "",
+    audioConnectionId: "",
+  });
+  const chosen = { ...draft, audio: { ...draft.audio, tts: true, emotionCues: true } };
+  assert.deepEqual(toSetupInput(chosen).audio, chosen.audio);
+  assert.equal(isBlankDraft(chosen), false, "a voice choice is the player's work, so the draft is kept");
+  assert.deepEqual(readDraft(JSON.parse(JSON.stringify(chosen))).audio, chosen.audio);
+  const { audio: _audio, ...older } = chosen;
+  assert.deepEqual(readDraft(older).audio, draft.audio, "a draft saved before #2448 starts with everything off");
+});
+
 test("a draft keeps the player's banned phrases on this device and sends them trimmed; none sends nothing", () => {
   const draft = { ...emptyDraft(), bannedPhrases: "  wet heat, slick folds  " };
   assert.equal(isBlankDraft(draft), false, "typed phrases are the player's work, so the draft is kept");
@@ -1040,4 +1289,31 @@ test("a draft keeps the player's banned phrases on this device and sends them tr
   assert.equal(readDraft({ ...draft, bannedPhrases: "x".repeat(3000) }).bannedPhrases.length, OWN_BANNED_PHRASES_MAX);
   assert.equal(toSetupInput(draft).bannedPhrases, "wet heat, slick folds");
   assert.ok(!("bannedPhrases" in toSetupInput({ ...draft, bannedPhrases: "   " })));
+});
+
+test("a draft asks how often they write: three numbers, 0 by default, checked on the connections step (#2424)", () => {
+  const draft = { ...emptyDraft(), connections: { ...emptyDraft().connections, narration: "conn-a" } };
+  assert.deepEqual(draft.messages, { daily: "0", squabbles: "0", invites: "0" });
+  assert.deepEqual(
+    [toSetupInput(draft).dailyMessages, toSetupInput(draft).groupSquabbles, toSetupInput(draft).dateInvites],
+    [0, 0, 0],
+  );
+  const typed = { ...draft, messages: { daily: "3", squabbles: "24", invites: "7" } };
+  assert.equal(stepProblem(typed, "connections", 1), null);
+  assert.deepEqual(
+    [toSetupInput(typed).dailyMessages, toSetupInput(typed).groupSquabbles, toSetupInput(typed).dateInvites],
+    [3, 24, 7],
+  );
+  for (const messages of [
+    { daily: "", squabbles: "0", invites: "0" },
+    { daily: "25", squabbles: "0", invites: "0" },
+    { daily: "0", squabbles: "1.5", invites: "0" },
+    { daily: "0", squabbles: "0", invites: "8" },
+  ]) {
+    assert.equal(stepProblem({ ...draft, messages }, "connections", 1), "ui.otomeForge.setup.needMessageNumbers");
+  }
+  // A draft saved before #2424 starts at 0, as a story then did.
+  const { messages: _messages, ...older } = typed;
+  assert.deepEqual(readDraft(older).messages, { daily: "0", squabbles: "0", invites: "0" });
+  assert.deepEqual(readDraft(JSON.parse(JSON.stringify(typed))).messages, typed.messages);
 });

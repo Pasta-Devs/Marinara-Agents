@@ -60,6 +60,15 @@ async function main() {
   // ── R1-107, changed in 0.3.6: the schedule refresh is the player's tap and never spends the budget ──
   const creatorsRoutes = read("server/src/slp/features/creators/slp-creators-routes.ts");
   assert.doesNotMatch(creatorsRoutes, /claimSlurpModelBudget|slurpModelWorkerAllows/u);
+  const refresh = creatorsRoutes.slice(
+    creatorsRoutes.indexOf('"/slurp/accounts/:id/conversation-schedule/refresh"'),
+    creatorsRoutes.indexOf("// Fan and follower totals per creator account"),
+  );
+  assert.match(refresh, /if \(!data \|\| typeof data !== "object" \|\| Array\.isArray\(data\)\)/u);
+  assert.ok(
+    refresh.indexOf("reply.code(422)") < refresh.indexOf("data.extensions"),
+    "schedule refresh rejects parsed null and non-object cards before reading fields",
+  );
 
   // ── R1-108: a refused or failed generated arc falls back to a library storyline ──
   const projects2 = read("server/src/slp/data/projects/slp-projects-storage-2.ts");

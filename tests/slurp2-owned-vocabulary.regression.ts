@@ -31,6 +31,9 @@ const ALLOWED_ENGINE_IMPORTS = new Set([
   "ImageGenResult",
   "StagedGalleryImage",
   "inferImageSource",
+  // Stored Engine lorebook attachment format.
+  "lorebookEntryImageSchema",
+  "MAX_LOREBOOK_ENTRY_IMAGES",
   "resolveMacros",
   "SceneOriginEnd",
   "SceneOriginProvider",

@@ -28,6 +28,7 @@ import { slurpLockedPostTeaser } from "../../modules/feed/slp-post-purpose.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteHost } from "./slp-route-host.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** Viewer projection: which persona is looking, what it may see, and how posts are priced for it. */
 export function createSlpViewerContext(
   app: FastifyInstance,
@@ -175,7 +176,7 @@ export function createSlpViewerContext(
     }
     // One clock for the whole projection, so every post in a page is measured against the same
     // instant and two posts made together never disagree about how old they are.
-    const projectedAt = new Date();
+    const projectedAt = slurpWorldNow();
     const authorIds = [...new Set(posts.map((post) => post.authorAccountId))];
     const projectionFunnel = await countFollowersForCreators(authorIds);
     const projectionScaleSettings = await noodle.getSettings();

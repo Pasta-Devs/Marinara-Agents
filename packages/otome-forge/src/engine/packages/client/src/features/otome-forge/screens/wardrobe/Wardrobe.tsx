@@ -1,13 +1,19 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Wardrobe. Complete looks only, for each love interest and for the player (Me): wear one at home,
 // show one of hers to a love interest (their one line about it, voiced; the first show of a look pays affection), and
-// the couple sets a look of hers makes with one of theirs, with a pair portrait once both are painted. A love
+// the couple sets a look of hers makes with one of theirs, with a pair portrait once both are painted (#2299: and its
+// Repaint once it is painted, the old portrait shown until the new one lands). A love
 // interest is named or referred to by their own pronouns, never "him" by default.
 // ──────────────────────────────────────────────
 // Routes (S/routes/wardrobe.ts): GET /runs/:run/wardrobe → WardrobeView; POST .../wardrobe/wear {owner, look} →
 // {wardrobe} (her new look is noticed by a love interest: P19, written in the background while `noticing`); POST
 // .../wardrobe/show {li, look} → ShowResult (P24). An unopened look is opened here as anywhere else (hooks/use-items).
 // Home (M3) shows the worn looks and HeNoticed (components/HeNoticed.tsx) too; useWearLook is exported for it.
+// #2128: My Wardrobe also lists the gifts bought in Wish's Shop, with how many of each (Date Night gives them), and the
+// figurines bought, each with Play the scene and (#2138) its paint: Painting…, or Paint / Try again as in the Shop
+// (ShopPanel.tsx FigurinePaint); the view's `gifts` and `figurines`, absent from an older server.
+// 0.21.0: a look won from Wish and not looked at yet has a dot by its name, and so does the tab of whose it is; a click
+// anywhere on its card (its picture, or any of its buttons) lets it go (useMarkSeen).
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +21,7 @@ import { BookOpen, Check, Heart, House, Paintbrush, RotateCcw, Sparkle, Sparkles
 import { useOtomeApi } from "../../api";
 import { CostHint } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
+import { FigurineArt, GIFT_NAME_KEYS, GiftArt } from "../../components/GiftArt";
 import { HeNoticed } from "../../components/HeNoticed";
 import { LookImage } from "../../components/LookImage";
 import { ImageDescription } from "../../components/ImageDescription";
@@ -24,6 +31,7 @@ import {
   paintWaits,
   readyArt,
   useItemActions,
+  useMarkSeen,
   useRefocus,
   wardrobeQueryKey,
   type ItemActions,
@@ -31,29 +39,33 @@ import {
 } from "../../hooks/use-items";
 import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { runPath } from "../../hooks/use-reader";
+import { FaceImage } from "../../components/Avatar";
 import { accentOf, initialsOf } from "../../lib/accent";
 import type { LiId, RunLiView, RunView } from "../../shared/api-types";
 import { FACES } from "../../shared/faces";
-import type { CoupleSet, LookView, ShowResult, WardrobeOwner, WardrobeView, WearResult } from "../../shared/wardrobe";
+import { GIFT_IDS } from "../../shared/shop";
+import {
+  wardrobeWorking,
+  type CoupleSet,
+  type LookView,
+  type ShowResult,
+  type WardrobeOwner,
+  type WardrobeView,
+  type WearResult,
+} from "../../shared/wardrobe";
 import type { ItemView } from "../../shared/wish";
-import { FACE_LABEL_KEYS } from "../reader/FacePlate";
+import { FigurinePaint } from "../wish/ShopPanel";
 import { OpenCost, PaintReviewDialog, RarityStars } from "../wish/TenPullGrid";
 
-/** While a look paints or a love interest is noticing hers, the wardrobe is read again this often. */
+/** While something in the wardrobe is still on its way (SH/wardrobe.ts wardrobeWorking), it is read again this often. */
 const POLL_MS = 3_000;
-
-const working = (wardrobe: WardrobeView | undefined) =>
-  !!wardrobe &&
-  (wardrobe.noticing ||
-    [...Object.values(wardrobe.him).flat(), ...wardrobe.me].some((look) => look.art?.state === "pending") ||
-    wardrobe.couples.some((couple) => couple.pair?.state === "pending"));
 
 export function useWardrobe(runKey: string) {
   const otome = useOtomeApi();
   return useQuery({
     queryKey: wardrobeQueryKey(runKey),
     queryFn: () => otome.get<WardrobeView>(`${runPath(runKey)}/wardrobe`),
-    refetchInterval: (query) => (working(query.state.data) ? POLL_MS : false),
+    refetchInterval: (query) => (wardrobeWorking(query.state.data) ? POLL_MS : false),
   });
 }
 
@@ -118,6 +130,7 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
   const wardrobe = useWardrobe(runKey);
   const actions = useItemActions(runKey);
   const wearing = useWearLook(runKey);
+  const markSeen = useMarkSeen(runKey);
   const owners: WardrobeOwner[] = [...view.lis.map((li) => li.id), "me"];
   const [owner, setOwner] = useState<WardrobeOwner>(
     initialOwner && owners.includes(initialOwner) ? initialOwner : (owners[0] ?? "me"),
@@ -194,6 +207,11 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
                 {person ? initialsOf(person.name) : <Sparkles size={12} strokeWidth={2} />}
               </span>
               <span className="of-ward-owner-name">{ownerName(t, value, view.lis)}</span>
+              {(value === "me" ? data.me : (data.him[value] ?? [])).some((look) => look.new) ? (
+                <span className="of-tab-dot of-new-dot">
+                  <span className="of-visually-hidden">{t("ui.otomeForge.common.hasNew")}</span>
+                </span>
+              ) : null}
             </label>
           );
         })}
@@ -230,6 +248,7 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
                   onWear={() => void wearing.wear(owner, look.id)}
                   onShow={() => setShowing(look)}
                   onOpenStory={onOpenStory}
+                  onSeen={() => markSeen(look.id)}
                 />
               </li>
             ))}
@@ -244,6 +263,17 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
         ) : null}
         <p className="of-hint">{t("ui.otomeForge.wardrobe.hint")}</p>
       </section>
+
+      {owner === "me" && (data.gifts || data.figurines) ? (
+        <OwnedGifts
+          runKey={runKey}
+          view={view}
+          wardrobe={data}
+          labelId={`${group}-gifts`}
+          actions={actions}
+          onOpenStory={onOpenStory}
+        />
+      ) : null}
 
       {couples.length ? (
         <section className="of-section of-glass" aria-labelledby={`${group}-couples`}>
@@ -264,6 +294,85 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChang
       {showing ? <ShowDialog runKey={runKey} view={view} look={showing} onClose={() => setShowing(null)} /> : null}
       <PaintReviewDialog actions={actions} />
     </div>
+  );
+}
+
+/** #2128: the gifts and figurines bought in the Shop, on the Shop's shelf. */
+function OwnedGifts({
+  runKey,
+  view,
+  wardrobe,
+  labelId,
+  actions,
+  onOpenStory,
+}: {
+  runKey: string;
+  view: RunView;
+  wardrobe: WardrobeView;
+  labelId: string;
+  actions: ItemActions;
+  onOpenStory: (key: string) => void;
+}) {
+  const { t } = useTranslation();
+  const gifts = GIFT_IDS.flatMap((gift) => {
+    const count = wardrobe.gifts?.[gift] ?? 0;
+    return count > 0 ? [{ gift, count }] : [];
+  });
+  const figurines = (wardrobe.figurines ?? []).flatMap((entry) => {
+    const li = view.lis.find((candidate) => candidate.id === entry.li);
+    return li ? [{ ...entry, li }] : [];
+  });
+  return (
+    <section className="of-section of-glass" aria-labelledby={labelId}>
+      <h2 id={labelId} className="of-section-title">
+        {t("ui.otomeForge.wardrobe.giftsTitle")}
+      </h2>
+      {gifts.length || figurines.length ? (
+        <ul className="of-shop-shelf of-shop-shelf--tall" aria-labelledby={labelId}>
+          {gifts.map(({ gift, count }) => {
+            const name = t(GIFT_NAME_KEYS[gift]);
+            return (
+              <li key={gift} className="of-shop-slot">
+                <span className="of-shop-stand">
+                  <GiftArt gift={gift} className="of-shop-item" />
+                  <span className="of-shelf-count" aria-hidden="true">
+                    ×{count}
+                  </span>
+                </span>
+                <span className="of-shop-name" aria-hidden="true">
+                  {name}
+                </span>
+                <span className="of-visually-hidden">{t("ui.otomeForge.shop.ownedCount", { name, count })}</span>
+              </li>
+            );
+          })}
+          {figurines.map(({ li, story, ...picture }) => {
+            const name = t("ui.otomeForge.shop.figurineOf", { name: li.name });
+            return (
+              <li key={li.id} className="of-shop-slot" style={{ "--of-li-accent": accentOf(li) } as CSSProperties}>
+                <span className="of-shop-stand">
+                  <FigurineArt li={li} url={picture.url} className="of-shop-item" />
+                </span>
+                <span className="of-shop-name">{name}</span>
+                <button
+                  type="button"
+                  className="of-button of-button--quiet of-glass of-button--small of-shop-buy"
+                  aria-label={t("ui.otomeForge.shop.playSceneLabel", { name: li.name })}
+                  onClick={() => onOpenStory(story.key)}
+                >
+                  <BookOpen size={14} strokeWidth={2} aria-hidden="true" />
+                  {t("ui.otomeForge.shop.playScene")}
+                </button>
+                <FigurinePaint runKey={runKey} view={view} li={li.id} name={name} picture={picture} actions={actions} />
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="of-empty">{t("ui.otomeForge.wardrobe.giftsNone")}</p>
+      )}
+      <p className="of-hint">{t("ui.otomeForge.wardrobe.giftsHint")}</p>
+    </section>
   );
 }
 
@@ -296,9 +405,22 @@ interface LookCardProps {
   onWear: () => void;
   onShow: () => void;
   onOpenStory: (key: string) => void;
+  /** 0.21.0: the card was clicked, so a new look is new no more. */
+  onSeen: () => void;
 }
 
-function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onShow, onOpenStory }: LookCardProps) {
+function LookCard({
+  view,
+  look,
+  person,
+  actions,
+  wearing,
+  wearBusy,
+  onWear,
+  onShow,
+  onOpenStory,
+  onSeen,
+}: LookCardProps) {
   const { t } = useTranslation();
   const nameRef = useRef<HTMLHeadingElement>(null);
   const wornRef = useRef<HTMLParagraphElement>(null);
@@ -314,6 +436,8 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
   // Wearing one of theirs paints its faces in the background when they are not painted yet (S/routes/wardrobe.ts).
   const wearPaintsFaces = look.owner !== "me" && images && view.world.images.expressions && faces.length < FACES.length;
   const held = paintWaits(look.art);
+  // 0.24.0: a painted look can be painted again, as the base look's Repaint does; its picture stays until a new one lands.
+  const repaint = !held && look.art?.state === "ready" && images;
   const shownAll = look.owner === "me" && view.lis.length > 0 && view.lis.every((li) => look.shownTo?.includes(li.id));
   const single = view.lis.length === 1 ? view.lis[0]! : null;
   const showLabel = single
@@ -321,7 +445,7 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
     : t("ui.otomeForge.wardrobe.showSomeone");
   // Open, Paint or Wear leaves once it is done: focus goes to "Worn at home", the card's next action, or its name.
   const onFocus = useRefocus(
-    `${look.unopened}|${held}|${look.worn}`,
+    `${look.unopened}|${held}|${repaint}|${look.worn}`,
     () =>
       (look.worn ? wornRef.current : null) ??
       actionsRef.current?.querySelector<HTMLElement>("button") ??
@@ -331,12 +455,15 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
     <article
       className="of-ward-look"
       onFocus={onFocus}
+      // A click on its picture or on any of its buttons (Enter and Space on one click too) is looking at it.
+      onClick={look.new ? onSeen : undefined}
       data-worn={look.worn}
       style={person ? ({ "--of-li-accent": accentOf(person) } as CSSProperties) : undefined}
     >
       <span className="of-ward-frame" data-painting={look.art?.state === "pending"} aria-hidden="true">
         <LookImage
           src={url}
+          cut={!!url && !!look.cut?.includes(url)}
           alt=""
           loading="lazy"
           decoding="async"
@@ -351,6 +478,11 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
       <div className="of-ward-look-body">
         <h3 ref={nameRef} className="of-ward-look-name" tabIndex={-1}>
           {name}
+          {look.new ? (
+            <span className="of-tab-dot of-new-dot of-item-dot">
+              <span className="of-visually-hidden">{t("ui.otomeForge.common.newItem")}</span>
+            </span>
+          ) : null}
         </h3>
         {look.item ? <RarityStars rarity={look.item.rarity} /> : null}
         <ImageDescription text={look.description} />
@@ -364,16 +496,12 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
             {t("ui.otomeForge.wish.painting")}
           </p>
         ) : null}
-        {faces.length ? (
-          <p className="of-ward-faces">
-            <span className="of-visually-hidden">
-              {t("ui.otomeForge.wardrobe.faces", {
-                faces: faces.map((face) => t(FACE_LABEL_KEYS[face])).join(", "),
-              })}
-            </span>
-            {faces.map((face) => (
-              <LookImage key={face} src={look.faces?.[face]} alt="" title={t(FACE_LABEL_KEYS[face])} loading="lazy" />
-            ))}
+        {/* A check once all five faces are painted (the server's facesPainted: his Engine sprites are not), not the
+            faces themselves: the Wardrobe never downloads them. */}
+        {look.facesPainted ? (
+          <p className="of-ward-expressions">
+            {t("ui.otomeForge.wardrobe.expressions")}
+            <Check size={13} strokeWidth={2.6} role="img" aria-label={t("ui.otomeForge.wardrobe.expressionsPainted")} />
           </p>
         ) : null}
         <div ref={actionsRef} className="of-ward-actions">
@@ -393,7 +521,7 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
               <OpenCost item={item} images={images} ask={view.world.images.ask} />
             </>
           ) : null}
-          {item && !look.unopened && held ? (
+          {item && !look.unopened && (held || repaint) ? (
             <>
               <button
                 type="button"
@@ -403,14 +531,16 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
                   if (!busy) void actions.paintItem(item);
                 }}
               >
-                {look.art?.state === "waiting-consent" ? (
-                  <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
-                ) : (
+                {held && look.art?.state !== "waiting-consent" ? (
                   <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
+                ) : (
+                  <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
                 )}
-                {look.art?.state === "waiting-consent"
-                  ? t("ui.otomeForge.wish.paint")
-                  : t("ui.otomeForge.wish.paintRetry")}
+                {!held
+                  ? t("ui.otomeForge.wardrobe.repaintLook", { look: name })
+                  : look.art?.state === "waiting-consent"
+                    ? t("ui.otomeForge.wish.paint")
+                    : t("ui.otomeForge.wish.paintRetry")}
               </button>
               <CostHint images={1} />
             </>
@@ -462,7 +592,7 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
             </button>
           ) : null}
         </div>
-        {!look.wearable && !look.unopened && !held && look.art?.state !== "pending" ? (
+        {!look.wearable && !look.unopened && !held && !repaint && look.art?.state !== "pending" ? (
           <p className="of-hint">
             {images ? t("ui.otomeForge.wardrobe.notWearable") : t("ui.otomeForge.wardrobe.notWearableNoImages")}
           </p>
@@ -493,8 +623,11 @@ function CoupleCard({
   const li = view.lis.find((item) => item.id === couple.his.li) ?? null;
   const target = pairTarget(runKey, couple);
   const busy = actions.busy.has(target.id);
+  // #2299: a kept portrait stays on screen while a repaint paints it again and after that failed.
   const pair = readyArt(couple.pair);
   const painting = couple.pair?.state === "pending" || busy;
+  const repaint = couple.pair?.state === "ready";
+  const retry = couple.pair?.state === "failed" || couple.pair?.state === "stopped";
   // "Paint a pair portrait" leaves while it paints: focus goes to the set's title, then the status under it is read.
   const onFocus = useRefocus(`${painting}|${!!pair}`, () => titleRef.current);
   const half = (side: "his" | "hers") => {
@@ -505,8 +638,10 @@ function CoupleCard({
         <span className="of-ward-frame of-ward-frame--small" aria-hidden="true">
           <LookImage
             src={look.url}
+            cut={!!look.cut}
             alt=""
             loading="lazy"
+            decoding="async"
             fallback={<span className="of-item-initials">{initialsOf(name)}</span>}
           />
         </span>
@@ -546,7 +681,8 @@ function CoupleCard({
           src={pair}
           alt={t("ui.otomeForge.wardrobe.pairAlt", { name: li?.name ?? "" })}
         />
-      ) : painting ? (
+      ) : null}
+      {painting ? (
         <p className="of-hint" role="status">
           {t("ui.otomeForge.wardrobe.pairPainting")}
         </p>
@@ -561,13 +697,15 @@ function CoupleCard({
             }}
           >
             <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
-            {couple.pair?.state === "failed" || couple.pair?.state === "stopped"
+            {retry
               ? t("ui.otomeForge.wish.paintRetry")
-              : t("ui.otomeForge.wardrobe.paintPair")}
+              : repaint
+                ? t("ui.otomeForge.wardrobe.repaintPair")
+                : t("ui.otomeForge.wardrobe.paintPair")}
           </button>
           <CostHint images={1} />
         </div>
-      ) : !couple.complete ? (
+      ) : pair ? null : !couple.complete ? (
         <p className="of-hint">{t("ui.otomeForge.wardrobe.coupleHint")}</p>
       ) : null}
       {actions.errors[target.id] ? (
@@ -679,7 +817,7 @@ function ShowDialog({
                 onClick={() => void show(item.id)}
               >
                 <span className="of-avatar" aria-hidden="true">
-                  {item.portrait ? <img src={item.portrait} alt="" /> : initialsOf(item.name)}
+                  {item.portrait ? <FaceImage src={item.portrait} /> : initialsOf(item.name)}
                 </span>
                 <span className="of-candidate-name">{t("ui.otomeForge.wardrobe.show", { name: item.name })}</span>
                 {look.shownTo?.includes(item.id) ? (
@@ -699,7 +837,7 @@ function ShowDialog({
       {result && person ? (
         <figure className="of-show-line" style={{ "--of-li-accent": accentOf(person) } as CSSProperties}>
           <span className="of-avatar of-avatar--hero" aria-hidden="true">
-            {face ? <img src={face} alt="" /> : initialsOf(person.name)}
+            {face ? <FaceImage src={face} /> : initialsOf(person.name)}
           </span>
           <figcaption className="of-show-who">{person.name}</figcaption>
           <p ref={lineRef} className="of-show-text" tabIndex={-1}>

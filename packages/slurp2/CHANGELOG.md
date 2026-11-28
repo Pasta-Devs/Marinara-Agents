@@ -1,5 +1,74 @@
 # Slurp release notes
 
+## 0.4.30 — 2026-11-28
+
+- With **Lorebook context** on, Slurp sends images from matching lorebook entries to compatible image connections.
+
+## 0.4.29 — 2026-11-23
+
+- Changed: when a Marinara chat with a Creator carries Slurp activity, that Creator stops writing to you first on Slurp while you roleplay. The quiet ends 20 minutes after the last reply in that chat.
+- Fixed: the Slurp activity carried into a Marinara chat no longer lists texts a Creator sent first that you have not answered yet, so the Creator no longer remarks that you ignore their DMs.
+- Added: Backstage > Messaging > "Pause Creator DMs". While it is on, no Creator writes to you first.
+- During both pauses, openers, check-ins, recurring updates, partner texts and drama questions are dropped, not saved for later, so nothing arrives in a burst afterwards. Promises, reminders and task updates a Creator owes you wait and arrive after the pause. Replies to your own messages and finished commissions still arrive.
+
+## 0.4.28 — 2026-11-19
+
+- Changed: the search fields on the Backstage Creators, Prompts and Continuity pages are now Marinara's own search field. Escape clears the text first, and a button clears it.
+- Needs a Marinara Engine with capability API 1.832 or newer; an older Engine does not load this version.
+
+## 0.4.27 — 2026-11-17
+
+- Changed: 23 copied helpers now come from two shared modules, `slp-hash.ts` and `slp-coerce.ts`, with the same output. A new regression freezes the hash values, so stored picks and rotations stay put.
+- Changed: the drama service uses the drama cast's `pairKey`, and earnings call `slurpDayKey` directly. No behaviour changes.
+
+## 0.4.26 — 2026-11-17
+
+- Changed: Slurp's switches, checkboxes and loading rings are now the ones Marinara Engine hands to packages (capability API 1.830), so they look and work like the Engine's own. The setting rows keep their name and note.
+- Changed: deleting an audience profile, a fan type, a storyline type or a content pack asks in Marinara's own dialog in place of the browser's.
+- Needs a Marinara Engine with capability API 1.830 or newer; an older Engine does not load this version.
+
+## 0.4.25 — 2026-11-16
+
+- Fixed: a hairstyle the card says is "worn" a certain way ("hair worn in a high ponytail") was read as clothing and left out of the picture.
+- Fixed: with Storylines off, explicit posts and occasions still brought in collab and couple partners from saved pairs and old collabs.
+- Added: Images › "One person per picture". Post pictures then show the Creator alone, with no partner, guest or collab partner drawn in.
+- Added: Backstage › Creators › "Refresh looks from cards". Slurp drafts each ticked Creator's look again from the card, as a Pulse task. One AI call per Creator.
+- Fixed: switching back to the Slurp tab no longer counts ad impressions again and rotates the ads.
+- Fixed: a fast second toggle in the events list no longer undoes the first one.
+- Fixed: a persona's Stir play can only be undone by that persona, also when no persona is sent.
+- Fixed: a double tap on a Life panel condition adds it once.
+
+## 0.4.24 — 2026-11-16
+
+- Fixed: cut-off post checks skip bracketed labels before the JSON object, schedule refresh rejects parsed non-object cards, and a relation denial no longer cancels an affirmed bond in a later clause.
+
+## 0.4.23 — 2026-11-16
+
+- Fixed: a post no longer stops in the middle of a sentence when the model runs out of output tokens. Slurp now sees that the answer was cut off and asks the model once more for a shorter post, in place of publishing the cut text.
+- Fixed: a card line that denies a relation, such as "not established friends" or "they aren't friends yet", no longer makes the two Creators friends.
+- Changed: the Creator settings tab that holds Delete is now called "Tools & delete", so you can find it.
+- Fixed: a double tap on "Resolve" for a Support ticket writes one line and gets one Creator reply.
+- Fixed: two subscription prices saved at the same time both stay saved.
+- Fixed: one damaged stored row no longer stops a Creator's request list or a scheduled follow-up, and a damaged character card gives a clear error when you refresh a conversation schedule.
+- Fixed: "Save to Slurp" from a chat checks that the chat has that character.
+
+## 0.4.22 — 2026-11-13
+
+- Fixed: A collab or couple post now shows every partner in its picture. A nude picture no longer gets clothes from the Creator's card, the Stage appearance or a saved look. "Completely naked" counts as no clothes. (#2274)
+- Changed: A joint post draws its partners in only at a clothed level; a nude or explicit picture still needs the spice consent check. A viewpoint the written scene names now wins over the weighted camera pick. A rewritten prompt that kept a viewpoint phrase is not given a second one. The image connection's own instructions now win on style and format; Slurp keeps who is in the picture, nude or clothed, and the outfit.
+
+## 0.4.21 — 2026-11-12
+
+- Added: Backstage > World clock. Slurp now has its own date. You can skip it forward by whole days, and you can go back only by restoring a checkpoint. A skip changes the date and nothing else: no posts, messages, events, stipends, income or cleanups are made for the days you skipped, and queued replies keep the wait they had left. Slurp saves a checkpoint before every skip and keeps the newest five by default. Manual checkpoints are never deleted. A restore saves a safety checkpoint first, brings back the data, settings, pictures and world date, keeps Slurp paused if it was paused, and puts the old state back if anything fails.
+
+## 0.4.20 — 2026-11-11
+
+- Changed: Slurp reads characters and character groups through Marinara Engine instead of a bundled copy of its storage, so a later change to how the Engine stores characters can't leave them blank. Refreshing a Creator's conversation schedule saves only the schedule keys, so a card edit made at the same time is kept. Needs a Marinara Engine with capability API 1.819 or newer. (#2242)
+
+## 0.4.19 — 2026-11-10 [highlight]
+
+- Important: please install this update before your next Marinara Engine update. That Engine update stores personas in a new format, and older Slurp versions read every persona there as blank: no name, description, appearance or About Me in feeds, profiles, messages and pictures. Slurp now reads personas through Marinara Engine, which reads both formats. Your personas and chats stay as they are. (#2230)
+
 ## 0.4.18 — 2026-11-05
 
 - Added: Backstage > Live shows has a Tip goals group. "Goal size" makes the room's goals and menu prices smaller or bigger. "Own goals" sets up to three goals for one Creator: an amount and what happens. They replace the made goals in that Creator's next shows, and the Creator acts out the text when the room hits the goal. Viewers cannot tip for an own goal's reward directly.

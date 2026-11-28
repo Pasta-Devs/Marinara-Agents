@@ -1,5 +1,7 @@
 import { SLURP_DEFAULT_REPLY_DELAYS, slurpDelayInRange, type SlurpReplyDelays } from "../messages/slp-messaging.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { slpStringHash as simpleHash } from "../../../../../shared/src/slp/slp-hash.js";
 type CreatorSource = { kind: string; entityId: string; displayName: string };
 
 /** `status` is the Engine's presence for the block; a routine read from the card has none. */
@@ -123,7 +125,7 @@ export async function resolveSlurpCreatorScheduleContext(
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,
   timeZone?: string,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
 ): Promise<string> {
   if (source.kind !== "character") return "No active Conversation Schedule is available for this Creator today.";
   const character = await characters.getById(source.entityId);
@@ -183,7 +185,7 @@ export type SlurpCreatorAvailability = {
 function inferAvailabilityFromActivity(
   creatorId: string,
   lastPostedAt: string | null,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
   delays: SlurpReplyDelays = SLURP_DEFAULT_REPLY_DELAYS,
 ): SlurpCreatorAvailability {
   if (delays.messagesUnscheduledAlwaysReachable) return { online: true, activity: null, minutesUntilOnline: 0 };
@@ -223,21 +225,6 @@ function inferAvailabilityFromActivity(
 
   // Posted >12 hours ago = offline for the day
   return { online: false, activity: null, minutesUntilOnline: null };
-}
-
-/**
- * Simple string hash for deterministic randomness.
- *
- * Not cryptographic, just needs to be consistent per input.
- */
-function simpleHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash);
 }
 
 const clockMinutes = (value: string | undefined): number | null => {
@@ -384,7 +371,7 @@ export function slurpTimelineMoment(
 export async function resolveSlurpCreatorScheduleBlocks(
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
   timeZone?: string,
 ): Promise<{ blocks: ScheduleBlock[]; yesterday: ScheduleBlock[]; tomorrow: ScheduleBlock[]; localNow: Date } | null> {
   if (source.kind !== "character") return null;
@@ -464,7 +451,7 @@ export async function resolveSlurpCreatorScheduleStatus(
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,
   timeZone?: string,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
 ): Promise<SlurpScheduleStatus> {
   if (source.kind !== "character") return { state: "not-applicable" };
   const character = await characters.getById(source.entityId);
@@ -492,7 +479,7 @@ export async function resolveSlurpCreatorAvailability(
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,
   timeZone?: string,
-  now: Date = new Date(),
+  now: Date = slurpWorldNow(),
   lastPostedAt?: string | null,
   delays?: SlurpReplyDelays,
 ): Promise<SlurpCreatorAvailability> {

@@ -16,8 +16,10 @@ import {
   drainSlurpContinuityExtraction,
   textSlurpPartners,
 } from "../messages/slp-messages-contract.js";
+import { isSlurpBackupActive } from "../../base/locking/slp-backup-state.js";
 import { slurpPaused } from "../../base/model/slp-pause.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /**
  * The background half of the world clock.
  *
@@ -65,7 +67,8 @@ export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (s
       const { clock } = (await createSlurpStorage(app.db).getSettings()).simulationTuning;
       pollMs = clock.tickMinutes * 60_000;
       // "Pause all": the world stands still (the settings read above keeps the flag in step).
-      if (slurpPaused()) return;
+      // A skip or restore holds the backup lock; ticks wait for it to finish.
+      if (slurpPaused() || isSlurpBackupActive()) return;
       // While the player is here the free tick runs every wake (R1-106): likes, follows and
       // storylines move while they watch, not only when the Inbox opens.
       const present = slurpPlayerPresent();
@@ -82,7 +85,7 @@ export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (s
       // Live shows run on the world clock whether or not the player watches (LIVE-V3-PLAN.md).
       await advanceSlurpLive(app.db).catch((error: unknown) => logger.warn(error, "[slurp-live] Live tick failed"));
       // A post that took off may become a trend (docs/TRENDS.md); it never fails the tick.
-      await advanceSlurpTrends(app.db, new Date()).catch((error: unknown) =>
+      await advanceSlurpTrends(app.db, slurpWorldNow()).catch((error: unknown) =>
         logger.warn(error, "[slurp-trends] Trends tick failed"),
       );
       // A Creator who is with the player texts like a partner, a few times a day.

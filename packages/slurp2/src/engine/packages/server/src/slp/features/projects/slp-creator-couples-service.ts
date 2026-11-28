@@ -34,6 +34,7 @@ import { resolveSlurpExplicitLevel } from "../../data/settings/slp-post-guidance
 import { slpSpiceFromExplicit } from "../../../../../shared/src/slp/slp-spice.js";
 import { slurpPlayerCoupleView, type SlurpPlayerCoupleView } from "../../modules/projects/slp-player-couple.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 /** A storyline about two Creators getting together: a live crossover whose words are romance. */
 const ROMANCE =
   /\b(romance|romantic|crush\w*|dat(e|es|ing)|falling for|love story|first kiss|in love|flirt\w*|verliebt)\b/iu;
@@ -93,7 +94,7 @@ export async function openSlurpCouplePage(db: DB, coupleId: string): Promise<Slu
   const opened = await mutateSlurpCreatorTies(db, (document) => {
     const current = document.couples.find((entry) => entry.id === coupleId);
     if (!current || !slurpCouplePageOpenable(current)) return null;
-    const next = slurpOpenCouplePage(current, accountId, new Date());
+    const next = slurpOpenCouplePage(current, accountId, slurpWorldNow());
     return {
       document: { ...document, couples: document.couples.map((entry) => (entry.id === coupleId ? next : entry)) },
       result: next,
@@ -170,7 +171,7 @@ export async function closeSlurpCouplePage(db: DB, coupleId: string): Promise<Sl
   const closed = await mutateSlurpCreatorTies(db, (document) => {
     const current = document.couples.find((entry) => entry.id === coupleId);
     if (!current?.page || current.page.closedAt) return null;
-    const next = slurpCloseCouplePage(current, new Date());
+    const next = slurpCloseCouplePage(current, slurpWorldNow());
     return {
       document: { ...document, couples: document.couples.map((entry) => (entry.id === coupleId ? next : entry)) },
       result: next,
@@ -314,7 +315,7 @@ export async function readSlurpPlayerCoupleView(
   if (!page) return null;
   const couple = slurpCoupleOf((await readSlurpCreatorTiesDocument(db)).couples, creatorId, page.id);
   if (!couple) return null;
-  const at = new Date();
+  const at = slurpWorldNow();
   // Her public side: how far she goes, and what her fans got this week.
   const weekAgo = new Date(at.getTime() - 7 * 86_400_000).toISOString();
   const posts = (await createSlurpStorage(db)

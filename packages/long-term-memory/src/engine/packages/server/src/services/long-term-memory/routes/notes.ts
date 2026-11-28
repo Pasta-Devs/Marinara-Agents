@@ -26,8 +26,10 @@ import {
   ltmSectionSchema,
   ltmStatusSchema,
   ltmSourceDerivedMemoriesResponseSchema,
+  ltmStoryTimeSchema,
   ltmSubjectsSchema,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { DEFAULT_LTM_GLOBAL_SETTINGS } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { branchInheritedNoteIds } from "../recall/generation-injection.js";
 import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "../maintenance/note-transfer.js";
@@ -50,15 +52,19 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { isLtmSourceNote } from "../extraction/source-extraction.js";
 import { processLongTermMemorySource } from "../extraction/source-processing.js";
-import { PROFESSOR_MARI_CHARACTER_ID } from "../sources/interop.js";
+import { branchHandHiddenTail, PROFESSOR_MARI_CHARACTER_ID } from "../sources/interop.js";
 import {
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
   isGlobalLtmScope,
+  matchesLtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import { LtmServiceError } from "../service-error.js";
+import type { UpdateLtmNotePatch } from "../persistence/storage.js";
+import { withLtmVaultLock } from "../persistence/vault-lock.js";
+import { describeStoryTime } from "../persistence/story-time.js";
 import type { FastifyInstance } from "fastify";
 import {
   NOTE_BODY_LIMIT_BYTES,
@@ -239,6 +245,16 @@ const updateNoteBody = z
       .array(ltmSectionKeySchema)
       .max(100)
       .refine((keys) => new Set(keys).size === keys.length, "Removed section keys must be unique.")
+      .optional(),
+    // A story date the user typed, or null to clear the stored date. Automated dates come only from Find story dates.
+    storyTime: ltmStoryTimeSchema
+      .refine((value) => value.origin === "manual", "Only a story date typed by the user can be set here.")
+      .nullable()
+      .optional(),
+    // Removes one stored time jump. The quote must still match the jump at that index.
+    removeStoryTimeJump: z
+      .object({ index: z.number().int().min(0).max(99), quote: z.string().min(1).max(240) })
+      .strict()
       .optional(),
   })
   .strict()
@@ -503,6 +519,13 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
         .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
     );
   });
+  app.get<{ Params: { id: string } }>("/notes/:id/story-date", async (request, reply) => {
+    const noteId = ltmNoteIdSchema.parse(request.params.id);
+    const notesById = new Map((await storage.listNotes()).map((note) => [note.id, note]));
+    const note = notesById.get(noteId);
+    if (!note) return reply.status(404).send({ error: "Long-term memory note not found" });
+    return describeStoryTime(note, notesById);
+  });
   app.get<{ Params: { id: string } }>("/notes/:id/derived", async (request, reply) => {
     const sourceNoteId = ltmNoteIdSchema.parse(request.params.id);
     const notes = await storage.listNotes();
@@ -547,6 +570,58 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       sourceOutgoingLinkCount: outgoingLinkCounts.get(sourceNoteId) ?? 0,
       memories: related,
     });
+  });
+  // The memories this chat recalls from the other branches of its conversation (the same set a reply uses), past
+  // recall's status and mode filters, without the ones its own place already reaches. Each is grouped by the branch
+  // it is saved to, so Chat Settings and the Vault can say "From branch <name>".
+  app.get<{ Params: { chatId: string } }>("/branch-memories/:chatId", async (request, reply) => {
+    const persistence = getPackagePersistence();
+    const chat = await persistence.getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    const mode = ltmModeForChatMode(chat.mode);
+    const inherited = await branchInheritedNoteIds(root, chat, mode);
+    if (!inherited?.size) return { branches: [] };
+    const [recall, notesById, chats] = await Promise.all([
+      getLtmGlobalSettings(root).then((globalSettings) =>
+        resolveLongTermMemoryRecallSettings({
+          chatMode: mode,
+          chatMetadata: parseLtmChatMetadata(chat.metadata),
+          globalSettings,
+        }),
+      ),
+      storage.getNotesByIds([...inherited]),
+      persistence.listChats(),
+    ]);
+    const branchChats = new Map(
+      chats.filter((other) => other.groupId === chat.groupId && other.id !== chat.id).map((other) => [other.id, other]),
+    );
+    const ownPlace = {
+      scope: resolveChatLtmScope(chat),
+      characterIds: normalizeLtmChatCharacterIds(chat.characterIds),
+    };
+    const byBranch = new Map<string, string[]>();
+    for (const note of notesById.values()) {
+      if (note.type === "source" || note.status === "archived") continue;
+      if (note.status === "resolved" && !recall.includeResolved) continue;
+      if (!note.modes.includes(mode) || matchesLtmScope(note, ownPlace)) continue;
+      const branchId = getLtmScopeChatIds(note.scope).find((id) => branchChats.has(id));
+      if (branchId) byBranch.set(branchId, [...(byBranch.get(branchId) ?? []), note.id]);
+    }
+    return {
+      branches: [...byBranch]
+        .map(([chatId, noteIds]) => ({
+          chatId,
+          name: getLtmChatDisplayName(branchChats.get(chatId)) || "Untitled chat",
+          noteIds,
+        }))
+        .sort((left, right) => right.noteIds.length - left.noteIds.length || left.name.localeCompare(right.name)),
+    };
+  });
+  // The latest messages this branch copied hidden by hand, which Chat Settings offers to show (`branchHandHiddenTail`).
+  app.get<{ Params: { chatId: string } }>("/branch-hidden-tail/:chatId", async (request, reply) => {
+    const chat = await getPackagePersistence().getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    return { messageIds: await branchHandHiddenTail(root, chat) };
   });
   app.get<{ Params: { id: string } }>("/notes/:id", async (request, reply) => {
     const note = await storage.getNote(ltmNoteIdSchema.parse(request.params.id));
@@ -727,7 +802,9 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       const id = parsedId.data;
       const existing = await storage.getNote(id);
       if (!existing) return reply.status(404).send({ error: "Long-term memory note not found" });
-      const patch = parsedBody.data;
+      const { storyTime, removeStoryTimeJump, ...fields } = parsedBody.data;
+      const patch: UpdateLtmNotePatch =
+        storyTime === undefined ? fields : { ...fields, storyTime: storyTime ?? undefined };
       const validationError = vaultNoteValidationError({ ...existing, ...patch });
       if (validationError) return reply.status(400).send({ error: validationError });
       if (existing.type === "source" && patch.sections !== undefined)
@@ -741,7 +818,19 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
         });
       let note;
       try {
-        note = await storage.updateNote(id, patch);
+        note = removeStoryTimeJump
+          ? await withLtmVaultLock(root, async () => {
+              const scan = (await storage.getNote(id))?.storyTimeScan;
+              if (scan?.jumps[removeStoryTimeJump.index]?.quote !== removeStoryTimeJump.quote)
+                throw new LtmServiceError(
+                  "That time jump has changed since it was shown; reload and try again",
+                  409,
+                  "ltm_story_time_jump_changed",
+                );
+              const jumps = scan.jumps.filter((_, index) => index !== removeStoryTimeJump.index);
+              return storage.updateNote(id, { ...patch, storyTimeScan: { ...scan, jumps } });
+            })
+          : await storage.updateNote(id, patch);
       } catch (error) {
         const result = routeError(error, "Could not update note.");
         return reply.status(result.statusCode).send(result.body);
@@ -911,11 +1000,13 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       chatMetadata: parseLtmChatMetadata(chat?.metadata),
       globalSettings: await getLtmGlobalSettings(root),
     });
-    const promptBudgetTokens = body.maxTokens ?? recall.budgetTokens ?? 4096;
+    const promptBudgetTokens =
+      body.maxTokens ?? recall.budgetTokens ?? DEFAULT_LTM_GLOBAL_SETTINGS.longTermMemoryBudgetTokens;
     const promptOverheadTokens = estimateLongTermMemoryPromptOverhead(recall.recallPreamble);
     const retrievalMaxTokens =
       promptBudgetTokens > promptOverheadTokens ? promptBudgetTokens - promptOverheadTokens : promptBudgetTokens;
-    const maxChunks = body.maxChunks ?? recall.maxChunks ?? 20;
+    // A caller may still ask for a count limit; settings no longer carry one.
+    const maxChunks = body.maxChunks;
     const scoreThreshold = body.minScore ?? recall.scoreThreshold ?? 0;
     const includeResolved = body.includeResolved ?? recall.includeResolved;
     const weights = {

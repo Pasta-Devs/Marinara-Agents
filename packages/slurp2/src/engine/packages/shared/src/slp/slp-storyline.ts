@@ -172,7 +172,8 @@ export const slpStorylineObjectSchema = z
     description: z.string().trim().max(2000).default(""),
     tone: z.string().trim().max(80).default(""),
     tags,
-    storyTags: tags,
+    // Absent when the story names none: a default would give a round trip a key the source never had.
+    storyTags: tags.optional(),
     /** A storyline that does not fit the lead never starts. */
     fit: slpFitSchema.optional(),
     /** 1 to 5 roles; one role is a solo story. */

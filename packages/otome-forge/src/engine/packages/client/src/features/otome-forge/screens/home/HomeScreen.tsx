@@ -1,13 +1,16 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Home. The love interest the player chose (or the player, in her own look) stands in a layered scene
-// tinted by the time of day, breathing, with a handwritten message of the day, his mood, tap zones that answer at once
-// from lines written in advance, the phone, Rough day?, Remind Me, Him / Me, and (M6) Caring message on a day the
-// period tracker has something to say. His face is M2b's: the tap's while its line shows, else his note's, else cold
+// tinted by the time of day, breathing, with a handwritten message of the day, his mood, touch zones (#2152: head,
+// cheek, chest, hand, and the crotch under NSFW Heat) that answer at once from lines written in advance, the phone,
+// Rough day?, Remind Me, Him / Me, and (M6) Caring message on a day the period tracker has something to say. His face
+// is M2b's: the tap's (a fond touch's face for its zone) while its line shows, else his note's, else cold
 // during a rupture, painted once his faces are (cut out when they can be). His lines are voiced as the reader voices
 // his story, when Settings → Audio voices him, and the home music plays beneath (OtomeForgeView's audio). Everything
 // works without images or audio.
 // M4: each side wears what the Wardrobe's Wear at home put on (a love interest's look cut out, with their faces painted
 // on it, as their portrait was), and Me shows what a love interest noticed about her look (P19) beside it.
+// #2127: Your thoughts…, beside Remind Me, holds what the protagonist is thinking or planning for the next main chapter
+// (ThoughtsSheet), with a dot on the button while they wait.
 // ──────────────────────────────────────────────
 // Routes (S/routes/home.ts): GET /runs/:run/home → HomeView; POST .../home/set {li?, show?} → {home};
 // POST .../home/note {li} → {note} (written by the local day's first call, the same note after); GET
@@ -15,8 +18,18 @@
 // local day and rupture state from this page (a rupture that opens or is repaired makes the day's note stale, and
 // Home's answer then has none; the other state's request is dropped then, so a repair the same day asks again): one
 // request in flight, and a failure waits for Try again instead of asking the model again on every visit. L0 shows his
-// newest CG or the newest painted place when the server names one.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+// newest CG or the newest painted place when the server names one. ThoughtsSheet sends POST .../home/thoughts {text}
+// → {thoughts}, and Home keeps the answer as its own.
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, HandHeart, HeartHandshake, MessageCircleHeart, RotateCcw, UsersRound } from "lucide-react";
@@ -35,7 +48,9 @@ import {
   localHour,
   pickLine,
   recordTap,
+  shownZones,
   skyPhase,
+  tapFace,
   tapMode,
   tapPool,
   type TapMode,
@@ -49,9 +64,11 @@ import type {
   LiId,
   LinesView,
   NoteView,
+  PlayerThoughts,
   RunLiView,
   RunView,
 } from "../../shared/api-types";
+import type { Face } from "../../shared/faces";
 import { timeOfDayOf, type TapZone } from "../../shared/home";
 import { wornLookUrl } from "../../shared/wardrobe";
 import { PALETTE } from "../../theme/tokens";
@@ -65,6 +82,7 @@ import { HomeLiPicker } from "./HomeLiPicker";
 import { MoodChip } from "./MoodChip";
 import { NoteCard, useLineVoice, type NoteStatus } from "./NoteCard";
 import { RoughDaySheet } from "./RoughDaySheet";
+import { ThoughtBubbleIcon, ThoughtsSheet } from "./ThoughtsSheet";
 
 export const homeQueryKey = (runKey: string) => ["otome-forge", "home", runKey] as const;
 export const linesQueryKey = (runKey: string, li: LiId) => ["otome-forge", "lines", runKey, li] as const;
@@ -77,10 +95,11 @@ const CUTOUT_POLL_MS = 10_000;
 /** While a love interest is noticing her new look (P19, written in the background), Home asks again this often. */
 const NOTICING_POLL_MS = 3_000;
 
-/** A cut-out Home shows is on its way: the look's, or (on him) one of his faces'. */
+/** A cut-out Home shows is on its way: the look's, (on him) one of his faces', or a figurine's or its paint (#2138). */
 const cutoutComing = (view: HomeView | undefined) =>
   view?.look?.cutoutState === "pending" ||
-  (view?.show === "him" && Object.values(view.faces).some((face) => face?.cutoutState === "pending"));
+  (view?.show === "him" && Object.values(view.faces).some((face) => face?.cutoutState === "pending")) ||
+  !!view?.figurines?.some((figurine) => figurine.cutting || figurine.art?.state === "pending");
 
 /**
  * Home, read again on every visit: the story changes it while Home is away (a rupture that opens or is repaired, a
@@ -303,7 +322,8 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
     const other = `${runKey} ${li.id} ${day} ${about.rupture ? "warm" : "curt"}`;
     noteRequests.delete(other);
     noteFailures.delete(other);
-    if (about.note || home.isFetching) return;
+    // #2459: an ended story writes no new note; one already written still shows.
+    if (about.note || home.isFetching || view.ended) return;
     const failure = noteFailures.get(noteKey);
     if (failure !== undefined) setNoteState({ key: noteKey, error: failure });
     else writeNote(noteKey, li.id, li.name);
@@ -331,7 +351,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
             writeNote(noteKey, li.id, li.name);
           },
         }
-      : about
+      : about && !view.ended
         ? { kind: "writing" }
         : null;
 
@@ -378,7 +398,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
   const taps = useRef<number[]>([]);
   const lastLine = useRef<string | null>(null);
   const voice = useLineVoice();
-  const [bubble, setBubble] = useState<{ id: number; li: LiId; text: string; mode: TapMode } | null>(null);
+  const [bubble, setBubble] = useState<{ id: number; li: LiId; text: string; mode: TapMode; face: Face } | null>(null);
   const tapsFor = li?.id;
   useEffect(() => {
     taps.current = [];
@@ -406,14 +426,26 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
     const line = pickLine(pool, lastLine.current);
     if (!line) return;
     lastLine.current = line;
-    setBubble((current) => ({ id: (current?.id ?? 0) + 1, li: li.id, text: line, mode }));
+    // #2152: a fond touch shows the face his pack names for the zone.
+    const face = tapFace(ownLines, zone, mode);
+    setBubble((current) => ({ id: (current?.id ?? 0) + 1, li: li.id, text: line, mode, face }));
     setAnnounce(t("ui.otomeForge.home.said", { name: li.name, line }));
     // Voiced in his voice when the settings voice him; the next tap cuts it short. Cached by its words.
     const spoken = { speaker: li.name, text: line };
     if (voice.can(spoken)) voice.play(tapLineRef(li.id, line), spoken);
   };
 
-  const [sheet, setSheet] = useState<"rough" | "pick" | "care" | null>(null);
+  const [sheet, setSheet] = useState<"rough" | "pick" | "care" | "thoughts" | null>(null);
+  // Your thoughts… waiting for the next main chapter (an answer from before 0.8.12 has none).
+  const thoughts = data?.thoughts ?? null;
+  const thoughtsWaitId = useId();
+  const onThoughtsSaved = (saved: PlayerThoughts | null) => {
+    queryClient.setQueryData<HomeView>(homeQueryKey(runKey), (current) =>
+      current ? { ...current, thoughts: saved } : current,
+    );
+    setSheet(null);
+    setAnnounce(t(saved ? "ui.otomeForge.home.thoughtsSaved" : "ui.otomeForge.home.thoughtsCleared"));
+  };
 
   // ── The period tracker (this browser only): Caring message shows on a day it has something to say, once Home knows
   // whose home it is. Followed in other tabs too; a caring message from another day is dropped as the day changes. ──
@@ -440,13 +472,16 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
 
   if (!li) return null;
   const said = bubble?.li === li.id ? bubble : null;
-  const remindLabel = t("ui.otomeForge.common.screenRemind");
+  // #2153: a birthday to celebrate puts a dot on Remind Me (absent from an older server, and when there is none).
+  const birthdays = !!data?.celebrate?.length;
+  const remindLabel = birthdays ? t("ui.otomeForge.home.remindBirthday") : t("ui.otomeForge.common.screenRemind");
+  const thoughtsLabel = t("ui.otomeForge.home.thoughts");
 
   // ── The figure. The cached look belongs to whoever it pictures: right after Him / Me flips, the other one's look is
   // still cached, so each side checks the URL before using it. His face (homeFace) when painted, cut-out first. ──
   const cached = data?.look ?? null;
   const pictures = (url: string | undefined) => !!url && (cached?.url === url || cached?.cutout === url);
-  const face = homeFace(note?.face ?? "", said?.mode ?? null, rupture);
+  const face = homeFace(note?.face ?? "", said?.face ?? null, rupture);
   const painted = face ? faceArt(li, face) : null;
   // The look each side wears (the Wardrobe's Wear at home, else the base portrait), as the server names it.
   const himUrl = li.worn?.url ?? li.portrait;
@@ -482,7 +517,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
       onPointerMove={parallax.onPointerMove}
       onPointerLeave={parallax.onPointerLeave}
     >
-      <HomeLayers backdrop={about?.backdrop ?? null}>
+      <HomeLayers backdrop={about?.backdrop ?? null} figurines={data?.figurines}>
         <div className="of-home-main">
           <div className="of-home-stage">
             {show === "him" ? (
@@ -495,6 +530,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
                 label={figureLabel}
                 face={face}
                 mood={rupture ? "cold" : (said?.mode ?? "fond")}
+                zones={shownZones(ownLines, view.world.content)}
                 onTap={onTap}
               />
             ) : (
@@ -574,19 +610,43 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
           <UsersRound size={17} strokeWidth={1.9} aria-hidden="true" />
           <span>{t("ui.otomeForge.home.whoIsHome")}</span>
         </button>
-        {/* M6: Remind Me, and Caring message beside it on a day the period tracker marks, as round buttons in one row
-            at the rail's foot, named for screen readers and in a tooltip. The rail is as tall with Caring message as
-            without it, so nothing moves as it comes or goes, and the note keeps its words on the shortest phones. */}
+        {/* M6: Remind Me, Your thoughts… (#2127) and Caring message beside them on a day the period tracker marks, as
+            round buttons in one row at the rail's foot, named for screen readers and in a tooltip. The rail is as tall
+            with Caring message as without it, so nothing moves as it comes or goes, and the note keeps its words on
+            the shortest phones. */}
         <div className="of-home-rail-row">
           <button
             ref={remindRef}
             type="button"
-            className="of-icon-button of-glass of-glass--strong"
+            className="of-icon-button of-glass of-glass--strong of-home-remind"
             aria-label={remindLabel}
             title={remindLabel}
             onClick={onOpenRemind}
           >
             <CalendarDays size={18} strokeWidth={1.9} aria-hidden="true" />
+            {birthdays ? <span className="of-tab-dot" aria-hidden="true" /> : null}
+          </button>
+          {/* Opens only once Home has answered: before that, thoughts already waiting are unknown, and the window would
+              open empty and a Send would replace them unseen. */}
+          <button
+            type="button"
+            className="of-icon-button of-glass of-glass--strong of-home-thoughts"
+            aria-label={thoughtsLabel}
+            aria-describedby={thoughts ? thoughtsWaitId : undefined}
+            aria-disabled={!data}
+            title={thoughtsLabel}
+            onClick={() => {
+              if (data) setSheet("thoughts");
+            }}
+          >
+            <ThoughtBubbleIcon />
+            {thoughts ? (
+              <span className="of-tab-dot">
+                <span id={thoughtsWaitId} className="of-visually-hidden">
+                  {t("ui.otomeForge.home.thoughtsWaiting")}
+                </span>
+              </span>
+            ) : null}
           </button>
           {careFrom && data ? (
             <CaringButton
@@ -613,6 +673,8 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
 
       {sheet === "rough" ? (
         <RoughDaySheet li={li} lines={ownLines} onClose={() => setSheet(null)} />
+      ) : sheet === "thoughts" ? (
+        <ThoughtsSheet runKey={runKey} thoughts={thoughts} onSaved={onThoughtsSaved} onClose={() => setSheet(null)} />
       ) : careOpen && care ? (
         <CaringMessage
           key={careFrom}

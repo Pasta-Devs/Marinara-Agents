@@ -5,21 +5,22 @@
 // Closed, the panel is inert, so neither focus nor screen readers reach into it.
 import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, ChevronRight, Library, Palette, PenLine, Users, Wand2, X } from "lucide-react";
+import { BookOpen, ChevronRight, Library, MessageSquareText, Palette, PenLine, Users, Wand2, X } from "lucide-react";
 import type { ConnectionOption } from "../../hooks/use-engine-resources";
 import type { StoryGenerationApi } from "../../hooks/use-story-generation";
-import type { StoryDocumentApi } from "../../hooks/use-story-writer";
+import type { PreferencesUpdate, StoryDocumentApi } from "../../hooks/use-story-writer";
 import type { StorySettings, StorySummary, StoryWriterPreferences } from "../../lib/story-writer/model";
 import type { ResolvedColorMode } from "../../lib/story-writer/styles-shell";
 import { AppearanceSection } from "./sidebar/AppearanceSection";
 import { CastSection } from "./sidebar/CastSection";
 import { Section } from "./sidebar/fields";
+import { QuickRepliesSection } from "./sidebar/QuickRepliesSection";
 import { StoriesSection } from "./sidebar/StoriesSection";
 import { StorySection } from "./sidebar/StorySection";
 import { ToolsSection } from "./sidebar/ToolsSection";
 import { WritingSection } from "./sidebar/WritingSection";
 
-export type SidebarSectionId = "stories" | "story" | "cast" | "writing" | "tools" | "appearance";
+export type SidebarSectionId = "stories" | "story" | "cast" | "writing" | "tools" | "quickReplies" | "appearance";
 type SectionId = SidebarSectionId;
 
 export interface StorySidebarProps {
@@ -30,7 +31,7 @@ export interface StorySidebarProps {
   iconUrl: string;
   preferences: StoryWriterPreferences;
   resolvedMode: ResolvedColorMode;
-  onPreferencesChange(patch: Partial<StoryWriterPreferences>): void;
+  onPreferencesChange: PreferencesUpdate;
   stories: StorySummary[];
   activeStoryId: string | null;
   onSelectStory(storyId: string): void;
@@ -42,6 +43,7 @@ export interface StorySidebarProps {
   doc: StoryDocumentApi;
   generation: StoryGenerationApi;
   connections: ConnectionOption[];
+  imageConnections: ConnectionOption[];
   connectionsLoading: boolean;
   /** A connection is selected or available as the default. */
   hasConnection: boolean;
@@ -49,6 +51,7 @@ export interface StorySidebarProps {
   onManageConnections(): void;
   onJumpToChapter(chapterId: string): void;
   onDeleteChapter(chapterId: string): void;
+  onPeekPrompt(): void;
   totalWords: number;
 }
 
@@ -64,6 +67,7 @@ export function StorySidebar(props: StorySidebarProps) {
     cast: false,
     writing: true,
     tools: false,
+    quickReplies: false,
     appearance: false,
   });
   const { open, onOpenChange, doc, generation } = props;
@@ -197,6 +201,7 @@ export function StorySidebar(props: StorySidebarProps) {
                     settings={settings}
                     onChange={updateSettings}
                     connections={props.connections}
+                    imageConnections={props.imageConnections}
                     connectionsLoading={props.connectionsLoading}
                     onEditConnection={props.onEditConnection}
                     onManageConnections={props.onManageConnections}
@@ -221,10 +226,21 @@ export function StorySidebar(props: StorySidebarProps) {
                     onSaveSummary={(chapterId, summary) => void doc.saveChapter(chapterId, { summary })}
                     onDeleteChapter={props.onDeleteChapter}
                     onJump={props.onJumpToChapter}
+                    onPeekPrompt={props.onPeekPrompt}
                   />
                 </Section>
               </Fragment>
             ) : null}
+            <Section
+              title={t("sidebar.sections.quickReplies")}
+              icon={<MessageSquareText size={18} />}
+              badge={props.preferences.quickReplies.length || undefined}
+              open={sections.quickReplies}
+              onToggle={() => toggleSection("quickReplies")}
+              sectionId="quickReplies"
+            >
+              <QuickRepliesSection preferences={props.preferences} onChange={props.onPreferencesChange} />
+            </Section>
             <Section
               title={t("sidebar.sections.appearance")}
               icon={<Palette size={18} />}

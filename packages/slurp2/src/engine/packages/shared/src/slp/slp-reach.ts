@@ -27,7 +27,9 @@
  * list. See `slurp-wallet.ts` for the numbers that must stay exact.
  */
 
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slp-tuning.js";
+import { slpHashFmix as hash } from "./slp-hash.js";
 
 /*
  * Creator reach numbers live in Simulation Tuning (`reach`): `floor` is the smallest audience a
@@ -39,29 +41,6 @@ import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slp-tuning
 const POST_SETTLE_DAYS = 2.5;
 
 const DAY_MS = 86_400_000;
-
-/**
- * FNV-1a followed by a murmur3 finalizer. Not a security hash, and nothing here needs one.
- *
- * The finalizer is load-bearing, not decoration. Plain FNV-1a barely avalanches its last byte: two
- * ids differing only in the final character hash to almost the same value. Slurp mints ids
- * sequentially, so without the mix every post created in one batch drew nearly the same share and
- * a whole page of posts landed on the same like count — exactly the sameness this module exists to
- * remove.
- */
-function hash(value: string): number {
-  let out = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    out ^= value.charCodeAt(index);
-    out = Math.imul(out, 0x01000193);
-  }
-  out ^= out >>> 16;
-  out = Math.imul(out, 0x85ebca6b);
-  out ^= out >>> 13;
-  out = Math.imul(out, 0xc2b2ae35);
-  out ^= out >>> 16;
-  return out >>> 0;
-}
 
 /** A stable number in [0, 1) for one id and one purpose. */
 function unitFor(id: string, salt: string): number {
@@ -169,7 +148,7 @@ export function slurpCreatorReach(
      */
     scale?: number;
   },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
   tuning: SlurpSimulationTuning["reach"] = SLURP_REALISTIC_TUNING.reach,
 ): number {
   const spread = unitFor(input.accountId, "reach");
@@ -191,7 +170,7 @@ export function slurpCreatorReach(
 export function slurpPostImpressions(
   /** `accountId` lets the algorithm week apply. Without it the post gets its plain share. */
   input: { postId: string; createdAt: string; creatorReach: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   // Between 18% and 70% of the audience: the spread is what stops every post looking identical.
   const share = 0.18 + unitFor(input.postId, "impressions") * 0.52;
@@ -208,7 +187,7 @@ export function slurpPostImpressions(
  */
 export function slurpPostLikeCount(
   input: { postId: string; createdAt: string; creatorReach: number; realLikes: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   // 4%–14% of impressions like a post. Anything higher reads as fake.
   const rate = 0.04 + unitFor(input.postId, "likes") * 0.1;
@@ -221,7 +200,7 @@ export function slurpPostLikeCount(
  */
 export function slurpPostReplyCount(
   input: { postId: string; createdAt: string; creatorReach: number; realReplies: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   const rate = 0.002 + unitFor(input.postId, "replies") * 0.006;
   return Math.max(0, input.realReplies) + Math.round(slurpPostImpressions(input, at) * rate);
@@ -235,7 +214,7 @@ export function slurpPostReplyCount(
  */
 export function slurpPostUnlockCount(
   input: { postId: string; createdAt: string; creatorReach: number; accountId?: string },
-  at: Date = new Date(),
+  at: Date = slurpWorldNow(),
 ): number {
   const rate = 0.004 + unitFor(input.postId, "unlocks") * 0.012;
   return Math.round(slurpPostImpressions(input, at) * rate);

@@ -51,6 +51,7 @@ import {
   type SlurpBondError,
 } from "../../modules/projects/slp-creator-bonds.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const RECENT = 8;
 const ERRORS: Record<SlurpTieError | "notFound" | "notOpen", [number, string]> = {
   notFound: [404, "That request is gone."],
@@ -151,7 +152,7 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
         ),
       ].map((deal) => ({
         ...deal,
-        owesPost: slurpDealOwesPost(deal, new Date()),
+        owesPost: slurpDealOwesPost(deal, slurpWorldNow()),
         bannerUrl: deal.status === "offered" ? (bannerOf.get(deal.adId) ?? null) : null,
         logoUrl: logoOf.get(deal.adId) ?? null,
       })),
@@ -190,7 +191,7 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
     const viewer = await viewerFrom(req.body, reply);
     if (!viewer) return;
     const outcome = await mutateSlurpCreatorTies(app.db, (document) => {
-      const next = run(document.ties, new Date());
+      const next = run(document.ties, slurpWorldNow());
       return typeof next === "string"
         ? { document, result: next }
         : { document: { ...document, ties: next }, result: "ok" as const };
@@ -294,7 +295,7 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
     if (!own) return;
     const { deal, creator } = own;
     const outcome = await mutateSlurpCreatorTies(app.db, (document) => {
-      const next = slurpAnswerDeal(document.deals, deal.id, parsed.data.accept, new Date());
+      const next = slurpAnswerDeal(document.deals, deal.id, parsed.data.accept, slurpWorldNow());
       return typeof next === "string"
         ? { document, result: next }
         : { document: { ...document, deals: next }, result: "ok" as const };
@@ -310,7 +311,7 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
     const own = viewer ? await ownDeal(id(req), viewer, reply) : null;
     if (!own) return;
     const outcome = await mutateSlurpCreatorTies(app.db, (document) => {
-      const next = slurpMarkDealPosted(document.deals, own.deal.id, new Date());
+      const next = slurpMarkDealPosted(document.deals, own.deal.id, slurpWorldNow());
       return typeof next === "string"
         ? { document, result: next }
         : { document: { ...document, deals: next }, result: "ok" as const };
@@ -328,7 +329,7 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
     const viewer = await viewerFrom(req.body, reply);
     if (!viewer) return;
     const outcome = await mutateSlurpCreatorTies(app.db, (document) => {
-      const at = new Date();
+      const at = slurpWorldNow();
       const next = run(document.couples, at);
       return typeof next === "string"
         ? { document, result: next }
@@ -407,7 +408,7 @@ export async function slpCreatorTiesRoutes(app: FastifyInstance, deps: SlpRouteD
     const viewer = await viewerFrom(req.body, reply);
     if (!viewer) return;
     const outcome = await mutateSlurpCreatorTies(app.db, (document) => {
-      const next = run(document.bonds, document.couples, new Date());
+      const next = run(document.bonds, document.couples, slurpWorldNow());
       return typeof next === "string"
         ? { document, result: next }
         : { document: { ...document, bonds: next }, result: "ok" as const };

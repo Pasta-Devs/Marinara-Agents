@@ -11,9 +11,11 @@
 // kept and repainted only on a tap; a `pending` record with no live paint in this process reads as `stopped`.
 // - memory5: the CG from the item's English brief (P20), with each person in it as a reference (the protagonist's
 //   persona avatar when she is in it; art/cg.ts cgSubjects), 768×1344, through generateBannerArt.
-// - moment4: its saved premise (or title), with its own love interest and protagonist, without another text call.
+// - moment4: its saved premise (or title), with its own love interest and protagonist (when its saved cast names her
+//   in any way art/cg.ts resolveCast knows), without another text call.
 // - his-look5, his-look4: his new look (generateOutfit, 832×1216 full body on grey), keeping his card or portrait as
 //   the likeness reference. her-look5, her-look4: the protagonist's.
+// - date4: its place with nobody in it, painted as a scene's place is (#2303; a 5★ date's is its banner's art).
 // A look's image, once ready, is added to its wearer's `outfits` (the kit's outfit shape), which is what makes it
 // wearable; his faces for it are painted when he wears it (S/routes/wardrobe.ts, through M2b's expressions).
 // Home cuts out his worn look and its ready faces lazily, on the next Home read (S/art/cutout.ts queueCutouts, plan M3
@@ -23,6 +25,8 @@
 // the same paint slot, so the other's paint queued behind it finds its record replaced and pays for nothing.
 // A couple set's pair portrait is painted only by its tap ("Paint a pair portrait (1 image)"): both looks, both people,
 // one paid image. It is kept in the Album (`state.album.cgs`, key `pair:<her look's id>`), so the state holds it once.
+// #2299: a tap repaints a kept one; the old portrait stays on screen while it paints and after a failure, and once the
+// new one is kept in its place the old image leaves the gallery.
 import type {
   AlbumCg,
   Outfit,
@@ -41,7 +45,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
-import { cgReferences, cgSubjects } from "./cg.js";
+import { cgReferences, cgSubjects, loadedCutouts, outfitCutouts, resolveCast, warnUnmatched } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
@@ -51,9 +55,13 @@ import {
   paintSlot,
   paintView,
   readSubject,
+  releaseReplacedImage,
+  repainting,
+  samePicture,
   startPaint,
   tapPaint,
   updateIfChanged,
+  withKeptPicture,
   type ArtDeps,
   type PaintCheck,
   type PaintOwner,
@@ -66,6 +74,7 @@ import {
   cgPrompt,
   lookPrompt,
   memoryArtBrief,
+  placePrompt,
 } from "../prompts.js";
 
 export interface ItemArtDeps extends ArtDeps {
@@ -98,7 +107,8 @@ const bannerPaints = (runId: string, item: Pick<Item, "id" | "banner">) =>
   isFeatured(item) && paintIsLive(runId, bannerArtOwner(item.banner));
 
 /** An illustrated reward or a look. Moments and legacy Snapshots use their saved text without another planner call. */
-export const hasArt = (item: Pick<Item, "kind" | "cg" | "look" | "text" | "premise" | "title">) =>
+export const hasArt = (item: Pick<Item, "kind" | "cg" | "look" | "text" | "premise" | "title" | "place">) =>
+  (item.kind === "date4" && !!item.place?.name.trim() && !!item.place.tags.trim()) ||
   (item.kind === "snapshot3" && !!item.text?.trim()) ||
   (item.kind === "moment4" && !!(item.premise?.trim() || item.title.trim())) ||
   (item.kind === "memory5" && !!item.cg?.brief.trim()) ||
@@ -118,10 +128,16 @@ export function itemArtView(runId: string, item: Pick<Item, "id" | "art" | "bann
 }
 
 /**
- * A featured 5★'s painted picture becomes its banner's art too, so the banner never pays for it again. Never throws:
- * the item's own art is saved already, and its image must stay.
+ * A featured 5★'s painted picture becomes its banner's art too, so the banner never pays for it again — and (0.24.0) a
+ * repaint of it replaces the banner's copy of the picture it painted over. Never throws: the item's own art is saved
+ * already, and its image must stay.
  */
-async function shareWithBanner(deps: Pick<ArtDeps, "store" | "runtime">, runId: string, item: Item): Promise<void> {
+async function shareWithBanner(
+  deps: Pick<ArtDeps, "store" | "runtime">,
+  runId: string,
+  item: Item,
+  replaced?: Paint | null,
+): Promise<void> {
   const art = item.art;
   if (!isFeatured(item) || art?.state !== "ready") return;
   try {
@@ -129,7 +145,10 @@ async function shareWithBanner(deps: Pick<ArtDeps, "store" | "runtime">, runId: 
       deps.store,
       runDocTarget("banner", bannerId(runId, item.banner)),
       normalizeBanner,
-      (banner) => (banner.key === item.banner && banner.art?.state !== "ready" ? { ...banner, art } : undefined),
+      (banner) =>
+        banner.key === item.banner && (banner.art?.state !== "ready" || samePicture(banner.art, replaced))
+          ? { ...banner, art }
+          : undefined,
     );
   } catch (error) {
     deps.runtime.logger.warn(
@@ -140,10 +159,14 @@ async function shareWithBanner(deps: Pick<ArtDeps, "store" | "runtime">, runId: 
   }
 }
 
-/** A painted look in the kit's outfit shape; null until its art is ready. */
+/**
+ * A painted look in the kit's outfit shape; null until it has a picture. A repaint keeps the picture it paints over on
+ * its record (art/paint.ts repainting/withKeptPicture), so a look stays its wearer's while that paints and after a
+ * failure: the picture on screen is still the one to wear, and the Wardrobe never drops the entry under it.
+ */
 export function outfitOf(item: Item): Outfit | null {
   const art = item.art;
-  if (!isLookKind(item.kind) || !item.look || art?.state !== "ready" || !art.url) return null;
+  if (!isLookKind(item.kind) || !item.look || !art?.url) return null;
   return {
     id: item.id,
     name: item.look.name,
@@ -155,21 +178,28 @@ export function outfitOf(item: Item): Outfit | null {
 }
 
 /**
- * Adds a painted look to its wearer's `outfits` once (the wardrobe can wear it from then on). Resolves the wearer's
+ * Adds a painted look to its wearer's `outfits` (the wardrobe can wear it from then on), and (0.24.0) keeps that entry
+ * on the picture a repaint of the look now shows. With `repoint`, only an entry already there is moved: a repaint of a
+ * look's picture elsewhere (its banner's) never makes a look the player has not opened wearable. Resolves the wearer's
  * document as saved or as it stands, or null when the look is not painted or the run is gone.
  */
 export async function addOutfit(
   deps: Pick<ArtDeps, "store">,
   runId: string,
   item: Item,
+  { repoint = false }: { repoint?: boolean } = {},
 ): Promise<Unit | Player | null> {
   const outfit = outfitOf(item);
   const wearer = lookWearer(item);
   if (!outfit || !wearer) return null;
-  const add = <T extends { outfits: Outfit[] }>(current: T) =>
-    current.outfits.some((entry) => entry.id === outfit.id)
-      ? undefined
-      : { ...current, outfits: [...current.outfits, outfit] };
+  const add = <T extends { outfits: Outfit[] }>(current: T) => {
+    const at = current.outfits.findIndex((entry) => entry.id === outfit.id);
+    if (at < 0) return repoint ? undefined : { ...current, outfits: [...current.outfits, outfit] };
+    if (current.outfits[at].url === outfit.url) return undefined;
+    const outfits = [...current.outfits];
+    outfits[at] = outfit;
+    return { ...current, outfits };
+  };
   const saved =
     wearer === "player"
       ? await updateIfChanged(deps.store, runDocTarget("player", playerId(runId)), normalizePlayer, add)
@@ -195,10 +225,30 @@ async function buildItemArt(
 ): Promise<BuiltArt> {
   if (!hasArt(item)) throw notFound("art for this item");
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth story");
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
+  // #2303: a 4★ date's place, with nobody in it, as the Dates banner shows its 5★'s.
+  if (item.kind === "date4" && item.place) {
+    const place = item.place;
+    const prompt = placePrompt({ name: place.name, tags: place.tags, world: run.world, style }, edited);
+    return {
+      ...prompt,
+      world: run.world,
+      paint: async (connectionId, debug) => {
+        const image = await images.generateImage({
+          connectionId,
+          name: place.name,
+          prompt: prompt.prompt,
+          negativePrompt: prompt.negativePrompt,
+          ...SCENE_SIZE,
+          debugMode: debug,
+        });
+        return images.uploadToGallery({ image, name: place.name, prompt: prompt.prompt });
+      },
+    };
+  }
   const privateScene = item.kind === "snapshot3" || item.kind === "moment4";
   if (item.kind === "memory5" || privateScene) {
     const li = privateScene ? run.units.find((unit) => unit.id === item.li) : null;
@@ -212,29 +262,27 @@ async function buildItemArt(
             (item.kind === "snapshot3"
               ? `Illustrate this saved everyday moment without adding events or people. Snapshot text: ${item.text}`
               : `Illustrate this saved Moment's premise without adding plot turns or people. Moment premise: ${item.premise?.trim() || item.title}`),
+          // The protagonist when the saved cast names her in any way it may ("You", a title, her first name).
           cast: [
-            li!.name,
-            ...(run.player.name && (!item.cg || item.cg.cast.some((name) => name === run.player.name))
-              ? [run.player.name]
+            li!.id,
+            ...(!item.cg || resolveCast(item.cg.cast, [li!], run.player).some((member) => "player" in member)
+              ? ["protagonist"]
               : []),
           ],
         }
       : item.cg!;
-    const subjects = cgSubjects(cg.cast, li ? [li] : run.units, run.player);
-    // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story; only a
-    // Memory whose brief the banner plan marked explicit goes further, while the world allows it (as banner art does),
-    // and a lowered one paints the clothed brief written beside it.
-    const { brief, explicit } = privateScene
-      ? { brief: cg.brief, explicit: false }
-      : memoryArtBrief(item.cg, item.title, run.world);
+    // 0.36.5: each person's outfit goes cut out first (free, art/cg.ts), for the paint and its prompt review alike.
+    const subjects = await outfitCutouts(deps, runId, cgSubjects(cg.cast, li ? [li] : run.units, run.player));
+    // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story, a
+    // Memory's cover too (#2467).
+    const brief = privateScene ? cg.brief : memoryArtBrief(item.cg, item.title);
     const prompt = cgPrompt(
       {
         brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        use: explicit ? "cg" : "clothed",
-        explicit,
+        use: "clothed",
         references: cgReferences(subjects).labels,
       },
       edited,
@@ -242,8 +290,9 @@ async function buildItemArt(
     return {
       ...prompt,
       world: run.world,
-      paint: (connectionId, debug) =>
-        images.generateBannerArt({
+      paint: (connectionId, debug) => {
+        warnUnmatched(deps.runtime.logger, `item ${item.id}`, subjects);
+        return images.generateBannerArt({
           connectionId,
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
@@ -252,7 +301,8 @@ async function buildItemArt(
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,
           debugMode: debug,
-        }),
+        });
+      },
     };
   }
   const wearer = lookWearer(item);
@@ -270,7 +320,7 @@ async function buildItemArt(
         connectionId,
         name: subject.name,
         // The likeness, never a look he wears: the card or persona avatar, else the base portrait.
-        unit: { ...subject.image, outfits: [] },
+        unit: { ...subject.image, outfits: [], who: subject.name },
         prompt: prompt.prompt,
         negativePrompt: prompt.negativePrompt,
         ...LOOK_SIZE,
@@ -305,13 +355,19 @@ async function paintItem(
   connectionId: string,
   { debugMode, consent, edited }: { debugMode: boolean; consent: boolean; edited?: Partial<ImagePrompt> },
 ): Promise<Paint | null> {
+  // The picture this paint replaced, kept until the wearer has moved off it (released below).
+  let replaced: Paint | undefined;
   const save = async (art: Paint) => {
-    const saved = await updateIfChanged(deps.store, itemTarget(runId, item.id), normalizeItem, (current) =>
-      current.id && current.art?.state === "pending" && current.art.at === at ? { ...current, art } : undefined,
-    );
+    let previous: Paint | undefined;
+    const saved = await updateIfChanged(deps.store, itemTarget(runId, item.id), normalizeItem, (current) => {
+      if (!(current.id && current.art?.state === "pending" && current.art.at === at)) return undefined;
+      previous = current.art;
+      return { ...current, art: withKeptPicture(art, previous) };
+    });
     if (!saved?.changed) return false;
+    replaced ??= previous;
     // Still in the slot: the banner's own paint, queued behind this one, then finds its record replaced.
-    await shareWithBanner(deps, runId, saved.value);
+    await shareWithBanner(deps, runId, saved.value, previous);
     return true;
   };
   const left = await paintRecord(deps, {
@@ -326,7 +382,8 @@ async function paintItem(
       ]);
       if (!current || !world || current.art?.state !== "pending" || current.art.at !== at) return "gone";
       // Its banner's art (the same picture) is painted: it is this item's art too, and nothing more is paid for.
-      if (banner?.key === item.banner && banner.art?.state === "ready") {
+      // 0.24.0: unless it is the very picture this repaint replaces, which the pending record still shows.
+      if (banner?.key === item.banner && banner.art?.state === "ready" && !samePicture(banner.art, current.art)) {
         await save(banner.art);
         return "gone";
       }
@@ -339,7 +396,13 @@ async function paintItem(
     save,
   });
   const saved = await readItem(deps, runId, item.id);
-  if (saved?.art?.state === "ready") await addOutfit(deps, runId, saved);
+  if (saved?.art?.state === "ready") {
+    // The wearer's entry moves to the new picture before the old one is released: the Engine refuses to delete an image
+    // a document still holds, so releasing first would leave the replaced picture in the gallery.
+    await addOutfit(deps, runId, saved);
+    // 0.24.0: a repaint replaces the picture it painted over; only a gallery image of ours is deleted.
+    await releaseReplacedImage(deps, replaced, saved.art);
+  }
   return left;
 }
 
@@ -357,7 +420,7 @@ export async function queueItemArt(
   // A featured 5★ whose banner's art is painting now waits for that picture (it becomes this item's art).
   if (!hasArt(item) || item.art || bannerPaints(runId, item)) return itemArtView(runId, item);
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-  if (!world) throw notFound("Otome Forge run");
+  if (!world) throw notFound("Otome Hearth story");
   const connectionId = world.images.connectionId;
   if (!connectionId || !activeOf(deps)()) return null;
   const owner = itemArtOwner(item.id);
@@ -392,8 +455,8 @@ export async function queueItemArt(
 
 /**
  * POST /runs/:run/items/:item/art: the tap that paints an owned item's art now (Ask's consent, a reviewed prompt, or
- * Retry). Waits for the paint and resolves the record as left; a ready one is returned as it is, and a tap while it
- * paints waits for that paint, so no tap pays twice.
+ * Retry), or (0.24.0) repaints a ready one. Waits for the paint and resolves the record as left; a tap while it paints
+ * waits for that paint, so no tap pays twice. A repainted look's picture is its `outfits` entry's too.
  */
 export async function paintItemNow(
   deps: ItemArtDeps,
@@ -409,6 +472,10 @@ export async function paintItemNow(
   };
   // The banner's art is the same picture: a tap while it paints waits for it, and pays only if it did not land.
   const first = await read();
+  // Only a picture that was already painted when the tap began is one the tap repaints (0.24.0). One that lands while the
+  // tap waits for it — the banner's shared paint above — is the tap's answer, so adopting it is what keeps a tap from
+  // paying twice for the same picture.
+  const painted = first.art?.state === "ready";
   if (isFeatured(first)) await paintSettled(runId, bannerArtOwner(first.banner));
   return tapPaint(
     runId,
@@ -418,19 +485,18 @@ export async function paintItemNow(
       return { value: art, art: art ?? undefined };
     },
     async () => {
-      const item = await read();
-      if (item.art?.state === "ready") {
-        await addOutfit(deps, runId, item);
-        return item.art;
+      const current = await read();
+      if (!painted && current.art?.state === "ready") {
+        await addOutfit(deps, runId, current);
+        return itemArtView(runId, current);
       }
       const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-      if (!world) throw notFound("Otome Forge run");
+      if (!world) throw notFound("Otome Hearth story");
       const connectionId = world.images.connectionId;
       if (!connectionId) throw noConnection();
       const at = new Date().toISOString();
-      const pending: Paint = { state: "pending", at };
       const claimed = await updateIfChanged(deps.store, itemTarget(runId, id), normalizeItem, (current) =>
-        current.art?.state === "ready" ? undefined : { ...current, art: pending },
+        current.id ? { ...current, art: repainting(current.art, at) } : undefined,
       );
       if (!claimed) throw notFound("item");
       if (claimed.changed)
@@ -442,20 +508,27 @@ export async function paintItemNow(
 
 // ── A couple set's pair portrait ──
 
-/** The last failed pair portrait per `${runId}|${hers}`, for the taps that waited on it (never stored). */
+/** The last failed pair portrait per `${runId}|${hers}`, until one is painted (never stored). */
 const pairFailures = new Map<string, Paint>();
 
-/** The pair portrait of the set whose her-look is `hers`: ready once kept in the Album, pending while it paints. */
+/**
+ * The pair portrait of the set whose her-look is `hers`: pending while it paints, failed after a tap that failed, and
+ * ready once kept in the Album. A kept one's picture stays on the record while a repaint paints and after it failed
+ * (#2299), as a repainted look's does.
+ */
 export function pairView(runId: string, cgs: readonly AlbumCg[], hers: string): Paint | null {
   const kept = cgs.find((entry) => entry.key === pairKey(hers));
-  if (kept) return { state: "ready", at: kept.at, url: kept.url, ref: kept.ref };
-  return paintIsLive(runId, pairOwner(hers)) ? { state: "pending", at: new Date().toISOString() } : null;
+  const picture = kept ? { url: kept.url, ref: kept.ref } : {};
+  if (paintIsLive(runId, pairOwner(hers))) return { state: "pending", at: new Date().toISOString(), ...picture };
+  const failure = pairFailures.get(`${runId}|${hers}`);
+  if (failure) return { ...failure, ...picture };
+  return kept ? { state: "ready", at: kept.at, ...picture } : null;
 }
 
 /** The couple set of `hers`: both items, owned and painted, or the reason the pair cannot be painted. */
 async function readPair(deps: ArtDeps, runId: string, hers: string) {
   const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
+  if (!run) throw notFound("Otome Hearth story");
   const her = await readItem(deps, runId, hers);
   if (!her || her.kind !== "her-look5" || !her.coupleWith) throw notFound("couple set");
   const his = await readItem(deps, runId, her.coupleWith);
@@ -485,12 +558,15 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
       identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
       outfitLine: hisOutfit.outfitLine,
       presentation: unit.bible?.look.presentation ?? "person",
+      // Each reference is the pair look itself, so it dresses them (0.36.5, cgPrompt).
+      outfitPictured: true,
     },
     {
       name: run.player.name || "Protagonist",
       identityLine: run.player.look.identityLine,
       outfitLine: herOutfit.outfitLine,
-      presentation: "person",
+      presentation: run.player.look.presentation,
+      outfitPictured: true,
     },
   ];
   const him = first(unit.name, "them");
@@ -509,10 +585,21 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
     edited,
   );
   // One reference each, the pair's looks (each painted from its wearer's likeness): with his card's full body beside
-  // his look, the model got two standing pictures of him and merged bodies (2026-11-03).
+  // his look, the model got two standing pictures of him and merged bodies (2026-11-03). Each look goes cut out of its
+  // backdrop, as a scene's people do (0.36.7, art/cg.ts loadedCutouts, for the paint and its prompt review alike); one
+  // that cannot be cut is sent as painted, since the look is what this portrait shows. A look that does not load
+  // stops the paint: the labels say each picture is them in this outfit.
+  const cutoutOf = await loadedCutouts(deps, runId, [
+    { owner: unit.id, url: hisOutfit.url },
+    { owner: "player", url: herOutfit.url },
+  ]);
   const units: ImageSubject[] = [
-    { kind: "character", portrait: hisOutfit.url },
-    { kind: "character", portrait: herOutfit.url },
+    { kind: "character", portrait: cutoutOf(unit.id, hisOutfit.url) ?? hisOutfit.url, who: unit.name },
+    {
+      kind: "character",
+      portrait: cutoutOf("player", herOutfit.url) ?? herOutfit.url,
+      who: run.player.name || "Protagonist",
+    },
   ];
   return { ...pair, ...prompt, units, name: first(unit.name, "Couple") };
 }
@@ -528,9 +615,9 @@ export async function pairPrompt(
 }
 
 /**
- * POST /runs/:run/wardrobe/pair: the tap that paints the set's pair portrait (one image). Waits for it; a set that has
- * one answers with it, and a second tap while it paints waits for that paint. A failure is answered, never kept: the
- * offer stays, and its next tap tries again.
+ * POST /runs/:run/wardrobe/pair: the tap that paints the set's pair portrait (one image), or (#2299) repaints the one
+ * kept. Waits for it; a second tap while it paints waits for that paint, so no tap pays twice. A failure is answered,
+ * never stored: the offer stays, and its next tap tries again.
  */
 export async function paintPairNow(
   deps: ItemArtDeps,
@@ -540,20 +627,30 @@ export async function paintPairNow(
 ): Promise<Paint> {
   const key = `${runId}|${hers}`;
   const asked = new Date().toISOString();
-  const kept = async () =>
-    pairView(runId, (await deps.store.readDoc(stateId(runId), normalizeState))?.album.cgs ?? [], hers);
+  const cgs = async () => (await deps.store.readDoc(stateId(runId), normalizeState))?.album.cgs ?? [];
+  const kept = async () => pairView(runId, await cgs(), hers);
+  /** The portrait kept now, as ready: the tap's own answer, read while its paint is still live. */
+  const keptReady = async (): Promise<Paint | null> => {
+    const entry = (await cgs()).find((item) => item.key === pairKey(hers));
+    return entry ? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref } : null;
+  };
+  // Only the portrait kept when the tap began is one it repaints: one that lands while it waits is its answer.
+  const first = await keptReady();
   const art = await tapPaint(
     runId,
     async () => pairOwner(hers),
-    async () => {
-      // A tap that waited on a paint that failed answers with that failure, so a double tap never pays twice.
-      const failure = pairFailures.get(key);
-      const left = (await kept()) ?? (failure && failure.at >= asked ? failure : undefined);
-      return { value: left ?? null, art: left };
+    async ({ threw }) => {
+      // A tap that waited on a paint answers with what it left, so a double tap never pays twice. A failure from before
+      // this tap is no answer to it, nor (#2299) is the portrait it came to repaint, left as it was by a paint that was
+      // refused: the tap then paints itself, or is refused in turn.
+      const left = await kept();
+      const stale = left?.state === "failed" ? left.at < asked : threw && samePicture(left, first);
+      const answer = stale ? undefined : (left ?? undefined);
+      return { value: answer ?? null, art: answer };
     },
     async (): Promise<Paint | null> => {
-      const already = await kept();
-      if (already?.state === "ready") return already;
+      const already = await keptReady();
+      if (already && !samePicture(already, first)) return already;
       // Refused before it waits in the lane: no set, a half not owned or not painted, no connection.
       const connectionId = (await readPair(deps, runId, hers)).run.world.images.connectionId;
       if (!connectionId) throw noConnection();
@@ -561,9 +658,10 @@ export async function paintPairNow(
       let painted: { image: PaintedImage; built: Awaited<ReturnType<typeof buildPair>> };
       try {
         painted = await paintSlot(connectionId, async () => {
-          if (!activeOf(deps)()) throw new Error("Otome Forge stopped before painting");
+          if (!activeOf(deps)()) throw new Error("Otome Hearth stopped before painting");
           // Built now, so the run, both looks, the rating (and its 18+ gate) and the connection are the ones in force
-          // at the paid call, however long it waited behind other paints.
+          // once it leaves the queue behind other paints. Building waits for the looks' free cut-outs (0.36.7), as a
+          // scene paint waits for its people's; a connection changed during that wait paints on the one it started on.
           const built = await buildPair(deps, runId, hers, edited);
           if (built.run.world.images.connectionId !== connectionId) {
             throw new OtomeForgeError(409, "The image connection changed before painting; try again.", "conflict");
@@ -598,25 +696,39 @@ export async function paintPairNow(
         ...(built.his.li ? { li: built.his.li } : {}),
       };
       let saved = false;
+      let replaced: AlbumCg | undefined;
       try {
         const result = await updateIfChanged(
           deps.store,
           runDocTarget("state", stateId(runId)),
           normalizeState,
-          (current) =>
-            current.album.cgs.some((item) => item.key === entry.key)
-              ? undefined
-              : {
-                  ...current,
-                  album: { ...current.album, cgs: keepNewest([...current.album.cgs, entry], STATE_LIMITS.album) },
-                },
+          (current) => {
+            const cgs = current.album.cgs;
+            const at = cgs.findIndex((item) => item.key === entry.key);
+            if (at < 0) {
+              return {
+                ...current,
+                album: { ...current.album, cgs: keepNewest([...cgs, entry], STATE_LIMITS.album) },
+              };
+            }
+            // A repaint takes the old portrait's place (and its date, so the Album keeps its order); a portrait kept
+            // meanwhile by someone else stays.
+            if (!samePicture(cgs[at], first)) return undefined;
+            replaced = cgs[at];
+            const next = [...cgs];
+            next[at] = { ...entry, at: cgs[at]!.at };
+            return { ...current, album: { ...current.album, cgs: next } };
+          },
         );
         saved = !!result?.changed;
       } finally {
         // Kept already (another process) or the run was deleted: nothing refers to this image.
         if (!saved && image.id) await images.deleteGalleryImage(image.id);
       }
-      return (await kept()) ?? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref };
+      if (saved) await releaseReplacedImage(deps, replaced, entry);
+      // Once its portrait is saved this paint never throws, so a tap waiting on it takes that portrait (tapPaint
+      // `threw`).
+      return (await keptReady().catch(() => null)) ?? { state: "ready", at: entry.at, url: entry.url, ref: entry.ref };
     },
   );
   return art ?? { state: "failed", at: new Date().toISOString(), error: "The pair portrait was not painted." };

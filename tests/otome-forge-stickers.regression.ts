@@ -15,6 +15,9 @@
 //   stopped. Images off paints nothing.
 // - The sticker prompt is a chibi bust on the look's matte with the look's rating and adult tags; an edit keeps them.
 // - A tap paints once; the Album lists the stickers she has and those waiting for a tap.
+// - #2477: a friend's five are designed once in one call (platonic, from their friend bible) and the sticker of each
+//   friend level reached, from 1, is painted; images off, nothing; their thread sends theirs and P17 lists them; the
+//   Album lists them after the love interests', with Repaint.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
@@ -32,6 +35,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   normalizeStickerSetReply,
+  paintStickerNow,
   queueStickers,
   stickerLookup,
   stickerNames,
@@ -42,6 +46,7 @@ import {
   runDocTarget,
   stateId,
   unitId,
+  worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
   normalizeThread,
@@ -60,10 +65,12 @@ import {
   readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { artWorld, routesOf, setImages, until } from "./fixtures/otome-forge-art.ts";
-import { KAI, MIR, SOL, at, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { isQuizCall } from "./fixtures/otome-forge-fakes.ts";
+import { KAI, KAVEH, MIR, SOL, at, json, seedFriend, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const EMOTIONS = ["guarded", "smug", "pensive", "flustered", "sulking", "teasing", "proud", "tender", "devoted"];
 const setReply = (emotions: readonly string[] = EMOTIONS) =>
@@ -85,16 +92,27 @@ async function setLevel(t: Awaited<ReturnType<typeof storyWorld>>, li: string, l
     lis: { ...state.lis, [li]: { ...state.lis[li]!, points: (level - 1) * 300 } },
   }));
 }
+/** #2477: Kaveh's five, and his friendship points. */
+const FRIEND_EMOTIONS = ["shy", "grumpy", "proud", "cheering", "beaming"];
+const setFriendPoints = (t: Awaited<ReturnType<typeof storyWorld>>, points: number) =>
+  t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    friends: { ...state.friends, [KAVEH]: { ...state.friends[KAVEH]!, points } },
+  }));
 const markPhoneOpened = (t: Awaited<ReturnType<typeof storyWorld>>) =>
   t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
     ...player,
     stickers: {},
   }));
 
-/** A free cut-out that lands at once (or is held until `release()`). */
-function cutouts({ hold = false }: { hold?: boolean } = {}) {
-  let release!: () => void;
-  const gate = hold ? new Promise<void>((resolve) => (release = resolve)) : Promise.resolve();
+/** A free cut-out that lands at once (or, from `hold()` on, is held until `release()`). */
+function cutouts({ hold: held = false }: { hold?: boolean } = {}) {
+  let release = () => {};
+  let gate = Promise.resolve();
+  const hold = () => {
+    gate = new Promise<void>((resolve) => (release = resolve));
+  };
+  if (held) hold();
   const calls: string[] = [];
   const client: CutoutClient = {
     async cutOut(url) {
@@ -104,7 +122,7 @@ function cutouts({ hold = false }: { hold?: boolean } = {}) {
     },
     deleteGalleryImage: async () => true,
   };
-  return { client, calls, release: () => release?.() };
+  return { client, calls, hold, release: () => release() };
 }
 
 test("names fold accents and case, and a shared slug takes the love interest's id suffix, deterministically", async () => {
@@ -139,6 +157,10 @@ test("names fold accents and case, and a shared slug takes the love interest's i
   );
   const name = stickerLookup(clash);
   assert.deepEqual(name(`${KAI}:smug`), { name: "kai_ab12_smug", about: "smug", who: "li", ownerName: "Kai" });
+  // #2477: a friend is named the same way, and shares a slug with the love interests.
+  const withFriend = { ...clash, friends: [{ ...run.units[0]!, id: KAVEH, name: "Kai" }] };
+  assert.deepEqual([...stickerNames(withFriend)].at(-1), [KAVEH, "kai_ab12"]);
+  assert.equal(stickerLookup(withFriend)(`${KAVEH}:shy`)?.ownerName, "Kai");
   assert.deepEqual(name("you:laugh"), { name: "kai_laugh", about: "laughing", who: "player", ownerName: "Kai" });
   assert.equal(name("li-nobody-zz99:smug"), null);
 });
@@ -212,6 +234,12 @@ test("P17 lists only stickers that exist, and threads render stickers by name, o
   assert.doesNotMatch(off, /"sticker"/, "the JSON shape no longer carries a face");
   const on = prompt([{ id: `${KAI}:smug`, name: "kai_smug", about: "smug" }]);
   assert.match(on, /Your stickers: \[kai_smug\] \(smug\)\./);
+  // 0.36.8 (#2394): stickers go out the way people send them in a chat, not only when words fall short.
+  assert.match(
+    on,
+    /Send stickers the way people do in a chat: to react, tease, sulk or answer without words\. At most one sticker in a reply, only from these lists; it may stand alone\./,
+  );
+  assert.doesNotMatch(on, /when a picture says it better than words/);
   assert.match(on, /e\.g\. "\[kai_smug\]"/);
   assert.match(
     on,
@@ -331,9 +359,20 @@ test("his set is nine distinct emotions, never another love interest's nine", ()
 });
 
 /** The art world with the run, art, phone-start and Album routes, a background lane and free cut-outs. */
-async function stickerWorld(runKey: string, options: { ask?: boolean; replies?: string[]; hold?: boolean } = {}) {
+async function stickerWorld(
+  runKey: string,
+  options: {
+    ask?: boolean;
+    replies?: string[];
+    hold?: boolean;
+    before?: Parameters<typeof artWorld>[0]["before"];
+    engineDeletes?: boolean;
+  } = {},
+) {
   const t = await artWorld({
     runKey,
+    before: options.before,
+    engineDeletes: options.engineDeletes,
     images: { ask: options.ask ?? false },
     replies: options.replies ?? [
       setReply(),
@@ -374,6 +413,7 @@ test("images off: nothing is designed or painted, and the book holds her built-i
   const t = await stickerWorld("r-stoff-aaaaaa");
   await setImages(t.store, t.runId, { connectionId: null });
   await setLevel(t, KAI, 6);
+  await seedFriend(t, {}, 1100);
   const started = await t.arts("POST", "/runs/:run/stickers");
   assert.deepEqual(started.body, { started: false }, "the phone opened without images starts nothing");
   assert.equal((await t.player()).stickers, undefined);
@@ -386,12 +426,20 @@ test("images off: nothing is designed or painted, and the book holds her built-i
   );
   await queueStickers(t.deps, t.runId, { debugMode: false });
   await t.settle();
-  assert.deepEqual([t.calls.length, t.paid.length], [0, 0]);
+  // Opening the story queues the personality quiz's answers (#2174), which are no sticker.
+  const stickerCalls = t.calls.filter((entry) => !isQuizCall(entry.messages));
+  assert.deepEqual([stickerCalls.length, t.paid.length], [0, 0]);
   assert.equal((await t.unit()).stickers, undefined);
+  assert.equal((await t.unit(KAVEH)).stickers, undefined, "#2477: nor a friend's");
 });
 
 test("a love interest at level 2 or more gets his nine designed, then one painted sticker per level reached", async () => {
   const t = await stickerWorld("r-stlevels-aaaaaa");
+  // The standalone art calls run on the Messages connection (the maintainer's, 2026-11-10), never Planning.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { narration: "conn-text", structured: "conn-plan", chat: "conn-chat" },
+  }));
   await setLevel(t, KAI, 4);
   await setLevel(t, MIR, 1);
   const first = await t.view();
@@ -403,6 +451,9 @@ test("a love interest at level 2 or more gets his nine designed, then one painte
     EMOTIONS,
   );
   assert.equal((await t.unit(MIR)).stickers, undefined, "level 1 designs nothing");
+  const designs = t.calls.filter((entry) => !isQuizCall(entry.messages));
+  assert.equal(designs.length, 1, "one design call, for his nine");
+  assert.equal(designs[0]!.connectionId, "conn-chat", "on the Messages connection, never Planning");
   // Levels 2, 3 and 4: three paints, one at a time in the low lane, each a chibi of him with his likeness.
   assert.deepEqual(Object.keys(kai.stickers!.art), ["guarded", "smug", "pensive"]);
   assert.equal(t.stickerPaints().length, 3);
@@ -447,6 +498,99 @@ test("a love interest at level 2 or more gets his nine designed, then one painte
       .slice(4)
       .every((call) => call.request.name === "Ines"),
   );
+});
+
+test("#2477: a friend's five are designed once, the sticker of each friend level reached painted, and listed after his", async () => {
+  const t = await stickerWorld("r-stfriend-aaaaaa", { replies: [setReply(FRIEND_EMOTIONS)] });
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  // A friend at level 3 whose story never designed his set: the next read catches up.
+  await seedFriend(t, {}, 450);
+  assert.equal((await t.view()).stickersPending, true, "his five are being designed");
+  await t.settle();
+  const kaveh = await t.unit(KAVEH);
+  assert.deepEqual(
+    kaveh.stickers!.set.map((sticker) => sticker.emotion),
+    FRIEND_EMOTIONS,
+  );
+  const designs = () => t.calls.filter((entry) => !isQuizCall(entry.messages));
+  assert.equal(designs().length, 1, "one design call, for his five");
+  const prompt = designs()[0]!
+    .messages.map((message) => message.content)
+    .join("\n");
+  assert.match(
+    prompt,
+    /one of the protagonist's close friends \(platonic, never a love interest\) in an otome game: 5 2D anime chibi stickers of Kaveh/,
+  );
+  assert.match(prompt, /exactly 5, ordered from the most reserved/);
+  assert.match(prompt, /^FRIEND: Kaveh \(he\/him\)$/m);
+  assert.match(prompt, /^Look: tall, ash hair; linen coat$/m);
+  assert.match(prompt, /^Personality: Proud, fussy, secretly soft\.$/m);
+  assert.match(prompt, /^- Kai: guarded, smug/m, "his set differs from the love interests'");
+  assert.doesNotMatch(prompt, /LOVE INTEREST/);
+  // Levels 1 to 3: three paints of him, after Kai's level 2 one, one at a time.
+  assert.deepEqual(Object.keys(kaveh.stickers!.art), FRIEND_EMOTIONS.slice(0, 3));
+  assert.deepEqual(
+    t.stickerPaints().map((call) => call.request.name),
+    ["Kai", "Kaveh", "Kaveh", "Kaveh"],
+  );
+  const book = async () =>
+    (await t.view()).stickers
+      .filter((sticker) => sticker.owner !== "you")
+      .map((sticker) => [sticker.name, sticker.level, !!sticker.url?.endsWith(".cut.png")]);
+  assert.deepEqual(await book(), [
+    ["kai_guarded", 2, true],
+    ["kaveh_shy", 1, true],
+    ["kaveh_grumpy", 2, true],
+    ["kaveh_proud", 3, true],
+  ]);
+  // Level 4 later: the next read paints just that one, and designs nothing again.
+  await setFriendPoints(t, 750);
+  await t.settle();
+  assert.equal(t.stickerPaints().length, 5);
+  assert.equal(designs().length, 1);
+  // The Album lists his after the love interests', and Repaint paints one again with a tap.
+  const album = (await t.album("GET", "/runs/:run/album")).body.stickers as Array<{ owner: string; name: string }>;
+  assert.deepEqual(
+    album.filter((sticker) => sticker.owner !== "you").map((sticker) => sticker.name),
+    ["kai_guarded", "kaveh_shy", "kaveh_grumpy", "kaveh_proud", "kaveh_cheering"],
+  );
+  const repainted = await t.arts("POST", "/runs/:run/art/sticker", { sticker: `${KAVEH}:shy` });
+  assert.equal(repainted.body.art.state, "ready", JSON.stringify(repainted.body));
+  assert.equal(t.stickerPaints().length, 6);
+});
+
+test("#2477: a friend's thread sends their painted stickers and P17 lists them as theirs; no other thread takes them", async () => {
+  const t = await artWorld({
+    runKey: "r-stfrsend-aaaaaa",
+    replies: Array.from({ length: 4 }, () => json({ messages: [{ text: "Hm." }] })),
+  });
+  const url = "/api/global-gallery/file/kaveh-shy.png";
+  await seedFriend(t, {
+    stickers: { set: SET.slice(0, 5), at, art: { guarded: { state: "ready", at, url } } },
+    cutouts: { [url]: { state: "ready", at, url: `${url}.cut.png` } },
+  });
+  await assert.doesNotReject(sendMessage(t.deps, t.runId, KAVEH, { sticker: `${KAVEH}:guarded` }));
+  const prompt = t.calls
+    .at(-1)!
+    .messages.map((message) => message.content)
+    .join("\n");
+  assert.match(prompt, /Your stickers: \[kaveh_guarded\] \(guarded\)\./);
+  assert.match(prompt, /Ines's stickers, which you may send too: \[ines_laugh\]/);
+  assert.match(prompt, /Ines: \[sends the sticker \[kaveh_guarded\] \(guarded\)\]/);
+  // One not reached yet, his in a love interest's thread, or with images off: refused.
+  for (const [li, sticker] of [
+    [KAVEH, `${KAVEH}:smug`],
+    [KAI, `${KAVEH}:guarded`],
+  ] as const) {
+    await assert.rejects(
+      sendMessage(t.deps, t.runId, li, { sticker }),
+      (error: { statusCode?: number }) => error.statusCode === 400,
+    );
+  }
+  await setImages(t.store, t.runId, { connectionId: null });
+  await assert.rejects(sendMessage(t.deps, t.runId, KAVEH, { sticker: `${KAVEH}:guarded` }));
+  await assert.doesNotReject(sendMessage(t.deps, t.runId, KAVEH, { sticker: "you:laugh" }));
 });
 
 test("only one sticker paints at a time per run, in the low lane behind a tap", async () => {
@@ -522,10 +666,10 @@ test("Ask before painting or prompt review leaves them waiting for a tap, which 
   ]);
   assert.deepEqual([one.body.art.state, two.body.art.state], ["ready", "ready"]);
   assert.equal(t.stickerPaints().length, 1, "two taps pay once");
-  // A tap on one already painted answers with it and pays nothing, even once images are turned off.
+  // #2299: a tap on one already painted repaints it, so with images off it is refused and pays nothing.
   await setImages(t.store, t.runId, { connectionId: null });
   const again = await t.arts("POST", "/runs/:run/art/sticker", { sticker: `${KAI}:guarded` });
-  assert.deepEqual([again.status, again.body.art?.state], [200, "ready"]);
+  assert.deepEqual([again.status, (await t.unit()).stickers!.art.guarded!.state], [503, "ready"]);
   assert.equal(t.stickerPaints().length, 1);
   await setImages(t.store, t.runId, { connectionId: "conn-image" });
   // Review mode from a GET does the same with Ask off.
@@ -536,6 +680,172 @@ test("Ask before painting or prompt review leaves them waiting for a tap, which 
   await until(async () => !!(await u.unit()).stickers?.art.guarded, "the sticker is claimed");
   assert.equal((await u.unit()).stickers!.art.guarded!.state, "waiting-consent");
   assert.equal(u.paid.length, 0);
+});
+
+test("#2299: a painted sticker repaints with a tap, shown as it was while it paints and kept when that fails", async () => {
+  let fails = false;
+  let hold: Promise<void> | undefined;
+  const t = await stickerWorld("r-strepaint-aaaaaa", {
+    engineDeletes: true,
+    before: async () => {
+      await hold;
+      if (fails) throw new Error("provider down");
+    },
+  });
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  await t.settle();
+  const id = `${KAI}:guarded`;
+  const first = (await t.unit()).stickers!.art.guarded!;
+  assert.equal(first.state, "ready");
+  const shownNow = async () => (await t.view()).stickers.find((sticker) => sticker.id === id)?.url;
+  const inAlbum = async () => {
+    const sticker = (await t.album("GET", "/runs/:run/album")).body.stickers.find((s: { id: string }) => s.id === id);
+    return [sticker?.url ?? null, sticker?.art?.state ?? null];
+  };
+  const old = `${first.url}.cut.png`;
+  assert.equal(await shownNow(), old);
+  assert.deepEqual(await inAlbum(), [old, null], "a painted sticker: the Album offers its Repaint");
+  const paid = t.stickerPaints().length;
+  const deleted = t.deleted.length;
+
+  let release = () => {};
+  hold = new Promise<void>((resolve) => (release = resolve));
+  const tap = t.arts("POST", "/runs/:run/art/sticker", { sticker: id });
+  try {
+    await until(() => t.stickerPaints().length > paid, "the repaint is paid for");
+    assert.equal(await shownNow(), old, "chats show the old sticker while the new one paints");
+    assert.deepEqual(await inAlbum(), [old, "pending"]);
+  } finally {
+    hold = undefined;
+    release();
+  }
+  // Its new picture is cut out after it is saved: held here, so the old cut-out must still be what everyone sees.
+  t.cut.hold();
+  let repainted: { state: string; url: string };
+  try {
+    repainted = (await tap).body.art;
+    assert.equal(repainted.state, "ready", JSON.stringify(repainted));
+    assert.notEqual(repainted.url, first.url);
+    assert.equal(t.stickerPaints().length, paid + 1, "a repaint is one more image");
+    assert.equal(await shownNow(), old, "chats keep the old sticker until the new one is cut out");
+    assert.deepEqual(await inAlbum(), [old, "pending"], "the Album shows it painting over the old one");
+    assert.deepEqual(
+      t.deleted.slice(deleted),
+      [first.ref!.slice("global-gallery:".length)],
+      "the old original goes; its cut-out stays",
+    );
+  } finally {
+    t.cut.release();
+  }
+  await t.settle();
+  assert.equal(await shownNow(), `${repainted.url}.cut.png`, "the new sticker everywhere once it is cut out");
+  assert.deepEqual(await inAlbum(), [`${repainted.url}.cut.png`, null], "the Album no longer shows it painting");
+  assert.deepEqual(t.deleted.slice(deleted), [first.ref!.slice("global-gallery:".length)], "the old image goes");
+
+  // A failed repaint keeps the sticker it painted over, the Album offers Try again, and nothing is deleted.
+  fails = true;
+  const failed = (await t.arts("POST", "/runs/:run/art/sticker", { sticker: id })).body.art;
+  assert.deepEqual([failed.state, failed.url], ["failed", repainted.url]);
+  assert.equal(await shownNow(), `${repainted.url}.cut.png`);
+  assert.deepEqual(await inAlbum(), [`${repainted.url}.cut.png`, "failed"]);
+  assert.equal(t.deleted.length, deleted + 1);
+});
+
+test("#2299: two repaints before the first new sticker is cut out keep the oldest cut-out shown until the newest is cut", async () => {
+  const t = await stickerWorld("r-strepaint2-aaaaaa");
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  await t.settle();
+  const id = `${KAI}:guarded`;
+  const old = `${(await t.unit()).stickers!.art.guarded!.url}.cut.png`;
+  const shownNow = async () => (await t.view()).stickers.find((sticker) => sticker.id === id)?.url;
+  t.cut.hold();
+  let newest: { url: string };
+  try {
+    const second = (await t.arts("POST", "/runs/:run/art/sticker", { sticker: id })).body.art;
+    assert.equal(await shownNow(), old, "after the first repaint");
+    newest = (await t.arts("POST", "/runs/:run/art/sticker", { sticker: id })).body.art;
+    assert.notEqual(newest.url, second.url);
+    assert.equal(await shownNow(), old, "after the second, still the oldest cut-out");
+  } finally {
+    t.cut.release();
+  }
+  await t.settle();
+  assert.equal(await shownNow(), `${newest.url}.cut.png`);
+});
+
+test("#2299: a repaint of a sticker shown uncut (its cut-out failed) shows the new one uncut until it is cut out", async () => {
+  const t = await stickerWorld("r-strepaint3-aaaaaa");
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  await t.settle();
+  const id = `${KAI}:guarded`;
+  const first = (await t.unit()).stickers!.art.guarded!;
+  // Its cleanup failed: the sticker is shown on its matte, as it was painted.
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cutouts: { ...unit.cutouts, [first.url!]: { state: "failed", at, error: "cleanup failed" } },
+  }));
+  const shownNow = async () => (await t.view()).stickers.find((sticker) => sticker.id === id)?.url;
+  const inAlbum = async () => {
+    const sticker = (await t.album("GET", "/runs/:run/album")).body.stickers.find((s: { id: string }) => s.id === id);
+    return [sticker?.url ?? null, sticker?.art?.state ?? null];
+  };
+  assert.equal(await shownNow(), first.url);
+  t.cut.hold();
+  let repainted: { url: string };
+  try {
+    repainted = (await t.arts("POST", "/runs/:run/art/sticker", { sticker: id })).body.art;
+    assert.equal(await shownNow(), repainted.url, "chats keep a sticker, the new one as the old was shown");
+    assert.deepEqual(await inAlbum(), [repainted.url, "pending"], "the Album keeps its picture and Repaint");
+  } finally {
+    t.cut.release();
+  }
+  await t.settle();
+  assert.equal(await shownNow(), `${repainted.url}.cut.png`);
+});
+
+test("#2299: a sticker tap that waited on a refused repaint is refused too, never answering with the old sticker", async () => {
+  const t = await stickerWorld("r-strefused-aaaaaa");
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  await t.settle();
+  const id = `${KAI}:guarded`;
+  const first = (await t.unit()).stickers!.art.guarded!;
+  assert.equal(first.state, "ready");
+  // Tap A holds the sticker's paint and is stopped at its read of the run until tap B waits on it.
+  let reads = 0;
+  let open = () => {};
+  const gate = new Promise<void>((resolve) => (open = resolve));
+  const store = Object.create(t.store) as typeof t.store;
+  store.readDoc = async (doc, normalize) => {
+    if (doc === worldId(t.runId) && ++reads === 2) await gate;
+    return t.store.readDoc(doc, normalize);
+  };
+  const tap = (deps: typeof t.deps) =>
+    paintStickerNow(deps, t.runId, id, { debugMode: false }).then(
+      (art) => ({ art }),
+      (error: { statusCode?: number }) => ({ error }),
+    );
+  const tapA = tap({ ...t.deps, store });
+  await until(() => reads >= 2, "tap A is reading the run inside its paint");
+  // Images go off meanwhile, so tap A is refused before it claims anything.
+  await setImages(t.store, t.runId, { connectionId: null });
+  let readsB = 0;
+  const storeB = Object.create(t.store) as typeof t.store;
+  storeB.readDoc = async (doc, normalize) => {
+    if (doc === worldId(t.runId)) readsB += 1;
+    return t.store.readDoc(doc, normalize);
+  };
+  const tapB = tap({ ...t.deps, store: storeB });
+  await until(() => readsB > 0, "tap B read the sticker");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  open();
+  const [refused, waited] = await Promise.all([tapA, tapB]);
+  assert.equal(refused.error?.statusCode, 503);
+  assert.equal(waited.error?.statusCode, 503, `the waiting tap is refused too: ${JSON.stringify(waited)}`);
+  assert.deepEqual((await t.unit()).stickers!.art.guarded, first, "the sticker is as it was");
 });
 
 test("a sticker is listed only after its cut-out settles, and a restart leaves at most one stopped", async () => {

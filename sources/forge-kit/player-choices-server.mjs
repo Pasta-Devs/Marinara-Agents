@@ -115,47 +115,103 @@ export async function forgeRememberSpeakerGenders(readSession, updateSession, be
 }
 
 // label turns an option's text into its saved label; Gacha Forge passes none and gets forgeChoiceLabel's punctuation.
-export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, terminal, label = forgeChoiceLabel }) {
+// reject, when given, hears why a reply is refused, in words the model can act on (a repair turn sends them back);
+// without it nothing changes. Choices and options are numbered from 1, as a model counts them.
+export function forgeNormalizeChoiceBeat(
+  raw,
+  options,
+  normalizeBeat,
+  { enabled, terminal, label = forgeChoiceLabel, reject },
+) {
+  const fail = (why) => {
+    reject?.(why);
+    return null;
+  };
   const beat = normalizeBeat(raw, options);
   forgeSpeakerGenders(raw, beat?.segments);
-  if (!beat || !enabled || raw?.choices == null) return beat;
-  if (!Array.isArray(raw.choices) || raw.choices.length > 3) return null;
-  if (raw.choices.length && beat.segments.length !== raw.segments.length) return null;
+  if (!beat)
+    return fail(
+      'the mainline "segments" did not follow the format: a non-empty array within the segment limit, each with a non-empty "text"',
+    );
+  if (!enabled || raw?.choices == null) return beat;
+  if (!Array.isArray(raw.choices)) return fail('"choices" must be an array');
+  if (raw.choices.length > 3) return fail(`this beat has ${raw.choices.length} choice points; use at most three`);
+  if (raw.choices.length && beat.segments.length !== raw.segments.length)
+    return fail(
+      `${raw.segments.length - beat.segments.length} mainline segment(s) have no "text"; every mainline segment needs a non-empty "text", because each choice's "at" counts them`,
+    );
   const choices = [];
-  const positions = new Set();
+  const positions = new Map();
   const places = new Map(beat.places.map((place) => [place.name, place]));
+  const last = beat.segments.length - 1;
   let big = false;
   for (const [index, choice] of raw.choices.entries()) {
-    if (!choice || !["small", "big"].includes(choice.kind)) return null;
-    if (!Number.isInteger(choice.at) || choice.at < 0 || choice.at >= beat.segments.length) return null;
-    if (positions.has(choice.at)) return null;
-    positions.add(choice.at);
-    if (!Array.isArray(choice.options) || choice.options.length < 2 || choice.options.length > 4) return null;
+    const n = index + 1;
+    if (!choice || !["small", "big"].includes(choice.kind))
+      return fail(`choice ${n} has kind ${JSON.stringify(choice?.kind)}; use "small" or "big"`);
+    if (typeof choice.at !== "number")
+      return fail(
+        `choice ${n}'s "at" is ${JSON.stringify(choice.at)}; it must be a whole JSON number, with no quotes, from 0 to ${last}`,
+      );
+    if (!Number.isInteger(choice.at) || choice.at < 0 || choice.at > last)
+      return fail(
+        `choice ${n}'s "at" is ${JSON.stringify(choice.at)}; it must be the zero-based index of a mainline segment, 0 to ${last}`,
+      );
+    if (positions.has(choice.at))
+      return fail(
+        `choices ${positions.get(choice.at)} and ${n} are both at ${choice.at}; never put two at the same index`,
+      );
+    positions.set(choice.at, n);
+    if (!Array.isArray(choice.options) || choice.options.length < 2 || choice.options.length > 4)
+      return fail(
+        `choice ${n} has ${Array.isArray(choice.options) ? choice.options.length : "no"} options; give it 2, 3 or 4`,
+      );
     if (choice.kind === "big") {
-      if (big || !terminal || choice.at !== beat.segments.length - 1) return null;
+      if (big) return fail("there is more than one big choice; a beat may have at most one");
+      if (!terminal)
+        return fail(
+          `choice ${n} is big, but this is not the last story beat: make it small, with 1 to 8 branch segments in every option`,
+        );
+      if (choice.at !== last)
+        return fail(`the big choice is at ${choice.at}; it must be at the very last mainline segment, ${last}`);
       big = true;
     }
     const labels = new Set();
     const selections = new Set();
     const normalizedOptions = [];
     for (const [optionIndex, option] of choice.options.entries()) {
+      const where = `choice ${n}, option ${optionIndex + 1}`;
       const rawText = typeof option?.text === "string" ? option.text.trim() : "";
-      if (!rawText || rawText.length > 280) return null;
+      if (!rawText || rawText.length > 280) return fail(`${where} needs a short "text" label of 1 to 280 characters`);
       const text = label(rawText);
-      if (labels.has(text)) return null;
+      if (labels.has(text))
+        return fail(`choice ${n} has two options labelled ${JSON.stringify(text)}; give each its own label`);
       labels.add(text);
       const selection = option.selection;
       const selectedText = typeof selection?.text === "string" ? selection.text.trim() : "";
       if (!selection || !["dialogue", "action"].includes(selection.kind) || !selectedText || selectedText.length > 280)
-        return null;
-      if (selection.kind === "dialogue" && selectedText === text) return null;
+        return fail(`${where} needs a "selection" of kind "dialogue" or "action" with a "text" of 1 to 280 characters`);
+      if (selection.kind === "dialogue" && selectedText === text)
+        return fail(
+          `${where}'s label is the exact spoken line; make the label a short intent such as "Apologize" and keep the line in its selection`,
+        );
       const selectionKey = `${selection.kind}:${selectedText}`;
-      if (selections.has(selectionKey)) return null;
+      if (selections.has(selectionKey))
+        return fail(`choice ${n} has two options with the same selection; make each different`);
       selections.add(selectionKey);
-      if (!Array.isArray(option.segments)) return null;
-      if (choice.kind === "big" && option.segments.length) return null;
-      if (choice.kind === "small" && (!option.segments.length || option.segments.length > 8)) return null;
-      if (option.segments.some((segment) => !segment || segment.choices != null || segment.choice != null)) return null;
+      if (!Array.isArray(option.segments)) return fail(`${where} needs a "segments" array`);
+      if (choice.kind === "big" && option.segments.length)
+        return fail(
+          `${where} belongs to the big choice, so its "segments" must be EMPTY: write nothing after a big choice`,
+        );
+      if (choice.kind === "small" && (!option.segments.length || option.segments.length > 8))
+        return fail(
+          `${where} has ${option.segments.length} branch segments; a small choice needs 1 to 8 in every option`,
+        );
+      if (option.segments.some((segment) => !segment || typeof segment !== "object"))
+        return fail(`${where}'s branch has an entry that is not a segment; each is an object with a non-empty "text"`);
+      if (option.segments.some((segment) => segment.choices != null || segment.choice != null))
+        return fail(`${where} has a choice inside its branch; never nest choices`);
       const branch =
         choice.kind === "small"
           ? normalizeBeat(
@@ -163,7 +219,8 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
               { ...options, start: beat.segments[choice.at].place || options.start, cgOpen: false },
             )
           : { segments: [], places: [] };
-      if (!branch || branch.segments.length !== option.segments.length) return null;
+      if (!branch || branch.segments.length !== option.segments.length)
+        return fail(`${where}'s branch has a segment with no "text"; every branch segment needs a non-empty "text"`);
       for (const place of branch.places) places.set(place.name, place);
       normalizedOptions.push({
         id: `option-${optionIndex + 1}`,
@@ -174,7 +231,10 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
     }
     choices.push({ id: `choice-${index + 1}`, kind: choice.kind, at: choice.at, options: normalizedOptions });
   }
-  if (places.size > 4) return null;
+  if (places.size > 4)
+    return fail(
+      `the mainline and all branches use ${places.size} places together (${[...places.keys()].join(", ")}); use at most four across all of them, each spelled the same way every time`,
+    );
   choices.sort((left, right) => left.at - right.at);
   return { ...beat, places: [...places.values()], choices };
 }

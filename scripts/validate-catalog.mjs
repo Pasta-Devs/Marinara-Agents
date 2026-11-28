@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { AVATAR_PACKAGE_IDS, assertAvatarPackageContract } from "./avatar-package-checks.mjs";
 import { CATALOG_ARTWORK_SIZE, catalogArtworkRelativePath, catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { buildStoreDocument } from "./catalog-store.mjs";
+import { buildDocumentationDocument } from "./catalog-documentation.mjs";
 import {
   LEGACY_CATALOG_MAJOR,
   assertManifestBuildProvenance,
@@ -195,23 +196,39 @@ async function assertStoreSidecar(path, entries) {
   }
 }
 
+async function assertDocumentationSidecar(path, entries) {
+  const document = await buildDocumentationDocument(repoRoot, dirname(path), entries);
+  const expected = Object.keys(document.packages).length > 0 ? document : null;
+  if (JSON.stringify(await readCommittedNotes(path)) !== JSON.stringify(expected)) {
+    throw new Error(`${path} does not match package documentation — run node scripts/build-documentation.mjs`);
+  }
+}
+
 for (const [major, lane] of expectedCatalogsByMajor) {
   await assertNotesSidecar(`catalog/v${major}/notes.json`, lane.packages);
   await assertStoreSidecar(`catalog/v${major}/store.json`, lane.packages);
+  await assertDocumentationSidecar(`catalog/v${major}/docs.json`, lane.packages);
 }
 await assertNotesSidecar("catalog/notes.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
 await assertStoreSidecar("catalog/store.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
+await assertDocumentationSidecar("catalog/docs.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
 if (previewCatalog.packages.length > 0) {
   const expectedPreviewLanes = createCatalogLanes(previewCatalog);
   for (const [major, lane] of expectedPreviewLanes) {
     await assertNotesSidecar(`catalog/preview/v${major}/notes.json`, lane.packages);
     await assertStoreSidecar(`catalog/preview/v${major}/store.json`, lane.packages);
+    await assertDocumentationSidecar(`catalog/preview/v${major}/docs.json`, lane.packages);
   }
   await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
   await assertStoreSidecar("catalog/preview/store.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
+  await assertDocumentationSidecar(
+    "catalog/preview/docs.json",
+    expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages,
+  );
 } else if (
   (await readCommittedNotes("catalog/preview/notes.json")) !== null ||
-  (await readCommittedNotes("catalog/preview/store.json")) !== null
+  (await readCommittedNotes("catalog/preview/store.json")) !== null ||
+  (await readCommittedNotes("catalog/preview/docs.json")) !== null
 ) {
   // The overlay directory is removed when nothing is staging-only, so a surviving
   // sidecar means a stale generated payload that no rebuild would produce.
@@ -271,7 +288,7 @@ const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: longTermMemorySourceRoot,
   boundaryPath: join(repoRoot, "packages/long-term-memory/engine-boundary.json"),
   displayName: "Long-Term Memory",
-  capabilityApi: { major: 1, minor: 390 },
+  capabilityApi: { major: 1, minor: 820 },
 });
 for (const relativePath of [
   "packages/shared/src/features/agents/long-term-memory",
@@ -395,6 +412,19 @@ async function validateTurnGameRuntime(manifest, packageRoot) {
     return () => registry.delete(key);
   };
   const api = {
+    // A turn game may keep its own records (Wordle's daily results): an empty store and a route sink stand in for
+    // the host's api.runtime.persistence and registerPrivilegedRoutes, which every Engine it installs on provides.
+    runtime: {
+      persistence: {
+        documents: {
+          getById: async () => null,
+          create: async (document) => ({ ...document, revision: 1 }),
+          update: async () => null,
+        },
+      },
+      logger: { error() {} },
+    },
+    registerPrivilegedRoutes: async () => () => {},
     registerTurnGameEngine(engine) {
       if (!engine?.gameType) throw new Error(`${manifest.id} registered an invalid turn-game engine`);
       const cleanup = unregister(gameEngines, engine.gameType);
@@ -485,6 +515,10 @@ for (const entry of catalog.packages) {
     }
     if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(longTermMemoryBoundary.builtAgainst)) {
       throw new Error("Long-Term Memory build provenance does not match engine-boundary.json");
+    }
+    // The Agent activity card is a Capability API 1.820 slot; a manifest that lost it would drop the card silently.
+    if (!manifest.contributions?.slots?.includes("chat-activity")) {
+      throw new Error("Long-Term Memory must declare the chat-activity slot");
     }
   }
   if (manifest.id === "pixelforge") {
@@ -1040,8 +1074,8 @@ const agentOnly = publishedCatalog.packages.filter(
   (entry) => !isRulesetPackage(entry.manifest) && !entry.manifest.entrypoints.server,
 ).length;
 const features = publishedCatalog.packages.length - agentOnly - rulesets;
-if (publishedCatalog.packages.length !== 44 || agentOnly !== 26 || features !== 18 || rulesets !== 0) {
-  throw new Error(`Expected 26 agents, 18 features, and 0 rulesets, found ${agentOnly}, ${features}, and ${rulesets}`);
+if (publishedCatalog.packages.length !== 46 || agentOnly !== 26 || features !== 20 || rulesets !== 0) {
+  throw new Error(`Expected 26 agents, 20 features, and 0 rulesets, found ${agentOnly}, ${features}, and ${rulesets}`);
 }
 console.log(
   `Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features, ${rulesets} rulesets).`,

@@ -21,7 +21,7 @@ import {
 import { clampGenerationMaxOutputTokens } from "../../../../services/generation/output-token-limits.js";
 import { withConnectionFallbackProvider } from "../../../../services/llm/connection-fallback-provider.js";
 import { createLLMProvider } from "../../../../services/llm/provider-registry.js";
-import { createCharactersStorage } from "../../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../../../../services/storage/connections.storage.js";
 import { requireModelAnswer } from "../../../base/model/slp-model-answer.js";
 import { slpWithProviderRetry } from "../../../base/model/slp-provider-retry.js";
@@ -37,6 +37,7 @@ import { describeSlurpRapport } from "../../../modules/messages/slp-rapport.js";
 import { buildSlpScenePlanMessages, readSlpScenePlan } from "../../../modules/messages/slp-roleplay-scene-prompt.js";
 import { slpSceneTranscript } from "../../../modules/messages/slp-roleplay-scene-rules.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /** A refusal the route turns into a status code; anything else is a 500. */
@@ -99,7 +100,7 @@ export async function planSlpRoleplayScene(
   );
   const persona = await createCharactersStorage(db).getPersona(input.viewer.entityId);
   const continuity = await listSlurpContinuityFor(db, creator.id, "fan_thread", {
-    at: new Date(),
+    at: slurpWorldNow(),
     threadId: thread.id,
     limit: 20,
   })

@@ -9,7 +9,7 @@
 // asks never takes the shown one's place; Home tapes the newest photo into his note, its words wrapping around it in both looks, mirrored in
 // RTL, at reduced motion. Each test runs on both projects (desktop-chromium and mobile-chromium).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-photo-shoot.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -210,7 +210,7 @@ function createPhotoStub({
           lis: Object.fromEntries(
             [KAI, MIR].map((li) => [
               li,
-              { cheat: "nudge", style: "", rupture: false, makeItRight: false, lines: { claw: null, cold: [] } },
+              { cheat: "nudge", style: "", rupture: false, lines: { claw: null, cold: [] } },
             ]),
           ),
         },
@@ -370,8 +370,8 @@ async function openOtome(page: Page, { review = false } = {}): Promise<Locator> 
 
 async function openDates(root: Locator) {
   await expect(root.getByRole("heading", { level: 1, name: "Kai Ardent" })).toBeVisible();
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Games" }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
 }
 
 async function openPhotoShoot(root: Locator) {
@@ -629,7 +629,7 @@ test("Otome Hearth Album: a photo that lands while Delete asks never takes the p
   await root.getByRole("button", { name: "Take picture" }).click();
   await expect.poll(() => posts(stub, "/photos").length).toBe(1);
   await root.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await expect(root.getByRole("heading", { level: 1, name: "Games" })).toBeFocused();
   await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Album", exact: true }).click();
   await root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Photos", exact: true }).click();
   await root.getByRole("button", { name: "View: The Glass Conservatory" }).click();

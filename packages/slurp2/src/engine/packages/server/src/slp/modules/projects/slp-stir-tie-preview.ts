@@ -30,6 +30,7 @@ import { slurpAddToCouple, slurpCoupleMembers, slurpNameList } from "./slp-coupl
 import type { SlpActionPreview, SlpStirNote } from "../../../../../shared/src/slp/slp-stir.js";
 import { slurpSyncExBonds, slurpEndBond, slurpSetBond, type SlurpBond } from "./slp-creator-bonds.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const bondPlural = (kind: string) => (kind === "ex" ? "exes" : kind === "family" ? "family" : `${kind}s`);
 export const SLURP_TIE_LEVERS = [
   "suggest-collab",
@@ -314,7 +315,7 @@ type TieDocument = { ties: SlurpCreatorTies; couples: SlurpCouple[]; bonds?: Slu
  * Undo would break it: a collab already planned or posted, a rivalry or collab that changed again,
  * a couple that opened a page since, or a partner who is with someone else now.
  */
-export function slurpUndoTie(document: TieDocument, undo: SlurpTieUndo, at = new Date()): TieDocument | null {
+export function slurpUndoTie(document: TieDocument, undo: SlurpTieUndo, at = slurpWorldNow()): TieDocument | null {
   const { ties, couples } = document;
   switch (undo.kind) {
     case "removeCollab": {

@@ -36,6 +36,8 @@ export const DEFAULT_LTM_EXTRACTION_CONFIG = ltmResolvedExtractionSettingsSchema
   finishCutOffAnswers: false,
   autoAcceptSafeChanges: false,
   autoImportChatSources: false,
+  autoImportReadFrom: "messages",
+  autoImportLeaveMessages: 0,
   chatImportDetail: "standard",
   useExtractionAgentOnGameMode: false,
 });

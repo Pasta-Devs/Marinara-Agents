@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useSpriteDisplay } from "../../hooks/use-sprite-display";
-import { BookOpen, ChevronLeft, Feather, Paintbrush, RotateCcw, Shirt, Sparkle, Star } from "lucide-react";
+import { BookOpen, ChevronLeft, Feather, Paintbrush, RotateCcw, Shirt, Sparkle, Star, Wine } from "lucide-react";
 import { CostHint } from "../../components/CostHint";
 import { PromptReviewDialog } from "../../components/PromptReviewDialog";
 import {
@@ -15,16 +15,17 @@ import {
   needsOpen,
   paintWaits,
   paintsOnOpen,
-  readyArt,
+  readyPicture,
   useRefocus,
   writesOnOpen,
   type ItemActions,
+  type ReadyPicture,
 } from "../../hooks/use-items";
 import { useOtomeAudio, useAudioSnapshot } from "../../hooks/use-otome-audio";
 import { accentOf, initialsOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { RunLiView, RunView } from "../../shared/api-types";
-import { isLookKind, type ItemKind, type ItemView, type PullResult, type Rarity } from "../../shared/wish";
+import { isDateKind, isLookKind, type ItemKind, type ItemView, type PullResult, type Rarity } from "../../shared/wish";
 import { RARITY_NAMES } from "./SealedLetter";
 
 const KIND_KEYS: Record<ItemKind, string> = {
@@ -35,6 +36,10 @@ const KIND_KEYS: Record<ItemKind, string> = {
   "his-look4": "ui.otomeForge.wish.kindTheirLook",
   "her-look5": "ui.otomeForge.wish.kindMyLook",
   "her-look4": "ui.otomeForge.wish.kindMyLook",
+  date5: "ui.otomeForge.wish.kindDateScenario",
+  date4: "ui.otomeForge.wish.kindDatePlace",
+  "his-look3": "ui.otomeForge.wish.kindTheirLook",
+  "her-look3": "ui.otomeForge.wish.kindMyLook",
 };
 
 const RARITY_KEYS: Record<Rarity, string> = {
@@ -68,12 +73,24 @@ export function RarityStars({ rarity }: { rarity: Rarity }) {
   );
 }
 
-/** The item's picture: its ready art, or a quiet card in the person's colour with their initials. */
-export function ItemArt({ item, view, fallbackUrl }: { item: ItemView; view: RunView; fallbackUrl?: string | null }) {
+/**
+ * The item's picture: its ready art (a look cleaned of its backdrop, unless it is a saved cut-out), or a quiet card in
+ * the person's colour with their initials.
+ */
+export function ItemArt({
+  item,
+  view,
+  fallbackArt,
+}: {
+  item: ItemView;
+  view: RunView;
+  fallbackArt?: ReadyPicture | null;
+}) {
   const li = itemPerson(item, view);
   const name = li?.name ?? view.player.name;
   const look = isLookKind(item.kind);
-  const url = useSpriteDisplay(readyArt(item.art) ?? fallbackUrl ?? null, look);
+  const picture = readyPicture(item) ?? fallbackArt ?? null;
+  const url = useSpriteDisplay(picture?.url ?? null, look && !picture?.cut);
   const accent = li ? accentOf(li) : undefined;
   return (
     <span
@@ -98,9 +115,11 @@ interface ItemDetailProps {
   item: ItemView;
   actions: ItemActions;
   /** The banner's art, shown for its featured item until the item's own is ready. */
-  fallbackUrl?: string | null;
+  fallbackArt?: ReadyPicture | null;
   onOpenStory?: (key: string) => void;
   onOpenWardrobe?: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
   /** Where focus starts (the item's title, so a screen reader reads it). */
   autoFocus?: boolean;
 }
@@ -110,9 +129,10 @@ export function ItemDetail({
   view,
   item,
   actions,
-  fallbackUrl,
+  fallbackArt,
   onOpenStory,
   onOpenWardrobe,
+  onOpenDate,
   autoFocus,
 }: ItemDetailProps) {
   const { t } = useTranslation();
@@ -150,7 +170,7 @@ export function ItemDetail({
 
   return (
     <article className="of-item-detail" data-rarity={RARITY_NAMES[item.rarity]} onFocus={onFocus}>
-      <ItemArt item={item} view={view} fallbackUrl={fallbackUrl} />
+      <ItemArt item={item} view={view} fallbackArt={fallbackArt} />
       <div className="of-item-body">
         <p className="of-item-kind">
           <RarityStars rarity={item.rarity} />
@@ -160,6 +180,11 @@ export function ItemDetail({
           {item.look?.name || item.title}
         </h3>
         {li ? <p className="of-item-who">{t("ui.otomeForge.wish.with", { name: li.name })}</p> : null}
+        {item.place ? (
+          <p className="of-item-who">
+            {t("ui.otomeForge.wish.datePlace", { place: item.place.name, count: item.scenes ?? 1 })}
+          </p>
+        ) : null}
         {item.premise ? <p className="of-item-text">{item.premise}</p> : null}
         {item.text ? <p className="of-item-text of-item-text--snapshot">{item.text}</p> : null}
         {item.voicedLine ? (
@@ -242,6 +267,12 @@ export function ItemDetail({
               {t("ui.otomeForge.wish.toWardrobe")}
             </button>
           ) : null}
+          {isDateKind(item.kind) && item.owned && onOpenDate ? (
+            <button type="button" className="of-button of-button--primary" onClick={() => onOpenDate(item.id)}>
+              <Wine size={16} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.wish.toDate")}
+            </button>
+          ) : null}
         </div>
         {error ? (
           <p className="of-notice of-notice--error" role="alert">
@@ -305,11 +336,13 @@ interface TenPullGridProps {
   spent: number;
   actions: ItemActions;
   /** The banner's art, for its featured item until the item's own is ready. */
-  bannerArt: string | null;
+  bannerArt: ReadyPicture | null;
   reducedMotion: boolean;
   onDone: () => void;
   onOpenStory?: (key: string) => void;
   onOpenWardrobe?: () => void;
+  /** #2303: plans a pulled date (Album → Dates) for the item id. */
+  onOpenDate?: (item: string) => void;
 }
 
 export function TenPullGrid({
@@ -323,6 +356,7 @@ export function TenPullGrid({
   onDone,
   onOpenStory,
   onOpenWardrobe,
+  onOpenDate,
 }: TenPullGridProps) {
   const { t } = useTranslation();
   const kindLabel = useKindLabel();
@@ -361,9 +395,10 @@ export function TenPullGrid({
           view={view}
           item={resolve(result.item)}
           actions={actions}
-          fallbackUrl={result.rarity === 5 ? bannerArt : null}
+          fallbackArt={result.rarity === 5 ? bannerArt : null}
           onOpenStory={onOpenStory}
           onOpenWardrobe={onOpenWardrobe}
+          onOpenDate={onOpenDate}
           autoFocus
         />
       </div>
@@ -399,7 +434,7 @@ export function TenPullGrid({
                 data-rarity={RARITY_NAMES[result.rarity]}
                 onClick={() => setShown(index)}
               >
-                <ItemArt item={item} view={view} fallbackUrl={result.rarity === 5 ? bannerArt : null} />
+                <ItemArt item={item} view={view} fallbackArt={result.rarity === 5 ? bannerArt : null} />
                 {result.isNew ? (
                   <span className="of-ribbon">{t("ui.otomeForge.wish.new")}</span>
                 ) : (

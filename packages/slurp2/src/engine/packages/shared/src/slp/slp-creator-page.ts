@@ -1,4 +1,6 @@
+import { slurpWorldNow } from "./slp-world-clock.js";
 import { z } from "zod";
+import { slpRecord as record } from "./slp-coerce.js";
 
 /**
  * A Creator's Page: the stack of blocks under the profile header that says who they are.
@@ -119,10 +121,6 @@ export const slpCreatorPageSchema = z
   .strict();
 export type SlpCreatorPage = z.infer<typeof slpCreatorPageSchema>;
 
-function record(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
 const clip = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : value);
 
 /**
@@ -204,7 +202,7 @@ export function normalizeSlpCreatorPage(
   value: unknown,
   fallback: { composedBy: SlpCreatorPage["composedBy"]; now: string } = {
     composedBy: "player",
-    now: new Date().toISOString(),
+    now: slurpWorldNow().toISOString(),
   },
 ): SlpCreatorPage | null {
   const raw = record(value);

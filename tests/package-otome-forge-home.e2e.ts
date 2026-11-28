@@ -13,8 +13,16 @@
 // noticed about hers arriving while Home is open; on a small phone the longest line stands beside the rail without
 // pushing it up, clear of the note, and at every phone size and on desktop it covers no rail button, the note (its Play
 // and Reply), her name, the top bar or the dock.
+// #2127: Your thoughts… beside Remind Me sends what the protagonist is thinking for the next chapter (Enter starts a new
+// line, a failure says so, the window opens with them to change, Clear lets them go), with a dot while they wait.
+// #2152: touch on Home at 1280x800 and 390x844: head, cheek, chest and hand, Cheek bringing its own face, voiced; under
+// NSFW Heat a Crotch zone by Tab and Enter and by pointer over the middle of the hand band, with Hand on its side, gone
+// during a rupture and for a cached pack once Heat is SFW; four or five zones or pills at every phone size.
+// #2504: his selfie in his message shows as a picture once painted, or Paint until then, never his bracketed command;
+// painted, it keeps the thread at its newest line, and one on an earlier page shows painted, on a tap or painted
+// elsewhere.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { deflateSync } from "node:zlib";
@@ -49,9 +57,14 @@ const CURT_NOTE = "The audit will not wait.";
 const WARM_AGAIN = "The lab is quiet again. Come by when you can.";
 const HIS_LINES = {
   head: ["Careful with the hair.", "Again. Fine.", "You are bold today."],
+  cheek: ["My face is not a canvas.", "Warm hands. Noted.", "Do not look so pleased."],
   hand: ["Cold hands. Stay a moment.", "Hold on, then.", "Fine. Just this once."],
   heart: ["That is my heart.", "Steady. It only beats.", "Too close. Stay."],
+  // #2152: written only under NSFW Heat.
+  crotch: ["Bold. Keep going and see.", "Your hand is wandering.", "Lower and I stop pretending."],
 };
+/** #2152: the face his pack names for each zone (his cheek's is not painted, so his figure names it). */
+const HIS_FACES = { head: "tender", cheek: "hurt", heart: "flustered", hand: "tender", crotch: "flustered" };
 const ANNOYED = ["Enough. I mean it.", "I am not a bell.", "Patience. Mine is thinning.", "One more and I leave."];
 
 /** A tiny solid PNG as a data: URL (the CSP allows data: images). */
@@ -138,6 +151,11 @@ function createHomeStub({
   photo = false,
   // The story memory's status (GET .../memory/status); without it the route is a 404 and no memory banner shows.
   memory = null as Json | null,
+  // #2152: the world's Heat; his lines hold crotch under NSFW Heat, or with `crotchLines` (a pack cached from before
+  // Heat was lowered). `cameo` stands his look as an Engine card avatar (a cameo with pills).
+  heat = "sfw" as "sfw" | "fade" | "explicit",
+  crotchLines = false,
+  cameo = false,
 } = {}) {
   const calls: Call[] = [];
   const state = {
@@ -147,6 +165,16 @@ function createHomeStub({
     replying: false,
     sendFailures: 0,
     closeFailures: 0,
+    // 0.47.1: a close accepted and remembered in the background (its session's start), held until `closeHold` resolves.
+    remembering: null as number | null,
+    closeHold: null as Promise<void> | null,
+    // How many of those fail as they land (the mark keeps "declined", Try again closes again), and Ilvar's level once
+    // one lands (the run view's affection).
+    backgroundFailures: 0,
+    landedLevel: null as number | null,
+    // #2127: Your thoughts… waiting for the next chapter, and how many sends fail first.
+    thoughts: null as Json | null,
+    thoughtsFailures: 0,
   };
   let homeReads = 0;
   // M4: the reads of Me before the line he noticed about her look lands (it is written in the background).
@@ -166,7 +194,7 @@ function createHomeStub({
       mystery: { question: "Who stopped the clocks?" },
       web: [],
       openingSituation: "",
-      content: { heat: "sfw", darkness: "angst", limits: {}, custom: [] },
+      content: { heat, darkness: "angst", limits: {}, custom: [] },
       images: { connectionId: images ? "conn-image" : null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
       forge: { phase: "ready", steps: [] },
@@ -269,7 +297,38 @@ function createHomeStub({
   let replies = 0;
   const archived = () => sessions.reduce((sum, session) => sum + session.count, 0);
   const unread = () => messages.filter((m) => m.who === "li" && (!seenAt || m.at > seenAt)).length;
+  let held = false;
+  let closeError: string | null = null;
+  /**
+   * 0.47.1: what the list and the page say of a close: remembering while held, then landed with its affection, or
+   * failed (`backgroundFailures`).
+   */
+  const closeView = () => {
+    if (state.remembering !== null && !held && state.backgroundFailures > 0) {
+      state.backgroundFailures -= 1;
+      state.remembering = null;
+      closeError = "declined";
+    } else if (state.remembering !== null && !held) {
+      if (state.landedLevel !== null) view.lis[0].level = state.landedLevel;
+      sessions.push({
+        start: state.remembering,
+        count: messages.length - state.remembering,
+        memory: { text: "She wrote late; he admitted he had not slept.", quote: "Barely." },
+        closedAt: now(),
+        affection: 5,
+      });
+      state.remembering = null;
+    }
+    const newest = sessions.at(-1);
+    return {
+      ...(state.remembering !== null ? { closing: {} } : closeError ? { closing: { error: closeError } } : {}),
+      ...(newest
+        ? { remembered: { start: newest.start, ...(newest.affection ? { affection: newest.affection } : {}) } }
+        : {}),
+    };
+  };
   const historyPage = () => ({
+    ...closeView(),
     messages: messages.map((m, i) => ({ ...m, archived: i < archived() })),
     page: 1,
     pages: 1,
@@ -319,9 +378,11 @@ function createHomeStub({
           : worn && home.li === ILVAR
             ? { url: HIS_WORN, source: "look", cutout: HIS_WORN_CUT, cutoutState: "ready" }
             : images && home.li === ILVAR
-              ? faceCutouts
-                ? { url: PORTRAIT, source: "look", cutout: PORTRAIT_CUT, cutoutState: "ready" }
-                : { url: PORTRAIT, source: "look", cutoutState: "uncut" }
+              ? cameo
+                ? { url: PORTRAIT, source: "avatar", cutoutState: "uncut" }
+                : faceCutouts
+                  ? { url: PORTRAIT, source: "look", cutout: PORTRAIT_CUT, cutoutState: "ready" }
+                  : { url: PORTRAIT, source: "look", cutoutState: "uncut" }
               : null;
       homeReads += 1;
       if (home.show === "me") meReads += 1;
@@ -352,8 +413,18 @@ function createHomeStub({
           photo: photo && home.li === ILVAR ? { url: PHOTO, at: now() } : null,
           noticed: noticedNow ? { li: ILVAR, text: noticedLine, look: "my-wardrobe-0-f", at: now() } : null,
           noticing: worn && meReads >= 1 && !noticedNow,
+          thoughts: state.thoughts,
         },
       };
+    }
+    if (path === `${base}/home/thoughts`) {
+      if (state.thoughtsFailures > 0) {
+        state.thoughtsFailures -= 1;
+        return { status: 500, json: { error: "Otome Hearth could not complete the request." } };
+      }
+      const text = String(call.body!.text ?? "").trim();
+      state.thoughts = text ? { text, at: now() } : null;
+      return { status: 200, json: { thoughts: state.thoughts } };
     }
     if (path === `${base}/home/set`) {
       if (call.body!.li) home.li = call.body!.li;
@@ -385,6 +456,7 @@ function createHomeStub({
     const lines = /^\/runs\/[^/]+\/lis\/([^/]+)\/lines$/u.exec(path);
     if (lines) {
       const tap = (pool: string[]) => ({ morning: pool, day: pool, night: pool });
+      const crotch = heat !== "sfw" || crotchLines;
       return {
         status: 200,
         json: images
@@ -394,7 +466,14 @@ function createHomeStub({
               rupture: state.rupture,
               tap: state.rupture
                 ? null
-                : { head: tap(HIS_LINES.head), hand: tap(HIS_LINES.hand), heart: tap(HIS_LINES.heart) },
+                : {
+                    head: tap(HIS_LINES.head),
+                    cheek: tap(HIS_LINES.cheek),
+                    hand: tap(HIS_LINES.hand),
+                    heart: tap(HIS_LINES.heart),
+                    ...(crotch ? { crotch: tap(HIS_LINES.crotch) } : {}),
+                  },
+              faces: state.rupture ? {} : HIS_FACES,
               annoyed: state.rupture ? [] : ANNOYED,
               cold: ["Not now.", "Leave it."],
               comfort: ["Sit. Tea first, then everything else."],
@@ -405,6 +484,7 @@ function createHomeStub({
               stage: 1,
               rupture: state.rupture,
               tap: null,
+              faces: {},
               annoyed: [],
               cold: [],
               comfort: [],
@@ -417,7 +497,7 @@ function createHomeStub({
         status: 200,
         json: {
           threads: [
-            { li: ILVAR, last: messages.at(-1), unread: unread(), busy: state.replying },
+            { li: ILVAR, last: messages.at(-1), unread: unread(), busy: state.replying, ...closeView() },
             { li: CASSIAN, last: null, unread: 0, busy: false },
           ],
         },
@@ -474,20 +554,12 @@ function createHomeStub({
         state.closeFailures -= 1;
         return { status: 409, json: { error: "Ilvar Thorne is still writing.", code: "busy" } };
       }
-      const count = messages.length - archived();
-      sessions.push({
-        start: archived(),
-        count,
-        memory: { text: "She wrote late; he admitted he had not slept.", quote: "Barely." },
-        closedAt: now(),
-      });
-      return {
-        status: 200,
-        json: {
-          memory: sessions.at(-1)!.memory,
-          grants: [{ source: "close-and-remember", li: ILVAR, affection: 5 }],
-        },
-      };
+      // Accepted at once; the memory lands once `closeHold` resolves (the next read after it).
+      closeError = null;
+      state.remembering = archived();
+      held = !!state.closeHold;
+      void state.closeHold?.then(() => (held = false));
+      return { status: 200, json: { remembering: true, start: state.remembering } };
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
@@ -596,11 +668,17 @@ const posts = (stub: Stub, suffix: string) =>
  * Every request Otome Forge makes to its own routes from now on. The voice service's (a voiced line) and the Engine
  * shell's own traffic (its polls and late first loads) are left out.
  */
+/**
+ * The API requests a step makes. The memory banner's status poll (every 30 s, C/lib/memory-notice.ts memoryPollMs) runs
+ * on its own clock, not the step's, so it is left out: counted, it failed a "no request" step whenever it came due.
+ */
 function apiRequests(page: Page): string[] {
   const seen: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.pathname.startsWith("/api/otome-forge/")) seen.push(`${request.method()} ${url.pathname}`);
+    if (url.pathname.startsWith("/api/otome-forge/") && !url.pathname.endsWith("/memory/status")) {
+      seen.push(`${request.method()} ${url.pathname}`);
+    }
   });
   return seen;
 }
@@ -672,12 +750,47 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
     "none",
   );
   await reducedEffects(false);
+  // #2141: hidden by day and at dawn, they hold still until dusk rather than twinkle unseen.
+  const homeStars = root.locator(".of-home-stars");
   expect(await starsUnder("day")).toBe(0);
+  await expect(homeStars).toHaveCSS("animation-play-state", "paused");
   expect(await starsUnder("dawn")).toBe(0);
+  await expect(homeStars).toHaveCSS("animation-play-state", "paused");
   expect(await starsUnder("night")).toBeGreaterThan(0.4);
+  await expect(homeStars).toHaveCSS("animation-play-state", "running");
   await home.evaluate((element, phase) => {
     (element as HTMLElement).dataset.sky = phase;
   }, sky ?? "night");
+  // #2141: Home's room is opaque and fills the stage, so the stage's own scene holds still under it (his thread, at the
+  // end, shows that scene, and it moves again there).
+  const sceneLoops = root.locator(".of-scene :is(.of-scene-glow, .of-scene-stars)");
+  await expect(sceneLoops).toHaveCount(3);
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "paused");
+  // #2141: once Home has faded in, that scene is not drawn at all (opacity 0), and not before: it shows through the fade.
+  const scene = root.locator(".of-scene");
+  await expect(scene).toHaveCSS("opacity", "0");
+  const [coveredAfter, fadeTakes] = await root.evaluate((element) => {
+    const timing = (selector: string, name: string) =>
+      element
+        .querySelector(selector)!
+        .getAnimations()
+        .find((animation) => (animation as CSSAnimation).animationName === name)!
+        .effect!.getTiming();
+    return [Number(timing(".of-scene", "of-covered").delay), Number(timing(".of-screen", "of-fade-in").duration)];
+  });
+  expect(coveredAfter).toBeGreaterThan(fadeTakes);
+  // Each drifting glow carries no blur of its own: its blur is on a still ::before, drawn once, not every frame.
+  for (const glow of await root.locator(".of-scene-glow").all()) {
+    const filters = await glow.evaluate((element) => [
+      getComputedStyle(element).filter,
+      getComputedStyle(element, "::before").filter,
+    ]);
+    expect(filters).toEqual(["blur(0px)", "blur(46px)"]);
+  }
+  // Midnight's light layer draws first in the front's own group, over nothing: it no longer blends (screen there is
+  // normal), and the front keeps a no-op filter so it is drawn as before.
+  await expect(root.locator(".of-home-l3")).toHaveCSS("mix-blend-mode", "normal");
+  await expect(root.locator(".of-home-front")).toHaveCSS("filter", "blur(0px)");
   await expect(root.getByRole("button", { name: /Messages/ })).toContainText("1");
   await page.screenshot({ path: testInfo.outputPath("01-home.png") });
   expect(posts(stub, "/home/note")).toHaveLength(1);
@@ -699,11 +812,11 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   expect(tapVoice.cacheKey).toMatch(new RegExp(`^otome-forge:${RUN}:tap:${ILVAR}:[0-9a-z]+$`, "u"));
   // A real pointer on his chest (he breathes, so the zone never holds still for a locator click): the rows over him
   // let the tap through.
-  const heart = (await zones.getByRole("button", { name: "Heart" }).boundingBox())!;
+  const heart = (await zones.getByRole("button", { name: "Chest" }).boundingBox())!;
   await page.mouse.click(heart.x + heart.width / 2, heart.y + heart.height / 2);
   await expect(bubble).toHaveText(anyOf(HIS_LINES.heart));
-  await zones.getByRole("button", { name: "Heart" }).focus();
-  await expect(zones.getByRole("button", { name: "Heart" })).toBeFocused();
+  await zones.getByRole("button", { name: "Chest" }).focus();
+  await expect(zones.getByRole("button", { name: "Chest" })).toBeFocused();
   for (let tap = 0; tap < 4; tap++) await page.keyboard.press("Enter");
   await expect(bubble).toHaveAttribute("data-mode", "annoyed");
   expect(ANNOYED).toContain(await bubble.textContent());
@@ -773,15 +886,17 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.locator(".of-quote-chip")).toContainText(WARM_AGAIN);
   await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("I left it on for you.");
   await root.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
+  await expect(root.getByText("Barely. The data kept me company.", { exact: true })).toBeVisible();
   expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: WARM_AGAIN });
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   // Settings and back: the phone opens on his thread again, and the quote that went with her message stays spent.
   await root.getByRole("button", { name: "Settings", exact: true }).click();
   await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
-  await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
+  await expect(root.getByText("Barely. The data kept me company.", { exact: true })).toBeVisible();
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
+  await expect(scene).toHaveCSS("opacity", "1");
   const scrolled = await root.evaluate((element) =>
     [element, ...element.querySelectorAll(".of-frame, .of-stage, .of-stage-body")]
       .filter((box) => box.scrollTop || box.scrollLeft)
@@ -789,6 +904,85 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   );
   expect(scrolled).toEqual([]);
   expect(pageErrors).toEqual([]);
+});
+
+// #2152: touch on Home on a desktop and an iPhone-sized window. Cheek by pointer brings his pack's face for it, voiced;
+// under NSFW Heat a Crotch zone stands over the middle of the hand band, reached by Tab and Enter and by a pointer,
+// while Hand still takes its sides; a pack cached from before Heat was lowered brings no Crotch, nor does a rupture.
+for (const size of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+]) {
+  test(`Otome Hearth Home touch at ${size.width}x${size.height}: Cheek with its face, and Crotch only under NSFW Heat`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize(size);
+    const stub = createHomeStub({ heat: "explicit" });
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await stubRoutes(page, stub, []);
+    const root = await openHome(page);
+    await recordSpeech(page);
+    await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+    const zones = root.getByRole("group", { name: "Touch Ilvar Thorne" });
+    await expect(zones.getByRole("button")).toHaveCount(5);
+    expect(await zones.getByRole("button").evaluateAll((nodes) => nodes.map((node) => node.ariaLabel))).toEqual([
+      "Head",
+      "Cheek",
+      "Chest",
+      "Hand",
+      "Crotch",
+    ]);
+    const requests = apiRequests(page);
+    const bubble = root.locator(".of-home-bubble");
+    const figure = root.locator(".of-figure");
+    // A real pointer on his cheek (he breathes, so the zone never holds still for a locator click).
+    const cheek = (await zones.getByRole("button", { name: "Cheek" }).boundingBox())!;
+    await page.mouse.click(cheek.x + cheek.width / 2, cheek.y + cheek.height / 2);
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.cheek));
+    await expect(figure).toHaveAttribute("data-face", HIS_FACES.cheek);
+    await expect(root.getByRole("img", { name: "Ilvar Thorne, hurt" })).toBeVisible();
+    await expect.poll(async () => (await voiced(page)).at(-1)?.text).toBe(await bubble.textContent());
+    expect((await voiced(page)).at(-1)!.cacheKey).toMatch(new RegExp(`:tap:${ILVAR}:`, "u"));
+
+    // Tab from Hand reaches Crotch, and Enter touches it.
+    await zones.getByRole("button", { name: "Hand" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(zones.getByRole("button", { name: "Crotch" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.crotch));
+    await expect(figure).toHaveAttribute("data-face", HIS_FACES.crotch);
+    await page.screenshot({ path: testInfo.outputPath("touch-crotch.png") });
+    // A pointer in the middle of the hand band touches the crotch; one on its side touches his hand.
+    const hand = (await zones.getByRole("button", { name: "Hand" }).boundingBox())!;
+    await page.mouse.click(hand.x + hand.width / 2, hand.y + hand.height / 2);
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.crotch));
+    await page.mouse.click(hand.x + hand.width * 0.9, hand.y + hand.height / 2);
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.hand));
+    expect(requests).toEqual([]);
+
+    // A rupture: no warm lines, so no Crotch, and the others answer coldly.
+    stub.state.rupture = true;
+    await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Story" }).click();
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    await expect(zones.getByRole("button")).toHaveCount(4);
+    await expect(zones.getByRole("button", { name: "Crotch" })).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+  });
+}
+
+test("Otome Hearth Home touch: a pack cached from before Heat was lowered brings no Crotch in an SFW story", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub({ heat: "sfw", crotchLines: true });
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+  const zones = root.getByRole("group", { name: "Touch Ilvar Thorne" });
+  await expect(zones.getByRole("button")).toHaveCount(4);
+  await expect(zones.getByRole("button", { name: "Crotch" })).toHaveCount(0);
 });
 
 test("Otome Forge phone: a thread with typing, his sticker, her sticker and Close and remember", async ({
@@ -884,14 +1078,17 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   const yours = root.getByRole("group", { name: "Your stickers" });
   const his = root.getByRole("group", { name: "Ilvar Thorne’s stickers" });
   await expect(yours.getByRole("button")).toHaveCount(5);
-  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" }).locator("img")).toHaveAttribute(
+  await expect(yours.getByRole("button", { name: "Attach the Laughing sticker" }).locator("img")).toHaveAttribute(
     "src",
     HER_LAUGH,
   );
-  await expect(yours.getByRole("button", { name: "Send the Pouting sticker" })).toHaveAttribute("data-kind", "builtin");
+  await expect(yours.getByRole("button", { name: "Attach the Pouting sticker" })).toHaveAttribute(
+    "data-kind",
+    "builtin",
+  );
   await expect(his.getByRole("button")).toHaveCount(2);
-  await expect(his.getByRole("button", { name: "Send the Pensive sticker" })).toBeVisible();
-  await expect(root.getByRole("button", { name: "Send the Flustered sticker" })).toHaveCount(0);
+  await expect(his.getByRole("button", { name: "Attach the Pensive sticker" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Attach the Flustered sticker" })).toHaveCount(0);
   // 44 px targets (the Stickers button and Send too), and the panel stays on the stage.
   for (const target of [
     yours.getByRole("button").first(),
@@ -925,7 +1122,7 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
     document.addEventListener("mousedown", press);
     Object.assign(window, { iosPress: press });
   });
-  await yours.getByRole("button", { name: "Send the Laughing sticker" }).click();
+  await yours.getByRole("button", { name: "Attach the Laughing sticker" }).click();
   await page.evaluate(() => {
     document.removeEventListener(
       "mousedown",
@@ -933,25 +1130,43 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
     );
     document.querySelector<HTMLElement>("main")!.removeAttribute("tabindex");
   });
-  // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page.
+  // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page. It is attached to
+  // the message, not sent: nothing goes until Send, and then the words and the sticker go together as one message.
   await expect(box).toBeFocused();
-  await expect.poll(() => posts(stub, "/send").length).toBe(3);
-  expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "", sticker: "you:laugh" });
-  await expect(log.getByRole("img", { name: "Sticker: Laughing" }).first()).toHaveAttribute("src", HER_LAUGH);
   await expect(box).toHaveValue("Half a thought");
+  const attached = root.locator(".of-attached-sticker");
+  await expect(attached).toContainText("Sticker attached: Laughing");
+  await expect(attached.getByRole("img", { name: "Sticker: Laughing" })).toHaveAttribute("src", HER_LAUGH);
+  expect(posts(stub, "/send")).toHaveLength(2);
+  // Remove takes it off; picking again puts it back.
+  await attached.getByRole("button", { name: "Remove the sticker" }).click();
+  await expect(attached).toHaveCount(0);
+  await expect(box).toBeFocused();
+  await root.getByRole("button", { name: "Stickers" }).click();
+  await yours.getByRole("button", { name: "Attach the Laughing sticker" }).click();
+  await expect(attached).toContainText("Sticker attached: Laughing");
+  await root.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => posts(stub, "/send").length).toBe(3);
+  expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "Half a thought", sticker: "you:laugh" });
+  await expect(attached).toHaveCount(0);
+  await expect(box).toHaveValue("");
+  // One bubble holds both.
+  const both = log.getByRole("listitem").filter({ hasText: "Half a thought" }).last();
+  await expect(both.getByRole("img", { name: "Sticker: Laughing" })).toHaveAttribute("src", HER_LAUGH);
+  await box.fill("Half a thought");
   // By keyboard, once his reply has landed (the picker waits while he writes): it opens on its first sticker, and
   // Escape closes it and gives focus back.
   await expect(root.locator(".of-typing")).toHaveCount(0);
   await expect(root.getByRole("button", { name: "Stickers" })).toHaveAttribute("aria-disabled", "false");
   await root.getByRole("button", { name: "Stickers" }).focus();
   await page.keyboard.press("Enter");
-  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" })).toBeFocused();
+  await expect(yours.getByRole("button", { name: "Attach the Laughing sticker" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
   await expect(yours).toHaveCount(0);
   // Closing it from its button gives focus back to the button too, never to the page.
   await root.getByRole("button", { name: "Stickers" }).click();
-  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" })).toBeFocused();
+  await expect(yours.getByRole("button", { name: "Attach the Laughing sticker" })).toBeFocused();
   await root.getByRole("button", { name: "Stickers" }).click();
   await expect(yours).toHaveCount(0);
   await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
@@ -973,8 +1188,8 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await expect(box).toHaveValue("Half a thought");
   expect(posts(stub, "/send")).toHaveLength(4);
 
-  // Close and remember: the conversation becomes his memory, and affection is earned once. A close that failed says
-  // so, and the dialog opened again starts clean.
+  // Close and remember: the conversation becomes his memory, and affection is earned once. A close refused before it
+  // starts says so, and the dialog opened again starts clean.
   await expect(root.locator(".of-typing")).toHaveCount(0);
   stub.state.closeFailures = 1;
   await root.getByRole("button", { name: "Close and remember" }).click();
@@ -987,16 +1202,40 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await root.getByRole("button", { name: "Close and remember" }).click();
   await expect(dialog).toContainText("Ilvar Thorne");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
+  // 0.47.1: accepted, the player is back in Messages at once while the memory is written in the background.
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
   await dialog.getByRole("button", { name: "Close and remember" }).click();
+  await expect(dialog).toHaveCount(0);
+  const ilvarRow = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
+  await expect(ilvarRow).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  await expect(ilvarRow).toBeFocused();
+  // Opened meanwhile, his thread says so, and sending waits until it lands; Close does nothing.
+  await ilvarRow.click();
+  await expect(
+    root.getByRole("status").filter({ hasText: "Ilvar Thorne is remembering this conversation." }),
+  ).toBeVisible();
+  await expect(root.getByRole("button", { name: "Send", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await expect(root.getByRole("button", { name: "Close and remember" })).toHaveAttribute(
+    "title",
+    "Wait until this conversation is remembered.",
+  );
+  await root.getByRole("button", { name: "All messages" }).click();
+  await expect(ilvarRow).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  remember();
+  // The list reads itself again until it lands, then says once what it earned.
+  await expect(ilvarRow).toContainText("+5 affection");
+  await expect(ilvarRow).not.toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  expect(posts(stub, "/close")).toHaveLength(2); // The one refused, then the one that landed.
+  await page.screenshot({ path: testInfo.outputPath("05-remembered.png") });
+  await ilvarRow.click();
   await expect(log).toContainText("Barely.");
   await expect(log).not.toContainText("She wrote late; he admitted he had not slept.");
-  await expect(log).toContainText("+5 affection");
-  expect(posts(stub, "/close")).toHaveLength(2); // The one that failed, then the one that landed.
-  await page.screenshot({ path: testInfo.outputPath("05-remembered.png") });
 
-  // Back to the threads, focus on his row.
+  // Back to the threads, focus on his row; the affection was said once.
   await root.getByRole("button", { name: "All messages" }).click();
-  await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toBeFocused();
+  await expect(ilvarRow).toBeFocused();
+  await expect(ilvarRow).not.toContainText("+5 affection");
 
   // A thread opened from the list is still open after Settings and back, and its Back still leads to his row.
   await root
@@ -1063,6 +1302,214 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await expect(close).toHaveAttribute("aria-disabled", "true");
   await expect(close).toHaveAttribute("title", "There is nothing new to remember yet.");
   await expect(close).toHaveAccessibleDescription("There is nothing new to remember yet.");
+});
+
+test("Otome Forge phone: a close that fails in the background says why with Try again, focus stays on his row, and Home's affection follows the landing", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  stub.state.backgroundFailures = 2;
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  const row = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
+  await row.click();
+  await root.getByRole("button", { name: "Close and remember" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+  // Back in Messages; the summary failed, so the conversation is still open, with why and Try again under his row.
+  await expect(row).toBeFocused();
+  const failed = "This conversation wasn’t remembered, so it’s still open.";
+  const reason = root.locator(".of-threads").getByRole("alert").filter({ hasText: failed });
+  await expect(reason).toContainText(catalog["ui.otomeForge.errors.declined"]!);
+  // His thread says so too; its Try again goes back to Messages, as Close does, and focus to his row.
+  await row.click();
+  await expect(root.getByRole("alert").filter({ hasText: failed })).toBeVisible();
+  await root.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(row).toBeFocused();
+  expect(posts(stub, "/close")).toHaveLength(2);
+  // It failed again: Try again in the list, and focus stays on his row while it is remembered.
+  await expect(reason).toBeVisible();
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  await reason.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(row).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  await expect(reason).toHaveCount(0);
+  await expect(row).toBeFocused();
+  // Home before it lands: the affection it earned shows there once it does, with no visit to Messages.
+  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  remember();
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  // Messages still says once what it earned.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(row).toContainText("+5 affection");
+  expect(posts(stub, "/close")).toHaveLength(3);
+});
+
+test("Otome Forge phone: Home's affection follows each close that lands, while another is still remembered", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Cassian's thread holds an open conversation, and his close is remembered for the whole test.
+  const base = `/api/otome-forge/runs/${RUN}/phone`;
+  let cassianClosing = false;
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.path === `${base}/${CASSIAN}/close`) {
+      stub.calls.push(call);
+      cassianClosing = true;
+      return { status: 200, json: { remembering: true, start: 0 } };
+    }
+    if (call.path === `${base}/${CASSIAN}/seen`) return { status: 200, json: {} };
+    const response = await answer(call);
+    const json = response.json as Json;
+    const open = [
+      { id: "m-c1", who: "player", text: "Are you at the docks?", at: new Date(Date.now() - 120_000).toISOString() },
+      { id: "m-c2", who: "li", text: "Always.", at: new Date(Date.now() - 60_000).toISOString() },
+    ];
+    const closing = cassianClosing ? { closing: {} } : {};
+    if (call.path === base) {
+      const row = json.threads.find((thread: Json) => thread.li === CASSIAN);
+      Object.assign(row, { last: open.at(-1), ...closing });
+    }
+    if (call.path === `${base}/${CASSIAN}`) {
+      // His page, without what Ilvar's close says.
+      const { closing: _ilvars, remembered: _his, ...rest } = json;
+      response.json = {
+        ...rest,
+        messages: open.map((m) => ({ ...m, archived: false })),
+        activeCount: 2,
+        seenAt: open[1]!.at,
+        ...closing,
+      };
+    }
+    return response;
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  const threads = root.locator(".of-threads");
+  const closeFrom = async (name: RegExp) => {
+    await threads.getByRole("button", { name }).click();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect(threads.getByRole("button", { name })).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+  };
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  await closeFrom(/Ilvar Thorne/);
+  await closeFrom(/Cassian/);
+  expect(posts(stub, "/close")).toHaveLength(2);
+  // Home while both are remembered: Ilvar's lands, and his affection shows there while Cassian's is still remembered.
+  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  remember();
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(threads.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("+5 affection");
+  await expect(threads.getByRole("button", { name: /Cassian/ })).toContainText(catalog["ui.otomeForge.phone.closing"]!);
+});
+
+test("Otome Forge phone: a close sent from Home's Reply shows its affection on Home before Messages was ever read", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Messages' first read waits until the player is back Home and the close has landed.
+  let answerList = () => {};
+  const listHeld = new Promise<void>((done) => (answerList = done));
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}/phone`) await listHeld;
+    return answer(call);
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  try {
+    await root
+      .getByRole("article", { name: "A note from Ilvar Thorne" })
+      .getByRole("button", { name: "Reply" })
+      .click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect.poll(() => posts(stub, "/close").length).toBe(1);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // Home while nothing has read Messages yet: it lands, then the list answers with it landed.
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    remember();
+  } finally {
+    answerList();
+  }
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
+  await page.keyboard.press("Escape");
+  // Messages still says once what it earned.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toContainText("+5 affection");
+});
+
+test("Otome Forge phone: a list read already on its way when a close is accepted never stops Home following it", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // Messages' first read answers with the phone as it was when it was asked, once the close has been accepted.
+  const list = `/api/otome-forge/runs/${RUN}/phone`;
+  let reads = 0;
+  let answerList = () => {};
+  const listHeld = new Promise<void>((done) => (answerList = done));
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method !== "GET" || call.path !== list || ++reads > 1) return answer(call);
+    const before = await answer(call);
+    await listHeld;
+    return before;
+  };
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  let remember = () => {};
+  stub.state.closeHold = new Promise<void>((done) => (remember = done));
+  stub.state.landedLevel = 3;
+  try {
+    // Messages is left before its list answers, then his thread opens from Home's Reply.
+    await root.getByRole("button", { name: /Messages/ }).click();
+    await expect.poll(() => reads).toBe(1);
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    await root
+      .getByRole("article", { name: "A note from Ilvar Thorne" })
+      .getByRole("button", { name: "Reply" })
+      .click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    await root.getByRole("button", { name: "Close and remember" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close and remember" }).click();
+    await expect.poll(() => posts(stub, "/close").length).toBe(1);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    remember();
+  } finally {
+    // The read from before the close answers now, with no close in it.
+    answerList();
+  }
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  const picker = page.getByRole("dialog", { name: "Who’s home" });
+  await expect(picker.getByRole("button", { name: /Ilvar Thorne/ })).toContainText("Affection 3");
 });
 
 test("Otome Forge daily messages: the first heartbeat reads nothing again for an old message; a new one reads Home again", async ({
@@ -1180,15 +1627,16 @@ test("Otome Forge phone: his thread's header keeps Close beside his name on one 
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  // "You unlocked a new sticker" landing while his thread is open (the close reads the run again) sits below its
-  // header, so his name and Close stay in view.
+  // "You unlocked a new sticker" landing once the close is remembered (0.47.1: back in Messages, which reads the run
+  // again then) sits below the top bar, so its controls stay in view.
   await page.setViewportSize({ width: 320, height: 640 });
   stub.stickerState.unlock = true;
   await close.click();
   await dialog.getByRole("button", { name: "Close and remember" }).click();
+  await expect(root.locator(".of-threads")).toBeVisible();
   const toast = root.locator(".of-toasts--app .of-toast");
   await expect(toast).toContainText("You unlocked a new sticker · Ilvar Thorne");
-  const [toastBox, headBox] = await Promise.all([toast.boundingBox(), root.locator(".of-thread-head").boundingBox()]);
+  const [toastBox, headBox] = await Promise.all([toast.boundingBox(), root.locator(".of-topbar").boundingBox()]);
   expect(toastBox!.y).toBeGreaterThanOrEqual(headBox!.y + headBox!.height);
   await page.screenshot({ path: testInfo.outputPath("thread-head-sticker-notice.png") });
   expect(pageErrors).toEqual([]);
@@ -1273,6 +1721,76 @@ test("Otome Forge Home without images, at reduced motion, during a rupture: init
   expect(pageErrors).toEqual([]);
 });
 
+test("Otome Hearth Home: Your thoughts… wait for the next chapter, open to change, and Clear lets them go", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub({ images: false });
+  stub.state.thoughtsFailures = 1;
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+  const button = root.getByRole("button", { name: "Your thoughts…", exact: true });
+  await expect(button).toHaveAttribute("title", "Your thoughts…");
+  // It opens only once Home has answered, so waiting thoughts are never replaced unseen.
+  await expect(button).toHaveAttribute("aria-disabled", "false");
+  await expect(button.locator(".of-tab-dot")).toHaveCount(0);
+  // With nothing waiting it says only its own title, never that thoughts wait.
+  await expect(button).toHaveAccessibleDescription("Your thoughts…");
+
+  // The window asks about what happened lately; Enter starts a new line and sends nothing.
+  await button.click();
+  const sheet = page.getByRole("dialog", { name: "Your thoughts…" });
+  const field = sheet.getByRole("textbox", { name: "What are your thoughts on what happened lately?" });
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("");
+  await expect(sheet).toContainText(
+    "The next story chapter takes whatever you write here into account, then lets it go.",
+  );
+  await expect(sheet.getByRole("button", { name: "Clear" })).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: "Send" })).toHaveAttribute("aria-disabled", "true");
+  await field.pressSequentially("I want to look into the clock tower.");
+  await page.keyboard.press("Enter");
+  await field.pressSequentially("And I wish he would hug me.");
+  await expect(field).toHaveValue("I want to look into the clock tower.\nAnd I wish he would hug me.");
+  await expect(sheet).toContainText("64 / 1000");
+  expect(posts(stub, "/home/thoughts")).toHaveLength(0);
+
+  // The first Send fails: the window says so and keeps what was written.
+  await sheet.getByRole("button", { name: "Send" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Your thoughts were not saved.");
+  await expect(field).toHaveValue("I want to look into the clock tower.\nAnd I wish he would hug me.");
+  await sheet.getByRole("button", { name: "Send" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(button).toBeFocused();
+  expect(posts(stub, "/home/thoughts").at(-1)!.body).toMatchObject({
+    text: "I want to look into the clock tower.\nAnd I wish he would hug me.",
+  });
+  await expect(root.locator("[aria-live=polite]").filter({ hasText: "Saved for the next story chapter." })).toHaveCount(
+    1,
+  );
+  await expect(button.locator(".of-tab-dot")).toBeVisible();
+  await expect(button).toHaveAccessibleDescription("Waiting for the next story chapter");
+  await page.screenshot({ path: testInfo.outputPath("thoughts-waiting.png") });
+
+  // Until the next chapter uses them, the window opens with them, and Clear lets them go.
+  await button.click();
+  await expect(field).toHaveValue("I want to look into the clock tower.\nAnd I wish he would hug me.");
+  await sheet.getByRole("button", { name: "Clear" }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(posts(stub, "/home/thoughts").at(-1)!.body).toMatchObject({ text: "" });
+  await expect(button.locator(".of-tab-dot")).toHaveCount(0);
+  await expect(button).toHaveAccessibleDescription("Your thoughts…");
+  await button.click();
+  await expect(field).toHaveValue("");
+  await sheet.getByRole("button", { name: "Close" }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(posts(stub, "/home/thoughts")).toHaveLength(3);
+  expect(pageErrors).toEqual([]);
+});
+
 /**
  * Phone sizes from 360 to 430 px wide and 600 to 900 px tall. At 390 × 664 without images the nameplate once covered
  * two of his three tap pills, and the rail covered the edge of a tap zone beside it at common heights.
@@ -1310,9 +1828,13 @@ function homeLayout(root: Locator) {
     const named = (selector: string, name: (node: Element) => string) =>
       [...element.querySelectorAll(selector)].map((node) => ({ name: name(node), box: box(node) }));
     const label = (node: Element) => (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 24);
+    // #2152: the crotch zone sits over the middle of the hand band, so Hand is probed on its exposed inline end (its
+    // start may stop at the cell's edge, beside the rail).
+    const crotch = !!element.querySelector('.of-tap-zone[data-zone="crotch"]');
     const targets = [...element.querySelectorAll(".of-tap-zone, .of-tap-pill")].map((node) => {
       const rect = node.getBoundingClientRect();
-      const hit = scope.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      const across = crotch && node.matches('.of-tap-zone[data-zone="hand"]') ? 0.9 : 0.5;
+      const hit = scope.elementFromPoint(rect.x + rect.width * across, rect.y + rect.height / 2);
       return { name: label(node), box: box(node), hit: !!hit && node.contains(hit) };
     });
     return {
@@ -1340,7 +1862,8 @@ function homeLayout(root: Locator) {
           boxRight: box.right,
         };
       })(),
-      // M6's round Remind Me and Caring message share a row at the rail's foot: each counts as a button of its own.
+      // M6's round Remind Me and Caring message share a row at the rail's foot with Your thoughts… (#2127): each counts
+      // as a button of its own.
       rail: named(".of-home-rail > :not(.of-home-rail-row), .of-home-rail-row > *", (node) => `rail: ${label(node)}`),
       covers: [
         ...named(".of-note", () => "note"),
@@ -1375,23 +1898,41 @@ async function showCaringMessage(page: Page, root: Locator) {
   await expect(root.getByRole("button", { name: "Caring message" })).toBeVisible();
 }
 
-// #2087: the same sweep again with a Photo Shoot photo taped into the note.
-for (const [images, photo] of [
-  [true, false],
-  [false, false],
-  [true, true],
+// #2087: the same sweep again with a Photo Shoot photo taped into the note. #2152: and under NSFW Heat, with his
+// fifth zone (the crotch), over his art, under his initials and under an Engine card's avatar cameo.
+for (const [images, photo, nsfw, cameo] of [
+  [true, false, false, false],
+  [false, false, false, false],
+  [true, true, false, false],
+  [true, false, true, false],
+  [false, false, true, false],
+  [true, false, true, true],
 ] as const) {
-  for (const look of ["dark", "light"] as const) {
-    test(`Otome Forge Home at phone sizes (${images ? "painted" : "no images"}${photo ? ", a photo in the note" : ""}, ${look === "dark" ? "Midnight" : "Pearl"}): nothing covers a tap zone or pill`, async ({
+  for (const look of nsfw ? (["dark"] as const) : (["dark", "light"] as const)) {
+    test(`Otome Forge Home at phone sizes (${cameo ? "card avatar" : images ? "painted" : "no images"}${photo ? ", a photo in the note" : ""}${nsfw ? ", NSFW Heat" : ""}, ${look === "dark" ? "Midnight" : "Pearl"}): nothing covers a tap zone or pill`, async ({
       page,
     }) => {
       test.setTimeout(120_000);
       await page.emulateMedia({ colorScheme: look });
-      const stub = createHomeStub({ images, photo });
+      const stub = createHomeStub({ images, photo, heat: nsfw ? "explicit" : "sfw", cameo });
+      // Without images his lines are the catalog's, so the crotch needs a pack of his own.
+      if (nsfw && !images) {
+        const answer = stub.answer;
+        stub.answer = async (call) => {
+          const response = await answer(call);
+          if (/\/lis\/[^/]+\/lines$/u.test(call.path)) {
+            const pool = { morning: HIS_LINES.crotch, day: HIS_LINES.crotch, night: HIS_LINES.crotch };
+            (response.json as Json).tap = { crotch: pool };
+          }
+          return response;
+        };
+      }
       await stubRoutes(page, stub, []);
       const root = await openHome(page);
       await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
-      await expect(root.locator(images ? ".of-tap-zone" : ".of-tap-pill")).toHaveCount(3);
+      const count = nsfw ? 5 : 4;
+      const pills = !images || cameo;
+      await expect(root.locator(pills ? ".of-tap-pill" : ".of-tap-zone")).toHaveCount(count);
 
       await expect(root.getByRole("button", { name: "Remind Me" })).toBeVisible();
       await expect(root.getByRole("button", { name: "Caring message" })).toHaveCount(0);
@@ -1402,10 +1943,17 @@ for (const [images, photo] of [
           await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
           const layout = await homeLayout(root);
           const at = `${size.width}x${size.height}${caring ? " with Caring message" : ""}`;
-          expect(layout.targets, at).toHaveLength(3);
-          expect(layout.rail, at).toHaveLength(caring ? 6 : 5);
+          expect(layout.targets, at).toHaveLength(count);
+          // Four or five pills wrap to two rows at most (the medallion keeps room for two), never more.
+          if (pills) {
+            const rows = new Set(layout.targets.map((target) => Math.round(target.box.y))).size;
+            expect(rows, `pill rows at ${at}`).toBeLessThanOrEqual(2);
+          }
+          expect(layout.rail, at).toHaveLength(caring ? 7 : 6);
           expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
-            caring ? ["rail: Remind Me", "rail: Caring message"] : ["rail: Remind Me"],
+            caring
+              ? ["rail: Remind Me", "rail: Your thoughts…", "rail: Caring message"]
+              : ["rail: Remind Me", "rail: Your thoughts…"],
           );
           // He shows, art or medallion: on the real Engine's 360 x 600 stage his cell once kept 128 px while its
           // cqh read 0, and he shrank to nothing.
@@ -1503,13 +2051,174 @@ for (const cleanup of ["pending", "failed"] as const) {
     await expect(log.getByRole("img", { name: "Sticker: Tender" })).toBeVisible();
     // #2044: the picker offers her stickers and his, never his faces.
     await root.getByRole("button", { name: "Stickers" }).click();
-    await expect(root.getByRole("button", { name: "Send the Laughing sticker" })).toBeVisible();
-    await expect(root.getByRole("button", { name: "Send the Tender sticker" })).toHaveCount(0);
+    await expect(root.getByRole("button", { name: "Attach the Laughing sticker" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Attach the Tender sticker" })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`phone-original-sticker-${cleanup}.png`) });
     expect(posts(stub, "/send")).toHaveLength(0);
     expect(stub.calls.filter((call) => call.method === "POST" && call.path.includes("/art/"))).toHaveLength(0);
   });
 }
+
+test("Otome Hearth phone: his selfie shows in his message as a picture, or Paint until it is painted (#2504)", async ({
+  page,
+}, testInfo) => {
+  const stub = createHomeStub();
+  const painted = { state: "ready", at: new Date().toISOString(), url: PHOTO };
+  let paints = 0;
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (
+      call.method === "POST" &&
+      call.path === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}/messages/m-selfie-b/selfie`
+    ) {
+      stub.calls.push(call);
+      paints += 1;
+      return { status: 200, json: { art: painted } };
+    }
+    const response = await answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}`) {
+      // His reply carried [selfie: …] twice over: the server keeps the picture on the message, never the brackets.
+      const at = new Date().toISOString();
+      (response.json as Json).messages.push(
+        {
+          id: "m-selfie-a",
+          who: "li",
+          text: "Proof I left the lab.",
+          at,
+          selfie: { brief: "on the bridge", art: painted },
+        },
+        { id: "m-selfie-b", who: "li", text: "", at, selfie: { brief: "", ...(paints ? { art: painted } : {}) } },
+      );
+    }
+    return response;
+  };
+  await page.emulateMedia({ colorScheme: "dark" });
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
+  const pictures = log.getByRole("img", { name: "A selfie Ilvar Thorne sent you" });
+  await expect(pictures).toHaveCount(1);
+  await expect(pictures.first()).toHaveAttribute("src", PHOTO);
+  await expect(log).toContainText("Proof I left the lab.");
+  await expect(log).not.toContainText("[selfie");
+  // The one not painted yet offers Paint (Ask before painting is off, so the tap paints it), with its cost.
+  const paint = log.getByRole("button", { name: "Paint the selfie" });
+  await expect(paint).toBeVisible();
+  await expect(log).toContainText("1 image");
+  await page.screenshot({ path: testInfo.outputPath("phone-selfie.png") });
+  await paint.click();
+  await expect(pictures).toHaveCount(2);
+  await expect(paint).toHaveCount(0);
+  expect(posts(stub, "/messages/m-selfie-b/selfie")).toHaveLength(1);
+  await expect(log).not.toContainText("[selfie");
+});
+
+test("Otome Hearth phone: a selfie painted keeps the thread at its newest line, and one on an earlier page shows painted (#2504)", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  // A picture as large as a selfie's: its message grows once it loads.
+  const painted = { state: "ready", at: new Date().toISOString(), url: png(416, 608, [240, 200, 160]) };
+  const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  // Page 1 overflows the log and ends on his selfie, painting until `newest` turns ready; page 2 holds an older one,
+  // and one painting elsewhere (another tab's Paint, say) until `elsewhere` turns ready.
+  let newest: Json = { state: "pending", at: at(1) };
+  let older: Json | undefined;
+  let elsewhere: Json = { state: "pending", at: at(1) };
+  const chatter = Array.from({ length: 30 }, (_, n) => ({
+    id: `m-chat-${n}`,
+    who: n % 2 ? "li" : "player",
+    text: `Line ${n} about the clocks.`,
+    at: at(60 - n),
+  }));
+  const pageOf = (number: number, messages: Json[]) => ({
+    messages: messages.map((message) => ({ ...message, archived: false })),
+    page: number,
+    pages: 2,
+    from: number === 2 ? 0 : 2,
+    past: 0,
+    activeCount: 33,
+    busy: false,
+    retry: false,
+    sessions: [],
+    seenAt: at(0),
+  });
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.method === "POST" && call.path.endsWith(`/phone/${ILVAR}/messages/m-old-selfie/selfie`)) {
+      stub.calls.push(call);
+      older = painted;
+      return { status: 200, json: { art: painted } };
+    }
+    return answer(call);
+  };
+  await stubRoutes(page, stub, []);
+  // The thread's pages by number (the stub reads paths alone).
+  await page.route(
+    (url) => url.pathname === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}`,
+    (route) =>
+      route.fulfill({
+        json:
+          new URL(route.request().url()).searchParams.get("page") === "2"
+            ? pageOf(2, [
+                {
+                  id: "m-old-selfie",
+                  who: "li",
+                  text: "From last spring.",
+                  at: at(90),
+                  selfie: { brief: "", ...(older ? { art: older } : {}) },
+                },
+                {
+                  id: "m-far-selfie",
+                  who: "li",
+                  text: "From the summer.",
+                  at: at(80),
+                  selfie: { brief: "", art: elsewhere },
+                },
+              ])
+            : pageOf(1, [
+                ...chatter,
+                { id: "m-new-selfie", who: "li", text: "", at: at(1), selfie: { brief: "", art: newest } },
+              ]),
+      }),
+  );
+  const root = await openHome(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
+  const pictures = log.getByRole("img", { name: "A selfie Ilvar Thorne sent you" });
+  const fromBottom = () => log.evaluate((list) => list.scrollHeight - list.scrollTop - list.clientHeight);
+  await expect(log.getByRole("button", { name: "Painting the selfie…" })).toBeVisible();
+  await expect.poll(fromBottom).toBeLessThan(2);
+  // Painted, it grows from its button to the picture, and the log keeps to the newest line.
+  newest = painted;
+  await expect(pictures).toHaveCount(1, { timeout: 10_000 });
+  await expect.poll(() => pictures.evaluate((picture: HTMLImageElement) => picture.naturalWidth)).toBe(416);
+  await expect.poll(fromBottom).toBeLessThan(2);
+  // An earlier page's selfie, painted on a tap, shows as a picture, never Paint again.
+  await log.evaluate((list) => (list.scrollTop = 0));
+  await log.getByRole("button", { name: "Earlier messages" }).click();
+  await expect(log).toContainText("From last spring.");
+  // One painting elsewhere shows painted once its paint ends, with no tap: the earlier page is read again meanwhile.
+  await expect(log.getByRole("button", { name: "Painting the selfie…" })).toBeVisible();
+  elsewhere = painted;
+  await expect(pictures).toHaveCount(2, { timeout: 10_000 });
+  await expect(log.getByRole("button", { name: "Painting the selfie…" })).toHaveCount(0);
+  expect(posts(stub, "/messages/m-far-selfie/selfie")).toHaveLength(0);
+  await log.getByRole("button", { name: "Paint the selfie" }).click();
+  await expect(pictures).toHaveCount(3);
+  await expect(log.getByRole("button", { name: "Paint the selfie" })).toHaveCount(0);
+  expect(posts(stub, "/messages/m-old-selfie/selfie")).toHaveLength(1);
+});
 
 for (const outcome of ["ready", "uncut", "load-error"] as const) {
   test(`Otome Hearth Home expressions retain a clean neutral when cleanup is ${outcome}`, async ({
@@ -1558,14 +2267,16 @@ for (const outcome of ["ready", "uncut", "load-error"] as const) {
     await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
     await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("home-expression-pending-neutral.png") });
-    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
     const reads = () => stub.calls.filter((call) => call.method === "GET" && call.path.endsWith("/home")).length;
     const before = reads();
     const completedResponse = page.waitForResponse(async (response) => {
       if (!new URL(response.url()).pathname.endsWith("/home") || response.status() !== 200) return false;
       return (await response.json()).faces.tender.cutoutState !== "pending";
     });
+    // The cut-out finishes before the clock moves on: jumping 60 s fires Home's waiting poll at once, and a poll answered
+    // "pending" before the change left the 10.5 s below too short for another, so the wait never ended (#2349 CI).
     phase = outcome === "uncut" ? "uncut" : "ready";
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
     await page.clock.runFor(10_500);
     await (await completedResponse).finished();
     let drained = 0;
@@ -1585,7 +2296,15 @@ for (const outcome of ["ready", "uncut", "load-error"] as const) {
     const completed = reads();
     await page.clock.runFor(20_000);
     expect(reads(), "ready or unavailable cleanup stops Home polling").toBe(completed);
-    expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+    expect(
+      stub.calls.filter(
+        (call) =>
+          call.method === "POST" &&
+          !call.path.endsWith("/index/opened") &&
+          // 0.22.7: the accent pick saves once (POST …/accent) and is not what this watches.
+          !call.path.endsWith("/accent"),
+      ),
+    ).toHaveLength(0);
     expect(spoken).toEqual([]);
   });
 }
@@ -1686,7 +2405,8 @@ for (const images of [true, false]) {
     await page.keyboard.press("ArrowRight");
     await expect(root.locator(".of-home-noticed .of-noticed")).toContainText(LONG_NOTICED, { timeout: 15_000 });
 
-    // M6's rail: Remind Me always, and Caring message beside it on a day the period tracker marks.
+    // M6's rail: Remind Me and Your thoughts… (#2127) always, and Caring message beside them on a day the period tracker
+    // marks.
     await expect(root.getByRole("button", { name: "Remind Me" })).toBeVisible();
     for (const caring of [false, true]) {
       if (caring) await showCaringMessage(page, root);
@@ -1696,9 +2416,11 @@ for (const images of [true, false]) {
         const layout = await homeLayout(root);
         const at = `${size.width}x${size.height}${caring ? " with Caring message" : ""}`;
         expect(layout.noticed, at).toHaveLength(1);
-        expect(layout.rail, at).toHaveLength(caring ? 6 : 5);
+        expect(layout.rail, at).toHaveLength(caring ? 7 : 6);
         expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
-          caring ? ["rail: Remind Me", "rail: Caring message"] : ["rail: Remind Me"],
+          caring
+            ? ["rail: Remind Me", "rail: Your thoughts…", "rail: Caring message"]
+            : ["rail: Remind Me", "rail: Your thoughts…"],
         );
         expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
         const [line] = layout.noticed;

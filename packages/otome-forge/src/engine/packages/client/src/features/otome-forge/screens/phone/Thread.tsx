@@ -7,29 +7,59 @@
 // busy and reports `busy` in the history, polled until it clears). Each message carries its own id, so the server
 // never saves it twice. A failed send never goes again by itself: the thread is read back, the words return to the
 // box when the server never saved them, and "Ask again" appears when it saved them but no reply came.
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+// The group chat (#2154) is this thread without `li`: "Everyone" with its members' portraits and names in the header,
+// each bubble in its speaker's accent with their name when the speaker changes and their portrait on the last of a run,
+// every sticker she has (#2477: her five and, with images on, each love interest's and friend's painted ones), no
+// quote, and Close and remember for everyone in it (no affection).
+// #2156: his invitation to clear the air (PhoneMessage.invite) shows under his message with Accept and Decline while it
+// waits (POST .../invite), then what became of it; Accept opens the scene that clears it in the reader (#2303,
+// onOpenScene), and the accepted card keeps a way back to it. #2424: his invitation on a date of his choosing shows the
+// same way; its Accept opens the date's looks step (onOpenDate, Dates' DateNight), which accepts it once the date is
+// planned, and the accepted card opens that date. When her message hurt someone so much that it opened his grievance
+// with her (the send's `held`), the thread says so: he needs space until she makes it right in Routes.
+// A picked sticker is attached to the message box (shown above it, with Remove), not sent: Send sends it with the words
+// in the box, or alone, as one message; picking another replaces it. A failed send that was never saved gives it back.
+// 0.47.1: once a close is accepted, the thread goes back to Messages (onBack) while the memory is written in the
+// background. Opened again meanwhile, it says the conversation is being remembered, and sending waits until it lands;
+// a close that failed shows why, with Try again (CloseRetry).
+// #2504: his selfie (PhoneMessage.selfie) shows inside his message once painted; until then it says it is painting, or
+// offers Paint as a hangout's memento does (PaintOnTap), and the thread is read again while one paints.
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookHeart, ChevronLeft, Heart, RotateCcw, SendHorizontal, X } from "lucide-react";
+import { BookHeart, ChevronLeft, Heart, HeartHandshake, RotateCcw, SendHorizontal, X } from "lucide-react";
 import { useOtomeApi } from "../../api";
-import { Avatar } from "../../components/Avatar";
+import { Avatar, AvatarCluster } from "../../components/Avatar";
+import { CostHint } from "../../components/CostHint";
+import { PaintButton, usePaintOnTap } from "../../components/PaintOnTap";
+import { phoneHapticKey, useOtomeHaptics } from "../../hooks/use-otome-haptics";
+import { storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
 import { typingDelay } from "../../lib/typing-delay";
 import { useOtomeProps } from "../../props";
 import type {
+  ImageSettings,
+  LiId,
   PhoneCloseResult,
   PhoneHistoryPage,
   PhoneListView,
   PhoneMessage,
   PhoneSendResult,
   PhoneSession,
+  RunFriendView,
   RunLiView,
   RunView,
 } from "../../shared/api-types";
 import { isFace } from "../../shared/faces";
+import { hapticsOn } from "../../shared/haptics";
+import { GROUP_THREAD } from "../../shared/home";
+import type { DateOpen } from "../dates/DateNight";
+import type { HangoutInvite } from "../album/Hangouts";
+import { playQueryKey } from "../dates/DatesHub";
 import { homeQueryKey } from "../home/HomeScreen";
-import { CloseAndRemember } from "./CloseAndRemember";
+import { CloseAndRemember, CloseRetry, closeSent } from "./CloseAndRemember";
+import { RemoteControl } from "./RemoteControl";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 import { Sticker, StickerArt, StickerPicker, stickerLabel, useStickers, type Stickers } from "./StickerPicker";
 import { messageTime } from "./ThreadList";
@@ -47,6 +77,10 @@ type SendBody = { text: string; quote?: string; sticker?: string; id: string } |
 
 /** A message id the server accepts as the client's own (S/phone/chat.ts MESSAGE_ID). */
 const messageId = () => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
+
+/** #2504: a selfie on the page is still painting, so the page is read again until it is not. */
+const selfiePainting = (page: PhoneHistoryPage | undefined) =>
+  !!page?.messages.some((row) => row.selfie?.art?.state === "pending");
 
 /** Rows by id, in first-seen order; a later copy of a row replaces its fields. */
 function mergeRows(...lists: Row[][]): Row[] {
@@ -71,42 +105,72 @@ interface Incoming {
 
 interface ThreadProps {
   runKey: string;
-  /** The run, for its stickers. */
-  view: Pick<RunView, "world" | "stickers">;
-  li: RunLiView;
+  /** The run, for its stickers and (in the group chat) who sent each message. */
+  view: Pick<RunView, "world" | "stickers" | "lis" | "ended" | "friends">;
+  /** His thread (#2458: or one of her friends'); absent, the group chat (#2154). */
+  li?: RunLiView | RunFriendView;
   quote?: string;
   /** Opened from the thread list: focus moves to the heading (a screen change already does). */
   focusHeading: boolean;
   onBack: () => void;
   /** The quote still waiting for her next message, or null once it went with one or she removed it. */
   onQuoteChange: (quote: string | null) => void;
+  /** #2156, #2303: opens the scene her acceptance of his invitation to clear the air registered. */
+  onOpenScene?: (key: string) => void;
+  /** #2424: opens his date invitation's looks step, or the date it opened. */
+  onOpenDate?: (open: DateOpen) => void;
+  /** #2458: a friend's invitation to hang out: Album → Hangouts plans it with them. */
+  onOpenHangout?: (invite: HangoutInvite) => void;
 }
 
-export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, onBack, onQuoteChange }: ThreadProps) {
+export function Thread({
+  runKey,
+  view,
+  li,
+  quote: initialQuote,
+  focusHeading,
+  onBack,
+  onQuoteChange,
+  onOpenScene,
+  onOpenDate,
+  onOpenHangout,
+}: ThreadProps) {
   const { t } = useTranslation();
-  const stickers = useStickers(view, li);
+  // #2477: the group chat offers every sticker she has.
+  const stickers = useStickers(view, li, { group: !li });
+  const haptics = useOtomeHaptics();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
   const { localization, timeZone } = useOtomeProps();
-  const key = threadQueryKey(runKey, li.id);
-  const path = phonePath(runKey, li.id);
-  const threadKey = `${runKey} ${li.id}`;
-  const accent = accentOf(li);
+  const id = li?.id ?? GROUP_THREAD;
+  const key = threadQueryKey(runKey, id);
+  const path = phonePath(runKey, id);
+  const threadKey = `${runKey} ${id}`;
+  const accent = li ? accentOf(li) : "var(--of-rose)";
+  const title = li ? li.name : t("ui.otomeForge.phone.groupName");
 
   const fetchPage = (page: number) => otome.get<PhoneHistoryPage>(path, { page });
   // Read again whenever the thread opens: a reply that landed after the player left (this page wrote nothing then) is
-  // in the server's page, and so is `busy` while it is still being written, which polls until it clears.
+  // in the server's page, and so is `busy` while it is still being written, or `closing` while it is remembered, which
+  // poll until they clear.
   const latest = useQuery({
     queryKey: key,
     queryFn: () => fetchPage(1),
     refetchOnMount: "always",
-    refetchInterval: (query) => (query.state.data?.busy ? BUSY_POLL_MS : false),
+    refetchInterval: (query) =>
+      query.state.data?.busy ||
+      (query.state.data?.closing && !query.state.data.closing.error) ||
+      selfiePainting(query.state.data)
+        ? BUSY_POLL_MS
+        : false,
   });
 
   const [olderPages, setOlderPages] = useState<PhoneHistoryPage[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [quote, setQuote] = useState<string | null>(initialQuote?.trim() || null);
+  /** The sticker attached to the message box, sent with its words on Send. */
+  const [attached, setAttached] = useState<string | null>(null);
   // The phone keeps the quote while it waits, so the thread opened again (after Settings) never brings back one spent.
   useEffect(() => {
     onQuoteChange(quote);
@@ -117,9 +181,13 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
   const [outgoing, setOutgoing] = useState<{ local: PhoneMessage | null; started: number } | null>(null);
   const [incoming, setIncoming] = useState<Incoming | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [closedGrant, setClosedGrant] = useState(0);
+  /** #2424: those whose grievance with her the last reply opened. */
+  const [hurt, setHurt] = useState<LiId[]>([]);
   const [announce, setAnnounce] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
+  /** Who sent one of their messages: him, or in the group chat its speaker (unknown when it names none). */
+  const speakerOf = (row: PhoneMessage) => li ?? view.lis.find((entry) => entry.id === row.li);
+  const nameOf = (row: PhoneMessage) => speakerOf(row)?.name ?? t("ui.otomeForge.phone.groupSomeone");
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLOListElement>(null);
   const stick = useRef(true);
@@ -148,18 +216,20 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
   const sessionEnds = new Map<number, PhoneSession>(
     sessions.map((session) => [session.start + session.count - 1, session]),
   );
-  const newestSession = sessions.at(-1);
 
   const waiting = !!outgoing && !incoming;
   const revealing = !!incoming && incoming.shown < incoming.his.length;
   const remoteBusy = !outgoing && latest.data?.busy === true;
   const typing = waiting || revealing || remoteBusy;
   const busy = !!outgoing || remoteBusy;
-  const canSend = !busy && draft.trim().length > 0;
+  /** 0.47.1: the open conversation is being remembered in the background; a close that failed shows its error. */
+  const closing = latest.data?.closing;
+  const rememberingNow = !!closing && !closing.error;
+  const canSend = !busy && !rememberingNow && (draft.trim().length > 0 || !!attached);
 
-  /** `fromDraft`: the box's own words are sent (a sticker leaves them where they are). */
+  /** `fromDraft`: the box's own words (and the sticker attached to it) are sent. */
   const send = async (body: SendBody, fromDraft = false) => {
-    if (busy || sending.has(threadKey)) return;
+    if (busy || rememberingNow || sending.has(threadKey)) return;
     sending.add(threadKey);
     const started = Date.now();
     const before = new Set(messages.map((row) => row.id));
@@ -177,15 +247,28 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
     stick.current = true;
     setOutgoing({ local, started });
     setError(null);
-    setClosedGrant(0);
-    setAnnounce(t("ui.otomeForge.phone.typing", { name: li.name }));
+    setHurt([]);
+    setAnnounce(li ? t("ui.otomeForge.phone.typing", { name: li.name }) : t("ui.otomeForge.phone.groupTyping"));
     if (local) {
-      if (fromDraft) setDraft("");
+      if (fromDraft) {
+        setDraft("");
+        setAttached(null);
+      }
       setQuote(null);
     }
     try {
-      const result = await otome.post<PhoneSendResult>(`${path}/send`, body);
+      // 0.34.0: while he holds the remote of her toys, his reply may drive them (the minutes he still has it).
+      const held = li && haptics && hapticsOn(view.world) ? haptics.remoteMinutes(li.id) : 0;
+      const result = await otome.post<PhoneSendResult>(`${path}/send`, held ? { ...body, remote: held } : body);
       const rows = Array.isArray(result.messages) ? result.messages : [];
+      const heldNow = Array.isArray(result.held) ? result.held : [];
+      setHurt(heldNow);
+      // A hurt costs affection, which the run view shows; one that opened a grievance shows in Routes and Dates too.
+      if (result.hurt?.length || heldNow.length) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+      if (heldNow.length) {
+        void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+        void queryClient.invalidateQueries({ queryKey: playQueryKey(runKey) });
+      }
       setIncoming({
         mine: rows.filter((row) => row.who === "player"),
         his: rows.filter((row) => row.who === "li" && !before.has(row.id)),
@@ -202,8 +285,9 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
         // Unknown: keep her words.
       }
       if (local && !saved) {
-        // A sticker has no words, and a newer draft is never overwritten.
+        // A newer draft, or a sticker attached since, is never overwritten.
         setDraft((current) => current || local.text);
+        if (local.sticker) setAttached((current) => current ?? local.sticker ?? null);
         if (local.quote) setQuote((current) => current ?? local.quote ?? null);
       }
       setOutgoing(null);
@@ -214,7 +298,8 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
     }
   };
 
-  // His messages appear one by one, each after its typing delay; then the thread keeps them.
+  // His messages appear one by one, each after its typing delay; then the thread keeps them. A message that drives her
+  // toys (0.34.0, while he holds the remote) plays as it appears, and loops until his next cue or Stop.
   useEffect(() => {
     if (!incoming) return;
     if (incoming.shown < incoming.his.length) {
@@ -223,12 +308,20 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
       const timer = setTimeout(
         () => {
           setIncoming((current) => (current === incoming ? { ...current, shown: current.shown + 1 } : current));
+          if (li && next.haptic?.length && haptics?.remoteMinutes(li.id)) {
+            haptics.play(phoneHapticKey(li.id, next.id), next.haptic);
+          }
           setAnnounce(
             next.text.trim()
-              ? t("ui.otomeForge.phone.said", { name: li.name, text: next.text })
+              ? t("ui.otomeForge.phone.said", { name: nameOf(next), text: next.text })
               : next.sticker
-                ? t("ui.otomeForge.phone.saidSticker", { name: li.name, face: stickerLabel(t, stickers, next.sticker) })
-                : "",
+                ? t("ui.otomeForge.phone.saidSticker", {
+                    name: nameOf(next),
+                    face: stickerLabel(t, stickers, next.sticker),
+                  })
+                : next.selfie
+                  ? t("ui.otomeForge.phone.saidSelfie", { name: nameOf(next) })
+                  : "",
           );
         },
         typingDelay(next.text, waited),
@@ -267,13 +360,26 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
       .post<Record<string, never>>(`${path}/seen`, { last: lastHis })
       .then(() => {
         queryClient.setQueryData<PhoneListView>(phoneQueryKey(runKey), (list) =>
-          list ? { threads: list.threads.map((row) => (row.li === li.id ? { ...row, unread: 0 } : row)) } : list,
+          list
+            ? {
+                ...list,
+                threads: list.threads.map((row) => (row.li === id ? { ...row, unread: 0 } : row)),
+                group: list.group && !li ? { ...list.group, unread: 0 } : list.group,
+              }
+            : list,
         );
         void queryClient.invalidateQueries({ queryKey: homeQueryKey(runKey) });
       })
-      .catch((failure: unknown) => console.warn("Otome Forge could not mark a thread as read", failure));
-  }, [lastHis, li.id, otome, path, queryClient, runKey]);
+      .catch((failure: unknown) => console.warn("Otome Hearth could not mark a thread as read", failure));
+    // `li` changes only with `id` (PhoneScreen keys the thread by it).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastHis, id, otome, path, queryClient, runKey]);
 
+  /** The log at its newest line, while the player is there. */
+  const keepNewest = () => {
+    const element = log.current;
+    if (element && stick.current) element.scrollTop = element.scrollHeight;
+  };
   // The log stays at its newest line while the player is there, and keeps its place when earlier messages load.
   useLayoutEffect(() => {
     const element = log.current;
@@ -281,9 +387,7 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
     if (prepend.current) {
       element.scrollTop = prepend.current.top + element.scrollHeight - prepend.current.height;
       prepend.current = null;
-    } else if (stick.current) {
-      element.scrollTop = element.scrollHeight;
-    }
+    } else keepNewest();
   }, [messages.length, typing, sessions.length, latest.isPending]);
 
   // Pages count from the newest message, so every new message moves every page's bounds. Once the newest page has
@@ -291,12 +395,13 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
   // newest page would drop out of view. If that read fails they are let go (Earlier messages loads them again).
   const latestFrom = latest.data?.from;
   const loadedFrom = useRef(latestFrom);
+  const readOlder = () => Promise.all(olderPages.map((older) => fetchPage(older.page)));
   useEffect(() => {
     if (latestFrom === undefined || loadedFrom.current === latestFrom) return;
     loadedFrom.current = latestFrom;
     if (!olderPages.length) return;
     let live = true;
-    Promise.all(olderPages.map((older) => fetchPage(older.page))).then(
+    readOlder().then(
       (fresh) => live && setOlderPages(fresh),
       () => live && setOlderPages([]),
     );
@@ -306,6 +411,25 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
     // Only when the newest page moves; the pages loaded are read as they are then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestFrom]);
+  // #2504: an earlier page's selfie that is still painting (a paint started in another tab, say) shows painted only
+  // once that page is read again: the pages loaded are, every BUSY_POLL_MS, until none of their selfies paints. A read
+  // that fails tries again.
+  useEffect(() => {
+    if (!olderPages.some(selfiePainting)) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      readOlder().then(
+        (fresh) => live && setOlderPages(fresh),
+        () => live && setOlderPages((current) => [...current]),
+      );
+    }, BUSY_POLL_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+    // Each read sets the pages, which arms the next one while they still hold a selfie painting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [olderPages]);
 
   const oldest = pages[0];
   const hasOlder = !!oldest && oldest.page < oldest.pages;
@@ -326,37 +450,28 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
 
   const submit = () => {
     if (!canSend) return;
-    void send({ text: draft.trim(), id: messageId(), ...(quote ? { quote } : {}) }, true);
+    void send(
+      {
+        text: draft.trim(),
+        id: messageId(),
+        ...(attached ? { sticker: attached } : {}),
+        ...(quote ? { quote } : {}),
+      },
+      true,
+    );
   };
 
-  const closed = (result: PhoneCloseResult) => {
-    // Shown at once as the newest closed conversation; the server's page follows.
-    queryClient.setQueryData<PhoneHistoryPage>(key, (page) => {
-      if (!page || page.activeCount === 0) return page;
-      const end = page.from + page.messages.length;
-      const session: PhoneSession = {
-        start: end - page.activeCount,
-        count: page.activeCount,
-        memory: result.memory,
-        closedAt: new Date().toISOString(),
-      };
-      return {
-        ...page,
-        messages: page.messages.map((row) => ({ ...row, archived: true })),
-        sessions: [...page.sessions, session],
-        past: page.past + 1,
-        activeCount: 0,
-        retry: false,
-      };
-    });
-    setClosedGrant(result.grants.reduce((sum, grant) => sum + (grant.affection ?? 0), 0));
-    void queryClient.invalidateQueries({ queryKey: key });
-    void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
-    void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+  // 0.47.1: accepted, the memory is written in the background, and the player is back in Messages at once.
+  const closed = async (result: PhoneCloseResult) => {
+    await closeSent(queryClient, runKey, id, result);
+    onBack();
   };
 
-  const askAgain = latest.data?.retry === true && !busy && !incoming;
+  const askAgain = latest.data?.retry === true && !busy && !rememberingNow && !incoming && !view.ended;
   const activeCount = latest.data?.activeCount ?? 0;
+  // The group chat's members now, as its page names them, and their names for the header and the log.
+  const members = (latest.data?.members ?? []).flatMap((member) => view.lis.filter((entry) => entry.id === member));
+  const memberNames = members.map((member) => member.name).join(", ");
 
   return (
     <div className="of-thread" style={{ "--of-li-accent": accent } as CSSProperties}>
@@ -370,16 +485,49 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
         >
           <ChevronLeft className="of-back-icon" size={20} strokeWidth={2.1} aria-hidden="true" />
         </button>
-        <Avatar name={li.name} url={li.portrait} accent={accent} size={36} />
-        <h1 ref={heading} className="of-thread-title" tabIndex={-1}>
-          {li.name}
-        </h1>
-        <CloseAndRemember
-          runKey={runKey}
-          li={li}
-          blocked={busy || incoming ? "waiting" : activeCount === 0 ? "empty" : null}
-          onClosed={closed}
-        />
+        {li ? (
+          <>
+            <Avatar name={li.name} url={li.portrait} accent={accent} size={36} />
+            <h1 ref={heading} className="of-thread-title" tabIndex={-1}>
+              {li.name}
+            </h1>
+          </>
+        ) : (
+          <>
+            <AvatarCluster
+              people={members.map((member) => ({ name: member.name, url: member.portrait, accent: accentOf(member) }))}
+              size={40}
+            />
+            <div className="of-thread-titles">
+              <h1 ref={heading} className="of-thread-title" tabIndex={-1}>
+                {title}
+              </h1>
+              {memberNames ? (
+                <p className="of-thread-subtitle">{t("ui.otomeForge.phone.groupMembers", { names: memberNames })}</p>
+              ) : null}
+            </div>
+          </>
+        )}
+        {/* The toys' remote is a love interest's alone (#2458: never a friend's). */}
+        {li && haptics && hapticsOn(view.world) && view.lis.some((entry) => entry.id === li.id) ? (
+          <RemoteControl li={li as RunLiView} />
+        ) : null}
+        {/* #2459: an ended story's Messages only open to read. */}
+        {view.ended ? null : (
+          <CloseAndRemember
+            path={path}
+            text={
+              li
+                ? t("ui.otomeForge.phone.closeText", { name: li.name })
+                : t("ui.otomeForge.phone.groupCloseText", { names: memberNames })
+            }
+            waitText={
+              li ? t("ui.otomeForge.phone.closeWait", { name: li.name }) : t("ui.otomeForge.phone.groupCloseWait")
+            }
+            blocked={busy || incoming ? "waiting" : rememberingNow ? "remembering" : activeCount === 0 ? "empty" : null}
+            onClosed={closed}
+          />
+        )}
       </header>
 
       {latest.isError && !latest.data ? (
@@ -395,7 +543,11 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
       <ol
         ref={log}
         className="of-thread-log"
-        aria-label={t("ui.otomeForge.phone.messagesWith", { name: li.name })}
+        aria-label={
+          li
+            ? t("ui.otomeForge.phone.messagesWith", { name: li.name })
+            : t("ui.otomeForge.phone.groupMessagesWith", { names: memberNames })
+        }
         aria-busy={latest.isPending}
         onScroll={(event) => {
           const element = event.currentTarget;
@@ -420,35 +572,73 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
             {t("ui.otomeForge.phone.loading")}
           </li>
         ) : messages.length === 0 && !typing ? (
-          <li className="of-thread-empty">{t("ui.otomeForge.phone.startHint", { name: li.name })}</li>
+          <li className="of-thread-empty">
+            {li ? t("ui.otomeForge.phone.startHint", { name: li.name }) : t("ui.otomeForge.phone.groupStartHint")}
+          </li>
         ) : null}
         {messages.map((row, at) => {
           const next = messages[at + 1];
+          const before = messages[at - 1];
           const index = indexOf.get(row.id);
           const session = index === undefined ? undefined : sessionEnds.get(index);
+          // A run is one sender's messages in a row (in the group chat, one speaker's), and never crosses a Close and
+          // remember divider: the row that ends a session closes its run, and the row after it starts one (Dottore, #2168).
+          const same = (other: PhoneMessage | undefined) => !!other && other.who === row.who && other.li === row.li;
+          const endsSession = (other: PhoneMessage | undefined) =>
+            !!other && sessionEnds.has(indexOf.get(other.id) ?? -1);
+          const joinsNext = !session && same(next);
+          const joinsBefore = !endsSession(before) && same(before);
           return (
             <Fragment key={row.id}>
               <Bubble
                 row={row}
-                li={li}
+                li={speakerOf(row)}
+                name={nameOf(row)}
                 stickers={stickers}
                 pending={!incoming && outgoing?.local?.id === row.id}
-                time={!next || next.who !== row.who ? messageTime(row.at, localization.locale, timeZone) : ""}
+                time={!joinsNext ? messageTime(row.at, localization.locale, timeZone) : ""}
+                group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
+                selfie={
+                  li && row.selfie ? (
+                    <Selfie
+                      runKey={runKey}
+                      li={li}
+                      row={row}
+                      images={view.world.images}
+                      ended={!!view.ended}
+                      // #2504: its picture grows the message once it loads, so the log keeps to its newest line.
+                      onShown={keepNewest}
+                      // A selfie may be on an earlier page, which only a read of those pages shows painted.
+                      onPainted={() => {
+                        void queryClient.invalidateQueries({ queryKey: key });
+                        if (olderPages.length) void readOlder().then(setOlderPages, () => undefined);
+                      }}
+                    />
+                  ) : null
+                }
               />
+              {li && row.invite && row.who === "li" ? (
+                <InviteCard
+                  runKey={runKey}
+                  li={li}
+                  row={row}
+                  ended={!!view.ended}
+                  onOpenScene={onOpenScene}
+                  onOpenDate={onOpenDate}
+                  {...(onOpenHangout ? { onOpenHangout } : {})}
+                />
+              ) : null}
               {session ? (
                 <li className="of-thread-divider">
                   <p className="of-thread-divider-title">
                     <BookHeart size={13} strokeWidth={2} aria-hidden="true" />
-                    {t("ui.otomeForge.phone.remembered", { name: session.name || li.name })}
+                    {li
+                      ? t("ui.otomeForge.phone.remembered", { name: session.name || li.name })
+                      : t("ui.otomeForge.phone.groupRemembered")}
                   </p>
                   {session.memory.quote ? (
                     <p className="of-memory-quote">
                       {t("ui.otomeForge.home.noteText", { text: session.memory.quote })}
-                    </p>
-                  ) : null}
-                  {closedGrant > 0 && session === newestSession ? (
-                    <p className="of-badge of-badge--soft" role="status">
-                      {t("ui.otomeForge.phone.affection", { amount: closedGrant })}
                     </p>
                   ) : null}
                 </li>
@@ -456,12 +646,24 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
             </Fragment>
           );
         })}
-        {typing ? <TypingIndicator /> : null}
+        {typing ? <TypingIndicator group={!li} /> : null}
       </ol>
 
+      {rememberingNow && !view.ended ? (
+        <p className="of-notice of-reader-notice" role="status">
+          {li
+            ? t("ui.otomeForge.phone.rememberingNote", { name: li.name })
+            : t("ui.otomeForge.phone.groupRememberingNote")}
+        </p>
+      ) : closing?.error && !view.ended ? (
+        // Accepted again: back to Messages, as a close from the dialog is.
+        <CloseRetry runKey={runKey} id={id} error={closing.error} onRetried={onBack} />
+      ) : null}
       {askAgain ? (
         <div className="of-notice of-reader-notice" role="status">
-          <span>{t("ui.otomeForge.phone.noAnswer", { name: li.name })}</span>
+          <span>
+            {li ? t("ui.otomeForge.phone.noAnswer", { name: li.name }) : t("ui.otomeForge.phone.groupNoAnswer")}
+          </span>
           <button type="button" className="of-button of-button--text" onClick={() => void send({ retry: true })}>
             <RotateCcw size={14} strokeWidth={2.2} aria-hidden="true" />
             {t("ui.otomeForge.phone.askAgain")}
@@ -473,70 +675,112 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
           {error}
         </p>
       ) : null}
-      <form
-        className="of-composer of-glass of-glass--strong"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        {quote ? (
-          <div className="of-quote-chip">
-            <span className="of-quote-text">
-              <span className="of-quote-label">{t("ui.otomeForge.phone.replyingTo", { name: li.name })}</span>
-              <q>{quote}</q>
-            </span>
-            <button
-              type="button"
-              className="of-icon-button"
-              aria-label={t("ui.otomeForge.phone.removeQuote")}
-              title={t("ui.otomeForge.phone.removeQuote")}
-              onClick={() => {
-                setQuote(null);
+      {hurt.map((held) => (
+        <p key={held} className="of-notice of-reader-notice" role="status">
+          {t("ui.otomeForge.phone.hurtHeld", {
+            name: [...view.lis, ...(view.friends ?? [])].find((entry) => entry.id === held)?.name ?? title,
+          })}
+        </p>
+      ))}
+      {view.ended ? (
+        <p className="of-hint of-composer of-glass">{t("ui.otomeForge.ending.messagesClosed")}</p>
+      ) : (
+        <form
+          className="of-composer of-glass of-glass--strong"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          {quote ? (
+            <div className="of-quote-chip">
+              <span className="of-quote-text">
+                <span className="of-quote-label">{t("ui.otomeForge.phone.replyingTo", { name: title })}</span>
+                <q>{quote}</q>
+              </span>
+              <button
+                type="button"
+                className="of-icon-button"
+                aria-label={t("ui.otomeForge.phone.removeQuote")}
+                title={t("ui.otomeForge.phone.removeQuote")}
+                onClick={() => {
+                  setQuote(null);
+                  input.current?.focus({ preventScroll: true });
+                }}
+              >
+                <X size={15} strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          {attached ? (
+            <div className="of-quote-chip of-attached-sticker">
+              {isFace(attached) && li ? (
+                <Sticker li={li} face={attached} />
+              ) : (
+                <StickerArt stickers={stickers} id={attached} />
+              )}
+              <span className="of-quote-text">
+                <span className="of-quote-label">
+                  {t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, attached) })}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="of-icon-button"
+                aria-label={t("ui.otomeForge.phone.removeSticker")}
+                title={t("ui.otomeForge.phone.removeSticker")}
+                onClick={() => {
+                  setAttached(null);
+                  input.current?.focus({ preventScroll: true });
+                }}
+              >
+                <X size={15} strokeWidth={2.2} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          <div className="of-composer-row">
+            <StickerPicker
+              stickers={stickers}
+              name={title}
+              disabled={busy || rememberingNow}
+              onPick={(sticker) => {
+                setAttached(sticker);
+                setAnnounce(t("ui.otomeForge.phone.stickerAttached", { face: stickerLabel(t, stickers, sticker) }));
                 input.current?.focus({ preventScroll: true });
               }}
+            />
+            {/* No Enter shortcut: Enter starts a new line on a phone and on a computer alike, and only Send sends. */}
+            <textarea
+              ref={input}
+              className="of-input of-composer-input"
+              rows={1}
+              value={draft}
+              maxLength={TEXT_MAX}
+              aria-label={
+                li ? t("ui.otomeForge.phone.inputLabel", { name: li.name }) : t("ui.otomeForge.phone.groupInputLabel")
+              }
+              placeholder={
+                li ? t("ui.otomeForge.phone.placeholder", { name: li.name }) : t("ui.otomeForge.phone.groupPlaceholder")
+              }
+              onChange={(event) => setDraft(event.target.value)}
+            />
+            <button
+              type="submit"
+              className="of-icon-button of-send"
+              aria-label={t("ui.otomeForge.phone.send")}
+              title={t("ui.otomeForge.phone.send")}
+              aria-disabled={!canSend}
             >
-              <X size={15} strokeWidth={2.2} aria-hidden="true" />
+              <SendHorizontal size={18} strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
-        ) : null}
-        <div className="of-composer-row">
-          <StickerPicker
-            stickers={stickers}
-            name={li.name}
-            disabled={busy}
-            onPick={(sticker) => {
-              void send({ text: "", sticker, id: messageId(), ...(quote ? { quote } : {}) });
-              input.current?.focus({ preventScroll: true });
-            }}
-          />
-          {/* No Enter shortcut: Enter starts a new line on a phone and on a computer alike, and only Send sends. */}
-          <textarea
-            ref={input}
-            className="of-input of-composer-input"
-            rows={1}
-            value={draft}
-            maxLength={TEXT_MAX}
-            aria-label={t("ui.otomeForge.phone.inputLabel", { name: li.name })}
-            placeholder={t("ui.otomeForge.phone.placeholder", { name: li.name })}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <button
-            type="submit"
-            className="of-icon-button of-send"
-            aria-label={t("ui.otomeForge.phone.send")}
-            title={t("ui.otomeForge.phone.send")}
-            aria-disabled={!canSend}
-          >
-            <SendHorizontal size={18} strokeWidth={2} aria-hidden="true" />
-          </button>
-        </div>
-        {draft.length >= COUNTER_FROM ? (
-          <span className="of-counter of-composer-counter">
-            {draft.length}/{TEXT_MAX}
-          </span>
-        ) : null}
-      </form>
+          {draft.length >= COUNTER_FROM ? (
+            <span className="of-counter of-composer-counter">
+              {draft.length}/{TEXT_MAX}
+            </span>
+          ) : null}
+        </form>
+      )}
 
       <p className="of-visually-hidden" aria-live="polite">
         {announce}
@@ -545,42 +789,302 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
   );
 }
 
+const INVITE_KEYS = {
+  pending: "ui.otomeForge.phone.invitePending",
+  accepted: "ui.otomeForge.phone.inviteAccepted",
+  declined: "ui.otomeForge.phone.inviteDeclined",
+  lapsed: "ui.otomeForge.phone.inviteLapsed",
+} as const;
+/** #2424: the same for his date invitation. */
+const DATE_INVITE_KEYS = {
+  ...INVITE_KEYS,
+  pending: "ui.otomeForge.phone.dateInvitePending",
+  accepted: "ui.otomeForge.phone.dateInviteAccepted",
+} as const;
+/** #2458: the same for a friend's invitation to hang out. */
+const HANGOUT_INVITE_KEYS = {
+  ...INVITE_KEYS,
+  pending: "ui.otomeForge.phone.hangoutInvitePending",
+  accepted: "ui.otomeForge.phone.hangoutInviteAccepted",
+} as const;
+
+/**
+ * #2156: his invitation to clear the air: Accept or Decline while it waits, then what became of it. #2424: his date
+ * invitation is accepted from its looks step (onOpenDate), and declined here.
+ */
+function InviteCard({
+  runKey,
+  li,
+  row,
+  onOpenScene,
+  onOpenDate,
+  onOpenHangout,
+  ended,
+}: {
+  runKey: string;
+  li: RunLiView | RunFriendView;
+  row: Row;
+  /** #2459: the story has ended, so an invitation still waiting is only shown. */
+  ended: boolean;
+  onOpenScene?: (key: string) => void;
+  onOpenDate?: (open: DateOpen) => void;
+  onOpenHangout?: (invite: HangoutInvite) => void;
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const status = row.invite!.status;
+  const date = row.invite!.kind === "date";
+  // Her answer takes the buttons away: focus moves to the card, whose status line announces what became of it.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const answered = useRef(false);
+  useEffect(() => {
+    if (!answered.current || status === "pending") return;
+    answered.current = false;
+    cardRef.current?.focus();
+  }, [status]);
+  // #2458: a friend asks her to hang out; accepting plans it in Album → Hangouts, where she picks what to wear.
+  const hangout = row.invite!.kind === "hangout";
+  const answer = async (accept: boolean) => {
+    if (busy) return;
+    if (date && accept) {
+      onOpenDate?.({ invite: { li: li.id, message: row.id } });
+      return;
+    }
+    if (hangout && accept) {
+      onOpenHangout?.({ friend: li.id, message: row.id });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const { scene } = await otome.post<{ status: string; scene?: string }>(`${phonePath(runKey, li.id)}/invite`, {
+        message: row.id,
+        accept,
+      });
+      answered.current = true;
+      void queryClient.invalidateQueries({ queryKey: playQueryKey(runKey) });
+      void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+      if (accept && scene) onOpenScene?.(scene);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+      void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, li.id) });
+    }
+  };
+  return (
+    <li className="of-invite-row">
+      <div
+        ref={cardRef}
+        className="of-invite of-glass"
+        role="group"
+        tabIndex={-1}
+        aria-label={t("ui.otomeForge.phone.inviteLabel", { name: li.name })}
+      >
+        <p className="of-invite-text" role="status">
+          <HeartHandshake size={15} strokeWidth={2} aria-hidden="true" />
+          <span>
+            {t((date ? DATE_INVITE_KEYS : hangout ? HANGOUT_INVITE_KEYS : INVITE_KEYS)[status], { name: li.name })}
+          </span>
+        </p>
+        {ended ? null : status === "pending" ? (
+          <div className="of-invite-actions">
+            <button
+              type="button"
+              className="of-button of-button--primary of-button--small"
+              aria-disabled={busy || (date && !onOpenDate)}
+              onClick={() => void answer(true)}
+            >
+              {t("ui.otomeForge.phone.inviteAccept")}
+            </button>
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              aria-disabled={busy}
+              onClick={() => void answer(false)}
+            >
+              {t("ui.otomeForge.phone.inviteDecline")}
+            </button>
+          </div>
+        ) : status === "accepted" && row.invite!.scene && date && onOpenDate ? (
+          <div className="of-invite-actions">
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              onClick={() => onOpenDate({ key: row.invite!.scene! })}
+            >
+              {t("ui.otomeForge.phone.dateInvitePlay", { name: li.name })}
+            </button>
+          </div>
+        ) : status === "accepted" && row.invite!.scene && onOpenScene ? (
+          <div className="of-invite-actions">
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              onClick={() => onOpenScene(row.invite!.scene!)}
+            >
+              {t(hangout ? "ui.otomeForge.phone.hangoutInvitePlay" : "ui.otomeForge.phone.invitePlay", {
+                name: li.name,
+              })}
+            </button>
+          </div>
+        ) : null}
+        {error ? (
+          <p className="of-error" role="alert">
+            {otome.errorMessage(error)}
+          </p>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * #2504: his selfie in his message: the picture once painted; until then Paint (or Retry), saying so while it paints,
+ * with its cost the first time, or only that it is a selfie when it cannot be painted (no images, or the story ended).
+ */
+function Selfie({
+  runKey,
+  li,
+  row,
+  images,
+  ended,
+  onShown,
+  onPainted,
+}: {
+  runKey: string;
+  li: RunLiView | RunFriendView;
+  row: Row;
+  images: Pick<ImageSettings, "connectionId" | "ask">;
+  ended: boolean;
+  /** Its picture has loaded. */
+  onShown: () => void;
+  /** Reads the thread again once a paint ends, whatever came of it. */
+  onPainted: () => void;
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const art = row.selfie?.art;
+  const { painting, error, tap, dialogs } = usePaintOnTap({
+    path: `${phonePath(runKey, li.id)}/messages/${encodeURIComponent(row.id)}/selfie`,
+    art,
+    ask: images.ask,
+    onSettled: onPainted,
+    askTitle: t("ui.otomeForge.phone.selfieAskTitle"),
+    askText: t("ui.otomeForge.phone.selfieAskText", { name: li.name }),
+    subject: t("ui.otomeForge.phone.selfieSubject", { name: li.name }),
+  });
+  if (art?.state === "ready" && art.url) {
+    return (
+      <img
+        className="of-bubble-selfie"
+        src={art.url}
+        alt={t("ui.otomeForge.phone.selfieAlt", { name: li.name })}
+        onLoad={onShown}
+      />
+    );
+  }
+  const paintable = painting || (!!images.connectionId && !ended);
+  return (
+    <div className="of-bubble-selfie of-bubble-selfie--waiting">
+      {paintable ? (
+        <PaintButton
+          art={art}
+          painting={painting}
+          onTap={tap}
+          labels={{
+            paint: t("ui.otomeForge.phone.selfiePaint"),
+            retry: t("ui.otomeForge.phone.selfieRetry"),
+            painting: t("ui.otomeForge.phone.selfiePainting"),
+          }}
+        />
+      ) : (
+        <span className="of-hint">{t("ui.otomeForge.phone.selfie")}</span>
+      )}
+      {paintable && !art ? <CostHint images={1} /> : null}
+      {error ? (
+        <p className="of-error" role="alert">
+          {otome.errorMessage(error)}
+        </p>
+      ) : null}
+      {art?.state === "failed" && art.error ? <p className="of-hint">{art.error}</p> : null}
+      {dialogs}
+    </div>
+  );
+}
+
+/**
+ * One message. `li` and `name` are who sent his (in the group chat its speaker, when known); `group` marks a member's
+ * message there, the first and the last of their run; `selfie` (#2504) is his selfie in it.
+ */
 function Bubble({
   row,
   li,
+  name,
   stickers,
   pending,
   time,
+  group,
+  selfie,
 }: {
   row: Row;
-  li: RunLiView;
+  li: RunLiView | RunFriendView | undefined;
+  name: string;
   stickers: Stickers;
   pending: boolean;
   time: string;
+  group?: { first: boolean; last: boolean };
+  selfie?: ReactNode;
 }) {
   const { t } = useTranslation();
   const text = row.text.trim();
+  const accent = group && li ? accentOf(li) : undefined;
+  const bubble = (
+    <div className="of-bubble" data-sticker={row.sticker && !text ? "true" : undefined}>
+      <span className="of-visually-hidden">
+        {row.who === "li" ? t("ui.otomeForge.phone.from", { name }) : t("ui.otomeForge.phone.fromYou")}
+      </span>
+      {row.quote ? <q className="of-bubble-quote">{row.quote}</q> : null}
+      {row.sticker ? (
+        isFace(row.sticker) && li ? (
+          <Sticker li={li} face={row.sticker} />
+        ) : (
+          <StickerArt stickers={stickers} id={row.sticker} />
+        )
+      ) : null}
+      {selfie}
+      {text ? <span className="of-bubble-text">{row.text}</span> : null}
+    </div>
+  );
   return (
     <li
       className="of-bubble-row"
       data-who={row.who}
+      data-group={group ? "true" : undefined}
       data-archived={row.archived ? "true" : undefined}
       data-pending={pending ? "true" : undefined}
+      style={accent ? ({ "--of-li-accent": accent } as CSSProperties) : undefined}
     >
-      <div className="of-bubble" data-sticker={row.sticker && !text ? "true" : undefined}>
-        <span className="of-visually-hidden">
-          {row.who === "li" ? t("ui.otomeForge.phone.from", { name: li.name }) : t("ui.otomeForge.phone.fromYou")}
+      {group?.first ? (
+        <span className="of-bubble-name" aria-hidden="true">
+          {name}
         </span>
-        {row.quote ? <q className="of-bubble-quote">{row.quote}</q> : null}
-        {row.sticker ? (
-          isFace(row.sticker) ? (
-            <Sticker li={li} face={row.sticker} />
+      ) : null}
+      {group ? (
+        <div className="of-bubble-line">
+          {group.last ? (
+            <Avatar name={name} url={li?.portrait} accent={accent} size={24} />
           ) : (
-            <StickerArt stickers={stickers} id={row.sticker} />
-          )
-        ) : null}
-        {text ? <span className="of-bubble-text">{row.text}</span> : null}
-      </div>
+            <span className="of-bubble-gap" aria-hidden="true" />
+          )}
+          {bubble}
+        </div>
+      ) : (
+        bubble
+      )}
       {time ? (
         <time className="of-bubble-time" dateTime={row.at}>
           {time}

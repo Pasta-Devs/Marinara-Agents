@@ -3,8 +3,9 @@
 // ──────────────────────────────────────────────
 // The end-of-arc "meet someone new" choice writes one love interest: their unit, their bible and their ties into the
 // world's web, then adds them to the cast LAST (cast order is Object.keys(state.lis), and a newcomer appended last is
-// safe everywhere). Nothing here touches world.forge.steps: the forge phase turns "forging" the moment a text step is
-// pending, and the whole app would drop the player onto a progress screen mid-arc. A love interest only exists once
+// safe everywhere). Nothing here adds to world.forge.steps: the forge phase turns "forging" the moment a text step is
+// pending, and the whole app would drop the player onto a progress screen mid-arc. The next read gives them a done bible
+// step and their paint step instead (setup/forge.ts forgeCast), so Your cast can paint them. A love interest only exists once
 // their bible does (the cast is state.lis filtered by unit.bible), so a failed arrival degrades to "not yet": the unit
 // sits without a bible, out of the cast, and the next attempt writes the bible. A newcomer whose arc plan fails or is
 // cancelled leaves the cast and the web but keeps their unit and bible (removeLoveInterest), so the same arrival again
@@ -25,6 +26,7 @@ import { castOf, readCard } from "../setup/cast.js";
 import { BibleSchema, normalizeUnit } from "../schemas/unit.js";
 import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { namesClash } from "./side-cast.js";
 
 /** What the player picked at the end of an arc: one of their cards, or someone invented. */
 export type Arrival =
@@ -41,7 +43,8 @@ const CONTROL = /[\u0000-\u001f\u007f]/u;
 
 /**
  * Writes the newcomer and returns who they are, for the arc that introduces them. 400 when the cast is full, when the
- * card cannot be read, or when the name is unusable; 409 when the run is still being forged.
+ * card is someone's in the cast already or cannot be read, or when the name is unusable; 409 when the run is still being
+ * forged.
  */
 export async function introduceLoveInterest(
   deps: GenerationDeps & {
@@ -53,7 +56,7 @@ export async function introduceLoveInterest(
   { debugMode, signal }: { debugMode?: boolean; signal?: AbortSignal } = {},
 ): Promise<{ id: string; name: string }> {
   const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
   const taken = Object.keys(run.state.lis);
   if (taken.length >= LIS_MAX) {
@@ -62,6 +65,9 @@ export async function introduceLoveInterest(
 
   let name = "";
   if (arrival.source === "card") {
+    // #2475: a card is one person's likeness, and a friend's or a relinked love interest's card can carry another name.
+    if ([...run.units, ...(run.friends ?? [])].some((unit) => unit.cardId === arrival.cardId))
+      throw new OtomeForgeError(400, "That card is already someone in your story's cast.", "bad-request");
     const card = await readCard(deps.runtime, arrival.cardId);
     name = card?.name.trim() ?? "";
     if (!name) throw new OtomeForgeError(400, "That card could not be read.", "bad-request");
@@ -74,6 +80,9 @@ export async function introduceLoveInterest(
   }
   if (CONTROL.test(name) || name.includes(".."))
     throw new OtomeForgeError(400, "That name cannot be used.", "bad-request");
+  // #2458: a friend stays a friend; the same person never also arrives as a love interest.
+  if ((run.friends ?? []).some((friend) => namesClash(name, friend.name)))
+    throw new OtomeForgeError(400, `${name} is already your friend.`, "bad-request");
 
   // A unit out of the cast for the same arrival (the same card, or archetype, name and notes, with the same pronouns) is
   // taken back with its bible, when it has one, instead of writing another.
@@ -82,6 +91,9 @@ export async function introduceLoveInterest(
   const kept = stored.find(
     (candidate) =>
       !Object.hasOwn(run.state.lis, candidate.id) &&
+      // #2458: never a friend's unit, which has no love interest's bible either.
+      !candidate.friend &&
+      !Object.hasOwn(run.state.friends, candidate.id) &&
       candidate.source === arrival.source &&
       candidate.name === name &&
       samePronouns(candidate.pronouns, arrival.pronouns) &&
@@ -188,6 +200,11 @@ export async function removeLoveInterest(
     .updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (world) => ({
       ...world,
       web: world.web.filter((row) => row.a !== li && row.b !== li),
+      // The forge steps a read may have given them (setup/forge.ts forgeCast), so Your cast lists no one gone.
+      forge: {
+        ...world.forge,
+        steps: world.forge.steps.filter((step) => step.id !== `bible:${li}` && step.id !== `paint:${li}`),
+      },
     }))
     .catch(() => null);
   await deps.store

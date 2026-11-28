@@ -39,7 +39,7 @@ export function isRunKey(value: unknown): value is string {
 
 /** The run id R that prefixes every document of the run. Throws on anything but a run key. */
 export function runIdOf(runKey: string): string {
-  if (!isRunKey(runKey)) throw new RangeError(`Not an Otome Forge run key: ${JSON.stringify(runKey).slice(0, 40)}`);
+  if (!isRunKey(runKey)) throw new RangeError(`Not an Otome Hearth run key: ${JSON.stringify(runKey).slice(0, 40)}`);
   return `${ID_PREFIX}${runKey}`;
 }
 
@@ -86,11 +86,12 @@ export const stateId = (runId: string) => `${runId}:state`;
 // ── The story (M2a). Kinds: "chapter", "beat", "memory". ──
 
 /**
- * `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>`, `prestige-<li>-<n>` (#2025) or
+ * `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>`, `prestige-<li>-<n>` (#2025),
+ * `side-<li>-<arc>` (#2155, his side of a story arc; arc 0 before the first, at most ARCS_MAX, which its route checks) or
  * `date-<n>`.
  */
 const CHAPTER_KEY =
-  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|prestige-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|date-[1-9]\d{0,5})$/;
+  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|prestige-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|side-li-[a-z0-9-]{3,40}-(?:0|[1-9]\d?)|date-[1-9]\d{0,5})$/;
 
 export function isChapterKey(value: unknown): value is string {
   return typeof value === "string" && CHAPTER_KEY.test(value);
@@ -147,6 +148,24 @@ export const itemId = (runId: string, item: string) => `${runId}:item:${item}`;
 export const itemStoryKey = (item: string) => `story-${item}`;
 export const isItemStoryKey = (key: string) => key.startsWith("story-");
 
+/**
+ * `${R}:quiz` (#2174): the personality quiz's generated statements, each love interest's scores and the player's
+ * answers (S/minigames/quiz.ts). Never read by a prompt.
+ */
+export const quizId = (runId: string) => `${runId}:quiz`;
+
+/**
+ * `${R}:recall` (0.19.0): the long-term recall index, each timeline chapter's summary as vectors (S/memory/recall-index.ts).
+ * Never read by a prompt.
+ */
+export const recallId = (runId: string) => `${runId}:recall`;
+
+/**
+ * `${R}:sides` (0.20.0): the side characters who spoke in the scenes read so far, each one's chapters, Engine card, look
+ * and sprite (S/schemas/side-cast.ts, S/story/side-cast.ts). Never read by a prompt.
+ */
+export const sideCastId = (runId: string) => `${runId}:sides`;
+
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
 export const RUN_DOC_KINDS = [
   "world",
@@ -164,6 +183,11 @@ export const RUN_DOC_KINDS = [
   "readhim",
   "readme",
   "photo",
+  "tarot",
+  "deck",
+  "quiz",
+  "recall",
+  "sides",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */

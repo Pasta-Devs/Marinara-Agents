@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -105,10 +105,13 @@ test("Advanced fields and expanded editors keep typing and pointer Close reachab
 }, testInfo) => {
   const { forge, saved } = await openEditors(page);
   // Controlled Engine viewport geometry is not native phone-keyboard proof.
+  // Each height keeps the arena within its short-screen layout (@container gfarena (max-height: 280px)). Since Engine
+  // #9376 a package's fullscreen hides the Engine top bar too, so the arena gets the whole height: portrait's keyboard
+  // top is 252, the 300 it was less that 48 px bar, so it tests the same layout as before.
   for (const [orientation, height] of [
     ["landscape", 150],
     ["landscape", 110],
-    ["portrait", 300],
+    ["portrait", 252],
   ] as const) {
     await page.evaluate(() => (window as any).__forgeKeyboardTop(null));
     await page.setViewportSize({ width: 874, height: 402 });

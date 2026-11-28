@@ -15,7 +15,13 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-couple-lines.ts";
 import { slurpCoupleOf } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-creator-couples.ts";
 import { slurpChatBridgeRapportLine } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport.ts";
+import { markSlurpEngineRoleplay } from "../packages/slurp2/src/engine/packages/server/src/slp/data/messages/slp-engine-roleplay-storage.ts";
+import { isUnsolicitedCreatorMessage } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-follow-up.ts";
 import { SLURP_CONTINUITY_FACT_LABELS } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/continuity/slp-continuity-prompt.ts";
+
+const worldClockStubs = { slurpWorldNow: () => new Date(), slurpWorldNowMs: () => Date.now() };
+const runInNewContextWithClock = (code: string, context: Record<string, unknown>, ...rest: unknown[]) =>
+  (runInNewContext as (...args: unknown[]) => unknown)(code, { ...worldClockStubs, ...context }, ...rest);
 
 const source = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-chat-context.ts", import.meta.url),
@@ -72,7 +78,7 @@ const arc = {
 };
 const ledgerReads: Array<{ creator: string; threadId: string | null }> = [];
 
-const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContext(
+const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContextWithClock(
   `${stripTypeScriptTypes(source.replace(/^import[\s\S]*?;\n/gm, "").replace(/^\s*export /gm, ""))}
   ({ buildSlurpChatContext, slurpCarryoverReach });`,
   {
@@ -88,6 +94,8 @@ const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContext(
       !(account.kind === "persona" && account.sourceKind === "persona"),
     slurpChatBridgeRapportLine,
     SLURP_CONTINUITY_FACT_LABELS,
+    markSlurpEngineRoleplay,
+    isUnsolicitedCreatorMessage,
     readSlurpCreatorTiesDocument: async () => ({ couples }),
     listSlurpContinuityFor: async (
       _db: unknown,
@@ -165,6 +173,17 @@ const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContext(
           imageUrl: null,
           createdAt: stale,
         },
+        // A check-in the player never answered: the carryover leaves it out.
+        {
+          role: "creator",
+          kind: "text",
+          content: "UNANSWERED CHECK IN",
+          price: 0,
+          unlockedAt: null,
+          imageUrl: null,
+          metadata: { followUp: true, followUpType: "check_in" },
+          createdAt: recent,
+        },
       ],
       listCommissionsForThread: async () => [
         { state: "cancellation_pending", price: 120, brief: "A sunset portrait", updatedAt: recent },
@@ -205,6 +224,7 @@ async function main() {
   );
   assert.match(block, /Alex subscribes to Mari Vale on Slurp\./u);
   assert.doesNotMatch(block, /PAID POST BODY|LOCKED MESSAGE BODY/u, "paid content must never reach a chat");
+  assert.doesNotMatch(block, /UNANSWERED CHECK IN/u, "an unasked text the player has not answered stays out");
   assert.doesNotMatch(block, /STALE/u, "activity older than the look-back window stays out");
   assert.doesNotMatch(block, /Someone Else|Player Creator|POST BY/u, "only the chat's character Creators count");
   assert.ok(block.indexOf("Loved the beach set") < block.indexOf("tipped"), "entries render oldest first");

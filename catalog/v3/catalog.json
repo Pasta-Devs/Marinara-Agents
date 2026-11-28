@@ -113,7 +113,7 @@
         },
         "id": "eightball",
         "name": "8-Ball Pool",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "description": "Play 8-Ball Pool with a Conversation character. Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -157,8 +157,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "c321474de4585578476ce86009f102352e6b75a3a1a2f343e4cd9f0d0abc4469",
-            "bytes": 37408
+            "sha256": "8059b64370d25254f5fa69b567dcd43094cc13df330cebc7cee9164a221f2bb8",
+            "bytes": 166797
           }
         ],
         "permissions": [
@@ -173,9 +173,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/eightball.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.6.zip",
-        "sha256": "46c45d0866cae768594f708dd36e36ec584cd60e4fc8d5d4a466bba0b445d82e",
-        "bytes": 70309
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.7.zip",
+        "sha256": "6c3ad02a682c76bcfe9147b5cd7ad0d22df74bb07a5aad94f3c703a23b0faebe",
+        "bytes": 199699
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
     },
@@ -286,12 +286,89 @@
           "engineVersion": "2.5.0",
           "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
         },
+        "id": "blackjack",
+        "name": "Blackjack",
+        "version": "1.0.2",
+        "description": "Play Blackjack against the house with Conversation characters. Install to use /blackjack manually in any Conversation chat, or type a message like \"let's play blackjack\" to open the table setup. Where Chat Settings → Agents → Commands lists Blackjack, characters can start a game while its switch is on.",
+        "engine": {
+          "min": "2.3.0",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/blackjack",
+            "aliases": [
+              "blackjack",
+              "black jack",
+              "twenty-one"
+            ],
+            "playerLabel": "Table game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "db88521aab88b2ad88733f0dbf0fd155be866fb2c3f5863224ba90abc78ee27a",
+            "bytes": 697
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "a1837084f1898fd55fa1b42f1ad273972fbfa3de930cf1ecbc6cd2d5495e9b2d",
+            "bytes": 17479
+          },
+          {
+            "path": "client.js",
+            "sha256": "4d39848e652bb2a86dc7dcfd5bfa2a8a5a657034098db2143f64c4d1974f4bbc",
+            "bytes": 36454
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/blackjack.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/blackjack-1.0.2.zip",
+        "sha256": "75b093f67c8f441a8ab5e46771ec27c97fa70bf39bc967748209d35da2bda875",
+        "bytes": 56710
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#blackjack"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 819
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.2",
+          "engineCommit": "c18c1af639cd2c253c13f8ca392ac450065025d3"
+        },
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.1.7",
+        "version": "1.1.10",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
-          "min": "2.4.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -318,17 +395,18 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "e7a7b0769ceda5d542206626dc775488c49ebbcfe9bed766dd429873a6f2d7b1",
-            "bytes": 405456
+            "sha256": "c1f6d4a9669a4311fcc841dcc1753927fd24ad4f40cd506e89aad9172cb9fc72",
+            "bytes": 390813
           },
           {
             "path": "client.js",
-            "sha256": "0ef7a269f2a7cffa68858c56d7a7611c78f26abacd07018aa8e7bcecabd46e93",
-            "bytes": 167433
+            "sha256": "e687a23e2ec5b880f92df085b3d2ad75e3a6113b85f5a42b80ea3edb2ffb2b44",
+            "bytes": 170673
           }
         ],
         "permissions": [
           "agent-runtime",
+          "character-write",
           "chat-read",
           "chat-write",
           "network",
@@ -341,9 +419,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.1.7.zip",
-        "sha256": "cee31728db5f6463553f29edb28cfde9ae98ae88399b47ccfd0d6b85e25e79ed",
-        "bytes": 575188
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.1.10.zip",
+        "sha256": "9bc4e5a67aba2c57895d4f5413c75275d5b1d5b9e080c7434f4c8b7f6be1a94d",
+        "bytes": 563809
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -444,7 +522,7 @@
         },
         "id": "chess",
         "name": "Chess",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "description": "Play Chess with a Conversation character. Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -484,8 +562,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "af7ec37a1091476f7ae4cc1fe39b1492a327c4daa195e9a3d99432770651d610",
-            "bytes": 28916
+            "sha256": "f66aea39e15f279088f61b67f83c38f0620d1d94b60a21bf69257fa82fe32c5c",
+            "bytes": 160618
           }
         ],
         "permissions": [
@@ -500,9 +578,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/chess.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.6.zip",
-        "sha256": "bc7ba9d919ba73a88cf49f5d2507b5d688c15b60fd7ffa7e012e87798617d518",
-        "bytes": 79677
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.7.zip",
+        "sha256": "706123c527598ff816a3681bc8dce833e96e3511a5bb39b11127c4f86247103d",
+        "bytes": 211380
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
     },
@@ -771,7 +849,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.27.5",
+        "version": "1.27.7",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.5.1",
@@ -1060,8 +1138,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "08eeacb2f5ee583e532fbfadeef3263ca2aef90531d63b23a85daf548a4c94af",
-            "bytes": 1921764
+            "sha256": "56dd4dc71a4a8500957b8d9749bce6c7734a4db2a9ab9d908ad327ce9aa5739b",
+            "bytes": 1922146
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1613,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "6e99135da7e14959257860002a4478b2414cb245ebb35af5d77636120d2b23fa",
-            "bytes": 1033225
+            "sha256": "4af4e04f5cee8d1466cd8896a37611b9445e2682eff363e2254c15b158f6d7f0",
+            "bytes": 1040637
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2388,9 +2466,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.27.5.zip",
-        "sha256": "a3a1581cb1d80e95ec491b57a64c7b8067120232c55051be68dab15d07849a0d",
-        "bytes": 9187385
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.27.7.zip",
+        "sha256": "082507153e894529721e663813fe4dc885495fae79f64e530134159d70b30b2f",
+        "bytes": 9195179
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -2399,8 +2477,8 @@
         "schemaVersion": 1,
         "id": "haptic",
         "name": "Haptic Feedback",
-        "version": "1.0.4",
-        "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
+        "version": "1.0.5",
+        "description": "Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. No toy yet? No worries, you can grab one now with a discount from Lovense! https://www.lovense.com/r/dupchb Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
         "engine": {
           "min": "2.4.3",
           "maxExclusive": "4.0.0"
@@ -2414,8 +2492,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "31eb959d29a7fa59624295c56a1cf7fdd3de7cd816474d162d195e0df4f24a76",
-            "bytes": 2586
+            "sha256": "4e0952fc60edea9bcf2933da5ccc5da820915557190cbb108ddc81075a174edf",
+            "bytes": 2694
           }
         ],
         "permissions": [
@@ -2430,9 +2508,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/haptic.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.4.zip",
-        "sha256": "8f00a3bb33d478850bbfb7be64ae485b344030cc9520c2772e2c8d18b66cf126",
-        "bytes": 1946
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.5.zip",
+        "sha256": "f1049e5beefe1bf08e3cb30de158f70439330477e6e4cc86b3329fe9123b5de5",
+        "bytes": 2076
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
     },
@@ -2651,18 +2729,18 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 390
+          "minor": 820
         },
         "builtAgainst": {
-          "engineVersion": "2.5.1",
-          "engineCommit": "345cd747cf8e8fd56f3fbdceb625a1edd568b525"
+          "engineVersion": "2.5.2",
+          "engineCommit": "6086825a1e91c5301bb4da80d4f919597186efab"
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.5.29",
+        "version": "1.6.13",
         "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
-          "min": "2.5.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -2681,8 +2759,42 @@
             "header": "engine"
           },
           "slots": [
-            "chat-settings"
-          ]
+            "chat-settings",
+            "conversation-surface",
+            "chat-activity"
+          ],
+          "assets": {
+            "paths": [
+              "assets/onboarding/activity-log-small.webp",
+              "assets/onboarding/activity-log.webp",
+              "assets/onboarding/archive-working-mini.webp",
+              "assets/onboarding/archive-working.webp",
+              "assets/onboarding/archivist-modes.webp",
+              "assets/onboarding/chibi.webp",
+              "assets/onboarding/done-filed.webp",
+              "assets/onboarding/done-fresh.webp",
+              "assets/onboarding/graph-model-small.webp",
+              "assets/onboarding/graph-model.webp",
+              "assets/onboarding/headstart-ladder.webp",
+              "assets/onboarding/hello-drawer.webp",
+              "assets/onboarding/inchat-bubble-small.webp",
+              "assets/onboarding/inchat-bubble.webp",
+              "assets/onboarding/reading-tape-small.webp",
+              "assets/onboarding/reading-tape.webp",
+              "assets/onboarding/review-stamp-small.webp",
+              "assets/onboarding/review-stamp.webp",
+              "assets/onboarding/settings-dials-small.webp",
+              "assets/onboarding/settings-dials.webp",
+              "assets/onboarding/sources-crate-small.webp",
+              "assets/onboarding/sources-crate.webp",
+              "assets/onboarding/vault-browse-small.webp",
+              "assets/onboarding/vault-browse.webp",
+              "assets/onboarding/vault-idle.webp",
+              "assets/onboarding/welcome-bell-small.webp",
+              "assets/onboarding/welcome-bell.webp",
+              "assets/onboarding/whats-new-cabinet.webp"
+            ]
+          }
         },
         "files": [
           {
@@ -2692,13 +2804,153 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "32248683556b2083cd5e86963da7683c3ed84b33c48a7f613ab3e9be0d5ade35",
-            "bytes": 513182
+            "sha256": "181785ec79d6c3bf3fc0e9d2923638c4b4b4b5ec04881efd398131da14ce7043",
+            "bytes": 594464
           },
           {
             "path": "client.js",
-            "sha256": "bac132b36fccf7d40b5732fa637caafcf345ad9c6fe0d6e0d7b3cfc236835dec",
-            "bytes": 936831
+            "sha256": "7b362bf33ec4c97a1a4196fa00957f14309449ae1b8f14cba1664cf1493684fd",
+            "bytes": 1106398
+          },
+          {
+            "path": "assets/onboarding/activity-log-small.webp",
+            "sha256": "45c67e2d82d394bb85dd9884844fdd71cdb444b71a99ae1943f92cca203e0cc8",
+            "bytes": 21814
+          },
+          {
+            "path": "assets/onboarding/activity-log.webp",
+            "sha256": "4ebead7fd5c7e8c6d6abc8d66ae9da39b203fb0dc19123519c6b4068a19a4a67",
+            "bytes": 74540
+          },
+          {
+            "path": "assets/onboarding/archive-working-mini.webp",
+            "sha256": "b0db55446ffb82b4cb36ceb21afc5728ca1faccd1cffc40f44d7c2bb2e68141a",
+            "bytes": 9144
+          },
+          {
+            "path": "assets/onboarding/archive-working.webp",
+            "sha256": "776f4d520f6c6991645f205f94846b9e5a70dde3b1cfd765016e574f63b634ec",
+            "bytes": 84354
+          },
+          {
+            "path": "assets/onboarding/archivist-modes.webp",
+            "sha256": "86649b8edadabd5679a691848530e5d3dbbf64f5f6076fb6c5dd6a40742bad04",
+            "bytes": 81130
+          },
+          {
+            "path": "assets/onboarding/chibi.webp",
+            "sha256": "bdbf38adb40e9e128754d2103a0b9bc9d887c33273640dc47a8c6f5cffdba0f3",
+            "bytes": 38982
+          },
+          {
+            "path": "assets/onboarding/done-filed.webp",
+            "sha256": "46ba390dc6cf343a760d68a44ca557069b230bb89e3e63cd612e41329e25a141",
+            "bytes": 84324
+          },
+          {
+            "path": "assets/onboarding/done-fresh.webp",
+            "sha256": "1d4f5a978256a1c6da7a85b8b8a27e5442ded6d3bde90c7d6ab4d60cbf460f75",
+            "bytes": 77466
+          },
+          {
+            "path": "assets/onboarding/graph-model-small.webp",
+            "sha256": "7d30af1e673f7d9df4aad4286f44d13eeedc17a3afcf7af15fee04a84a5c418a",
+            "bytes": 22768
+          },
+          {
+            "path": "assets/onboarding/graph-model.webp",
+            "sha256": "7c80a5946ea605759a643a3816fe235f08ad59737f484b7f0ee9f48fe17b384d",
+            "bytes": 77798
+          },
+          {
+            "path": "assets/onboarding/headstart-ladder.webp",
+            "sha256": "c826ce6947abd8a2f13a14c11fd7b7be2d9bdb077e269c86e20e6984cfc7d963",
+            "bytes": 91312
+          },
+          {
+            "path": "assets/onboarding/hello-drawer.webp",
+            "sha256": "61aaf4f59a240891fffc37f82566a2f783b79e0b3063cadad4881a06c09f671f",
+            "bytes": 73212
+          },
+          {
+            "path": "assets/onboarding/inchat-bubble-small.webp",
+            "sha256": "bb391e1ddf9eb64166cdae3690aae748b1287b2b5070ca0a441ae59102052a88",
+            "bytes": 16586
+          },
+          {
+            "path": "assets/onboarding/inchat-bubble.webp",
+            "sha256": "1cffba1c96bb6b2c429142419e00d361a1626fd145bf00ac5d930f6785468807",
+            "bytes": 58738
+          },
+          {
+            "path": "assets/onboarding/reading-tape-small.webp",
+            "sha256": "83374a55a1d14bf27ce5e8cbbe32c159da26775a7aa73e387bd4d5be24d1e4b7",
+            "bytes": 25764
+          },
+          {
+            "path": "assets/onboarding/reading-tape.webp",
+            "sha256": "032d7e473bf0da3ac9ba1b49c3ac3cd100f08ab5809791580404beaf405882cc",
+            "bytes": 89580
+          },
+          {
+            "path": "assets/onboarding/review-stamp-small.webp",
+            "sha256": "66f8751af369e3ea91a6aea8785df60e545bfd47bebe42157cdbcebf7335f78b",
+            "bytes": 24514
+          },
+          {
+            "path": "assets/onboarding/review-stamp.webp",
+            "sha256": "79345a7ad47ea0902fda68f99045b9dcbdcbd4b42d0672c87cc973fda4393bea",
+            "bytes": 83864
+          },
+          {
+            "path": "assets/onboarding/settings-dials-small.webp",
+            "sha256": "24d42f05258a18ad66f8850a5a2491e78083b819aa5d610e450af06ef4991c75",
+            "bytes": 24752
+          },
+          {
+            "path": "assets/onboarding/settings-dials.webp",
+            "sha256": "7f15f97cfb606d04a8395e77f22b4fcee11ca5276578dd68a96979be707bb3dc",
+            "bytes": 88000
+          },
+          {
+            "path": "assets/onboarding/sources-crate-small.webp",
+            "sha256": "11ff298a32197e640136d2ba35c6cc32c2af2ce4e409a8acb6c5ae73829d5ca0",
+            "bytes": 23058
+          },
+          {
+            "path": "assets/onboarding/sources-crate.webp",
+            "sha256": "956bc0744be894a4f0f50a3c9841ec92b3ac16dded5d65bd7ce6ca1e390116b2",
+            "bytes": 79636
+          },
+          {
+            "path": "assets/onboarding/vault-browse-small.webp",
+            "sha256": "01c50983015f6840f9df1d539bb528bd8fad9762394af14b05b7a98781ae2e34",
+            "bytes": 24344
+          },
+          {
+            "path": "assets/onboarding/vault-browse.webp",
+            "sha256": "aed5a1be574e364d339e2a699029b69e350119e1dc2517605ff23b78602cabb1",
+            "bytes": 85758
+          },
+          {
+            "path": "assets/onboarding/vault-idle.webp",
+            "sha256": "20bd31b57d6d2f27880c5358858005e1e8e4d8702e9a942361419f255172cf6b",
+            "bytes": 72036
+          },
+          {
+            "path": "assets/onboarding/welcome-bell-small.webp",
+            "sha256": "15b35ee7ff75775638c4ab839a3005c35bc178d06b69ed6b74e271f5e6aeec3b",
+            "bytes": 21238
+          },
+          {
+            "path": "assets/onboarding/welcome-bell.webp",
+            "sha256": "24cd5a0ffc55ae6fb46e3256d6f8159ab41b1671a2e439b21b44f507ff7f1382",
+            "bytes": 72926
+          },
+          {
+            "path": "assets/onboarding/whats-new-cabinet.webp",
+            "sha256": "225a9c5b7c439e04483842e9e44a6c62b8d4b49b22be5fa5c4e462b269eb6c05",
+            "bytes": 346520
           }
         ],
         "permissions": [
@@ -2714,9 +2966,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.29.zip",
-        "sha256": "a7a59e795c52de0965e237934b8568af87cb53208e03a75445a437b52812df3c",
-        "bytes": 1452522
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.6.13.zip",
+        "sha256": "e27189ca13fa212b6de147bf5be6173540e34b008c730f0a9be53ec8c8e794a5",
+        "bytes": 3588102
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -2921,15 +3173,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 341
+          "minor": 830
         },
         "builtAgainst": {
-          "engineVersion": "2.5.1",
-          "engineCommit": "42d64368e82340a46e35c0f4489d9f41024d6032"
+          "engineVersion": "2.5.2",
+          "engineCommit": "611557bc28a57e63dc634742f59f1769cc1c261c"
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.5.12",
+        "version": "1.5.19",
         "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -2958,7 +3210,7 @@
           }
         },
         "engine": {
-          "min": "2.5.1",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -3012,13 +3264,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "71795a663c2b92df08ce28026f031aafe729c5d7b39f375848403b1b40684810",
-            "bytes": 545726
+            "sha256": "e3a92b8fb979221eb6c4ff991be8ad88446db40a0391ecb86aaf8b174c4a6772",
+            "bytes": 533260
           },
           {
             "path": "client.js",
-            "sha256": "1c3b726cdb96522d96651849aa6e5fe65fd1b4f7214558574c64040257b00348",
-            "bytes": 733315
+            "sha256": "f395d52456b5e19af4fcd50949449ab775e165e7150082118bc925e8402fede1",
+            "bytes": 733953
           },
           {
             "path": "noodle-klusek.png",
@@ -3039,9 +3291,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.12.zip",
-        "sha256": "6ce0d8812d52d7e63f9a131605ada38a35421c62bc572405953b0deae112f7d6",
-        "bytes": 1311787
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.19.zip",
+        "sha256": "c4745727126d1014f0b74f7d4f27debd5bd84b2deca4427ffb194be59352e9f1",
+        "bytes": 1299959
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -3058,7 +3310,7 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.8.10",
+        "version": "0.49.3",
         "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
@@ -3082,6 +3334,30 @@
             "iconPaths": [
               "otome-hearth-tab-heart.png"
             ]
+          },
+          "assets": {
+            "paths": [
+              "kitty/rose-1.webp",
+              "kitty/rose-2.webp",
+              "kitty/rose-3.webp",
+              "kitty/rose-4.webp",
+              "kitty/rose-5.webp",
+              "kitty/sky-1.webp",
+              "kitty/sky-2.webp",
+              "kitty/sky-3.webp",
+              "kitty/sky-4.webp",
+              "kitty/sky-5.webp",
+              "kitty/lemon-1.webp",
+              "kitty/lemon-2.webp",
+              "kitty/lemon-3.webp",
+              "kitty/lemon-4.webp",
+              "kitty/lemon-5.webp",
+              "kitty/mint-1.webp",
+              "kitty/mint-2.webp",
+              "kitty/mint-3.webp",
+              "kitty/mint-4.webp",
+              "kitty/mint-5.webp"
+            ]
           }
         },
         "files": [
@@ -3092,13 +3368,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "913d5ad715f46238dbd2ed342ec33612d131e69cf203bb0fb4ab6344b83c2812",
-            "bytes": 540909
+            "sha256": "bcfd453909439f169691ff65a9d2c882dd043a7ab2472629a95abc3d0486ea28",
+            "bytes": 850299
           },
           {
             "path": "client.js",
-            "sha256": "67fccc469807381a7d69e0dab876bd4824997da2c068151d0f3e19f7c17402d3",
-            "bytes": 1235432
+            "sha256": "85b09f46b30d5e30859e189a33ffb82ed689727d1799d68079ba33f48ddedd0c",
+            "bytes": 1539820
           },
           {
             "path": "otome-hearth-icon.png",
@@ -3114,9 +3390,110 @@
             "path": "fonts/OFL.txt",
             "sha256": "42a08de2370044e2966c8158770a86c67a8b343c9422a1b30b8599d25c05dd5f",
             "bytes": 4558
+          },
+          {
+            "path": "kitty/rose-1.webp",
+            "sha256": "a8fff2369db54346e5ad83bfa149e5aa65e18480e454b88fc70bfa562197a62c",
+            "bytes": 36508
+          },
+          {
+            "path": "kitty/rose-2.webp",
+            "sha256": "b8537625617a05351f188d059322837db14db6c2fbf9007f0740f91c4ca9d38b",
+            "bytes": 43428
+          },
+          {
+            "path": "kitty/rose-3.webp",
+            "sha256": "6e548203b6ed43a3732479d14aef08d8da9cde9b8845ebbcc74fe6520581fa3f",
+            "bytes": 41082
+          },
+          {
+            "path": "kitty/rose-4.webp",
+            "sha256": "d175f4d5ba50fe335f7d5701befc03f42513ff09cb39cd60fc5d95b91ee5af12",
+            "bytes": 43380
+          },
+          {
+            "path": "kitty/rose-5.webp",
+            "sha256": "568e86876a38c03bd8dcad0fa693ee3b9b3505d6e89ea2eebbbfe7b8a1481772",
+            "bytes": 54750
+          },
+          {
+            "path": "kitty/sky-1.webp",
+            "sha256": "4fd419365acd42721100d99fdd452e58230347ef4ac9ed75f73955ece3a6e120",
+            "bytes": 37706
+          },
+          {
+            "path": "kitty/sky-2.webp",
+            "sha256": "34d2a9ad8075e4f3ec24c28f71cb1613cb0ef0052f7ffba76d89e8a2156eec07",
+            "bytes": 55588
+          },
+          {
+            "path": "kitty/sky-3.webp",
+            "sha256": "66388fc99f893ec21ef41e4f6bd8de9b1ec1422da3f5535296b41864e13ff2fc",
+            "bytes": 34736
+          },
+          {
+            "path": "kitty/sky-4.webp",
+            "sha256": "92d3bd3b31b027b9f7940b2678c3f97ac8a7b51d7d8e825c1f09512276214ed0",
+            "bytes": 40424
+          },
+          {
+            "path": "kitty/sky-5.webp",
+            "sha256": "e226f99949208c635c37d9a2fec61ce4d0f17122e42bcf48115d2ec457792cb8",
+            "bytes": 49598
+          },
+          {
+            "path": "kitty/lemon-1.webp",
+            "sha256": "af1fd6a8ca19b74990fa866719195f81152cd70d59b7c0d94145d8d66f5f83f8",
+            "bytes": 48394
+          },
+          {
+            "path": "kitty/lemon-2.webp",
+            "sha256": "31b1e30278b43b65a240912d322eb4a2e0ba68fce32bcb67cb967ac167e597da",
+            "bytes": 54832
+          },
+          {
+            "path": "kitty/lemon-3.webp",
+            "sha256": "bfa3c28ea0ffe4321760fa96087684534640afde94664229256b52020da921c5",
+            "bytes": 44764
+          },
+          {
+            "path": "kitty/lemon-4.webp",
+            "sha256": "17b60fd4a2d61a96ae9e561ab5e1cb0266915d0e28cb37856a0f2a53fd727ed5",
+            "bytes": 52402
+          },
+          {
+            "path": "kitty/lemon-5.webp",
+            "sha256": "97b76569a0dc3020d0a00ada4ef2c992f64732dd6a7f4f6f9712787b03cab3bc",
+            "bytes": 47516
+          },
+          {
+            "path": "kitty/mint-1.webp",
+            "sha256": "162946eb9004f60c328dcc8b0597356dd620906572cfffb70f013efb660b7a15",
+            "bytes": 55180
+          },
+          {
+            "path": "kitty/mint-2.webp",
+            "sha256": "49f524b3a190188b3092a62c0b5a06097d48fb2d22569c152efbc372fde8f301",
+            "bytes": 43578
+          },
+          {
+            "path": "kitty/mint-3.webp",
+            "sha256": "7a582bb5734c5fbd889e2e64f19f5be5b9922bf4b83d5ab044a57e9cd4112af5",
+            "bytes": 42108
+          },
+          {
+            "path": "kitty/mint-4.webp",
+            "sha256": "c8c51e33cc1bfaaa86b0f5377531971b3d323ae4e3063d8683622716c40aa915",
+            "bytes": 43720
+          },
+          {
+            "path": "kitty/mint-5.webp",
+            "sha256": "7567f0005de7ff1826e18f7bf114bcb833a1794c1e9d498f80deed74ac28cd51",
+            "bytes": 45000
           }
         ],
         "permissions": [
+          "network",
           "routes",
           "storage",
           "ui"
@@ -3126,9 +3503,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.8.10.zip",
-        "sha256": "c0876fcc1fe3e7e63c25ab566396c753adce446c5149a6804ca6f1ef8fa0ebba",
-        "bytes": 1927993
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.49.3.zip",
+        "sha256": "fb8be4f6123fcb5f1890c7c8a9f48b2bf5ec47589212b2116c2356b64df3fb52",
+        "bytes": 3462367
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },
@@ -3187,7 +3564,7 @@
         },
         "id": "poker",
         "name": "Poker",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "description": "Play Texas Hold’em Poker with Conversation characters. Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -3229,8 +3606,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "05ac5b92c06509448a457c76593e241b5ede75b74b18dafc136ce15ef0706efd",
-            "bytes": 33965
+            "sha256": "cbdc2e79c26d13fb63ff63a02db00ca5373b5794641a5210929b4e46ca015b1b",
+            "bytes": 163372
           }
         ],
         "permissions": [
@@ -3245,9 +3622,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/poker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.6.zip",
-        "sha256": "386efe30c0f40f05da52e62431860d459847386f0f9afa678b2892c7cd77e6c4",
-        "bytes": 60405
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.7.zip",
+        "sha256": "44c520e277a3321a41ca4e2f9616b8431fab379481f6496d68155aee24541f04",
+        "bytes": 189813
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
     },
@@ -3306,7 +3683,7 @@
         },
         "id": "quartermaster",
         "name": "Quartermaster",
-        "version": "0.1.33",
+        "version": "0.1.34",
         "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.6",
@@ -3334,13 +3711,13 @@
           },
           {
             "path": "client.js",
-            "sha256": "bb328e5d0887e067d2a2b554be19149875453b944aadc7ed5e7b761575a227fc",
+            "sha256": "e9347282a5d298ef8d5bb105602e0527d2e51e6bfc92f65e11dadfce82efab04",
             "bytes": 356554
           },
           {
             "path": "server.mjs",
-            "sha256": "8bbb7bc59705d9f0a57095920548c6d7a000aa7ecd6d8dcac06e8dd4f0be9ec0",
-            "bytes": 163277
+            "sha256": "a3ccf6fbf1e330c0b37be9ec42504ca71240612c8fb2dcb234db479bfef2feab",
+            "bytes": 164995
           },
           {
             "path": "icons/armor_legs.webp",
@@ -3464,9 +3841,9 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quartermaster.png",
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/quartermaster/README.md",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.33.zip",
-        "sha256": "c660f91a28d7db6a8ce3f968682e66ea8e96affac4aaf72c1fac83e1d4d50d82",
-        "bytes": 564311
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.34.zip",
+        "sha256": "e1cab4837e77753f088393eef1d4dffbb3ff84a381a0086c895343f70dc2de59",
+        "bytes": 566029
       }
     },
     {
@@ -3643,7 +4020,7 @@
         },
         "id": "rock-paper-scissors",
         "name": "Rock-Paper-Scissors",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -3685,8 +4062,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "f54e32bbbb7792e54d5fe0aa2881a92556e74bab32ac060da350ca0147f926e1",
-            "bytes": 27976
+            "sha256": "2948ac44bcdef943295273c1bc3b034b4d087d6bf1401c7da8c6e7b4f1fee9bf",
+            "bytes": 159704
           }
         ],
         "permissions": [
@@ -3701,9 +4078,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/rock-paper-scissors.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.6.zip",
-        "sha256": "4a5f7b746fb234023028d4925676a4b0f833add94ba09494935acfef1c49697a",
-        "bytes": 37676
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.7.zip",
+        "sha256": "1b3f2888919164a0a982a61013b93f92e99590c105c1a23037d129fbc48d5ab0",
+        "bytes": 169405
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
     },
@@ -4105,15 +4482,15 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 341
+          "minor": 832
         },
         "builtAgainst": {
-          "engineVersion": "2.5.0",
-          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+          "engineVersion": "2.5.2",
+          "engineCommit": "5c5cfedf6d31a09c5712422765cad3424fcaa31b"
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.18",
+        "version": "0.4.30",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -4142,7 +4519,7 @@
           }
         },
         "engine": {
-          "min": "2.4.6",
+          "min": "2.5.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -4182,13 +4559,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "71054a56bfdb8cd4d28a09c99a00f8dd180ce740cf606371d0ecc22acf3c8a2c",
-            "bytes": 2164536
+            "sha256": "10acdb5589391c9373186674d25da32e67bd159d4bba2f28490939c059c650e4",
+            "bytes": 2168404
           },
           {
             "path": "client.js",
-            "sha256": "174f826104ba12aaf20b12599a572bd5cb927d93a1031717fd0bf02b9aa748c6",
-            "bytes": 2910591
+            "sha256": "a600b930581c884a460730d5373a0fc730bc019fe301d157d0c758e9168d62b9",
+            "bytes": 2921292
           },
           {
             "path": "slurp2-logo.png",
@@ -4212,21 +4589,22 @@
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/de.json",
-            "sha256": "5f84b47b173de6433d1e3638797d96e1923d13263b049ef98cbddb62b302d9cf",
-            "bytes": 242224
+            "sha256": "c2cfa116ba723fab16244507958590a5781aeede4682b033d7926c388f113198",
+            "bytes": 247626
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/ko.json",
-            "sha256": "51715d63f9adf86922fb92dae91baba6604c83a1f5734c7622f67baa9ead6eb6",
-            "bytes": 339947
+            "sha256": "84e3dc1900cff95e8a8d5202a417607aedca7915b9f42646eb98263b65f99845",
+            "bytes": 345385
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/pl.json",
-            "sha256": "09c99b2a79c9eeedcb3fc2965bddfc77567f34612a12247cb031f8d6e77cb0e2",
-            "bytes": 243945
+            "sha256": "54fb019644eb8afab842b398aa34843686436211a3c1343c4b0d405ddb48fcbf",
+            "bytes": 249892
           }
         ],
         "permissions": [
+          "character-write",
           "chat-read",
           "mari-actions",
           "network",
@@ -4241,9 +4619,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.18.zip",
-        "sha256": "be13c0f314f58580bebf3f264589af4ffb0d346d8393967c4b8bdb38423008ef",
-        "bytes": 6133255
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.30.zip",
+        "sha256": "42b8e5664be81cb9174dfd84fe1989a120c78be033e20d64864a7873d7e04827",
+        "bytes": 6164634
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },
@@ -4260,7 +4638,7 @@
         },
         "id": "story-writer",
         "name": "Story Writer",
-        "version": "0.1.1",
+        "version": "0.7.0",
         "description": "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
         "engine": {
           "min": "2.5.1",
@@ -4302,13 +4680,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ca6300129f178a7f32aa5eadd587a5a7c885ffc4a202c617e70ee235731d3974",
-            "bytes": 13665
+            "sha256": "76dd70a5af49a54cc15b6454374030bbfd35c1bf41f3e23034f4f533a994a43d",
+            "bytes": 25030
           },
           {
             "path": "client.js",
-            "sha256": "4a745b679a777d1d71dd8a17f441a9b621784a8b5c0b6579619b6a1ba9a71438",
-            "bytes": 210075
+            "sha256": "b8bd269620968e2fd7035b0f205b6ce6cac927f80966d0fd2761292402d0f7ed",
+            "bytes": 269428
           },
           {
             "path": "story-writer-icon.png",
@@ -4346,9 +4724,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/story-writer.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.1.1.zip",
-        "sha256": "ba901a101a3094af030ea08e1d3ea6bc68301e74351ebf6340a5f4480fee99ff",
-        "bytes": 614064
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.7.0.zip",
+        "sha256": "2af1455a1a89d7f0974884b7ddea7029c79f46c48973285c29ac409eee53be6e",
+        "bytes": 684782
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/story-writer/README.md"
     },
@@ -4407,7 +4785,7 @@
         },
         "id": "tic-tac-toe",
         "name": "Tic-Tac-Toe",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "description": "Play Tic-Tac-Toe with a Conversation character. Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -4450,8 +4828,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "f99e8230481efdafd596e285a7987eacf3e0d7f1f9e86ffde8dd80dee31edb56",
-            "bytes": 23865
+            "sha256": "11658a603cd305bb463df00012f37869c50123f7825602234b32f474850eac53",
+            "bytes": 155604
           }
         ],
         "permissions": [
@@ -4466,9 +4844,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/tic-tac-toe.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.6.zip",
-        "sha256": "46b214655d7c0aa764773e6e51c79fcc6b15d9dbabb4acc24c7451d543c94a69",
-        "bytes": 33455
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.7.zip",
+        "sha256": "f8828f1ec82126fa31e9571ecfad1b66b600e88cf447a1a294d479f56ccc934b",
+        "bytes": 165195
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
     },
@@ -4485,7 +4863,7 @@
         },
         "id": "uno",
         "name": "UNO",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -4525,8 +4903,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "7f859e74da5472be93bd7be56727d870495c7ddea8a4c86999572eed22a3fa60",
-            "bytes": 33357
+            "sha256": "680eb2fa1693543c7781b43434305d6523cd8b4728a5f2c6fc9bba34a5af7f46",
+            "bytes": 161890
           }
         ],
         "permissions": [
@@ -4541,11 +4919,89 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/uno.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.6.zip",
-        "sha256": "1bfa4fbfb6627af7ef2ff26b179883d61d1be2b1398bf701682e567ce75b0728",
-        "bytes": 59861
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.7.zip",
+        "sha256": "61c5b93fab25c12cfa696661dab48154362bf4d4ad6fd85227bb8e8471ca75fa",
+        "bytes": 188395
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 386
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.1",
+          "engineCommit": "54e6848c818ae4150f108ab9614986bb7610891d"
+        },
+        "id": "wordle",
+        "name": "Wordle",
+        "version": "1.1.1",
+        "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
+        "engine": {
+          "min": "2.5.1",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent",
+          "turn-game"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-surface"
+          ],
+          "conversationGame": {
+            "command": "/wordle",
+            "aliases": [
+              "wordle",
+              "word of the day",
+              "daily word"
+            ],
+            "playerLabel": "Daily word game"
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "b75d7ab3ee9d433acc6decbdf2028839ede22dda2f060f6d6c31612232a046e9",
+            "bytes": 672
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "9df6ad0d62b647e60cb82941c963d4c483daa87b875f16b48877cc9aa491dc9d",
+            "bytes": 65640
+          },
+          {
+            "path": "client.js",
+            "sha256": "f1a543b20f3fe660731db8aa1c38022bc7e694140f709a8d281002d48ee3dffc",
+            "bytes": 34104
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "chat-write",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/wordle.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/wordle-1.1.1.zip",
+        "sha256": "5c59c8122abc6a015516c801f043d300767e3b958bfb928deb36601e60dbd2b7",
+        "bytes": 102489
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#wordle"
     },
     {
       "manifest": {
@@ -4560,7 +5016,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.8.0",
+        "version": "1.8.1",
         "description": "Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.5.1",
@@ -4596,13 +5052,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "08bad852d9b2193d0106305330e2c92475f854c9ffd0bf11e74bc8abdaeb4646",
-            "bytes": 137268
+            "sha256": "48d18d55d23e1e42070c20efbe3f5521c79d69ec6ec231b106aab5e6d5f84d0e",
+            "bytes": 137872
           },
           {
             "path": "client.js",
-            "sha256": "94f946e904c6e6570a9f6a0cdf852d132ba1b878079352dc441c883ea9b9e09b",
-            "bytes": 444643
+            "sha256": "1faef7f5833ac25bdd22d25ff4d7abe08c91d65b8eeedf9e3c70493b3b8942bf",
+            "bytes": 444679
           }
         ],
         "permissions": [
@@ -4620,9 +5076,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.8.0.zip",
-        "sha256": "20a4f7304221ef895ce98997200b3f0e411b085d3fd3ebdf3704da305a797a78",
-        "bytes": 584427
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.8.1.zip",
+        "sha256": "7439a62f0a6d3e26af50bba9967dec910f3955d63e1d39679833652ba463b7cd",
+        "bytes": 585067
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },

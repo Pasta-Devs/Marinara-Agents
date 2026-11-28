@@ -190,7 +190,8 @@ async function photoWorld(
     },
   };
   const cutouts: CutoutClient = {
-    cutOut: async () => ({ id: "cut", url: `${FILE}/cut.png` }),
+    // One cut-out per picture, as the Engine's free cleanup makes them (0.36.7: the looks are sent cut out).
+    cutOut: async (url) => ({ id: `cut-${url}`, url: `${url}.cut.png` }),
     deleteGalleryImage: async () => true,
   };
   const deps: RouteDeps = { ...t.deps, art, cutouts } as RouteDeps;
@@ -238,7 +239,13 @@ test("Take picture paints one photo with no model call: his look, her look, then
   assert.equal(t.paid.length, 1);
   const paid = t.paid[0]!;
   assert.equal(paid.method, "generateImage", "the kit wrapper never rebuilds these references");
-  assert.deepEqual(decoded(paid), [HIS_URL, HER_URL, PLACE_URL], "people first, the place last");
+  // Each look cut out of its backdrop (0.36.7); the place keeps its picture, the photo's only background.
+  assert.deepEqual(
+    decoded(paid),
+    [`${HIS_URL}.cut.png`, `${HER_URL}.cut.png`, PLACE_URL],
+    "people first, the place last",
+  );
+  assert.equal(paid.request.characters, 2, "0.47.2: the first two are people, which NovelAI gets alone");
   assert.deepEqual([paid.request.width, paid.request.height], [1024, 1024]);
   assert.equal(paid.request.prompt, review.body.prompt, "the review showed what was sent");
   assert.equal(t.calls.length, 0, "no model call");
@@ -252,10 +259,10 @@ test("Take picture paints one photo with no model call: his look, her look, then
   assert.equal((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.wornOutfit, undefined);
   assert.deepEqual(await t.store.readDoc(stateId(t.runId), normalizeState), stateBefore);
 
-  // Everyday looks send their portraits; without one, his card's avatar and her persona's.
+  // Everyday looks send their portraits, cut out (0.36.7); without one, his card's avatar and her persona's, as they are.
   const base = await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
   assert.equal(base.body.photo.art.state, "ready");
-  assert.deepEqual(decoded(t.paid[1]!), [KAI_PORTRAIT, INES_PORTRAIT, PLACE_URL]);
+  assert.deepEqual(decoded(t.paid[1]!), [`${KAI_PORTRAIT}.cut.png`, `${INES_PORTRAIT}.cut.png`, PLACE_URL]);
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => {
     const { portrait: _portrait, portraitRef: _ref, ...rest } = unit;
     return { ...rest, cardId: "card-kai" };
@@ -279,6 +286,44 @@ test("Take picture paints one photo with no model call: his look, her look, then
   );
   assert.doesNotMatch(t.paid[2]!.request.prompt, /in this outfit/u);
   assert.match(t.paid[2]!.request.prompt, /Kai: tall, dark hair, grey eyes; black wool coat\./u);
+  // #2147: Engine art as a base look is who they are too (his card, her persona), and a place in an Engine background
+  // sends that background.
+  const background = "/api/backgrounds/file/harbour.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: "/api/sprites/card-kai/file/full_neutral.png",
+  }));
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    portrait: "/api/avatars/file/ines-persona.png",
+  }));
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    places: { ...world.places, [PLACE]: { ...world.places[PLACE]!, art: { state: "ready", at, url: background } } },
+  }));
+  await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
+  assert.deepEqual(decoded(t.paid[3]!), [
+    "/api/avatars/file/kai-card.png",
+    "/api/avatars/file/ines-persona.png",
+    background,
+  ]);
+  assert.match(
+    t.paid[3]!.request.prompt,
+    /Reference images, in order: Kai's face; Ines's face; the place behind them\./u,
+  );
+  // A card unlinked after it gave him his sprite: the sprite he still stands in is his reference (CodeRabbit, #2161).
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => {
+    const { cardId: _unlinked, ...rest } = unit;
+    return rest;
+  });
+  await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
+  assert.equal(decoded(t.paid[4]!)[0], "/api/sprites/card-kai/file/full_neutral.png");
+  // ...and when that sprite won't load, nothing is paid for a stranger.
+  const read = t.images.cardAvatarImage;
+  t.images.cardAvatarImage = async (path) => (path.startsWith("/api/sprites/") ? null : read(path));
+  await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
+  assert.equal(t.paid.length, 5, "a sprite that won't load pays for no photo");
+  t.images.cardAvatarImage = read;
   assert.equal(t.calls.length, 0, "still no model call");
 });
 
@@ -401,8 +446,9 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   assert.match(solo.prompt, /safe for work, fully clothed/u);
   assert.match(solo.negativePrompt, /nudity, nsfw, sexual content, lingerie/u);
   assert.match(solo.negativePrompt, /extra people/u);
-  // How many people to draw and with how many limbs (the maintainer's anatomy report, 2026-11-03).
-  assert.match(solo.prompt, /Draw exactly two people, each appearing once, with two arms, two legs and five fingers/u);
+  // How many people to draw (the maintainer's anatomy report, 2026-11-03), with no limbs counted since 0.36.5.
+  assert.match(solo.prompt, /Draw exactly two people, each appearing once\./u);
+  assert.doesNotMatch(solo.prompt, /two arms|five fingers/u);
 
   const kiss = (await promptOf(t, setup({ his: pick("fond", "kiss"), her: pick("blush", "kiss") }))).body.prompt;
   assert.match(

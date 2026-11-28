@@ -29,6 +29,7 @@ import { withSlurpLiveShow } from "./slp-live-lock.js";
 import { shootSlurpLivePicture } from "./slp-live-picture.js";
 import { simulateSlurpLiveShow } from "./slp-live-service.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpLiveBeatResult = "written" | "waiting" | "busy" | "failed" | "ended" | "missing";
 
 // ponytail: in-process guard, one beat call per show at a time; a second server process would need a row flag.
@@ -56,7 +57,7 @@ export async function beatSlurpLiveShow(
     message?: string;
     joined?: boolean;
   },
-  now = new Date(),
+  now = slurpWorldNow(),
 ): Promise<SlurpLiveBeatResult> {
   const t0 = Date.now();
   const noodle = createSlurpStorage(db);

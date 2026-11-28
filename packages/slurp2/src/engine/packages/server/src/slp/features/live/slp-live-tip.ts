@@ -11,6 +11,7 @@ import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpLiveTipResult = "booked" | "ended" | "missing" | "processing" | "broke" | "taken" | "hosting";
 
 /**
@@ -29,7 +30,7 @@ export async function tipSlurpLiveShow(
     /** Buys (or extends) a private block at `settings.live.privatePrice` instead of a tip. */
     private?: boolean;
   },
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpLiveTipResult> {
   const storage = createSlurpLiveStorage(db);
   const show = await storage.get(input.showId);

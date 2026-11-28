@@ -5,10 +5,13 @@
 // ──────────────────────────────────────────────
 // Routes (S/routes/phone.ts): GET /runs/:run/phone → PhoneListView; GET .../phone/:li?page= → PhoneHistoryPage (the
 // kit's forgeChatHistoryPage, page 1 newest); POST .../phone/:li/send {text?, quote?, sticker?, id?, retry?} →
-// PhoneSendResult (409 busy while his reply or a close is being written); POST .../close → PhoneCloseResult;
+// PhoneSendResult (409 busy while his reply is being written or a close remembered); POST .../close → PhoneCloseResult
+// (0.47.1: answered once accepted, its memory written in the background);
 // POST .../seen {last?} → {}; POST /runs/:run/phone/due {open?} → PhoneDueResult (useDailyMessages, #2044).
 // #2044: the first time the phone opens with images on, POST /runs/:run/stickers starts the protagonist's five chibi
 // stickers (S/art/stickers.ts), and the run view is read again so it polls until they land.
+// #2154: the group chat, "Everyone", opens as the thread named GROUP_THREAD (GET .../phone/group, and so on); the same
+// heartbeat answers for its squabbles.
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../../api";
@@ -16,7 +19,10 @@ import { imagesOn } from "../../hooks/use-items";
 import { runPath } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import type { LiId, PhoneDueResult, RunView } from "../../shared/api-types";
+import { GROUP_THREAD } from "../../shared/home";
 import { homeQueryKey } from "../home/HomeScreen";
+import type { DateOpen } from "../dates/DateNight";
+import type { HangoutInvite } from "../album/Hangouts";
 import { Thread } from "./Thread";
 import { ThreadList } from "./ThreadList";
 
@@ -36,11 +42,25 @@ export const phonePath = (runKey: string, li?: LiId) =>
 export const DAILY_POLL_MS = 60_000;
 /** Each run's newest daily message as this page last heard it, kept across remounts and restarts of the heartbeat. */
 const heardDaily = new Map<string, string | null>();
+/** The same for each run's newest group chat squabble (#2154), and its newest date invitation (#2424). */
+const heardGroup = new Map<string, string | null>();
+const heardInvite = new Map<string, string | null>();
+const heardFriend = new Map<string, string | null>();
+const heardHangout = new Map<string, string | null>();
+
+/** Whether `latest` is new beside the mark `heard` keeps for this run (see useDailyMessages); keeps it as the mark. */
+function heardNew(heard: Map<string, string | null>, runKey: string, latest: { li: LiId; at: string } | null) {
+  const key = latest ? `${latest.li} ${latest.at}` : null;
+  const before = heard.get(runKey);
+  heard.set(runKey, key);
+  return !!latest && before !== undefined && key !== before;
+}
 
 /**
- * Settings → Connections' daily messages (S/phone/daily.ts): while the story is forged, its daily number is above 0
- * and the page is visible, asks POST .../phone/due every minute (the first a minute after it starts), naming the thread
- * the player has open, which never gets one. When a new daily message has landed, the thread list, Home's unread count
+ * Settings → Connections' daily messages (S/phone/daily.ts), group chat squabbles (#2154, S/phone/group.ts) and date
+ * invitations (#2424, S/phone/invite.ts): while the story is forged, any of the numbers is above 0 and the page is visible, asks POST .../phone/due every minute (the first
+ * a minute after it starts), naming the thread the player has open, which never gets one. A new squabble reads the
+ * list, Home's unread count and the group chat again, as a daily message does his thread. When a new daily message has landed, the thread list, Home's unread count
  * and his thread are read again, so it shows unread like a reply that landed after she left. A message is new when it
  * differs from the newest this page heard (heardDaily), so a remount or a restart (a language or debug change) reads
  * nothing again for one it already heard.
@@ -53,7 +73,16 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
   const queryClient = useQueryClient();
   const openRef = useRef(open);
   openRef.current = open;
-  const on = !!runKey && view?.forge.phase === "ready" && (view.world.dailyMessages ?? 0) > 0;
+  const on =
+    !!runKey &&
+    view?.forge.phase === "ready" &&
+    !view.ended &&
+    ((view.world.dailyMessages ?? 0) > 0 ||
+      (view.world.groupSquabbles ?? 0) > 0 ||
+      (view.world.dateInvites ?? 0) > 0 ||
+      // #2458: her friends' weekly messages and hangout invitations.
+      (view.world.friendMessages ?? 0) > 0 ||
+      (view.world.friendInvites ?? 0) > 0);
   useEffect(() => {
     if (!on || !runKey) return;
     let stopped = false;
@@ -62,13 +91,21 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
       if (document.visibilityState === "visible") {
         try {
           const due = await otome.post<PhoneDueResult>(`${phonePath(runKey)}/due`, { open: openRef.current });
-          const key = due.latest ? `${due.latest.li} ${due.latest.at}` : null;
-          const heard = heardDaily.get(runKey);
-          if (!stopped) heardDaily.set(runKey, key);
-          if (!stopped && due.latest && heard !== undefined && key !== heard) {
+          if (stopped) return;
+          const landed = [
+            heardNew(heardDaily, runKey, due.latest) ? due.latest!.li : null,
+            heardNew(heardGroup, runKey, due.group?.latest ?? null) ? GROUP_THREAD : null,
+            // #2424: a date invitation lands in his thread as a daily message does.
+            heardNew(heardInvite, runKey, due.invite?.latest ?? null) ? due.invite!.latest!.li : null,
+            // #2458: so does a friend's message or invitation to hang out.
+            heardNew(heardFriend, runKey, due.friend?.latest ?? null) ? due.friend!.latest!.li : null,
+            heardNew(heardHangout, runKey, due.hangout?.latest ?? null) ? due.hangout!.latest!.li : null,
+          ].filter((thread) => thread !== null);
+          if (landed.length) {
             void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
             void queryClient.invalidateQueries({ queryKey: homeQueryKey(runKey) });
-            void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, due.latest.li) });
+            for (const thread of landed)
+              void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, thread) });
           }
         } catch {
           // The server spends an attempt before any work, so a failed heartbeat simply waits for the next one.
@@ -90,6 +127,12 @@ interface PhoneScreenProps {
   /** The thread shown (Home's Reply opens one with the note quoted); null, or one not in the cast, shows the list. */
   open: PhoneOpen | null;
   onOpenChange: (open: PhoneOpen | null) => void;
+  /** #2156, #2303: opens the scene to clear the air with him, once she accepts his invitation in his thread. */
+  onOpenScene?: (key: string) => void;
+  /** #2424: opens his date invitation's looks step, or the date it opened. */
+  onOpenDate?: (open: DateOpen) => void;
+  /** #2458: a friend's invitation to hang out, accepted: Album → Hangouts plans it with them. */
+  onOpenHangout?: (invite: HangoutInvite) => void;
 }
 
 /** Starts the protagonist's stickers once, the first time the phone opens with images on (#2044). */
@@ -106,11 +149,19 @@ function useStartStickers(runKey: string, view: RunView) {
       .then(({ started }) => {
         if (started) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
       })
-      .catch((failure: unknown) => console.warn("Otome Forge could not start the protagonist's stickers", failure));
+      .catch((failure: unknown) => console.warn("Otome Hearth could not start the protagonist's stickers", failure));
   }, [due, otome, queryClient, runKey]);
 }
 
-export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenProps) {
+export function PhoneScreen({
+  runKey,
+  view,
+  open,
+  onOpenChange,
+  onOpenScene,
+  onOpenDate,
+  onOpenHangout,
+}: PhoneScreenProps) {
   useStartStickers(runKey, view);
   // Focus follows the player inside the phone: into a thread they opened here, back to its row when they leave it.
   // A thread opened from Home's Reply leaves for a list read for the first time, whose rows come after it loads: the
@@ -121,10 +172,16 @@ export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenPro
   const heading = useRef<HTMLHeadingElement>(null);
   const focusRow = (id: LiId, element: HTMLButtonElement | null) => {
     if (!element || returnTo.current !== id) return;
-    returnTo.current = null;
     // Never away from wherever the player has moved meanwhile.
     const active = document.activeElement;
-    if (!active || active === document.body || active === heading.current) element.focus({ preventScroll: true });
+    if (active && active !== document.body && active !== heading.current) {
+      returnTo.current = null;
+      return;
+    }
+    element.focus({ preventScroll: true });
+    // 0.47.1: a thread left by Close and remember's dialog is still inert behind it here; the effect below focuses
+    // the row once the dialog has let go.
+    if (document.activeElement === element) returnTo.current = null;
   };
   useEffect(() => {
     if (open || !returnTo.current) return;
@@ -135,7 +192,23 @@ export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenPro
     } else heading.current?.focus({ preventScroll: true });
   }, [open]);
 
-  const li = open ? (view.lis.find((item) => item.id === open.li) ?? null) : null;
+  if (open?.li === GROUP_THREAD) {
+    return (
+      <Thread
+        key={GROUP_THREAD}
+        runKey={runKey}
+        view={view}
+        focusHeading={openedHere.current}
+        onBack={() => {
+          returnTo.current = GROUP_THREAD;
+          onOpenChange(null);
+        }}
+        onQuoteChange={() => undefined}
+      />
+    );
+  }
+  // #2458: one of her friends has a thread too.
+  const li = open ? ([...view.lis, ...(view.friends ?? [])].find((item) => item.id === open.li) ?? null) : null;
   if (open && li) {
     return (
       <Thread
@@ -152,6 +225,9 @@ export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenPro
         onQuoteChange={(quote) => {
           if ((open.quote?.trim() || null) !== quote) onOpenChange({ li: li.id, ...(quote ? { quote } : {}) });
         }}
+        onOpenScene={onOpenScene}
+        onOpenDate={onOpenDate}
+        {...(onOpenHangout ? { onOpenHangout } : {})}
       />
     );
   }

@@ -23,6 +23,7 @@ import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpExtensionOn, slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { ads, characters, noodle, resolveViewerPersona } = deps;
   // Brands & ads off: nothing new is drawn, synced or written by the model; the pool stays editable.
@@ -165,7 +166,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       id: input.id ?? `user-${newId()}`,
       platform: SLURP_GARNISH_PLATFORM,
       origin: "user",
-      createdAt: new Date().toISOString(),
+      createdAt: slurpWorldNow().toISOString(),
     });
   });
 

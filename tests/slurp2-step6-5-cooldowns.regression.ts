@@ -68,7 +68,7 @@ for (const path of [
 // 0 minutes = a cool-off that ends at once (the strike still counts).
 assert.match(
   server("data/messages/slp-messages-storage-actions.ts"),
-  /coolUntil: new Date\(Date\.now\(\) \+ hours \* 3_600_000\)\.toISOString\(\),\s+strikes:/u,
+  /coolUntil: new Date\((?:Date\.now|slurpWorldNowMs)\(\) \+ hours \* 3_600_000\)\.toISOString\(\),\s+strikes:/u,
 );
 
 // ── Creator replies per day: both claims pass the setting ──

@@ -21,7 +21,7 @@ import {
   resolveIllustratorCharacterReferences,
 } from "../../../services/image/illustrator-references.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
@@ -29,6 +29,7 @@ import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-override
 import { generateSlpImageWithRetry, slpImageRetryable } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
+import { resolveSlurpLoreImageReferences } from "../../data/host/slp-lore-context.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
 import {
   slurpApplyImageLook,
@@ -177,7 +178,7 @@ export async function generateSlpPostImage(input: {
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
-  const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
+  const allowReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
   // The Creator's own appearance, written on the Creator rather than borrowed from a card.
   // `imageGenerationIncludeDescriptions` ("Use the Creator's look") gates this: off, a public
   // picture uses only the post, image habits and avatar references, same as the DM path in
@@ -247,7 +248,7 @@ export async function generateSlpPostImage(input: {
         ) {
           characterDescription = referenceResolution.appearanceBlock;
         }
-        if (input.settings.imageGenerationUseAvatarReferences && allowAvatarReferences) {
+        if (input.settings.imageGenerationUseAvatarReferences && allowReferences) {
           const builtInMariReferences =
             input.account.entityId === PROFESSOR_MARI_ID ? readProfessorMariReferenceImages() : [];
           const combinedReferences = [...builtInMariReferences, ...referenceResolution.referenceImages];
@@ -441,10 +442,18 @@ export async function generateSlpPostImage(input: {
     };
   }
 
+  const providerReferences = await resolveSlurpLoreImageReferences(input.db, {
+    enabled: input.settings.enableLorebookContext && allowReferences,
+    source: input.account,
+    texts: [input.postContent, input.promptOverride?.prompt ?? input.draftPrompt],
+    prompt: finalPrompt,
+    referenceImages,
+  });
+
   const image = await generateSlpImageWithRetry(
     () =>
       generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
-        prompt: finalPrompt,
+        prompt: providerReferences.prompt,
         negativePrompt: finalNegativePrompt,
         model: imageModel,
         width: input.settings.imageWidth,
@@ -452,7 +461,7 @@ export async function generateSlpPostImage(input: {
         imageEndpointId: input.imageConnection.imageEndpointId || undefined,
         comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
         imageDefaults,
-        referenceImages,
+        referenceImages: providerReferences.referenceImages,
         debugMode: input.debugMode,
         fallback: imageFallback,
         admissionMode: input.admissionMode,

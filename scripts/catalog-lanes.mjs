@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { buildStoreDocument } from "./catalog-store.mjs";
+import { buildDocumentationDocument } from "./catalog-documentation.mjs";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertReleaseNotesForFeatureBumps, buildReleaseNotesDocument } from "./catalog-release-notes.mjs";
 
@@ -280,12 +281,25 @@ async function writeLaneNotes(repoRoot, directory, lanes) {
   for (const [major, lane] of lanes) {
     await writeNotesSidecar(join(directory, `v${major}`), await buildReleaseNotesDocument(repoRoot, lane.packages));
     await writeStoreSidecar(repoRoot, join(directory, `v${major}`), lane.packages);
+    await writeDocumentationSidecar(repoRoot, join(directory, `v${major}`), lane.packages);
   }
   const legacyLane = lanes.get(LEGACY_CATALOG_MAJOR);
   if (legacyLane) {
     await writeNotesSidecar(directory, await buildReleaseNotesDocument(repoRoot, legacyLane.packages));
     await writeStoreSidecar(repoRoot, directory, legacyLane.packages);
+    await writeDocumentationSidecar(repoRoot, directory, legacyLane.packages);
   }
+}
+
+async function writeDocumentationSidecar(repoRoot, directory, packages) {
+  const document = await buildDocumentationDocument(repoRoot, relative(repoRoot, directory), packages);
+  const path = join(directory, "docs.json");
+  if (Object.keys(document.packages).length === 0) {
+    await rm(path, { force: true });
+    return;
+  }
+  await mkdir(directory, { recursive: true });
+  await writeFile(path, `${JSON.stringify(document, null, 2)}\n`);
 }
 
 /** Write (or remove) the Agent Organizer store sidecar beside one catalog.json. */

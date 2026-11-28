@@ -275,8 +275,9 @@ test("POST /runs checks the setup and the 18+ gate, then writes the run and star
     [
       ["world-plan", "pending"],
       ...ids.map((id) => [`bible:${id}`, "pending"]),
-      ...ids.map((id) => [`paint:${id}`, "waiting-consent"]),
-      ["paint:player", "waiting-consent"],
+      // With an image connection, and neither Ask before painting nor prompt review, each look paints by itself.
+      ...ids.map((id) => [`paint:${id}`, "pending"]),
+      ["paint:player", "pending"],
     ],
   );
   const archetype = (await store.readDoc(unitId(runId, ids[2]!), normalizeUnit))!;
@@ -309,7 +310,50 @@ test("POST /runs checks the setup and the 18+ gate, then writes the run and star
   assert.equal(plain.status, 200);
   assert.ok(plain.body.view.forge.steps.every((step: { id: string }) => !step.id.startsWith("paint:")));
   assert.equal(plain.body.view.world.content.heat, "explicit");
+  // Settings → Connections' three numbers are set at setup when asked (#2424), and left off otherwise.
+  assert.deepEqual(
+    [plain.body.view.world.dailyMessages, plain.body.view.world.groupSquabbles, plain.body.view.world.dateInvites],
+    [undefined, undefined, undefined],
+  );
   await forgeSettled(runIdOf(plain.body.run));
+  const numbered = await call("POST", "/runs", {
+    body: {
+      setup: setupInput({
+        images: { ...base.images, connectionId: null },
+        dailyMessages: 3,
+        groupSquabbles: 0,
+        dateInvites: 2,
+      } as never),
+    },
+  });
+  assert.equal(numbered.status, 200, JSON.stringify(numbered.body));
+  assert.deepEqual(
+    [
+      numbered.body.view.world.dailyMessages,
+      numbered.body.view.world.groupSquabbles,
+      numbered.body.view.world.dateInvites,
+    ],
+    [3, undefined, 2],
+  );
+  await forgeSettled(runIdOf(numbered.body.run));
+  const tooMany = await call("POST", "/runs", { body: { setup: setupInput({ dateInvites: 8 } as never) } });
+  assert.deepEqual([tooMany.status, tooMany.body.code], [400, "bad-request"]);
+
+  // Ask before painting, or the Engine's prompt review, holds every look for the tap.
+  for (const body of [
+    { setup: setupInput({ images: { ...base.images, ask: true } }) },
+    { setup: base, reviewImagePrompts: true },
+  ]) {
+    const held = await call("POST", "/runs", { body });
+    assert.equal(held.status, 200);
+    assert.deepEqual(
+      held.body.view.forge.steps
+        .filter((step: { id: string }) => step.id.startsWith("paint:"))
+        .map((step: { state: string }) => step.state),
+      ["waiting-consent", "waiting-consent", "waiting-consent", "waiting-consent"],
+    );
+    await forgeSettled(runIdOf(held.body.run));
+  }
 });
 
 test("GET /runs/:run shows a forge step a restart left running as failed", async () => {
@@ -444,6 +488,26 @@ test("settings: love interests who message you each day is 0 to 24, off by defau
   const off = await call("POST", "/runs/:run/settings", { params: run, body: { dailyMessages: 0 } });
   assert.equal(off.body.world.dailyMessages, 0);
   assert.equal((await world())!.phoneDaily!.days["2026-11-02"]!.attempts, 1, "turning it off keeps today's count");
+});
+
+test("settings: date invitations each week is 0 to 7, off by default, kept by other saves, its quota hidden", async () => {
+  // #2424.
+  const { call, world, run, store } = await setup();
+  assert.equal((await world())!.dateInvites, undefined, "off by default");
+  const saved = await call("POST", "/runs/:run/settings", { params: run, body: { dateInvites: 7 } });
+  assert.deepEqual([saved.status, saved.body.world.dateInvites], [200, 7]);
+  for (const bad of [8, -1, 0.5, "2"]) {
+    const refused = await call("POST", "/runs/:run/settings", { params: run, body: { dateInvites: bad } });
+    assert.deepEqual([refused.status, refused.body.code], [400, "bad-request"], String(bad));
+  }
+  await store.mutateDoc(runDocTarget("world", worldId(runIdOf(RUN_KEY))), normalizeWorld, (current) => ({
+    ...current,
+    inviteWeekly: { days: { "2026-11-02": { attempts: 1, nextAt: 1, wrote: [KAI] } }, last: { li: KAI, at } },
+  }));
+  const other = await call("POST", "/runs/:run/settings", { params: run, body: { dailyMessages: 2 } });
+  assert.deepEqual([other.body.world.dateInvites, other.body.world.inviteWeekly], [7, undefined]);
+  assert.equal((await call("GET", "/runs/:run", { params: run })).body.view.world.inviteWeekly, undefined);
+  assert.equal((await world())!.inviteWeekly!.days["2026-11-02"]!.attempts, 1);
 });
 
 test("revoking the gate drops every world to SFW, Angst at most and SFW images; changes after it lower without asking", async () => {
@@ -695,6 +759,29 @@ test("delete: the typed title must match; then every document of the run and its
     bare.logs.filter((entry) => entry.level === "warn").map((entry) => entry.args),
     [[RUN_KEY, 2]],
   );
+});
+
+test("delete sweeps Tarot night's readings and deck, and the deck's painted cards (#2151)", async () => {
+  const { call, fake, run, deleted, store } = await setup();
+  const runId = runIdOf(RUN_KEY);
+  const card = { state: "ready", at, url: "/api/global-gallery/file/card-1.png", ref: "global-gallery:card-1" };
+  await store.mutateDoc(
+    runDocTarget("deck", `${runId}:deck`),
+    (data) => data,
+    () => ({ version: 1, cards: { fool: { card: "fool", figure: "you", art: card } } }),
+  );
+  await store.mutateDoc(
+    runDocTarget("tarot", `${runId}:tarot:tr-abc123-aaaaaa`),
+    (data) => data,
+    () => ({ id: "tr-abc123-aaaaaa" }),
+  );
+  const removed = await call("POST", "/runs/:run/delete", { params: run, body: { confirmTitle: "Moonlit Court" } });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(
+    [...fake.rows.keys()].filter((id) => id.startsWith(`${runId}:`)),
+    [],
+  );
+  assert.deepEqual(deleted.sort(), ["card-1", "kai-1", "player-1"]);
 });
 
 for (const stop of ["a storage error", "a restart"]) {

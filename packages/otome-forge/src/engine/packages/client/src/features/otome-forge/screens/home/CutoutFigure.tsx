@@ -4,14 +4,14 @@
 // way); the player the same way (a painted look, then her
 // persona avatar in a cameo, then initials). Three wrappers move it: parallax (20 px at most, from the pointer),
 // a slow drift and breathing (scale 1 → 1.006 over 4.5 s). Every one of them is off under reduced motion.
-// His tap zones (head, hand, heart) sit on the art, or under the medallion as labelled buttons when there is none.
+// His touch zones (#2152: head, cheek, chest, hand, and the crotch under NSFW Heat, as Home lists them) sit on the art,
+// or under the medallion as labelled buttons when there is none.
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Hand, Heart, Smile, type LucideIcon } from "lucide-react";
 import { initialsOf } from "../../lib/accent";
 import type { TapMode } from "../../lib/tap-mood";
-import { TAP_ZONES, type TapZone } from "../../shared/home";
+import type { TapZone } from "../../shared/home";
 import type { Face } from "../../shared/faces";
 
 /**
@@ -25,13 +25,14 @@ export interface FigureArt {
   fallback?: FigureArt;
 }
 
+// The stored `heart` zone reads as the chest (#2152).
 const ZONE_KEYS: Record<TapZone, string> = {
   head: "ui.otomeForge.home.tapHead",
-  hand: "ui.otomeForge.home.tapHand",
+  cheek: "ui.otomeForge.home.tapCheek",
   heart: "ui.otomeForge.home.tapHeart",
+  hand: "ui.otomeForge.home.tapHand",
+  crotch: "ui.otomeForge.home.tapCrotch",
 };
-
-const ZONE_ICONS: Record<TapZone, LucideIcon> = { head: Smile, hand: Hand, heart: Heart };
 
 const clamp = (value: number) => Math.max(-1, Math.min(1, value));
 
@@ -84,11 +85,22 @@ interface CutoutFigureProps {
   label: string;
   face?: Face | "";
   mood?: TapMode;
-  /** His tap zones; the player's figure has none. */
+  /** The zones he shows, top to bottom (C/lib/tap-mood.ts shownZones); the player's figure has none. */
+  zones?: readonly TapZone[];
   onTap?: (zone: TapZone) => void;
 }
 
-export function CutoutFigure({ who, name, accent, art, label, face = "", mood = "fond", onTap }: CutoutFigureProps) {
+export function CutoutFigure({
+  who,
+  name,
+  accent,
+  art,
+  label,
+  face = "",
+  mood = "fond",
+  zones = [],
+  onTap,
+}: CutoutFigureProps) {
   const { t } = useTranslation();
   // An image that fails to load steps down to its fallback, and past the last one to the initials.
   const [broken, setBroken] = useState<readonly string[]>([]);
@@ -100,15 +112,14 @@ export function CutoutFigure({ who, name, accent, art, label, face = "", mood = 
     setBurst((current) => ({ id: (current?.id ?? 0) + 1, zone }));
     onTap?.(zone);
   };
-  const zones = onTap ? (
+  const targets = onTap ? (
     <div
       className={onArt ? "of-tap-zones" : "of-tap-pills"}
       role="group"
       aria-label={t("ui.otomeForge.home.tapGroup", { name })}
     >
-      {TAP_ZONES.map((zone) => {
-        const Icon = ZONE_ICONS[zone];
-        return onArt ? (
+      {zones.map((zone) =>
+        onArt ? (
           <button
             key={zone}
             type="button"
@@ -119,11 +130,10 @@ export function CutoutFigure({ who, name, accent, art, label, face = "", mood = 
           />
         ) : (
           <button key={zone} type="button" className="of-tap-pill of-glass" data-zone={zone} onClick={() => tap(zone)}>
-            <Icon size={15} strokeWidth={2} aria-hidden="true" />
             {t(ZONE_KEYS[zone])}
           </button>
-        );
-      })}
+        ),
+      )}
       {burst ? <span key={burst.id} className="of-tap-burst" data-zone={burst.zone} aria-hidden="true" /> : null}
     </div>
   ) : null;
@@ -158,11 +168,11 @@ export function CutoutFigure({ who, name, accent, art, label, face = "", mood = 
                 </span>
               </div>
             )}
-            {onArt ? zones : null}
+            {onArt ? targets : null}
           </div>
         </div>
       </div>
-      {onArt ? null : zones}
+      {onArt ? null : targets}
     </div>
   );
 }

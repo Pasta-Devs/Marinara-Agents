@@ -37,6 +37,7 @@ import {
 } from "../../modules/continuity/slp-continuity-rules.js";
 import { slurpExtractionSourceHash } from "../../modules/continuity/slp-continuity-extraction.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 function parseJson<T>(value: unknown, fallback: T): T {
   try {
     return typeof value === "string" ? (JSON.parse(value) as T) : fallback;
@@ -123,7 +124,7 @@ export type SlurpContinuityEventInput = SlurpContinuityIdentity & {
 export async function recordSlurpContinuityEvent(
   db: DB,
   input: SlurpContinuityEventInput,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpContinuityEvent> {
   const existing = await db
     .select()
@@ -157,7 +158,7 @@ export async function recordSlurpContinuityEvent(
     expiresAt: input.expiresAt ? input.expiresAt.toISOString() : null,
   };
   await db.insert(slurpContinuityEvents).values(row);
-  await pruneSlurpContinuity(db, input.creatorAccountId, at);
+  await pruneSlurpContinuity(db, input.creatorAccountId);
   return mapEvent(row);
 }
 
@@ -182,7 +183,7 @@ export type SlurpContinuityFactInput = SlurpContinuityIdentity & {
 export async function createSlurpContinuityFact(
   db: DB,
   input: SlurpContinuityFactInput,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpContinuityFact | null> {
   const text = input.text.trim().slice(0, SLURP_CONTINUITY_TEXT_MAX);
   if (!text) return null;
@@ -220,7 +221,7 @@ export async function editSlurpContinuityFact(
   db: DB,
   id: string,
   patch: Partial<Pick<SlurpContinuityFact, "text" | "subject" | "audienceScope" | "factType" | "expiresAt">>,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpContinuityFact | null> {
   const [row] = await db.select().from(slurpContinuityFacts).where(eq(slurpContinuityFacts.id, id));
   if (!row) return null;
@@ -248,7 +249,7 @@ export async function moveSlurpContinuityStatus(
   target: "fact" | "event",
   id: string,
   to: SlurpContinuityStatus,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<boolean> {
   const table = target === "fact" ? slurpContinuityFacts : slurpContinuityEvents;
   const [row] = await db.select().from(table).where(eq(table.id, id));
@@ -268,7 +269,7 @@ export async function retractSlurpContinuitySource(
   db: DB,
   creatorAccountId: string,
   sourceHash: string,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<number> {
   if (!sourceHash) return 0;
   const rows = await db
@@ -316,7 +317,12 @@ export async function listSlurpContinuityFor(
 }
 
 /** Retention for one Creator: finished events past their window, then the oldest over the cap. */
-export async function pruneSlurpContinuity(db: DB, creatorAccountId: string, at = new Date()): Promise<number> {
+// Real clock, never later than the world date: a restore to an earlier date must not prune events written after it.
+export async function pruneSlurpContinuity(
+  db: DB,
+  creatorAccountId: string,
+  at = new Date(Math.min(Date.now(), slurpWorldNow().getTime())),
+): Promise<number> {
   const rows = await db
     .select()
     .from(slurpContinuityEvents)
@@ -365,7 +371,7 @@ export async function proposeSlurpContinuityChange(
     sourceMessageIds?: string[];
     extractionFingerprint?: string;
   },
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<string> {
   const pending = await db
     .select()
@@ -445,7 +451,7 @@ export type SlurpContinuityLink = {
 export async function recordSlurpContinuityLink(
   db: DB,
   input: Omit<SlurpContinuityLink, "id" | "createdAt">,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<void> {
   const existing = await db
     .select()
@@ -490,7 +496,7 @@ export async function promoteSlurpContinuityFact(
   db: DB,
   id: string,
   audienceScope: SlurpPromotionTarget,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpContinuityFact | "not_found" | "not_promotable"> {
   const [row] = await db.select().from(slurpContinuityFacts).where(eq(slurpContinuityFacts.id, id));
   if (!row) return "not_found";
@@ -526,7 +532,7 @@ export async function promoteSlurpContinuityFact(
 export async function listSlurpContinuityForEditor(
   db: DB,
   creatorAccountId: string,
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<{
   facts: SlurpContinuityFact[];
   events: SlurpContinuityEvent[];
@@ -579,7 +585,7 @@ export async function reviewSlurpContinuityProposal(
   db: DB,
   id: string,
   decision: "approve" | "reject",
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpContinuityFact | SlurpContinuityEvent | "not_found" | "rejected" | "not_pending" | "stale"> {
   const [row] = await db.select().from(slurpContinuityProposals).where(eq(slurpContinuityProposals.id, id));
   if (!row) return "not_found";

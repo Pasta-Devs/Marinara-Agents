@@ -1,7 +1,7 @@
 import { SlpEmptyState, SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlurpProfileMediaTile } from "./SlpScreenProfile";
 import { useSlpDrawnCount } from "../../base/ui/slp-drawn-count";
-import { Images, Loader2, PenLine, UserPlus } from "lucide-react";
+import { Images, PenLine, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSlpStoryRings } from "../../modules/story/SlpStoryRing";
 import { cn } from "../../../lib/utils";
@@ -20,6 +20,8 @@ import type { StageProfileViewModel } from "./slp-profile-view-model";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
 import { createSlpLightboxImage, SLP_CARD_STACK_CLASS } from "../../modules/post/SlpPostHelpers";
 
+import { slurpWorldNowMs } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { Spinner } from "../../../components/ui/Spinner";
 /** Stories younger than this still wear the ring on the profile's Story row. */
 const STORY_LIVE_MS = 24 * 60 * 60 * 1000;
 
@@ -146,7 +148,7 @@ export function SlpProfilePostCards({ model }: { model: StageProfileViewModel })
                     disabled={subscribersQuery.isFetchingNextPage}
                     className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
                   >
-                    {subscribersQuery.isFetchingNextPage && <Loader2 size={14} className="animate-spin" />}
+                    {subscribersQuery.isFetchingNextPage && <Spinner size="sm" />}
                     {localizeUi("ui.noodle.noodlehome.loadMore", {
                       visible: subscribers.length,
                       total: subscriberTotal,
@@ -257,7 +259,7 @@ export function SlpProfilePostCards({ model }: { model: StageProfileViewModel })
               <SlurpMomentShelfTile
                 key={moment.post.id}
                 moment={moment}
-                isNew={Date.now() - Date.parse(moment.post.createdAt) < STORY_LIVE_MS}
+                isNew={slurpWorldNowMs() - Date.parse(moment.post.createdAt) < STORY_LIVE_MS}
                 onOpen={() => setActiveStoryId(moment.post.id)}
               />
             ))}

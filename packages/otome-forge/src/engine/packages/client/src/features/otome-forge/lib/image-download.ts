@@ -103,7 +103,7 @@ export function useImageDownload(url: string | null, filename: string) {
       setState("ready");
       return true;
     } catch (error) {
-      console.warn("Otome Forge could not save an image", error);
+      console.warn("Otome Hearth could not save an image", error);
       setState("failed");
       return false;
     }

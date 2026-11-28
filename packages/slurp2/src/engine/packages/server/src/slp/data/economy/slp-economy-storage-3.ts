@@ -16,6 +16,7 @@ import { NOODLER_FAN_IDENTITY_PREFIX } from "../../modules/audience/slp-fan-iden
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createEconomyStorage3(context: SlurpStorageContext) {
   const {
     db,
@@ -147,7 +148,7 @@ export function createEconomyStorage3(context: SlurpStorageContext) {
      * Today's payout for one Creator: dollars it may still move, and the coins that brings. The daily
      * limit is shared by every Creator the same persona runs, so a second page does not double it.
      */
-    async getPayoutState(creatorAccountId: string, at = new Date()) {
+    async getPayoutState(creatorAccountId: string, at = slurpWorldNow()) {
       const settings = await this.getSettings();
       const crowdWeight = settings.simulationTuning.economy.crowdWeight;
       const dailyLimit = settings.walletPayoutDailyLimit;
@@ -182,7 +183,7 @@ export function createEconomyStorage3(context: SlurpStorageContext) {
       const recipientId = creator.sourceEntityId;
       const run = enqueueFinancial(async () => {
         const { earnings: current, crowdWeight, othersToday, dailyLimit } = await this.getPayoutState(creatorAccountId);
-        const next = payoutEarnings(current, amount, new Date(), crowdWeight, othersToday, dailyLimit);
+        const next = payoutEarnings(current, amount, slurpWorldNow(), crowdWeight, othersToday, dailyLimit);
         if (!next) return { status: "refused" as const };
         const previousWalletValue = await settingsStore.get(slurpWalletKey(recipientId));
         const previousViewerSettingsValue = await settingsStore.get(slurpViewerSettingsKey(recipientId));
@@ -191,7 +192,13 @@ export function createEconomyStorage3(context: SlurpStorageContext) {
           const wallet = await getWalletNow(recipientId);
           const credited = await writeWallet(
             recipientId,
-            credit(wallet, "topUp", slurpPayoutCoins(amount, crowdWeight), new Date(), `payout: ${creator.handle}`),
+            credit(
+              wallet,
+              "topUp",
+              slurpPayoutCoins(amount, crowdWeight),
+              slurpWorldNow(),
+              `payout: ${creator.handle}`,
+            ),
           );
           return { status: "paid" as const, earnings: next, wallet: credited };
         } catch (error) {

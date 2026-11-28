@@ -9,6 +9,7 @@ import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
 import { reconcileSlpThreadScene } from "./scenes/slp-roleplay-scene-origin.js";
 
+import { slurpWorldNowMs, slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const INITIAL_DELAY_MS = 15_000;
 // Delayed reply bubbles are timed in seconds, and a 60 s poll delivered every second bubble a
 // minute later. A tick is cheap reads unless something is due.
@@ -71,7 +72,7 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
             role: "creator",
             content: bubble.content,
             // Keep the original trigger for obligation checks, but order the stored message by delivery.
-            createdAt: new Date().toISOString(),
+            createdAt: slurpWorldNow().toISOString(),
             replyObligationCreatedAt: bubble.createdAt,
             replyBubbleId: bubble.id,
           });
@@ -131,7 +132,7 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
             // The failing thread steps back on its own. Left oldest-first, it took the first slot
             // every tick and each retry spent model budget.
             // ponytail: fixed 10 min per-thread wait; store a failure count if this needs to grow.
-            await storage.setReplyNotBefore(thread.id, new Date(Date.now() + 10 * 60_000).toISOString());
+            await storage.setReplyNotBefore(thread.id, new Date(slurpWorldNowMs() + 10 * 60_000).toISOString());
           }
         }
       }

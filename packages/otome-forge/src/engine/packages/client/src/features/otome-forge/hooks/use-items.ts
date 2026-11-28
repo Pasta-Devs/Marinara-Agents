@@ -1,12 +1,15 @@
 // ──────────────────────────────────────────────
 // Otome Forge: what Wish, the Wardrobe and the Album share about items (M4): their queries, an item's first open, and
-// a tap that paints (an item's art, a banner's, a couple set's pair portrait).
+// a tap that paints (an item's art, a banner's, a couple set's pair portrait, a Shop figurine's, #2138, a Tarot card's,
+// #2151), and the request id a wish or a Shop purchase (#2128) keeps until it is answered.
 // ──────────────────────────────────────────────
 // Routes: POST /runs/:run/items/:item/open → ItemOpenResult (S/routes/items.ts) writes a Memory's Character Story, a
 // Moment or a first-wear beat and paints its art, once; the server holds the paint for a tap under Ask before painting
 // or the Engine's prompt review. A tap paints through the target's own route (`paintPath`, with an edited prompt when
 // reviewed) and the prompt to review comes from `promptPath`; it is also the Retry of a failed or stopped paint. One
 // open per item, and one paint per target, is in flight from this page however many screens or taps ask.
+// 0.21.0: POST /runs/:run/items/:item/seen lets an item won from Wish go from unseen (useMarkSeen): its dot in the
+// Wardrobe or the Album, and the count on the dock, go at once; the server's answer and a read again settle them.
 import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useOtomeApi, type RequestBody } from "../api";
@@ -14,22 +17,115 @@ import type { ImagePrompt } from "../components/PromptReviewDialog";
 import { useOtomeProps } from "../props";
 import { homeQueryKey } from "../screens/home/HomeScreen";
 import type { Paint, RunView } from "../shared/api-types";
-import type { ItemOpenResult } from "../shared/wardrobe";
-import { isLookKind, type BannerView, type ItemKind, type ItemView } from "../shared/wish";
+import { deckKey, type Arcana } from "../shared/tarot";
+import type { AlbumView, ItemOpenResult, WardrobeView } from "../shared/wardrobe";
+import {
+  collectionOf,
+  datePlacePaintable,
+  isLookKind,
+  type BannerView,
+  type ItemKind,
+  type ItemView,
+} from "../shared/wish";
 import { runPath } from "./use-reader";
 import { runQueryKey } from "./use-run";
 
 export const wishQueryKey = (runKey: string) => ["otome-forge", "wish", runKey] as const;
 export const wardrobeQueryKey = (runKey: string) => ["otome-forge", "wardrobe", runKey] as const;
 export const albumQueryKey = (runKey: string) => ["otome-forge", "album", runKey] as const;
+/** #2128: the Shop in Wish (C/screens/wish/ShopPanel.tsx). */
+export const shopQueryKey = (runKey: string) => ["otome-forge", "shop", runKey] as const;
+/** #2151: Tarot night's deck and open reading (C/screens/dates/TarotNight.tsx), one query per love interest under it. */
+export const tarotQueryKey = (runKey: string) => ["otome-forge", "tarot", runKey] as const;
+/** GET /runs/:run/dates (C/screens/dates/DateNight.tsx useDates): the dates won from Wish, with their place pictures. */
+export const datesQueryKey = (runKey: string) => ["otome-forge", "dates", runKey] as const;
 
 /**
- * Everything an item can change: what Wish, the Wardrobe, the Album, Home and the run view show. Resolves once the
- * screens on show have read it again, so a button that waited on the change never shows the old item in between.
+ * Everything an item can change: what Wish (and its Shop), the Wardrobe, the Album and its Dates, Home, Tarot night's
+ * deck and the run view show. 0.34.8: the dates too, so a date's Paint it shows the painting it started at once.
+ * Resolves once the screens on show have read it again, so a button that waited on the change never shows the old item
+ * in between.
  */
 export async function invalidateCollection(queryClient: QueryClient, runKey: string): Promise<void> {
-  const keys = [wishQueryKey(runKey), wardrobeQueryKey(runKey), albumQueryKey(runKey), homeQueryKey(runKey)];
+  const keys = [
+    wishQueryKey(runKey),
+    shopQueryKey(runKey),
+    wardrobeQueryKey(runKey),
+    albumQueryKey(runKey),
+    homeQueryKey(runKey),
+    tarotQueryKey(runKey),
+    datesQueryKey(runKey),
+  ];
   await Promise.all([...keys, runQueryKey(runKey)].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+}
+
+/**
+ * 0.21.0: marks an item won from Wish as looked at. Its dot goes from the cached Wardrobe or Album and the dock's count
+ * drops at once; then the run view and its screen are read again (a failed request brings the dot back). One request
+ * per item at a time.
+ */
+export function useMarkSeen(runKey: string) {
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const sent = useRef(new Set<string>());
+  return (id: string) => {
+    if (sent.current.has(id)) return;
+    sent.current.add(id);
+    const screen = collectionOf(id);
+    const collectionKey = screen === "wardrobe" ? wardrobeQueryKey : albumQueryKey;
+    queryClient.setQueryData<RunView>(runQueryKey(runKey), (view) =>
+      view?.unseen ? { ...view, unseen: { ...view.unseen, [screen]: Math.max(0, view.unseen[screen] - 1) } } : view,
+    );
+    if (screen === "wardrobe") {
+      const seen = <T extends { id: string; new?: true }>(look: T): T => {
+        if (look.id !== id || !look.new) return look;
+        const { new: _new, ...rest } = look;
+        return rest as T;
+      };
+      queryClient.setQueryData<WardrobeView>(wardrobeQueryKey(runKey), (data) =>
+        data
+          ? {
+              ...data,
+              me: data.me.map(seen),
+              him: Object.fromEntries(Object.entries(data.him).map(([li, looks]) => [li, looks.map(seen)])),
+            }
+          : data,
+      );
+    } else {
+      queryClient.setQueryData<AlbumView>(albumQueryKey(runKey), (data) =>
+        data
+          ? {
+              ...data,
+              memories: data.memories.map((item) => {
+                if (item.id !== id || !item.new) return item;
+                const { new: _new, ...rest } = item;
+                return rest;
+              }),
+            }
+          : data,
+      );
+    }
+    void otome
+      .post(`${runPath(runKey)}/items/${encodeURIComponent(id)}/seen`, {})
+      .catch((error: unknown) => console.warn("Otome Hearth could not mark an item seen", error))
+      .finally(() => {
+        // The run view and the screen are read again, never written from this answer: two seen in quick succession
+        // may answer out of order (Dottore on #2204), and a read sent before the write must not leave its dot. A failed
+        // request brings the dot back. A later click may send again (the route is idempotent) should one still show.
+        sent.current.delete(id);
+        void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+        void queryClient.invalidateQueries({ queryKey: collectionKey(runKey) });
+      });
+  };
+}
+
+/** A pull's or a purchase's id: kept until it is answered, so a retry is the same request and is never paid twice. */
+export function newRequestId(): string {
+  const random =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
+      : Math.random().toString(36).slice(2, 14);
+  return `w-${Date.now().toString(36)}-${random}`;
 }
 
 /** Kinds whose first open writes something: a Character Story, a Moment, a first-wear beat. */
@@ -37,9 +133,14 @@ const WRITTEN_KINDS: ReadonlySet<ItemKind> = new Set(["memory5", "moment4", "his
 
 export const writesOnOpen = (item: Pick<ItemView, "kind">) => WRITTEN_KINDS.has(item.kind);
 
-/** An illustrated reward or look whose first open can paint, with images on. */
-export const paintsOnOpen = (item: Pick<ItemView, "kind">, images: boolean) =>
-  images && (item.kind === "memory5" || item.kind === "moment4" || item.kind === "snapshot3" || isLookKind(item.kind));
+/** An illustrated reward or look whose first open can paint, with images on (#2303: a 4★ date paints its place). */
+export const paintsOnOpen = (item: Pick<ItemView, "kind" | "place">, images: boolean) =>
+  images &&
+  (item.kind === "memory5" ||
+    item.kind === "moment4" ||
+    item.kind === "snapshot3" ||
+    datePlacePaintable(item) ||
+    isLookKind(item.kind));
 
 /**
  * True while an owned item's first open has not finished: its story is unwritten, or its art never started (as the
@@ -54,8 +155,18 @@ export function needsOpen(item: ItemView, images: boolean): boolean {
 export const paintWaits = (art: Paint | null | undefined) =>
   !!art && (art.state === "waiting-consent" || art.state === "failed" || art.state === "stopped");
 
-export const readyArt = (art: Paint | null | undefined): string | null =>
-  art?.state === "ready" && art.url ? art.url : null;
+/**
+ * The picture a record shows: its own once ready, and (0.24.0) the one a repaint kept on screen while the new one
+ * paints and after it failed. Only a repaint puts a url on a record that is not ready, as a base look's portrait stays.
+ */
+export const readyArt = (art: Paint | null | undefined): string | null => art?.url || null;
+
+/** Ready art and whether it is a saved cut-out (an ItemView's or BannerView's `cut`: shown as it is, never cleaned). */
+export const readyPicture = (source: { art: Paint | null; cut?: true } | null | undefined) => {
+  const url = readyArt(source?.art);
+  return url ? { url, cut: !!source?.cut } : null;
+};
+export type ReadyPicture = NonNullable<ReturnType<typeof readyPicture>>;
 
 export const imagesOn = (view: Pick<RunView, "world">) => !!view.world.images.connectionId;
 
@@ -100,6 +211,30 @@ export const itemPaintTarget = (runKey: string, item: ItemView): PaintTarget => 
   const path = `${runPath(runKey)}/items/${encodeURIComponent(item.id)}/art`;
   return { id: item.id, subject: item.look?.name || item.title, paintPath: path, promptPath: `${path}/prompt` };
 };
+
+/** S/routes/shop.ts (#2138): POST .../shop/figurines/:li/art and .../art/prompt; `subject` names it in the review. */
+export const figurinePaintTarget = (runKey: string, li: string, subject: string): PaintTarget => {
+  const path = `${runPath(runKey)}/shop/figurines/${encodeURIComponent(li)}/art`;
+  return { id: `figurine:${li}`, subject, paintPath: path, promptPath: `${path}/prompt` };
+};
+
+/**
+ * S/routes/tarot.ts (#2151): POST .../art/tarot {li, card} and .../art/tarot/prompt, from Tarot night and the Album; a
+ * card of the story's one set is the same card whichever love interest's `li` asks. `subject` names it in the review.
+ */
+export const tarotPaintTarget = (
+  runKey: string,
+  li: string,
+  card: Arcana,
+  subject: string,
+  key = deckKey(card, li), // #2458: a friend's own card has its own key (the Album passes it)
+): PaintTarget => ({
+  id: `tarot:${key}`,
+  subject,
+  paintPath: `${runPath(runKey)}/art/tarot`,
+  promptPath: `${runPath(runKey)}/art/tarot/prompt`,
+  body: { li, card },
+});
 
 /** S/routes/wish.ts: POST .../wish/art {banner} and .../wish/art/prompt {banner}. */
 export const bannerPaintTarget = (runKey: string, banner: BannerView): PaintTarget => ({

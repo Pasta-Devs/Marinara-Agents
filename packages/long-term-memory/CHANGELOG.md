@@ -1,5 +1,71 @@
 # Long-Term Memory changelog
 
+## 1.6.13 — 2026-11-28
+
+- In Sources, filtering Chat Messages to a branch now also lists the imported pieces from a parent chat whose messages are hidden in that branch. You can extract them again or delete them from there. A piece that skips messages now names only the message numbers it holds in its title, such as "messages 1-4, 9-12". The count and range on its row still run from its first message to its last.
+
+## 1.6.12 — 2026-11-28
+
+- The Review count now includes memories that a read could not save, so it may go up after this update on installs that already have some in Review. The memories the read did save still apply as before.
+
+## 1.6.11 — 2026-11-27
+
+- If an error says your connection doesn't serve your extraction model, an import now tells you to check the model name. A plain "Not Found" error doesn't count, because a wrong connection address can cause it too. After the model-name error an import starts no new pieces and leaves them for a later run, though pieces already being read still finish. It stops the same way when a login or quota error arrives with an error code Long-Term Memory recognizes.
+
+## 1.6.10 — 2026-11-27
+
+- If you extract a source again after saving memories from it, and its text hasn't changed, a read that would create new memories now waits in Review so you can catch reworded copies. This lasts while the earlier draft is kept. By default, a finished draft is removed after 30 days.
+
+## 1.6.9 — 2026-11-27
+
+- Extraction no longer drops a memory because the model wrote its subject ID with capitals, spaces or punctuation. It cleans up the ID and keeps the memory.
+
+## 1.6.8 — 2026-11-27
+
+- A branch's chat summary no longer shows as new in Sources when another chat of its conversation already saved memories from the same messages. It shows under Imported with "Already saved from" and a link to that memory, and Import all new and auto-import skip it.
+
+## 1.6.7 — 2026-11-20
+
+- Chat summaries get a story date when they say which messages they cover, and Conversation day and week summaries get their own days. Find story dates dates the ones imported before.
+
+## 1.6.6 — 2026-11-20
+
+- The Vault and Sources open and respond quickly with a very large character library (tens of thousands of cards) instead of freezing for minutes.
+
+## 1.6.5 — 2026-11-19
+
+- New memories from Roleplay and Game chats carry the story date the World State tracker saved, and Conversation memories carry the real date.
+- Find story dates reads your existing memories' chat text for in-story dates and time skips, shows what it found with the exact words it relied on, and saves only what you apply.
+- Memories show their story date in the Vault, where you can correct it, and the story's timeline reaches the AI with its dates.
+
+## 1.6.4 — 2026-11-19
+
+- Read from, the choice between reading messages or finished summaries in the background, can be set once for every chat in Memory Settings under "Memories from chats". A chat follows it until you pick its own in Chat Settings, and "Use the default for all chats" there goes back. The default stays Messages, so no chat changes until you pick Summaries.
+
+## 1.6.3 — 2026-11-16
+
+- A chat can read its summaries instead of its messages in the background. Set "Read from" to Summaries in Chat Settings under "Memories from this chat". A summary is read once it covers a finished stretch, and one that keeps changing stays in Sources. The default stays Messages, so no chat changes until you pick Summaries.
+
+## 1.6.2 — 2026-11-16
+
+- Background import no longer reads a message piece that failed again each time a later piece closes; it is read again on Retry in Chat Settings, after a change of the extraction connection, or on the first reply after ten minutes.
+
+## 1.6.1 — 2026-11-14
+
+- "Checked N of M" in the three AI checks counts only memories the model actually reviewed, and a check that stops at its limit has a "Check the next batch" button, so every memory can be reviewed.
+
+## 1.6.0 — 2026-11-14
+
+- The Memory Vault has a Graph view of your memories and their links.
+- Each reply has a Long-Term Memory card in the chat's Agent activity panel and drawer, and Activity has its own page.
+- Branched chats remember what their other branches saved and keep their latest messages visible.
+- Recall is set by one token budget, uses whole memories only and matches the meaning of the latest messages.
+- Extraction saves fewer, story-level memories, and "Newest messages to leave for later" keeps it off a scene that is still going. Background import now reads messages only; import chat summaries by hand from Sources.
+- Sharing is set per Agent, with "Can read" and "Can add" switches.
+- New: setup and a tour with Mari, a one-time "What's new", and three AI checks for older memories ("Tidy with AI", "Link older relationships", "Find duplicate people") that change only what you tick.
+- Memory Settings, Sources, Review and the Vault are simpler to read.
+- Needs an Engine with Capability API 1.820.
+
 ## 1.5.29 — 2026-11-01
 
 - Long-Term Memory no longer imports Advanced Memory scene recaps. Chats that use Advanced Memory are extracted from their own summaries and messages, so their memories get keywords, links and threads, and "Hide remembered messages" works for them. Memories already imported from recaps stay.

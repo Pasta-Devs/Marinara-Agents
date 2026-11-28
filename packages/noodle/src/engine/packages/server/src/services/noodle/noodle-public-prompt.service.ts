@@ -7,7 +7,7 @@ import {
   type WeekSchedule,
 } from "@marinara-engine/shared";
 import type { ChatMessage } from "../llm/base-provider.js";
-import { createCharactersStorage } from "../storage/characters.storage.js";
+import { createCharactersStorage } from "../../lib/host-characters-storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";

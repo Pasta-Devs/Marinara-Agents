@@ -28,7 +28,7 @@ export async function ensurePrologue(deps: { store: OtomeStore }, runId: string)
   const read = () => deps.store.readDoc(chapterId(runId, PROLOGUE_KEY), normalizeChapter);
   return readOrGenerate(runId, read, async () => {
     const run = await readRun(deps.store, runId);
-    if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!run) throw new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
     if (run.world.forge.phase !== "ready") {
       throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
     }

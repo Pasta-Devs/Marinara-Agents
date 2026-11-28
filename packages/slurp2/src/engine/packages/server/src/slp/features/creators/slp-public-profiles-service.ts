@@ -12,7 +12,7 @@ import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { modelAnswerForCorrection, requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import type { BaseLLMProvider, ChatMessage } from "../../../services/llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
-import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createCharactersStorage } from "../../../lib/host-characters-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { parseSlpGeneratedProfiles } from "../../modules/creators/slp-generated-profiles.js";
 import { allocateAmbientProfileHandles } from "../audience/slp-audience-contract.js";

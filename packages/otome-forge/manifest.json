@@ -10,7 +10,7 @@
   },
   "id": "otome-forge",
   "name": "Otome Hearth",
-  "version": "0.8.10",
+  "version": "0.49.3",
   "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
   "engine": {
     "min": "2.5.1",
@@ -34,6 +34,30 @@
       "iconPaths": [
         "otome-hearth-tab-heart.png"
       ]
+    },
+    "assets": {
+      "paths": [
+        "kitty/rose-1.webp",
+        "kitty/rose-2.webp",
+        "kitty/rose-3.webp",
+        "kitty/rose-4.webp",
+        "kitty/rose-5.webp",
+        "kitty/sky-1.webp",
+        "kitty/sky-2.webp",
+        "kitty/sky-3.webp",
+        "kitty/sky-4.webp",
+        "kitty/sky-5.webp",
+        "kitty/lemon-1.webp",
+        "kitty/lemon-2.webp",
+        "kitty/lemon-3.webp",
+        "kitty/lemon-4.webp",
+        "kitty/lemon-5.webp",
+        "kitty/mint-1.webp",
+        "kitty/mint-2.webp",
+        "kitty/mint-3.webp",
+        "kitty/mint-4.webp",
+        "kitty/mint-5.webp"
+      ]
     }
   },
   "files": [
@@ -44,13 +68,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "913d5ad715f46238dbd2ed342ec33612d131e69cf203bb0fb4ab6344b83c2812",
-      "bytes": 540909
+      "sha256": "bcfd453909439f169691ff65a9d2c882dd043a7ab2472629a95abc3d0486ea28",
+      "bytes": 850299
     },
     {
       "path": "client.js",
-      "sha256": "67fccc469807381a7d69e0dab876bd4824997da2c068151d0f3e19f7c17402d3",
-      "bytes": 1235432
+      "sha256": "85b09f46b30d5e30859e189a33ffb82ed689727d1799d68079ba33f48ddedd0c",
+      "bytes": 1539820
     },
     {
       "path": "otome-hearth-icon.png",
@@ -66,9 +90,110 @@
       "path": "fonts/OFL.txt",
       "sha256": "42a08de2370044e2966c8158770a86c67a8b343c9422a1b30b8599d25c05dd5f",
       "bytes": 4558
+    },
+    {
+      "path": "kitty/rose-1.webp",
+      "sha256": "a8fff2369db54346e5ad83bfa149e5aa65e18480e454b88fc70bfa562197a62c",
+      "bytes": 36508
+    },
+    {
+      "path": "kitty/rose-2.webp",
+      "sha256": "b8537625617a05351f188d059322837db14db6c2fbf9007f0740f91c4ca9d38b",
+      "bytes": 43428
+    },
+    {
+      "path": "kitty/rose-3.webp",
+      "sha256": "6e548203b6ed43a3732479d14aef08d8da9cde9b8845ebbcc74fe6520581fa3f",
+      "bytes": 41082
+    },
+    {
+      "path": "kitty/rose-4.webp",
+      "sha256": "d175f4d5ba50fe335f7d5701befc03f42513ff09cb39cd60fc5d95b91ee5af12",
+      "bytes": 43380
+    },
+    {
+      "path": "kitty/rose-5.webp",
+      "sha256": "568e86876a38c03bd8dcad0fa693ee3b9b3505d6e89ea2eebbbfe7b8a1481772",
+      "bytes": 54750
+    },
+    {
+      "path": "kitty/sky-1.webp",
+      "sha256": "4fd419365acd42721100d99fdd452e58230347ef4ac9ed75f73955ece3a6e120",
+      "bytes": 37706
+    },
+    {
+      "path": "kitty/sky-2.webp",
+      "sha256": "34d2a9ad8075e4f3ec24c28f71cb1613cb0ef0052f7ffba76d89e8a2156eec07",
+      "bytes": 55588
+    },
+    {
+      "path": "kitty/sky-3.webp",
+      "sha256": "66388fc99f893ec21ef41e4f6bd8de9b1ec1422da3f5535296b41864e13ff2fc",
+      "bytes": 34736
+    },
+    {
+      "path": "kitty/sky-4.webp",
+      "sha256": "92d3bd3b31b027b9f7940b2678c3f97ac8a7b51d7d8e825c1f09512276214ed0",
+      "bytes": 40424
+    },
+    {
+      "path": "kitty/sky-5.webp",
+      "sha256": "e226f99949208c635c37d9a2fec61ce4d0f17122e42bcf48115d2ec457792cb8",
+      "bytes": 49598
+    },
+    {
+      "path": "kitty/lemon-1.webp",
+      "sha256": "af1fd6a8ca19b74990fa866719195f81152cd70d59b7c0d94145d8d66f5f83f8",
+      "bytes": 48394
+    },
+    {
+      "path": "kitty/lemon-2.webp",
+      "sha256": "31b1e30278b43b65a240912d322eb4a2e0ba68fce32bcb67cb967ac167e597da",
+      "bytes": 54832
+    },
+    {
+      "path": "kitty/lemon-3.webp",
+      "sha256": "bfa3c28ea0ffe4321760fa96087684534640afde94664229256b52020da921c5",
+      "bytes": 44764
+    },
+    {
+      "path": "kitty/lemon-4.webp",
+      "sha256": "17b60fd4a2d61a96ae9e561ab5e1cb0266915d0e28cb37856a0f2a53fd727ed5",
+      "bytes": 52402
+    },
+    {
+      "path": "kitty/lemon-5.webp",
+      "sha256": "97b76569a0dc3020d0a00ada4ef2c992f64732dd6a7f4f6f9712787b03cab3bc",
+      "bytes": 47516
+    },
+    {
+      "path": "kitty/mint-1.webp",
+      "sha256": "162946eb9004f60c328dcc8b0597356dd620906572cfffb70f013efb660b7a15",
+      "bytes": 55180
+    },
+    {
+      "path": "kitty/mint-2.webp",
+      "sha256": "49f524b3a190188b3092a62c0b5a06097d48fb2d22569c152efbc372fde8f301",
+      "bytes": 43578
+    },
+    {
+      "path": "kitty/mint-3.webp",
+      "sha256": "7a582bb5734c5fbd889e2e64f19f5be5b9922bf4b83d5ab044a57e9cd4112af5",
+      "bytes": 42108
+    },
+    {
+      "path": "kitty/mint-4.webp",
+      "sha256": "c8c51e33cc1bfaaa86b0f5377531971b3d323ae4e3063d8683622716c40aa915",
+      "bytes": 43720
+    },
+    {
+      "path": "kitty/mint-5.webp",
+      "sha256": "7567f0005de7ff1826e18f7bf114bcb833a1794c1e9d498f80deed74ac28cd51",
+      "bytes": 45000
     }
   ],
   "permissions": [
+    "network",
     "routes",
     "storage",
     "ui"

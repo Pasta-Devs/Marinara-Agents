@@ -144,6 +144,11 @@ for (const path of [
   "lib/api-client.ts",
   "lib/emoji-catalog.generated.ts",
   "components/ui/Modal.tsx",
+  "components/ui/Switch.tsx",
+  "components/ui/Checkbox.tsx",
+  "components/ui/Spinner.tsx",
+  "components/ui/Tabs.tsx",
+  "components/ui/SearchInput.tsx",
 ]) {
   bundles[path] = await bundle(path);
 }
@@ -418,6 +423,36 @@ for (const [label, options] of [
   );
   assert.match(modalWithI18n.type.name, /^I18nextProvider/u, "the Engine's Modal renders with the Engine's i18n");
   assert.equal(modalWithI18n.props.i18n, globalThis.__engineI18n);
+
+  // Switch, Checkbox and Spinner (capability API 1.830): the Engine's, or the package does not load.
+  for (const name of ["Switch", "Checkbox", "Spinner"]) {
+    function HostComponent() {}
+    const file = `components/ui/${name}.tsx`;
+    const { module } = await load(file, { host: hostWith({ components: { [name]: HostComponent } }) });
+    assert.equal(module[name], HostComponent, `the package's ${name} is the Engine's`);
+    await assert.rejects(
+      load(file, { host: hostWith({ components: {} }) }),
+      new RegExp(`does not provide the ${name} component.*capability API 1\\.830`, "u"),
+    );
+  }
+  // Tabs and SearchInput (capability API 1.832). The search field renders under the Engine's i18n.
+  for (const name of ["Tabs", "SearchInput"]) {
+    function HostComponent() {}
+    const file = `components/ui/${name}.tsx`;
+    const { module } = await load(file, { host: hostWith({ components: { [name]: HostComponent } }) });
+    const rendered = name === "Tabs" ? null : module.SearchInput({ value: "", onChange() {}, label: "Search" });
+    if (name === "Tabs") assert.equal(module.Tabs, HostComponent, "the package's Tabs is the Engine's");
+    else {
+      assert.match(rendered.type.name, /^I18nextProvider/u);
+      assert.equal(rendered.props.i18n, globalThis.__engineI18n);
+      assert.equal(rendered.props.children.type, HostComponent, "the package's SearchInput is the Engine's");
+      assert.equal(rendered.props.children.props.label, "Search");
+    }
+    await assert.rejects(
+      load(file, { host: hostWith({ components: {} }) }),
+      new RegExp(`does not provide the ${name} component.*capability API 1\\.832`, "u"),
+    );
+  }
   assert.equal(modalWithI18n.props.children.type, HostModal);
   const packageProvider = modalWithI18n.props.children.props.children;
   assert.equal(packageProvider.props.value, packageTranslation, "its content keeps the package's own i18n");

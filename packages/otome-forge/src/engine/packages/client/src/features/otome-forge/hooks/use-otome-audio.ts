@@ -10,12 +10,16 @@
 //   settings change; stock music plays meanwhile. Nothing is generated while generation is off, muted or silent as
 //   saved: Settings → Audio's unsaved preview of Mute and the volumes changes only what is heard. A chapter's theme is
 //   held with its chapter: its saved track plays wherever it is held (the reader, the Album's Soundtrack), never a
-//   chosen music folder in its place, and a new one is made only while chapter themes are on.
-// - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win; the protagonist uses her
-//   persona's voice or stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool
-//   voice for their gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
+//   chosen music folder in its place, and a new one is made only while chapter themes are on. 0.44.0: Home's music is
+//   the Album → Soundtrack row the player chose for it (a mood, or a chapter's saved theme), Home's own otherwise.
+// - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win, and anyone outside the
+//   cast takes the voice assigned to their name, lib/audio.ts lineVoice; the protagonist uses her persona's voice or
+//   stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool voice for their
+//   gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
 //   backlog plays the saved clip; a comfort line (M3's Rough day?) is voiced with none, so it never lands in the
-//   Engine's audio cache (plan §1.9).
+//   Engine's audio cache (plan §1.9). A scene's lines after the one on screen are made ahead, one at a time (prepare,
+//   on an Engine with capability API 1.835's prepareAudio), so each plays as its text starts; on an older Engine, or
+//   after one fails, a line is voiced as it appears.
 // - One controller per story. <OtomeAudioProvider> makes it; a provider inside another one adds nothing, so OtomeForgeView
 //   can hold one for every screen and the reader still works on its own. A screen claims its music cue with
 //   useMusicCue; the newest claim wins, and the provider's own cue plays when none is held.
@@ -34,7 +38,6 @@ import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { forgeSoundtrackContextKey } from "@forge-kit/audio-settings.mjs";
 import { chapterMusicCue, musicAssetsInFolder, normalizeOtomeAudio } from "../shared/audio";
-import { forgeSpeakerVoice } from "@forge-kit/voice-picking.mjs";
 import { host } from "marinara:host";
 import { api } from "../../../lib/api-client";
 import { ttsService, ttsUnavailableReason } from "../../../lib/tts-service";
@@ -44,15 +47,27 @@ import {
   MUSIC_LENGTH_MS,
   MUSIC_SCOPE,
   lineSpeaker,
+  lineVoice,
+  lineVoiceRequest,
   runIdOf,
-  voiceCacheKey,
+  VoicePrep,
   worldTracks,
   wouldVoice,
   type EngineMusicCue,
+  type LineSpeaker,
+  type PrepLine,
 } from "../lib/audio";
 import { useOtomeProps } from "../props";
-import type { AudioSettings, Player, RunLiView, RunView, Segment, SoundtrackTrack } from "../shared/api-types";
-import type { MusicMood } from "../shared/faces";
+import type {
+  AudioSettings,
+  Player,
+  RunFriendView,
+  RunLiView,
+  RunView,
+  Segment,
+  SoundtrackTrack,
+} from "../shared/api-types";
+import { MUSIC_MOODS, type MusicMood } from "../shared/faces";
 import { patchRun } from "./use-run";
 
 // ── The Engine's audio service, as Otome reads it (lib/audio-service.ts, capability API 1.381) ──
@@ -82,6 +97,13 @@ interface HostAudio {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
+
+type PrepareAudio = (text: string, options: object) => Promise<void>;
+/** Capability API 1.835: the Engine makes a voice clip ahead without playing it; older Engines leave it out. */
+const prepareAudio: PrepareAudio | null = (() => {
+  const method = (ttsService as { prepareAudio?: unknown }).prepareAudio;
+  return typeof method === "function" ? (method as PrepareAudio).bind(ttsService) : null;
+})();
 
 /** The Engine's audio service, or null on an Engine without it (the game then plays silently). */
 function hostAudio(): HostAudio | null {
@@ -123,6 +145,8 @@ interface ControllerDeps {
   post: ReturnType<typeof useOtomeApi>["post"];
   debugMode: boolean;
   lis: readonly RunLiView[];
+  /** #2458: her friends, voiced as the love interests are; absent before a run view lists them. */
+  friends?: readonly RunFriendView[];
   player: Pick<Player, "name" | "personaId">;
   onTracks: (tracks: SoundtrackTrack[]) => void;
 }
@@ -171,6 +195,12 @@ export class OtomeAudioController {
   private readonly voiceLists = new Map<string, Promise<string[]>>();
   private voiceAbort: AbortController | null = null;
   private voiceIndex = 0;
+  private readonly voicePrep = prepareAudio
+    ? new VoicePrep(
+        (line) => this.prepareLine(line, prepareAudio),
+        (line) => `${this.settings.emotionCues ? "cues" : "plain"}:${line.ref}`,
+      )
+    : null;
   private disposed = false;
   private snapshot: AudioSnapshot = { notice: null, speaking: null, settings: 0 };
   private noticeId = 0;
@@ -262,10 +292,15 @@ export class OtomeAudioController {
     // A save that opens or closes generation plays the cue again (a preview only changes the levels it plays at).
     if (source || before.muted !== saved.muted || before.musicVolume <= 0 !== saved.musicVolume <= 0) {
       void this.applyCue(true);
+    } else if (before.homeCue !== saved.homeCue || before.homeTrack?.tag !== saved.homeTrack?.tag) {
+      void this.applyCue();
     }
     const voices = (value: AudioSettings) =>
       [value.tts, value.otherVoices, value.muted, value.dialogueVolume > 0].join();
-    if (voices(previous) !== voices(next)) this.update({ settings: this.snapshot.settings + 1 });
+    if (voices(previous) !== voices(next)) {
+      this.voicePrep?.reset();
+      this.update({ settings: this.snapshot.settings + 1 });
+    }
   }
 
   /** The story's recorded tracks (a refetched view); tracks made in this visit stay until the record lists them. */
@@ -308,7 +343,11 @@ export class OtomeAudioController {
       const held = this.claims[index]!.cue;
       if (held !== undefined) return held;
     }
-    return this.baseCue;
+    if (this.baseCue !== "home") return this.baseCue;
+    // 0.44.0: the Album → Soundtrack row chosen for Home, as the Album plays it.
+    const { homeCue, homeTrack } = this.saved;
+    if (homeTrack) return { chapterKey: homeCue.slice(chapterMusicCue("").length), mood: "home", track: homeTrack };
+    return (MUSIC_MOODS as readonly string[]).includes(homeCue) ? (homeCue as MusicMood) : "home";
   }
 
   /** A stock sound from the Engine's library (`sfx:ui:<name>`) at the effects volume; silent while muted (M4). */
@@ -358,7 +397,7 @@ export class OtomeAudioController {
     try {
       await this.playCue(force);
     } catch (error) {
-      console.warn("Otome Forge could not play music", error);
+      console.warn("Otome Hearth could not play music", error);
     }
   }
 
@@ -567,13 +606,13 @@ export class OtomeAudioController {
         }
         if (!chapterKey && Array.isArray(saved?.tracks)) deps.onTracks(saved.tracks as SoundtrackTrack[]);
       } catch (error) {
-        console.warn("Otome Forge could not record a generated track", error);
+        console.warn("Otome Hearth could not record a generated track", error);
       }
       return track;
     } catch (error) {
       if (!abort.signal.aborted && (error as { name?: string })?.name !== "AbortError") {
         this.failed.add(`${connectionId}:${cue}`);
-        console.warn("Otome Forge could not generate music", error);
+        console.warn("Otome Hearth could not generate music", error);
         this.notify(chapterKey ? "chapterMusicFailed" : "musicFailed");
       }
       return null;
@@ -592,7 +631,7 @@ export class OtomeAudioController {
   wouldSpeak(segment: Segment): boolean {
     const deps = this.deps;
     if (!deps || ttsUnavailableReason) return false;
-    return wouldVoice(this.settings, lineSpeaker(segment, deps.lis, deps.player));
+    return wouldVoice(this.settings, lineSpeaker(segment, deps.lis, deps.player, deps.friends));
   }
 
   private readTtsConfig(): Promise<unknown> {
@@ -637,41 +676,27 @@ export class OtomeAudioController {
   async speak(segment: Segment, ref: string, { cache = true }: { cache?: boolean } = {}): Promise<SpeakOutcome> {
     const deps = this.deps;
     const settings = this.settings;
-    const speaker = deps ? lineSpeaker(segment, deps.lis, deps.player) : null;
+    const speaker = deps ? lineSpeaker(segment, deps.lis, deps.player, deps.friends) : null;
     if (this.disposed || ttsUnavailableReason || !wouldVoice(settings, speaker)) return "silent";
     this.stopVoice();
     const abort = new AbortController();
     this.voiceAbort = abort;
     this.update({ speaking: ref });
     try {
-      const config = await this.readTtsConfig();
-      const voice = await forgeSpeakerVoice(config, speaker, speaker.cast || settings.otherVoices, this.listVoices);
+      const made = await this.voiceRequest(segment, ref, speaker, settings, cache);
       if (abort.signal.aborted || this.disposed) return "stopped";
-      if (!voice) return "silent";
-      const connectionId = isRecord(config) && typeof config.connectionId === "string" ? config.connectionId : "";
-      await ttsService.speakSequence(
-        [
-          {
-            text: segment.text,
-            speaker: segment.speaker,
-            voice,
-            ...(speaker.characterId ? { characterId: speaker.characterId } : {}),
-            ...(cache ? { cacheKey: voiceCacheKey(this.runKey, ref) } : {}),
-          },
-        ],
-        `${this.voicePrefix}${(this.voiceIndex += 1)}`,
-        {
-          signal: abort.signal,
-          volume: settings.dialogueVolume,
-          muted: settings.muted,
-          throwOnError: true,
-          audioConnectionId: connectionId,
-        },
-      );
+      if (!made) return "silent";
+      await ttsService.speakSequence([made.request], `${this.voicePrefix}${(this.voiceIndex += 1)}`, {
+        signal: abort.signal,
+        volume: settings.dialogueVolume,
+        muted: settings.muted,
+        throwOnError: true,
+        audioConnectionId: made.connectionId,
+      });
       return abort.signal.aborted ? "stopped" : "spoken";
     } catch (error) {
       if (abort.signal.aborted || (error as { name?: string })?.name === "AbortError") return "stopped";
-      console.warn("Otome Forge could not voice a line", error);
+      console.warn("Otome Hearth could not voice a line", error);
       this.notify("voiceFailed");
       return "failed";
     } finally {
@@ -680,6 +705,40 @@ export class OtomeAudioController {
         this.update({ speaking: null });
       }
     }
+  }
+
+  /** A line's voice request (lib/audio.ts lineVoiceRequest) and the speech connection; null when it has no voice. */
+  private async voiceRequest(
+    segment: Segment,
+    ref: string,
+    speaker: LineSpeaker,
+    settings: AudioSettings,
+    cache: boolean,
+  ) {
+    const config = await this.readTtsConfig();
+    const voice = await lineVoice(config, speaker, speaker.cast || settings.otherVoices, this.listVoices);
+    if (!voice) return null;
+    const connectionId = isRecord(config) && typeof config.connectionId === "string" ? config.connectionId : "";
+    return { request: lineVoiceRequest(this.runKey, ref, segment, speaker, voice, settings, cache), connectionId };
+  }
+
+  /**
+   * Makes these lines' voices ahead, in order, so each plays as its text starts; the newest list replaces the lines
+   * still waiting. Nothing on an Engine without prepareAudio, or for lines the settings would not voice.
+   */
+  prepare(lines: readonly PrepLine[]) {
+    this.voicePrep?.set(this.disposed || ttsUnavailableReason ? [] : lines);
+  }
+
+  private async prepareLine(line: PrepLine, prepare: PrepareAudio) {
+    const deps = this.deps;
+    const settings = this.settings;
+    const speaker = deps ? lineSpeaker(line.segment, deps.lis, deps.player, deps.friends) : null;
+    if (this.disposed || !wouldVoice(settings, speaker)) return;
+    const made = await this.voiceRequest(line.segment, line.ref, speaker, settings, true);
+    if (!made || this.disposed || !wouldVoice(this.settings, speaker)) return;
+    const { text, ...request } = made.request;
+    await prepare(text, { ...request, audioConnectionId: made.connectionId });
   }
 
   stopVoice() {
@@ -691,6 +750,7 @@ export class OtomeAudioController {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.voicePrep?.reset();
     this.abortGeneration();
     this.stopVoice();
     this.player?.dispose();
@@ -737,6 +797,7 @@ function AudioScope({ run, cue = null, children }: ProviderProps) {
     post: otome.post,
     debugMode,
     lis: run?.lis ?? [],
+    friends: run?.friends ?? [],
     player: run?.player ?? { name: "", personaId: "" },
     onTracks: (tracks) => {
       if (!runKey) return;

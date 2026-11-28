@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 386
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.1",
+    "engineCommit": "54e6848c818ae4150f108ab9614986bb7610891d"
+  },
+  "id": "wordle",
+  "name": "Wordle",
+  "version": "1.1.1",
+  "description": "A daily Wordle race with Conversation characters. Install to use /wordle manually in any Conversation chat, or type a message like \"let's play wordle\" to open today's game. Where Chat Settings → Agents → Commands lists Wordle, characters can start today's game while its switch is on.",
+  "engine": {
+    "min": "2.5.1",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent",
+    "turn-game"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "conversation-surface"
+    ],
+    "conversationGame": {
+      "command": "/wordle",
+      "aliases": [
+        "wordle",
+        "word of the day",
+        "daily word"
+      ],
+      "playerLabel": "Daily word game"
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "b75d7ab3ee9d433acc6decbdf2028839ede22dda2f060f6d6c31612232a046e9",
+      "bytes": 672
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "9df6ad0d62b647e60cb82941c963d4c483daa87b875f16b48877cc9aa491dc9d",
+      "bytes": 65640
+    },
+    {
+      "path": "client.js",
+      "sha256": "f1a543b20f3fe660731db8aa1c38022bc7e694140f709a8d281002d48ee3dffc",
+      "bytes": 34104
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "chat-write",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

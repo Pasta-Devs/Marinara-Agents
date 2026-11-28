@@ -1,27 +1,32 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Dates. Pick who to spend time with, then one of the five activities: Read {{name}}, Read Me (#1945),
-// Date Night (Make it right during a rupture), the Photo Shoot (#2087: only with an image connection, and it pays
-// nothing) and the Claw Machine, each with what it pays and what it costs; today's capped rewards; and the plush
-// shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).
+// Otome Forge: Games, the dock's screen with id "dates" (titled Dates before #2429, which left that name to the dates
+// won in Wish). Pick who to spend time with, then one of the six activities: Read {{name}}, Read Me (#1945),
+// Tarot night (#2151), the Photo Shoot (#2087: only with an image connection, and it pays nothing), (0.35.0) Kitty Cards
+// and the Claw Machine (last since 0.36.7, the maintainer's call), each with what it pays and what it costs; today's
+// capped rewards; and the plush shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).
+// #2303: Date Night is gone; dates are won on Wish's Dates banner and planned from Album → Dates.
 // ──────────────────────────────────────────────
 // GET /runs/:run/play → PlayView (S/routes/claw.ts). Each activity is a screen of its own that OtomeForgeView opens
 // with ActivityScreenProps; one that has not arrived yet in this build shows its card without a Play button, and so
-// does the Photo Shoot without an image connection ("Needs an image connection").
+// does the Photo Shoot without an image connection ("Needs an image connection"). #2156: while his grievance with her
+// stands every activity with him shows "{name} needs space" instead (the server refuses them too).
 import { useEffect, useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarHeart,
   Camera,
+  Cat,
   Eye,
   Feather,
   Heart,
+  HeartCrack,
   Image as ImageIcon,
+  MoonStar,
   NotebookPen,
   RotateCcw,
   Sparkles,
   Star,
-  Wine,
   type LucideIcon,
 } from "lucide-react";
 import { useOtomeApi } from "../../api";
@@ -34,7 +39,7 @@ import type { RunLiView, RunView } from "../../shared/api-types";
 import { PLUSH_SERIES, liPlushId, type PlayView } from "../../shared/claw";
 import { AFFECTION_EARNINGS, STARLIGHT_EARNINGS } from "../../shared/economy";
 
-export const DATE_ACTIVITIES = ["read-him", "read-me", "date-night", "photo-shoot", "claw"] as const;
+export const DATE_ACTIVITIES = ["read-him", "read-me", "tarot", "photo-shoot", "kitty", "claw"] as const;
 export type DateActivity = (typeof DATE_ACTIVITIES)[number];
 
 /** What OtomeForgeView gives each activity's screen: the run, the love interest it is played with, and the way back. */
@@ -47,23 +52,28 @@ export interface ActivityScreenProps {
 
 export const playQueryKey = (runKey: string) => ["otome-forge", "play", runKey] as const;
 
-/** GET /runs/:run/play: today's capped earnings, the shelf, and how each love interest plays. */
-export function usePlay(runKey: string) {
+const KITTEN_POLL_MS = 3_000;
+
+/**
+ * GET /runs/:run/play: today's capped earnings, the shelf, and how each love interest plays. `kittens` (Kitty Cards,
+ * 0.35.0): read again every few seconds while a painted kitten may still land by itself (`kittensPending`).
+ */
+export function usePlay(runKey: string, { kittens = false } = {}) {
   const otome = useOtomeApi();
   return useQuery({
     queryKey: playQueryKey(runKey),
     queryFn: () => otome.get<PlayView>(`${runPath(runKey)}/play`),
+    refetchInterval: (query) => (kittens && query.state.data?.kittensPending ? KITTEN_POLL_MS : false),
   });
 }
 
 interface ActivityCopy {
   Icon: LucideIcon;
   title: string;
-  /** Date Night's title during a rupture. */
-  repairTitle?: string;
   text: string;
-  repairText?: string;
   cost: string;
+  /** The cost with an image connection, when it differs (Tarot night paints the cards it draws). */
+  costImages?: string;
   CostIcon: LucideIcon;
 }
 
@@ -83,13 +93,12 @@ const ACTIVITY_COPY: Record<DateActivity, ActivityCopy> = {
     cost: "ui.otomeForge.dates.readMeCost",
     CostIcon: Feather,
   },
-  "date-night": {
-    Icon: Wine,
-    title: "ui.otomeForge.dates.dateTitle",
-    repairTitle: "ui.otomeForge.dates.repairTitle",
-    text: "ui.otomeForge.dates.dateText",
-    repairText: "ui.otomeForge.dates.repairText",
-    cost: "ui.otomeForge.dates.dateCost",
+  tarot: {
+    Icon: MoonStar,
+    title: "ui.otomeForge.dates.tarotTitle",
+    text: "ui.otomeForge.dates.tarotText",
+    cost: "ui.otomeForge.dates.tarotCost",
+    costImages: "ui.otomeForge.dates.tarotCostImages",
     CostIcon: Feather,
   },
   "photo-shoot": {
@@ -104,6 +113,13 @@ const ACTIVITY_COPY: Record<DateActivity, ActivityCopy> = {
     title: "ui.otomeForge.dates.clawTitle",
     text: "ui.otomeForge.dates.clawText",
     cost: "ui.otomeForge.dates.clawCost",
+    CostIcon: Sparkles,
+  },
+  kitty: {
+    Icon: Cat,
+    title: "ui.otomeForge.kitty.hubTitle",
+    text: "ui.otomeForge.kitty.hubText",
+    cost: "ui.otomeForge.kitty.cost",
     CostIcon: Sparkles,
   },
 };
@@ -124,9 +140,9 @@ const REWARDS: Record<DateActivity, { key: string; values: Record<string, number
       close: AFFECTION_EARNINGS.readMeClose,
     },
   },
-  "date-night": {
+  tarot: {
     key: "ui.otomeForge.dates.rewardFlat",
-    values: { starlight: STARLIGHT_EARNINGS.date, affection: AFFECTION_EARNINGS.date },
+    values: { starlight: STARLIGHT_EARNINGS.tarot, affection: AFFECTION_EARNINGS.tarot },
   },
   // No Starlight and no affection: the photo is all it gives.
   "photo-shoot": { key: "ui.otomeForge.dates.photoReward", values: {} },
@@ -136,6 +152,14 @@ const REWARDS: Record<DateActivity, { key: string; values: Record<string, number
       starlight: STARLIGHT_EARNINGS.clawRound,
       plush: STARLIGHT_EARNINGS.clawPlush,
       affection: AFFECTION_EARNINGS.clawRound,
+    },
+  },
+  kitty: {
+    key: "ui.otomeForge.kitty.reward",
+    values: {
+      starlight: STARLIGHT_EARNINGS.kittyGame,
+      win: STARLIGHT_EARNINGS.kittyWin,
+      affection: AFFECTION_EARNINGS.kittyGame,
     },
   },
 };
@@ -188,8 +212,8 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
   }, [li, onPickLi, partner]);
 
   const data = play.data ?? null;
-  // Date Night is Make it right by the open date's own plan, else by a rupture (S/minigames/date-night.ts).
-  const makeItRight = !!(partner && data?.lis[partner.id]?.makeItRight);
+  // #2156: his grievance with her stands: every date with him waits.
+  const held = !!(partner && data?.lis[partner.id]?.held);
   const plush = data?.plush ?? {};
   const slots = [...PLUSH_SERIES, ...view.lis.map((item) => liPlushId(item.id))];
   const owned = slots.filter((prize) => (plush[prize] ?? 0) > 0).length;
@@ -209,8 +233,10 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
       {view.lis.length === 0 ? (
         <p className="of-empty">{t("ui.otomeForge.dates.noCast")}</p>
       ) : (
-        <fieldset className="of-section of-glass of-partners">
-          <legend className="of-section-title">{t("ui.otomeForge.dates.pickTitle")}</legend>
+        <div role="radiogroup" className="of-section of-glass of-partners" aria-labelledby={`${shelfId}-pick`}>
+          <h2 id={`${shelfId}-pick`} className="of-section-title">
+            {t("ui.otomeForge.dates.pickTitle")}
+          </h2>
           <div className="of-partner-list">
             {view.lis.map((item) => {
               const accent = accentOf(item);
@@ -240,7 +266,7 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
               );
             })}
           </div>
-        </fieldset>
+        </div>
       )}
 
       {partner ? (
@@ -282,21 +308,25 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
             )}
           </section>
 
+          {held ? (
+            <p className="of-notice">
+              <HeartCrack size={15} strokeWidth={2} aria-hidden="true" />
+              <span>{t("ui.otomeForge.dates.heldNote", { name: partner.name })}</span>
+            </p>
+          ) : null}
           <ul className="of-activities" aria-label={t("ui.otomeForge.dates.activitiesLabel", { name: partner.name })}>
             {DATE_ACTIVITIES.map((activity) => {
               const copy = ACTIVITY_COPY[activity];
-              const repair = activity === "date-night" && makeItRight;
-              const title = t(repair && copy.repairTitle ? copy.repairTitle : copy.title, { name: partner.name });
+              const title = t(copy.title, { name: partner.name });
               const reward = REWARDS[activity];
               // The Photo Shoot is only an image call: without an image connection it is shown as unavailable.
               const needsImages = activity === "photo-shoot" && !imagesOn(view);
-              const ready = available.has(activity) && !needsImages;
+              const ready = available.has(activity) && !needsImages && !held;
               return (
                 <li
                   key={activity}
                   className="of-activity of-glass"
                   data-activity={activity}
-                  data-repair={repair || undefined}
                   style={{ "--of-li-accent": accentOf(partner) } as CSSProperties}
                 >
                   <span className="of-activity-icon" aria-hidden="true">
@@ -304,16 +334,14 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
                   </span>
                   <div className="of-activity-body">
                     <h2 className="of-activity-title">{title}</h2>
-                    <p className="of-activity-text">
-                      {t(repair && copy.repairText ? copy.repairText : copy.text, { name: partner.name })}
-                    </p>
+                    <p className="of-activity-text">{t(copy.text, { name: partner.name })}</p>
                     <p className="of-activity-reward">
                       <Star size={12} strokeWidth={2} fill="currentColor" aria-hidden="true" />
                       <span>{t(reward.key, { ...reward.values, name: partner.name })}</span>
                     </p>
                     <p className="of-cost">
                       <copy.CostIcon size={13} strokeWidth={2} aria-hidden="true" />
-                      <span>{t(copy.cost)}</span>
+                      <span>{t(copy.costImages && imagesOn(view) ? copy.costImages : copy.cost)}</span>
                     </p>
                   </div>
                   {ready ? (
@@ -327,9 +355,11 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
                     </button>
                   ) : (
                     <span className="of-badge of-badge--soft of-activity-play">
-                      {available.has(activity) && needsImages
-                        ? t("ui.otomeForge.dates.needsImages")
-                        : t("ui.otomeForge.dates.soon")}
+                      {held && available.has(activity)
+                        ? t("ui.otomeForge.dates.needsSpace", { name: partner.name })
+                        : available.has(activity) && needsImages
+                          ? t("ui.otomeForge.dates.needsImages")
+                          : t("ui.otomeForge.dates.soon")}
                     </span>
                   )}
                 </li>

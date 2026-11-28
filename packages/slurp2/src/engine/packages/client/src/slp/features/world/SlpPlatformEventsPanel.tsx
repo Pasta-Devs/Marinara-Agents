@@ -1,6 +1,6 @@
 import { useSlpStoryTimeline } from "./slp-story-hooks";
 import { CalendarDays, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -13,6 +13,9 @@ import {
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { cn } from "../../../lib/utils";
 import { SectionTitle } from "../../modules/settings/SlpSettingsControls";
+
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
+import { Checkbox } from "../../../components/ui/Checkbox";
 
 const fieldClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm";
@@ -66,10 +69,21 @@ export function SlurpPlatformEventsSettings({
   onStartInStir?: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  // A second toggle before the first save returns builds on the first, not on the old `events` prop.
+  const pending = useRef<SlurpPlatformEvent[] | null>(null);
+  const current = () => pending.current ?? events;
+  const commit = async (next: SlurpPlatformEvent[]) => {
+    pending.current = next;
+    try {
+      return await onSave(next);
+    } finally {
+      if (pending.current === next) pending.current = null;
+    }
+  };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SlurpPlatformEvent | null>(null);
   const timeline = useSlpStoryTimeline();
-  const activeIds = slurpRunningPlatformEventIds(events, timeline.data?.occurrences ?? [], new Date());
+  const activeIds = slurpRunningPlatformEventIds(events, timeline.data?.occurrences ?? [], slurpWorldNow());
   const sorted = [...events].sort((a, b) => eventOrder(a) - eventOrder(b) || a.name.localeCompare(b.name));
   const valid = draft ? slurpPlatformEventSchema.safeParse(draft).success : false;
 
@@ -82,7 +96,7 @@ export function SlurpPlatformEventsSettings({
     setDraft({ ...item });
   };
   const add = () => {
-    const today = new Date();
+    const today = slurpWorldNow();
     const item: SlurpPlatformEvent = {
       id: `custom-${Date.now().toString(36)}`,
       contentId: `custom-${Date.now().toString(36)}`,
@@ -105,21 +119,21 @@ export function SlurpPlatformEventsSettings({
   const save = async () => {
     const parsed = draft && slurpPlatformEventSchema.safeParse(draft);
     if (!parsed?.success) return;
-    const exists = events.some((item) => item.id === parsed.data.id);
+    const exists = current().some((item) => item.id === parsed.data.id);
     const next = exists
-      ? events.map((item) => (item.id === parsed.data.id ? parsed.data : item))
-      : [...events, parsed.data];
-    if (await onSave(next)) setSelectedId(null);
+      ? current().map((item) => (item.id === parsed.data.id ? parsed.data : item))
+      : [...current(), parsed.data];
+    if (await commit(next)) setSelectedId(null);
   };
   const remove = async (item: SlurpPlatformEvent) => {
-    if (!events.some((entry) => entry.id === item.id)) {
+    if (!current().some((entry) => entry.id === item.id)) {
       setSelectedId(null);
       return;
     }
-    if (await onSave(events.filter((entry) => entry.id !== item.id))) setSelectedId(null);
+    if (await commit(current().filter((entry) => entry.id !== item.id))) setSelectedId(null);
   };
   const toggle = (item: SlurpPlatformEvent) =>
-    void onSave(events.map((entry) => (entry.id === item.id ? { ...entry, enabled: !entry.enabled } : entry)));
+    void commit(current().map((entry) => (entry.id === item.id ? { ...entry, enabled: !entry.enabled } : entry)));
   const restore = async () => {
     const confirmed = await showConfirmDialog({
       title: t("ui.slurp.settings.events.restore", { defaultValue: "Restore default events" }),
@@ -129,7 +143,7 @@ export function SlurpPlatformEventsSettings({
       confirmLabel: t("ui.slurp.settings.events.restore", { defaultValue: "Restore default events" }),
       cancelLabel: t("ui.slurp.actions.cancel"),
     });
-    if (confirmed && (await onSave(slurpPlatformEventsDefault()))) setSelectedId(null);
+    if (confirmed && (await commit(slurpPlatformEventsDefault()))) setSelectedId(null);
   };
 
   const editor = draft && (
@@ -339,8 +353,7 @@ export function SlurpPlatformEventsSettings({
             return (
               <li key={item.id} className="space-y-2 px-3 py-1.5 sm:px-4">
                 <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={item.enabled}
                     disabled={saving}
                     onChange={() => toggle(item)}

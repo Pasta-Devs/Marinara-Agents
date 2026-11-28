@@ -63,6 +63,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { READ_ME_WORDS, ownView, readMeMessages } from "../prompts.js";
+import { assertFreeToDate, assertNotHeld } from "./date-night.js";
 import { clean, recalledLine } from "./read-him.js";
 
 export const READ_ME_MAX_TOKENS = 2400;
@@ -319,7 +320,7 @@ export interface ReadMeDeps extends GenerationDeps {
   memory?: Pick<OtomeMemory, "recall" | "maintain">;
 }
 
-const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+const runNotFound = () => new OtomeForgeError(404, "No such Otome Hearth story.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 const setNotFound = () => new OtomeForgeError(404, "No such Read Me set.", "not-found");
 const entryNotFound = () => new OtomeForgeError(404, "No such notebook entry.", "not-found");
@@ -368,14 +369,14 @@ export async function startReadMe(
     const unit = run.units.find((entry) => entry.id === li);
     if (!unit || !run.state.lis[li]) throw liNotFound();
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
-    const { liState, relationship, offscreen } = ownView(run.state, li);
+    const { liState, relationship, offscreen, bondPlayed } = ownView(run.state, li);
     const lately = [relationship, offscreen].filter((line) => !!line.trim());
-    const recalled = await recalledLine(deps.memory, runId, unit, lately, debugMode);
+    const recalled = await recalledLine(deps.memory, runId, unit, debugMode);
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
       job: "narration",
       label: `read-me/${li}`,
-      messages: readMeMessages({ world: run.world, player: run.player, unit, liState, recalled, lately }),
+      messages: readMeMessages({ world: run.world, player: run.player, unit, liState, bondPlayed, recalled, lately }),
       schema: ReadMeReplySchema,
       normalize: checkReadMeReply,
       maxTokens: READ_ME_MAX_TOKENS,
@@ -421,7 +422,11 @@ export async function answerReadMe(
 ): Promise<ReadMeAnswer> {
   const own = playerWords(words);
   const at = new Date().toISOString();
-  const saved = await deps.store.updateDoc(readMeTarget(runId, setId), normalizeSet, (current) => {
+  const target = readMeTarget(runId, setId);
+  // #2156: an open set waits too while their grievance with her stands (S/minigames/date-night.ts assertFreeToDate).
+  const open = await deps.store.readDoc(target.id, normalizeSet);
+  if (open) await assertFreeToDate(deps.store, runId, open.li);
+  const saved = await deps.store.updateDoc(target, normalizeSet, (current) => {
     if (!current) throw setNotFound();
     if (!current.guesses[guess]) throw new OtomeForgeError(400, "Invalid request: no such guess", "bad-request");
     if (current.answers[guess]) return current;
@@ -550,6 +555,8 @@ export async function finishReadMe(
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     paid = current.readMe.paid.find((entry) => entry.setId === setId) ?? null;
     if (paid) return current;
+    // #2156: a set waits, unpaid and open, while their grievance with her stands.
+    assertNotHeld(current, set.li);
     const outcome = applyReadMe(current, set, { at });
     const amount = (key: "starlight" | "affection") =>
       outcome.grants.reduce((sum, entry) => sum + (entry[key] ?? 0), 0);

@@ -21,6 +21,7 @@ import { withSlurpLiveShow } from "./slp-live-lock.js";
 import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 import { notifySlurpLiveStart, postSlurpLiveSummary } from "./slp-live-news.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 const MINUTE = 60_000;
 /** ponytail: a fixed cap keeps the code simulation cheap; make it a setting if players want busier evenings. */
 const MAX_OPEN_SHOWS = 3;
@@ -33,7 +34,7 @@ const ROOM_MIN = 8;
 type Settings = Awaited<ReturnType<ReturnType<typeof createSlurpStorage>["getSettings"]>>;
 
 /** The world tick for live shows: move every open show to now, end the finished ones, start the due ones. */
-export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
+export async function advanceSlurpLive(db: DB, at = slurpWorldNow()): Promise<void> {
   const settings = await createSlurpStorage(db).getSettings();
   if (!slpExtensionOn(settings, "live")) return;
   await trySlpOperation("slurp-live-tick", async () => {
@@ -202,7 +203,7 @@ export type SlurpLiveHostResult = { show: SlurpLiveShow } | "missing" | "live";
 export async function hostSlurpLiveShow(
   db: DB,
   input: { personaId: string; creatorId?: string; minutes: number },
-  at = new Date(),
+  at = slurpWorldNow(),
 ): Promise<SlurpLiveHostResult> {
   const noodle = createSlurpStorage(db);
   const host = input.creatorId
@@ -239,7 +240,7 @@ export async function hostSlurpLiveShow(
 }
 
 /** The hosting player ends their show early; the room's tips so far stay paid. */
-export async function endSlurpLiveShow(db: DB, input: { showId: string; personaId: string }, at = new Date()) {
+export async function endSlurpLiveShow(db: DB, input: { showId: string; personaId: string }, at = slurpWorldNow()) {
   return withSlurpLiveShow(input.showId, async () => {
     const storage = createSlurpLiveStorage(db);
     const show = await storage.get(input.showId);

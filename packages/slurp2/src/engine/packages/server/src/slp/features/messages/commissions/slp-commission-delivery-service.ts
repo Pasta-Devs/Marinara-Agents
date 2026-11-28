@@ -16,6 +16,7 @@ import { enqueueSlurpPendingText } from "../../world/slp-world-contract.js";
 import { slurpMessageMediaUrl } from "../../../base/media/slp-media.js";
 import { slurpChatLanguage, slurpCommissionDeliveryNote } from "../../../modules/world/slp-world-copy.js";
 
+import { slurpWorldNow } from "../../../../../../shared/src/slp/slp-world-clock.js";
 export type SlurpCommissionDeliveryOutcome =
   | { status: "delivered"; commission: SlurpCommission }
   /** The delivery message could not be written. `deliverCommission` refunded the fan. */
@@ -85,7 +86,7 @@ export async function deliverAutomaticSlurpCommission(
  */
 export async function deliverDueSlurpCommissions(db: DB): Promise<number> {
   const messages = createSlurpMessagesStorage(db);
-  const due = await messages.listDueCommissionDeliveries(new Date().toISOString());
+  const due = await messages.listDueCommissionDeliveries(slurpWorldNow().toISOString());
   let delivered = 0;
   for (const { commission, mediaPath } of due) {
     const outcome = await deliverAutomaticSlurpCommission(db, commission, mediaPath);

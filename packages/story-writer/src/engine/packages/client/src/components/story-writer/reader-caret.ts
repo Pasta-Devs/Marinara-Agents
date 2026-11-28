@@ -25,14 +25,24 @@ export function caretRangeAt(x: number, y: number): Range | null {
   return typeof doc.caretRangeFromPoint === "function" ? doc.caretRangeFromPoint(x, y) : null;
 }
 
+/** The picture a caret position is in, if any: the browser can put one there, where nothing typed would land. */
+function pictureAt(range: Range | null): Element | null {
+  const node = range?.startContainer;
+  const element = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement;
+  return element?.closest("figure") ?? null;
+}
+
 /**
  * The caret position inside `editable` nearest to a point of one text column: the point itself, else the closest line
  * above or below it (a click under the last line lands at that line, a click on the chapter heading at the first one).
+ * Beside a picture (a click in the margin next to it), it is the text line left of the picture.
  */
 export function caretRangeNear(editable: HTMLElement, x: number, y: number, top: number, bottom: number) {
   const inside = (atY: number) => {
-    const range = caretRangeAt(x, atY);
-    return range && editable.contains(range.startContainer) ? range : null;
+    let range = caretRangeAt(x, atY);
+    const picture = pictureAt(range);
+    if (picture) range = caretRangeAt(picture.getBoundingClientRect().left - 2, atY);
+    return range && editable.contains(range.startContainer) && !pictureAt(range) ? range : null;
   };
   const direct = inside(y);
   if (direct) return direct;
@@ -54,8 +64,10 @@ export function focusEditableAt(editable: HTMLElement, range: Range | null, fall
   let target = range;
   if (!target) {
     target = document.createRange();
-    // Inside the first/last paragraph, so typing never lands in a bare text node beside the paragraphs.
-    const edge = fallback === "start" ? editable.firstElementChild : editable.lastElementChild;
+    // Inside the first/last paragraph, so typing never lands in a bare text node beside the paragraphs, nor in a
+    // picture.
+    const blocks = Array.from(editable.children).filter((child) => child.tagName !== "FIGURE");
+    const edge = fallback === "start" ? blocks[0] : blocks[blocks.length - 1];
     target.selectNodeContents(edge ?? editable);
     target.collapse(fallback === "start");
   }

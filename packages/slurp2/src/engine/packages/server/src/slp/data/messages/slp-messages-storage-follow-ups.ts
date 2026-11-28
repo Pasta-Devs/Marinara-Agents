@@ -62,7 +62,7 @@ import {
 import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
 import { unlinkCreatorMedia } from "../../base/media/slp-media.js";
 import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../../modules/economy/slp-creator-pricing.js";
-import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slp-messages-storage-helpers.js";
+import { DAY, int, json, mapCommission, mapMessage, mapThread, now, realNow } from "./slp-messages-storage-helpers.js";
 import type {
   SlurpCommission,
   SlurpMessage,
@@ -73,6 +73,7 @@ import type {
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
 import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
 
+import { slurpWorldNow } from "../../../../../shared/src/slp/slp-world-clock.js";
 export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
   const {
     db,
@@ -159,7 +160,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
       await context.storage.cancelScheduledFollowUp(threadId, followUpId);
     },
     async claimScheduledFollowUp(followUpId: string): Promise<boolean> {
-      const timestamp = now();
+      const timestamp = realNow();
       const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
       return db.transaction(async (tx) => {
         const current = (
@@ -286,7 +287,7 @@ export function createMessagesStorageFollowUps(context: SlurpMessagesContext) {
     /**
      * Get all threads with pending follow-ups that are due.
      */
-    async getThreadsWithDueFollowUps(now: string = new Date().toISOString()): Promise<
+    async getThreadsWithDueFollowUps(now: string = slurpWorldNow().toISOString()): Promise<
       Array<{
         id: string;
         viewerAccountId: string;

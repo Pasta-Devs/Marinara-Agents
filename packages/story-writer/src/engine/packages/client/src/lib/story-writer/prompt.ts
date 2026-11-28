@@ -7,6 +7,8 @@ import {
   chapterTitle,
   countWords,
   DEFAULT_CONTINUE_MESSAGE,
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_WRITER_SYSTEM_PROMPT,
   LIMITS,
   type StoryChapter,
   type StorySettings,
@@ -40,6 +42,9 @@ const MAX_MESSAGES = 200;
 // /generate/raw refuses a message over 500,000 characters before it fits the prompt to the model; stay under it.
 const MAX_MESSAGE_CHARS = 490_000;
 const MAX_TOKENS = 200_000;
+const LORE_SCAN_CHARS = 150_000;
+/** Generate's output room: how long a passage runs is the author's to ask, so it gets a Long chapter's room. */
+const PASSAGE_BUDGET_WORDS = 4_000;
 const PROTAGONIST = "the protagonist";
 const TIMELINE_INTRO =
   "Planned events in order; [x] = already happened, [ ] = still to come. Move the story toward the next unchecked " +
@@ -76,6 +81,13 @@ function totalWords(chapters: StoryChapter[]): number {
 /** The user message that asks for more; a cleared field falls back to the default, since an empty turn breaks providers. */
 export function continueMessageOf(settings: Pick<StorySettings, "continueMessage">): string {
   return settings.continueMessage.trim() ? settings.continueMessage : DEFAULT_CONTINUE_MESSAGE;
+}
+
+/** The prompt at the very top. Unchanged, it asks for the next part rather than a chapter when the writer decides. */
+export function systemPromptOf(settings: Pick<StorySettings, "systemPrompt">, writer: boolean): string {
+  return writer && settings.systemPrompt === DEFAULT_SYSTEM_PROMPT
+    ? DEFAULT_WRITER_SYSTEM_PROMPT
+    : settings.systemPrompt;
 }
 
 /** Output budget: never below the connection's own saved budget, which reasoning models need. */
@@ -172,6 +184,7 @@ function lengthSection(
   chapters: StoryChapter[],
   number: number,
   partial: StoryChapter | null,
+  writer: boolean,
 ) {
   const words = totalWords(chapters);
   const written = chapters.filter((chapter) => chapter.text.trim()).length;
@@ -185,9 +198,21 @@ function lengthSection(
     parts.push(
       `Target: about ${formatNumber(settings.targetWords)} words in total; about ${percent}% is written, so pace the plot to end near the target.`,
     );
-    if (settings.targetWords - words <= settings.chapterWords) {
+    // Only chapters with a length can be the final one; the writer who decides also decides where the story ends.
+    if (!writer && settings.targetWords - words <= settings.chapterWords) {
       parts.push("This should be the final chapter or very close to it: bring the story to its ending.");
     }
+  }
+  if (writer) {
+    parts.push(
+      partial
+        ? `You are continuing chapter ${number}; about ${formatNumber(countWords(partial.text))} words of it are already written.`
+        : `You are writing the start of chapter ${number}.`,
+    );
+    parts.push(
+      `Write the next passage of chapter ${number}, as much as the author asks for, and stop there. The author decides where chapters end: do not start a new chapter, and bring this one to a close only when the author asks.`,
+    );
+    return parts.join(" ");
   }
   parts.push(`Write chapter ${number} at about ${formatNumber(settings.chapterWords)} words.`);
   if (partial) parts.push(`About ${formatNumber(countWords(partial.text))} words of it are already written.`);
@@ -226,15 +251,41 @@ function keepTail(text: string, limit = MAX_MESSAGE_CHARS): string {
   return text.length > limit ? text.slice(text.length - limit) : text;
 }
 
+/**
+ * What a chapter run asks for: the quick reply clicked, else what a rewritten chapter was written from (a quick reply,
+ * or the continue message as it was then), else the continue message.
+ */
+export function chapterRequest(settings: StorySettings, quickReply?: string, rewritten?: StoryChapter | null): string {
+  if (quickReply?.trim()) return quickReply;
+  return rewritten?.request.trim() ? rewritten.request : continueMessageOf(settings);
+}
+
+/**
+ * Text the Engine's lorebook scanner reads: the overview, the note, the latest chapters and the request, newest text
+ * kept. The current continue message is left out, as it always was.
+ */
+export function loreScanText(settings: StorySettings, chapters: StoryChapter[], request: string): string {
+  const scanned = request === continueMessageOf(settings) ? "" : request;
+  return [settings.overview, settings.authorNote, ...chapters.slice(-3).map((chapter) => chapter.text), scanned]
+    .filter((part) => part.trim())
+    .join("\n\n")
+    .slice(-LORE_SCAN_CHARS);
+}
+
 export function buildChapterMessages(input: {
   settings: StorySettings;
   chapters: StoryChapter[];
   mode: "next" | "continue";
+  /** The writer decides (Chapter length "Off"): no chapter length, never an ending. Default: the story's setting. */
+  writer?: boolean;
   characters: PromptCharacter[];
   personas: PromptCharacter[];
   lore: PromptLoreEntry[];
+  /** The final user message (a quick reply, or a rewritten chapter's own request); empty = the continue message. */
+  request?: string;
 }): ChatMessage[] {
   const { settings, chapters, characters, personas, lore } = input;
+  const writer = input.writer ?? settings.writerDecides;
   const names = storyNames(characters, personas);
   const continueMessage = continueMessageOf(settings);
   const requestOf = (chapter: StoryChapter) => (chapter.request.trim() ? chapter.request : continueMessage);
@@ -273,7 +324,7 @@ export function buildChapterMessages(input: {
   const language = settings.language.trim();
   const systemSections = (earlierChapters: string) =>
     joinSections([
-      replaceMacros(settings.systemPrompt, names).trim(),
+      replaceMacros(systemPromptOf(settings, writer), names).trim(),
       section("story_details", storyDetails(settings)),
       section("story_overview", replaceMacros(settings.overview, names)),
       section("world_info", worldInfo(lore, names)),
@@ -282,7 +333,7 @@ export function buildChapterMessages(input: {
       section("story_notes", replaceMacros(settings.notes, names)),
       settings.timeline.length ? section("timeline", `${TIMELINE_INTRO}\n${timelineList(settings.timeline)}`) : "",
       section("earlier_chapters", earlierChapters),
-      section("length", lengthSection(settings, chapters, number, partial)),
+      section("length", lengthSection(settings, chapters, number, partial, writer)),
       section("banned_phrases", banned.length ? `Never use these words or phrases: ${banned.join(", ")}` : ""),
       section("language", language ? `Write the story in ${language}.` : ""),
       section("formatting", formattingSection(settings, number, !!partial)),
@@ -302,7 +353,7 @@ export function buildChapterMessages(input: {
       { role: "assistant", content: partial.text.trimEnd() },
     );
   }
-  messages.push({ role: "user", content: continueMessage });
+  messages.push({ role: "user", content: input.request?.trim() ? input.request : continueMessage });
   if (authorNote) injectAuthorNote(messages, authorNote, settings.authorNoteDepth);
   return messages;
 }
@@ -317,6 +368,87 @@ export function injectAuthorNote(messages: ChatMessage[], note: string, depth: n
   const steps = Number.isFinite(depth) ? Math.max(0, Math.floor(depth)) : 0;
   messages.splice(Math.max(1, anchor - steps), 0, { role: "user", content: note });
   return messages;
+}
+
+/** Where a chapter run reads the cast and the lore (the Engine, at generation time). */
+export interface PromptSources {
+  characters(ids: string[]): Promise<PromptCharacter[]>;
+  personas(ids: string[]): Promise<PromptCharacter[]>;
+  lore(lorebookIds: string[], scanText: string): Promise<PromptLoreEntry[]>;
+}
+
+export interface ChapterPlan {
+  mode: "next" | "continue";
+  /** The chapter a rewrite replaces. */
+  original: StoryChapter | null;
+  /** The chapter the run writes into; null = a new chapter after the last. */
+  target: StoryChapter | null;
+  /** Written the way the writer decides (Chapter length "Off"): no chapter length, and the status is left alone. */
+  writer: boolean;
+  chapterNumber: number;
+  request: string;
+  messages: ChatMessage[];
+  maxTokens: number;
+}
+
+/** The chapter Generate writes into: the one the author is on, else the last one. Null when there is no chapter. */
+export function generateTarget(chapters: StoryChapter[], selectedChapterId?: string | null): StoryChapter | null {
+  return chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[chapters.length - 1] ?? null;
+}
+
+/**
+ * Everything a chapter run sends, built before the story changes. Write and Peek both call this, so a peek shows
+ * exactly what Write would send. Null when Generate has no chapter to write into: it never starts one.
+ */
+export async function planChapter(input: {
+  settings: StorySettings;
+  chapters: StoryChapter[];
+  requested: "next" | "continue" | "rewrite" | "generate";
+  /** Generate: the chapter the author is on (see generateTarget). */
+  selectedChapterId?: string | null;
+  /** A quick reply, sent in place of the continue message. */
+  quickReply?: string;
+  savedMaxTokens: number | null;
+  sources: PromptSources;
+}): Promise<ChapterPlan | null> {
+  const { settings, chapters, requested } = input;
+  const writer = settings.writerDecides || requested === "generate";
+  // Generate continues the chapter the author is on and reads the story up to it; every other run writes the last
+  // chapter, or a new one after it.
+  const generated = requested === "generate" ? generateTarget(chapters, input.selectedChapterId) : null;
+  if (requested === "generate" && !generated) return null;
+  const story = generated ? chapters.slice(0, chapters.indexOf(generated) + 1) : chapters;
+  const last = story[story.length - 1];
+  const original = requested === "rewrite" ? (last ?? null) : null;
+  const mode: "next" | "continue" = !last || (requested === "next" && last.status !== "draft") ? "next" : "continue";
+  // A rewrite is written from an emptied last chapter, so the prompt treats it as a new chapter.
+  const promptChapters = original ? [...story.slice(0, -1), { ...original, text: "", summary: "" }] : story;
+  // Continuing a draft sends a quick reply once: the draft keeps the request it was started with.
+  const request = chapterRequest(settings, input.quickReply, original);
+  const [characters, personas, lore] = await Promise.all([
+    input.sources.characters(settings.characterIds),
+    input.sources.personas(settings.personaIds),
+    input.sources.lore(settings.lorebookIds, loreScanText(settings, promptChapters, request)),
+  ]);
+  return {
+    mode,
+    original,
+    target: mode === "next" ? null : (last ?? null),
+    writer,
+    chapterNumber: mode === "next" ? story.length + 1 : story.length,
+    request,
+    messages: buildChapterMessages({
+      settings,
+      chapters: promptChapters,
+      mode,
+      writer,
+      characters,
+      personas,
+      lore,
+      request,
+    }),
+    maxTokens: chapterTokenBudget(writer ? PASSAGE_BUDGET_WORDS : settings.chapterWords, input.savedMaxTokens),
+  };
 }
 
 // ── Summaries ──
@@ -342,6 +474,86 @@ export function buildSummaryMessages(input: {
   ];
 }
 
+// ── Illustrations ──
+
+/** The output room the picture prompt asks for (a connection's own saved maximum wins when larger). */
+export const PICTURE_PROMPT_MAX_TOKENS = 800;
+/** How much of the passage, and of the text just before it, the picture prompt reads. */
+const PASSAGE_CHARS = 6_000;
+const PASSAGE_CONTEXT_CHARS = 2_000;
+
+/** The looks of one character or persona: its description and appearance, which say what it looks like. */
+function looksCard(character: PromptCharacter, names: MacroNames): string {
+  const tag = character.name.replace(/[<>/]/g, "").trim() || "Character";
+  const fields = (["description", "appearance"] as const).flatMap((key) => {
+    const value = replaceMacros(character[key] ?? "", names).trim();
+    return value ? [`${key === "description" ? "Description" : "Appearance"}: ${value}`] : [];
+  });
+  return fields.length ? `<${tag}>\n${fields.join("\n")}\n</${tag}>` : "";
+}
+
+/**
+ * The one text call behind Illustrate: the story's cast, setting and the passage go to the story's own connection,
+ * which answers with an English prompt for the image connection. `before` is the text just before the passage, so
+ * the model knows who is there and where. The prompt names the cast members it shows, so the server can send their
+ * pictures as references (illustrations.ts castInPrompt).
+ */
+export function buildIllustrationMessages(input: {
+  settings: StorySettings;
+  characters: PromptCharacter[];
+  personas: PromptCharacter[];
+  lore: PromptLoreEntry[];
+  passage: string;
+  before?: string;
+}): ChatMessage[] {
+  const { settings, characters, personas, lore } = input;
+  const names = storyNames(characters, personas);
+  const system = [
+    "You write the prompt an image generator paints one illustration of a story from.",
+    "Read the story's setup and the passage, then describe in English the single picture that shows the passage best.",
+    "Say who is in it and what each of them looks like as the story describes them (build, face, hair, clothes), what they are doing, where they are, the time of day and the light, and the mood.",
+    "Name every person by their full name as the setup gives it, and describe them by their looks too: the image generator does not know them.",
+    "Describe only what can be seen. The picture has no text in it: no letters, captions, signs with writing or speech bubbles.",
+    "Answer with the prompt alone, as one paragraph of 50 to 150 words: no title, label, quotes or comments.",
+  ].join(" ");
+  const lines: Array<[string, string]> = [
+    ["Title", settings.title],
+    ["Fandom", settings.fandom],
+    ["Genre", settings.genre],
+  ];
+  const details = lines
+    .filter(([, value]) => value.trim())
+    .map(([label, value]) => `${label}: ${value.trim()}`)
+    .join("\n");
+  const user = joinSections([
+    section("story_details", details),
+    section("story_overview", replaceMacros(settings.overview, names)),
+    section("world_info", worldInfo(lore, names)),
+    section("characters", characters.map((character) => looksCard(character, names)).join("\n")),
+    section("personas", personas.map((persona) => looksCard(persona, names)).join("\n")),
+    section("story_notes", replaceMacros(settings.notes, names)),
+    section("before_the_passage", keepTail(input.before ?? "", PASSAGE_CONTEXT_CHARS)),
+    section("passage", input.passage.slice(0, PASSAGE_CHARS)),
+    "Write the picture prompt for the passage.",
+  ]);
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
+/** The picture prompt in a model's answer: no reasoning, fences, label or wrapping quotes, on one line. */
+export function cleanPicturePrompt(answer: string): string {
+  return visibleStreamingText(answer)
+    .replace(/```[a-z]*/gi, "")
+    .trim()
+    .replace(/^\**\s*(?:image |picture )?prompt\s*\**\s*:\s*\**\s*/i, "")
+    .replace(/^["“”'‘’]+|["“”'‘’]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, LIMITS.picturePrompt);
+}
+
 // ── Timeline ──
 
 /** How much of an unsummarized latest chapter the timeline planner reads. */
@@ -353,9 +565,13 @@ export function buildTimelineMessages(input: { settings: StorySettings; chapters
   const { settings, chapters } = input;
   const words = totalWords(chapters);
   const language = settings.language.trim();
+  // Chapters have no set length when the writer decides.
+  const chapterSize = settings.writerDecides
+    ? ""
+    : `, in chapters of about ${formatNumber(settings.chapterWords)} words`;
   const pacing = settings.targetWords
-    ? `The story should end at about ${formatNumber(settings.targetWords)} words; about ${formatNumber(words)} are written so far, in chapters of about ${formatNumber(settings.chapterWords)} words.`
-    : `The story is open-ended; about ${formatNumber(words)} words are written so far, in chapters of about ${formatNumber(settings.chapterWords)} words.`;
+    ? `The story should end at about ${formatNumber(settings.targetWords)} words; about ${formatNumber(words)} are written so far${chapterSize}.`
+    : `The story is open-ended; about ${formatNumber(words)} words are written so far${chapterSize}.`;
   const system = [
     "You plan the timeline of key plot events for a story that is written chapter by chapter.",
     "Create the timeline, or refresh the current one: keep its events unless the story so far contradicts them, mark the events that already happened as done, and add the events still needed to carry the story to its ending.",

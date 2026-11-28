@@ -31,10 +31,25 @@ import {
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeWorld } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import type { OtomeStore } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
+import type { CutoutClient } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { KAI, MIR, at, storyWorld } from "./otome-forge-story.ts";
 
 export const PNG = "iVBORw0KGgo=";
 export const KEY = "main-1";
+
+/**
+ * A gallery delete as the Engine answers it: refused (the route answers 409) while any stored document still holds its
+ * `global-gallery:<id>` reference, deleted only once nothing does. `rows` is the fake document store's rows.
+ */
+export function engineDeletes(rows: Map<string, { data: unknown }>, deleted: string[]) {
+  return async (id: string) => {
+    const ref = `global-gallery:${id}`;
+    const held = [...rows.values()].some((row) => JSON.stringify(row.data).includes(ref));
+    if (held) return false;
+    deleted.push(id);
+    return true;
+  };
+}
 
 export interface PaidCall {
   method: "generateImage" | "generateBannerArt" | "generatePortrait";
@@ -86,7 +101,9 @@ export function fakeImages({ before }: { before?: (call: PaidCall, n: number) =>
     deleteGalleryImage: async (id) => (deleted.push(id), true),
     characterCard: async () => null,
     personaAvatar: async () => "",
-    cardAvatarImage: async (path) => (path.startsWith("/api/") ? { mime: "image/png", base64: PNG } : null),
+    // An Engine file, or an outfit's cut-out (the default cutter's, artWorld).
+    cardAvatarImage: async (path) =>
+      path.startsWith("/api/") || path.endsWith(".cut.png") ? { mime: "image/png", base64: PNG } : null,
   };
   return { images, paid, uploads, deleted };
 }
@@ -137,17 +154,29 @@ export async function artWorld({
   images: settings = {},
   before,
   replies = [],
+  engineDeletes: refuseHeldDeletes = false,
 }: {
   runKey: string;
   images?: Partial<ImageSettings>;
   before?: (call: PaidCall, n: number) => void | Promise<void>;
   replies?: Parameters<typeof storyWorld>[0]["replies"];
+  /** Delete as the Engine does: a picture a stored document still holds is kept (409), as it is for a real run. */
+  engineDeletes?: boolean;
 }) {
   const world = await storyWorld({ runKey, replies });
   await setImages(world.store, world.runId, { connectionId: "conn-image", ...settings });
   const fake = fakeImages({ before });
-  const deps: RouteDeps = { ...world.deps, images: fake.images };
-  return { ...world, ...fake, deps };
+  const images = refuseHeldDeletes
+    ? { ...fake.images, deleteGalleryImage: engineDeletes(world.fake.rows, fake.deleted) }
+    : fake.images;
+  // A free cut-out as the Engine's sprite cleanup would make it (`<url>.cut.png`): scene art sends each person's outfit
+  // cut out (0.36.5, S/art/cg.ts outfitCutouts), so a paint finds one. A test that needs another passes its own.
+  const cutouts: CutoutClient = {
+    cutOut: async (url) => ({ url: `${url}.cut.png`, id: `cut-${url}` }),
+    deleteGalleryImage: async () => true,
+  };
+  const deps: RouteDeps = { ...world.deps, images, cutouts };
+  return { ...world, ...fake, images, deps };
 }
 
 export async function setImages(store: OtomeStore, runId: string, images: Partial<ImageSettings>) {

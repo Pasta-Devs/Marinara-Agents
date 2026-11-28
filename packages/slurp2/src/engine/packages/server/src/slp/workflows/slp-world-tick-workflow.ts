@@ -14,6 +14,7 @@ import { advanceSlurpLive } from "../features/live/slp-live-contract.js";
 import { advanceSlurpTrends } from "../features/discovery/slp-discovery-contract.js";
 import { slurpPausedNow } from "../data/settings/slp-pause-storage.js";
 
+import { slurpWorldNow } from "../../../../shared/src/slp/slp-world-clock.js";
 let modelDrains: Promise<void> | null = null;
 
 /** World work that runs when the player opens the notification stream. Each step fails soft. */
@@ -32,7 +33,7 @@ export async function slpCatchUpWorldOnOpen(app: FastifyInstance) {
   await advanceSlurpDrama(app.db).catch((error: unknown) => logger.warn(error, "[slurp-drama] Catch-up failed"));
   await advanceSlurpLive(app.db).catch((error: unknown) => logger.warn(error, "[slurp-live] Catch-up failed"));
   // A post that took off may become a trend (docs/TRENDS.md), as on the scheduler's clock.
-  await advanceSlurpTrends(app.db, new Date()).catch((error: unknown) =>
+  await advanceSlurpTrends(app.db, slurpWorldNow()).catch((error: unknown) =>
     logger.warn(error, "[slurp-trends] Catch-up failed"),
   );
   // A Creator who is with the player texts like a partner.
