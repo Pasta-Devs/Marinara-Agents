@@ -191,7 +191,7 @@ type CreatorPostImageResult = {
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
-  /** Exact positive prompt sent to the image provider. Also stored as `metadata.imageProviderPrompt`. */
+  /** Reusable positive prompt, also stored as `metadata.imageProviderPrompt`. Lorebook guidance is added per request. */
   providerPrompt: string;
 };
 
@@ -789,8 +789,7 @@ async function generateCreatorPostImageRun(
       imageModel: imageModel || "unknown",
       imageStyleProfileId: compiledPrompt.profile.id,
       noodlerMediaPath: file.filePath,
-      // What the provider actually drew from, so every surface that shows or edits the picture's
-      // prompt shows this rather than the draft it started as.
+      // Keep the reusable prompt editable. Redraws resolve fresh lorebook references and guidance.
       imageProviderPrompt: finalPrompt,
     },
     preview: null,
