@@ -404,6 +404,10 @@ never imported uses its chat's size. When the selected chat also has summaries,
 it says that importing both can repeat memories in review. A chat with branches
 adds a Branch menu (this branch, each other branch, All branches); it filters
 the list to a branch's history, and the destination stays the whole chat.
+A branch's history includes a parent's imported piece whose copies are recorded as hidden in that branch, since the
+branch makes no piece of its own for them. The row keeps the parent's name and actions. Background import lists only
+the branch's own pieces. A piece that skips messages is titled by the runs it holds ("messages 1-4, 9-12"); its row
+still shows the first and last number.
 A branch recalls the memories saved from the messages it copied, and its parent
 recalls the branch's memories of those messages; a memory from a piece crossing
 the fork stays with its own chat.

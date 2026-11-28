@@ -204,7 +204,30 @@ function chunks(value: string, cap = 24_000) {
   return result;
 }
 type TranscriptMessage = Awaited<ReturnType<ReturnType<typeof getPackagePersistence>["listMessages"]>>[number];
-type TranscriptPiece = { entryId: string; first: number; last: number; content: string; messageIds: string[] };
+type TranscriptPiece = {
+  entryId: string;
+  first: number;
+  last: number;
+  /** The runs of message numbers the piece holds, first to last. */
+  ranges: Array<[number, number]>;
+  content: string;
+  messageIds: string[];
+};
+// Names only the message numbers the piece holds. A list too long for a title ends at a whole range, never inside a number.
+export function pieceTitle(
+  chatName: string,
+  { first, last, ranges }: Pick<TranscriptPiece, "first" | "last" | "ranges">,
+) {
+  const held = ranges.map(([from, to]) => (from === to ? `${from}` : `${from}-${to}`)).join(", "),
+    title = `${chatName}, ${first === last ? "message" : "messages"} ${held}`;
+  // One range keeps the plain cut it always had, so a saved title does not change.
+  if (title.length <= 240 || ranges.length === 1) return title.slice(0, 240);
+  const cut = title.slice(0, 238),
+    end = cut.lastIndexOf(", ");
+  if (end > chatName.length) return `${cut.slice(0, end)}, …`;
+  const space = title.lastIndexOf(" ", 240);
+  return title.slice(0, space > chatName.length ? space : 240);
+}
 // A piece is named by its first message, so new messages only grow or follow the last piece and earlier pieces keep
 // their ids and text. Numbers count every message, hidden ones too, so they match the chat's message numbers. Memories
 // reach every character, so like the Engine's own memory this reads the public content, never agentContent with its
@@ -237,6 +260,9 @@ export function transcriptPieces(
       line = `${speaker(message)}: ${body}`;
     if (!start && current && current.content.length + 2 + line.length <= cap) {
       current.content += `\n\n${line}`;
+      const run = current.ranges.at(-1)!;
+      if (run[1] === number - 1) run[1] = number;
+      else current.ranges.push([number, number]);
       current.last = number;
       current.messageIds.push(message.id);
       continue;
@@ -245,13 +271,22 @@ export function transcriptPieces(
     current = undefined;
     const entryId = start ?? message.id;
     start = undefined;
-    if (line.length <= cap) current = { entryId, first: number, last: number, content: line, messageIds: [message.id] };
+    if (line.length <= cap)
+      current = {
+        entryId,
+        first: number,
+        last: number,
+        ranges: [[number, number]],
+        content: line,
+        messageIds: [message.id],
+      };
     else
       for (const [part, content] of chunks(line, cap).entries())
         pieces.push({
           entryId: part ? `${entryId}:part:${part + 1}` : entryId,
           first: number,
           last: number,
+          ranges: [[number, number]],
           content,
           messageIds: [message.id],
         });
@@ -912,7 +947,7 @@ async function candidates(
         const entryId = boundedId(piece.entryId, "message"),
           provenance = { kind: "chat_transcript" as const, sourceId: chat.id, entryId },
           range = piece.first === piece.last ? `${piece.first}` : `${piece.first}-${piece.last}`,
-          title = `${chatDisplayName}, ${piece.first === piece.last ? "message" : "messages"} ${range}`.slice(0, 240);
+          title = pieceTitle(chatDisplayName, piece);
         result.push({
           sourceId: boundedId(`${chat.id}:messages:${entryId}`, `${chat.id.slice(0, 60)}:messages`),
           previewOrder: `${chat.id}\0${String(piece.first).padStart(8, "0")}\0${entryId}`,
@@ -1353,10 +1388,7 @@ export async function hideImportedChatMessages(root: string, chatIds?: Iterable<
         for (const row of await candidates({ source: "messages", chatId }, undefined, pieces)) {
           if (row.provenance.sourceId !== chatId) continue;
           const note = matchExisting(row),
-            current =
-              note?.status === "active" &&
-              !reviewing.has(note.id) &&
-              sourceFingerprintCurrent(note.extractionFingerprint, candidateFingerprintForNote(row, note));
+            current = note?.status === "active" && !reviewing.has(note.id) && sourceFingerprintCurrent(note, row);
           for (const id of row.messageIds ?? [])
             if (!current) pending.add(id);
             else if (!noteFor.has(id)) noteFor.set(id, note.id);
@@ -1541,20 +1573,24 @@ function outdatedSourceNotes(
 }
 
 // The same source text under a new title or message range is still read: only its labels moved.
-function sourceFingerprintCurrent(
-  existing: LtmNote["extractionFingerprint"],
-  candidate: ReturnType<typeof candidateFingerprintForNote>,
-) {
-  return existing?.sourceHash === candidate.sourceHash || extractionFingerprintsMatchSourceText(existing, candidate);
+function sourceFingerprintCurrent(note: LtmNote, candidate: Candidate) {
+  const existing = note.extractionFingerprint,
+    fresh = candidateFingerprintForNote(candidate, note);
+  return (
+    existing?.sourceHash === fresh.sourceHash ||
+    extractionFingerprintsMatchSourceText(existing, fresh) ||
+    // A chat piece read before 1.6.0 has no text hash, so compare it under the title it was saved with.
+    (candidate.provenance.kind === "chat_transcript" &&
+      existing?.sourceHash ===
+        candidateFingerprintForNote({ ...candidate, title: note.title ?? candidate.title }, note).sourceHash)
+  );
 }
 
-function previewFreshness(
-  note: LtmNote,
-  candidateFingerprint: ReturnType<typeof candidateFingerprintForNote>,
-): Exclude<LtmInteropPreviewFreshness, "new"> {
+function previewFreshness(note: LtmNote, candidate: Candidate): Exclude<LtmInteropPreviewFreshness, "new"> {
   const existingFingerprint = note.extractionFingerprint;
   if (!existingFingerprint) return "extraction_incomplete";
-  if (!sourceFingerprintCurrent(existingFingerprint, candidateFingerprint)) return "source_updated";
+  if (!sourceFingerprintCurrent(note, candidate)) return "source_updated";
+  const candidateFingerprint = candidateFingerprintForNote(candidate, note);
   // The text hash only exists on newer fingerprints, so it is not part of the context.
   const { sourceHash: _existingSourceHash, textHash: _existingTextHash, ...existingContext } = existingFingerprint,
     { sourceHash: _candidateSourceHash, textHash: _candidateTextHash, ...candidateContext } = candidateFingerprint;
@@ -1653,7 +1689,7 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
     ? {
         ...base,
         status: "imported" as const,
-        freshness: previewFreshness(note, candidateFingerprintForNote(row, note)),
+        freshness: previewFreshness(note, row),
         existingNoteId: note.id,
         existingNoteTitle: note.title || row.title,
       }
@@ -1713,6 +1749,8 @@ function previewPage<T>(
 export async function previewPackageInterop(
   request: LtmInteropPreviewRequest,
   root: string,
+  /** `ownPiecesOnly` leaves a parent's rows out of `branchChatId`'s list: background import reads only its own chat. */
+  { ownPiecesOnly = false }: { ownPiecesOnly?: boolean } = {},
 ): Promise<LtmInteropPreviewResponse> {
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
@@ -1723,12 +1761,21 @@ export async function previewPackageInterop(
       found.filter((row) => candidateVisibleInScope(row, sourceScope)),
       matchExisting,
     );
-  // Identical branch pieces are already merged, so a branch keeps the pieces its chat contributed to.
+  // Identical branch pieces are already merged, so a branch keeps the pieces its chat contributed to. It also keeps
+  // a parent's imported pieces whose copies it records as hidden: it produces no piece of its own for those messages.
   const { branchChatId } = request;
-  const rows =
-    request.source === "messages" && branchChatId
-      ? resolved.filter((row) => row.branchChatIds?.includes(branchChatId))
-      : resolved;
+  let rows = resolved;
+  if (request.source === "messages" && branchChatId) {
+    const inherited = new Set(
+        ownPiecesOnly ? [] : Object.keys((await readLtmHiddenMessages(root))[branchChatId] ?? {}),
+      ),
+      groupId = inherited.size ? (await getPackagePersistence().getChat(branchChatId))?.groupId : undefined;
+    rows = resolved.filter(
+      (row) =>
+        row.branchChatIds?.includes(branchChatId) ||
+        (groupId && getLtmScopeGroupIds(row.scope).includes(groupId) && inherited.has(matchExisting(row)?.id ?? "")),
+    );
+  }
   // Only an unfiltered first page has seen the whole source, so only it can say which notes lost theirs.
   const outdated =
     request.cursor || request.query
