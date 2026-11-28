@@ -132,8 +132,5 @@
       "guidance": ["packages/slurp2/README.md"],
       "checks": []
     }
-  ],
-  "autofix": {
-    "validate": "npm ci && npm run check"
-  }
+  ]
 }
