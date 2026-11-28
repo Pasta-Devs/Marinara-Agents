@@ -2658,7 +2658,7 @@ export interface SceneLooks {
 
 /** #2509: P6's `wear` (S/story/beats.ts wearOf). */
 const WEAR_RULE =
-  '- wear: in a node where someone has changed clothes, "wear": {"<exact name>": "<a look from their list under WHAT THEY WEAR>"}. It dresses them, and changes their picture, for this whole node and the ones after. Use it only when a change makes sense. Going to sleep and waking is one change: into what they wear once they are up, never into night clothes first.';
+  '- wear: everyone in this node who is in other clothes than they wear now, changing on the page or coming in already changed: {"<exact name>": "<a look from their list under WHAT THEY WEAR>"}, else {}. Only "wear" dresses them and changes their picture, for this whole node and the ones after, so never write a change of clothes without it. Change clothes only when it makes sense.';
 
 export function beatMessages({
   world,
@@ -2704,8 +2704,9 @@ export function beatMessages({
   // the task, so a chapter's scenes share one cached prompt (#2066, #2091).
   // 0.28.0: the shape is repeated at the very end of the task turn (BEAT_SHAPE_TRAILER). Everything between the shape
   // above and that line is instruction, so a model reading only the tail of a long prompt had nothing to copy; the two
-  // say the same thing from one constant, so they cannot drift.
-  const beatShape = `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]}`;
+  // say the same thing from one constant, so they cannot drift. #2509: `wear` is in the shape when anyone may change, so
+  // a model that copies the shape never leaves a change of clothes off the stage.
+  const beatShape = `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]${looks?.change ? ', "wear": {}' : ""}}`;
   const instructions = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, one segment at a time.",
     NO_CHOICES_SENTENCE,
@@ -2826,7 +2827,7 @@ export function beatMessages({
     // message is never cached, so saying it here costs nothing. "PLUS the extra keys this node asks for" keeps the
     // choice-effects, cg and voices blocks above from reading as optional extras a strict "ONLY" would drop.
     ...toysLines(world, toys),
-    `Reply with ONLY the JSON object, no markdown and no code fence, in the shape above (plus the extra keys this node asks for, such as "choices", "effects", "cg"${looks?.change ? ', "voices" or "wear"' : ' or "voices"'}): ${beatShape}`,
+    `Reply with ONLY the JSON object, no markdown and no code fence, in the shape above (plus the extra keys this node asks for, such as "choices", "effects", "cg" or "voices"): ${beatShape}`,
     otomeContractReminder("scene"),
   ];
   return storyMessages(
