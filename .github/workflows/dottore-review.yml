@@ -84,7 +84,7 @@ jobs:
   review:
     needs: admission
     if: needs.admission.outputs.admitted == 'true'
-    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@96da858e5091b2f564b17d047818b0d37ae8b301
+    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@4aee33b507fb2a2765699a90c1f58b4f22f39c05
     with:
       pr_number: ${{ inputs.pr_number }}
       comment_body: ${{ inputs.comment_body }}
