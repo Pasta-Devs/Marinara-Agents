@@ -1110,6 +1110,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.30",
+          "date": "2026-11-28",
+          "notes": "- With **Lorebook context** on, Slurp sends images from matching lorebook entries to compatible image connections.",
+          "highlight": false
+        },
+        {
           "version": "0.4.29",
           "date": "2026-11-23",
           "notes": "- Changed: when a Marinara chat with a Creator carries Slurp activity, that Creator stops writing to you first on Slurp while you roleplay. The quiet ends 20 minutes after the last reply in that chat.\n- Fixed: the Slurp activity carried into a Marinara chat no longer lists texts a Creator sent first that you have not answered yet, so the Creator no longer remarks that you ignore their DMs.\n- Added: Backstage > Messaging > \"Pause Creator DMs\". While it is on, no Creator writes to you first.\n- During both pauses, openers, check-ins, recurring updates, partner texts and drama questions are dropped, not saved for later, so nothing arrives in a burst afterwards. Promises, reminders and task updates a Creator owes you wait and arrive after the pause. Replies to your own messages and finished commissions still arrive.",
@@ -1221,12 +1227,6 @@
           "version": "0.4.11",
           "date": "2026-10-29",
           "notes": "- Backstage (Engine link) no longer says Long-Term Memory isn't sharing after its \"Other Agents can read memories\" switch is turned on. The line clears at once after Slurp's offer, and the next time the panel loads after Long-Term Memory's offer or Memory Settings.",
-          "highlight": false
-        },
-        {
-          "version": "0.4.10",
-          "date": "2026-10-29",
-          "notes": "- Turning on \"What your other Agents know\" now asks whether to turn on Long-Term Memory's \"Other Agents can read memories\" when that switch is off. \"Turn it on\" changes only that switch; \"Not now\" leaves it alone.",
           "highlight": false
         }
       ]
