@@ -642,7 +642,15 @@ function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefin
   return matchesScope(candidate, scope);
 }
 
-function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candidate) => LtmNote | undefined) {
+function resolvePreviewCandidates(
+  rows: Candidate[],
+  matchExisting: (row: Candidate) => LtmNote | undefined,
+  inherited: ReadonlySet<string>,
+) {
+  const rank = (row: Candidate) => {
+    const note = matchExisting(row);
+    return note ? (inherited.has(note.id) ? 2 : 1) : 0;
+  };
   const resolved = new Map<string, Candidate>();
   const branchChatIds = new Map<string, Set<string>>();
   for (const row of rows) {
@@ -650,7 +658,8 @@ function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candid
     // distinct chat ids; keep the first identical chat-summary candidate so
     // shared branch summaries do not repeat in the Sources preview, preferring
     // an already-imported sibling so the row reflects imported state instead of
-    // offering a duplicate import. A branch copies messages under new ids, so
+    // offering a duplicate import, and over that the sibling whose note the
+    // picked branch records. A branch copies messages under new ids, so
     // identical message pieces match by the chat group instead.
     const key =
       row.provenance.kind === "chat_summary"
@@ -659,7 +668,7 @@ function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candid
           ? `chat_transcript\0${getLtmScopeGroupIds(row.scope)[0] ?? row.provenance.sourceId}\0${row.sourceText}`
           : row.sourceId;
     const previous = resolved.get(key);
-    if (!previous || (!matchExisting(previous) && matchExisting(row))) resolved.set(key, row);
+    if (!previous || rank(row) > rank(previous)) resolved.set(key, row);
     if (row.provenance.kind === "chat_transcript")
       branchChatIds.set(key, (branchChatIds.get(key) ?? new Set()).add(row.provenance.sourceId));
   }
@@ -1755,21 +1764,25 @@ export async function previewPackageInterop(
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
   const pieces = await chatPieces(request.source, matchExisting, root);
+  const { branchChatId } = request;
+  // The imported sources whose messages the picked branch records as hidden.
+  const inherited = new Set(
+    request.source === "messages" && branchChatId && !ownPiecesOnly
+      ? Object.keys((await readLtmHiddenMessages(root))[branchChatId] ?? {})
+      : [],
+  );
   const candidateRequest = { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
     found = await candidates(candidateRequest, undefined, pieces),
     resolved = resolvePreviewCandidates(
       found.filter((row) => candidateVisibleInScope(row, sourceScope)),
       matchExisting,
+      inherited,
     );
   // Identical branch pieces are already merged, so a branch keeps the pieces its chat contributed to. It also keeps
   // a parent's imported pieces whose copies it records as hidden: it produces no piece of its own for those messages.
-  const { branchChatId } = request;
   let rows = resolved;
   if (request.source === "messages" && branchChatId) {
-    const inherited = new Set(
-        ownPiecesOnly ? [] : Object.keys((await readLtmHiddenMessages(root))[branchChatId] ?? {}),
-      ),
-      groupId = inherited.size ? (await getPackagePersistence().getChat(branchChatId))?.groupId : undefined;
+    const groupId = inherited.size ? (await getPackagePersistence().getChat(branchChatId))?.groupId : undefined;
     rows = resolved.filter(
       (row) =>
         row.branchChatIds?.includes(branchChatId) ||

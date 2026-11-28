@@ -882,7 +882,10 @@ async function main() {
         previewPackageInterop(
           {
             source: "messages",
-            sourceScope: { groupId: "group-listed", chatIds: [listedParent.id, listedBranch.id, listedSibling.id] },
+            sourceScope: {
+              groupId: "group-listed",
+              chatIds: [listedParent.id, listedBranch.id, listedSibling.id, "chat-listed-twin"],
+            },
             branchChatId,
             limit: 100,
           },
@@ -940,6 +943,41 @@ async function main() {
         "source_updated",
         "and an edit still shows it as updated",
       );
+      // Two imported pieces with identical text share one row. The branch gets the one whose note it records.
+      const listedTwin = grouped("chat-listed-twin", "Listed twin");
+      chats.push(listedTwin);
+      messagesByChat.set(
+        listedTwin.id,
+        listedParentRows.map((row, index) => ({
+          ...listedMessage(
+            listedTwin.id,
+            `lt${index + 1}`,
+            index + 1,
+            index === 1 ? { hiddenFromAI: true, visibilityManual: true } : {},
+          ),
+          content: row.content,
+        })),
+      );
+      const twinPieceId = `${listedTwin.id}:messages:lt1`;
+      await importPackageInterop(
+        { source: "messages", chatId: listedTwin.id, sourceIds: [twinPieceId], extract: true, limit: 100 },
+        root,
+        new AbortController().signal,
+      );
+      const twinNote = (await storage.listNotes()).find((note) => note.provenance?.entryId === "lt1")!;
+      const beforeTwin = await readLtmHiddenMessages(root);
+      for (const [noteId, pieceId] of [
+        [listedNote.id, parentPieceId],
+        [twinNote.id, twinPieceId],
+      ] as const) {
+        await writeLtmHiddenMessages({ ...beforeTwin, [listedBranch.id]: { [noteId]: ["lb1", "lb3"] } }, root);
+        assert.deepEqual(
+          (await listed(listedBranch.id)).filter(({ status }) => status !== "pending").map(({ sourceId }) => sourceId),
+          [pieceId],
+          "the branch keeps the identical piece it records, whichever comes first",
+        );
+      }
+      await writeLtmHiddenMessages(beforeTwin, root);
 
       // A list too long for a title ends at a whole range, and a very long chat name never leaves half a number.
       const scattered = {
