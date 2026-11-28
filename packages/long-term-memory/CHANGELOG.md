@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.13 — 2026-11-28
 
 - In Sources, filtering Chat Messages to a branch now also lists the imported pieces from a parent chat whose messages are hidden in that branch. You can extract them again or delete them from there. A piece that skips messages now names only the message numbers it holds in its title, such as "messages 1-4, 9-12". The count and range on its row still run from its first message to its last.
 
